@@ -1,10 +1,10 @@
 #include <CL/sycl.hpp>
-#include <catch2/catch.hpp>
+#include <gtest/gtest.h>
 #include <neso_particles.hpp>
 
 using namespace NESO::Particles;
 
-TEST_CASE("test_cell_dat_const_1") {
+TEST(CellDat, test_cell_dat_const_1) {
 
   SYCLTarget sycl_target{GPU_SELECTOR, MPI_COMM_WORLD};
 
@@ -14,8 +14,8 @@ TEST_CASE("test_cell_dat_const_1") {
 
   CellDatConst<INT> cdc(sycl_target, cell_count, nrow, ncol);
 
-  REQUIRE(cdc.nrow == nrow);
-  REQUIRE(cdc.ncol == ncol);
+  ASSERT_TRUE(cdc.nrow == nrow);
+  ASSERT_TRUE(cdc.ncol == ncol);
 
   // should have malloced a cell_count * nrow * ncol sized block
   std::vector<INT> test_data(cell_count * nrow * ncol);
@@ -41,7 +41,7 @@ TEST_CASE("test_cell_dat_const_1") {
     for (int rowx = 0; rowx < nrow; rowx++) {
       for (int colx = 0; colx < ncol; colx++) {
         // check data returned from dat using user interface
-        REQUIRE(cell_data->data[colx][rowx] == ++index);
+        ASSERT_TRUE(cell_data->data[colx][rowx] == ++index);
         // change the data
         cell_data->data[colx][rowx] = 2 * cell_data->data[colx][rowx];
       }
@@ -59,14 +59,14 @@ TEST_CASE("test_cell_dat_const_1") {
   for (int cellx = 0; cellx < cell_count; cellx++) {
     for (int rowx = 0; rowx < nrow; rowx++) {
       for (int colx = 0; colx < ncol; colx++) {
-        REQUIRE(test_data[cellx * stride + colx * nrow + rowx] ==
-                2 * (++index));
+        ASSERT_TRUE(test_data[cellx * stride + colx * nrow + rowx] ==
+                    2 * (++index));
       }
     }
   }
 }
 
-TEST_CASE("test_cell_dat_REAL_1") {
+TEST(CellDat, test_cell_dat_REAL_1) {
 
   SYCLTarget sycl_target{GPU_SELECTOR, MPI_COMM_WORLD};
 
@@ -83,8 +83,8 @@ TEST_CASE("test_cell_dat_REAL_1") {
     ddc.set_nrow(cellx, cellx_nrow);
 
     // check enough space was allocated
-    REQUIRE(ddc.nrow_alloc[cellx] >= nrows_0[cellx]);
-    REQUIRE(ddc.nrow[cellx] == nrows_0[cellx]);
+    ASSERT_TRUE(ddc.nrow_alloc[cellx] >= nrows_0[cellx]);
+    ASSERT_TRUE(ddc.nrow[cellx] == nrows_0[cellx]);
   }
 
   REAL index = 0.0;
@@ -92,8 +92,8 @@ TEST_CASE("test_cell_dat_REAL_1") {
     CellData<REAL> cd = ddc.get_cell(cellx);
 
     const int nrow = ddc.nrow[cellx];
-    REQUIRE(cd->nrow == nrow);
-    REQUIRE(cd->ncol == ddc.ncol);
+    ASSERT_TRUE(cd->nrow == nrow);
+    ASSERT_TRUE(cd->ncol == ddc.ncol);
 
     for (int rowx = 0; rowx < nrow; rowx++) {
       for (int colx = 0; colx < ncol; colx++) {
@@ -112,8 +112,8 @@ TEST_CASE("test_cell_dat_REAL_1") {
     ddc.set_nrow(cellx, cellx_nrow);
 
     // check enough space was allocated
-    REQUIRE(ddc.nrow_alloc[cellx] >= nrows_1[cellx]);
-    REQUIRE(ddc.nrow[cellx] == nrows_1[cellx]);
+    ASSERT_TRUE(ddc.nrow_alloc[cellx] >= nrows_1[cellx]);
+    ASSERT_TRUE(ddc.nrow[cellx] == nrows_1[cellx]);
   }
 
   index = 0.0;
@@ -121,20 +121,20 @@ TEST_CASE("test_cell_dat_REAL_1") {
     CellData<REAL> cd = ddc.get_cell(cellx);
 
     const int nrow = ddc.nrow[cellx];
-    REQUIRE(cd->nrow == nrow);
-    REQUIRE(cd->ncol == ddc.ncol);
+    ASSERT_TRUE(cd->nrow == nrow);
+    ASSERT_TRUE(cd->ncol == ddc.ncol);
 
     const int nrow0 = nrows_0[cellx];
 
     for (int rowx = 0; rowx < nrow0; rowx++) {
       for (int colx = 0; colx < ncol; colx++) {
-        REQUIRE(cd->data[colx][rowx] == ++index);
+        ASSERT_TRUE(cd->data[colx][rowx] == ++index);
       }
     }
   }
 }
 
-TEST_CASE("test_cell_dat_INT_1") {
+TEST(CellDat, test_cell_dat_INT_1) {
 
   SYCLTarget sycl_target{GPU_SELECTOR, MPI_COMM_WORLD};
 
@@ -151,8 +151,8 @@ TEST_CASE("test_cell_dat_INT_1") {
     ddc.set_nrow(cellx, cellx_nrow);
 
     // check enough space was allocated
-    REQUIRE(ddc.nrow_alloc[cellx] >= nrows_0[cellx]);
-    REQUIRE(ddc.nrow[cellx] == nrows_0[cellx]);
+    ASSERT_TRUE(ddc.nrow_alloc[cellx] >= nrows_0[cellx]);
+    ASSERT_TRUE(ddc.nrow[cellx] == nrows_0[cellx]);
   }
 
   INT index = 0;
@@ -160,8 +160,8 @@ TEST_CASE("test_cell_dat_INT_1") {
     CellData<INT> cd = ddc.get_cell(cellx);
 
     const int nrow = ddc.nrow[cellx];
-    REQUIRE(cd->nrow == nrow);
-    REQUIRE(cd->ncol == ddc.ncol);
+    ASSERT_TRUE(cd->nrow == nrow);
+    ASSERT_TRUE(cd->ncol == ddc.ncol);
 
     for (int rowx = 0; rowx < nrow; rowx++) {
       for (int colx = 0; colx < ncol; colx++) {
@@ -180,8 +180,8 @@ TEST_CASE("test_cell_dat_INT_1") {
     ddc.set_nrow(cellx, cellx_nrow);
 
     // check enough space was allocated
-    REQUIRE(ddc.nrow_alloc[cellx] >= nrows_1[cellx]);
-    REQUIRE(ddc.nrow[cellx] == nrows_1[cellx]);
+    ASSERT_TRUE(ddc.nrow_alloc[cellx] >= nrows_1[cellx]);
+    ASSERT_TRUE(ddc.nrow[cellx] == nrows_1[cellx]);
   }
 
   index = 0;
@@ -189,14 +189,14 @@ TEST_CASE("test_cell_dat_INT_1") {
     CellData<INT> cd = ddc.get_cell(cellx);
 
     const int nrow = ddc.nrow[cellx];
-    REQUIRE(cd->nrow == nrow);
-    REQUIRE(cd->ncol == ddc.ncol);
+    ASSERT_TRUE(cd->nrow == nrow);
+    ASSERT_TRUE(cd->ncol == ddc.ncol);
 
     const int nrow0 = nrows_0[cellx];
 
     for (int rowx = 0; rowx < nrow0; rowx++) {
       for (int colx = 0; colx < ncol; colx++) {
-        REQUIRE(cd->data[colx][rowx] == ++index);
+        ASSERT_TRUE(cd->data[colx][rowx] == ++index);
       }
     }
   }

@@ -1,6 +1,6 @@
 
 MPI_CFLAGS:= -Wl,-Bsymbolic-functions -Wl,-z,relro -I/usr/include/x86_64-linux-gnu/mpich -L/usr/lib/x86_64-linux-gnu -lmpich -g
-LIBS:=
+LIBS:=-L/opt/spack/linux-ubuntu22.04-cascadelake/gcc-11.2.0/googletest-1.10.0-plag456p2u6f73arwvg2mwvdxrymrbam/lib/pkgconfig/../../lib -lgtest
 
 HIPSYCL:=syclcc --hipsycl-targets=omp -DGPU_SELECTOR=0
 DPCPP:=dpcpp -DGPU_SELECTOR=0

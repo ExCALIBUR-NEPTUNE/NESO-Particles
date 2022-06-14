@@ -1,11 +1,11 @@
 #include <CL/sycl.hpp>
-#include <catch2/catch.hpp>
+#include <gtest/gtest.h>
 #include <neso_particles.hpp>
 #include <random>
 
 using namespace NESO::Particles;
 
-TEST_CASE("test_particle_dat_append_1") {
+TEST(ParticleDat, test_particle_dat_append_1) {
 
   SYCLTarget sycl_target{GPU_SELECTOR, MPI_COMM_WORLD};
 
@@ -17,7 +17,7 @@ TEST_CASE("test_particle_dat_append_1") {
 
   std::vector<INT> counts(cell_count);
   for (int cellx = 0; cellx < cell_count; cellx++) {
-    REQUIRE(A->s_npart_cell[cellx] == 0);
+    ASSERT_TRUE(A->s_npart_cell[cellx] == 0);
     counts[cellx] = 0;
   }
 
@@ -40,7 +40,7 @@ TEST_CASE("test_particle_dat_append_1") {
   }
   A->realloc(counts);
   for (int cellx = 0; cellx < cell_count; cellx++) {
-    REQUIRE(A->cell_dat.nrow[cellx] >= counts[cellx]);
+    ASSERT_TRUE(A->cell_dat.nrow[cellx] >= counts[cellx]);
   }
 
   A->append_particle_data(N, false, cells0, data0);
@@ -48,13 +48,13 @@ TEST_CASE("test_particle_dat_append_1") {
   sycl_target.queue.wait();
 
   for (int cellx = 0; cellx < cell_count; cellx++) {
-    REQUIRE(A->s_npart_cell[cellx] == counts[cellx]);
+    ASSERT_TRUE(A->s_npart_cell[cellx] == counts[cellx]);
     // the "data exists" flag is false so these new values should all be
     // zero
     auto cell_data = A->cell_dat.get_cell(cellx);
     for (int cx = 0; cx < ncomp; cx++) {
       for (int px = 0; px < (A->s_npart_cell[cellx]); px++) {
-        REQUIRE((*cell_data)[cx][px] == 0);
+        ASSERT_TRUE((*cell_data)[cx][px] == 0);
       }
     }
   }
@@ -66,7 +66,7 @@ TEST_CASE("test_particle_dat_append_1") {
   A->realloc(counts);
 
   for (int cellx = 0; cellx < cell_count; cellx++) {
-    REQUIRE(A->cell_dat.nrow[cellx] >= counts[cellx]);
+    ASSERT_TRUE(A->cell_dat.nrow[cellx] >= counts[cellx]);
   }
 
   A->append_particle_data(N, true, cells0, data0);
@@ -74,7 +74,7 @@ TEST_CASE("test_particle_dat_append_1") {
   sycl_target.queue.wait();
 
   for (int cellx = 0; cellx < cell_count; cellx++) {
-    REQUIRE(A->s_npart_cell[cellx] == counts[cellx]);
+    ASSERT_TRUE(A->s_npart_cell[cellx] == counts[cellx]);
     // the "data exists" flag is false so these new values should all be
     // zero
     auto cell_data = A->cell_dat.get_cell(cellx);
