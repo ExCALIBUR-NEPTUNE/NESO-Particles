@@ -29,8 +29,10 @@ public:
         std::cout << "Using a CPU device\n";
         this->device = sycl::device(sycl::cpu_selector());
       }
-    } else {
+    } else if (gpu_device < 0) {
       this->device = sycl::device(sycl::cpu_selector());
+    } else {
+      this->device = sycl::device(sycl::default_selector());
     }
 
     std::cout << "Using " << this->device.get_info<sycl::info::device::name>()
