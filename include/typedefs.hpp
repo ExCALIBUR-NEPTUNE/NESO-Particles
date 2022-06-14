@@ -9,17 +9,16 @@
 namespace NESO::Particles {
 
 #define NESOASSERT(expr, msg)                                                  \
-    neso_particle_assert(#expr, expr, __FILE__, __LINE__, msg)
+  neso_particle_assert(#expr, expr, __FILE__, __LINE__, msg)
 
-inline void neso_particle_assert(const char *expr_str, bool expr, const char *file,
-                        int line, const char *msg) {
-    if (!expr) {
-        std::cerr << "NESO Particles Assertion error:\t" << msg << "\n"
-                  << "Expected value:\t" << expr_str << "\n"
-                  << "Source location:\t\t" << file << ", line " << line
-                  << "\n";
-        abort();
-    }
+inline void neso_particle_assert(const char *expr_str, bool expr,
+                                 const char *file, int line, const char *msg) {
+  if (!expr) {
+    std::cerr << "NESO Particles Assertion error:\t" << msg << "\n"
+              << "Expected value:\t" << expr_str << "\n"
+              << "Source location:\t\t" << file << ", line " << line << "\n";
+    abort();
+  }
 }
 
 typedef double REAL;
