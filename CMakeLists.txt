@@ -20,6 +20,16 @@ else()
   set(HIPSYCL_TARGETS "omp")
 endif(NOT hipSYCL_FOUND)
 
+# hipsycl, trisycl and computecpp all define an "add_sycl_to_target" for the
+# compilation of a target
+if(NOT COMMAND add_sycl_to_target)
+  # Note from hipsycl: "Do not call target_sources after add_sycl_to_target or
+  # dependency tracking on compiler flags will break in subtle ways"
+  function(add_sycl_to_target)
+
+  endfunction()
+endif()
+
 enable_testing()
 
 # put all targets in bin

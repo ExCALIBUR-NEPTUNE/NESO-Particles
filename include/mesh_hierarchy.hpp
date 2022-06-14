@@ -8,6 +8,14 @@
 
 namespace NESO::Particles {
 
+static inline int reduce_mul(const int nel, std::vector<int> &values) {
+  int v = 1;
+  for (int ex = 0; ex < nel; ex++) {
+    v *= values[ex];
+  }
+  return v;
+}
+
 class MeshHierarchy {
 
 public:
@@ -32,8 +40,7 @@ public:
         inverse_cell_width_coarse(1.0 / extent),
         inverse_cell_width_fine(((double)std::pow(2, subdivision_order)) /
                                 extent),
-        ncells_coarse(std::accumulate(dims.begin(), dims.begin() + ndim, 1,
-                                      std::multiplies<>{})),
+        ncells_coarse(reduce_mul(ndim, dims)),
         ncells_fine(std::pow(std::pow(2, subdivision_order), ndim)) {
     NESOASSERT(dims.size() >= ndim, "vector of dims too small");
     for (int dimx = 0; dimx < ndim; dimx++) {

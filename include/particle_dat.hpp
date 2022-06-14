@@ -119,18 +119,18 @@ inline void ParticleDatT<T>::append_particle_data(const int npart_new,
         INT cellx = a_cells[idx];
         // atomically get the new layer and increment the count in
         // the cell
-#if defined(__INTEL_LLVM_COMPILER)
-        auto element_atomic = sycl::ext::oneapi::atomic_ref<
-            int, sycl::ext::oneapi::memory_order_acq_rel,
-            sycl::ext::oneapi::memory_scope_device,
-            sycl::access::address_space::global_space>(s_npart_cell[cellx]);
+        //#if defined(__INTEL_LLVM_COMPILER)
+        //        auto element_atomic = sycl::ext::oneapi::atomic_ref<
+        //            int, sycl::ext::oneapi::memory_order_acq_rel,
+        //            sycl::ext::oneapi::memory_scope_device,
+        //            sycl::access::address_space::global_space>(s_npart_cell[cellx]);
+        //        const int layerx = element_atomic.fetch_add(1);
+        //#else
+        sycl::atomic_ref<int, sycl::memory_order::relaxed,
+                         sycl::memory_scope::device>
+            element_atomic(s_npart_cell[cellx]);
         const int layerx = element_atomic.fetch_add(1);
-#else
-                    sycl::atomic_ref<int, sycl::memory_order::relaxed,
-                                     sycl::memory_scope::device>
-                        element_atomic(s_npart_cell[cellx]);
-                    const int layerx = element_atomic.fetch_add(1);
-#endif
+        //#endif
         // copy the data into the dat.
         for (int cx = 0; cx < ncomp; cx++) {
           d_cell_dat_ptr[cellx][cx][layerx] = a_data[cx * npart_new + idx];
@@ -146,18 +146,18 @@ inline void ParticleDatT<T>::append_particle_data(const int npart_new,
         INT cellx = a_cells[idx];
         // atomically get the layer
 
-#if defined(__INTEL_LLVM_COMPILER)
-        auto element_atomic = sycl::ext::oneapi::atomic_ref<
-            int, sycl::ext::oneapi::memory_order_acq_rel,
-            sycl::ext::oneapi::memory_scope_device,
-            sycl::access::address_space::global_space>(s_npart_cell[cellx]);
+        //#if defined(__INTEL_LLVM_COMPILER)
+        //        auto element_atomic = sycl::ext::oneapi::atomic_ref<
+        //            int, sycl::ext::oneapi::memory_order_acq_rel,
+        //            sycl::ext::oneapi::memory_scope_device,
+        //            sycl::access::address_space::global_space>(s_npart_cell[cellx]);
+        //        const int layerx = element_atomic.fetch_add(1);
+        //#else
+        sycl::atomic_ref<int, sycl::memory_order::relaxed,
+                         sycl::memory_scope::device>
+            element_atomic(s_npart_cell[cellx]);
         const int layerx = element_atomic.fetch_add(1);
-#else
-                    sycl::atomic_ref<int, sycl::memory_order::relaxed,
-                                     sycl::memory_scope::device>
-                        element_atomic(s_npart_cell[cellx]);
-                    const int layerx = element_atomic.fetch_add(1);
-#endif
+        //#endif
 
         // zero the new components in the dat
         for (int cx = 0; cx < ncomp; cx++) {

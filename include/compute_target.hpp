@@ -20,7 +20,7 @@ public:
   CommPair comm_pair;
 
   SYCLTarget(){};
-  SYCLTarget(const int gpu_device, MPI_Comm comm) : comm_pair(comm_pair) {
+  SYCLTarget(const int gpu_device, MPI_Comm comm) : comm_pair(comm) {
     if (gpu_device > 0) {
       try {
         this->device = sycl::device(sycl::gpu_selector());
