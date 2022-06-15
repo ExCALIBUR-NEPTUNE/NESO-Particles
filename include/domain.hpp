@@ -29,6 +29,7 @@ public:
   virtual inline double get_inverse_cell_width_fine() = 0;
   virtual inline int get_ncells_coarse() = 0;
   virtual inline int get_ncells_fine() = 0;
+  virtual inline MeshHierarchy &get_mesh_hierarchy() = 0;
 };
 
 class CartesianHMesh : public HMesh {
@@ -43,7 +44,7 @@ private:
   int mpi_dims[3] = {0, 0, 0};
   std::vector<int> cell_counts = {0, 0, 0};
   int cell_starts[3] = {0, 0, 0};
-  int cell_ends[3] = {0, 0, 0};
+  int cell_ends[3] = {1, 1, 1};
   MeshHierarchy mesh_hierarchy;
 
 public:
@@ -108,14 +109,12 @@ public:
       get_decomp_1d(mpi_dims[dimx], cell_counts[dimx], coords[dimx],
                     &cell_starts[dimx], &cell_ends[dimx]);
     }
-    
+
     // for this mesh the hierarchy is simply a copy of the mesh
     this->mesh_hierarchy = MeshHierarchy(comm_cart, ndim, dims,
                                          cell_width_coarse, subdivision_order);
-    
+
     // setup the hierarchy
-
-
   };
 
   inline MPI_Comm get_comm() { return this->comm_cart; };
@@ -132,6 +131,7 @@ public:
   };
   inline int get_ncells_coarse() { return this->ncells_coarse; };
   inline int get_ncells_fine() { return this->ncells_fine; };
+  inline MeshHierarchy &get_mesh_hierarchy() { return this->mesh_hierarchy; };
 };
 
 class Domain {
