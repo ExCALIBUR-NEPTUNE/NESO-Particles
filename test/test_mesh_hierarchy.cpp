@@ -11,7 +11,7 @@ TEST(MeshHierarchy, test_mesh_hierarchy_1) {
   dims[0] = 2;
   dims[1] = 4;
 
-  MeshHierarchy mh(sycl_target, 2, dims, 2.0, 2);
+  MeshHierarchy mh(MPI_COMM_WORLD, 2, dims, 2.0, 2);
 
   ASSERT_TRUE(mh.ndim == 2);
   ASSERT_TRUE(mh.dims[0] == 2);
@@ -35,5 +35,4 @@ TEST(MeshHierarchy, test_mesh_hierarchy_2) {
   CartesianHMesh mesh(MPI_COMM_WORLD, ndim, dims, cell_extent,
                       subdivision_order);
   SYCLTarget sycl_target{GPU_SELECTOR, mesh.get_comm()};
-  MeshHierarchy mh(sycl_target, mesh);
 }

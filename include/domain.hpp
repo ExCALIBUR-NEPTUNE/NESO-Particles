@@ -1,5 +1,6 @@
 #ifndef _NESO_PARTICLES_DOMAIN
 #define _NESO_PARTICLES_DOMAIN
+#include "mesh_hierarchy.hpp"
 #include "typedefs.hpp"
 #include <mpi.h>
 
@@ -17,7 +18,6 @@ public:
 
 class HMesh : public Mesh {
 
-private:
 public:
   virtual inline MPI_Comm get_comm() = 0;
   virtual inline int get_ndim() = 0;
@@ -44,6 +44,7 @@ private:
   std::vector<int> cell_counts = {0, 0, 0};
   int cell_starts[3] = {0, 0, 0};
   int cell_ends[3] = {0, 0, 0};
+  MeshHierarchy mesh_hierarchy;
 
 public:
   const int ndim;
@@ -107,6 +108,14 @@ public:
       get_decomp_1d(mpi_dims[dimx], cell_counts[dimx], coords[dimx],
                     &cell_starts[dimx], &cell_ends[dimx]);
     }
+    
+    // for this mesh the hierarchy is simply a copy of the mesh
+    this->mesh_hierarchy = MeshHierarchy(comm_cart, ndim, dims,
+                                         cell_width_coarse, subdivision_order);
+    
+    // setup the hierarchy
+
+
   };
 
   inline MPI_Comm get_comm() { return this->comm_cart; };
