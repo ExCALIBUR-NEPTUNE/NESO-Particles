@@ -46,6 +46,23 @@ inline std::vector<size_t> reverse_argsort(const std::vector<T> &array) {
   return indices;
 }
 
+#define MIN(x, y) (((x) < (y)) ? (x) : (y))
+template <typename T>
+void get_decomp_1d(const T N_compute_units, const T N_work_items,
+                   const T work_unit, T *rstart, T *rend) {
+
+  const auto pq = std::div(N_work_items, N_compute_units);
+  const T i = work_unit;
+  const T p = pq.quot;
+  const T q = pq.rem;
+  const T n = (i < q) ? (p + 1) : p;
+  const T start = (MIN(i, q) * (p + 1)) + ((i > q) ? (i - q) * p : 0);
+  const T end = start + n;
+
+  *rstart = start;
+  *rend = end;
+}
+
 } // namespace NESO::Particles
 
 #endif

@@ -43,9 +43,9 @@ public:
     NESOASSERT(subdivision_order >= 0, "Negative subdivision order passed.");
   };
 
-  MeshHierarchy(HMesh &mesh)
-      : sycl_target(mesh.get_sycl_target()), ndim(mesh.get_ndim()),
-        dims(mesh.get_dims()), subdivision_order(mesh.get_subdivision_order()),
+  MeshHierarchy(SYCLTarget &sycl_target, HMesh &mesh)
+      : sycl_target(sycl_target), ndim(mesh.get_ndim()), dims(mesh.get_dims()),
+        subdivision_order(mesh.get_subdivision_order()),
         cell_width_coarse(mesh.get_cell_width_coarse()),
         cell_width_fine(mesh.get_cell_width_coarse() /
                         ((double)std::pow(2, mesh.get_subdivision_order()))),

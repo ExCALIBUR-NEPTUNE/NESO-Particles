@@ -19,7 +19,7 @@ class HMesh : public Mesh {
 
 private:
 public:
-  virtual inline SYCLTarget &get_sycl_target() = 0;
+  virtual inline MPI_Comm get_comm() = 0;
   virtual inline int get_ndim() = 0;
   virtual inline std::vector<int> &get_dims() = 0;
   virtual inline int get_subdivision_order() = 0;
@@ -34,10 +34,18 @@ public:
 class CartesianHMesh : public HMesh {
 private:
   int cell_count;
+  MPI_Comm comm;
   MPI_Comm comm_cart;
+  int cell_end[3] = {0, 0, 0};
+  int cell_start[3] = {0, 0, 0};
+  int periods[3] = {1, 1, 1};
+  int coords[3] = {0, 0, 0};
+  int mpi_dims[3] = {0, 0, 0};
+  std::vector<int> cell_counts = {0, 0, 0};
+  int cell_starts[3] = {0, 0, 0};
+  int cell_ends[3] = {0, 0, 0};
 
 public:
-  SYCLTarget &sycl_target;
   const int ndim;
   std::vector<int> &dims;
   const int subdivision_order;
@@ -48,10 +56,9 @@ public:
   const int ncells_coarse;
   const int ncells_fine;
 
-  CartesianHMesh(SYCLTarget &sycl_target, const int ndim,
-                 std::vector<int> &dims, const double extent = 1.0,
-                 const int subdivision_order = 1)
-      : sycl_target(sycl_target), ndim(ndim), dims(dims),
+  CartesianHMesh(MPI_Comm comm, const int ndim, std::vector<int> &dims,
+                 const double extent = 1.0, const int subdivision_order = 1)
+      : comm(comm), ndim(ndim), dims(dims),
         subdivision_order(subdivision_order), cell_width_coarse(extent),
         cell_width_fine(extent / ((double)std::pow(2, subdivision_order))),
         inverse_cell_width_coarse(1.0 / extent),
@@ -69,12 +76,12 @@ public:
     NESOASSERT(subdivision_order >= 0, "Negative subdivision order passed.");
 
     // mpi decompose
-    std::vector<int> mpi_dims = {0, 0, 0};
     // mpi_dims has monotonically decreasing order
-    MPICHK(MPI_Dims_create(sycl_target.comm_pair.size_parent, ndim,
-                           mpi_dims.data()));
+    int rank, size;
+    MPICHK(MPI_Comm_size(comm, &size));
+    MPICHK(MPI_Comm_rank(comm, &rank));
+    MPICHK(MPI_Dims_create(size, ndim, mpi_dims));
 
-    std::vector<int> cell_counts(ndim);
     for (int dimx = 0; dimx < ndim; dimx++) {
       cell_counts[dimx] = dims[dimx] * std::pow(2, subdivision_order);
     }
@@ -89,12 +96,20 @@ public:
 
     // create MPI cart comm with a decomposition that roughly makes sense for
     // the shape of the domain
-    int periods[3] = {1, 1, 1};
-    MPICHK(MPI_Cart_create(sycl_target.comm, ndim, mpi_dims_reordered.data(),
-                           periods, 1, &comm_cart));
+    MPICHK(MPI_Cart_create(comm, ndim, mpi_dims_reordered.data(), periods, 1,
+                           &comm_cart));
+
+    // get the information about the cart comm that was actually created
+    MPICHK(MPI_Cart_get(comm_cart, ndim, mpi_dims, periods, coords));
+
+    // in each dimension compute the portion owned by this rank
+    for (int dimx = 0; dimx < ndim; dimx++) {
+      get_decomp_1d(mpi_dims[dimx], cell_counts[dimx], coords[dimx],
+                    &cell_starts[dimx], &cell_ends[dimx]);
+    }
   };
 
-  virtual inline SYCLTarget &get_sycl_target() { return this->sycl_target; };
+  inline MPI_Comm get_comm() { return this->comm_cart; };
   inline int get_ndim() { return this->ndim; };
   inline std::vector<int> &get_dims() { return this->dims; };
   inline int get_subdivision_order() { return this->subdivision_order; };
