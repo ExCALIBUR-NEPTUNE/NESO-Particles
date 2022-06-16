@@ -2,6 +2,8 @@
 #define _NESO_PARTICLES_DOMAIN
 #include "mesh_hierarchy.hpp"
 #include "typedefs.hpp"
+#include <cstdint>
+#include <cstdlib>
 #include <mpi.h>
 
 namespace NESO::Particles {
@@ -29,7 +31,8 @@ public:
   virtual inline double get_inverse_cell_width_fine() = 0;
   virtual inline int get_ncells_coarse() = 0;
   virtual inline int get_ncells_fine() = 0;
-  virtual inline MeshHierarchy &get_mesh_hierarchy() = 0;
+  virtual inline MeshHierarchy *get_mesh_hierarchy() = 0;
+  virtual inline void free() = 0;
 };
 
 class CartesianHMesh : public HMesh {
@@ -43,11 +46,13 @@ private:
   int coords[3] = {0, 0, 0};
   int mpi_dims[3] = {0, 0, 0};
   std::vector<int> cell_counts = {0, 0, 0};
-  int cell_starts[3] = {0, 0, 0};
-  int cell_ends[3] = {1, 1, 1};
   MeshHierarchy mesh_hierarchy;
+  bool allocated = false;
 
 public:
+  int cell_starts[3] = {0, 0, 0};
+  int cell_ends[3] = {1, 1, 1};
+
   const int ndim;
   std::vector<int> &dims;
   const int subdivision_order;
@@ -100,6 +105,7 @@ public:
     // the shape of the domain
     MPICHK(MPI_Cart_create(comm, ndim, mpi_dims_reordered.data(), periods, 1,
                            &comm_cart));
+    this->allocated = true;
 
     // get the information about the cart comm that was actually created
     MPICHK(MPI_Cart_get(comm_cart, ndim, mpi_dims, periods, coords));
@@ -115,6 +121,34 @@ public:
                                          cell_width_coarse, subdivision_order);
 
     // setup the hierarchy
+
+    // mesh tuple index
+    INT index_mesh[3];
+    // mesh_hierarchy tuple index
+    INT index_mh[6];
+
+    mesh_hierarchy.claim_initialise();
+
+    // loop over owned cells
+    for (int cz = cell_starts[2]; cz < cell_ends[2]; cz++) {
+      index_mesh[2] = cz;
+      for (int cy = cell_starts[1]; cy < cell_ends[1]; cy++) {
+        index_mesh[1] = cy;
+        for (int cx = cell_starts[0]; cx < cell_ends[0]; cx++) {
+          index_mesh[0] = cx;
+          // convert mesh tuple index to mesh hierarchy tuple index
+          mesh_tuple_to_mh_tuple(index_mesh, index_mh);
+          // convert mesh hierarchy tuple index to global linear index in the
+          // MeshHierarchy
+          const INT index_global =
+              mesh_hierarchy.tuple_to_linear_global(index_mh);
+          // claim ownership of the current cell in the MeshHierarchy
+          mesh_hierarchy.claim_cell(index_global, 1);
+        }
+      }
+    }
+
+    mesh_hierarchy.claim_finalise();
   };
 
   inline MPI_Comm get_comm() { return this->comm_cart; };
@@ -131,7 +165,32 @@ public:
   };
   inline int get_ncells_coarse() { return this->ncells_coarse; };
   inline int get_ncells_fine() { return this->ncells_fine; };
-  inline MeshHierarchy &get_mesh_hierarchy() { return this->mesh_hierarchy; };
+  inline MeshHierarchy *get_mesh_hierarchy() { return &this->mesh_hierarchy; };
+
+  /*
+   * Convert a mesh index (index_x, index_y, ...) for this cartesian mesh to
+   * the format for a MeshHierarchy: (coarse_x, coarse_y,.., fine_x,
+   * fine_y,...).
+   */
+  inline void mesh_tuple_to_mh_tuple(const INT *index_mesh, INT *index_mh) {
+    for (int dimx = 0; dimx < ndim; dimx++) {
+      auto pq = std::div((long long)index_mesh[dimx],
+                         (long long)mesh_hierarchy.ncells_dim_fine);
+      index_mh[dimx] = pq.quot;
+      index_mh[dimx + ndim] = pq.rem;
+    }
+  }
+
+  inline void free() {
+    int flag;
+    MPICHK(MPI_Initialized(&flag))
+    if (allocated && flag) {
+      MPICHK(MPI_Comm_free(&this->comm_cart))
+      this->comm_cart = MPI_COMM_NULL;
+    }
+    this->allocated = false;
+    mesh_hierarchy.free();
+  }
 };
 
 class Domain {

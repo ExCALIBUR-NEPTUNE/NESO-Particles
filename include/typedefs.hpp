@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <numeric>
 #include <vector>
 
 #define RESTRICT __restrict
