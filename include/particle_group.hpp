@@ -8,6 +8,7 @@
 #include <string>
 
 #include "access.hpp"
+#include "cell_dat.hpp"
 #include "compute_target.hpp"
 #include "domain.hpp"
 #include "particle_dat.hpp"
@@ -69,6 +70,14 @@ public:
   inline ParticleDatShPtr<INT> &operator[](Sym<INT> sym) {
     return this->particle_dats_int.at(sym);
   };
+
+  inline CellData<REAL> get_cell(Sym<REAL> sym, const int cell) {
+    return particle_dats_real[sym]->cell_dat.get_cell(cell);
+  }
+
+  inline CellData<INT> get_cell(Sym<INT> sym, const int cell) {
+    return particle_dats_int[sym]->cell_dat.get_cell(cell);
+  }
 };
 
 inline void

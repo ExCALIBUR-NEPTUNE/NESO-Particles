@@ -31,6 +31,22 @@ uniform_within_extents(const int N, const int ndim, const double *extents,
   return positions;
 }
 
+inline std::vector<std::vector<double>>
+normal_distribution(const int N, const int ndim, const double mu,
+                    const double sigma, std::mt19937 rng = std::mt19937()) {
+
+  std::normal_distribution<> d{mu, sigma};
+  std::vector<std::vector<double>> array(ndim);
+  for (int dimx = 0; dimx < ndim; dimx++) {
+    array[dimx] = std::vector<double>(N);
+    for (int px = 0; px < N; px++) {
+      array[dimx][px] = d(rng);
+    }
+  }
+
+  return array;
+}
+
 } // namespace NESO::Particles
 
 #endif
