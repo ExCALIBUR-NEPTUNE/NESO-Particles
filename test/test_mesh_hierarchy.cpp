@@ -10,8 +10,11 @@ TEST(MeshHierarchy, test_mesh_hierarchy_creation) {
   std::vector<int> dims(2);
   dims[0] = 2;
   dims[1] = 4;
+  std::vector<double> origin(2);
+  origin[0] = 0.0;
+  origin[1] = 0.0;
 
-  MeshHierarchy mh(MPI_COMM_WORLD, 2, dims, 2.0, 2);
+  MeshHierarchy mh(MPI_COMM_WORLD, 2, dims, origin, 2.0, 2);
 
   ASSERT_TRUE(mh.ndim == 2);
   ASSERT_TRUE(mh.dims[0] == 2);

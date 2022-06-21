@@ -50,6 +50,7 @@ public:
   CommPair comm_pair;
   int ndim;
   std::vector<int> dims;
+  std::vector<double> origin;
   int subdivision_order;
 
   double cell_width_coarse;
@@ -64,8 +65,9 @@ public:
 
   MeshHierarchy(){};
   MeshHierarchy(MPI_Comm comm, const int ndim, std::vector<int> dims,
-                const double extent = 1.0, const int subdivision_order = 1)
-      : comm(comm), comm_pair(comm), ndim(ndim), dims(dims),
+                std::vector<double> origin, const double extent = 1.0,
+                const int subdivision_order = 1)
+      : comm(comm), comm_pair(comm), ndim(ndim), dims(dims), origin(origin),
         subdivision_order(subdivision_order), cell_width_coarse(extent),
         cell_width_fine(extent / ((double)std::pow(2, subdivision_order))),
         inverse_cell_width_coarse(1.0 / extent),

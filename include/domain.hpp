@@ -116,8 +116,11 @@ public:
                     &cell_starts[dimx], &cell_ends[dimx]);
     }
 
+    std::vector<double> origin(2);
+    origin[0] = 0.0;
+    origin[1] = 0.0;
     // for this mesh the hierarchy is simply a copy of the mesh
-    this->mesh_hierarchy = MeshHierarchy(comm_cart, ndim, dims,
+    this->mesh_hierarchy = MeshHierarchy(comm_cart, ndim, dims, origin,
                                          cell_width_coarse, subdivision_order);
 
     // setup the hierarchy
