@@ -11,5 +11,6 @@
 #include "particle_set.hpp"
 #include "particle_spec.hpp"
 #include "typedefs.hpp"
+#include "utility.hpp"
 
 #endif

@@ -22,7 +22,6 @@ private:
   int ncell;
   int npart_local;
   std::vector<INT> npart_cell;
-  std::vector<INT> npart_cell_tmp;
 
 public:
   Domain domain;
@@ -49,10 +48,8 @@ public:
     }
     this->npart_local = 0;
     this->npart_cell = std::vector<INT>(this->ncell);
-    this->npart_cell_tmp = std::vector<INT>(this->ncell);
     for (int cellx = 0; cellx < this->ncell; cellx++) {
       this->npart_cell[cellx] = 0;
-      this->npart_cell_tmp[cellx] = 0;
     }
   }
   ~ParticleGroup() {}
@@ -102,31 +99,30 @@ inline void ParticleGroup::add_particles(U particle_data){
 inline void ParticleGroup::add_particles_local(ParticleSet &particle_data) {
   // loop over the cells of the new particles and allocate more space in the
   // dats
-  for (int cellx = 0; cellx < this->ncell; cellx++) {
-    this->npart_cell_tmp[cellx] = this->npart_cell[cellx];
-  }
+
   const int npart = particle_data.npart;
   const int npart_new = this->npart_local + npart;
   auto cellids = particle_data.get(*this->cell_id_sym);
+  std::vector<INT> layers(npart_new);
   for (int px = 0; px < npart_new; px++) {
     auto cellindex = cellids[px];
     NESOASSERT((cellindex >= 0) && (cellindex < this->ncell),
                "Bad particle cellid)");
-    this->npart_cell_tmp[cellindex]++;
+    layers[px] = this->npart_cell[cellindex]++;
   }
 
   for (auto &dat : this->particle_dats_real) {
-    dat.second->realloc(this->npart_cell_tmp);
-
+    dat.second->realloc(this->npart_cell);
     dat.second->append_particle_data(npart, particle_data.contains(dat.first),
-                                     cellids, particle_data.get(dat.first));
+                                     cellids, layers,
+                                     particle_data.get(dat.first));
   }
 
   for (auto &dat : this->particle_dats_int) {
-    dat.second->realloc(this->npart_cell_tmp);
-
+    dat.second->realloc(this->npart_cell);
     dat.second->append_particle_data(npart, particle_data.contains(dat.first),
-                                     cellids, particle_data.get(dat.first));
+                                     cellids, layers,
+                                     particle_data.get(dat.first));
   }
 
   this->npart_local = npart_new;

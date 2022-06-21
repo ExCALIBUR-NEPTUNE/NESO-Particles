@@ -14,9 +14,6 @@ namespace NESO::Particles {
 
 template <typename T> class ParticleDatT {
 private:
-  int npart_local;
-  int npart_alloc;
-
 public:
   int *s_npart_cell;
   const Sym<T> sym;
@@ -34,9 +31,6 @@ public:
         ncell(ncell), positions(positions),
         cell_dat(CellDat<T>(sycl_target, ncell, ncomp)) {
 
-    this->npart_local = 0;
-    this->npart_alloc = 0;
-
     this->s_npart_cell =
         sycl::malloc_shared<int>(this->ncell, this->sycl_target.queue);
     for (int cellx = 0; cellx < this->ncell; cellx++) {
@@ -48,15 +42,65 @@ public:
   inline void set_compute_target(SYCLTarget &sycl_target) {
     this->sycl_target = sycl_target;
   }
-  inline int get_npart_local(const int npart_local) {
-    return this->npart_local;
-  }
   inline void append_particle_data(const int npart_new,
                                    const bool new_data_exists,
                                    std::vector<INT> &cells,
+                                   std::vector<INT> &layers,
                                    std::vector<T> &data);
   inline void realloc(std::vector<INT> &npart_cell_new);
-  inline int get_npart_local() { return this->npart_local; }
+
+  inline void compress_particle_data(const int npart, std::vector<INT> &cells,
+                                     std::vector<INT> &layers_old,
+                                     std::vector<INT> &layers_new) {
+    NESOASSERT(cells.size() >= npart, "Too few cells");
+    NESOASSERT(layers_old.size() >= npart, "Too few layers old");
+    NESOASSERT(layers_new.size() >= npart, "Too few layers new");
+    for (int px = 0; px < npart; px++) {
+      NESOASSERT(layers_old[px] > layers_new[px],
+                 "compressing only makes sense downwards.");
+    }
+
+    sycl::buffer<INT, 1> b_cells(cells.data(), sycl::range<1>{npart});
+    sycl::buffer<INT, 1> b_layers_old(layers_old.data(), sycl::range<1>{npart});
+    sycl::buffer<INT, 1> b_layers_new(layers_new.data(), sycl::range<1>{npart});
+
+    T ***d_cell_dat_ptr = this->cell_dat.device_ptr();
+    auto event = this->sycl_target.queue.submit([&](sycl::handler &cgh) {
+      // The cell counts on this dat
+      auto a_cells = b_cells.get_access<sycl::access::mode::read>(cgh);
+      auto a_layers_old =
+          b_layers_old.get_access<sycl::access::mode::read>(cgh);
+      auto a_layers_new =
+          b_layers_new.get_access<sycl::access::mode::read>(cgh);
+
+      cgh.parallel_for<>(sycl::range<1>(npart), [=](sycl::id<1> idx) {
+        const INT cellx = a_cells[idx];
+        const INT layer_oldx = a_layers_old[idx];
+        const INT layer_newx = a_layers_new[idx];
+
+        // copy the data from old layer to new layer.
+        for (int cx = 0; cx < ncomp; cx++) {
+          d_cell_dat_ptr[cellx][cx][layer_newx] =
+              d_cell_dat_ptr[cellx][cx][layer_oldx];
+        }
+      });
+    });
+
+    event.wait();
+    return;
+  }
+
+  inline void set_npart_cell(const INT cell, const int npart) {
+    s_npart_cell[cell] = npart;
+    return;
+  }
+  inline void set_npart_cells(std::vector<INT> &npart) {
+    NESOASSERT(npart.size() >= this->ncell, "bad vector size");
+    for (int cellx = 0; cellx < this->ncell; cellx++) {
+      s_npart_cell[cellx] = npart[cellx];
+    }
+    return;
+  }
 };
 
 template <typename T> using ParticleDatShPtr = std::shared_ptr<ParticleDatT<T>>;
@@ -92,6 +136,7 @@ template <typename T>
 inline void ParticleDatT<T>::append_particle_data(const int npart_new,
                                                   const bool new_data_exists,
                                                   std::vector<INT> &cells,
+                                                  std::vector<INT> &layers,
                                                   std::vector<T> &data) {
 
   NESOASSERT(npart_new <= cells.size(), "incorrect number of cells");
@@ -104,6 +149,7 @@ inline void ParticleDatT<T>::append_particle_data(const int npart_new,
   T ***d_cell_dat_ptr = this->cell_dat.device_ptr();
 
   sycl::buffer<INT, 1> b_cells(cells.data(), sycl::range<1>{size_npart_new});
+  sycl::buffer<INT, 1> b_layers(layers.data(), sycl::range<1>{size_npart_new});
 
   // If data is supplied copy the data otherwise zero the components.
   if (new_data_exists) {
@@ -112,25 +158,12 @@ inline void ParticleDatT<T>::append_particle_data(const int npart_new,
     this->sycl_target.queue.submit([&](sycl::handler &cgh) {
       // The cell counts on this dat
       auto a_cells = b_cells.get_access<sycl::access::mode::read>(cgh);
+      auto a_layers = b_layers.get_access<sycl::access::mode::read>(cgh);
       // The new data
       auto a_data = b_data.template get_access<sycl::access::mode::read>(cgh);
-
       cgh.parallel_for<>(sycl::range<1>(npart_new), [=](sycl::id<1> idx) {
-        INT cellx = a_cells[idx];
-        // atomically get the new layer and increment the count in
-        // the cell
-        //#if defined(__INTEL_LLVM_COMPILER)
-        //        auto element_atomic = sycl::ext::oneapi::atomic_ref<
-        //            int, sycl::ext::oneapi::memory_order_acq_rel,
-        //            sycl::ext::oneapi::memory_scope_device,
-        //            sycl::access::address_space::global_space>(s_npart_cell[cellx]);
-        //        const int layerx = element_atomic.fetch_add(1);
-        //#else
-        sycl::atomic_ref<int, sycl::memory_order::relaxed,
-                         sycl::memory_scope::device>
-            element_atomic(s_npart_cell[cellx]);
-        const int layerx = element_atomic.fetch_add(1);
-        //#endif
+        const INT cellx = a_cells[idx];
+        const INT layerx = a_layers[idx];
         // copy the data into the dat.
         for (int cx = 0; cx < ncomp; cx++) {
           d_cell_dat_ptr[cellx][cx][layerx] = a_data[cx * npart_new + idx];
@@ -141,30 +174,22 @@ inline void ParticleDatT<T>::append_particle_data(const int npart_new,
     this->sycl_target.queue.submit([&](sycl::handler &cgh) {
       // The cell counts on this dat
       auto a_cells = b_cells.get_access<sycl::access::mode::read>(cgh);
+      auto a_layers = b_layers.get_access<sycl::access::mode::read>(cgh);
 
       cgh.parallel_for<>(sycl::range<1>(npart_new), [=](sycl::id<1> idx) {
-        INT cellx = a_cells[idx];
-        // atomically get the layer
-
-        //#if defined(__INTEL_LLVM_COMPILER)
-        //        auto element_atomic = sycl::ext::oneapi::atomic_ref<
-        //            int, sycl::ext::oneapi::memory_order_acq_rel,
-        //            sycl::ext::oneapi::memory_scope_device,
-        //            sycl::access::address_space::global_space>(s_npart_cell[cellx]);
-        //        const int layerx = element_atomic.fetch_add(1);
-        //#else
-        sycl::atomic_ref<int, sycl::memory_order::relaxed,
-                         sycl::memory_scope::device>
-            element_atomic(s_npart_cell[cellx]);
-        const int layerx = element_atomic.fetch_add(1);
-        //#endif
-
+        const INT cellx = a_cells[idx];
+        const INT layerx = a_layers[idx];
         // zero the new components in the dat
         for (int cx = 0; cx < ncomp; cx++) {
           d_cell_dat_ptr[cellx][cx][layerx] = ((T)0);
         }
       });
     });
+  }
+
+  for (int px = 0; px < npart_new; px++) {
+    auto cellx = cells[px];
+    s_npart_cell[cellx]++;
   }
 }
 

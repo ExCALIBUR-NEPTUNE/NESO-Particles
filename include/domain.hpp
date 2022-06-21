@@ -8,23 +8,14 @@
 
 namespace NESO::Particles {
 
-class Mesh {
-private:
-  int cell_count;
-
-public:
-  Mesh(){};
-  Mesh(int cell_count) : cell_count(cell_count){};
-  inline int get_cell_count() { return this->cell_count; };
-};
-
-class HMesh : public Mesh {
+class HMesh {
 
 public:
   virtual inline MPI_Comm get_comm() = 0;
   virtual inline int get_ndim() = 0;
   virtual inline std::vector<int> &get_dims() = 0;
   virtual inline int get_subdivision_order() = 0;
+  virtual inline int get_cell_count() = 0;
   virtual inline double get_cell_width_coarse() = 0;
   virtual inline double get_cell_width_fine() = 0;
   virtual inline double get_inverse_cell_width_coarse() = 0;
@@ -52,6 +43,7 @@ private:
 public:
   int cell_starts[3] = {0, 0, 0};
   int cell_ends[3] = {1, 1, 1};
+  double global_extents[3] = {0.0, 0.0, 0.0};
 
   const int ndim;
   std::vector<int> &dims;
@@ -91,6 +83,7 @@ public:
 
     for (int dimx = 0; dimx < ndim; dimx++) {
       cell_counts[dimx] = dims[dimx] * std::pow(2, subdivision_order);
+      global_extents[dimx] = extent * dims[dimx];
     }
     // direction with most cells first to match mpi_dims order
     auto cell_count_ordering = reverse_argsort(cell_counts);
@@ -133,6 +126,7 @@ public:
     mesh_hierarchy.claim_initialise();
 
     // loop over owned cells
+    this->cell_count = 0;
     for (int cz = cell_starts[2]; cz < cell_ends[2]; cz++) {
       index_mesh[2] = cz;
       for (int cy = cell_starts[1]; cy < cell_ends[1]; cy++) {
@@ -147,6 +141,7 @@ public:
               mesh_hierarchy.tuple_to_linear_global(index_mh);
           // claim ownership of the current cell in the MeshHierarchy
           mesh_hierarchy.claim_cell(index_global, 1);
+          this->cell_count++;
         }
       }
     }
@@ -168,6 +163,7 @@ public:
   };
   inline int get_ncells_coarse() { return this->ncells_coarse; };
   inline int get_ncells_fine() { return this->ncells_fine; };
+  inline int get_cell_count() { return this->cell_count; };
   inline MeshHierarchy *get_mesh_hierarchy() { return &this->mesh_hierarchy; };
 
   /*
@@ -199,8 +195,8 @@ public:
 class Domain {
 private:
 public:
-  Mesh &mesh;
-  Domain(Mesh &mesh) : mesh(mesh) {}
+  HMesh &mesh;
+  Domain(HMesh &mesh) : mesh(mesh) {}
   ~Domain() {}
 };
 

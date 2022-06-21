@@ -19,6 +19,9 @@ private:
   std::map<Sym<REAL>, std::vector<REAL>> values_real;
   std::map<Sym<INT>, std::vector<INT>> values_int;
 
+  std::vector<REAL> dummy_real;
+  std::vector<INT> dummy_int;
+
 public:
   const int npart;
 
@@ -45,9 +48,19 @@ public:
   };
 
   inline std::vector<REAL> &get(Sym<REAL> const &sym) {
-    return values_real[sym];
+    if (contains(sym)) {
+      return values_real[sym];
+    } else {
+      return dummy_real;
+    }
   };
-  inline std::vector<INT> &get(Sym<INT> const &sym) { return values_int[sym]; };
+  inline std::vector<INT> &get(Sym<INT> const &sym) {
+    if (contains(sym)) {
+      return values_int[sym];
+    } else {
+      return dummy_int;
+    }
+  };
   inline bool contains(Sym<REAL> const &sym) {
     return (this->values_real.count(sym) > 0);
   }
