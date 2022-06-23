@@ -6,16 +6,22 @@ set(CMAKE_CXX_STANDARD 17)
 
 add_definitions(-DGPU_SELECTOR=0)
 
-include(FetchContent)
-FetchContent_Declare(
-  googletest
-  URL https://github.com/google/googletest/archive/054a986a8513149e8374fc669a5fe40117ca6b41.zip
-)
-# For Windows: Prevent overriding the parent project's compiler/linker settings
-set(gtest_force_shared_crt
-    ON
-    CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(googletest)
+enable_testing()
+find_package(GTest QUIET)
+
+if(NOT GTest_FOUND)
+  include(FetchContent)
+  FetchContent_Declare(
+    googletest
+    URL https://github.com/google/googletest/archive/054a986a8513149e8374fc669a5fe40117ca6b41.zip
+  )
+  # For Windows: Prevent overriding the parent project's compiler/linker
+  # settings
+  set(gtest_force_shared_crt
+      ON
+      CACHE BOOL "" FORCE)
+  FetchContent_MakeAvailable(googletest)
+endif()
 
 set(EXECUTABLE testNESOParticles)
 set(TEST_MAIN ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp)
@@ -27,12 +33,12 @@ file(GLOB TEST_SRCS ${CMAKE_CURRENT_SOURCE_DIR}/test_*.cpp
      ${CMAKE_CURRENT_SOURCE_DIR}/*_test.cpp)
 
 # options common to both fftw/mkl
-set(LINK_LIBRARIES_COMMON ${MPI_CXX_LINK_FLAGS} ${MPI_CXX_LIBRARIES} gtest)
+set(LINK_LIBRARIES_COMMON ${MPI_CXX_LINK_FLAGS} ${MPI_CXX_LIBRARIES}
+                          GTest::gtest GTest::gtest_main)
 
 set(INCLUDE_DIRECTORIES_COMMON ${CMAKE_SOURCE_DIR}/include
                                ${MPI_CXX_INCLUDE_PATH})
 
-enable_testing()
 # Build the tests individually
 include(GoogleTest)
 foreach(TEST ${TEST_SRCS})
