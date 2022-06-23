@@ -59,10 +59,11 @@ public:
       NESOASSERT(layers_old[px] > layers_new[px],
                  "compressing only makes sense downwards.");
     }
-
-    sycl::buffer<INT, 1> b_cells(cells.data(), sycl::range<1>{npart});
-    sycl::buffer<INT, 1> b_layers_old(layers_old.data(), sycl::range<1>{npart});
-    sycl::buffer<INT, 1> b_layers_new(layers_new.data(), sycl::range<1>{npart});
+    
+    const size_t npart_s = static_cast<size_t>(npart);
+    sycl::buffer<INT, 1> b_cells(cells.data(), sycl::range<1>{npart_s});
+    sycl::buffer<INT, 1> b_layers_old(layers_old.data(), sycl::range<1>{npart_s});
+    sycl::buffer<INT, 1> b_layers_new(layers_new.data(), sycl::range<1>{npart_s});
 
     T ***d_cell_dat_ptr = this->cell_dat.device_ptr();
     auto event = this->sycl_target.queue.submit([&](sycl::handler &cgh) {
