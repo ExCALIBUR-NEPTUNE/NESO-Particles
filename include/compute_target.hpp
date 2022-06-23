@@ -46,6 +46,40 @@ public:
   void free() { comm_pair.free(); }
 };
 
+template <typename T>
+class BufferDevice {
+  private:
+  public:
+    SYCLTarget &sycl_target;
+    T * ptr;
+    size_t size;
+  //BufferDevice(
+  //){
+  //  this->ptr = NULL;
+  //}
+  BufferDevice(
+    SYCLTarget &sycl_target,
+    size_t size
+  ) : sycl_target(sycl_target){
+    this->size = size;
+    this->ptr = (T*) sycl::malloc_device(size, sycl_target.queue);
+  }
+  inline int realloc_no_copy(const size_t size){
+    if (size > this->size){
+      sycl::free(this->ptr, this->sycl_target.queue);
+      this->ptr = (T*) sycl::malloc_device(size, sycl_target.queue);
+      this->size = size;
+    }
+    return this->size;
+  }
+  ~BufferDevice(){
+    if( this->ptr != NULL){
+      sycl::free(this->ptr, sycl_target.queue);
+    }
+  }
+};
+
+
 } // namespace NESO::Particles
 
 #endif
