@@ -2,6 +2,7 @@
 #define _NESO_PARTICLES_CELL_DAT
 
 #include <CL/sycl.hpp>
+#include <cstdio>
 #include <memory>
 #include <vector>
 
@@ -18,6 +19,18 @@ namespace NESO::Particles {
  */
 template <typename T> class CellDataT {
 private:
+  // std::format is C++20.......
+  std::string format(INT value) {
+    char buffer[128];
+    const int err = snprintf(buffer, 128, "%ld", value);
+    return std::string(buffer);
+  }
+  std::string format(REAL value) {
+    char buffer[128];
+    const int err = snprintf(buffer, 128, "%f", value);
+    return std::string(buffer);
+  }
+
 public:
   SYCLTarget &sycl_target;
   const int nrow;
@@ -36,6 +49,16 @@ public:
    * row. e.g. CellData cell_data; T value = *cell_data[col][row];
    */
   inline std::vector<T> &operator[](int col) { return this->data[col]; }
+
+  inline void print() {
+
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      for (int colx = 0; colx < ncol; colx++) {
+        std::cout << this->format(this->data[colx][rowx]) << " ";
+      }
+      std::cout << std::endl;
+    }
+  }
 };
 
 template <typename T> using CellData = std::shared_ptr<CellDataT<T>>;
@@ -253,6 +276,19 @@ public:
    *      d[cell_index][column_index][row_index]
    */
   T ***device_ptr() { return this->d_ptr; };
+
+  inline void print(int start = -1, int end = -1) {
+
+    start = (start < 0) ? 0 : start;
+    end = (end < 0) ? ncells : end;
+
+    for (int cx = start; cx < end; cx++) {
+      std::cout << "------- " << cx << " -------" << std::endl;
+      auto cell = this->get_cell(cx);
+      cell->print();
+    }
+    std::cout << "-----------------" << std::endl;
+  }
 };
 
 } // namespace NESO::Particles

@@ -49,7 +49,7 @@ public:
                                    std::vector<T> &data);
   inline void realloc(std::vector<INT> &npart_cell_new);
 
-  inline sycl::event move_particle_data(const int npart, const INT *d_cells_old,
+  inline sycl::event copy_particle_data(const int npart, const INT *d_cells_old,
                                         const INT *d_cells_new,
                                         const INT *d_layers_old,
                                         const INT *d_layers_new) {
@@ -66,7 +66,7 @@ public:
           const INT layer_oldx = d_layers_old[idx];
           const INT layer_newx = d_layers_new[idx];
 
-          // copy the data from old layer to new layer.
+          // copy the data from old cell/layer to new cell/layer.
           for (int cx = 0; cx < ncomp; cx++) {
             d_cell_dat_ptr[cell_newx][cx][layer_newx] =
                 d_cell_dat_ptr[cell_oldx][cx][layer_oldx];
@@ -75,6 +75,21 @@ public:
       });
     });
 
+    return event;
+  }
+
+  /*
+   * Async call to set s_npart_cells from a device buffer
+   */
+  template <typename U>
+  inline sycl::event set_npart_cells_device(const U *d_npart_cell) {
+    const size_t ncell = static_cast<size_t>(this->ncell);
+    int *s_npart_cell_ptr = this->s_npart_cell;
+    sycl::event event = this->sycl_target.queue.submit([&](sycl::handler &cgh) {
+      cgh.parallel_for<>(sycl::range<1>(ncell), [=](sycl::id<1> idx) {
+        s_npart_cell_ptr[idx] = static_cast<int>(d_npart_cell[idx]);
+      });
+    });
     return event;
   }
 
@@ -89,6 +104,7 @@ public:
     }
     return;
   }
+  inline void trim_cell_dat_rows();
 };
 
 template <typename T> using ParticleDatShPtr = std::shared_ptr<ParticleDatT<T>>;
@@ -112,6 +128,11 @@ inline void ParticleDatT<T>::realloc(std::vector<INT> &npart_cell_new) {
              "Insufficent new cell counts");
   for (int cellx = 0; cellx < this->ncell; cellx++) {
     this->cell_dat.set_nrow(cellx, npart_cell_new[cellx]);
+  }
+}
+template <typename T> inline void ParticleDatT<T>::trim_cell_dat_rows() {
+  for (int cellx = 0; cellx < this->ncell; cellx++) {
+    this->cell_dat.set_nrow(cellx, s_npart_cell[cellx]);
   }
 }
 
