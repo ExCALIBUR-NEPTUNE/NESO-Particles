@@ -28,8 +28,15 @@ private:
   BufferDevice<INT> compress_cells_new;
   BufferDevice<INT> compress_layers_old;
   BufferDevice<INT> compress_layers_new;
-  BufferDevice<INT> device_npart_cell;
-  BufferDevice<INT> device_move_counters;
+
+  // these should be INT not int but hipsycl refused to do atomic refs on long
+  // int
+  BufferDevice<int> device_npart_cell;
+  BufferDevice<int> device_move_counters;
+
+  inline void compute_remove_compress_indicies(const int npart,
+                                               const std::vector<INT> &cells,
+                                               const std::vector<INT> &layers);
 
 public:
   Domain domain;
@@ -46,14 +53,11 @@ public:
   ParticleGroup(Domain domain, ParticleSpec &particle_spec,
                 SYCLTarget &sycl_target)
       : domain(domain), sycl_target(sycl_target),
-        ncell(domain.mesh.get_cell_count()),
-        compress_cells_old(sycl_target, 1),
-        compress_cells_new(sycl_target, 1),
-        compress_layers_old(sycl_target, 1),
+        ncell(domain.mesh.get_cell_count()), compress_cells_old(sycl_target, 1),
+        compress_cells_new(sycl_target, 1), compress_layers_old(sycl_target, 1),
         compress_layers_new(sycl_target, 1),
         device_npart_cell(sycl_target, domain.mesh.get_cell_count()),
-        device_move_counters(sycl_target, domain.mesh.get_cell_count())
-  {
+        device_move_counters(sycl_target, domain.mesh.get_cell_count()) {
 
     for (auto &property : particle_spec.properties_real) {
       add_particle_dat(ParticleDat(sycl_target, property, this->ncell));
@@ -93,114 +97,8 @@ public:
     return particle_dats_int[sym]->cell_dat.get_cell(cell);
   }
 
-  inline void remove_particles(
-    const int npart,
-    const std::vector<INT> &cells,
-    const std::vector<INT> &layers
-  ){
-    
-    compress_cells_old.realloc_no_copy(npart);
-    compress_layers_old.realloc_no_copy(npart);
-    compress_layers_new.realloc_no_copy(npart);
-    const auto cell_count = domain.mesh.get_cell_count();
-    NESOASSERT(cell_count <= this->npart_cell.size(), "bad buffer lengths on cell count");
-    device_npart_cell.realloc_no_copy(cell_count);
-
-    sycl::buffer<INT> b_npart_cell(this->npart_cell.data(), sycl::range<1>{this->npart_cell.size()});
-    sycl::buffer<INT> b_cells(cells.data(), sycl::range<1>{cells.size()});
-    sycl::buffer<INT> b_layers(layers.data(), sycl::range<1>{layers.size()});
-
-    auto device_npart_cell_ptr = device_npart_cell.ptr;
-    auto device_move_counters_ptr = device_move_counters.ptr;
-
-    auto compress_cells_old_ptr = compress_cells_old.ptr;
-    auto compress_layers_old_ptr = compress_layers_old.ptr;
-    auto compress_layers_new_ptr = compress_layers_new.ptr;
-
-
-    INT *** cell_ids_ptr = this->cell_id_dat->cell_dat.device_ptr();
-    
-    this->sycl_target.queue.submit([&](sycl::handler &cgh) {
-      
-
-      auto a_npart_cell = b_npart_cell.get_access<sycl::access::mode::read_write>(cgh);
-      auto a_cells = b_cells.get_access<sycl::access::mode::read>(cgh);
-      auto a_layers = b_layers.get_access<sycl::access::mode::read>(cgh);
-
-      cgh.parallel_for<>(sycl::range<1>((size_t) cell_count), [=](sycl::id<1> idx) {
-        device_npart_cell_ptr[idx] = a_npart_cell[idx];
-        device_move_counters_ptr[idx] = 0;
-      });
-      cgh.parallel_for<>(sycl::range<1>((size_t) npart), [=](sycl::id<1> idx) {
-
-        const auto cell = a_cells[idx];
-        const auto layer = a_layers[idx];
-
-        // Atomically do device_npart_cell_ptr[cell]--
-        sycl::atomic_ref<
-            INT,
-            sycl::memory_order::relaxed,
-            sycl::memory_scope::device
-        > element_atomic(device_npart_cell_ptr[cell]);
-        element_atomic.fetch_add(-1);
-
-        // indicate this particle is removed by setting the cell index to -1
-        cell_ids_ptr[cell][0][layer] = -1;
-      });
-      cgh.parallel_for<>(sycl::range<1>((size_t) npart), [=](sycl::id<1> idx) {
-
-        const auto cell = a_cells[idx];
-        const auto layer = a_layers[idx];
-        
-        // Is this layer less than the new cell count?
-        // If so then there is a particle in a row greater than the cell count
-        // to be copied into this layer.
-        if (layer < device_npart_cell_ptr[cell]){
-
-          // If there are n rows to be filled in row indices less than the new
-          // cell count then there are n rows greater than the new cell count
-          // which are to be copied down. Atomically compute which one of those
-          // rows this index copies.
-          sycl::atomic_ref<
-              INT,
-              sycl::memory_order::relaxed,
-              sycl::memory_scope::device
-          > element_atomic(device_move_counters_ptr[cell]);
-          const INT source_row_offset = element_atomic.fetch_add(1);
-
-          // find the source row counting up from new_cell_count to old_cell_count
-          // potential source rows will have a cell index >= 0. This index
-          // should pick the i^th source row where i was computed from the
-          // atomic above.
-          INT found_count = 0;
-          INT source_row = -1;
-          for(INT rowx=device_npart_cell_ptr[cell] ; rowx<a_npart_cell[idx] ; rowx++){
-            // Is this a potential source row?
-            if (cell_ids_ptr[cell][0][layer] != -1){
-              if(source_row_offset == found_count++){
-                source_row = rowx;
-                break;
-              }
-            }
-          }
-          
-          compress_cells_old_ptr[idx] = cell;
-          compress_layers_new_ptr[idx] = layer;
-          compress_layers_old_ptr[idx] = source_row;
-
-        } else {
-
-          compress_cells_old_ptr[idx] = -1;
-          compress_layers_new_ptr[idx] = -1;
-          compress_layers_old_ptr[idx] = -1;
-
-        }
-
-      });
-    }).wait();
-  }
-
-
+  inline void remove_particles(const int npart, const std::vector<INT> &cells,
+                               const std::vector<INT> &layers);
 };
 
 inline void
@@ -262,6 +160,164 @@ inline void ParticleGroup::add_particles_local(ParticleSet &particle_data) {
   // The append is async
   this->sycl_target.queue.wait();
 }
+
+
+inline void ParticleGroup::compute_remove_compress_indicies(
+    const int npart, const std::vector<INT> &cells,
+    const std::vector<INT> &layers) {
+
+  compress_cells_old.realloc_no_copy(npart);
+  compress_layers_old.realloc_no_copy(npart);
+  compress_layers_new.realloc_no_copy(npart);
+  const auto cell_count = domain.mesh.get_cell_count();
+  NESOASSERT(cell_count <= this->npart_cell.size(),
+             "bad buffer lengths on cell count");
+  device_npart_cell.realloc_no_copy(cell_count);
+
+  sycl::buffer<INT> b_npart_cell(this->npart_cell.data(),
+                                 sycl::range<1>{this->npart_cell.size()});
+  sycl::buffer<INT> b_cells(cells.data(), sycl::range<1>{cells.size()});
+  sycl::buffer<INT> b_layers(layers.data(), sycl::range<1>{layers.size()});
+
+  auto device_npart_cell_ptr = device_npart_cell.ptr;
+  auto device_move_counters_ptr = device_move_counters.ptr;
+
+  auto compress_cells_old_ptr = compress_cells_old.ptr;
+  auto compress_layers_old_ptr = compress_layers_old.ptr;
+  auto compress_layers_new_ptr = compress_layers_new.ptr;
+
+  INT ***cell_ids_ptr = this->cell_id_dat->cell_dat.device_ptr();
+
+  this->sycl_target.queue
+      .submit([&](sycl::handler &cgh) {
+        auto a_npart_cell =
+            b_npart_cell.get_access<sycl::access::mode::read_write>(cgh);
+        auto a_cells = b_cells.get_access<sycl::access::mode::read>(cgh);
+        auto a_layers = b_layers.get_access<sycl::access::mode::read>(cgh);
+
+        cgh.parallel_for<>(sycl::range<1>(static_cast<size_t>(cell_count)),
+                           [=](sycl::id<1> idx) {
+                             device_npart_cell_ptr[idx] =
+                                 static_cast<int>(a_npart_cell[idx]);
+                             device_move_counters_ptr[idx] = 0;
+                           });
+        cgh.parallel_for<>(sycl::range<1>(static_cast<size_t>(npart)),
+                           [=](sycl::id<1> idx) {
+                             const auto cell = a_cells[idx];
+                             const auto layer = a_layers[idx];
+
+                             // Atomically do device_npart_cell_ptr[cell]--
+                             sycl::atomic_ref<int, sycl::memory_order::relaxed,
+                                              sycl::memory_scope::device>
+                                 element_atomic(device_npart_cell_ptr[cell]);
+                             element_atomic.fetch_add(-1);
+
+                             // indicate this particle is removed by setting the
+                             // cell index to -1
+                             cell_ids_ptr[cell][0][layer] = -1;
+                           });
+        cgh.parallel_for<>(
+            sycl::range<1>(static_cast<size_t>(npart)), [=](sycl::id<1> idx) {
+              const auto cell = a_cells[idx];
+              const auto layer = a_layers[idx];
+
+              // Is this layer less than the new cell count?
+              // If so then there is a particle in a row greater than the cell
+              // count to be copied into this layer.
+              if (layer < device_npart_cell_ptr[cell]) {
+
+                // If there are n rows to be filled in row indices less than the
+                // new cell count then there are n rows greater than the new
+                // cell count which are to be copied down. Atomically compute
+                // which one of those rows this index copies.
+                sycl::atomic_ref<int, sycl::memory_order::relaxed,
+                                 sycl::memory_scope::device>
+                    element_atomic(device_move_counters_ptr[cell]);
+                const INT source_row_offset = element_atomic.fetch_add(1);
+
+                // find the source row counting up from new_cell_count to
+                // old_cell_count potential source rows will have a cell index
+                // >= 0. This index should pick the i^th source row where i was
+                // computed from the atomic above.
+                INT found_count = 0;
+                INT source_row = -1;
+                for (INT rowx = device_npart_cell_ptr[cell];
+                     rowx < a_npart_cell[idx]; rowx++) {
+                  // Is this a potential source row?
+                  if (cell_ids_ptr[cell][0][layer] != -1) {
+                    if (source_row_offset == found_count++) {
+                      source_row = rowx;
+                      break;
+                    }
+                  }
+                }
+
+                compress_cells_old_ptr[idx] = cell;
+                compress_layers_new_ptr[idx] = layer;
+                compress_layers_old_ptr[idx] = source_row;
+
+              } else {
+
+                compress_cells_old_ptr[idx] = -1;
+                compress_layers_new_ptr[idx] = -1;
+                compress_layers_old_ptr[idx] = -1;
+              }
+            });
+      })
+      .wait();
+}
+
+inline void ParticleGroup::remove_particles(const int npart,
+                                            const std::vector<INT> &cells,
+                                            const std::vector<INT> &layers) {
+
+  compute_remove_compress_indicies(npart, cells, layers);
+
+  auto compress_cells_old_ptr = compress_cells_old.ptr;
+  auto compress_layers_old_ptr = compress_layers_old.ptr;
+  auto compress_layers_new_ptr = compress_layers_new.ptr;
+  for(auto &dat : particle_dats_real){
+    dat.second->move_particle_data(
+      npart,
+      compress_cells_old_ptr,
+      compress_cells_old_ptr,
+      compress_layers_old_ptr,
+      compress_layers_new_ptr
+    );
+  }
+  for(auto &dat : particle_dats_int){
+    dat.second->move_particle_data(
+      npart,
+      compress_cells_old_ptr,
+      compress_cells_old_ptr,
+      compress_layers_old_ptr,
+      compress_layers_new_ptr
+    );
+  }
+  
+// TODO engineer out this buffer creation
+  sycl::buffer<INT> b_npart_cell(this->npart_cell.data(),
+                                 sycl::range<1>{this->npart_cell.size()});
+
+  auto device_npart_cell_ptr = device_npart_cell.ptr;
+  const auto cell_count = domain.mesh.get_cell_count();
+  this->sycl_target.queue
+      .submit([&](sycl::handler &cgh) {
+        auto a_npart_cell =
+            b_npart_cell.get_access<sycl::access::mode::read_write>(cgh);
+
+        cgh.parallel_for<>(sycl::range<1>(static_cast<size_t>(cell_count)),
+                           [=](sycl::id<1> idx) {
+                             a_npart_cell[idx] =
+                                 static_cast<INT>(device_npart_cell_ptr[idx]);
+                           });
+  });
+
+  // the move calls are async
+  sycl_target.queue.wait_and_throw();
+
+}
+
 
 } // namespace NESO::Particles
 

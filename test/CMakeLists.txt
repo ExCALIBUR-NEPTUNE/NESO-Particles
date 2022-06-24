@@ -34,7 +34,7 @@ file(GLOB TEST_SRCS ${CMAKE_CURRENT_SOURCE_DIR}/test_*.cpp
 
 # options common to both fftw/mkl
 set(LINK_LIBRARIES_COMMON ${MPI_CXX_LINK_FLAGS} ${MPI_CXX_LIBRARIES}
-                          GTest::gtest GTest::gtest_main)
+                          GTest::gtest)
 
 set(INCLUDE_DIRECTORIES_COMMON ${CMAKE_SOURCE_DIR}/include
                                ${MPI_CXX_INCLUDE_PATH})

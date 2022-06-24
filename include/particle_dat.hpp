@@ -49,46 +49,33 @@ public:
                                    std::vector<T> &data);
   inline void realloc(std::vector<INT> &npart_cell_new);
 
-  inline void compress_particle_data(const int npart, std::vector<INT> &cells,
-                                     std::vector<INT> &layers_old,
-                                     std::vector<INT> &layers_new) {
-    NESOASSERT(cells.size() >= npart, "Too few cells");
-    NESOASSERT(layers_old.size() >= npart, "Too few layers old");
-    NESOASSERT(layers_new.size() >= npart, "Too few layers new");
-    for (int px = 0; px < npart; px++) {
-      NESOASSERT(layers_old[px] > layers_new[px],
-                 "compressing only makes sense downwards.");
-    }
-    
+  inline sycl::event move_particle_data(const int npart, const INT *d_cells_old,
+                                        const INT *d_cells_new,
+                                        const INT *d_layers_old,
+                                        const INT *d_layers_new) {
     const size_t npart_s = static_cast<size_t>(npart);
-    sycl::buffer<INT, 1> b_cells(cells.data(), sycl::range<1>{npart_s});
-    sycl::buffer<INT, 1> b_layers_old(layers_old.data(), sycl::range<1>{npart_s});
-    sycl::buffer<INT, 1> b_layers_new(layers_new.data(), sycl::range<1>{npart_s});
-
     T ***d_cell_dat_ptr = this->cell_dat.device_ptr();
-    auto event = this->sycl_target.queue.submit([&](sycl::handler &cgh) {
-      // The cell counts on this dat
-      auto a_cells = b_cells.get_access<sycl::access::mode::read>(cgh);
-      auto a_layers_old =
-          b_layers_old.get_access<sycl::access::mode::read>(cgh);
-      auto a_layers_new =
-          b_layers_new.get_access<sycl::access::mode::read>(cgh);
+    const int ncomp = this->ncomp;
 
-      cgh.parallel_for<>(sycl::range<1>(npart), [=](sycl::id<1> idx) {
-        const INT cellx = a_cells[idx];
-        const INT layer_oldx = a_layers_old[idx];
-        const INT layer_newx = a_layers_new[idx];
+    sycl::event event = this->sycl_target.queue.submit([&](sycl::handler &cgh) {
+      cgh.parallel_for<>(sycl::range<1>(npart_s), [=](sycl::id<1> idx) {
+        const INT cell_oldx = d_cells_old[idx];
+        // remove particles currently masks of elements using -1
+        if (cell_oldx > -1) {
+          const INT cell_newx = d_cells_old[idx];
+          const INT layer_oldx = d_layers_old[idx];
+          const INT layer_newx = d_layers_new[idx];
 
-        // copy the data from old layer to new layer.
-        for (int cx = 0; cx < ncomp; cx++) {
-          d_cell_dat_ptr[cellx][cx][layer_newx] =
-              d_cell_dat_ptr[cellx][cx][layer_oldx];
+          // copy the data from old layer to new layer.
+          for (int cx = 0; cx < ncomp; cx++) {
+            d_cell_dat_ptr[cell_newx][cx][layer_newx] =
+                d_cell_dat_ptr[cell_oldx][cx][layer_oldx];
+          }
         }
       });
     });
 
-    event.wait();
-    return;
+    return event;
   }
 
   inline void set_npart_cell(const INT cell, const int npart) {
