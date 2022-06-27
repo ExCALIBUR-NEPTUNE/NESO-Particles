@@ -37,6 +37,9 @@ private:
   inline void compute_remove_compress_indicies(const int npart,
                                                const std::vector<INT> &cells,
                                                const std::vector<INT> &layers);
+  template <typename T> inline void realloc_dat(ParticleDatShPtr<T> &dat) {
+    dat->realloc(this->npart_cell);
+  }
 
 public:
   Domain domain;
@@ -59,16 +62,16 @@ public:
         device_npart_cell(sycl_target, domain.mesh.get_cell_count()),
         device_move_counters(sycl_target, domain.mesh.get_cell_count()) {
 
+    this->npart_local = 0;
+    this->npart_cell = std::vector<INT>(this->ncell);
+    for (int cellx = 0; cellx < this->ncell; cellx++) {
+      this->npart_cell[cellx] = 0;
+    }
     for (auto &property : particle_spec.properties_real) {
       add_particle_dat(ParticleDat(sycl_target, property, this->ncell));
     }
     for (auto &property : particle_spec.properties_int) {
       add_particle_dat(ParticleDat(sycl_target, property, this->ncell));
-    }
-    this->npart_local = 0;
-    this->npart_cell = std::vector<INT>(this->ncell);
-    for (int cellx = 0; cellx < this->ncell; cellx++) {
-      this->npart_cell[cellx] = 0;
     }
   }
   ~ParticleGroup() {}
@@ -111,6 +114,7 @@ ParticleGroup::add_particle_dat(ParticleDatShPtr<REAL> particle_dat) {
     this->position_dat = particle_dat;
     this->position_sym = std::make_shared<Sym<REAL>>(particle_dat->sym.name);
   }
+  realloc_dat(particle_dat);
 }
 inline void
 ParticleGroup::add_particle_dat(ParticleDatShPtr<INT> particle_dat) {
@@ -120,6 +124,7 @@ ParticleGroup::add_particle_dat(ParticleDatShPtr<INT> particle_dat) {
     this->cell_id_dat = particle_dat;
     this->cell_id_sym = std::make_shared<Sym<INT>>(particle_dat->sym.name);
   }
+  realloc_dat(particle_dat);
 }
 
 inline void ParticleGroup::add_particles(){};
@@ -145,14 +150,14 @@ inline void ParticleGroup::add_particles_local(ParticleSet &particle_data) {
   }
 
   for (auto &dat : this->particle_dats_real) {
-    dat.second->realloc(this->npart_cell);
+    realloc_dat(dat.second);
     dat.second->append_particle_data(npart, particle_data.contains(dat.first),
                                      cellids, layers,
                                      particle_data.get(dat.first));
   }
 
   for (auto &dat : this->particle_dats_int) {
-    dat.second->realloc(this->npart_cell);
+    realloc_dat(dat.second);
     dat.second->append_particle_data(npart, particle_data.contains(dat.first),
                                      cellids, layers,
                                      particle_data.get(dat.first));
@@ -218,7 +223,7 @@ inline void ParticleGroup::compute_remove_compress_indicies(
                              element_atomic.fetch_add(-1);
 
                              //// indicate this particle is removed by setting
-                             ///the / cell index to -1
+                             /// the / cell index to -1
                              cell_ids_ptr[cell][0][layer] = -42;
                            });
       })
