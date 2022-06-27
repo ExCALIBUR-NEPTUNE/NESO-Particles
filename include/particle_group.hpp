@@ -22,7 +22,7 @@ class ParticleGroup {
 private:
   int ncell;
   int npart_local;
-  std::vector<INT> npart_cell;
+  BufferShared<INT> npart_cell;
 
   BufferDevice<INT> compress_cells_old;
   BufferDevice<INT> compress_cells_new;
@@ -39,7 +39,20 @@ private:
                                                const std::vector<INT> &layers);
   template <typename T> inline void realloc_dat(ParticleDatShPtr<T> &dat) {
     dat->realloc(this->npart_cell);
-  }
+  };
+  template <typename T> inline void push_particle_spec(
+      ParticleProp<T> prop
+  ){
+    this->particle_spec.push(prop);
+  };
+
+  // members for mpi communication
+  BufferShared<int> s_send_ranks;
+  BufferShared<int> s_recv_ranks;
+  BufferShared<int> s_send_offsets;
+  BufferShared<int> s_recv_offsets;
+  BufferShared<int> s_num_ranks_send;
+  BufferShared<int> s_num_ranks_recv;
 
 public:
   Domain domain;
@@ -47,11 +60,19 @@ public:
 
   std::map<Sym<REAL>, ParticleDatShPtr<REAL>> particle_dats_real{};
   std::map<Sym<INT>, ParticleDatShPtr<INT>> particle_dats_int{};
-
+  
+  // ParticleDat storing Positions
   std::shared_ptr<Sym<REAL>> position_sym;
   ParticleDatShPtr<REAL> position_dat;
+  // ParticleDat storing cell ids
   std::shared_ptr<Sym<INT>> cell_id_sym;
   ParticleDatShPtr<INT> cell_id_dat;
+  // ParticleDat storing MPI rank
+  std::shared_ptr<Sym<INT>> mpi_rank_sym;
+  ParticleDatShPtr<INT> mpi_rank_dat;
+
+  // ParticleSpec of all the ParticleDats of this ParticleGroup
+  ParticleSpec particle_spec;
 
   ParticleGroup(Domain domain, ParticleSpec &particle_spec,
                 SYCLTarget &sycl_target)
@@ -59,13 +80,21 @@ public:
         ncell(domain.mesh.get_cell_count()), compress_cells_old(sycl_target, 1),
         compress_cells_new(sycl_target, 1), compress_layers_old(sycl_target, 1),
         compress_layers_new(sycl_target, 1),
+        s_send_ranks(sycl_target, 1),
+        s_recv_ranks(sycl_target, 1),
+        s_send_offsets(sycl_target, 1),
+        s_recv_offsets(sycl_target, 1),
+        s_num_ranks_send(sycl_target, 1),
+        s_num_ranks_recv(sycl_target, 1),
+        npart_cell(sycl_target, 1),
         device_npart_cell(sycl_target, domain.mesh.get_cell_count()),
         device_move_counters(sycl_target, domain.mesh.get_cell_count()) {
-
+    
     this->npart_local = 0;
-    this->npart_cell = std::vector<INT>(this->ncell);
+    this->npart_cell.realloc_no_copy(domain.mesh.get_cell_count());
+
     for (int cellx = 0; cellx < this->ncell; cellx++) {
-      this->npart_cell[cellx] = 0;
+      this->npart_cell.ptr[cellx] = 0;
     }
     for (auto &property : particle_spec.properties_real) {
       add_particle_dat(ParticleDat(sycl_target, property, this->ncell));
@@ -73,6 +102,17 @@ public:
     for (auto &property : particle_spec.properties_int) {
       add_particle_dat(ParticleDat(sycl_target, property, this->ncell));
     }
+    // Create a ParticleDat to store the MPI rank of the particles in.
+    add_particle_dat(
+        ParticleDat(sycl_target, ParticleProp(Sym<INT>("NESO_MPI_RANK"), 1),
+                                 ncell)
+    );
+    // Create a ParticleDat to store the layer for packing.
+    add_particle_dat(
+        ParticleDat(sycl_target, ParticleProp(Sym<INT>("NESO_MPI_LAYER"), 1),
+                                 ncell)
+    );
+
   }
   ~ParticleGroup() {}
 
@@ -103,7 +143,9 @@ public:
   inline void remove_particles(const int npart, const std::vector<INT> &cells,
                                const std::vector<INT> &layers);
 
-  inline INT get_npart_cell(const int cell) { return this->npart_cell[cell]; }
+  inline INT get_npart_cell(const int cell) { return this->npart_cell.ptr[cell]; }
+  inline ParticleSpec & get_particle_spec(){ return this->particle_spec; }
+  inline void global_move();
 };
 
 inline void
@@ -115,6 +157,8 @@ ParticleGroup::add_particle_dat(ParticleDatShPtr<REAL> particle_dat) {
     this->position_sym = std::make_shared<Sym<REAL>>(particle_dat->sym.name);
   }
   realloc_dat(particle_dat);
+  // TODO clean up this ParticleProp handling
+  push_particle_spec(ParticleProp(particle_dat->sym, particle_dat->ncomp, particle_dat->positions));
 }
 inline void
 ParticleGroup::add_particle_dat(ParticleDatShPtr<INT> particle_dat) {
@@ -125,6 +169,8 @@ ParticleGroup::add_particle_dat(ParticleDatShPtr<INT> particle_dat) {
     this->cell_id_sym = std::make_shared<Sym<INT>>(particle_dat->sym.name);
   }
   realloc_dat(particle_dat);
+  // TODO clean up this ParticleProp handling
+  push_particle_spec(ParticleProp(particle_dat->sym, particle_dat->ncomp, particle_dat->positions));
 }
 
 inline void ParticleGroup::add_particles(){};
@@ -146,7 +192,7 @@ inline void ParticleGroup::add_particles_local(ParticleSet &particle_data) {
     NESOASSERT((cellindex >= 0) && (cellindex < this->ncell),
                "Bad particle cellid)");
 
-    layers[px] = this->npart_cell[cellindex]++;
+    layers[px] = this->npart_cell.ptr[cellindex]++;
   }
 
   for (auto &dat : this->particle_dats_real) {
@@ -177,12 +223,11 @@ inline void ParticleGroup::compute_remove_compress_indicies(
   compress_layers_old.realloc_no_copy(npart);
   compress_layers_new.realloc_no_copy(npart);
   const auto cell_count = domain.mesh.get_cell_count();
-  NESOASSERT(cell_count <= this->npart_cell.size(),
+  NESOASSERT(cell_count <= this->npart_cell.size,
              "bad buffer lengths on cell count");
   device_npart_cell.realloc_no_copy(cell_count);
 
-  sycl::buffer<INT> b_npart_cell(this->npart_cell.data(),
-                                 sycl::range<1>{this->npart_cell.size()});
+  auto npart_cell_ptr = npart_cell.ptr;
   sycl::buffer<INT> b_cells(cells.data(), sycl::range<1>{cells.size()});
   sycl::buffer<INT> b_layers(layers.data(), sycl::range<1>{layers.size()});
 
@@ -196,12 +241,10 @@ inline void ParticleGroup::compute_remove_compress_indicies(
   INT ***cell_ids_ptr = this->cell_id_dat->cell_dat.device_ptr();
   this->sycl_target.queue
       .submit([&](sycl::handler &cgh) {
-        auto a_npart_cell =
-            b_npart_cell.get_access<sycl::access::mode::read_write>(cgh);
         cgh.parallel_for<>(sycl::range<1>(static_cast<size_t>(cell_count)),
                            [=](sycl::id<1> idx) {
                              device_npart_cell_ptr[idx] =
-                                 static_cast<int>(a_npart_cell[idx]);
+                                 static_cast<int>(npart_cell_ptr[idx]);
                              device_move_counters_ptr[idx] = 0;
                            });
       })
@@ -231,8 +274,6 @@ inline void ParticleGroup::compute_remove_compress_indicies(
 
   this->sycl_target.queue
       .submit([&](sycl::handler &cgh) {
-        auto a_npart_cell =
-            b_npart_cell.get_access<sycl::access::mode::read_write>(cgh);
         auto a_cells = b_cells.get_access<sycl::access::mode::read>(cgh);
         auto a_layers = b_layers.get_access<sycl::access::mode::read>(cgh);
 
@@ -262,7 +303,7 @@ inline void ParticleGroup::compute_remove_compress_indicies(
                 INT found_count = 0;
                 INT source_row = -1;
                 for (INT rowx = device_npart_cell_ptr[cell];
-                     rowx < a_npart_cell[cell]; rowx++) {
+                     rowx < npart_cell_ptr[cell]; rowx++) {
                   // Is this a potential source row?
                   if (cell_ids_ptr[cell][0][rowx] > -1) {
                     if (source_row_offset == found_count++) {
@@ -308,19 +349,14 @@ inline void ParticleGroup::remove_particles(const int npart,
     dat.second->set_npart_cells_device(device_npart_cell.ptr);
   }
 
-  // TODO engineer out this buffer creation
-  sycl::buffer<INT> b_npart_cell(this->npart_cell.data(),
-                                 sycl::range<1>{this->npart_cell.size()});
-
+  auto npart_cell_ptr = npart_cell.ptr;
   auto device_npart_cell_ptr = device_npart_cell.ptr;
   const auto cell_count = domain.mesh.get_cell_count();
   this->sycl_target.queue.submit([&](sycl::handler &cgh) {
-    auto a_npart_cell =
-        b_npart_cell.get_access<sycl::access::mode::read_write>(cgh);
 
     cgh.parallel_for<>(
         sycl::range<1>(static_cast<size_t>(cell_count)), [=](sycl::id<1> idx) {
-          a_npart_cell[idx] = static_cast<INT>(device_npart_cell_ptr[idx]);
+          npart_cell_ptr[idx] = static_cast<INT>(device_npart_cell_ptr[idx]);
         });
   });
 
@@ -334,6 +370,53 @@ inline void ParticleGroup::remove_particles(const int npart,
     dat.second->trim_cell_dat_rows();
   }
 }
+
+/*
+ * Perform global move operation to send particles to the MPI ranks stored in
+ * the NESO_MPI_RANK ParticleDat. Must be called collectively on the
+ * communicator.
+ */
+inline void ParticleGroup::global_move(){
+  
+  const int comm_size = sycl_target.comm_pair.size_parent;
+  const int comm_rank = sycl_target.comm_pair.rank_parent;
+  s_send_ranks.realloc_no_copy(comm_size);
+  s_recv_ranks.realloc_no_copy(comm_size);
+
+  auto s_send_ranks_ptr = s_send_ranks.ptr;
+  auto s_recv_ranks_ptr = s_recv_ranks.ptr;
+  auto s_num_ranks_send_ptr = s_num_ranks_send.ptr;
+  auto s_num_ranks_recv_ptr = s_num_ranks_recv.ptr;
+  
+  // zero the send/recv counts
+  this->sycl_target.queue.submit([&](sycl::handler &cgh) {
+    cgh.parallel_for<>(sycl::range<1>(comm_size), [=](sycl::id<1> idx) {
+      s_send_ranks_ptr[idx] = 0;
+      s_recv_ranks_ptr[idx] = 0;
+    });
+  });
+  // zero the number of ranks involved with send/recv
+  this->sycl_target.queue.submit([&](sycl::handler &cgh) {
+    cgh.single_task<>([=]() {
+      s_num_ranks_send_ptr[0] = 0;
+      s_num_ranks_recv_ptr[0] = 0;
+    });
+  });
+  sycl_target.queue.wait_and_throw();
+  // loop over all particles - for leaving particles atomically compute the
+  // packing layer by incrementing the send count for the report rank and
+  // increment the counter for the number of remote ranks to send to
+  // TODO - need a "ParticleLoop" first
+
+
+
+
+
+
+
+}
+
+
 
 } // namespace NESO::Particles
 

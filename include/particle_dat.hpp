@@ -48,6 +48,7 @@ public:
                                    std::vector<INT> &layers,
                                    std::vector<T> &data);
   inline void realloc(std::vector<INT> &npart_cell_new);
+  inline void realloc(BufferShared<INT> &npart_cell_new);
 
   inline sycl::event copy_particle_data(const int npart, const INT *d_cells_old,
                                         const INT *d_cells_new,
@@ -105,6 +106,7 @@ public:
     return;
   }
   inline void trim_cell_dat_rows();
+  inline void print(){this->cell_dat.print();};
 };
 
 template <typename T> using ParticleDatShPtr = std::shared_ptr<ParticleDatT<T>>;
@@ -128,6 +130,14 @@ inline void ParticleDatT<T>::realloc(std::vector<INT> &npart_cell_new) {
              "Insufficent new cell counts");
   for (int cellx = 0; cellx < this->ncell; cellx++) {
     this->cell_dat.set_nrow(cellx, npart_cell_new[cellx]);
+  }
+}
+template <typename T>
+inline void ParticleDatT<T>::realloc(BufferShared<INT> &npart_cell_new) {
+  NESOASSERT(npart_cell_new.size >= this->ncell,
+             "Insufficent new cell counts");
+  for (int cellx = 0; cellx < this->ncell; cellx++) {
+    this->cell_dat.set_nrow(cellx, npart_cell_new.ptr[cellx]);
   }
 }
 template <typename T> inline void ParticleDatT<T>::trim_cell_dat_rows() {

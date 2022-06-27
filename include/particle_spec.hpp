@@ -34,6 +34,7 @@ public:
 
 class ParticleSpec {
 private:
+public:
   template <typename... T> void push(T... args) { this->push(args...); }
   void push(ParticleProp<REAL> pp) { this->properties_real.push_back(pp); }
   void push(ParticleProp<INT> pp) { this->properties_int.push_back(pp); }
@@ -45,13 +46,12 @@ private:
     this->properties_int.push_back(pp);
     this->push(args...);
   }
-
-public:
   std::vector<ParticleProp<REAL>> properties_real;
   std::vector<ParticleProp<INT>> properties_int;
 
   template <typename... T> ParticleSpec(T... args) { this->push(args...); };
 
+  ParticleSpec(){};
   ~ParticleSpec(){};
 };
 
