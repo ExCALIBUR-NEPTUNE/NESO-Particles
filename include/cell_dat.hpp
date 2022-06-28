@@ -2,6 +2,7 @@
 #define _NESO_PARTICLES_CELL_DAT
 
 #include <CL/sycl.hpp>
+#include <algorithm>
 #include <cstdio>
 #include <memory>
 #include <vector>
@@ -146,6 +147,7 @@ private:
   T ***d_ptr;
   std::vector<T **> h_ptr_cells;
   std::vector<T *> h_ptr_cols;
+  int nrow_max;
 
 public:
   SYCLTarget &sycl_target;
@@ -169,7 +171,7 @@ public:
     sycl::free(this->d_ptr, sycl_target.queue);
   };
   inline CellDat(SYCLTarget &sycl_target, const int ncells, const int ncol)
-      : sycl_target(sycl_target), ncells(ncells), ncol(ncol) {
+      : sycl_target(sycl_target), ncells(ncells), ncol(ncol), nrow_max(0) {
 
     this->nrow = std::vector<INT>(ncells);
     this->d_ptr = sycl::malloc_device<T **>(ncells, sycl_target.queue);
@@ -235,6 +237,20 @@ public:
   }
 
   /*
+   *  Recompute nrow_max from current row counts.
+   */
+  inline int compute_nrow_max() {
+    this->nrow_max =
+        *std::max_element(std::begin(this->nrow), std::end(this->nrow));
+    return this->nrow_max;
+  }
+
+  /*
+   * Get the maximum number of rows across all cells.
+   */
+  inline int get_nrow_max() { return this->nrow_max; }
+
+  /*
    * Get the contents of a provided cell on the host as a CellData instance.
    */
   inline CellData<T> get_cell(const int cell) {
@@ -289,6 +305,11 @@ public:
     }
     std::cout << "-----------------" << std::endl;
   }
+
+  /*
+   * Number of bytes to store a row of this CellDat
+   */
+  inline size_t row_size() { return ((size_t)this->ncol) * sizeof(T); }
 };
 
 } // namespace NESO::Particles

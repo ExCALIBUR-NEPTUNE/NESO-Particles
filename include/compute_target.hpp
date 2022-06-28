@@ -96,11 +96,35 @@ public:
       sycl::free(this->ptr, sycl_target.queue);
     }
   }
-  //inline T& operator[](const int index) {
-  //  return this->ptr[index];
-  //};
+  // inline T& operator[](const int index) {
+  //   return this->ptr[index];
+  // };
 };
 
+template <typename T> class BufferHost {
+private:
+public:
+  SYCLTarget &sycl_target;
+  T *ptr;
+  size_t size;
+  BufferHost(SYCLTarget &sycl_target, size_t size) : sycl_target(sycl_target) {
+    this->size = size;
+    this->ptr = (T *)sycl::malloc_host(size * sizeof(T), sycl_target.queue);
+  }
+  inline int realloc_no_copy(const size_t size) {
+    if (size > this->size) {
+      sycl::free(this->ptr, this->sycl_target.queue);
+      this->ptr = (T *)sycl::malloc_host(size * sizeof(T), sycl_target.queue);
+      this->size = size;
+    }
+    return this->size;
+  }
+  ~BufferHost() {
+    if (this->ptr != NULL) {
+      sycl::free(this->ptr, sycl_target.queue);
+    }
+  }
+};
 
 } // namespace NESO::Particles
 

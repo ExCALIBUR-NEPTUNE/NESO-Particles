@@ -20,7 +20,7 @@ TEST(ParticleGroup, creation) {
   SYCLTarget sycl_target{GPU_SELECTOR, mesh.get_comm()};
 
   Domain domain(mesh);
-  
+
   ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
                              ParticleProp(Sym<REAL>("V"), 3),
                              ParticleProp(Sym<INT>("CELL_ID"), 1, true),
@@ -410,11 +410,12 @@ TEST(ParticleGroup, global_move) {
   auto positions =
       uniform_within_extents(N, ndim, mesh.global_extents, rng_pos);
   auto velocities = normal_distribution(N, 3, 0.0, 1.0, rng_vel);
-  
-  std::uniform_int_distribution<int> uniform_dist(0, sycl_target.comm_pair.size_parent-1);
+
+  std::uniform_int_distribution<int> uniform_dist(
+      0, sycl_target.comm_pair.size_parent - 1);
 
   ParticleSet initial_distribution(N, A.get_particle_spec());
-  
+
   for (int px = 0; px < N; px++) {
     for (int dimx = 0; dimx < ndim; dimx++) {
       initial_distribution[Sym<REAL>("P")][px][dimx] = positions[dimx][px];
@@ -424,34 +425,17 @@ TEST(ParticleGroup, global_move) {
     }
     initial_distribution[Sym<INT>("CELL_ID")][px][0] = 0;
     initial_distribution[Sym<INT>("ID")][px][0] = px;
-    initial_distribution[Sym<INT>("NESO_MPI_RANK")][px][0] = uniform_dist(rng_rank);
+    initial_distribution[Sym<INT>("NESO_MPI_RANK")][px][0] =
+        uniform_dist(rng_rank);
   }
-  
-  if (sycl_target.comm_pair.rank_parent == 0){
+
+  if (sycl_target.comm_pair.rank_parent == 0) {
     A.add_particles_local(initial_distribution);
   }
-  
-  A[Sym<INT>("NESO_MPI_RANK")]->print();
 
+  A[Sym<INT>("NESO_MPI_RANK")]->print();
 
   A.global_move();
 
-
-
   mesh.free();
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
