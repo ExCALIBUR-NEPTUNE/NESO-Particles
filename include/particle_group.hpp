@@ -1,6 +1,7 @@
 #ifndef _NESO_PARTICLES_PARTICLE_GROUP
 #define _NESO_PARTICLES_PARTICLE_GROUP
 
+#include <CL/sycl.hpp>
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -11,6 +12,7 @@
 #include "cell_dat.hpp"
 #include "compute_target.hpp"
 #include "domain.hpp"
+#include "packing_unpacking.hpp"
 #include "particle_dat.hpp"
 #include "particle_set.hpp"
 #include "particle_spec.hpp"
@@ -47,7 +49,7 @@ private:
   // members for mpi communication
   BufferShared<int> s_send_ranks;
   BufferShared<int> s_recv_ranks;
-  BufferShared<int> s_send_offsets;
+  BufferShared<int> s_send_rank_npart;
   BufferShared<int> s_recv_offsets;
   BufferShared<int> s_num_ranks_send;
   BufferShared<int> s_num_ranks_recv;
@@ -55,9 +57,8 @@ private:
   BufferShared<int> s_pack_cells;
   BufferShared<int> s_pack_layers_src;
   BufferShared<int> s_pack_layers_dst;
-  // pack/unpack buffers
-  BufferDevice<char> d_packing;
-  BufferHost<char> h_packing;
+
+  ParticlePacker particle_packer;
 
 public:
   Domain domain;
@@ -85,12 +86,12 @@ public:
         ncell(domain.mesh.get_cell_count()), compress_cells_old(sycl_target, 1),
         compress_cells_new(sycl_target, 1), compress_layers_old(sycl_target, 1),
         compress_layers_new(sycl_target, 1), s_send_ranks(sycl_target, 1),
-        s_recv_ranks(sycl_target, 1), s_send_offsets(sycl_target, 1),
+        s_recv_ranks(sycl_target, 1), s_send_rank_npart(sycl_target, 1),
         s_recv_offsets(sycl_target, 1), s_num_ranks_send(sycl_target, 1),
         s_num_ranks_recv(sycl_target, 1), s_pack_cells(sycl_target, 1),
         s_pack_layers_src(sycl_target, 1), s_pack_layers_dst(sycl_target, 1),
-        s_npart_send_recv(sycl_target, 1), d_packing(sycl_target, 1),
-        h_packing(sycl_target, 1), npart_cell(sycl_target, 1),
+        s_npart_send_recv(sycl_target, 1), particle_packer(sycl_target),
+        npart_cell(sycl_target, 1),
         device_npart_cell(sycl_target, domain.mesh.get_cell_count()),
         device_move_counters(sycl_target, domain.mesh.get_cell_count()) {
 
@@ -471,7 +472,7 @@ inline void ParticleGroup::global_move() {
                   pack_layer_atomic(s_recv_ranks_ptr[owning_rank]);
               const int pack_layer = pack_layer_atomic.fetch_add(1);
 
-              // increment the counter for number of sent particles (globally)
+              // increment the counter for number of sent particles (all ranks)
               sycl::atomic_ref<int, sycl::memory_order::relaxed,
                                sycl::memory_scope::device>
                   send_count_atomic(s_npart_send_recv_ptr[0]);
@@ -498,24 +499,21 @@ inline void ParticleGroup::global_move() {
       })
       .wait_and_throw();
 
-  // The send offsets are the offsets in the packing buffer for each remote
-  // rank. These offsets are computed using a cumulative sum over the send
-  // counts for each of the remote ranks (where the send count is non-zero).
   const int num_remote_send_ranks = s_num_ranks_send_ptr[0];
-  s_send_offsets.realloc_no_copy(num_remote_send_ranks + 1);
-  auto s_send_offsets_ptr = s_send_offsets.ptr;
-  s_send_offsets_ptr[0] = 0;
-  for (int rx = 0; rx < num_remote_send_ranks; rx++) {
-    const int rank = s_send_ranks_ptr[rx];
-    const int to_send_count = s_recv_ranks_ptr[rank];
-    s_send_offsets_ptr[rx + 1] = s_send_offsets_ptr[rx] + to_send_count;
-  }
-
+  s_send_rank_npart.realloc_no_copy(num_remote_send_ranks);
+  auto s_send_rank_npart_ptr = s_send_rank_npart.ptr;
   const int num_particles_leaving = s_npart_send_recv_ptr[0];
-  // allocate enough space to pack all particles to send
-  const size_t send_nbytes = num_particles_leaving * this->particle_size();
-  d_packing.realloc_no_copy(send_nbytes);
-  h_packing.realloc_no_copy(send_nbytes);
+
+  this->sycl_target.queue
+      .submit([&](sycl::handler &cgh) {
+        cgh.parallel_for<>(sycl::range<1>(num_remote_send_ranks),
+                           [=](sycl::id<1> idx) {
+                             const int rank = s_send_ranks_ptr[idx];
+                             const int npart = s_recv_ranks_ptr[rank];
+                             s_send_rank_npart_ptr[idx] = npart;
+                           });
+      })
+      .wait_and_throw();
 
   // We now have:
   // 1) n particles to send
@@ -525,8 +523,13 @@ inline void ParticleGroup::global_move() {
   //    each particle to send)
   // 5) m destination MPI ranks to send to
   // 6) array length m of destination ranks
-  // 7) array length m+1 where entry i is the start of the allocated space to
-  //    pack particle data to send to send_ranks[i].
+  // 7) array length m of particle counts to send to each destination ranks
+
+  this->particle_packer.reset();
+  this->particle_packer.pack(
+      num_remote_send_ranks, s_send_ranks_ptr, s_send_rank_npart_ptr,
+      num_particles_leaving, s_pack_cells_ptr, s_pack_layers_src_ptr,
+      s_pack_layers_dst_ptr, particle_dats_real, particle_dats_int);
 }
 
 } // namespace NESO::Particles
