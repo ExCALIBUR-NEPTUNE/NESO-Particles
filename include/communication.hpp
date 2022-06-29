@@ -1,9 +1,8 @@
 #ifndef _NESO_PARTICLES_COMMUNICATION
 #define _NESO_PARTICLES_COMMUNICATION
 
-#include <mpi.h>
-
 #include "typedefs.hpp"
+#include <mpi.h>
 
 #define _MACRO_STRING(x) #x
 #define STR(x) _MACRO_STRING(x)

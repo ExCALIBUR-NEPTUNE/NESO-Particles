@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "access.hpp"
@@ -31,6 +32,7 @@ private:
     const int err = snprintf(buffer, 128, "%f", value);
     return std::string(buffer);
   }
+  std::string format(char value) { return std::string(1, value); }
 
 public:
   SYCLTarget &sycl_target;

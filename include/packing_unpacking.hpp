@@ -91,11 +91,11 @@ public:
         .wait_and_throw();
   }
 
-  inline void
+  inline sycl::event
   pack(const int num_remote_send_ranks, const int *s_send_ranks_ptr,
-       const int *s_send_rank_npart_ptr, const int num_particles_leaving,
-       const int *s_pack_cells_ptr, const int *s_pack_layers_src_ptr,
-       const int *s_pack_layers_dst_ptr,
+       const int *s_send_rank_npart_ptr, const int *s_send_rank_map_ptr,
+       const int num_particles_leaving, const int *s_pack_cells_ptr,
+       const int *s_pack_layers_src_ptr, const int *s_pack_layers_dst_ptr,
        std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
        std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int) {
 
@@ -126,48 +126,48 @@ public:
         particle_dats_int[Sym<INT>("NESO_MPI_RANK")]->cell_dat.device_ptr();
 
     auto k_pack_cell_dat = this->cell_dat.device_ptr();
+    sycl::event event = this->sycl_target.queue.submit([&](sycl::handler &cgh) {
+      cgh.parallel_for<>(
+          // for each leaving particle
+          sycl::range<1>(static_cast<size_t>(num_particles_leaving)),
+          [=](sycl::id<1> idx) {
+            const int cell = s_pack_cells_ptr[idx];
+            const int layer_src = s_pack_layers_src_ptr[idx];
+            const int layer_dst = s_pack_layers_dst_ptr[idx];
+            const int rank = k_particle_dat_rank[cell][0][layer_src];
+            const int rank_packing_cell = s_send_rank_map_ptr[rank];
 
-    this->sycl_target.queue
-        .submit([&](sycl::handler &cgh) {
-          cgh.parallel_for<>(
-              // for each leaving particle
-              sycl::range<1>(static_cast<size_t>(num_particles_leaving)),
-              [=](sycl::id<1> idx) {
-                const int cell = s_pack_cells_ptr[idx];
-                const int layer_src = s_pack_layers_src_ptr[idx];
-                const int layer_dst = s_pack_layers_src_ptr[idx];
-                const int rank = k_particle_dat_rank[cell][0][layer_src];
+            char *base_pack_ptr =
+                &k_pack_cell_dat[rank_packing_cell][0]
+                                [layer_dst * num_bytes_per_particle];
+            REAL *pack_ptr_real = (REAL *)base_pack_ptr;
+            // for each real dat
+            int index = 0;
+            for (int dx = 0; dx < k_num_dats_real; dx++) {
+              REAL ***dat_ptr = k_particle_dat_ptr_real[dx];
+              const int ncomp = k_particle_dat_ncomp_real[dx];
+              // for each component
+              for (int cx = 0; cx < ncomp; cx++) {
+                pack_ptr_real[index + cx] = dat_ptr[cell][cx][layer_src];
+              }
+              index += ncomp;
+            }
+            // for each int dat
+            INT *pack_ptr_int = (INT *)(pack_ptr_real + index);
+            index = 0;
+            for (int dx = 0; dx < k_num_dats_int; dx++) {
+              INT ***dat_ptr = k_particle_dat_ptr_int[dx];
+              const int ncomp = k_particle_dat_ncomp_int[dx];
+              // for each component
+              for (int cx = 0; cx < ncomp; cx++) {
+                pack_ptr_int[index + cx] = dat_ptr[cell][cx][layer_src];
+              }
+              index += ncomp;
+            }
+          });
+    });
 
-                char *base_pack_ptr =
-                    &k_pack_cell_dat[rank][0]
-                                    [layer_dst * num_bytes_per_particle];
-                REAL *pack_ptr_real = (REAL *)base_pack_ptr;
-                // for each real dat
-                int index = 0;
-                for (int dx = 0; dx < k_num_dats_real; dx++) {
-                  REAL ***dat_ptr = k_particle_dat_ptr_real[dx];
-                  const int ncomp = k_particle_dat_ncomp_real[dx];
-                  // for each component
-                  for (int cx = 0; cx < ncomp; cx++) {
-                    pack_ptr_real[index + cx] = dat_ptr[cell][cx][layer_src];
-                  }
-                  index += ncomp;
-                }
-                // for each int dat
-                INT *pack_ptr_int = (INT *)(pack_ptr_real + index);
-                index = 0;
-                for (int dx = 0; dx < k_num_dats_int; dx++) {
-                  INT ***dat_ptr = k_particle_dat_ptr_int[dx];
-                  const int ncomp = k_particle_dat_ncomp_int[dx];
-                  // for each component
-                  for (int cx = 0; cx < ncomp; cx++) {
-                    pack_ptr_int[index + cx] = dat_ptr[cell][cx][layer_src];
-                  }
-                  index += ncomp;
-                }
-              });
-        })
-        .wait_and_throw();
+    return event;
   };
 };
 

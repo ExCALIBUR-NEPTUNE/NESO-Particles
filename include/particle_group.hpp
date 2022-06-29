@@ -12,6 +12,7 @@
 #include "cell_dat.hpp"
 #include "compute_target.hpp"
 #include "domain.hpp"
+#include "global_move.hpp"
 #include "packing_unpacking.hpp"
 #include "particle_dat.hpp"
 #include "particle_set.hpp"
@@ -50,7 +51,7 @@ private:
   BufferShared<int> s_send_ranks;
   BufferShared<int> s_recv_ranks;
   BufferShared<int> s_send_rank_npart;
-  BufferShared<int> s_recv_offsets;
+  BufferShared<int> s_send_rank_map;
   BufferShared<int> s_num_ranks_send;
   BufferShared<int> s_num_ranks_recv;
   BufferShared<int> s_npart_send_recv;
@@ -59,6 +60,7 @@ private:
   BufferShared<int> s_pack_layers_dst;
 
   ParticlePacker particle_packer;
+  GlobalMoveExchange global_move_exchange;
 
 public:
   Domain domain;
@@ -87,11 +89,11 @@ public:
         compress_cells_new(sycl_target, 1), compress_layers_old(sycl_target, 1),
         compress_layers_new(sycl_target, 1), s_send_ranks(sycl_target, 1),
         s_recv_ranks(sycl_target, 1), s_send_rank_npart(sycl_target, 1),
-        s_recv_offsets(sycl_target, 1), s_num_ranks_send(sycl_target, 1),
+        s_send_rank_map(sycl_target, 1), s_num_ranks_send(sycl_target, 1),
         s_num_ranks_recv(sycl_target, 1), s_pack_cells(sycl_target, 1),
         s_pack_layers_src(sycl_target, 1), s_pack_layers_dst(sycl_target, 1),
         s_npart_send_recv(sycl_target, 1), particle_packer(sycl_target),
-        npart_cell(sycl_target, 1),
+        npart_cell(sycl_target, 1), global_move_exchange(sycl_target),
         device_npart_cell(sycl_target, domain.mesh.get_cell_count()),
         device_move_counters(sycl_target, domain.mesh.get_cell_count()) {
 
@@ -406,10 +408,15 @@ inline void ParticleGroup::remove_particles(const int npart,
  */
 inline void ParticleGroup::global_move() {
 
+  // MPI RMA to inform remote ranks they will recv particles through the global
+  // move
+  this->global_move_exchange.npart_exchange_init();
+
   const int comm_size = sycl_target.comm_pair.size_parent;
   const int comm_rank = sycl_target.comm_pair.rank_parent;
   s_send_ranks.realloc_no_copy(comm_size);
   s_recv_ranks.realloc_no_copy(comm_size);
+  s_send_rank_map.realloc_no_copy(comm_size);
 
   auto pl_iter_range = this->get_particle_loop_iter_range();
   auto pl_stride = this->get_particle_loop_cell_stride();
@@ -423,7 +430,7 @@ inline void ParticleGroup::global_move() {
   auto s_recv_ranks_ptr = s_recv_ranks.ptr;
   auto s_num_ranks_send_ptr = s_num_ranks_send.ptr;
   auto s_num_ranks_recv_ptr = s_num_ranks_recv.ptr;
-  // auto s_recv_offsets_ptr = s_recv_offsets.ptr;
+  auto s_send_rank_map_ptr = s_send_rank_map.ptr;
   auto s_pack_cells_ptr = s_pack_cells.ptr;
   auto s_pack_layers_src_ptr = s_pack_layers_src.ptr;
   auto s_pack_layers_dst_ptr = s_pack_layers_dst.ptr;
@@ -492,6 +499,7 @@ inline void ParticleGroup::global_move() {
                     num_ranks_send_atomic(s_num_ranks_send_ptr[0]);
                 const int rank_index = num_ranks_send_atomic.fetch_add(1);
                 s_send_ranks_ptr[rank_index] = static_cast<int>(owning_rank);
+                s_send_rank_map_ptr[owning_rank] = rank_index;
               }
             }
           }
@@ -503,6 +511,11 @@ inline void ParticleGroup::global_move() {
   s_send_rank_npart.realloc_no_copy(num_remote_send_ranks);
   auto s_send_rank_npart_ptr = s_send_rank_npart.ptr;
   const int num_particles_leaving = s_npart_send_recv_ptr[0];
+
+  // start exchanging global send counts
+  this->global_move_exchange.npart_exchange_sendrecv(
+      num_remote_send_ranks, s_send_ranks, s_send_rank_npart);
+
 
   this->sycl_target.queue
       .submit([&](sycl::handler &cgh) {
@@ -525,11 +538,19 @@ inline void ParticleGroup::global_move() {
   // 6) array length m of destination ranks
   // 7) array length m of particle counts to send to each destination ranks
 
+
+
+  // pack particles whilst communicating global move information
   this->particle_packer.reset();
-  this->particle_packer.pack(
+  auto global_pack_event = this->particle_packer.pack(
       num_remote_send_ranks, s_send_ranks_ptr, s_send_rank_npart_ptr,
-      num_particles_leaving, s_pack_cells_ptr, s_pack_layers_src_ptr,
-      s_pack_layers_dst_ptr, particle_dats_real, particle_dats_int);
+      s_send_rank_map_ptr, num_particles_leaving, s_pack_cells_ptr,
+      s_pack_layers_src_ptr, s_pack_layers_dst_ptr, particle_dats_real,
+      particle_dats_int);
+
+
+  global_pack_event.wait_and_throw();
+  this->global_move_exchange.npart_exchange_finalise();
 }
 
 } // namespace NESO::Particles
