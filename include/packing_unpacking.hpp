@@ -103,18 +103,18 @@ public:
                                        const int *h_send_rank_npart_ptr) {
     this->h_send_buffer.realloc_no_copy(this->required_send_buffer_length);
     this->h_send_offsets.realloc_no_copy(num_remote_send_ranks);
+    NESOASSERT((this->cell_dat.ncells) >=
+                   (this->sycl_target.comm_pair.size_parent),
+               "Insuffient cells");
 
     INT offset = 0;
     std::stack<sycl::event> copy_events{};
     for (int rankx = 0; rankx < num_remote_send_ranks; rankx++) {
       const int npart_tmp = h_send_rank_npart_ptr[rankx];
       const int nbytes_tmp = npart_tmp * this->num_bytes_per_particle;
-
-      auto cell_dat_ptr = this->cell_dat.device_ptr();
-      copy_events.push(
-          this->sycl_target.queue.memcpy(&this->h_send_buffer.ptr[offset],
-                                         cell_dat_ptr[rankx][0], nbytes_tmp));
-
+      auto device_ptr = this->cell_dat.col_device_ptr(rankx, 0);
+      copy_events.push(this->sycl_target.queue.memcpy(
+          &this->h_send_buffer.ptr[offset], device_ptr, nbytes_tmp));
       this->h_send_offsets.ptr[rankx] = offset;
       offset += nbytes_tmp;
     }

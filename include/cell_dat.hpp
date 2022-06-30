@@ -295,6 +295,13 @@ public:
    */
   T ***device_ptr() { return this->d_ptr; };
 
+  /*
+   * Get the device pointer for a column in a cell.
+   */
+  T *col_device_ptr(const int cell, const int col) {
+    return this->h_ptr_cols[cell * this->ncol + col];
+  }
+
   inline void print(int start = -1, int end = -1) {
 
     start = (start < 0) ? 0 : start;
