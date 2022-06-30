@@ -6,6 +6,7 @@
 #include <map>
 #include <memory>
 #include <mpi.h>
+#include <stack>
 #include <string>
 
 #include "cell_dat.hpp"
@@ -18,7 +19,6 @@ namespace NESO::Particles {
 
 class ParticlePacker {
 private:
-  CellDat<char> cell_dat;
   BufferShared<int> s_npart_packed;
 
   int num_dats_real = 0;
@@ -68,12 +68,20 @@ private:
   }
 
 public:
+  int num_bytes_per_particle;
+  CellDat<char> cell_dat;
+
+  BufferHost<char> h_send_buffer;
+  BufferHost<INT> h_send_offsets;
+  INT required_send_buffer_length;
+
   SYCLTarget &sycl_target;
   ~ParticlePacker(){};
   ParticlePacker(SYCLTarget &sycl_target)
       : sycl_target(sycl_target),
         cell_dat(sycl_target, sycl_target.comm_pair.size_parent, 1),
         s_npart_packed(sycl_target, sycl_target.comm_pair.size_parent),
+        h_send_buffer(sycl_target, 1), h_send_offsets(sycl_target, 1),
         s_particle_dat_ptr_real(sycl_target, 1),
         s_particle_dat_ptr_int(sycl_target, 1),
         s_particle_dat_ncomp_real(sycl_target, 1),
@@ -91,6 +99,35 @@ public:
         .wait_and_throw();
   }
 
+  inline char *get_packed_data_on_host(const int num_remote_send_ranks,
+                                       const int *h_send_rank_npart_ptr) {
+    this->h_send_buffer.realloc_no_copy(this->required_send_buffer_length);
+    this->h_send_offsets.realloc_no_copy(num_remote_send_ranks);
+
+    INT offset = 0;
+    std::stack<sycl::event> copy_events{};
+    for (int rankx = 0; rankx < num_remote_send_ranks; rankx++) {
+      const int npart_tmp = h_send_rank_npart_ptr[rankx];
+      const int nbytes_tmp = npart_tmp * this->num_bytes_per_particle;
+
+      auto cell_dat_ptr = this->cell_dat.device_ptr();
+      copy_events.push(
+          this->sycl_target.queue.memcpy(&this->h_send_buffer.ptr[offset],
+                                         cell_dat_ptr[rankx][0], nbytes_tmp));
+
+      this->h_send_offsets.ptr[rankx] = offset;
+      offset += nbytes_tmp;
+    }
+
+    while (!copy_events.empty()) {
+      auto event = copy_events.top();
+      event.wait_and_throw();
+      copy_events.pop();
+    }
+
+    return this->h_send_buffer.ptr;
+  }
+
   inline sycl::event
   pack(const int num_remote_send_ranks, const int *s_send_ranks_ptr,
        const int *s_send_rank_npart_ptr, const int *s_send_rank_map_ptr,
@@ -100,12 +137,16 @@ public:
        std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int) {
 
     // Allocate enough space to store the particles to pack
-    const int num_bytes_per_particle =
+    this->num_bytes_per_particle =
         particle_size(particle_dats_real, particle_dats_int);
+
+    this->required_send_buffer_length = 0;
     for (int rankx = 0; rankx < num_remote_send_ranks; rankx++) {
       const int npart = s_send_rank_npart_ptr[rankx];
-      this->cell_dat.set_nrow(rankx, (npart + s_npart_packed.ptr[rankx]) *
-                                         num_bytes_per_particle);
+      const INT rankx_contrib =
+          (npart + s_npart_packed.ptr[rankx]) * this->num_bytes_per_particle;
+      this->cell_dat.set_nrow(rankx, rankx_contrib);
+      this->required_send_buffer_length += rankx_contrib;
     }
 
     // get the pointers to the particle dat data and the number of components in
@@ -125,6 +166,8 @@ public:
     const auto k_particle_dat_rank =
         particle_dats_int[Sym<INT>("NESO_MPI_RANK")]->cell_dat.device_ptr();
 
+    const int k_num_bytes_per_particle = this->num_bytes_per_particle;
+
     auto k_pack_cell_dat = this->cell_dat.device_ptr();
     sycl::event event = this->sycl_target.queue.submit([&](sycl::handler &cgh) {
       cgh.parallel_for<>(
@@ -139,7 +182,7 @@ public:
 
             char *base_pack_ptr =
                 &k_pack_cell_dat[rank_packing_cell][0]
-                                [layer_dst * num_bytes_per_particle];
+                                [layer_dst * k_num_bytes_per_particle];
             REAL *pack_ptr_real = (REAL *)base_pack_ptr;
             // for each real dat
             int index = 0;
@@ -169,6 +212,100 @@ public:
 
     return event;
   };
+};
+
+class ParticleUnpacker {
+private:
+  BufferShared<int> s_npart_packed;
+
+  int num_dats_real = 0;
+  int num_dats_int = 0;
+  BufferShared<REAL ***> s_particle_dat_ptr_real;
+  BufferShared<INT ***> s_particle_dat_ptr_int;
+  BufferShared<int> s_particle_dat_ncomp_real;
+  BufferShared<int> s_particle_dat_ncomp_int;
+
+  BufferHost<char> d_recv_buffer;
+
+  inline size_t
+  particle_size(std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
+                std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int) {
+    size_t s = 0;
+    for (auto &dat : particle_dats_real) {
+      s += dat.second->cell_dat.row_size();
+    }
+    for (auto &dat : particle_dats_int) {
+      s += dat.second->cell_dat.row_size();
+    }
+    this->num_bytes_per_particle = s;
+    return s;
+  };
+
+  inline void get_particle_dat_info(
+      std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
+      std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int) {
+
+    num_dats_real = particle_dats_real.size();
+    s_particle_dat_ptr_real.realloc_no_copy(num_dats_real);
+    s_particle_dat_ncomp_real.realloc_no_copy(num_dats_real);
+
+    num_dats_int = particle_dats_real.size();
+    s_particle_dat_ptr_int.realloc_no_copy(num_dats_int);
+    s_particle_dat_ncomp_int.realloc_no_copy(num_dats_int);
+
+    int index = 0;
+    for (auto &dat : particle_dats_real) {
+      s_particle_dat_ptr_real.ptr[index] = dat.second->cell_dat.device_ptr();
+      s_particle_dat_ncomp_real.ptr[index] = dat.second->ncomp;
+      index++;
+    }
+    index = 0;
+    for (auto &dat : particle_dats_int) {
+      s_particle_dat_ptr_int.ptr[index] = dat.second->cell_dat.device_ptr();
+      s_particle_dat_ncomp_int.ptr[index] = dat.second->ncomp;
+      index++;
+    }
+  }
+
+public:
+  BufferHost<char> h_recv_buffer;
+  BufferHost<INT> h_recv_offsets;
+  int npart_recv;
+  int num_bytes_per_particle;
+
+  SYCLTarget &sycl_target;
+  ~ParticleUnpacker(){};
+  ParticleUnpacker(SYCLTarget &sycl_target)
+      : sycl_target(sycl_target), h_recv_buffer(sycl_target, 1),
+        h_recv_offsets(sycl_target, 1), d_recv_buffer(sycl_target, 1),
+        s_npart_packed(sycl_target, sycl_target.comm_pair.size_parent),
+        s_particle_dat_ptr_real(sycl_target, 1),
+        s_particle_dat_ptr_int(sycl_target, 1),
+        s_particle_dat_ncomp_real(sycl_target, 1),
+        s_particle_dat_ncomp_int(sycl_target, 1){};
+
+  inline void
+  reset(const int num_remote_recv_ranks, BufferHost<int> &h_recv_rank_npart,
+        std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
+        std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int) {
+
+    // realloc the array that holds where in the recv buffer the data from each
+    // remote rank should be placed
+    this->h_recv_offsets.realloc_no_copy(num_remote_recv_ranks);
+    const auto nbytes_per_particle =
+        this->particle_size(particle_dats_real, particle_dats_int);
+
+    // compute the offsets in the recv buffer
+    this->npart_recv = 0;
+    for (int rankx = 0; rankx < num_remote_recv_ranks; rankx++) {
+      this->h_recv_offsets.ptr[rankx] = this->npart_recv * nbytes_per_particle;
+      this->npart_recv += h_recv_rank_npart.ptr[rankx];
+    }
+
+    // realloc the recv buffer
+    this->h_recv_buffer.realloc_no_copy(this->npart_recv * nbytes_per_particle);
+    this->d_recv_buffer.realloc_no_copy(this->npart_recv * nbytes_per_particle);
+  }
 };
 
 } // namespace NESO::Particles

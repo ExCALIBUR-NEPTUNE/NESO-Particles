@@ -21,6 +21,7 @@ private:
   ParticleDatShPtr<INT> mpi_rank_dat;
 
   ParticlePacker particle_packer;
+  ParticleUnpacker particle_unpacker;
   GlobalMoveExchange global_move_exchange;
 
   BufferShared<int> s_send_ranks;
@@ -43,14 +44,14 @@ public:
              std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int)
       : sycl_target(sycl_target), particle_dats_real(particle_dats_real),
         particle_dats_int(particle_dats_int), particle_packer(sycl_target),
-        global_move_exchange(sycl_target),
+        particle_unpacker(sycl_target), global_move_exchange(sycl_target),
         s_send_ranks(sycl_target, sycl_target.comm_pair.size_parent),
         s_recv_ranks(sycl_target, sycl_target.comm_pair.size_parent),
         s_send_rank_map(sycl_target, sycl_target.comm_pair.size_parent),
-        s_pack_cells(sycl_target, 1024), s_pack_layers_src(sycl_target, 1024),
-        s_pack_layers_dst(sycl_target, 1024), s_num_ranks_send(sycl_target, 1),
+        s_pack_cells(sycl_target, 1), s_pack_layers_src(sycl_target, 1),
+        s_pack_layers_dst(sycl_target, 1), s_num_ranks_send(sycl_target, 1),
         s_num_ranks_recv(sycl_target, 1), s_npart_send_recv(sycl_target, 1),
-        s_send_rank_npart(sycl_target, 16){};
+        s_send_rank_npart(sycl_target, 1){};
   inline void set_mpi_rank_dat(ParticleDatShPtr<INT> mpi_rank_dat) {
     this->mpi_rank_dat = mpi_rank_dat;
   }
@@ -160,10 +161,6 @@ public:
     auto s_send_rank_npart_ptr = this->s_send_rank_npart.ptr;
     const int num_particles_leaving = s_npart_send_recv_ptr[0];
 
-    // start exchanging global send counts
-    this->global_move_exchange.npart_exchange_sendrecv(
-        num_remote_send_ranks, this->s_send_ranks, this->s_send_rank_npart);
-
     this->sycl_target.queue
         .submit([&](sycl::handler &cgh) {
           cgh.parallel_for<>(sycl::range<1>(num_remote_send_ranks),
@@ -193,8 +190,25 @@ public:
         s_pack_layers_src_ptr, s_pack_layers_dst_ptr, particle_dats_real,
         particle_dats_int);
 
-    global_pack_event.wait_and_throw();
+    // start exchanging global send counts
+    this->global_move_exchange.npart_exchange_sendrecv(
+        num_remote_send_ranks, this->s_send_ranks, this->s_send_rank_npart);
     this->global_move_exchange.npart_exchange_finalise();
+
+    // allocate space to recv packed particles
+    particle_unpacker.reset(this->global_move_exchange.num_remote_recv_ranks,
+                            this->global_move_exchange.h_recv_rank_npart,
+                            particle_dats_real, particle_dats_int);
+
+    // wait for the local particles to be packed.
+    global_pack_event.wait_and_throw();
+
+    // send and recv packed particles from particle_packer.cell_dat to
+    // particle_unpacker.h_recv_buffer using h_recv_offsets.
+    this->global_move_exchange.exchange_init(this->particle_packer,
+                                             this->particle_unpacker);
+
+    this->global_move_exchange.exchange_finalise(this->particle_unpacker);
   }
 };
 

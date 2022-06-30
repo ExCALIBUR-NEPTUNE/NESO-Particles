@@ -49,6 +49,7 @@ inline std::vector<size_t> reverse_argsort(const std::vector<T> &array) {
 }
 
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
+#define MAX(x, y) (((x) < (y)) ? (y) : (x))
 template <typename T>
 void get_decomp_1d(const T N_compute_units, const T N_work_items,
                    const T work_unit, T *rstart, T *rend) {
