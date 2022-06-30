@@ -107,6 +107,14 @@ public:
   }
   inline void trim_cell_dat_rows();
   inline void print() { this->cell_dat.print(); };
+
+  inline INT get_particle_loop_iter_range() {
+    return this->cell_dat.ncells * this->cell_dat.get_nrow_max();
+  }
+  inline INT get_particle_loop_cell_stride() {
+    return this->cell_dat.get_nrow_max();
+  }
+  inline int *get_particle_loop_npart_cell() { return this->s_npart_cell; }
 };
 
 template <typename T> using ParticleDatShPtr = std::shared_ptr<ParticleDatT<T>>;
