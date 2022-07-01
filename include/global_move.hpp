@@ -216,6 +216,8 @@ public:
                                              this->particle_unpacker);
 
     this->global_move_exchange.exchange_finalise(this->particle_unpacker);
+
+    this->particle_unpacker.unpack(particle_dats_real, particle_dats_int);
   }
 };
 

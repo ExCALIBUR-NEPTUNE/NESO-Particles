@@ -19,6 +19,7 @@ namespace NESO::Particles {
 
 class k_reset;
 class k_pack;
+class k_unpack;
 
 class ParticlePacker {
 private:
@@ -295,19 +296,105 @@ public:
     // realloc the array that holds where in the recv buffer the data from each
     // remote rank should be placed
     this->h_recv_offsets.realloc_no_copy(num_remote_recv_ranks);
-    const auto nbytes_per_particle =
+    this->num_bytes_per_particle =
         this->particle_size(particle_dats_real, particle_dats_int);
 
     // compute the offsets in the recv buffer
     this->npart_recv = 0;
     for (int rankx = 0; rankx < num_remote_recv_ranks; rankx++) {
-      this->h_recv_offsets.ptr[rankx] = this->npart_recv * nbytes_per_particle;
+      this->h_recv_offsets.ptr[rankx] =
+          this->npart_recv * this->num_bytes_per_particle;
       this->npart_recv += h_recv_rank_npart.ptr[rankx];
     }
 
     // realloc the recv buffer
-    this->h_recv_buffer.realloc_no_copy(this->npart_recv * nbytes_per_particle);
-    this->d_recv_buffer.realloc_no_copy(this->npart_recv * nbytes_per_particle);
+    this->h_recv_buffer.realloc_no_copy(this->npart_recv *
+                                        this->num_bytes_per_particle);
+    this->d_recv_buffer.realloc_no_copy(this->npart_recv *
+                                        this->num_bytes_per_particle);
+  }
+
+  /*
+   * Unpack the recv buffer into the particle group. Particles unpack into cell
+   * 0.
+   */
+  inline void
+  unpack(std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
+         std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int) {
+
+    // copy packed data to device
+    auto event_memcpy = this->sycl_target.queue.memcpy(
+        this->d_recv_buffer.ptr, this->h_recv_buffer.ptr,
+        this->npart_recv * this->num_bytes_per_particle);
+
+    // old cell occupancy
+    auto mpi_rank_dat = particle_dats_int[Sym<INT>("NESO_MPI_RANK")];
+    const int npart_cell_0_old = mpi_rank_dat->s_npart_cell[0];
+    const int npart_cell_0_new = npart_cell_0_old + this->npart_recv;
+    // realloc cell 0 on the dats
+    for (auto &dat : particle_dats_real) {
+      dat.second->realloc(0, npart_cell_0_new);
+    }
+    for (auto &dat : particle_dats_int) {
+      dat.second->realloc(0, npart_cell_0_new);
+    }
+
+    const int k_npart_recv = this->npart_recv;
+
+    // get the pointers to the particle dat data and the number of components in
+    // each dat
+    get_particle_dat_info(particle_dats_real, particle_dats_int);
+
+    // unpack into cell 0
+    const int k_num_bytes_per_particle = this->num_bytes_per_particle;
+    const int k_num_dats_real = this->num_dats_real;
+    const int k_num_dats_int = this->num_dats_int;
+    const auto k_particle_dat_ptr_real = s_particle_dat_ptr_real.ptr;
+    const auto k_particle_dat_ptr_int = s_particle_dat_ptr_int.ptr;
+    const auto k_particle_dat_ncomp_real = s_particle_dat_ncomp_real.ptr;
+    const auto k_particle_dat_ncomp_int = s_particle_dat_ncomp_int.ptr;
+    char *k_recv_buffer = this->d_recv_buffer.ptr;
+
+    event_memcpy.wait_and_throw();
+    this->sycl_target.queue
+        .submit([&](sycl::handler &cgh) {
+          cgh.parallel_for<k_unpack>(
+              // for each new particle
+              sycl::range<1>(static_cast<size_t>(k_npart_recv)),
+              [=](sycl::id<1> idx) {
+                const int cell = 0;
+                // destination layer in the cell
+                const int layer = npart_cell_0_old + idx;
+                // source position in the packed buffer
+                const int offset = k_num_bytes_per_particle * idx;
+                char *unpack_base_ptr = k_recv_buffer + offset;
+                REAL *unpack_ptr_real = (REAL *)unpack_base_ptr;
+                // for each real dat
+                int index = 0;
+                for (int dx = 0; dx < k_num_dats_real; dx++) {
+                  REAL ***dat_ptr = k_particle_dat_ptr_real[dx];
+                  const int ncomp = k_particle_dat_ncomp_real[dx];
+                  // for each component
+                  for (int cx = 0; cx < ncomp; cx++) {
+                    dat_ptr[cell][cx][layer] = unpack_ptr_real[index + cx];
+                  }
+                  index += ncomp;
+                }
+                // for each int dat
+                INT *unpack_ptr_int = (INT *)(unpack_ptr_real + index);
+                index = 0;
+                for (int dx = 0; dx < k_num_dats_int; dx++) {
+                  INT ***dat_ptr = k_particle_dat_ptr_int[dx];
+                  const int ncomp = k_particle_dat_ncomp_int[dx];
+                  // for each component
+                  for (int cx = 0; cx < ncomp; cx++) {
+                    dat_ptr[cell][cx][layer] = unpack_ptr_int[index + cx];
+                  }
+                  index += ncomp;
+                }
+              });
+        })
+        .wait_and_throw();
   }
 };
 
