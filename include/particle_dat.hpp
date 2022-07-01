@@ -12,6 +12,9 @@
 
 namespace NESO::Particles {
 
+class k_copy_particle_data;
+class k_set_npart_cells;
+
 template <typename T> class ParticleDatT {
 private:
 public:
@@ -59,21 +62,22 @@ public:
     const int ncomp = this->ncomp;
 
     sycl::event event = this->sycl_target.queue.submit([&](sycl::handler &cgh) {
-      cgh.parallel_for<>(sycl::range<1>(npart_s), [=](sycl::id<1> idx) {
-        const INT cell_oldx = d_cells_old[idx];
-        // remove particles currently masks of elements using -1
-        if (cell_oldx > -1) {
-          const INT cell_newx = d_cells_old[idx];
-          const INT layer_oldx = d_layers_old[idx];
-          const INT layer_newx = d_layers_new[idx];
+      cgh.parallel_for<k_copy_particle_data>(
+          sycl::range<1>(npart_s), [=](sycl::id<1> idx) {
+            const INT cell_oldx = d_cells_old[idx];
+            // remove particles currently masks of elements using -1
+            if (cell_oldx > -1) {
+              const INT cell_newx = d_cells_old[idx];
+              const INT layer_oldx = d_layers_old[idx];
+              const INT layer_newx = d_layers_new[idx];
 
-          // copy the data from old cell/layer to new cell/layer.
-          for (int cx = 0; cx < ncomp; cx++) {
-            d_cell_dat_ptr[cell_newx][cx][layer_newx] =
-                d_cell_dat_ptr[cell_oldx][cx][layer_oldx];
-          }
-        }
-      });
+              // copy the data from old cell/layer to new cell/layer.
+              for (int cx = 0; cx < ncomp; cx++) {
+                d_cell_dat_ptr[cell_newx][cx][layer_newx] =
+                    d_cell_dat_ptr[cell_oldx][cx][layer_oldx];
+              }
+            }
+          });
     });
 
     return event;
@@ -87,9 +91,10 @@ public:
     const size_t ncell = static_cast<size_t>(this->ncell);
     int *s_npart_cell_ptr = this->s_npart_cell;
     sycl::event event = this->sycl_target.queue.submit([&](sycl::handler &cgh) {
-      cgh.parallel_for<>(sycl::range<1>(ncell), [=](sycl::id<1> idx) {
-        s_npart_cell_ptr[idx] = static_cast<int>(d_npart_cell[idx]);
-      });
+      cgh.parallel_for<k_set_npart_cells>(
+          sycl::range<1>(ncell), [=](sycl::id<1> idx) {
+            s_npart_cell_ptr[idx] = static_cast<int>(d_npart_cell[idx]);
+          });
     });
     return event;
   }
@@ -156,6 +161,9 @@ template <typename T> inline void ParticleDatT<T>::trim_cell_dat_rows() {
   this->cell_dat.compute_nrow_max();
 }
 
+class k_append_particle_data_with_data;
+class k_append_particle_data_without_data;
+
 /*
  *  Append particle data to the ParticleDat. wait() must be called on the queue
  *  before use of the data.
@@ -190,14 +198,15 @@ inline void ParticleDatT<T>::append_particle_data(const int npart_new,
       auto a_layers = b_layers.get_access<sycl::access::mode::read>(cgh);
       // The new data
       auto a_data = b_data.template get_access<sycl::access::mode::read>(cgh);
-      cgh.parallel_for<>(sycl::range<1>(npart_new), [=](sycl::id<1> idx) {
-        const INT cellx = a_cells[idx];
-        const INT layerx = a_layers[idx];
-        // copy the data into the dat.
-        for (int cx = 0; cx < ncomp; cx++) {
-          d_cell_dat_ptr[cellx][cx][layerx] = a_data[cx * npart_new + idx];
-        }
-      });
+      cgh.parallel_for<k_append_particle_data_with_data>(
+          sycl::range<1>(npart_new), [=](sycl::id<1> idx) {
+            const INT cellx = a_cells[idx];
+            const INT layerx = a_layers[idx];
+            // copy the data into the dat.
+            for (int cx = 0; cx < ncomp; cx++) {
+              d_cell_dat_ptr[cellx][cx][layerx] = a_data[cx * npart_new + idx];
+            }
+          });
     });
   } else {
     this->sycl_target.queue.submit([&](sycl::handler &cgh) {
@@ -205,14 +214,15 @@ inline void ParticleDatT<T>::append_particle_data(const int npart_new,
       auto a_cells = b_cells.get_access<sycl::access::mode::read>(cgh);
       auto a_layers = b_layers.get_access<sycl::access::mode::read>(cgh);
 
-      cgh.parallel_for<>(sycl::range<1>(npart_new), [=](sycl::id<1> idx) {
-        const INT cellx = a_cells[idx];
-        const INT layerx = a_layers[idx];
-        // zero the new components in the dat
-        for (int cx = 0; cx < ncomp; cx++) {
-          d_cell_dat_ptr[cellx][cx][layerx] = ((T)0);
-        }
-      });
+      cgh.parallel_for<k_append_particle_data_without_data>(
+          sycl::range<1>(npart_new), [=](sycl::id<1> idx) {
+            const INT cellx = a_cells[idx];
+            const INT layerx = a_layers[idx];
+            // zero the new components in the dat
+            for (int cx = 0; cx < ncomp; cx++) {
+              d_cell_dat_ptr[cellx][cx][layerx] = ((T)0);
+            }
+          });
     });
   }
 

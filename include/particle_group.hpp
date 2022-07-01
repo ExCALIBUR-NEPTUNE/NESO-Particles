@@ -21,6 +21,11 @@
 
 namespace NESO::Particles {
 
+class k_mask_removed_particles;
+class k_remove_new_npart;
+class k_compute_compress_layers;
+class k_reset_move_counters;
+
 class ParticleGroup {
 private:
   int ncell;
@@ -256,12 +261,13 @@ inline void ParticleGroup::compute_remove_compress_indicies(
   INT ***cell_ids_ptr = this->cell_id_dat->cell_dat.device_ptr();
   this->sycl_target.queue
       .submit([&](sycl::handler &cgh) {
-        cgh.parallel_for<>(sycl::range<1>(static_cast<size_t>(cell_count)),
-                           [=](sycl::id<1> idx) {
-                             device_npart_cell_ptr[idx] =
-                                 static_cast<int>(npart_cell_ptr[idx]);
-                             device_move_counters_ptr[idx] = 0;
-                           });
+        cgh.parallel_for<k_reset_move_counters>(
+            sycl::range<1>(static_cast<size_t>(cell_count)),
+            [=](sycl::id<1> idx) {
+              device_npart_cell_ptr[idx] =
+                  static_cast<int>(npart_cell_ptr[idx]);
+              device_move_counters_ptr[idx] = 0;
+            });
       })
       .wait();
 
@@ -269,21 +275,21 @@ inline void ParticleGroup::compute_remove_compress_indicies(
       .submit([&](sycl::handler &cgh) {
         auto a_cells = b_cells.get_access<sycl::access::mode::read>(cgh);
         auto a_layers = b_layers.get_access<sycl::access::mode::read>(cgh);
-        cgh.parallel_for<>(sycl::range<1>(static_cast<size_t>(npart)),
-                           [=](sycl::id<1> idx) {
-                             const auto cell = a_cells[idx];
-                             const auto layer = a_layers[idx];
+        cgh.parallel_for<k_mask_removed_particles>(
+            sycl::range<1>(static_cast<size_t>(npart)), [=](sycl::id<1> idx) {
+              const auto cell = a_cells[idx];
+              const auto layer = a_layers[idx];
 
-                             // Atomically do device_npart_cell_ptr[cell]--
-                             sycl::atomic_ref<int, sycl::memory_order::relaxed,
-                                              sycl::memory_scope::device>
-                                 element_atomic(device_npart_cell_ptr[cell]);
-                             element_atomic.fetch_add(-1);
+              // Atomically do device_npart_cell_ptr[cell]--
+              sycl::atomic_ref<int, sycl::memory_order::relaxed,
+                               sycl::memory_scope::device>
+                  element_atomic(device_npart_cell_ptr[cell]);
+              element_atomic.fetch_add(-1);
 
-                             //// indicate this particle is removed by setting
-                             /// the / cell index to -1
-                             cell_ids_ptr[cell][0][layer] = -42;
-                           });
+              //// indicate this particle is removed by setting
+              /// the / cell index to -1
+              cell_ids_ptr[cell][0][layer] = -1;
+            });
       })
       .wait();
 
@@ -292,7 +298,7 @@ inline void ParticleGroup::compute_remove_compress_indicies(
         auto a_cells = b_cells.get_access<sycl::access::mode::read>(cgh);
         auto a_layers = b_layers.get_access<sycl::access::mode::read>(cgh);
 
-        cgh.parallel_for<>(
+        cgh.parallel_for<k_compute_compress_layers>(
             sycl::range<1>(static_cast<size_t>(npart)), [=](sycl::id<1> idx) {
               const auto cell = a_cells[idx];
               const auto layer = a_layers[idx];
@@ -368,7 +374,7 @@ inline void ParticleGroup::remove_particles(const int npart,
   auto device_npart_cell_ptr = device_npart_cell.ptr;
   const auto cell_count = domain.mesh.get_cell_count();
   this->sycl_target.queue.submit([&](sycl::handler &cgh) {
-    cgh.parallel_for<>(
+    cgh.parallel_for<k_remove_new_npart>(
         sycl::range<1>(static_cast<size_t>(cell_count)), [=](sycl::id<1> idx) {
           npart_cell_ptr[idx] = static_cast<INT>(device_npart_cell_ptr[idx]);
         });

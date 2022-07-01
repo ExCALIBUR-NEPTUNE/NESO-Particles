@@ -17,6 +17,9 @@
 
 namespace NESO::Particles {
 
+class k_reset;
+class k_pack;
+
 class ParticlePacker {
 private:
   BufferShared<int> s_npart_packed;
@@ -92,7 +95,7 @@ public:
     auto s_npart_packed_ptr = s_npart_packed.ptr;
     this->sycl_target.queue
         .submit([&](sycl::handler &cgh) {
-          cgh.parallel_for<>(
+          cgh.parallel_for<k_reset>(
               sycl::range<1>(static_cast<size_t>(size_parent)),
               [=](sycl::id<1> idx) { s_npart_packed_ptr[idx] = 0; });
         })
@@ -170,7 +173,7 @@ public:
 
     auto k_pack_cell_dat = this->cell_dat.device_ptr();
     sycl::event event = this->sycl_target.queue.submit([&](sycl::handler &cgh) {
-      cgh.parallel_for<>(
+      cgh.parallel_for<k_pack>(
           // for each leaving particle
           sycl::range<1>(static_cast<size_t>(num_particles_leaving)),
           [=](sycl::id<1> idx) {
