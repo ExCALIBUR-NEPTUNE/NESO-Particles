@@ -437,5 +437,8 @@ TEST(ParticleGroup, global_move) {
 
   A.global_move();
 
+  std::cout << "RANK: " << sycl_target.comm_pair.rank_parent << std::endl;
+  A[Sym<INT>("NESO_MPI_RANK")]->print();
+
   mesh.free();
 }

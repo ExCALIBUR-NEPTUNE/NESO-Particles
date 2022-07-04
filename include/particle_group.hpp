@@ -32,6 +32,8 @@ private:
   int npart_local;
   BufferShared<INT> npart_cell;
 
+  BufferDevice<INT> d_remove_cells;
+  BufferDevice<INT> d_remove_layers;
   BufferDevice<INT> compress_cells_old;
   BufferDevice<INT> compress_cells_new;
   BufferDevice<INT> compress_layers_old;
@@ -42,9 +44,9 @@ private:
   BufferDevice<int> device_npart_cell;
   BufferDevice<int> device_move_counters;
 
-  inline void compute_remove_compress_indicies(const int npart,
-                                               const std::vector<INT> &cells,
-                                               const std::vector<INT> &layers);
+  template <typename T>
+  inline void compute_remove_compress_indicies(const int npart, T *usm_cells,
+                                               T *usm_layers);
   template <typename T> inline void realloc_dat(ParticleDatShPtr<T> &dat) {
     dat->realloc(this->npart_cell);
   };
@@ -78,7 +80,8 @@ public:
   ParticleGroup(Domain domain, ParticleSpec &particle_spec,
                 SYCLTarget &sycl_target)
       : domain(domain), sycl_target(sycl_target),
-        ncell(domain.mesh.get_cell_count()), compress_cells_old(sycl_target, 1),
+        ncell(domain.mesh.get_cell_count()), d_remove_cells(sycl_target, 1),
+        d_remove_layers(sycl_target, 1), compress_cells_old(sycl_target, 1),
         compress_cells_new(sycl_target, 1), compress_layers_old(sycl_target, 1),
         compress_layers_new(sycl_target, 1), npart_cell(sycl_target, 1),
         device_npart_cell(sycl_target, domain.mesh.get_cell_count()),
@@ -132,6 +135,8 @@ public:
 
   inline void remove_particles(const int npart, const std::vector<INT> &cells,
                                const std::vector<INT> &layers);
+  template <typename T>
+  inline void remove_particles(const int npart, T *usm_cells, T *usm_layers);
 
   inline INT get_npart_cell(const int cell) {
     return this->npart_cell.ptr[cell];
@@ -235,9 +240,10 @@ inline void ParticleGroup::add_particles_local(ParticleSet &particle_data) {
   this->sycl_target.queue.wait();
 }
 
-inline void ParticleGroup::compute_remove_compress_indicies(
-    const int npart, const std::vector<INT> &cells,
-    const std::vector<INT> &layers) {
+template <typename T>
+inline void ParticleGroup::compute_remove_compress_indicies(const int npart,
+                                                            T *usm_cells,
+                                                            T *usm_layers) {
 
   compress_cells_old.realloc_no_copy(npart);
   compress_layers_old.realloc_no_copy(npart);
@@ -248,8 +254,6 @@ inline void ParticleGroup::compute_remove_compress_indicies(
   device_npart_cell.realloc_no_copy(cell_count);
 
   auto npart_cell_ptr = npart_cell.ptr;
-  sycl::buffer<INT> b_cells(cells.data(), sycl::range<1>{cells.size()});
-  sycl::buffer<INT> b_layers(layers.data(), sycl::range<1>{layers.size()});
 
   auto device_npart_cell_ptr = device_npart_cell.ptr;
   auto device_move_counters_ptr = device_move_counters.ptr;
@@ -273,12 +277,10 @@ inline void ParticleGroup::compute_remove_compress_indicies(
 
   this->sycl_target.queue
       .submit([&](sycl::handler &cgh) {
-        auto a_cells = b_cells.get_access<sycl::access::mode::read>(cgh);
-        auto a_layers = b_layers.get_access<sycl::access::mode::read>(cgh);
         cgh.parallel_for<k_mask_removed_particles>(
             sycl::range<1>(static_cast<size_t>(npart)), [=](sycl::id<1> idx) {
-              const auto cell = a_cells[idx];
-              const auto layer = a_layers[idx];
+              const auto cell = usm_cells[idx];
+              const auto layer = usm_layers[idx];
 
               // Atomically do device_npart_cell_ptr[cell]--
               sycl::atomic_ref<int, sycl::memory_order::relaxed,
@@ -295,13 +297,10 @@ inline void ParticleGroup::compute_remove_compress_indicies(
 
   this->sycl_target.queue
       .submit([&](sycl::handler &cgh) {
-        auto a_cells = b_cells.get_access<sycl::access::mode::read>(cgh);
-        auto a_layers = b_layers.get_access<sycl::access::mode::read>(cgh);
-
         cgh.parallel_for<k_compute_compress_layers>(
             sycl::range<1>(static_cast<size_t>(npart)), [=](sycl::id<1> idx) {
-              const auto cell = a_cells[idx];
-              const auto layer = a_layers[idx];
+              const auto cell = usm_cells[idx];
+              const auto layer = usm_layers[idx];
 
               // Is this layer less than the new cell count?
               // If so then there is a particle in a row greater than the cell
@@ -348,11 +347,10 @@ inline void ParticleGroup::compute_remove_compress_indicies(
       .wait_and_throw();
 }
 
-inline void ParticleGroup::remove_particles(const int npart,
-                                            const std::vector<INT> &cells,
-                                            const std::vector<INT> &layers) {
-
-  compute_remove_compress_indicies(npart, cells, layers);
+template <typename T>
+inline void ParticleGroup::remove_particles(const int npart, T *usm_cells,
+                                            T *usm_layers) {
+  compute_remove_compress_indicies(npart, usm_cells, usm_layers);
 
   auto compress_cells_old_ptr = compress_cells_old.ptr;
   auto compress_layers_old_ptr = compress_layers_old.ptr;
@@ -389,6 +387,38 @@ inline void ParticleGroup::remove_particles(const int npart,
   for (auto &dat : particle_dats_int) {
     dat.second->trim_cell_dat_rows();
   }
+}
+
+inline void ParticleGroup::remove_particles(const int npart,
+                                            const std::vector<INT> &cells,
+                                            const std::vector<INT> &layers) {
+
+  this->d_remove_cells.realloc_no_copy(npart);
+  this->d_remove_layers.realloc_no_copy(npart);
+
+  auto k_cells = this->d_remove_cells.ptr;
+  auto k_layers = this->d_remove_layers.ptr;
+
+  NESOASSERT(cells.size() >= npart, "Bad cells length compared to npart");
+  NESOASSERT(layers.size() >= npart, "Bad layers length compared to npart");
+
+  auto b_cells = sycl::buffer<INT>(cells.data(), sycl::range<1>(npart));
+  auto b_layers = sycl::buffer<INT>(layers.data(), sycl::range<1>(npart));
+
+  this->sycl_target.queue
+      .submit([&](sycl::handler &cgh) {
+        auto a_cells = b_cells.get_access<sycl::access::mode::read>(cgh);
+        auto a_layers = b_layers.get_access<sycl::access::mode::read>(cgh);
+        cgh.parallel_for<k_mask_removed_particles>(
+            sycl::range<1>(static_cast<size_t>(npart)), [=](sycl::id<1> idx) {
+              k_cells[idx] = static_cast<INT>(a_cells[idx]);
+              k_layers[idx] = static_cast<INT>(a_layers[idx]);
+            });
+      })
+      .wait_and_throw();
+
+  this->remove_particles(npart, this->d_remove_cells.ptr,
+                         this->d_remove_layers.ptr);
 }
 
 /*

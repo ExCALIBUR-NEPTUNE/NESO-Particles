@@ -217,7 +217,12 @@ public:
 
     this->global_move_exchange.exchange_finalise(this->particle_unpacker);
 
+    // Unpack the recv'd particles
     this->particle_unpacker.unpack(particle_dats_real, particle_dats_int);
+
+    // remove the sent particles
+
+
   }
 };
 

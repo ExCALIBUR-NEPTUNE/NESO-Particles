@@ -397,8 +397,6 @@ public:
               });
         })
         .wait_and_throw();
-
-
   }
 };
 
