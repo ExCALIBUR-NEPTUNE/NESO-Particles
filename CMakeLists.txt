@@ -7,6 +7,12 @@ project(
 
 set(CMAKE_CXX_STANDARD 17)
 
+# set build type
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE "RelWithDebInfo")
+  message(STATUS "Set CMAKE_BUILD_TYPE=RelWithDebInfo")
+endif()
+
 # find MPI
 find_package(MPI REQUIRED)
 

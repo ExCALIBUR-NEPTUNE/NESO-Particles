@@ -334,9 +334,11 @@ public:
     // realloc cell 0 on the dats
     for (auto &dat : particle_dats_real) {
       dat.second->realloc(0, npart_cell_0_new);
+      dat.second->set_npart_cell(0, npart_cell_0_new);
     }
     for (auto &dat : particle_dats_int) {
       dat.second->realloc(0, npart_cell_0_new);
+      dat.second->set_npart_cell(0, npart_cell_0_new);
     }
 
     const int k_npart_recv = this->npart_recv;
@@ -395,6 +397,8 @@ public:
               });
         })
         .wait_and_throw();
+
+
   }
 };
 
