@@ -46,13 +46,11 @@ private:
     this->particle_spec.push(prop);
   };
 
-
   // compression for dats when particles are removed
   LayerCompressor layer_compressor;
 
   // members for mpi communication
   GlobalMove global_move_ctx;
-
 
 public:
   Domain domain;
@@ -82,8 +80,8 @@ public:
         device_npart_cell(sycl_target, domain.mesh.get_cell_count()),
         device_move_counters(sycl_target, domain.mesh.get_cell_count()),
         layer_compressor(sycl_target, ncell, this->npart_cell),
-        global_move_ctx(sycl_target, layer_compressor, particle_dats_real, particle_dats_int)
-         {
+        global_move_ctx(sycl_target, layer_compressor, particle_dats_real,
+                        particle_dats_int) {
 
     this->npart_local = 0;
     this->npart_cell.realloc_no_copy(domain.mesh.get_cell_count());

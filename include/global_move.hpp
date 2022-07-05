@@ -48,13 +48,11 @@ public:
   SYCLTarget &sycl_target;
 
   ~GlobalMove(){};
-  GlobalMove(SYCLTarget &sycl_target,
-             LayerCompressor &layer_compressor,
+  GlobalMove(SYCLTarget &sycl_target, LayerCompressor &layer_compressor,
              std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
              std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int)
-      : sycl_target(sycl_target), 
-      layer_compressor(layer_compressor),
-      particle_dats_real(particle_dats_real),
+      : sycl_target(sycl_target), layer_compressor(layer_compressor),
+        particle_dats_real(particle_dats_real),
         particle_dats_int(particle_dats_int), particle_packer(sycl_target),
         particle_unpacker(sycl_target), global_move_exchange(sycl_target),
         s_send_ranks(sycl_target, sycl_target.comm_pair.size_parent),
@@ -225,18 +223,14 @@ public:
 
     // remove the sent particles whilst the communication occurs
     this->layer_compressor.remove_particles(
-      num_particles_leaving,
-      s_pack_cells_ptr,
-      s_pack_layers_src_ptr,
-      particle_dats_real, particle_dats_int
-    );
+        num_particles_leaving, s_pack_cells_ptr, s_pack_layers_src_ptr,
+        particle_dats_real, particle_dats_int);
 
     // wait for particle data to be send/recv'd
     this->global_move_exchange.exchange_finalise(this->particle_unpacker);
 
     // Unpack the recv'd particles
     this->particle_unpacker.unpack(particle_dats_real, particle_dats_int);
-
   }
 };
 
