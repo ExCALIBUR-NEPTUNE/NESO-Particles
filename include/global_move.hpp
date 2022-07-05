@@ -221,8 +221,6 @@ public:
     this->particle_unpacker.unpack(particle_dats_real, particle_dats_int);
 
     // remove the sent particles
-
-
   }
 };
 
