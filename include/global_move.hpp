@@ -4,6 +4,7 @@
 #include <CL/sycl.hpp>
 #include <mpi.h>
 
+#include "cell_dat_compression.hpp"
 #include "communication.hpp"
 #include "compute_target.hpp"
 #include "global_move_exchange.hpp"
@@ -39,14 +40,21 @@ private:
   BufferShared<int> s_npart_send_recv;
   BufferShared<int> s_send_rank_npart;
 
+  // Reference to the layer compressor on the particle group such that this
+  // global move can remove the sent particles
+  LayerCompressor *layer_compressor;
+
 public:
   SYCLTarget &sycl_target;
 
   ~GlobalMove(){};
   GlobalMove(SYCLTarget &sycl_target,
+             //LayerCompressor *layer_compressor,
              std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
              std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int)
-      : sycl_target(sycl_target), particle_dats_real(particle_dats_real),
+      : sycl_target(sycl_target), 
+      //layer_compressor(layer_compressor),
+      particle_dats_real(particle_dats_real),
         particle_dats_int(particle_dats_int), particle_packer(sycl_target),
         particle_unpacker(sycl_target), global_move_exchange(sycl_target),
         s_send_ranks(sycl_target, sycl_target.comm_pair.size_parent),

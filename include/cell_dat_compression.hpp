@@ -8,12 +8,8 @@
 #include <mpi.h>
 #include <string>
 
-#include "access.hpp"
 #include "cell_dat.hpp"
 #include "compute_target.hpp"
-#include "domain.hpp"
-#include "global_move.hpp"
-#include "packing_unpacking.hpp"
 #include "particle_dat.hpp"
 #include "particle_set.hpp"
 #include "particle_spec.hpp"
