@@ -37,7 +37,8 @@ TEST(ParticleGroup, creation) {
 
   auto positions =
       uniform_within_extents(N, ndim, mesh.global_extents, rng_pos);
-  auto velocities = normal_distribution(N, 3, 0.0, 1.0, rng_vel);
+  auto velocities =
+      NESO::Particles::normal_distribution(N, 3, 0.0, 1.0, rng_vel);
 
   ParticleSet initial_distribution(N, particle_spec);
 
@@ -129,7 +130,8 @@ TEST(ParticleGroup, compression_removal_all) {
 
   auto positions =
       uniform_within_extents(N, ndim, mesh.global_extents, rng_pos);
-  auto velocities = normal_distribution(N, 3, 0.0, 1.0, rng_vel);
+  auto velocities =
+      NESO::Particles::normal_distribution(N, 3, 0.0, 1.0, rng_vel);
 
   std::uniform_int_distribution<int> uniform_dist(0, 8);
 
@@ -346,7 +348,8 @@ TEST(ParticleGroup, add_particle_dat) {
 
   auto positions =
       uniform_within_extents(N, ndim, mesh.global_extents, rng_pos);
-  auto velocities = normal_distribution(N, 3, 0.0, 1.0, rng_vel);
+  auto velocities =
+      NESO::Particles::normal_distribution(N, 3, 0.0, 1.0, rng_vel);
 
   ParticleSet initial_distribution(N, particle_spec);
 
@@ -409,7 +412,8 @@ TEST(ParticleGroup, global_move_single) {
 
   auto positions =
       uniform_within_extents(N, ndim, mesh.global_extents, rng_pos);
-  auto velocities = normal_distribution(N, 3, 0.0, 1.0, rng_vel);
+  auto velocities =
+      NESO::Particles::normal_distribution(N, 3, 0.0, 1.0, rng_vel);
 
   std::uniform_int_distribution<int> uniform_dist(
       0, sycl_target.comm_pair.size_parent - 1);
@@ -438,7 +442,6 @@ TEST(ParticleGroup, global_move_single) {
 
   A.global_move();
 
-  // loop over owned particles and check they should be on this rank
   const int rank = sycl_target.comm_pair.rank_parent;
   const int correct_npart = mapping[rank].size();
 
@@ -455,6 +458,7 @@ TEST(ParticleGroup, global_move_single) {
   auto cell_ids_dat = A[Sym<INT>("ID")]->cell_dat.get_cell(0);
   auto velocities_dat = A[Sym<REAL>("V")]->cell_dat.get_cell(0);
 
+  // loop over owned particles and check they should be on this rank
   for (int px = 0; px < correct_npart; px++) {
     // find the particle in the dat
     int row = -1;

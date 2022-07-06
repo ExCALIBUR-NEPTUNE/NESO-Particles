@@ -5,10 +5,13 @@
 #include <memory>
 
 #include "access.hpp"
+#include "cell_dat.hpp"
 #include "compute_target.hpp"
 #include "particle_set.hpp"
 #include "particle_spec.hpp"
 #include "typedefs.hpp"
+
+using namespace cl;
 
 namespace NESO::Particles {
 
