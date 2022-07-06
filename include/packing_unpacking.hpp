@@ -9,17 +9,11 @@
 #include <stack>
 #include <string>
 
-#include "cell_dat.hpp"
 #include "compute_target.hpp"
-#include "domain.hpp"
 #include "particle_dat.hpp"
 #include "typedefs.hpp"
 
 namespace NESO::Particles {
-
-class k_reset;
-class k_pack;
-class k_unpack;
 
 class ParticlePacker {
 private:
@@ -96,7 +90,7 @@ public:
     auto s_npart_packed_ptr = s_npart_packed.ptr;
     this->sycl_target.queue
         .submit([&](sycl::handler &cgh) {
-          cgh.parallel_for<k_reset>(
+          cgh.parallel_for<>(
               sycl::range<1>(static_cast<size_t>(size_parent)),
               [=](sycl::id<1> idx) { s_npart_packed_ptr[idx] = 0; });
         })
@@ -174,7 +168,7 @@ public:
 
     auto k_pack_cell_dat = this->cell_dat.device_ptr();
     sycl::event event = this->sycl_target.queue.submit([&](sycl::handler &cgh) {
-      cgh.parallel_for<k_pack>(
+      cgh.parallel_for<>(
           // for each leaving particle
           sycl::range<1>(static_cast<size_t>(num_particles_leaving)),
           [=](sycl::id<1> idx) {
@@ -360,7 +354,7 @@ public:
     event_memcpy.wait_and_throw();
     this->sycl_target.queue
         .submit([&](sycl::handler &cgh) {
-          cgh.parallel_for<k_unpack>(
+          cgh.parallel_for<>(
               // for each new particle
               sycl::range<1>(static_cast<size_t>(k_npart_recv)),
               [=](sycl::id<1> idx) {

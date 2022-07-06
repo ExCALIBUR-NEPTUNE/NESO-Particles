@@ -265,11 +265,11 @@ inline void ParticleGroup::remove_particles(const int npart,
       .submit([&](sycl::handler &cgh) {
         auto a_cells = b_cells.get_access<sycl::access::mode::read>(cgh);
         auto a_layers = b_layers.get_access<sycl::access::mode::read>(cgh);
-        cgh.parallel_for<k_mask_removed_particles>(
-            sycl::range<1>(static_cast<size_t>(npart)), [=](sycl::id<1> idx) {
-              k_cells[idx] = static_cast<INT>(a_cells[idx]);
-              k_layers[idx] = static_cast<INT>(a_layers[idx]);
-            });
+        cgh.parallel_for<>(sycl::range<1>(static_cast<size_t>(npart)),
+                           [=](sycl::id<1> idx) {
+                             k_cells[idx] = static_cast<INT>(a_cells[idx]);
+                             k_layers[idx] = static_cast<INT>(a_layers[idx]);
+                           });
       })
       .wait_and_throw();
 

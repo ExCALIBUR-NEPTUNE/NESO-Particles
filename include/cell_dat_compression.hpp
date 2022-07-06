@@ -17,11 +17,6 @@
 
 namespace NESO::Particles {
 
-class k_mask_removed_particles;
-class k_remove_new_npart;
-class k_compute_compress_layers;
-class k_reset_move_counters;
-
 class LayerCompressor {
 private:
   const int ncell;
@@ -83,18 +78,18 @@ public:
     INT ***cell_ids_ptr = this->cell_id_dat->cell_dat.device_ptr();
     this->sycl_target.queue
         .submit([&](sycl::handler &cgh) {
-          cgh.parallel_for<k_reset_move_counters>(
-              sycl::range<1>(static_cast<size_t>(ncell)), [=](sycl::id<1> idx) {
-                device_npart_cell_ptr[idx] =
-                    static_cast<int>(npart_cell_ptr[idx]);
-                device_move_counters_ptr[idx] = 0;
-              });
+          cgh.parallel_for<>(sycl::range<1>(static_cast<size_t>(ncell)),
+                             [=](sycl::id<1> idx) {
+                               device_npart_cell_ptr[idx] =
+                                   static_cast<int>(npart_cell_ptr[idx]);
+                               device_move_counters_ptr[idx] = 0;
+                             });
         })
         .wait();
 
     this->sycl_target.queue
         .submit([&](sycl::handler &cgh) {
-          cgh.parallel_for<k_mask_removed_particles>(
+          cgh.parallel_for<>(
               sycl::range<1>(static_cast<size_t>(npart)), [=](sycl::id<1> idx) {
                 const auto cell = usm_cells[idx];
                 const auto layer = usm_layers[idx];
@@ -114,7 +109,7 @@ public:
 
     this->sycl_target.queue
         .submit([&](sycl::handler &cgh) {
-          cgh.parallel_for<k_compute_compress_layers>(
+          cgh.parallel_for<>(
               sycl::range<1>(static_cast<size_t>(npart)), [=](sycl::id<1> idx) {
                 const auto cell = usm_cells[idx];
                 const auto layer = usm_layers[idx];
@@ -191,7 +186,7 @@ public:
     auto device_npart_cell_ptr = this->d_npart_cell.ptr;
     const auto ncell = this->ncell;
     this->sycl_target.queue.submit([&](sycl::handler &cgh) {
-      cgh.parallel_for<k_remove_new_npart>(
+      cgh.parallel_for<>(
           sycl::range<1>(static_cast<size_t>(ncell)), [=](sycl::id<1> idx) {
             npart_cell_ptr[idx] = static_cast<INT>(device_npart_cell_ptr[idx]);
           });

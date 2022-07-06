@@ -14,10 +14,6 @@
 using namespace cl;
 namespace NESO::Particles {
 
-class k_reset;
-class k_discover;
-class k_rank_map;
-
 class GlobalMove {
 
 private:
@@ -93,11 +89,10 @@ public:
 
     // zero the send/recv counts
     this->sycl_target.queue.submit([&](sycl::handler &cgh) {
-      cgh.parallel_for<k_reset>(sycl::range<1>(comm_size),
-                                [=](sycl::id<1> idx) {
-                                  s_send_ranks_ptr[idx] = 0;
-                                  s_recv_ranks_ptr[idx] = 0;
-                                });
+      cgh.parallel_for<>(sycl::range<1>(comm_size), [=](sycl::id<1> idx) {
+        s_send_ranks_ptr[idx] = 0;
+        s_recv_ranks_ptr[idx] = 0;
+      });
     });
     // zero the number of ranks involved with send/recv
     this->sycl_target.queue.submit([&](sycl::handler &cgh) {
@@ -117,7 +112,7 @@ public:
 
     this->sycl_target.queue
         .submit([&](sycl::handler &cgh) {
-          cgh.parallel_for<k_discover>(
+          cgh.parallel_for<>(
               sycl::range<1>(pl_iter_range), [=](sycl::id<1> idx) {
                 const INT cellx = ((INT)idx) / pl_stride;
                 const INT layerx = ((INT)idx) % pl_stride;
@@ -174,12 +169,12 @@ public:
 
     this->sycl_target.queue
         .submit([&](sycl::handler &cgh) {
-          cgh.parallel_for<k_rank_map>(
-              sycl::range<1>(num_remote_send_ranks), [=](sycl::id<1> idx) {
-                const int rank = s_send_ranks_ptr[idx];
-                const int npart = s_recv_ranks_ptr[rank];
-                s_send_rank_npart_ptr[idx] = npart;
-              });
+          cgh.parallel_for<>(sycl::range<1>(num_remote_send_ranks),
+                             [=](sycl::id<1> idx) {
+                               const int rank = s_send_ranks_ptr[idx];
+                               const int npart = s_recv_ranks_ptr[rank];
+                               s_send_rank_npart_ptr[idx] = npart;
+                             });
         })
         .wait_and_throw();
 

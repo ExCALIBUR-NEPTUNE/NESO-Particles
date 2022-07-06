@@ -375,7 +375,7 @@ TEST(ParticleGroup, add_particle_dat) {
   mesh.free();
 }
 
-TEST(ParticleGroup, global_move) {
+TEST(ParticleGroup, global_move_single) {
 
   const int ndim = 2;
   std::vector<int> dims(ndim);
@@ -405,7 +405,7 @@ TEST(ParticleGroup, global_move) {
   std::mt19937 rng_vel(52234231);
   std::mt19937 rng_rank(18241);
 
-  const int N = 10;
+  const int N = 1024;
 
   auto positions =
       uniform_within_extents(N, ndim, mesh.global_extents, rng_pos);
@@ -416,6 +416,8 @@ TEST(ParticleGroup, global_move) {
 
   ParticleSet initial_distribution(N, A.get_particle_spec());
 
+  // determine which particles should end up on which rank
+  std::map<int, std::vector<int>> mapping;
   for (int px = 0; px < N; px++) {
     for (int dimx = 0; dimx < ndim; dimx++) {
       initial_distribution[Sym<REAL>("P")][px][dimx] = positions[dimx][px];
@@ -425,20 +427,55 @@ TEST(ParticleGroup, global_move) {
     }
     initial_distribution[Sym<INT>("CELL_ID")][px][0] = 0;
     initial_distribution[Sym<INT>("ID")][px][0] = px;
-    initial_distribution[Sym<INT>("NESO_MPI_RANK")][px][0] =
-        uniform_dist(rng_rank);
+    const auto px_rank = uniform_dist(rng_rank);
+    initial_distribution[Sym<INT>("NESO_MPI_RANK")][px][0] = px_rank;
+    mapping[px_rank].push_back(px);
   }
 
   if (sycl_target.comm_pair.rank_parent == 0) {
     A.add_particles_local(initial_distribution);
   }
 
-  A[Sym<INT>("NESO_MPI_RANK")]->print();
-
   A.global_move();
 
-  std::cout << "RANK: " << sycl_target.comm_pair.rank_parent << std::endl;
-  A[Sym<INT>("NESO_MPI_RANK")]->print();
+  // loop over owned particles and check they should be on this rank
+  const int rank = sycl_target.comm_pair.rank_parent;
+  const int correct_npart = mapping[rank].size();
+
+  // check the dats hold the correct number of particles in all dats
+  for (auto &dat : A.particle_dats_real) {
+    ASSERT_EQ(dat.second->s_npart_cell[0], correct_npart);
+  }
+  for (auto &dat : A.particle_dats_int) {
+    ASSERT_EQ(dat.second->s_npart_cell[0], correct_npart);
+  }
+
+  // check cell 0 contains the data for the correct particles in the correct
+  // rows
+  auto cell_ids_dat = A[Sym<INT>("ID")]->cell_dat.get_cell(0);
+  auto velocities_dat = A[Sym<REAL>("V")]->cell_dat.get_cell(0);
+
+  for (int px = 0; px < correct_npart; px++) {
+    // find the particle in the dat
+    int row = -1;
+    const int id = mapping[rank][px];
+    for (int rx = 0; rx < correct_npart; rx++) {
+      if ((*cell_ids_dat)[0][rx] == id) {
+        row = rx;
+        break;
+      }
+    }
+    ASSERT_TRUE(row != -1);
+
+    // we use this assumption below - check it actually holds
+    ASSERT_EQ(id, initial_distribution[Sym<INT>("ID")][id][0]);
+
+    // check the velocities were copied correctly
+    for (int cx = 0; cx < 3; cx++) {
+      ASSERT_EQ(initial_distribution[Sym<REAL>("V")][id][cx],
+                (*velocities_dat)[cx][row]);
+    }
+  }
 
   mesh.free();
 }
