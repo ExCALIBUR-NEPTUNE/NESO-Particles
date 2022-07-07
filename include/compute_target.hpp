@@ -57,6 +57,7 @@ public:
     this->size = size;
     this->ptr = (T *)sycl::malloc_device(size * sizeof(T), sycl_target.queue);
   }
+  inline size_t size_bytes() { return this->size * sizeof(T); }
   inline int realloc_no_copy(const size_t size) {
     if (size > this->size) {
       sycl::free(this->ptr, this->sycl_target.queue);
@@ -83,6 +84,7 @@ public:
     this->size = size;
     this->ptr = (T *)sycl::malloc_shared(size * sizeof(T), sycl_target.queue);
   }
+  inline size_t size_bytes() { return this->size * sizeof(T); }
   inline int realloc_no_copy(const size_t size) {
     if (size > this->size) {
       sycl::free(this->ptr, this->sycl_target.queue);
@@ -111,6 +113,7 @@ public:
     this->size = size;
     this->ptr = (T *)sycl::malloc_host(size * sizeof(T), sycl_target.queue);
   }
+  inline size_t size_bytes() { return this->size * sizeof(T); }
   inline int realloc_no_copy(const size_t size) {
     if (size > this->size) {
       sycl::free(this->ptr, this->sycl_target.queue);

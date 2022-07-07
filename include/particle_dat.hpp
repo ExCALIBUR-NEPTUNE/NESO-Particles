@@ -51,7 +51,8 @@ public:
                                    std::vector<INT> &layers,
                                    std::vector<T> &data);
   inline void realloc(std::vector<INT> &npart_cell_new);
-  inline void realloc(BufferShared<INT> &npart_cell_new);
+  template <typename U> inline void realloc(BufferShared<U> &npart_cell_new);
+  template <typename U> inline void realloc(BufferHost<U> &npart_cell_new);
   inline void realloc(const int cell, const int npart_cell_new);
 
   inline sycl::event copy_particle_data(const int npart, const INT *d_cells_old,
@@ -81,6 +82,17 @@ public:
     });
 
     return event;
+  }
+
+  /*
+   * Get the number of particles stored in all cells
+   */
+  inline INT get_npart_local() {
+    INT n = 0;
+    for (int cellx = 0; cellx < this->ncell; cellx++) {
+      n += s_npart_cell[cellx];
+    }
+    return n;
   }
 
   /*
@@ -152,14 +164,23 @@ inline void ParticleDatT<T>::realloc(std::vector<INT> &npart_cell_new) {
   this->cell_dat.compute_nrow_max();
 }
 template <typename T>
-inline void ParticleDatT<T>::realloc(BufferShared<INT> &npart_cell_new) {
+template <typename U>
+inline void ParticleDatT<T>::realloc(BufferShared<U> &npart_cell_new) {
   NESOASSERT(npart_cell_new.size >= this->ncell, "Insufficent new cell counts");
   for (int cellx = 0; cellx < this->ncell; cellx++) {
     this->cell_dat.set_nrow(cellx, npart_cell_new.ptr[cellx]);
   }
   this->cell_dat.compute_nrow_max();
 }
-
+template <typename T>
+template <typename U>
+inline void ParticleDatT<T>::realloc(BufferHost<U> &npart_cell_new) {
+  NESOASSERT(npart_cell_new.size >= this->ncell, "Insufficent new cell counts");
+  for (int cellx = 0; cellx < this->ncell; cellx++) {
+    this->cell_dat.set_nrow(cellx, npart_cell_new.ptr[cellx]);
+  }
+  this->cell_dat.compute_nrow_max();
+}
 template <typename T>
 inline void ParticleDatT<T>::realloc(const int cell, const int npart_cell_new) {
   NESOASSERT(npart_cell_new >= 0, "Bad cell new cell npart.");

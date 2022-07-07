@@ -15,6 +15,7 @@
 #include "particle_spec.hpp"
 #include "typedefs.hpp"
 
+using namespace cl;
 namespace NESO::Particles {
 
 class LayerCompressor {

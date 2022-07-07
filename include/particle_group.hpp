@@ -11,6 +11,7 @@
 #include "access.hpp"
 #include "cell_dat.hpp"
 #include "cell_dat_compression.hpp"
+#include "cell_dat_move.hpp"
 #include "compute_target.hpp"
 #include "domain.hpp"
 #include "global_move.hpp"
@@ -20,12 +21,12 @@
 #include "particle_spec.hpp"
 #include "typedefs.hpp"
 
+using namespace cl;
 namespace NESO::Particles {
 
 class ParticleGroup {
 private:
   int ncell;
-  int npart_local;
   BufferShared<INT> npart_cell;
 
   BufferDevice<INT> d_remove_cells;
@@ -51,6 +52,26 @@ private:
 
   // members for mpi communication
   GlobalMove global_move_ctx;
+  // members for moving particles between local cells
+  CellMove cell_move_ctx;
+
+  // set the cell particle counts on the ParticleGroup from the position dat
+  inline void set_npart_cell_from_dat() {
+
+    const auto k_ncell = this->ncell;
+    auto k_dat_npart_cell = this->position_dat->s_npart_cell;
+    auto k_npart_cell = this->npart_cell.ptr;
+    auto k_device_npart_cell = this->device_npart_cell.ptr;
+
+    this->sycl_target.queue
+        .submit([&](sycl::handler &cgh) {
+          cgh.parallel_for<>(sycl::range<1>(k_ncell), [=](sycl::id<1> idx) {
+            k_npart_cell[idx] = k_dat_npart_cell[idx];
+            k_device_npart_cell[idx] = k_dat_npart_cell[idx];
+          });
+        })
+        .wait_and_throw();
+  }
 
 public:
   Domain domain;
@@ -81,9 +102,12 @@ public:
         device_move_counters(sycl_target, domain.mesh.get_cell_count()),
         layer_compressor(sycl_target, ncell, this->npart_cell),
         global_move_ctx(sycl_target, layer_compressor, particle_dats_real,
-                        particle_dats_int) {
+                        particle_dats_int),
+        cell_move_ctx(this->ncell, sycl_target, layer_compressor,
+                      particle_dats_real, particle_dats_int)
 
-    this->npart_local = 0;
+  {
+
     this->npart_cell.realloc_no_copy(domain.mesh.get_cell_count());
 
     for (int cellx = 0; cellx < this->ncell; cellx++) {
@@ -113,7 +137,7 @@ public:
   template <typename U> inline void add_particles(U particle_data);
   inline void add_particles_local(ParticleSet &particle_data);
 
-  inline int get_npart_local() { return this->npart_local; }
+  inline int get_npart_local() { return this->position_dat->get_npart_local(); }
 
   inline ParticleDatShPtr<REAL> &operator[](Sym<REAL> sym) {
     return this->particle_dats_real.at(sym);
@@ -152,6 +176,11 @@ public:
    * Number of bytes required to store the data for one particle.
    */
   inline size_t particle_size();
+
+  inline void cell_move() {
+    this->cell_move_ctx.move();
+    this->set_npart_cell_from_dat();
+  };
 };
 
 inline void
@@ -205,8 +234,7 @@ inline void ParticleGroup::add_particles_local(ParticleSet &particle_data) {
   // loop over the cells of the new particles and allocate more space in the
   // dats
 
-  const int npart = particle_data.npart;
-  const int npart_new = this->npart_local + npart;
+  const int npart_new = particle_data.npart;
   auto cellids = particle_data.get(*this->cell_id_sym);
   std::vector<INT> layers(npart_new);
   for (int px = 0; px < npart_new; px++) {
@@ -219,19 +247,17 @@ inline void ParticleGroup::add_particles_local(ParticleSet &particle_data) {
 
   for (auto &dat : this->particle_dats_real) {
     realloc_dat(dat.second);
-    dat.second->append_particle_data(npart, particle_data.contains(dat.first),
-                                     cellids, layers,
-                                     particle_data.get(dat.first));
+    dat.second->append_particle_data(npart_new,
+                                     particle_data.contains(dat.first), cellids,
+                                     layers, particle_data.get(dat.first));
   }
 
   for (auto &dat : this->particle_dats_int) {
     realloc_dat(dat.second);
-    dat.second->append_particle_data(npart, particle_data.contains(dat.first),
-                                     cellids, layers,
-                                     particle_data.get(dat.first));
+    dat.second->append_particle_data(npart_new,
+                                     particle_data.contains(dat.first), cellids,
+                                     layers, particle_data.get(dat.first));
   }
-
-  this->npart_local = npart_new;
 
   // The append is async
   this->sycl_target.queue.wait();
@@ -243,6 +269,7 @@ inline void ParticleGroup::remove_particles(const int npart, T *usm_cells,
   this->layer_compressor.remove_particles(npart, usm_cells, usm_layers,
                                           this->particle_dats_real,
                                           this->particle_dats_int);
+  this->set_npart_cell_from_dat();
 }
 
 inline void ParticleGroup::remove_particles(const int npart,
@@ -282,7 +309,10 @@ inline void ParticleGroup::remove_particles(const int npart,
  * the NESO_MPI_RANK ParticleDat. Must be called collectively on the
  * communicator.
  */
-inline void ParticleGroup::global_move() { global_move_ctx.move(); }
+inline void ParticleGroup::global_move() {
+  this->global_move_ctx.move();
+  this->set_npart_cell_from_dat();
+}
 
 } // namespace NESO::Particles
 
