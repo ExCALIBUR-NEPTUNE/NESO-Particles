@@ -34,21 +34,28 @@ private:
   BufferDevice<int> d_move_counters;
 
   // references to the ParticleGroup methods
-  BufferShared<INT> &npart_cell;
   ParticleDatShPtr<INT> cell_id_dat;
+  std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real;
+  std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int;
 
 public:
   SYCLTarget &sycl_target;
 
   ~LayerCompressor() {}
-  LayerCompressor(SYCLTarget &sycl_target, const int ncell,
-                  BufferShared<INT> &npart_cell)
+  LayerCompressor(
+      SYCLTarget &sycl_target, const int ncell,
+      std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
+      std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int)
       : sycl_target(sycl_target), ncell(ncell), d_remove_cells(sycl_target, 1),
         d_remove_layers(sycl_target, 1), d_compress_cells_old(sycl_target, 1),
         d_compress_cells_new(sycl_target, 1),
         d_compress_layers_old(sycl_target, 1),
         d_compress_layers_new(sycl_target, 1), d_npart_cell(sycl_target, ncell),
-        d_move_counters(sycl_target, ncell), npart_cell(npart_cell) {}
+        d_move_counters(sycl_target, ncell),
+        particle_dats_real(particle_dats_real),
+        particle_dats_int(particle_dats_int)
+
+  {}
 
   inline void set_cell_id_dat(ParticleDatShPtr<INT> cell_id_dat) {
     this->cell_id_dat = cell_id_dat;
@@ -67,7 +74,8 @@ public:
 
     const int ncell = this->ncell;
 
-    auto npart_cell_ptr = this->npart_cell.ptr;
+    auto mpi_particle_dat = this->particle_dats_int[Sym<INT>("NESO_MPI_RANK")];
+    auto npart_cell_ptr = mpi_particle_dat->s_npart_cell;
 
     auto device_npart_cell_ptr = this->d_npart_cell.ptr;
     auto device_move_counters_ptr = this->d_move_counters.ptr;
@@ -161,10 +169,7 @@ public:
   }
 
   template <typename T>
-  inline void remove_particles(
-      const int npart, T *usm_cells, T *usm_layers,
-      std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
-      std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int) {
+  inline void remove_particles(const int npart, T *usm_cells, T *usm_layers) {
     compute_remove_compress_indicies(npart, usm_cells, usm_layers);
 
     auto compress_cells_old_ptr = this->d_compress_cells_old.ptr;
@@ -182,16 +187,6 @@ public:
           compress_layers_old_ptr, compress_layers_new_ptr);
       dat.second->set_npart_cells_device(this->d_npart_cell.ptr);
     }
-
-    auto npart_cell_ptr = this->npart_cell.ptr;
-    auto device_npart_cell_ptr = this->d_npart_cell.ptr;
-    const auto ncell = this->ncell;
-    this->sycl_target.queue.submit([&](sycl::handler &cgh) {
-      cgh.parallel_for<>(
-          sycl::range<1>(static_cast<size_t>(ncell)), [=](sycl::id<1> idx) {
-            npart_cell_ptr[idx] = static_cast<INT>(device_npart_cell_ptr[idx]);
-          });
-    });
 
     // the move calls are async
     sycl_target.queue.wait_and_throw();

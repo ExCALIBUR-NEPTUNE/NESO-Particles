@@ -208,6 +208,7 @@ public:
         .memcpy(this->h_npart_cell.ptr, this->d_npart_cell.ptr,
                 sizeof(int) * this->ncell)
         .wait();
+
     for (auto &dat : particle_dats_real) {
       dat.second->realloc(this->h_npart_cell);
       for (int cellx = 0; cellx < this->ncell; cellx++) {
@@ -269,11 +270,11 @@ public:
           });
         })
         .wait_and_throw();
+    particle_dats_int[Sym<INT>("CELL_ID")]->print();
 
     // compress the data by removing the old rows
-    this->layer_compressor.remove_particles(
-        move_count, this->d_cells_old.ptr, this->d_layers_old.ptr,
-        this->particle_dats_real, this->particle_dats_int);
+    this->layer_compressor.remove_particles(move_count, this->d_cells_old.ptr,
+                                            this->d_layers_old.ptr);
   };
 };
 

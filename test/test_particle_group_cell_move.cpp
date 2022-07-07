@@ -37,7 +37,7 @@ TEST(ParticleGroup, cell_move) {
 
   std::mt19937 rng_pos(52234234);
   std::mt19937 rng_vel(52234231);
-  std::mt19937 rng_cell(18241);
+  std::mt19937 rng_cell(18241 + rank);
   std::mt19937 rng_rank(112348241);
 
   const int N = 10;
@@ -98,6 +98,5 @@ TEST(ParticleGroup, cell_move) {
       .wait_and_throw();
 
   A.cell_move();
-
   mesh.free();
 }

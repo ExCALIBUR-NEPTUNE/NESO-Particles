@@ -100,7 +100,8 @@ public:
         d_remove_layers(sycl_target, 1), npart_cell(sycl_target, 1),
         device_npart_cell(sycl_target, domain.mesh.get_cell_count()),
         device_move_counters(sycl_target, domain.mesh.get_cell_count()),
-        layer_compressor(sycl_target, ncell, this->npart_cell),
+        layer_compressor(sycl_target, ncell, particle_dats_real,
+                         particle_dats_int),
         global_move_ctx(sycl_target, layer_compressor, particle_dats_real,
                         particle_dats_int),
         cell_move_ctx(this->ncell, sycl_target, layer_compressor,
@@ -266,9 +267,7 @@ inline void ParticleGroup::add_particles_local(ParticleSet &particle_data) {
 template <typename T>
 inline void ParticleGroup::remove_particles(const int npart, T *usm_cells,
                                             T *usm_layers) {
-  this->layer_compressor.remove_particles(npart, usm_cells, usm_layers,
-                                          this->particle_dats_real,
-                                          this->particle_dats_int);
+  this->layer_compressor.remove_particles(npart, usm_cells, usm_layers);
   this->set_npart_cell_from_dat();
 }
 
