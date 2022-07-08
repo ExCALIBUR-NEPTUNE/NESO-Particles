@@ -110,3 +110,81 @@ TEST(ParticleGroup, global_move_single) {
 
   mesh.free();
 }
+
+TEST(ParticleGroup, global_move_multiple) {
+
+  const int ndim = 2;
+  std::vector<int> dims(ndim);
+  dims[0] = 8;
+  dims[1] = 8;
+
+  const double cell_extent = 1.0;
+  const int subdivision_order = 0;
+  CartesianHMesh mesh(MPI_COMM_WORLD, ndim, dims, cell_extent,
+                      subdivision_order);
+
+  SYCLTarget sycl_target{GPU_SELECTOR, mesh.get_comm()};
+
+  Domain domain(mesh);
+
+  ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
+                             ParticleProp(Sym<REAL>("V"), 3),
+                             ParticleProp(Sym<INT>("CELL_ID"), 1, true),
+                             ParticleProp(Sym<INT>("ID"), 1)};
+
+  ParticleGroup A(domain, particle_spec, sycl_target);
+
+  A.add_particle_dat(ParticleDat(sycl_target, ParticleProp(Sym<REAL>("FOO"), 3),
+                                 domain.mesh.get_cell_count()));
+
+  std::mt19937 rng_pos(52234234);
+  std::mt19937 rng_vel(52234231);
+  std::mt19937 rng_rank(18241);
+
+  const int N = 10;
+
+  auto positions =
+      uniform_within_extents(N, ndim, mesh.global_extents, rng_pos);
+  auto velocities =
+      NESO::Particles::normal_distribution(N, 3, 0.0, 1.0, rng_vel);
+
+  std::uniform_int_distribution<int> uniform_dist(
+      0, sycl_target.comm_pair.size_parent - 1);
+
+  ParticleSet initial_distribution(N, A.get_particle_spec());
+
+  // determine which particles should end up on which rank
+  std::map<int, std::vector<int>> mapping;
+  for (int px = 0; px < N; px++) {
+    for (int dimx = 0; dimx < ndim; dimx++) {
+      initial_distribution[Sym<REAL>("P")][px][dimx] = positions[dimx][px];
+    }
+    for (int dimx = 0; dimx < 3; dimx++) {
+      initial_distribution[Sym<REAL>("V")][px][dimx] = velocities[dimx][px];
+    }
+    initial_distribution[Sym<INT>("CELL_ID")][px][0] = 0;
+    initial_distribution[Sym<INT>("ID")][px][0] = px;
+    const auto px_rank = uniform_dist(rng_rank);
+    initial_distribution[Sym<INT>("NESO_MPI_RANK")][px][0] = px_rank;
+    mapping[px_rank].push_back(px);
+  }
+
+  if (sycl_target.comm_pair.rank_parent == 0) {
+    A.add_particles_local(initial_distribution);
+  }
+
+  MeshHierarchyGlobalMap mesh_heirarchy_global_map(
+      sycl_target, domain.mesh, A.position_dat, A.cell_id_dat, A.mpi_rank_dat);
+
+  reset_cell_ids(A[Sym<INT>("CELL_ID")]);
+
+  mesh_heirarchy_global_map.execute();
+
+  A[Sym<INT>("NESO_MPI_RANK")]->print();
+
+  A.global_move();
+
+  A[Sym<INT>("NESO_MPI_RANK")]->print();
+
+  mesh.free();
+}

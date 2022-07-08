@@ -6,6 +6,7 @@
 #include "cell_dat.hpp"
 #include "compute_target.hpp"
 #include "domain.hpp"
+#include "global_mapping.hpp"
 #include "mesh_hierarchy.hpp"
 #include "particle_dat.hpp"
 #include "particle_group.hpp"

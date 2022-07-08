@@ -254,10 +254,24 @@ public:
     // not claimed and the rank of claimed cells.
     map_created = true;
   }
-
+  
+  /*
+   *  Get the owning MPI rank for a linear cell index.
+   */
   inline int get_owner(INT index) {
     NESOASSERT(map_created, "map is not created");
     return map[index];
+  };
+  
+  /*
+   *  Get the owning MPI ranks for n indicies in global tuple form.
+   */
+  inline void get_owners(const int nqueries, INT *indices, int *ranks){
+    for(int qx=0 ; qx<nqueries ; qx++){
+      const INT linear_index = this->tuple_to_linear_global(indices + (qx * this->ndim * 2));
+      const int rank = get_owner(linear_index);
+      ranks[qx] = rank;
+    }
   };
 };
 
