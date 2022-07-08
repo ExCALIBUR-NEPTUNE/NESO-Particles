@@ -270,7 +270,6 @@ public:
           });
         })
         .wait_and_throw();
-    particle_dats_int[Sym<INT>("CELL_ID")]->print();
 
     // compress the data by removing the old rows
     this->layer_compressor.remove_particles(move_count, this->d_cells_old.ptr,
