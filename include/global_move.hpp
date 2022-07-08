@@ -218,8 +218,7 @@ public:
 
     // remove the sent particles whilst the communication occurs
     this->layer_compressor.remove_particles(
-        num_particles_leaving, s_pack_cells_ptr, s_pack_layers_src_ptr,
-        particle_dats_real, particle_dats_int);
+        num_particles_leaving, s_pack_cells_ptr, s_pack_layers_src_ptr);
 
     // wait for particle data to be send/recv'd
     this->global_move_exchange.exchange_finalise(this->particle_unpacker);

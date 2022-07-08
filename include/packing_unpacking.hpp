@@ -47,7 +47,7 @@ private:
     s_particle_dat_ptr_real.realloc_no_copy(num_dats_real);
     s_particle_dat_ncomp_real.realloc_no_copy(num_dats_real);
 
-    num_dats_int = particle_dats_real.size();
+    num_dats_int = particle_dats_int.size();
     s_particle_dat_ptr_int.realloc_no_copy(num_dats_int);
     s_particle_dat_ncomp_int.realloc_no_copy(num_dats_int);
 
@@ -247,7 +247,7 @@ private:
     s_particle_dat_ptr_real.realloc_no_copy(num_dats_real);
     s_particle_dat_ncomp_real.realloc_no_copy(num_dats_real);
 
-    num_dats_int = particle_dats_real.size();
+    num_dats_int = particle_dats_int.size();
     s_particle_dat_ptr_int.realloc_no_copy(num_dats_int);
     s_particle_dat_ncomp_int.realloc_no_copy(num_dats_int);
 
