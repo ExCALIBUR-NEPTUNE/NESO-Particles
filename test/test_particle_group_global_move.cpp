@@ -115,8 +115,8 @@ TEST(ParticleGroup, global_move_multiple) {
 
   const int ndim = 2;
   std::vector<int> dims(ndim);
-  dims[0] = 8;
-  dims[1] = 8;
+  dims[0] = 4;
+  dims[1] = 4;
 
   const double cell_extent = 1.0;
   const int subdivision_order = 0;
@@ -176,11 +176,13 @@ TEST(ParticleGroup, global_move_multiple) {
   MeshHierarchyGlobalMap mesh_heirarchy_global_map(
       sycl_target, domain.mesh, A.position_dat, A.cell_id_dat, A.mpi_rank_dat);
 
-  reset_cell_ids(A[Sym<INT>("CELL_ID")]);
-
-  mesh_heirarchy_global_map.execute();
+  CartesianPeriodic pbc(sycl_target, mesh, A.position_dat);
 
   A[Sym<INT>("NESO_MPI_RANK")]->print();
+
+  reset_mpi_ranks(A[Sym<INT>("NESO_MPI_RANK")]);
+  pbc.execute();
+  mesh_heirarchy_global_map.execute();
 
   A.global_move();
 

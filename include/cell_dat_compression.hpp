@@ -175,6 +175,7 @@ public:
     auto compress_cells_old_ptr = this->d_compress_cells_old.ptr;
     auto compress_layers_old_ptr = this->d_compress_layers_old.ptr;
     auto compress_layers_new_ptr = this->d_compress_layers_new.ptr;
+
     for (auto &dat : particle_dats_real) {
       dat.second->copy_particle_data(
           npart, compress_cells_old_ptr, compress_cells_old_ptr,

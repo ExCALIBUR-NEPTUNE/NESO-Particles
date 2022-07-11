@@ -123,7 +123,7 @@ public:
     // Create a ParticleDat to store the MPI rank of the particles in.
     mpi_rank_sym = std::make_shared<Sym<INT>>("NESO_MPI_RANK");
     mpi_rank_dat =
-        ParticleDat(sycl_target, ParticleProp(*mpi_rank_sym, 1), ncell);
+        ParticleDat(sycl_target, ParticleProp(*mpi_rank_sym, 2), ncell);
     add_particle_dat(mpi_rank_dat);
     this->global_move_ctx.set_mpi_rank_dat(mpi_rank_dat);
 

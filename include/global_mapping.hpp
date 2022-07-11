@@ -97,7 +97,10 @@ public:
                   // not mapped into a local cell or halo cell and should
                   // be sent through the global move
                   const auto cell_on_dat = k_cell_id_dat[cellx][0][layerx];
-                  if (cell_on_dat < 0) {
+                  // Inspect to see if the a mpi rank has been identified for a
+                  // local communication pattern.
+                  const auto mpi_rank_on_dat = k_mpi_rank_dat[cellx][1][layerx];
+                  if (mpi_rank_on_dat < 0) {
                     // Atomically increment the lookup count
                     sycl::atomic_ref<int, sycl::memory_order::relaxed,
                                      sycl::memory_scope::device>
@@ -223,9 +226,10 @@ public:
                                this->h_lookup_ranks.ptr);
 
     // copy the mpi ranks back to the ParticleDat
-    this->sycl_target.queue.memcpy(this->d_lookup_ranks.ptr,
-                                   this->h_lookup_ranks.ptr,
-                                   this->h_lookup_ranks.size_bytes()).wait_and_throw();
+    this->sycl_target.queue
+        .memcpy(this->d_lookup_ranks.ptr, this->h_lookup_ranks.ptr,
+                this->h_lookup_ranks.size_bytes())
+        .wait_and_throw();
     this->sycl_target.queue
         .submit([&](sycl::handler &cgh) {
           cgh.parallel_for<>(sycl::range<1>(npart_query), [=](sycl::id<1> idx) {
@@ -235,8 +239,6 @@ public:
           });
         })
         .wait_and_throw();
-
-
   };
 };
 
@@ -244,16 +246,16 @@ public:
  *  Set all components 0 of particles to -1 in the passed ParticleDat.
  *
  */
-inline void reset_cell_ids(ParticleDatShPtr<INT> &cell_id_dat) {
+inline void reset_mpi_ranks(ParticleDatShPtr<INT> &mpi_rank_dat) {
 
   // iteration set
-  auto pl_iter_range = cell_id_dat->get_particle_loop_iter_range();
-  auto pl_stride = cell_id_dat->get_particle_loop_cell_stride();
-  auto pl_npart_cell = cell_id_dat->get_particle_loop_npart_cell();
+  auto pl_iter_range = mpi_rank_dat->get_particle_loop_iter_range();
+  auto pl_stride = mpi_rank_dat->get_particle_loop_cell_stride();
+  auto pl_npart_cell = mpi_rank_dat->get_particle_loop_npart_cell();
 
   // pointers to access BufferDevices in the kernel
-  auto k_cell_id_dat = cell_id_dat->cell_dat.device_ptr();
-  auto sycl_target = cell_id_dat->sycl_target;
+  auto k_cell_id_dat = mpi_rank_dat->cell_dat.device_ptr();
+  auto sycl_target = mpi_rank_dat->sycl_target;
   sycl_target.queue
       .submit([&](sycl::handler &cgh) {
         cgh.parallel_for<>(sycl::range<1>(pl_iter_range), [=](sycl::id<1> idx) {
@@ -262,6 +264,7 @@ inline void reset_cell_ids(ParticleDatShPtr<INT> &cell_id_dat) {
           if (layerx < pl_npart_cell[cellx]) {
 
             k_cell_id_dat[cellx][0][layerx] = -1;
+            k_cell_id_dat[cellx][1][layerx] = -1;
           }
         });
       })
