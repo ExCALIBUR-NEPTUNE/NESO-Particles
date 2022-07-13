@@ -3,6 +3,7 @@
 
 #include "access.hpp"
 #include "boundary_conditions.hpp"
+#include "cell_binning.hpp"
 #include "cell_dat.hpp"
 #include "compute_target.hpp"
 #include "domain.hpp"

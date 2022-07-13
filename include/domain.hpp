@@ -31,8 +31,6 @@ private:
   int cell_count;
   MPI_Comm comm;
   MPI_Comm comm_cart;
-  int cell_end[3] = {0, 0, 0};
-  int cell_start[3] = {0, 0, 0};
   int periods[3] = {1, 1, 1};
   int coords[3] = {0, 0, 0};
   int mpi_dims[3] = {0, 0, 0};
@@ -43,6 +41,7 @@ private:
 public:
   int cell_starts[3] = {0, 0, 0};
   int cell_ends[3] = {1, 1, 1};
+  int cell_counts_local[3] = {0, 0, 0};
   double global_extents[3] = {0.0, 0.0, 0.0};
 
   const int ndim;
@@ -124,6 +123,15 @@ public:
     INT index_mh[6];
 
     mesh_hierarchy.claim_initialise();
+
+    // store the size of the local subdomain such that local linear indices can
+    // be computed
+    for (int dimx = 0; dimx < ndim; dimx++) {
+      const int tmp_width = cell_ends[dimx] - cell_starts[dimx];
+      NESOASSERT(tmp_width > 0,
+                 "A domain of width <= 0 cells does not make sense");
+      this->cell_counts_local[dimx] = tmp_width;
+    }
 
     // loop over owned cells
     this->cell_count = 0;

@@ -184,6 +184,7 @@ TEST(ParticleGroup, global_move_multiple) {
       sycl_target, domain.mesh, A.position_dat, A.cell_id_dat, A.mpi_rank_dat);
 
   CartesianPeriodic pbc(sycl_target, mesh, A.position_dat);
+  CartesianCellBin ccb(sycl_target, mesh, A.position_dat, A.cell_id_dat);
 
   reset_mpi_ranks(A[Sym<INT>("NESO_MPI_RANK")]);
 
@@ -261,8 +262,8 @@ TEST(ParticleGroup, global_move_multiple) {
     pbc.execute();
     mesh_heirarchy_global_map.execute();
     A.global_move();
-    // would normally bin into local cells here
-    // then move particles between cells and compress
+    ccb.execute();
+    A.cell_move();
 
     lambda_test();
 

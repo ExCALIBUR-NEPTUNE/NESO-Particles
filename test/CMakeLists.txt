@@ -56,6 +56,10 @@ foreach(TEST ${TEST_SRCS})
   gtest_discover_tests(${TEST_NAME})
 endforeach()
 
+
+
+
+
 # Build a global test suite
 add_executable(${EXECUTABLE} ${TEST_MAIN} ${TEST_LIST})
 
