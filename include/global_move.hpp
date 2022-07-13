@@ -220,7 +220,6 @@ public:
     this->layer_compressor.remove_particles(
         num_particles_leaving, s_pack_cells_ptr, s_pack_layers_src_ptr);
 
-    mpi_rank_dat->print();
     // wait for particle data to be send/recv'd
     this->global_move_exchange.exchange_finalise(this->particle_unpacker);
 

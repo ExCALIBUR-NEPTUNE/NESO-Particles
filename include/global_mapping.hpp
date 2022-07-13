@@ -73,7 +73,6 @@ public:
 
     // pointers to access dats in kernel
     auto k_position_dat = this->position_dat->cell_dat.device_ptr();
-    auto k_cell_id_dat = this->cell_id_dat->cell_dat.device_ptr();
     auto k_mpi_rank_dat = this->mpi_rank_dat->cell_dat.device_ptr();
 
     // iteration set
@@ -92,11 +91,6 @@ public:
                 const INT cellx = ((INT)idx) / pl_stride;
                 const INT layerx = ((INT)idx) % pl_stride;
                 if (layerx < pl_npart_cell[cellx]) {
-
-                  // if the cell on the particle < 0 then the particle was
-                  // not mapped into a local cell or halo cell and should
-                  // be sent through the global move
-                  const auto cell_on_dat = k_cell_id_dat[cellx][0][layerx];
                   // Inspect to see if the a mpi rank has been identified for a
                   // local communication pattern.
                   const auto mpi_rank_on_dat = k_mpi_rank_dat[cellx][1][layerx];
@@ -254,7 +248,7 @@ inline void reset_mpi_ranks(ParticleDatShPtr<INT> &mpi_rank_dat) {
   auto pl_npart_cell = mpi_rank_dat->get_particle_loop_npart_cell();
 
   // pointers to access BufferDevices in the kernel
-  auto k_cell_id_dat = mpi_rank_dat->cell_dat.device_ptr();
+  auto k_mpi_rank_dat = mpi_rank_dat->cell_dat.device_ptr();
   auto sycl_target = mpi_rank_dat->sycl_target;
   sycl_target.queue
       .submit([&](sycl::handler &cgh) {
@@ -263,8 +257,8 @@ inline void reset_mpi_ranks(ParticleDatShPtr<INT> &mpi_rank_dat) {
           const INT layerx = ((INT)idx) % pl_stride;
           if (layerx < pl_npart_cell[cellx]) {
 
-            k_cell_id_dat[cellx][0][layerx] = -1;
-            k_cell_id_dat[cellx][1][layerx] = -1;
+            k_mpi_rank_dat[cellx][0][layerx] = -1;
+            k_mpi_rank_dat[cellx][1][layerx] = -1;
           }
         });
       })

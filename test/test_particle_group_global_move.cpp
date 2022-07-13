@@ -1,4 +1,5 @@
 #include <CL/sycl.hpp>
+#include <cmath>
 #include <gtest/gtest.h>
 #include <neso_particles.hpp>
 #include <random>
@@ -115,8 +116,8 @@ TEST(ParticleGroup, global_move_multiple) {
 
   const int ndim = 2;
   std::vector<int> dims(ndim);
-  dims[0] = 4;
-  dims[1] = 4;
+  dims[0] = 8;
+  dims[1] = 8;
 
   const double cell_extent = 1.0;
   const int subdivision_order = 0;
@@ -142,14 +143,16 @@ TEST(ParticleGroup, global_move_multiple) {
   std::mt19937 rng_vel(52234231);
   std::mt19937 rng_rank(18241);
 
-  const int N = 10;
-  const int Ntest = 1;
+  const int N = 4096;
+  const int Ntest = 2024;
   const REAL dt = 0.001;
+  const REAL tol = 1.0e-10;
+  const int cell_count = domain.mesh.get_cell_count();
 
   auto positions =
       uniform_within_extents(N, ndim, mesh.global_extents, rng_pos);
-  auto velocities =
-      NESO::Particles::normal_distribution(N, 3, 0.0, 1.0, rng_vel);
+  auto velocities = NESO::Particles::normal_distribution(
+      N, 3, 0.0, dims[0] * cell_extent, rng_vel);
 
   std::uniform_int_distribution<int> uniform_dist(
       0, sycl_target.comm_pair.size_parent - 1);
@@ -182,13 +185,9 @@ TEST(ParticleGroup, global_move_multiple) {
 
   CartesianPeriodic pbc(sycl_target, mesh, A.position_dat);
 
-  A[Sym<INT>("NESO_MPI_RANK")]->print();
-
   reset_mpi_ranks(A[Sym<INT>("NESO_MPI_RANK")]);
 
-  auto lambda_advect = [&] { std::cout << " FOO " << std::endl; };
-
-  auto lambda_test = [&] {
+  auto lambda_advect = [&] {
     auto k_P = A[Sym<REAL>("P")]->cell_dat.device_ptr();
     auto k_V = A[Sym<REAL>("V")]->cell_dat.device_ptr();
     const auto k_ndim = ndim;
@@ -214,19 +213,62 @@ TEST(ParticleGroup, global_move_multiple) {
         .wait_and_throw();
   };
 
+  REAL T = 0.0;
+  auto lambda_test = [&] {
+    // for all cells
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      auto P = A[Sym<REAL>("P")]->cell_dat.get_cell(cellx);
+      auto P_ORIG = A[Sym<REAL>("P_ORIG")]->cell_dat.get_cell(cellx);
+      auto V = A[Sym<REAL>("V")]->cell_dat.get_cell(cellx);
+
+      const int nrow = P->nrow;
+
+      // for each dimension
+      for (int dimx = 0; dimx < ndim; dimx++) {
+
+        // for each particle
+        for (int px = 0; px < nrow; px++) {
+          // read the original position of the particle and compute the correct
+          // current position based on the time T and velocity on the particle
+          const REAL P_correct_abs = (*P_ORIG)[dimx][px] + T * (*V)[dimx][px];
+          // map the absolute position back into the periodic domain
+
+          const REAL extent = mesh.global_extents[dimx];
+          const REAL P_correct =
+              std::fmod(std::fmod(P_correct_abs, extent) + extent, extent);
+
+          const REAL P_to_test = (*P)[dimx][px];
+
+          const REAL err0 = ABS(P_correct - P_to_test);
+          // case where P_correct is at 0 and P_to_test is at extent - which is
+          // the same point in the periodic mapping
+          const REAL err1 = ABS(err0 - extent);
+
+          ASSERT_TRUE(((err0 <= tol) || (err1 <= tol)));
+
+          // check that the particle position is actually owned by this MPI
+          // rank
+          const int particle_cell =
+              ((REAL)(P_to_test * mesh.inverse_cell_width_fine));
+          ASSERT_TRUE(particle_cell >= mesh.cell_starts[dimx]);
+          ASSERT_TRUE(particle_cell < mesh.cell_ends[dimx]);
+        }
+      }
+    }
+  };
+
   for (int testx = 0; testx < Ntest; testx++) {
     pbc.execute();
     mesh_heirarchy_global_map.execute();
     A.global_move();
     // would normally bin into local cells here
     // then move particles between cells and compress
-    A[Sym<INT>("NESO_MPI_RANK")]->print();
 
-    // test current position
     lambda_test();
 
-    // advect need a particle loop
     lambda_advect();
+
+    T += dt;
   }
   mesh.free();
 }
