@@ -128,6 +128,7 @@ TEST(ParticleGroup, global_move_multiple) {
   Domain domain(mesh);
 
   ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
+                             ParticleProp(Sym<REAL>("P_ORIG"), ndim),
                              ParticleProp(Sym<REAL>("V"), 3),
                              ParticleProp(Sym<INT>("CELL_ID"), 1, true),
                              ParticleProp(Sym<INT>("ID"), 1)};
@@ -142,6 +143,8 @@ TEST(ParticleGroup, global_move_multiple) {
   std::mt19937 rng_rank(18241);
 
   const int N = 10;
+  const int Ntest = 1;
+  const REAL dt = 0.001;
 
   auto positions =
       uniform_within_extents(N, ndim, mesh.global_extents, rng_pos);
@@ -158,6 +161,7 @@ TEST(ParticleGroup, global_move_multiple) {
   for (int px = 0; px < N; px++) {
     for (int dimx = 0; dimx < ndim; dimx++) {
       initial_distribution[Sym<REAL>("P")][px][dimx] = positions[dimx][px];
+      initial_distribution[Sym<REAL>("P_ORIG")][px][dimx] = positions[dimx][px];
     }
     for (int dimx = 0; dimx < 3; dimx++) {
       initial_distribution[Sym<REAL>("V")][px][dimx] = velocities[dimx][px];
@@ -181,12 +185,48 @@ TEST(ParticleGroup, global_move_multiple) {
   A[Sym<INT>("NESO_MPI_RANK")]->print();
 
   reset_mpi_ranks(A[Sym<INT>("NESO_MPI_RANK")]);
-  pbc.execute();
-  mesh_heirarchy_global_map.execute();
 
-  A.global_move();
+  auto lambda_advect = [&] { std::cout << " FOO " << std::endl; };
 
-  A[Sym<INT>("NESO_MPI_RANK")]->print();
+  auto lambda_test = [&] {
+    auto k_P = A[Sym<REAL>("P")]->cell_dat.device_ptr();
+    auto k_V = A[Sym<REAL>("V")]->cell_dat.device_ptr();
+    const auto k_ndim = ndim;
+    const auto k_dt = dt;
 
+    const auto pl_iter_range = A.mpi_rank_dat->get_particle_loop_iter_range();
+    const auto pl_stride = A.mpi_rank_dat->get_particle_loop_cell_stride();
+    const auto pl_npart_cell = A.mpi_rank_dat->get_particle_loop_npart_cell();
+
+    sycl_target.queue
+        .submit([&](sycl::handler &cgh) {
+          cgh.parallel_for<>(
+              sycl::range<1>(pl_iter_range), [=](sycl::id<1> idx) {
+                const INT cellx = ((INT)idx) / pl_stride;
+                const INT layerx = ((INT)idx) % pl_stride;
+                if (layerx < pl_npart_cell[cellx]) {
+                  for (int dimx = 0; dimx < k_ndim; dimx++) {
+                    k_P[cellx][dimx][layerx] += k_V[cellx][dimx][layerx] * k_dt;
+                  }
+                }
+              });
+        })
+        .wait_and_throw();
+  };
+
+  for (int testx = 0; testx < Ntest; testx++) {
+    pbc.execute();
+    mesh_heirarchy_global_map.execute();
+    A.global_move();
+    // would normally bin into local cells here
+    // then move particles between cells and compress
+    A[Sym<INT>("NESO_MPI_RANK")]->print();
+
+    // test current position
+    lambda_test();
+
+    // advect need a particle loop
+    lambda_advect();
+  }
   mesh.free();
 }
