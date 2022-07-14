@@ -90,12 +90,12 @@ TEST(ParticleGroup, cell_move) {
         .submit([&](sycl::handler &cgh) {
           cgh.parallel_for<>(
               sycl::range<1>(pl_iter_range), [=](sycl::id<1> idx) {
-                const INT cellx = ((INT)idx) / pl_stride;
-                const INT layerx = ((INT)idx) % pl_stride;
-                if (layerx < pl_npart_cell[cellx]) {
-                  const INT px = k_id_dat[cellx][0][layerx];
-                  k_cell_id_dat[cellx][0][layerx] = k_new_cell_ids[px];
-                }
+                NESO_PARTICLES_KERNEL_START
+                const INT cellx = NESO_PARTICLES_KERNEL_CELL;
+                const INT layerx = NESO_PARTICLES_KERNEL_LAYER;
+                const INT px = k_id_dat[cellx][0][layerx];
+                k_cell_id_dat[cellx][0][layerx] = k_new_cell_ids[px];
+                NESO_PARTICLES_KERNEL_END
               });
         })
         .wait_and_throw();

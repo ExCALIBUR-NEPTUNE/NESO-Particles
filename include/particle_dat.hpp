@@ -130,8 +130,16 @@ public:
     this->cell_dat.print(start, end);
   };
 
-  inline INT get_particle_loop_iter_range() {
+  inline INT get_npart_upper_bound() {
     return this->cell_dat.ncells * this->cell_dat.get_nrow_max();
+  }
+
+  inline INT get_particle_loop_iter_range() {
+#ifdef NESO_PARTICLES_ITER_PARTICLES
+    return this->cell_dat.ncells * this->cell_dat.get_nrow_max();
+#else // case for NESO_PARTICLES_ITER_CELLS
+    return this->cell_dat.ncells;
+#endif
   }
   inline INT get_particle_loop_cell_stride() {
     return this->cell_dat.get_nrow_max();

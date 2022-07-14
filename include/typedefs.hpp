@@ -67,43 +67,30 @@ void get_decomp_1d(const T N_compute_units, const T N_work_items,
   *rend = end;
 }
 
+#ifdef NESO_PARTICLES_DEVICE_TYPE_CPU
 
-#ifndef NESO_PARTICLES_DEVICE_TYPE
-#define NESO_PARTICLES_DEVICE_TYPE G
-#endif
+#define NESO_PARTICLES_DEVICE_LABEL "CPU"
+#define NESO_PARTICLES_ITER_CELLS 1
 
-#if NESO_PARTICLES_DEVICE_TYPE == 'G'
-#define NESO_PARTICLES_DEVICE_LABEL "GPU"
-
-
+#define NESO_PARTICLES_KERNEL_START                                            \
+  const int neso_npart = pl_npart_cell[idx];                                   \
+  for (int neso_layer = 0; neso_layer < neso_npart; neso_layer++) {
+#define NESO_PARTICLES_KERNEL_END }
+#define NESO_PARTICLES_KERNEL_CELL idx
+#define NESO_PARTICLES_KERNEL_LAYER neso_layer
 
 #else
-#define NESO_PARTICLES_DEVICE_LABEL "CPU"
 
+#define NESO_PARTICLES_DEVICE_LABEL "GPU"
+#define NESO_PARTICLES_ITER_PARTICLES 1
 
-
-
-
-
-#endif
-
-#define NESO_PARTICLES_KERNEL_START if((((INT)idx) % pl_stride) < (pl_npart_cell[((INT)idx) / pl_stride])){
+#define NESO_PARTICLES_KERNEL_START                                            \
+  if ((((INT)idx) % pl_stride) < (pl_npart_cell[((INT)idx) / pl_stride])) {
 #define NESO_PARTICLES_KERNEL_END }
 #define NESO_PARTICLES_KERNEL_CELL (((INT)idx) / pl_stride)
 #define NESO_PARTICLES_KERNEL_LAYER (((INT)idx) % pl_stride)
 
-
-
-
-
-
-
-
-
-
-
-
-
+#endif
 
 } // namespace NESO::Particles
 

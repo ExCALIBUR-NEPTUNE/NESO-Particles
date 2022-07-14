@@ -55,23 +55,21 @@ public:
         .submit([&](sycl::handler &cgh) {
           cgh.parallel_for<>(
               sycl::range<1>(pl_iter_range), [=](sycl::id<1> idx) {
-                const INT cellx = ((INT)idx) / pl_stride;
-                const INT layerx = ((INT)idx) % pl_stride;
-
-                if (layerx < pl_npart_cell[cellx]) {
-                  for (int dimx = 0; dimx < k_ndim; dimx++) {
-                    const REAL pos = k_positions_dat[cellx][dimx][layerx];
-                    // offset the position in the current dimension to be
-                    // positive by adding an integer times the extent
-                    const REAL n_extent_offset_real =
-                        ABS(pos / k_extents[dimx]);
-                    const INT n_extent_offset_int = n_extent_offset_real + 2.0;
-                    const REAL pos_fmod =
-                        fmod(pos + n_extent_offset_int * k_extents[dimx],
-                             k_extents[dimx]);
-                    k_positions_dat[cellx][dimx][layerx] = pos_fmod;
-                  }
+                NESO_PARTICLES_KERNEL_START
+                const INT cellx = NESO_PARTICLES_KERNEL_CELL;
+                const INT layerx = NESO_PARTICLES_KERNEL_LAYER;
+                for (int dimx = 0; dimx < k_ndim; dimx++) {
+                  const REAL pos = k_positions_dat[cellx][dimx][layerx];
+                  // offset the position in the current dimension to be
+                  // positive by adding an integer times the extent
+                  const REAL n_extent_offset_real = ABS(pos / k_extents[dimx]);
+                  const INT n_extent_offset_int = n_extent_offset_real + 2.0;
+                  const REAL pos_fmod =
+                      fmod(pos + n_extent_offset_int * k_extents[dimx],
+                           k_extents[dimx]);
+                  k_positions_dat[cellx][dimx][layerx] = pos_fmod;
                 }
+                NESO_PARTICLES_KERNEL_END
               });
         })
         .wait_and_throw();

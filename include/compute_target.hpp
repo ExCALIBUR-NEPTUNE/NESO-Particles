@@ -39,6 +39,7 @@ public:
 
     std::cout << "Using " << this->device.get_info<sycl::info::device::name>()
               << std::endl;
+    std::cout << "Kernel type: " << NESO_PARTICLES_DEVICE_LABEL << std::endl;
 
     this->queue = sycl::queue(this->device);
     this->comm = comm;

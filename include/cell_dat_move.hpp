@@ -174,33 +174,33 @@ public:
         .submit([&](sycl::handler &cgh) {
           cgh.parallel_for<>(
               sycl::range<1>(pl_iter_range), [=](sycl::id<1> idx) {
-                const INT cellx = ((INT)idx) / pl_stride;
-                const INT layerx = ((INT)idx) % pl_stride;
-                if (layerx < pl_npart_cell[cellx]) {
+                NESO_PARTICLES_KERNEL_START
+                const INT cellx = NESO_PARTICLES_KERNEL_CELL;
+                const INT layerx = NESO_PARTICLES_KERNEL_LAYER;
 
-                  // if the cell on the particle is not the current cell then
-                  // the particle needs moving.
-                  const auto cell_on_dat = k_cell_id_dat[cellx][0][layerx];
-                  if (cellx != cell_on_dat) {
-                    // Atomically increment the particle count for the new cell
-                    sycl::atomic_ref<int, sycl::memory_order::relaxed,
-                                     sycl::memory_scope::device>
-                        atomic_layer(k_npart_cell[cell_on_dat]);
-                    const int layer_new = atomic_layer.fetch_add(1);
+                // if the cell on the particle is not the current cell then
+                // the particle needs moving.
+                const auto cell_on_dat = k_cell_id_dat[cellx][0][layerx];
+                if (cellx != cell_on_dat) {
+                  // Atomically increment the particle count for the new cell
+                  sycl::atomic_ref<int, sycl::memory_order::relaxed,
+                                   sycl::memory_scope::device>
+                      atomic_layer(k_npart_cell[cell_on_dat]);
+                  const int layer_new = atomic_layer.fetch_add(1);
 
-                    // Get an index for this particle in the arrays that hold
-                    // old/new cells/layers
-                    sycl::atomic_ref<int, sycl::memory_order::relaxed,
-                                     sycl::memory_scope::device>
-                        atomic_index(k_move_count[0]);
-                    const int array_index = atomic_index.fetch_add(1);
+                  // Get an index for this particle in the arrays that hold
+                  // old/new cells/layers
+                  sycl::atomic_ref<int, sycl::memory_order::relaxed,
+                                   sycl::memory_scope::device>
+                      atomic_index(k_move_count[0]);
+                  const int array_index = atomic_index.fetch_add(1);
 
-                    k_cells_old[array_index] = cellx;
-                    k_cells_new[array_index] = static_cast<int>(cell_on_dat);
-                    k_layers_old[array_index] = layerx;
-                    k_layers_new[array_index] = layer_new;
-                  }
+                  k_cells_old[array_index] = cellx;
+                  k_cells_new[array_index] = static_cast<int>(cell_on_dat);
+                  k_layers_old[array_index] = layerx;
+                  k_layers_new[array_index] = layer_new;
                 }
+                NESO_PARTICLES_KERNEL_END
               });
         })
         .wait_and_throw();

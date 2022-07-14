@@ -74,31 +74,31 @@ public:
         .submit([&](sycl::handler &cgh) {
           cgh.parallel_for<>(
               sycl::range<1>(pl_iter_range), [=](sycl::id<1> idx) {
-                const INT cellx = ((INT)idx) / pl_stride;
-                const INT layerx = ((INT)idx) % pl_stride;
+                NESO_PARTICLES_KERNEL_START
+                const INT cellx = NESO_PARTICLES_KERNEL_CELL;
+                const INT layerx = NESO_PARTICLES_KERNEL_LAYER;
 
-                if (layerx < pl_npart_cell[cellx]) {
-                  int cell_tmps[3];
+                int cell_tmps[3];
 
-                  for (int dimx = 0; dimx < k_ndim; dimx++) {
-                    const REAL pos = k_positions_dat[cellx][dimx][layerx] -
-                                     k_cell_starts[dimx] * k_cell_width_fine;
-                    int cell_tmp = ((REAL)pos * k_inverse_cell_width_fine);
-                    cell_tmp = (cell_tmp < 0) ? 0 : cell_tmp;
-                    cell_tmp = (cell_tmp >= k_cell_ends[dimx])
-                                   ? k_cell_ends[dimx] - 1
-                                   : cell_tmp;
-                    cell_tmps[dimx] = cell_tmp;
-                  }
-
-                  // convert to linear index
-                  int linear_index = cell_tmps[k_ndim - 1];
-                  for (int dimx = k_ndim - 2; dimx >= 0; dimx--) {
-                    linear_index *= k_cell_counts[dimx];
-                    linear_index += cell_tmps[dimx];
-                  }
-                  k_cell_id_dat[cellx][0][layerx] = linear_index;
+                for (int dimx = 0; dimx < k_ndim; dimx++) {
+                  const REAL pos = k_positions_dat[cellx][dimx][layerx] -
+                                   k_cell_starts[dimx] * k_cell_width_fine;
+                  int cell_tmp = ((REAL)pos * k_inverse_cell_width_fine);
+                  cell_tmp = (cell_tmp < 0) ? 0 : cell_tmp;
+                  cell_tmp = (cell_tmp >= k_cell_ends[dimx])
+                                 ? k_cell_ends[dimx] - 1
+                                 : cell_tmp;
+                  cell_tmps[dimx] = cell_tmp;
                 }
+
+                // convert to linear index
+                int linear_index = cell_tmps[k_ndim - 1];
+                for (int dimx = k_ndim - 2; dimx >= 0; dimx--) {
+                  linear_index *= k_cell_counts[dimx];
+                  linear_index += cell_tmps[dimx];
+                }
+                k_cell_id_dat[cellx][0][layerx] = linear_index;
+                NESO_PARTICLES_KERNEL_END
               });
         })
         .wait_and_throw();

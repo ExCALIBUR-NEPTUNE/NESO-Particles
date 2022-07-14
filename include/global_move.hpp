@@ -75,9 +75,10 @@ public:
     auto pl_stride = this->mpi_rank_dat->get_particle_loop_cell_stride();
     auto pl_npart_cell = this->mpi_rank_dat->get_particle_loop_npart_cell();
 
-    this->s_pack_cells.realloc_no_copy(pl_iter_range);
-    this->s_pack_layers_src.realloc_no_copy(pl_iter_range);
-    this->s_pack_layers_dst.realloc_no_copy(pl_iter_range);
+    const auto npart_upper_bound = this->mpi_rank_dat->get_npart_upper_bound();
+    this->s_pack_cells.realloc_no_copy(npart_upper_bound);
+    this->s_pack_layers_src.realloc_no_copy(npart_upper_bound);
+    this->s_pack_layers_dst.realloc_no_copy(npart_upper_bound);
 
     auto s_send_ranks_ptr = this->s_send_ranks.ptr;
     auto s_recv_ranks_ptr = this->s_recv_ranks.ptr;
@@ -116,50 +117,48 @@ public:
         .submit([&](sycl::handler &cgh) {
           cgh.parallel_for<>(
               sycl::range<1>(pl_iter_range), [=](sycl::id<1> idx) {
-                const INT cellx = ((INT)idx) / pl_stride;
-                const INT layerx = ((INT)idx) % pl_stride;
+                NESO_PARTICLES_KERNEL_START
+                const INT cellx = NESO_PARTICLES_KERNEL_CELL;
+                const INT layerx = NESO_PARTICLES_KERNEL_LAYER;
+                const INT owning_rank = d_neso_mpi_rank[cellx][0][layerx];
 
-                if (layerx < pl_npart_cell[cellx]) {
-                  const INT owning_rank = d_neso_mpi_rank[cellx][0][layerx];
+                // if rank is valid and not equal to this rank then this
+                // particle is being sent somewhere
+                if (((owning_rank >= 0) && (owning_rank < INT_comm_size)) &&
+                    (owning_rank != INT_comm_rank)) {
+                  // Increment the counter for the remote rank
+                  // reuse the recv ranks array to avoid mallocing more space
+                  sycl::atomic_ref<int, sycl::memory_order::relaxed,
+                                   sycl::memory_scope::device>
+                      pack_layer_atomic(s_recv_ranks_ptr[owning_rank]);
+                  const int pack_layer = pack_layer_atomic.fetch_add(1);
 
-                  // if rank is valid and not equal to this rank then this
-                  // particle is being sent somewhere
-                  if (((owning_rank >= 0) && (owning_rank < INT_comm_size)) &&
-                      (owning_rank != INT_comm_rank)) {
-                    // Increment the counter for the remote rank
-                    // reuse the recv ranks array to avoid mallocing more space
+                  // increment the counter for number of sent particles (all
+                  // ranks)
+                  sycl::atomic_ref<int, sycl::memory_order::relaxed,
+                                   sycl::memory_scope::device>
+                      send_count_atomic(s_npart_send_recv_ptr[0]);
+                  const int send_index = send_count_atomic.fetch_add(1);
+
+                  // store the cell, source layer, packing layer
+                  s_pack_cells_ptr[send_index] = static_cast<int>(cellx);
+                  s_pack_layers_src_ptr[send_index] = static_cast<int>(layerx);
+                  s_pack_layers_dst_ptr[send_index] = pack_layer;
+
+                  // if the packing layer is zero then this is the first
+                  // particle found sending to the remote rank -> increment
+                  // the number of remote ranks and record this rank.
+                  if (pack_layer == 0) {
                     sycl::atomic_ref<int, sycl::memory_order::relaxed,
                                      sycl::memory_scope::device>
-                        pack_layer_atomic(s_recv_ranks_ptr[owning_rank]);
-                    const int pack_layer = pack_layer_atomic.fetch_add(1);
-
-                    // increment the counter for number of sent particles (all
-                    // ranks)
-                    sycl::atomic_ref<int, sycl::memory_order::relaxed,
-                                     sycl::memory_scope::device>
-                        send_count_atomic(s_npart_send_recv_ptr[0]);
-                    const int send_index = send_count_atomic.fetch_add(1);
-
-                    // store the cell, source layer, packing layer
-                    s_pack_cells_ptr[send_index] = static_cast<int>(cellx);
-                    s_pack_layers_src_ptr[send_index] =
-                        static_cast<int>(layerx);
-                    s_pack_layers_dst_ptr[send_index] = pack_layer;
-
-                    // if the packing layer is zero then this is the first
-                    // particle found sending to the remote rank -> increment
-                    // the number of remote ranks and record this rank.
-                    if (pack_layer == 0) {
-                      sycl::atomic_ref<int, sycl::memory_order::relaxed,
-                                       sycl::memory_scope::device>
-                          num_ranks_send_atomic(s_num_ranks_send_ptr[0]);
-                      const int rank_index = num_ranks_send_atomic.fetch_add(1);
-                      s_send_ranks_ptr[rank_index] =
-                          static_cast<int>(owning_rank);
-                      s_send_rank_map_ptr[owning_rank] = rank_index;
-                    }
+                        num_ranks_send_atomic(s_num_ranks_send_ptr[0]);
+                    const int rank_index = num_ranks_send_atomic.fetch_add(1);
+                    s_send_ranks_ptr[rank_index] =
+                        static_cast<int>(owning_rank);
+                    s_send_rank_map_ptr[owning_rank] = rank_index;
                   }
                 }
+                NESO_PARTICLES_KERNEL_END
               });
         })
         .wait_and_throw();

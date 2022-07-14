@@ -205,13 +205,10 @@ TEST(ParticleGroup, global_move_multiple) {
                 NESO_PARTICLES_KERNEL_START
                 const INT cellx = NESO_PARTICLES_KERNEL_CELL;
                 const INT layerx = NESO_PARTICLES_KERNEL_LAYER;
-                  for (int dimx = 0; dimx < k_ndim; dimx++) {
-                    k_P[cellx][dimx][layerx] += k_V[cellx][dimx][layerx] * k_dt;
-                  }
+                for (int dimx = 0; dimx < k_ndim; dimx++) {
+                  k_P[cellx][dimx][layerx] += k_V[cellx][dimx][layerx] * k_dt;
+                }
                 NESO_PARTICLES_KERNEL_END
-
-
-
               });
         })
         .wait_and_throw();

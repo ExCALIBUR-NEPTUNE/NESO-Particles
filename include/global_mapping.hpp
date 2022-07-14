@@ -90,25 +90,25 @@ public:
         .submit([&](sycl::handler &cgh) {
           cgh.parallel_for<>(
               sycl::range<1>(pl_iter_range), [=](sycl::id<1> idx) {
-                const INT cellx = ((INT)idx) / pl_stride;
-                const INT layerx = ((INT)idx) % pl_stride;
-                if (layerx < pl_npart_cell[cellx]) {
-                  // Inspect to see if the a mpi rank has been identified for a
-                  // local communication pattern.
-                  const auto mpi_rank_on_dat = k_mpi_rank_dat[cellx][1][layerx];
-                  if (mpi_rank_on_dat < 0) {
-                    // Atomically increment the lookup count
-                    sycl::atomic_ref<int, sycl::memory_order::relaxed,
-                                     sycl::memory_scope::device>
-                        atomic_count(k_lookup_count[0]);
-                    const int index = atomic_count.fetch_add(1);
+                NESO_PARTICLES_KERNEL_START
+                const INT cellx = NESO_PARTICLES_KERNEL_CELL;
+                const INT layerx = NESO_PARTICLES_KERNEL_LAYER;
+                // Inspect to see if the a mpi rank has been identified for a
+                // local communication pattern.
+                const auto mpi_rank_on_dat = k_mpi_rank_dat[cellx][1][layerx];
+                if (mpi_rank_on_dat < 0) {
+                  // Atomically increment the lookup count
+                  sycl::atomic_ref<int, sycl::memory_order::relaxed,
+                                   sycl::memory_scope::device>
+                      atomic_count(k_lookup_count[0]);
+                  const int index = atomic_count.fetch_add(1);
 
-                    // store this particles location so that it can be
-                    // directly accessed later
-                    k_lookup_local_cells[index] = cellx;
-                    k_lookup_local_layers[index] = layerx;
-                  }
+                  // store this particles location so that it can be
+                  // directly accessed later
+                  k_lookup_local_cells[index] = cellx;
+                  k_lookup_local_layers[index] = layerx;
                 }
+                NESO_PARTICLES_KERNEL_END
               });
         })
         .wait_and_throw();
@@ -258,13 +258,13 @@ inline void reset_mpi_ranks(ParticleDatShPtr<INT> &mpi_rank_dat) {
   sycl_target.queue
       .submit([&](sycl::handler &cgh) {
         cgh.parallel_for<>(sycl::range<1>(pl_iter_range), [=](sycl::id<1> idx) {
-          const INT cellx = ((INT)idx) / pl_stride;
-          const INT layerx = ((INT)idx) % pl_stride;
-          if (layerx < pl_npart_cell[cellx]) {
+          NESO_PARTICLES_KERNEL_START
+          const INT cellx = NESO_PARTICLES_KERNEL_CELL;
+          const INT layerx = NESO_PARTICLES_KERNEL_LAYER;
 
-            k_mpi_rank_dat[cellx][0][layerx] = -1;
-            k_mpi_rank_dat[cellx][1][layerx] = -1;
-          }
+          k_mpi_rank_dat[cellx][0][layerx] = -1;
+          k_mpi_rank_dat[cellx][1][layerx] = -1;
+          NESO_PARTICLES_KERNEL_END
         });
       })
       .wait_and_throw();
