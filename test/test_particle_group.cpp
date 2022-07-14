@@ -110,7 +110,6 @@ TEST(ParticleGroup, compression_removal_all) {
   Domain domain(mesh);
 
   const int cell_count = domain.mesh.get_cell_count();
-  ASSERT_TRUE(cell_count > 4);
 
   ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
                              ParticleProp(Sym<REAL>("V"), 3),
@@ -133,7 +132,8 @@ TEST(ParticleGroup, compression_removal_all) {
   auto velocities =
       NESO::Particles::normal_distribution(N, 3, 0.0, 1.0, rng_vel);
 
-  std::uniform_int_distribution<int> uniform_dist(0, 8);
+  std::uniform_int_distribution<int> uniform_dist(0, cell_count - 1);
+  ASSERT_TRUE(cell_count > 2);
 
   ParticleSet initial_distribution(N, particle_spec);
 
