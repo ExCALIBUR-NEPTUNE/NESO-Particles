@@ -13,6 +13,7 @@
 #include "particle_group.hpp"
 #include "particle_set.hpp"
 #include "particle_spec.hpp"
+#include "profiling.hpp"
 #include "typedefs.hpp"
 #include "utility.hpp"
 

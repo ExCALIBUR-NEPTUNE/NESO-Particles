@@ -36,6 +36,11 @@ if(NOT COMMAND add_sycl_to_target)
   endfunction()
 endif()
 
+if( NESO_PARTICLES_DEVICE_TYPE )
+  add_definitions(-DNESO_PARTICLES_DEVICE_TYPE=${NESO_PARTICLES_DEVICE_TYPE})
+  message(STATUS NESO_PARTICLES_DEVICE_TYPE=${NESO_PARTICLES_DEVICE_TYPE})
+endif()
+
 enable_testing()
 
 # put all targets in bin

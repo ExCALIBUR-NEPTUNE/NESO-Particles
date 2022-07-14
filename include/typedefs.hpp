@@ -67,6 +67,44 @@ void get_decomp_1d(const T N_compute_units, const T N_work_items,
   *rend = end;
 }
 
+
+#ifndef NESO_PARTICLES_DEVICE_TYPE
+#define NESO_PARTICLES_DEVICE_TYPE G
+#endif
+
+#if NESO_PARTICLES_DEVICE_TYPE == 'G'
+#define NESO_PARTICLES_DEVICE_LABEL "GPU"
+
+
+
+#else
+#define NESO_PARTICLES_DEVICE_LABEL "CPU"
+
+
+
+
+
+
+#endif
+
+#define NESO_PARTICLES_KERNEL_START if((((INT)idx) % pl_stride) < (pl_npart_cell[((INT)idx) / pl_stride])){
+#define NESO_PARTICLES_KERNEL_END }
+#define NESO_PARTICLES_KERNEL_CELL (((INT)idx) / pl_stride)
+#define NESO_PARTICLES_KERNEL_LAYER (((INT)idx) % pl_stride)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 } // namespace NESO::Particles
 
 #endif

@@ -13,6 +13,7 @@
 #include "particle_dat.hpp"
 #include "particle_set.hpp"
 #include "particle_spec.hpp"
+#include "profiling.hpp"
 #include "typedefs.hpp"
 
 using namespace cl;
@@ -131,6 +132,7 @@ public:
         d_particle_dat_ncomp_int(sycl_target, 1) {}
 
   inline void move() {
+    auto t0 = profile_timestamp();
     // reset the particle counters on each cell
     auto mpi_rank_dat = particle_dats_int[Sym<INT>("NESO_MPI_RANK")];
     const auto k_ncell = this->ncell;
@@ -274,6 +276,9 @@ public:
     // compress the data by removing the old rows
     this->layer_compressor.remove_particles(move_count, this->d_cells_old.ptr,
                                             this->d_layers_old.ptr);
+
+    sycl_target.profile_map.inc("CellMove", "Move", 1,
+                                profile_elapsed(t0, profile_timestamp()));
   };
 };
 

@@ -19,6 +19,7 @@
 #include "particle_dat.hpp"
 #include "particle_set.hpp"
 #include "particle_spec.hpp"
+#include "profiling.hpp"
 #include "typedefs.hpp"
 
 using namespace cl;

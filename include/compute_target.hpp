@@ -5,6 +5,7 @@
 #include <mpi.h>
 
 #include "communication.hpp"
+#include "profiling.hpp"
 #include "typedefs.hpp"
 
 using namespace cl;
@@ -18,6 +19,7 @@ public:
   sycl::queue queue;
   MPI_Comm comm;
   CommPair comm_pair;
+  ProfileMap profile_map;
 
   SYCLTarget(){};
   SYCLTarget(const int gpu_device, MPI_Comm comm) : comm_pair(comm) {
@@ -40,6 +42,11 @@ public:
 
     this->queue = sycl::queue(this->device);
     this->comm = comm;
+
+    this->profile_map.set("MPI", "MPI_COMM_WORLD_rank",
+                          this->comm_pair.rank_parent);
+    this->profile_map.set("MPI", "MPI_COMM_WORLD_size",
+                          this->comm_pair.size_parent);
   }
   ~SYCLTarget() {}
 

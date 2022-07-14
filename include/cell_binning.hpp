@@ -6,6 +6,7 @@
 
 #include "domain.hpp"
 #include "particle_dat.hpp"
+#include "profiling.hpp"
 #include "typedefs.hpp"
 
 using namespace cl;
@@ -34,7 +35,7 @@ public:
         d_cell_starts(sycl_target, 3), d_cell_ends(sycl_target, 3) {
 
     NESOASSERT(mesh.ndim <= 3, "bad mesh ndim");
-    BufferHost<REAL> h_cell_counts(sycl_target, 3);
+    BufferHost<int> h_cell_counts(sycl_target, 3);
     for (int dimx = 0; dimx < mesh.ndim; dimx++) {
       h_cell_counts.ptr[dimx] = this->mesh.cell_counts_local[dimx];
     }
@@ -52,6 +53,7 @@ public:
   };
 
   inline void execute() {
+    auto t0 = profile_timestamp();
 
     auto pl_iter_range = this->position_dat->get_particle_loop_iter_range();
     auto pl_stride = this->position_dat->get_particle_loop_cell_stride();
@@ -100,6 +102,8 @@ public:
               });
         })
         .wait_and_throw();
+    sycl_target.profile_map.inc("CartesianCellBin", "Execute", 1,
+                                profile_elapsed(t0, profile_timestamp()));
   }
 };
 

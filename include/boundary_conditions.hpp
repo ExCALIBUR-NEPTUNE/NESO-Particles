@@ -6,6 +6,7 @@
 
 #include "domain.hpp"
 #include "particle_dat.hpp"
+#include "profiling.hpp"
 #include "typedefs.hpp"
 
 using namespace cl;
@@ -40,6 +41,7 @@ public:
 
   inline void execute() {
 
+    auto t0 = profile_timestamp();
     auto pl_iter_range = this->position_dat->get_particle_loop_iter_range();
     auto pl_stride = this->position_dat->get_particle_loop_cell_stride();
     auto pl_npart_cell = this->position_dat->get_particle_loop_npart_cell();
@@ -73,6 +75,8 @@ public:
               });
         })
         .wait_and_throw();
+    sycl_target.profile_map.inc("CartesianPeriodic", "Execute", 1,
+                                profile_elapsed(t0, profile_timestamp()));
   }
 };
 

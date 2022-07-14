@@ -2,6 +2,7 @@
 #define _NESO_PARTICLES_HIERARCHY
 #include "communication.hpp"
 #include "compute_target.hpp"
+#include "profiling.hpp"
 #include "typedefs.hpp"
 #include <cmath>
 #include <cstdint>

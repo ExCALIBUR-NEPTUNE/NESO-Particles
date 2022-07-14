@@ -9,6 +9,7 @@
 #include "compute_target.hpp"
 #include "global_move_exchange.hpp"
 #include "packing_unpacking.hpp"
+#include "profiling.hpp"
 #include "typedefs.hpp"
 
 using namespace cl;
@@ -63,6 +64,7 @@ public:
   }
 
   inline void move() {
+    auto t0 = profile_timestamp();
     // MPI RMA to inform remote ranks they will recv particles through the
     // global move
     this->global_move_exchange.npart_exchange_init();
@@ -225,6 +227,8 @@ public:
 
     // Unpack the recv'd particles
     this->particle_unpacker.unpack(particle_dats_real, particle_dats_int);
+    sycl_target.profile_map.inc("GlobalMove", "Move", 1,
+                                profile_elapsed(t0, profile_timestamp()));
   }
 };
 

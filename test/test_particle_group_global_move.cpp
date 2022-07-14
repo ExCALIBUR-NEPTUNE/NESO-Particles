@@ -143,9 +143,9 @@ TEST(ParticleGroup, global_move_multiple) {
   std::mt19937 rng_vel(52234231);
   std::mt19937 rng_rank(18241);
 
-  const int N = 4096;
-  const int Ntest = 2024;
-  const REAL dt = 0.001;
+  const int N = 1024;
+  const int Ntest = 1024;
+  const REAL dt = 0.01;
   const REAL tol = 1.0e-10;
   const int cell_count = domain.mesh.get_cell_count();
 
@@ -202,13 +202,16 @@ TEST(ParticleGroup, global_move_multiple) {
         .submit([&](sycl::handler &cgh) {
           cgh.parallel_for<>(
               sycl::range<1>(pl_iter_range), [=](sycl::id<1> idx) {
-                const INT cellx = ((INT)idx) / pl_stride;
-                const INT layerx = ((INT)idx) % pl_stride;
-                if (layerx < pl_npart_cell[cellx]) {
+                NESO_PARTICLES_KERNEL_START
+                const INT cellx = NESO_PARTICLES_KERNEL_CELL;
+                const INT layerx = NESO_PARTICLES_KERNEL_LAYER;
                   for (int dimx = 0; dimx < k_ndim; dimx++) {
                     k_P[cellx][dimx][layerx] += k_V[cellx][dimx][layerx] * k_dt;
                   }
-                }
+                NESO_PARTICLES_KERNEL_END
+
+
+
               });
         })
         .wait_and_throw();
@@ -221,6 +224,7 @@ TEST(ParticleGroup, global_move_multiple) {
       auto P = A[Sym<REAL>("P")]->cell_dat.get_cell(cellx);
       auto P_ORIG = A[Sym<REAL>("P_ORIG")]->cell_dat.get_cell(cellx);
       auto V = A[Sym<REAL>("V")]->cell_dat.get_cell(cellx);
+      auto C = A[Sym<INT>("CELL_ID")]->cell_dat.get_cell(cellx);
 
       const int nrow = P->nrow;
 
@@ -255,6 +259,23 @@ TEST(ParticleGroup, global_move_multiple) {
           ASSERT_TRUE(particle_cell < mesh.cell_ends[dimx]);
         }
       }
+
+      // check the particle is in the cell it is binned into
+      // for each particle
+      for (int px = 0; px < nrow; px++) {
+        int index_tuple[3] = {0, 0, 0};
+        for (int dimx = 0; dimx < ndim; dimx++) {
+          const REAL P_CELL =
+              (*P)[dimx][px] - mesh.cell_starts[dimx] * mesh.cell_width_fine;
+          index_tuple[dimx] = ((REAL)P_CELL * mesh.inverse_cell_width_fine);
+        }
+        int index_linear =
+            index_tuple[0] +
+            mesh.cell_counts_local[0] *
+                (index_tuple[1] + mesh.cell_counts_local[1] * index_tuple[2]);
+
+        ASSERT_EQ((*C)[0][px], index_linear);
+      }
     }
   };
 
@@ -266,7 +287,6 @@ TEST(ParticleGroup, global_move_multiple) {
     A.cell_move();
 
     lambda_test();
-
     lambda_advect();
 
     T += dt;

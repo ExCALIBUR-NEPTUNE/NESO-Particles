@@ -6,6 +6,7 @@
 
 #include "domain.hpp"
 #include "particle_dat.hpp"
+#include "profiling.hpp"
 #include "typedefs.hpp"
 
 using namespace cl;
@@ -58,6 +59,7 @@ public:
         d_dims(sycl_target, 3){};
 
   inline void execute() {
+    auto t0 = profile_timestamp();
 
     // reset the device count for cell ids that need mapping
     auto k_lookup_count = this->d_lookup_count.ptr;
@@ -233,6 +235,9 @@ public:
           });
         })
         .wait_and_throw();
+
+    sycl_target.profile_map.inc("MeshHierarchyGlobalMap", "Execute", 1,
+                                profile_elapsed(t0, profile_timestamp()));
   };
 };
 
