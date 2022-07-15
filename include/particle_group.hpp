@@ -48,9 +48,6 @@ private:
     this->particle_spec.push(prop);
   };
 
-  // compression for dats when particles are removed
-  LayerCompressor layer_compressor;
-
   // members for mpi communication
   GlobalMove global_move_ctx;
   // members for moving particles between local cells
@@ -93,6 +90,9 @@ public:
 
   // ParticleSpec of all the ParticleDats of this ParticleGroup
   ParticleSpec particle_spec;
+
+  // compression for dats when particles are removed
+  LayerCompressor layer_compressor;
 
   ParticleGroup(Domain domain, ParticleSpec &particle_spec,
                 SYCLTarget &sycl_target)

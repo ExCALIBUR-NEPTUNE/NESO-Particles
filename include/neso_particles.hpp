@@ -8,6 +8,7 @@
 #include "compute_target.hpp"
 #include "domain.hpp"
 #include "global_mapping.hpp"
+#include "local_move.hpp"
 #include "mesh_hierarchy.hpp"
 #include "particle_dat.hpp"
 #include "particle_group.hpp"
