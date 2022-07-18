@@ -127,10 +127,10 @@ public:
   }
 
   inline sycl::event
-  pack(const int num_remote_send_ranks, const int *s_send_ranks_ptr,
-       const int *s_send_rank_npart_ptr, const int *s_send_rank_map_ptr,
-       const int num_particles_leaving, const int *s_pack_cells_ptr,
-       const int *s_pack_layers_src_ptr, const int *s_pack_layers_dst_ptr,
+  pack(const int num_remote_send_ranks, const int *s_send_rank_npart_ptr,
+       const int *s_send_rank_map_ptr, const int num_particles_leaving,
+       const int *s_pack_cells_ptr, const int *s_pack_layers_src_ptr,
+       const int *s_pack_layers_dst_ptr,
        std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
        std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int) {
 
