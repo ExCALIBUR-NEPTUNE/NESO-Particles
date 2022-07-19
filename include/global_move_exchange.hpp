@@ -65,23 +65,23 @@ public:
    * the communicator.
    */
   inline void npart_exchange_sendrecv(const int num_remote_send_ranks,
-                                      BufferShared<int> &s_send_ranks,
-                                      BufferShared<int> &s_send_rank_npart) {
-    this->h_send_ranks.realloc_no_copy(s_send_ranks.size);
-    this->h_send_rank_npart.realloc_no_copy(s_send_rank_npart.size);
+                                      BufferDeviceHost<int> &dh_send_ranks,
+                                      BufferHost<int> &h_send_rank_npart) {
+    this->h_send_ranks.realloc_no_copy(dh_send_ranks.size);
+    this->h_send_rank_npart.realloc_no_copy(h_send_rank_npart.size);
     this->num_remote_send_ranks = num_remote_send_ranks;
 
-    NESOASSERT(s_send_ranks.size >= num_remote_send_ranks,
+    NESOASSERT(dh_send_ranks.size >= num_remote_send_ranks,
                "Buffer size does not match number of remote ranks.");
-    NESOASSERT(s_send_rank_npart.size >= num_remote_send_ranks,
+    NESOASSERT(h_send_rank_npart.size >= num_remote_send_ranks,
                "Buffer size does not match number of remote ranks.");
     for (int rx = 0; rx < num_remote_send_ranks; rx++) {
-      const int rank_tmp = s_send_ranks.ptr[rx];
+      const int rank_tmp = dh_send_ranks.h_buffer.ptr[rx];
       NESOASSERT(
           ((rank_tmp >= 0) && (rank_tmp < sycl_target.comm_pair.size_parent)),
           "Invalid rank");
       this->h_send_ranks.ptr[rx] = rank_tmp;
-      const int npart_tmp = s_send_rank_npart.ptr[rx];
+      const int npart_tmp = h_send_rank_npart.ptr[rx];
       NESOASSERT(npart_tmp > 0, "Invalid particle count");
       this->h_send_rank_npart.ptr[rx] = npart_tmp;
     }

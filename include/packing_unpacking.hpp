@@ -127,10 +127,10 @@ public:
   }
 
   inline sycl::event
-  pack(const int num_remote_send_ranks, const int *s_send_rank_npart_ptr,
-       const int *s_send_rank_map_ptr, const int num_particles_leaving,
-       const int *s_pack_cells_ptr, const int *s_pack_layers_src_ptr,
-       const int *s_pack_layers_dst_ptr,
+  pack(const int num_remote_send_ranks, BufferHost<int> &h_send_rank_npart,
+       BufferDeviceHost<int> &dh_send_rank_map, const int num_particles_leaving,
+       BufferDevice<int> &d_pack_cells, BufferDevice<int> &d_pack_layers_src,
+       BufferDevice<int> &d_pack_layers_dst,
        std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
        std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int) {
 
@@ -140,7 +140,7 @@ public:
 
     this->required_send_buffer_length = 0;
     for (int rankx = 0; rankx < num_remote_send_ranks; rankx++) {
-      const int npart = s_send_rank_npart_ptr[rankx];
+      const int npart = h_send_rank_npart.ptr[rankx];
       const INT rankx_contrib =
           (npart + s_npart_packed.ptr[rankx]) * this->num_bytes_per_particle;
       this->cell_dat.set_nrow(rankx, rankx_contrib);
@@ -163,6 +163,11 @@ public:
     const auto k_particle_dat_ncomp_int = s_particle_dat_ncomp_int.ptr;
     const auto k_particle_dat_rank =
         particle_dats_int[Sym<INT>("NESO_MPI_RANK")]->cell_dat.device_ptr();
+    const auto k_send_rank_map = dh_send_rank_map.d_buffer.ptr;
+
+    const auto k_pack_cells = d_pack_cells.ptr;
+    const auto k_pack_layers_src = d_pack_layers_src.ptr;
+    const auto k_pack_layers_dst = d_pack_layers_dst.ptr;
 
     const int k_num_bytes_per_particle = this->num_bytes_per_particle;
 
@@ -172,11 +177,11 @@ public:
           // for each leaving particle
           sycl::range<1>(static_cast<size_t>(num_particles_leaving)),
           [=](sycl::id<1> idx) {
-            const int cell = s_pack_cells_ptr[idx];
-            const int layer_src = s_pack_layers_src_ptr[idx];
-            const int layer_dst = s_pack_layers_dst_ptr[idx];
+            const int cell = k_pack_cells[idx];
+            const int layer_src = k_pack_layers_src[idx];
+            const int layer_dst = k_pack_layers_dst[idx];
             const int rank = k_particle_dat_rank[cell][0][layer_src];
-            const int rank_packing_cell = s_send_rank_map_ptr[rank];
+            const int rank_packing_cell = k_send_rank_map[rank];
 
             char *base_pack_ptr =
                 &k_pack_cell_dat[rank_packing_cell][0]

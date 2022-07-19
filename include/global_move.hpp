@@ -32,7 +32,7 @@ private:
   // global move can remove the sent particles
   LayerCompressor &layer_compressor;
 
-  BufferShared<int> s_send_rank_npart;
+  BufferDeviceHost<int> dh_send_rank_npart;
 
 public:
   SYCLTarget &sycl_target;
@@ -46,7 +46,7 @@ public:
         particle_dats_real(particle_dats_real),
         particle_dats_int(particle_dats_int), particle_packer(sycl_target),
         particle_unpacker(sycl_target), global_move_exchange(sycl_target),
-        s_send_rank_npart(sycl_target, 1){};
+        dh_send_rank_npart(sycl_target, 1){};
   inline void set_mpi_rank_dat(ParticleDatShPtr<INT> mpi_rank_dat) {
     this->mpi_rank_dat = mpi_rank_dat;
     this->departing_identify.set_mpi_rank_dat(mpi_rank_dat);
@@ -62,26 +62,27 @@ public:
     this->departing_identify.identify(0);
 
     const int num_remote_send_ranks =
-        this->departing_identify.s_num_ranks_send.ptr[0];
-    this->s_send_rank_npart.realloc_no_copy(num_remote_send_ranks);
-    auto s_send_rank_npart_ptr = this->s_send_rank_npart.ptr;
+        this->departing_identify.dh_num_ranks_send.h_buffer.ptr[0];
+    this->dh_send_rank_npart.realloc_no_copy(num_remote_send_ranks);
+    auto k_send_rank_npart = this->dh_send_rank_npart.d_buffer.ptr;
     const int num_particles_leaving =
-        this->departing_identify.s_npart_send_recv.ptr[0];
+        this->departing_identify.dh_num_particle_send.h_buffer.ptr[0];
 
-    auto s_send_ranks_ptr = this->departing_identify.s_send_ranks.ptr;
-    auto s_send_counts_all_ranks_ptr =
-        this->departing_identify.s_send_counts_all_ranks.ptr;
+    auto k_send_ranks = this->departing_identify.dh_send_ranks.d_buffer.ptr;
+    auto k_send_counts_all_ranks =
+        this->departing_identify.dh_send_counts_all_ranks.d_buffer.ptr;
 
     this->sycl_target.queue
         .submit([&](sycl::handler &cgh) {
-          cgh.parallel_for<>(
-              sycl::range<1>(num_remote_send_ranks), [=](sycl::id<1> idx) {
-                const int rank = s_send_ranks_ptr[idx];
-                const int npart = s_send_counts_all_ranks_ptr[rank];
-                s_send_rank_npart_ptr[idx] = npart;
-              });
+          cgh.parallel_for<>(sycl::range<1>(num_remote_send_ranks),
+                             [=](sycl::id<1> idx) {
+                               const int rank = k_send_ranks[idx];
+                               const int npart = k_send_counts_all_ranks[rank];
+                               k_send_rank_npart[idx] = npart;
+                             });
         })
         .wait_and_throw();
+    this->dh_send_rank_npart.device_to_host();
 
     // We now have:
     // 1) n particles to send
@@ -93,23 +94,22 @@ public:
     // 6) array length m of destination ranks
     // 7) array length m of particle counts to send to each destination ranks
 
-    auto s_pack_cells_ptr = this->departing_identify.s_pack_cells.ptr;
-    auto s_pack_layers_src_ptr = this->departing_identify.s_pack_layers_src.ptr;
-    auto s_pack_layers_dst_ptr = this->departing_identify.s_pack_layers_dst.ptr;
-    auto s_send_rank_map_ptr = this->departing_identify.s_send_rank_map.ptr;
-    auto &s_send_ranks = this->departing_identify.s_send_ranks;
+    auto &dh_send_ranks = this->departing_identify.dh_send_ranks;
 
     // pack particles whilst communicating global move information
     this->particle_packer.reset();
     auto global_pack_event = this->particle_packer.pack(
-        num_remote_send_ranks, s_send_rank_npart_ptr, s_send_rank_map_ptr,
-        num_particles_leaving, s_pack_cells_ptr, s_pack_layers_src_ptr,
-        s_pack_layers_dst_ptr, this->particle_dats_real,
+        num_remote_send_ranks, this->dh_send_rank_npart.h_buffer,
+        this->departing_identify.dh_send_rank_map, num_particles_leaving,
+        this->departing_identify.d_pack_cells,
+        this->departing_identify.d_pack_layers_src,
+        this->departing_identify.d_pack_layers_dst, this->particle_dats_real,
         this->particle_dats_int);
 
     // start exchanging global send counts
     this->global_move_exchange.npart_exchange_sendrecv(
-        num_remote_send_ranks, s_send_ranks, this->s_send_rank_npart);
+        num_remote_send_ranks, dh_send_ranks,
+        this->dh_send_rank_npart.h_buffer);
     this->global_move_exchange.npart_exchange_finalise();
 
     // allocate space to recv packed particles
@@ -129,7 +129,8 @@ public:
 
     // remove the sent particles whilst the communication occurs
     this->layer_compressor.remove_particles(
-        num_particles_leaving, s_pack_cells_ptr, s_pack_layers_src_ptr);
+        num_particles_leaving, this->departing_identify.d_pack_cells.ptr,
+        this->departing_identify.d_pack_layers_src.ptr);
 
     // wait for particle data to be send/recv'd
     this->global_move_exchange.exchange_finalise(this->particle_unpacker);

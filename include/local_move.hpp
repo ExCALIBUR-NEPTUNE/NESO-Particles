@@ -37,9 +37,7 @@ private:
   BufferHost<MPI_Request> h_recv_requests;
   BufferHost<MPI_Status> h_status;
 
-  // TODO make device
-  BufferShared<int> s_send_rank_map;
-
+  BufferDeviceHost<int> dh_send_rank_map;
   BufferHost<int> h_send_rank_npart;
   BufferHost<int> h_recv_rank_npart;
 
@@ -66,7 +64,7 @@ public:
         particle_unpacker(sycl_target), h_send_ranks(sycl_target, 1),
         h_recv_ranks(sycl_target, 1), h_send_requests(sycl_target, 1),
         h_recv_requests(sycl_target, 1), h_status(sycl_target, 1),
-        s_send_rank_map(sycl_target, sycl_target.comm_pair.size_parent),
+        dh_send_rank_map(sycl_target, sycl_target.comm_pair.size_parent),
         h_send_rank_npart(sycl_target, 1), h_recv_rank_npart(sycl_target, 1),
         departing_identify(sycl_target) {
 
@@ -153,19 +151,12 @@ public:
     // h_recv_ranks should now contain remote ranks that want to send to this
     // rank
 
-    // Setup the rank map that the packing routine requires
-    BufferHost<int> h_send_rank_map(this->sycl_target,
-                                    this->sycl_target.comm_pair.size_parent);
-
     int index = 0;
     for (int rankx = 0; rankx < this->num_remote_send_ranks; rankx++) {
       const int rank = this->h_send_ranks.ptr[rankx];
-      h_send_rank_map.ptr[rank] = index++;
+      this->dh_send_rank_map.h_buffer.ptr[rank] = index++;
     }
-
-    this->sycl_target.queue.memcpy(this->s_send_rank_map.ptr,
-                                   h_send_rank_map.ptr,
-                                   this->s_send_rank_map.size_bytes());
+    this->dh_send_rank_map.host_to_device();
   };
 
   inline void set_mpi_rank_dat(ParticleDatShPtr<INT> mpi_rank_dat) {
@@ -248,30 +239,25 @@ public:
     // find particles leaving through the local interface
     this->departing_identify.identify(1);
 
-    auto s_pack_cells_ptr = this->departing_identify.s_pack_cells.ptr;
-    auto s_pack_layers_src_ptr = this->departing_identify.s_pack_layers_src.ptr;
-    auto s_pack_layers_dst_ptr = this->departing_identify.s_pack_layers_dst.ptr;
-
-    auto s_send_rank_npart_ptr =
-        this->departing_identify.s_send_counts_all_ranks.ptr;
-    auto s_send_rank_map_ptr = this->s_send_rank_map.ptr;
-
     // reset the packer
     this->particle_packer.reset();
 
     for (int rankx = 0; rankx < this->num_remote_send_ranks; rankx++) {
       const int rank = this->h_send_ranks.ptr[rankx];
-      this->h_send_rank_npart.ptr[rankx] = s_send_rank_npart_ptr[rank];
+      this->h_send_rank_npart.ptr[rankx] =
+          this->departing_identify.dh_send_counts_all_ranks.h_buffer.ptr[rank];
     }
 
     const int num_particles_leaving =
-        this->departing_identify.s_npart_send_recv.ptr[0];
+        this->departing_identify.dh_num_particle_send.h_buffer.ptr[0];
 
     // start the packing
     auto global_pack_event = this->particle_packer.pack(
-        this->num_remote_send_ranks, s_send_rank_npart_ptr, s_send_rank_map_ptr,
-        num_particles_leaving, s_pack_cells_ptr, s_pack_layers_src_ptr,
-        s_pack_layers_dst_ptr, this->particle_dats_real,
+        this->num_remote_send_ranks, this->h_send_rank_npart,
+        this->dh_send_rank_map, num_particles_leaving,
+        this->departing_identify.d_pack_cells,
+        this->departing_identify.d_pack_layers_src,
+        this->departing_identify.d_pack_layers_dst, this->particle_dats_real,
         this->particle_dats_int);
 
     // exchange the send/recv counts with neighbours
@@ -293,7 +279,8 @@ public:
 
     // remove the sent particles whilst the communication occurs
     this->layer_compressor.remove_particles(
-        num_particles_leaving, s_pack_cells_ptr, s_pack_layers_src_ptr);
+        num_particles_leaving, this->departing_identify.d_pack_cells.ptr,
+        this->departing_identify.d_pack_layers_src.ptr);
 
     // finalise exchange particles
     this->exchange_finalise();
