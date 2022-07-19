@@ -217,6 +217,14 @@ public:
     for (auto &dat : particle_dats_int) {
       dat.second->realloc(this->h_npart_cell);
     }
+
+    // wait for the reallocs
+    for (auto &dat : particle_dats_real) {
+      dat.second->wait_realloc();
+    }
+    for (auto &dat : particle_dats_int) {
+      dat.second->wait_realloc();
+    }
     this->sycl_target.queue
         .submit([&](sycl::handler &cgh) {
           cgh.parallel_for<class dummy>(

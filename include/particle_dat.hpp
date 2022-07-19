@@ -201,6 +201,11 @@ public:
     return this->cell_dat.get_nrow_max();
   }
   inline int *get_particle_loop_npart_cell() { return this->d_npart_cell; }
+
+  /*
+   *  Wait for a realloc to complete
+   */
+  inline void wait_realloc() { this->cell_dat.wait_set_nrow(); }
 };
 
 template <typename T> using ParticleDatShPtr = std::shared_ptr<ParticleDatT<T>>;
@@ -251,6 +256,9 @@ inline void ParticleDatT<T>::realloc(const int cell, const int npart_cell_new) {
 template <typename T> inline void ParticleDatT<T>::trim_cell_dat_rows() {
   for (int cellx = 0; cellx < this->ncell; cellx++) {
     this->cell_dat.set_nrow(cellx, this->h_npart_cell[cellx]);
+    // A trim should not be expected to realloc or perform memcpy so we can
+    // call wait immediately
+    this->cell_dat.wait_set_nrow();
   }
 }
 

@@ -47,6 +47,7 @@ TEST(ParticleDat, test_particle_dat_append_1) {
   }
 
   A->realloc(counts);
+  A->wait_realloc();
   for (int cellx = 0; cellx < cell_count; cellx++) {
     ASSERT_TRUE(A->cell_dat.nrow[cellx] >= counts[cellx]);
   }
@@ -72,6 +73,7 @@ TEST(ParticleDat, test_particle_dat_append_1) {
     A->set_npart_cell(cellx, 0);
   }
   A->realloc(counts);
+  A->wait_realloc();
 
   for (int cellx = 0; cellx < cell_count; cellx++) {
     ASSERT_TRUE(A->cell_dat.nrow[cellx] >= counts[cellx]);

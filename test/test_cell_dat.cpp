@@ -81,6 +81,7 @@ TEST(CellDat, test_cell_dat_REAL_1) {
     const int cellx_nrow = cellx + 1;
     nrows_0[cellx] = cellx_nrow;
     ddc.set_nrow(cellx, cellx_nrow);
+    ddc.wait_set_nrow();
 
     // check enough space was allocated
     ASSERT_TRUE(ddc.nrow_alloc[cellx] >= nrows_0[cellx]);
@@ -110,6 +111,7 @@ TEST(CellDat, test_cell_dat_REAL_1) {
     const int cellx_nrow = (cellx + 1) * 2;
     nrows_1[cellx] = cellx_nrow;
     ddc.set_nrow(cellx, cellx_nrow);
+    ddc.wait_set_nrow();
 
     // check enough space was allocated
     ASSERT_TRUE(ddc.nrow_alloc[cellx] >= nrows_1[cellx]);
@@ -149,6 +151,7 @@ TEST(CellDat, test_cell_dat_INT_1) {
     const int cellx_nrow = cellx + 1;
     nrows_0[cellx] = cellx_nrow;
     ddc.set_nrow(cellx, cellx_nrow);
+    ddc.wait_set_nrow();
 
     // check enough space was allocated
     ASSERT_TRUE(ddc.nrow_alloc[cellx] >= nrows_0[cellx]);
@@ -178,6 +181,7 @@ TEST(CellDat, test_cell_dat_INT_1) {
     const int cellx_nrow = (cellx + 1) * 2;
     nrows_1[cellx] = cellx_nrow;
     ddc.set_nrow(cellx, cellx_nrow);
+    ddc.wait_set_nrow();
 
     // check enough space was allocated
     ASSERT_TRUE(ddc.nrow_alloc[cellx] >= nrows_1[cellx]);

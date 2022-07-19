@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <memory>
+#include <stack>
 #include <string>
 #include <vector>
 
@@ -152,6 +153,9 @@ private:
   std::vector<T *> h_ptr_cols;
   int nrow_max = -1;
 
+  EventStack stack_events;
+  std::stack<T *> stack_ptrs;
+
 public:
   SYCLTarget &sycl_target;
   const int ncells;
@@ -202,6 +206,7 @@ public:
    * Set the number of rows required in a provided cell. This will realloc if
    * needed and copy the existing data into the new space. May not shrink the
    * array if the requested size is smaller than the existing size.
+   * wait_set_nrow should be called before using the dat.
    */
   inline void set_nrow(const INT cell, const INT nrow_required) {
 
@@ -216,32 +221,42 @@ public:
       if (nrow_required > nrow_alloced) {
         for (int colx = 0; colx < this->ncol; colx++) {
           T *col_ptr_old = this->h_ptr_cols[cell * this->ncol + colx];
+          this->stack_ptrs.push(col_ptr_old);
           T *col_ptr_new =
               sycl::malloc_device<T>(nrow_required, this->sycl_target.queue);
 
           if (nrow_alloced > 0) {
-            this->sycl_target.queue
-                .memcpy(col_ptr_new, col_ptr_old, nrow_existing * sizeof(T))
-                .wait();
+            this->stack_events.push(this->sycl_target.queue.memcpy(
+                col_ptr_new, col_ptr_old, nrow_existing * sizeof(T)));
           }
-          if (col_ptr_old != NULL) {
-            sycl::free(col_ptr_old, this->sycl_target.queue);
-          }
-
           this->h_ptr_cols[cell * this->ncol + colx] = col_ptr_new;
         }
         this->nrow_alloc[cell] = nrow_required;
-        sycl_target.queue.memcpy(this->h_ptr_cells[cell],
-                                 &this->h_ptr_cols[cell * this->ncol],
-                                 this->ncol * sizeof(T *));
-
-        sycl_target.queue.wait();
+        this->stack_events.push(sycl_target.queue.memcpy(
+            this->h_ptr_cells[cell], &this->h_ptr_cols[cell * this->ncol],
+            this->ncol * sizeof(T *)));
       }
       this->nrow[cell] = nrow_required;
       this->nrow_max = -1;
     }
     sycl_target.profile_map.inc("CellDat", "set_nrow", 1,
                                 profile_elapsed(t0, profile_timestamp()));
+  }
+
+  /*
+   * Wait for set_nrow to complete
+   */
+  inline void wait_set_nrow() {
+    // wait for the events - memcpys
+    this->stack_events.wait();
+    // can now free the pointers
+    while (!this->stack_ptrs.empty()) {
+      auto ptr = this->stack_ptrs.top();
+      if (ptr != NULL) {
+        sycl::free(ptr, this->sycl_target.queue);
+      }
+      this->stack_ptrs.pop();
+    }
   }
 
   /*

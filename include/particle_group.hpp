@@ -42,6 +42,7 @@ private:
                                                T *usm_layers);
   template <typename T> inline void realloc_dat(ParticleDatShPtr<T> &dat) {
     dat->realloc(this->npart_cell);
+    dat->wait_realloc();
   };
   template <typename T> inline void push_particle_spec(ParticleProp<T> prop) {
     this->particle_spec.push(prop);

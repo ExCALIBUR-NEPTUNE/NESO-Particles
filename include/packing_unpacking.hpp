@@ -146,6 +146,7 @@ public:
       this->cell_dat.set_nrow(rankx, rankx_contrib);
       this->required_send_buffer_length += rankx_contrib;
     }
+    this->cell_dat.wait_set_nrow();
 
     // get the pointers to the particle dat data and the number of components in
     // each dat
@@ -356,6 +357,12 @@ public:
     for (auto &dat : particle_dats_int) {
       dat.second->realloc(0, npart_cell_0_new);
       dat.second->set_npart_cell(0, npart_cell_0_new);
+    }
+    for (auto &dat : particle_dats_real) {
+      dat.second->wait_realloc();
+    }
+    for (auto &dat : particle_dats_int) {
+      dat.second->wait_realloc();
     }
 
     const int k_npart_recv = this->npart_recv;
