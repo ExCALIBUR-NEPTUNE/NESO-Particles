@@ -53,10 +53,10 @@ public:
     auto pl_stride = this->mpi_rank_dat->get_particle_loop_cell_stride();
     auto pl_npart_cell = this->mpi_rank_dat->get_particle_loop_npart_cell();
 
-    const auto npart_upper_bound = this->mpi_rank_dat->get_npart_upper_bound();
-    this->d_pack_cells.realloc_no_copy(npart_upper_bound);
-    this->d_pack_layers_src.realloc_no_copy(npart_upper_bound);
-    this->d_pack_layers_dst.realloc_no_copy(npart_upper_bound);
+    const auto npart_local = this->mpi_rank_dat->get_npart_local();
+    this->d_pack_cells.realloc_no_copy(npart_local);
+    this->d_pack_layers_src.realloc_no_copy(npart_local);
+    this->d_pack_layers_dst.realloc_no_copy(npart_local);
 
     auto k_send_ranks = this->dh_send_ranks.d_buffer.ptr;
     auto k_send_counts_all_ranks = this->dh_send_counts_all_ranks.d_buffer.ptr;
