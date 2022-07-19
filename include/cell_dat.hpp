@@ -11,6 +11,7 @@
 #include "access.hpp"
 #include "compute_target.hpp"
 #include "domain.hpp"
+#include "profiling.hpp"
 #include "typedefs.hpp"
 
 namespace NESO::Particles {
@@ -203,6 +204,8 @@ public:
    * array if the requested size is smaller than the existing size.
    */
   inline void set_nrow(const INT cell, const INT nrow_required) {
+
+    auto t0 = profile_timestamp();
     NESOASSERT(cell >= 0, "Cell index is negative");
     NESOASSERT(cell < this->ncells, "Cell index is >= ncells");
     NESOASSERT(nrow_required >= 0, "Requested number of rows is negative");
@@ -236,6 +239,8 @@ public:
       }
       this->nrow[cell] = nrow_required;
     }
+    sycl_target.profile_map.inc("CellDat", "set_nrow", 1,
+                                profile_elapsed(t0, profile_timestamp()));
   }
 
   /*

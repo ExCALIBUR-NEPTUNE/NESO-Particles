@@ -133,6 +133,8 @@ public:
        std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
        std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int) {
 
+    auto t0 = profile_timestamp();
+
     // Allocate enough space to store the particles to pack
     this->num_bytes_per_particle =
         particle_size(particle_dats_real, particle_dats_int);
@@ -172,6 +174,10 @@ public:
     const int k_num_bytes_per_particle = this->num_bytes_per_particle;
 
     auto k_pack_cell_dat = this->cell_dat.device_ptr();
+
+    sycl_target.profile_map.inc("ParticlePacker", "pack_prepare", 1,
+                                profile_elapsed(t0, profile_timestamp()));
+
     sycl::event event = this->sycl_target.queue.submit([&](sycl::handler &cgh) {
       cgh.parallel_for<>(
           // for each leaving particle
@@ -331,6 +337,8 @@ public:
   unpack(std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
          std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int) {
 
+    auto t0 = profile_timestamp();
+
     // copy packed data to device
     auto event_memcpy = this->sycl_target.queue.memcpy(
         this->d_recv_buffer.ptr, this->h_recv_buffer.ptr,
@@ -370,6 +378,8 @@ public:
         this->dh_particle_dat_ncomp_int.d_buffer.ptr;
     char *k_recv_buffer = this->d_recv_buffer.ptr;
 
+    sycl_target.profile_map.inc("ParticleUnpacker", "unpack_prepare", 1,
+                                profile_elapsed(t0, profile_timestamp()));
     event_memcpy.wait_and_throw();
     this->sycl_target.queue
         .submit([&](sycl::handler &cgh) {
