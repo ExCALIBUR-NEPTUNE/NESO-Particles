@@ -137,7 +137,7 @@ public:
     auto mpi_rank_dat = particle_dats_int[Sym<INT>("NESO_MPI_RANK")];
     const auto k_ncell = this->ncell;
     auto k_npart_cell = d_npart_cell.ptr;
-    auto k_mpi_npart_cell = mpi_rank_dat->s_npart_cell;
+    auto k_mpi_npart_cell = mpi_rank_dat->d_npart_cell;
     auto reset_event = this->sycl_target.queue.submit([&](sycl::handler &cgh) {
       cgh.parallel_for<>(sycl::range<1>(k_ncell), [=](sycl::id<1> idx) {
         k_npart_cell[idx] = k_mpi_npart_cell[idx];

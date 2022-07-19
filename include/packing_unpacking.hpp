@@ -346,7 +346,7 @@ public:
 
     // old cell occupancy
     auto mpi_rank_dat = particle_dats_int[Sym<INT>("NESO_MPI_RANK")];
-    const int npart_cell_0_old = mpi_rank_dat->s_npart_cell[0];
+    const int npart_cell_0_old = mpi_rank_dat->h_npart_cell[0];
     const int npart_cell_0_new = npart_cell_0_old + this->npart_recv;
     // realloc cell 0 on the dats
     for (auto &dat : particle_dats_real) {

@@ -36,7 +36,6 @@ private:
   // these should be INT not int but hipsycl refused to do atomic refs on long
   // int
   BufferDevice<int> device_npart_cell;
-  BufferDevice<int> device_move_counters;
 
   template <typename T>
   inline void compute_remove_compress_indicies(const int npart, T *usm_cells,
@@ -57,7 +56,7 @@ private:
   inline void set_npart_cell_from_dat() {
 
     const auto k_ncell = this->ncell;
-    auto k_dat_npart_cell = this->position_dat->s_npart_cell;
+    auto k_dat_npart_cell = this->position_dat->d_npart_cell;
     auto k_npart_cell = this->npart_cell.ptr;
     auto k_device_npart_cell = this->device_npart_cell.ptr;
 
@@ -98,9 +97,8 @@ public:
                 SYCLTarget &sycl_target)
       : domain(domain), sycl_target(sycl_target),
         ncell(domain.mesh.get_cell_count()), d_remove_cells(sycl_target, 1),
+        device_npart_cell(sycl_target, 1),
         d_remove_layers(sycl_target, 1), npart_cell(sycl_target, 1),
-        device_npart_cell(sycl_target, domain.mesh.get_cell_count()),
-        device_move_counters(sycl_target, domain.mesh.get_cell_count()),
         layer_compressor(sycl_target, ncell, particle_dats_real,
                          particle_dats_int),
         global_move_ctx(sycl_target, layer_compressor, particle_dats_real,
@@ -109,12 +107,15 @@ public:
                       particle_dats_real, particle_dats_int)
 
   {
-
-    this->npart_cell.realloc_no_copy(domain.mesh.get_cell_count());
+    
+    this->npart_cell.realloc_no_copy(this->ncell);
+    this->device_npart_cell.realloc_no_copy(this->ncell);
 
     for (int cellx = 0; cellx < this->ncell; cellx++) {
       this->npart_cell.ptr[cellx] = 0;
     }
+    this->sycl_target.queue.memcpy(this->device_npart_cell.ptr, this->npart_cell.ptr, this->ncell * sizeof(int)).wait();
+
     for (auto &property : particle_spec.properties_real) {
       add_particle_dat(ParticleDat(sycl_target, property, this->ncell));
     }
@@ -197,6 +198,9 @@ ParticleGroup::add_particle_dat(ParticleDatShPtr<REAL> particle_dat) {
   // TODO clean up this ParticleProp handling
   push_particle_spec(ParticleProp(particle_dat->sym, particle_dat->ncomp,
                                   particle_dat->positions));
+  particle_dat->set_npart_cells_device(this->device_npart_cell.ptr).wait();
+  particle_dat->npart_device_to_host();
+
 }
 inline void
 ParticleGroup::add_particle_dat(ParticleDatShPtr<INT> particle_dat) {
@@ -210,6 +214,8 @@ ParticleGroup::add_particle_dat(ParticleDatShPtr<INT> particle_dat) {
   // TODO clean up this ParticleProp handling
   push_particle_spec(ParticleProp(particle_dat->sym, particle_dat->ncomp,
                                   particle_dat->positions));
+  particle_dat->set_npart_cells_device(this->device_npart_cell.ptr).wait();
+  particle_dat->npart_device_to_host();
 }
 
 inline void ParticleGroup::add_particles(){};
@@ -263,6 +269,13 @@ inline void ParticleGroup::add_particles_local(ParticleSet &particle_data) {
 
   // The append is async
   this->sycl_target.queue.wait();
+    for (auto &dat : particle_dats_real) {
+      dat.second->npart_host_to_device();
+    }
+    for (auto &dat : particle_dats_int) {
+      dat.second->npart_host_to_device();
+    }
+  this->set_npart_cell_from_dat();
 }
 
 template <typename T>

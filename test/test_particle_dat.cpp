@@ -21,7 +21,7 @@ TEST(ParticleDat, test_particle_dat_append_1) {
 
   std::vector<INT> counts(cell_count);
   for (int cellx = 0; cellx < cell_count; cellx++) {
-    ASSERT_TRUE(A->s_npart_cell[cellx] == 0);
+    ASSERT_TRUE(A->h_npart_cell[cellx] == 0);
     counts[cellx] = 0;
   }
 
@@ -56,12 +56,12 @@ TEST(ParticleDat, test_particle_dat_append_1) {
   sycl_target.queue.wait();
 
   for (int cellx = 0; cellx < cell_count; cellx++) {
-    ASSERT_TRUE(A->s_npart_cell[cellx] == counts[cellx]);
+    ASSERT_TRUE(A->h_npart_cell[cellx] == counts[cellx]);
     // the "data exists" flag is false so these new values should all be
     // zero
     auto cell_data = A->cell_dat.get_cell(cellx);
     for (int cx = 0; cx < ncomp; cx++) {
-      for (int px = 0; px < (A->s_npart_cell[cellx]); px++) {
+      for (int px = 0; px < (A->h_npart_cell[cellx]); px++) {
         ASSERT_TRUE((*cell_data)[cx][px] == 0);
       }
     }

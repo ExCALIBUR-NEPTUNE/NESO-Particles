@@ -97,7 +97,7 @@ TEST(ParticleGroup, compression_removal_all) {
 
   const int ndim = 2;
   std::vector<int> dims(ndim);
-  dims[0] = 4;
+  dims[0] = 8;
   dims[1] = 8;
 
   const double cell_extent = 1.0;
@@ -162,7 +162,7 @@ TEST(ParticleGroup, compression_removal_all) {
   std::vector<int> orig_occupancies(cell_count);
   for (int cx = 0; cx < cell_count; cx++) {
     orig_occupancies[cx] = A.get_npart_cell(cx);
-    ASSERT_EQ(orig_occupancies[cx], A[Sym<REAL>("P")]->s_npart_cell[cx]);
+    ASSERT_EQ(orig_occupancies[cx], A[Sym<REAL>("P")]->h_npart_cell[cx]);
   }
 
   std::vector<INT> cells;
@@ -171,30 +171,35 @@ TEST(ParticleGroup, compression_removal_all) {
   layers.reserve(N);
 
   // in cell 0 remove all the particles
-  const auto npart_cell_0 = A[Sym<INT>("ID")]->s_npart_cell[0];
+  const auto npart_cell_0 = A[Sym<INT>("ID")]->h_npart_cell[0];
   for (int layerx = 0; layerx < npart_cell_0; layerx++) {
     cells.push_back(0);
     layers.push_back(layerx);
   }
-
+  
   A.remove_particles(cells.size(), cells, layers);
 
   // cell 0 should have no particles
   ASSERT_EQ(A.get_npart_cell(0), 0);
-  ASSERT_EQ(A[Sym<REAL>("P")]->s_npart_cell[0], 0);
-  ASSERT_EQ(A[Sym<REAL>("V")]->s_npart_cell[0], 0);
-  ASSERT_EQ(A[Sym<INT>("CELL_ID")]->s_npart_cell[0], 0);
-  ASSERT_EQ(A[Sym<INT>("ID")]->s_npart_cell[0], 0);
-  ASSERT_EQ(A[Sym<REAL>("FOO")]->s_npart_cell[0], 0);
+    
+  int tmp = -1;
+  sycl_target.queue.memcpy(&tmp, &A[Sym<REAL>("P")]->d_npart_cell[0], sizeof(int)).wait();
+  ASSERT_EQ(tmp, 0);
+
+  ASSERT_EQ(A[Sym<REAL>("P")]->h_npart_cell[0], 0);
+  ASSERT_EQ(A[Sym<REAL>("V")]->h_npart_cell[0], 0);
+  ASSERT_EQ(A[Sym<INT>("CELL_ID")]->h_npart_cell[0], 0);
+  ASSERT_EQ(A[Sym<INT>("ID")]->h_npart_cell[0], 0);
+  ASSERT_EQ(A[Sym<REAL>("FOO")]->h_npart_cell[0], 0);
   // cells 1, ..., cell_count - 1 should be unchanged
   for (int cx = 1; cx < cell_count; cx++) {
     const int cx_count = orig_occupancies[cx];
     ASSERT_EQ(A.get_npart_cell(cx), cx_count);
-    ASSERT_EQ(A[Sym<REAL>("P")]->s_npart_cell[cx], cx_count);
-    ASSERT_EQ(A[Sym<REAL>("V")]->s_npart_cell[cx], cx_count);
-    ASSERT_EQ(A[Sym<INT>("CELL_ID")]->s_npart_cell[cx], cx_count);
-    ASSERT_EQ(A[Sym<INT>("ID")]->s_npart_cell[cx], cx_count);
-    ASSERT_EQ(A[Sym<REAL>("FOO")]->s_npart_cell[cx], cx_count);
+    ASSERT_EQ(A[Sym<REAL>("P")]->h_npart_cell[cx], cx_count);
+    ASSERT_EQ(A[Sym<REAL>("V")]->h_npart_cell[cx], cx_count);
+    ASSERT_EQ(A[Sym<INT>("CELL_ID")]->h_npart_cell[cx], cx_count);
+    ASSERT_EQ(A[Sym<INT>("ID")]->h_npart_cell[cx], cx_count);
+    ASSERT_EQ(A[Sym<REAL>("FOO")]->h_npart_cell[cx], cx_count);
   }
   for (int cellx = 1; cellx < cell_count; cellx++) {
     auto P = A.get_cell(Sym<REAL>("P"), cellx);
@@ -237,7 +242,7 @@ TEST(ParticleGroup, compression_removal_all) {
   cells.reserve(N);
   layers.reserve(N);
 
-  const auto npart_cell_1 = A[Sym<INT>("ID")]->s_npart_cell[1];
+  const auto npart_cell_1 = A[Sym<INT>("ID")]->h_npart_cell[1];
 
   cells.push_back(1);
   layers.push_back(0);
@@ -254,20 +259,20 @@ TEST(ParticleGroup, compression_removal_all) {
 
   // cell 1 should have npart_cell_1 - 2 particles
   ASSERT_EQ(A.get_npart_cell(1), npart_cell_1 - 2);
-  ASSERT_EQ(A[Sym<REAL>("P")]->s_npart_cell[1], npart_cell_1 - 2);
-  ASSERT_EQ(A[Sym<REAL>("V")]->s_npart_cell[1], npart_cell_1 - 2);
-  ASSERT_EQ(A[Sym<INT>("CELL_ID")]->s_npart_cell[1], npart_cell_1 - 2);
-  ASSERT_EQ(A[Sym<INT>("ID")]->s_npart_cell[1], npart_cell_1 - 2);
-  ASSERT_EQ(A[Sym<REAL>("FOO")]->s_npart_cell[1], npart_cell_1 - 2);
+  ASSERT_EQ(A[Sym<REAL>("P")]->h_npart_cell[1], npart_cell_1 - 2);
+  ASSERT_EQ(A[Sym<REAL>("V")]->h_npart_cell[1], npart_cell_1 - 2);
+  ASSERT_EQ(A[Sym<INT>("CELL_ID")]->h_npart_cell[1], npart_cell_1 - 2);
+  ASSERT_EQ(A[Sym<INT>("ID")]->h_npart_cell[1], npart_cell_1 - 2);
+  ASSERT_EQ(A[Sym<REAL>("FOO")]->h_npart_cell[1], npart_cell_1 - 2);
   // cells 2, ..., cell_count - 1 should be unchanged
   for (int cx = 2; cx < cell_count; cx++) {
     const int cx_count = orig_occupancies[cx];
     ASSERT_EQ(A.get_npart_cell(cx), cx_count);
-    ASSERT_EQ(A[Sym<REAL>("P")]->s_npart_cell[cx], cx_count);
-    ASSERT_EQ(A[Sym<REAL>("V")]->s_npart_cell[cx], cx_count);
-    ASSERT_EQ(A[Sym<INT>("CELL_ID")]->s_npart_cell[cx], cx_count);
-    ASSERT_EQ(A[Sym<INT>("ID")]->s_npart_cell[cx], cx_count);
-    ASSERT_EQ(A[Sym<REAL>("FOO")]->s_npart_cell[cx], cx_count);
+    ASSERT_EQ(A[Sym<REAL>("P")]->h_npart_cell[cx], cx_count);
+    ASSERT_EQ(A[Sym<REAL>("V")]->h_npart_cell[cx], cx_count);
+    ASSERT_EQ(A[Sym<INT>("CELL_ID")]->h_npart_cell[cx], cx_count);
+    ASSERT_EQ(A[Sym<INT>("ID")]->h_npart_cell[cx], cx_count);
+    ASSERT_EQ(A[Sym<REAL>("FOO")]->h_npart_cell[cx], cx_count);
   }
   for (int cellx = 1; cellx < cell_count; cellx++) {
     auto P = A.get_cell(Sym<REAL>("P"), cellx);

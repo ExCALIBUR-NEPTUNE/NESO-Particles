@@ -75,10 +75,10 @@ TEST(ParticleGroup, global_move_single) {
 
   // check the dats hold the correct number of particles in all dats
   for (auto &dat : A.particle_dats_real) {
-    ASSERT_EQ(dat.second->s_npart_cell[0], correct_npart);
+    ASSERT_EQ(dat.second->h_npart_cell[0], correct_npart);
   }
   for (auto &dat : A.particle_dats_int) {
-    ASSERT_EQ(dat.second->s_npart_cell[0], correct_npart);
+    ASSERT_EQ(dat.second->h_npart_cell[0], correct_npart);
   }
 
   // check cell 0 contains the data for the correct particles in the correct

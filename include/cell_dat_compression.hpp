@@ -75,7 +75,7 @@ public:
     const int ncell = this->ncell;
 
     auto mpi_particle_dat = this->particle_dats_int[Sym<INT>("NESO_MPI_RANK")];
-    auto npart_cell_ptr = mpi_particle_dat->s_npart_cell;
+    auto k_npart_cell = mpi_particle_dat->d_npart_cell;
 
     auto device_npart_cell_ptr = this->d_npart_cell.ptr;
     auto device_move_counters_ptr = this->d_move_counters.ptr;
@@ -90,7 +90,7 @@ public:
           cgh.parallel_for<>(sycl::range<1>(static_cast<size_t>(ncell)),
                              [=](sycl::id<1> idx) {
                                device_npart_cell_ptr[idx] =
-                                   static_cast<int>(npart_cell_ptr[idx]);
+                                   static_cast<int>(k_npart_cell[idx]);
                                device_move_counters_ptr[idx] = 0;
                              });
         })
@@ -107,7 +107,7 @@ public:
                 sycl::atomic_ref<int, sycl::memory_order::relaxed,
                                  sycl::memory_scope::device>
                     element_atomic(device_npart_cell_ptr[cell]);
-                element_atomic.fetch_add(-1);
+                auto count = element_atomic.fetch_add(-1);
 
                 //// indicate this particle is removed by setting
                 /// the / cell index to -1
@@ -144,7 +144,7 @@ public:
                   INT found_count = 0;
                   INT source_row = -1;
                   for (INT rowx = device_npart_cell_ptr[cell];
-                       rowx < npart_cell_ptr[cell]; rowx++) {
+                       rowx < k_npart_cell[cell]; rowx++) {
                     // Is this a potential source row?
                     if (cell_ids_ptr[cell][0][rowx] > -1) {
                       if (source_row_offset == found_count++) {
@@ -170,7 +170,7 @@ public:
 
   template <typename T>
   inline void remove_particles(const int npart, T *usm_cells, T *usm_layers) {
-    compute_remove_compress_indicies(npart, usm_cells, usm_layers);
+    this->compute_remove_compress_indicies(npart, usm_cells, usm_layers);
 
     auto compress_cells_old_ptr = this->d_compress_cells_old.ptr;
     auto compress_layers_old_ptr = this->d_compress_layers_old.ptr;
@@ -193,9 +193,11 @@ public:
     sycl_target.queue.wait_and_throw();
 
     for (auto &dat : particle_dats_real) {
+      dat.second->npart_device_to_host();
       dat.second->trim_cell_dat_rows();
     }
     for (auto &dat : particle_dats_int) {
+      dat.second->npart_device_to_host();
       dat.second->trim_cell_dat_rows();
     }
   }
