@@ -213,16 +213,27 @@ public:
 
     for (auto &dat : particle_dats_real) {
       dat.second->realloc(this->h_npart_cell);
-      for (int cellx = 0; cellx < this->ncell; cellx++) {
-        dat.second->set_npart_cell(cellx, h_npart_cell.ptr[cellx]);
-      }
     }
     for (auto &dat : particle_dats_int) {
       dat.second->realloc(this->h_npart_cell);
-      for (int cellx = 0; cellx < this->ncell; cellx++) {
-        dat.second->set_npart_cell(cellx, h_npart_cell.ptr[cellx]);
-      }
     }
+    this->sycl_target.queue
+        .submit([&](sycl::handler &cgh) {
+          cgh.parallel_for<class dummy>(
+              sycl::range<1>(k_ncell),
+              [=](sycl::id<1> idx) { k_npart_cell[idx] = 0; });
+        })
+        .wait();
+
+    EventStack tmp_stack;
+    for (auto &dat : particle_dats_real) {
+      tmp_stack.push(dat.second->async_set_npart_cells(this->h_npart_cell));
+    }
+    for (auto &dat : particle_dats_int) {
+      tmp_stack.push(dat.second->async_set_npart_cells(this->h_npart_cell));
+    }
+    tmp_stack.wait();
+
     // get the npart to move on the host
     this->sycl_target.queue
         .memcpy(this->h_move_count.ptr, this->d_move_count.ptr, sizeof(int))

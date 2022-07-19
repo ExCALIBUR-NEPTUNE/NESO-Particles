@@ -176,14 +176,16 @@ TEST(ParticleGroup, compression_removal_all) {
     cells.push_back(0);
     layers.push_back(layerx);
   }
-  
+
   A.remove_particles(cells.size(), cells, layers);
 
   // cell 0 should have no particles
   ASSERT_EQ(A.get_npart_cell(0), 0);
-    
+
   int tmp = -1;
-  sycl_target.queue.memcpy(&tmp, &A[Sym<REAL>("P")]->d_npart_cell[0], sizeof(int)).wait();
+  sycl_target.queue
+      .memcpy(&tmp, &A[Sym<REAL>("P")]->d_npart_cell[0], sizeof(int))
+      .wait();
   ASSERT_EQ(tmp, 0);
 
   ASSERT_EQ(A[Sym<REAL>("P")]->h_npart_cell[0], 0);

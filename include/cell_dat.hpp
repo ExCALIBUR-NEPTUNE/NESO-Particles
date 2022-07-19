@@ -150,7 +150,7 @@ private:
   T ***d_ptr;
   std::vector<T **> h_ptr_cells;
   std::vector<T *> h_ptr_cols;
-  int nrow_max;
+  int nrow_max = -1;
 
 public:
   SYCLTarget &sycl_target;
@@ -238,6 +238,7 @@ public:
         sycl_target.queue.wait();
       }
       this->nrow[cell] = nrow_required;
+      this->nrow_max = -1;
     }
     sycl_target.profile_map.inc("CellDat", "set_nrow", 1,
                                 profile_elapsed(t0, profile_timestamp()));
@@ -255,7 +256,12 @@ public:
   /*
    * Get the maximum number of rows across all cells.
    */
-  inline int get_nrow_max() { return this->nrow_max; }
+  inline int get_nrow_max() {
+    if (this->nrow_max < 0) {
+      this->compute_nrow_max();
+    }
+    return this->nrow_max;
+  }
 
   /*
    * Get the contents of a provided cell on the host as a CellData instance.

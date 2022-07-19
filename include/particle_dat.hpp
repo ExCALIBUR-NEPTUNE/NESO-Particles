@@ -52,11 +52,19 @@ public:
                 this->ncell * sizeof(int))
         .wait();
   }
+  inline sycl::event async_npart_host_to_device() {
+    return this->sycl_target.queue.memcpy(
+        this->d_npart_cell, this->h_npart_cell, this->ncell * sizeof(int));
+  }
   inline void npart_device_to_host() {
     this->sycl_target.queue
         .memcpy(this->h_npart_cell, this->d_npart_cell,
                 this->ncell * sizeof(int))
         .wait();
+  }
+  inline sycl::event async_npart_device_to_host() {
+    return this->sycl_target.queue.memcpy(
+        this->h_npart_cell, this->d_npart_cell, this->ncell * sizeof(int));
   }
 
   ~ParticleDatT() {
@@ -149,6 +157,26 @@ public:
     this->npart_host_to_device();
     return;
   }
+
+  template <typename U>
+  inline void set_npart_cells(const BufferHost<U> &h_npart_cell_in) {
+    NESOASSERT(h_npart_cell_in.size >= this->ncell, "bad BufferHost size");
+    for (int cellx = 0; cellx < this->ncell; cellx++) {
+      this->h_npart_cell[cellx] = h_npart_cell_in.ptr[cellx];
+    }
+    this->npart_host_to_device();
+    return;
+  }
+  template <typename U>
+  inline sycl::event
+  async_set_npart_cells(const BufferHost<U> &h_npart_cell_in) {
+    NESOASSERT(h_npart_cell_in.size >= this->ncell, "bad BufferHost size");
+    for (int cellx = 0; cellx < this->ncell; cellx++) {
+      this->h_npart_cell[cellx] = h_npart_cell_in.ptr[cellx];
+    }
+    return this->async_npart_host_to_device();
+  }
+
   inline void trim_cell_dat_rows();
   inline void print(const int start = 0, int end = -1) {
     if (end < 0) {
@@ -197,7 +225,6 @@ inline void ParticleDatT<T>::realloc(std::vector<INT> &npart_cell_new) {
   for (int cellx = 0; cellx < this->ncell; cellx++) {
     this->cell_dat.set_nrow(cellx, npart_cell_new[cellx]);
   }
-  this->cell_dat.compute_nrow_max();
 }
 template <typename T>
 template <typename U>
@@ -206,7 +233,6 @@ inline void ParticleDatT<T>::realloc(BufferShared<U> &npart_cell_new) {
   for (int cellx = 0; cellx < this->ncell; cellx++) {
     this->cell_dat.set_nrow(cellx, npart_cell_new.ptr[cellx]);
   }
-  this->cell_dat.compute_nrow_max();
 }
 template <typename T>
 template <typename U>
@@ -215,20 +241,17 @@ inline void ParticleDatT<T>::realloc(BufferHost<U> &npart_cell_new) {
   for (int cellx = 0; cellx < this->ncell; cellx++) {
     this->cell_dat.set_nrow(cellx, npart_cell_new.ptr[cellx]);
   }
-  this->cell_dat.compute_nrow_max();
 }
 template <typename T>
 inline void ParticleDatT<T>::realloc(const int cell, const int npart_cell_new) {
   NESOASSERT(npart_cell_new >= 0, "Bad cell new cell npart.");
   this->cell_dat.set_nrow(cell, npart_cell_new);
-  this->cell_dat.compute_nrow_max();
 }
 
 template <typename T> inline void ParticleDatT<T>::trim_cell_dat_rows() {
   for (int cellx = 0; cellx < this->ncell; cellx++) {
     this->cell_dat.set_nrow(cellx, this->h_npart_cell[cellx]);
   }
-  this->cell_dat.compute_nrow_max();
 }
 
 /*

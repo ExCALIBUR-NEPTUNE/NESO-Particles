@@ -3,6 +3,7 @@
 
 #include <CL/sycl.hpp>
 #include <mpi.h>
+#include <stack>
 
 #include "communication.hpp"
 #include "profiling.hpp"
@@ -182,6 +183,24 @@ public:
     return this->sycl_target.queue.memcpy(
         this->h_buffer.ptr, this->d_buffer.ptr, this->size_bytes());
   }
+};
+
+class EventStack {
+private:
+  std::stack<sycl::event> stack;
+
+public:
+  ~EventStack(){};
+  EventStack(){};
+
+  inline void push(sycl::event e) { this->stack.push(e); }
+
+  inline void wait() {
+    while (!this->stack.empty()) {
+      this->stack.top().wait();
+      this->stack.pop();
+    }
+  };
 };
 
 } // namespace NESO::Particles

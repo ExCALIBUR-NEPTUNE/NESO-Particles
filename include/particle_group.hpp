@@ -97,8 +97,8 @@ public:
                 SYCLTarget &sycl_target)
       : domain(domain), sycl_target(sycl_target),
         ncell(domain.mesh.get_cell_count()), d_remove_cells(sycl_target, 1),
-        device_npart_cell(sycl_target, 1),
-        d_remove_layers(sycl_target, 1), npart_cell(sycl_target, 1),
+        device_npart_cell(sycl_target, 1), d_remove_layers(sycl_target, 1),
+        npart_cell(sycl_target, 1),
         layer_compressor(sycl_target, ncell, particle_dats_real,
                          particle_dats_int),
         global_move_ctx(sycl_target, layer_compressor, particle_dats_real,
@@ -107,14 +107,17 @@ public:
                       particle_dats_real, particle_dats_int)
 
   {
-    
+
     this->npart_cell.realloc_no_copy(this->ncell);
     this->device_npart_cell.realloc_no_copy(this->ncell);
 
     for (int cellx = 0; cellx < this->ncell; cellx++) {
       this->npart_cell.ptr[cellx] = 0;
     }
-    this->sycl_target.queue.memcpy(this->device_npart_cell.ptr, this->npart_cell.ptr, this->ncell * sizeof(int)).wait();
+    this->sycl_target.queue
+        .memcpy(this->device_npart_cell.ptr, this->npart_cell.ptr,
+                this->ncell * sizeof(int))
+        .wait();
 
     for (auto &property : particle_spec.properties_real) {
       add_particle_dat(ParticleDat(sycl_target, property, this->ncell));
@@ -167,14 +170,6 @@ public:
   }
   inline ParticleSpec &get_particle_spec() { return this->particle_spec; }
   inline void global_move();
-  inline INT get_particle_loop_iter_range() {
-    return this->domain.mesh.get_cell_count() *
-           this->position_dat->cell_dat.get_nrow_max();
-  }
-  inline INT get_particle_loop_cell_stride() {
-    return this->position_dat->cell_dat.get_nrow_max();
-  }
-  inline INT *get_particle_loop_npart_cell() { return this->npart_cell.ptr; }
   /*
    * Number of bytes required to store the data for one particle.
    */
@@ -200,7 +195,6 @@ ParticleGroup::add_particle_dat(ParticleDatShPtr<REAL> particle_dat) {
                                   particle_dat->positions));
   particle_dat->set_npart_cells_device(this->device_npart_cell.ptr).wait();
   particle_dat->npart_device_to_host();
-
 }
 inline void
 ParticleGroup::add_particle_dat(ParticleDatShPtr<INT> particle_dat) {
@@ -269,12 +263,12 @@ inline void ParticleGroup::add_particles_local(ParticleSet &particle_data) {
 
   // The append is async
   this->sycl_target.queue.wait();
-    for (auto &dat : particle_dats_real) {
-      dat.second->npart_host_to_device();
-    }
-    for (auto &dat : particle_dats_int) {
-      dat.second->npart_host_to_device();
-    }
+  for (auto &dat : particle_dats_real) {
+    dat.second->npart_host_to_device();
+  }
+  for (auto &dat : particle_dats_int) {
+    dat.second->npart_host_to_device();
+  }
   this->set_npart_cell_from_dat();
 }
 
