@@ -49,6 +49,8 @@ public:
     const int comm_size = this->sycl_target.comm_pair.size_parent;
     const int comm_rank = this->sycl_target.comm_pair.rank_parent;
 
+    NESOASSERT(this->mpi_rank_dat.get() != nullptr,
+               "MPI rank dat is not defined");
     auto pl_iter_range = this->mpi_rank_dat->get_particle_loop_iter_range();
     auto pl_stride = this->mpi_rank_dat->get_particle_loop_cell_stride();
     auto pl_npart_cell = this->mpi_rank_dat->get_particle_loop_npart_cell();

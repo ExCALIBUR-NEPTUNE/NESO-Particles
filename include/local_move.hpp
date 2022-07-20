@@ -161,6 +161,7 @@ public:
 
   inline void set_mpi_rank_dat(ParticleDatShPtr<INT> mpi_rank_dat) {
     this->mpi_rank_dat = mpi_rank_dat;
+    this->departing_identify.set_mpi_rank_dat(this->mpi_rank_dat);
   }
 
   inline void npart_exchange_sendrecv() {

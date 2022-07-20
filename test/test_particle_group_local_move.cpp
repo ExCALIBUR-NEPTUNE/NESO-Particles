@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 #include <neso_particles.hpp>
 #include <random>
+#include <vector>
 
 using namespace NESO::Particles;
 
@@ -43,7 +44,7 @@ TEST(ParticleGroup, local_move_multiple) {
   const REAL tol = 1.0e-10;
   const int cell_count = domain.mesh.get_cell_count();
 
-  const int rank = sycl_target.comm_pair.rank_parent;
+  // const int rank = sycl_target.comm_pair.rank_parent;
   const int size = sycl_target.comm_pair.size_parent;
 
   auto positions =
@@ -111,14 +112,45 @@ TEST(ParticleGroup, local_move_multiple) {
         .wait_and_throw();
   };
 
+  auto lambda_global_to_local = [&] {
+    auto k_MPI_RANK = A[Sym<INT>("NESO_MPI_RANK")]->cell_dat.device_ptr();
+    const auto pl_iter_range = A.mpi_rank_dat->get_particle_loop_iter_range();
+    const auto pl_stride = A.mpi_rank_dat->get_particle_loop_cell_stride();
+    const auto pl_npart_cell = A.mpi_rank_dat->get_particle_loop_npart_cell();
+
+    sycl_target.queue
+        .submit([&](sycl::handler &cgh) {
+          cgh.parallel_for<>(
+              sycl::range<1>(pl_iter_range), [=](sycl::id<1> idx) {
+                NESO_PARTICLES_KERNEL_START
+                const INT cellx = NESO_PARTICLES_KERNEL_CELL;
+                const INT layerx = NESO_PARTICLES_KERNEL_LAYER;
+                k_MPI_RANK[cellx][1][layerx] = k_MPI_RANK[cellx][0][layerx];
+                NESO_PARTICLES_KERNEL_END
+              });
+        })
+        .wait_and_throw();
+  };
+
   REAL T = 0.0;
   auto lambda_test = [&] {
+    // A[Sym<INT>("NESO_MPI_RANK")]->print();
+    // A[Sym<REAL>("P")]->print();
+
+    int npart_found = A.mpi_rank_dat->get_npart_local();
+    int global_npart_found = 0;
+    MPICHK(MPI_Allreduce(&npart_found, &global_npart_found, 1, MPI_INT, MPI_SUM,
+                         sycl_target.comm_pair.comm_parent));
+    ASSERT_EQ(global_npart_found, N);
+
     // for all cells
     for (int cellx = 0; cellx < cell_count; cellx++) {
       auto P = A[Sym<REAL>("P")]->cell_dat.get_cell(cellx);
       auto P_ORIG = A[Sym<REAL>("P_ORIG")]->cell_dat.get_cell(cellx);
       auto V = A[Sym<REAL>("V")]->cell_dat.get_cell(cellx);
       auto C = A[Sym<INT>("CELL_ID")]->cell_dat.get_cell(cellx);
+      auto MPI_RANK = A[Sym<INT>("NESO_MPI_RANK")]->cell_dat.get_cell(cellx);
+      auto ID = A[Sym<INT>("ID")]->cell_dat.get_cell(cellx);
 
       const int nrow = P->nrow;
 
@@ -147,8 +179,14 @@ TEST(ParticleGroup, local_move_multiple) {
 
           // check that the particle position is actually owned by this MPI
           // rank
+
+          auto mpi_rank_0 = (*MPI_RANK)[0][px];
+          auto mpi_rank_1 = (*MPI_RANK)[1][px];
+
+          const INT id = (*ID)[0][px];
           const int particle_cell =
               ((REAL)(P_to_test * mesh.inverse_cell_width_fine));
+
           ASSERT_TRUE(particle_cell >= mesh.cell_starts[dimx]);
           ASSERT_TRUE(particle_cell < mesh.cell_ends[dimx]);
         }
@@ -173,19 +211,27 @@ TEST(ParticleGroup, local_move_multiple) {
     }
   };
 
-  const int nranks = 2;
-  int ranks[2] = {(rank - 1 + size) % size, (rank + 1) % size};
+  const int nranks = size;
+  std::vector<int> ranks(size);
+  for (int rx = 0; rx < size; rx++) {
+    ranks[rx] = rx;
+  }
+
   LocalMove local_move_ctx(sycl_target, A.layer_compressor,
                            A.particle_dats_real, A.particle_dats_int, nranks,
-                           ranks);
-
-  mesh.free();
-  return;
+                           ranks.data());
+  local_move_ctx.set_mpi_rank_dat(A.mpi_rank_dat);
 
   for (int testx = 0; testx < Ntest; testx++) {
     pbc.execute();
+
+    reset_mpi_ranks(A.mpi_rank_dat);
     mesh_heirarchy_global_map.execute();
-    A.global_move();
+    lambda_global_to_local();
+
+    local_move_ctx.move();
+    A.set_npart_cell_from_dat();
+
     ccb.execute();
     A.cell_move();
 
@@ -194,5 +240,6 @@ TEST(ParticleGroup, local_move_multiple) {
 
     T += dt;
   }
+
   mesh.free();
 }

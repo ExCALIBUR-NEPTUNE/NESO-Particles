@@ -216,6 +216,12 @@ TEST(ParticleGroup, global_move_multiple) {
 
   REAL T = 0.0;
   auto lambda_test = [&] {
+    int npart_found = A.mpi_rank_dat->get_npart_local();
+    int global_npart_found = 0;
+    MPICHK(MPI_Allreduce(&npart_found, &global_npart_found, 1, MPI_INT, MPI_SUM,
+                         sycl_target.comm_pair.comm_parent));
+    ASSERT_EQ(global_npart_found, N);
+
     // for all cells
     for (int cellx = 0; cellx < cell_count; cellx++) {
       auto P = A[Sym<REAL>("P")]->cell_dat.get_cell(cellx);

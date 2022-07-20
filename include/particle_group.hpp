@@ -53,24 +53,6 @@ private:
   // members for moving particles between local cells
   CellMove cell_move_ctx;
 
-  // set the cell particle counts on the ParticleGroup from the position dat
-  inline void set_npart_cell_from_dat() {
-
-    const auto k_ncell = this->ncell;
-    auto k_dat_npart_cell = this->position_dat->d_npart_cell;
-    auto k_npart_cell = this->npart_cell.ptr;
-    auto k_device_npart_cell = this->device_npart_cell.ptr;
-
-    this->sycl_target.queue
-        .submit([&](sycl::handler &cgh) {
-          cgh.parallel_for<>(sycl::range<1>(k_ncell), [=](sycl::id<1> idx) {
-            k_npart_cell[idx] = k_dat_npart_cell[idx];
-            k_device_npart_cell[idx] = k_dat_npart_cell[idx];
-          });
-        })
-        .wait_and_throw();
-  }
-
 public:
   Domain domain;
   SYCLTarget &sycl_target;
@@ -180,6 +162,24 @@ public:
     this->cell_move_ctx.move();
     this->set_npart_cell_from_dat();
   };
+
+  // set the cell particle counts on the ParticleGroup from the position dat
+  inline void set_npart_cell_from_dat() {
+
+    const auto k_ncell = this->ncell;
+    auto k_dat_npart_cell = this->position_dat->d_npart_cell;
+    auto k_npart_cell = this->npart_cell.ptr;
+    auto k_device_npart_cell = this->device_npart_cell.ptr;
+
+    this->sycl_target.queue
+        .submit([&](sycl::handler &cgh) {
+          cgh.parallel_for<>(sycl::range<1>(k_ncell), [=](sycl::id<1> idx) {
+            k_npart_cell[idx] = k_dat_npart_cell[idx];
+            k_device_npart_cell[idx] = k_dat_npart_cell[idx];
+          });
+        })
+        .wait_and_throw();
+  }
 };
 
 inline void
