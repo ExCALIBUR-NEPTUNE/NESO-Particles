@@ -211,6 +211,15 @@ public:
   inline void set_nrow(const INT cell, const INT nrow_required) {
 
     auto t0 = profile_timestamp();
+
+    if (nrow_required < this->nrow[cell]) {
+      this->nrow[cell] = nrow_required;
+      this->nrow_max = -1;
+      sycl_target.profile_map.inc("CellDat", "set_nrow", 1,
+                                  profile_elapsed(t0, profile_timestamp()));
+      return;
+    }
+
     NESOASSERT(cell >= 0, "Cell index is negative");
     NESOASSERT(cell < this->ncells, "Cell index is >= ncells");
     NESOASSERT(nrow_required >= 0, "Requested number of rows is negative");

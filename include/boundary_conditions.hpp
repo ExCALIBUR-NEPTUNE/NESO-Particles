@@ -73,7 +73,7 @@ public:
               });
         })
         .wait_and_throw();
-    sycl_target.profile_map.inc("CartesianPeriodic", "Execute", 1,
+    sycl_target.profile_map.inc("CartesianPeriodic", "execute", 1,
                                 profile_elapsed(t0, profile_timestamp()));
   }
 };

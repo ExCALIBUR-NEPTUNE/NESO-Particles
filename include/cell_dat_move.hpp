@@ -258,6 +258,7 @@ public:
     const auto k_particle_dat_ncomp_real = this->d_particle_dat_ncomp_real.ptr;
     const auto k_particle_dat_ncomp_int = this->d_particle_dat_ncomp_int.ptr;
 
+    auto t1 = profile_timestamp();
     // copy from old cells/layers to new cells/layers
     this->sycl_target.queue
         .submit([&](sycl::handler &cgh) {
@@ -291,12 +292,17 @@ public:
           });
         })
         .wait_and_throw();
+    sycl_target.profile_map.inc("CellMove", "cell_move", 1,
+                                profile_elapsed(t1, profile_timestamp()));
 
+    auto t2 = profile_timestamp();
     // compress the data by removing the old rows
     this->layer_compressor.remove_particles(move_count, this->d_cells_old.ptr,
                                             this->d_layers_old.ptr);
 
-    sycl_target.profile_map.inc("CellMove", "Move", 1,
+    sycl_target.profile_map.inc("CellMove", "remove_particles", 1,
+                                profile_elapsed(t2, profile_timestamp()));
+    sycl_target.profile_map.inc("CellMove", "move", 1,
                                 profile_elapsed(t0, profile_timestamp()));
   };
 };

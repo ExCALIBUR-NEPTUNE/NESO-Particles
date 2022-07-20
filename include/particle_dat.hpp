@@ -141,6 +141,13 @@ public:
     return event;
   }
 
+  template <typename U>
+  inline void set_npart_cells_host(const U *h_npart_cell_in) {
+    for (int cellx = 0; cellx < this->ncell; cellx++) {
+      this->h_npart_cell[cellx] = h_npart_cell_in[cellx];
+    }
+  }
+
   inline void set_npart_cell(const INT cell, const int npart) {
     this->h_npart_cell[cell] = npart;
     this->sycl_target.queue
@@ -255,10 +262,12 @@ inline void ParticleDatT<T>::realloc(const int cell, const int npart_cell_new) {
 
 template <typename T> inline void ParticleDatT<T>::trim_cell_dat_rows() {
   for (int cellx = 0; cellx < this->ncell; cellx++) {
+    NESOASSERT((this->h_npart_cell[cellx] <= this->cell_dat.nrow[cellx]),
+               "A trim should not increase the number of rows");
     this->cell_dat.set_nrow(cellx, this->h_npart_cell[cellx]);
     // A trim should not be expected to realloc or perform memcpy so we can
     // call wait immediately
-    this->cell_dat.wait_set_nrow();
+    // this->cell_dat.wait_set_nrow();
   }
 }
 

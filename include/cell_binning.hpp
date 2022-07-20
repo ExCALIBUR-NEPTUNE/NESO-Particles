@@ -102,7 +102,7 @@ public:
               });
         })
         .wait_and_throw();
-    sycl_target.profile_map.inc("CartesianCellBin", "Execute", 1,
+    sycl_target.profile_map.inc("CartesianCellBin", "execute", 1,
                                 profile_elapsed(t0, profile_timestamp()));
   }
 };

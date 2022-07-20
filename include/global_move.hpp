@@ -122,22 +122,31 @@ public:
     // wait for the local particles to be packed.
     global_pack_event.wait_and_throw();
 
+    sycl_target.profile_map.inc("GlobalMove", "move_stage_1", 1,
+                                profile_elapsed(t0, profile_timestamp()));
+
     // send and recv packed particles from particle_packer.cell_dat to
     // particle_unpacker.h_recv_buffer using h_recv_offsets.
     this->global_move_exchange.exchange_init(this->particle_packer,
                                              this->particle_unpacker);
+
+    sycl_target.profile_map.inc("GlobalMove", "move_stage_2", 1,
+                                profile_elapsed(t0, profile_timestamp()));
 
     // remove the sent particles whilst the communication occurs
     this->layer_compressor.remove_particles(
         num_particles_leaving, this->departing_identify.d_pack_cells.ptr,
         this->departing_identify.d_pack_layers_src.ptr);
 
+    sycl_target.profile_map.inc("GlobalMove", "move_stage_3", 1,
+                                profile_elapsed(t0, profile_timestamp()));
+
     // wait for particle data to be send/recv'd
     this->global_move_exchange.exchange_finalise(this->particle_unpacker);
 
     // Unpack the recv'd particles
     this->particle_unpacker.unpack(particle_dats_real, particle_dats_int);
-    sycl_target.profile_map.inc("GlobalMove", "Move", 1,
+    sycl_target.profile_map.inc("GlobalMove", "move", 1,
                                 profile_elapsed(t0, profile_timestamp()));
   }
 };

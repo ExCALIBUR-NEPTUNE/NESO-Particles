@@ -7,6 +7,7 @@
 #include "communication.hpp"
 #include "compute_target.hpp"
 #include "packing_unpacking.hpp"
+#include "profiling.hpp"
 #include "typedefs.hpp"
 
 using namespace cl;
@@ -159,6 +160,8 @@ public:
   inline void exchange_init(ParticlePacker &particle_packer,
                             ParticleUnpacker &particle_unpacker) {
 
+    auto t0 = profile_timestamp();
+
     // Get the packed particle data on the host
     auto h_send_buffer = particle_packer.get_packed_data_on_host(
         this->num_remote_send_ranks, this->h_send_rank_npart.ptr);
@@ -191,6 +194,9 @@ public:
                     MPI_CHAR, this->h_send_ranks.ptr[rankx], 43, this->comm,
                     &this->h_send_requests.ptr[rankx]));
     }
+
+    sycl_target.profile_map.inc("GlobalMoveExchange", "exchange_init", 1,
+                                profile_elapsed(t0, profile_timestamp()));
   }
 
   /*
