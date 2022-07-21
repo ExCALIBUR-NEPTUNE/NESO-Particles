@@ -217,7 +217,7 @@ public:
 
     for (int dimx = 0; dimx < this->ndim; dimx++) {
       starts[dimx] = this->cell_starts[dimx] - width;
-      ends[dimx] = this->cell_ends[dimx] - width;
+      ends[dimx] = this->cell_ends[dimx] + width;
       dims[dimx] = this->dims[dimx];
     }
 

@@ -249,6 +249,20 @@ public:
           this->departing_identify.dh_send_counts_all_ranks.h_buffer.ptr[rank];
     }
 
+    // check no particles are trying to be send through the local method to a
+    // rank the local method has not setup communication patterns with
+    for (int rankx = 0; rankx < this->num_remote_send_ranks; rankx++) {
+      const int rank = this->h_send_ranks.ptr[rankx];
+      this->departing_identify.dh_send_counts_all_ranks.h_buffer.ptr[rank] = 0;
+    }
+    const int mpi_size = this->sycl_target.comm_pair.size_parent;
+    for (int rank = 0; rank < mpi_size; rank++) {
+      NESOASSERT(this->departing_identify.dh_send_counts_all_ranks.h_buffer
+                         .ptr[rank] == 0,
+                 "Particle is attempting to use local communication method for "
+                 "an unreachable rank.");
+    }
+
     const int num_particles_leaving =
         this->departing_identify.dh_num_particle_send.h_buffer.ptr[0];
 

@@ -11,7 +11,7 @@ TEST(ParticleGroup, stencil_move_multiple) {
 
   const int ndim = 2;
   std::vector<int> dims(ndim);
-  dims[0] = 8;
+  dims[0] = 32;
   dims[1] = 8;
 
   const double cell_extent = 1.0;
@@ -35,44 +35,42 @@ TEST(ParticleGroup, stencil_move_multiple) {
   A.add_particle_dat(ParticleDat(sycl_target, ParticleProp(Sym<REAL>("FOO"), 3),
                                  domain.mesh.get_cell_count()));
 
+  // const int rank = sycl_target.comm_pair.rank_parent;
+  // const int size = sycl_target.comm_pair.size_parent;
+
   std::mt19937 rng_pos(52234234);
   std::mt19937 rng_vel(52234231);
-  std::mt19937 rng_rank(18241);
+  std::mt19937 rng_cell(18241);
 
   const int N = 1024;
   const int Ntest = 1024;
-  const REAL dt = 0.01;
+  const REAL dt = 1.0;
   const REAL tol = 1.0e-10;
   const int cell_count = domain.mesh.get_cell_count();
-
-  // const int rank = sycl_target.comm_pair.rank_parent;
-  const int size = sycl_target.comm_pair.size_parent;
-
-  auto positions =
-      uniform_within_extents(N, ndim, mesh.global_extents, rng_pos);
-  auto velocities = NESO::Particles::normal_distribution(
-      N, 3, 0.0, dims[0] * cell_extent, rng_vel);
-
-  std::uniform_int_distribution<int> uniform_dist(
-      0, sycl_target.comm_pair.size_parent - 1);
+  auto velocity_index = std::uniform_int_distribution<int>(0, 1);
+  auto cell_index =
+      std::uniform_int_distribution<int>(0, MAX(dims[0], dims[1]));
 
   ParticleSet initial_distribution(N, A.get_particle_spec());
 
-  // determine which particles should end up on which rank
-  std::map<int, std::vector<int>> mapping;
+  REAL vel_map[2] = {-1.0, 1.0};
   for (int px = 0; px < N; px++) {
+
+    // create particles in the centres of random cells
     for (int dimx = 0; dimx < ndim; dimx++) {
-      initial_distribution[Sym<REAL>("P")][px][dimx] = positions[dimx][px];
-      initial_distribution[Sym<REAL>("P_ORIG")][px][dimx] = positions[dimx][px];
+      const int cell_dim = cell_index(rng_cell) % dims[dimx];
+      const REAL pos = (cell_dim + 0.5) * cell_extent;
+      initial_distribution[Sym<REAL>("P")][px][dimx] = pos;
+      initial_distribution[Sym<REAL>("P_ORIG")][px][dimx] = pos;
     }
+
+    // initialise velocities that are +-1 cell in each direction
     for (int dimx = 0; dimx < 3; dimx++) {
-      initial_distribution[Sym<REAL>("V")][px][dimx] = velocities[dimx][px];
+      initial_distribution[Sym<REAL>("V")][px][dimx] =
+          vel_map[velocity_index(rng_vel)] * cell_extent;
     }
-    initial_distribution[Sym<INT>("CELL_ID")][px][0] = 0;
+
     initial_distribution[Sym<INT>("ID")][px][0] = px;
-    const auto px_rank = uniform_dist(rng_rank);
-    initial_distribution[Sym<INT>("NESO_MPI_RANK")][px][0] = px_rank;
-    mapping[px_rank].push_back(px);
   }
 
   if (sycl_target.comm_pair.rank_parent == 0) {
@@ -212,15 +210,18 @@ TEST(ParticleGroup, stencil_move_multiple) {
     }
   };
 
-  const int nranks = size;
-  std::vector<int> ranks(size);
-  for (int rx = 0; rx < size; rx++) {
-    ranks[rx] = rx;
-  }
+  // distribute the initial particles using the global method
+  pbc.execute();
+  reset_mpi_ranks(A.mpi_rank_dat);
+  mesh_heirarchy_global_map.execute();
+  A.global_move();
+  ccb.execute();
+  A.cell_move();
 
+  auto &neighbour_ranks = mesh.get_local_communication_neighbours();
   LocalMove local_move_ctx(sycl_target, A.layer_compressor,
-                           A.particle_dats_real, A.particle_dats_int, nranks,
-                           ranks.data());
+                           A.particle_dats_real, A.particle_dats_int,
+                           neighbour_ranks.size(), neighbour_ranks.data());
   local_move_ctx.set_mpi_rank_dat(A.mpi_rank_dat);
 
   for (int testx = 0; testx < Ntest; testx++) {
