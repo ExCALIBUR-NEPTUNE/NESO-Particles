@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <cstdlib>
 #include <mpi.h>
+#include <set>
+#include <vector>
 
 namespace NESO::Particles {
 
@@ -24,6 +26,7 @@ public:
   virtual inline int get_ncells_fine() = 0;
   virtual inline MeshHierarchy *get_mesh_hierarchy() = 0;
   virtual inline void free() = 0;
+  virtual inline std::vector<int> &get_local_communication_neighbours() = 0;
 };
 
 class CartesianHMesh : public HMesh {
@@ -37,6 +40,7 @@ private:
   std::vector<int> cell_counts = {0, 0, 0};
   MeshHierarchy mesh_hierarchy;
   bool allocated = false;
+  std::vector<int> local_neighbours;
 
 public:
   int cell_starts[3] = {0, 0, 0};
@@ -55,7 +59,8 @@ public:
   const int ncells_fine;
 
   CartesianHMesh(MPI_Comm comm, const int ndim, std::vector<int> &dims,
-                 const double extent = 1.0, const int subdivision_order = 1)
+                 const double extent = 1.0, const int subdivision_order = 1,
+                 const int stencil_width = 0)
       : comm(comm), ndim(ndim), dims(dims),
         subdivision_order(subdivision_order), cell_width_coarse(extent),
         cell_width_fine(extent / ((double)std::pow(2, subdivision_order))),
@@ -155,6 +160,10 @@ public:
     }
 
     mesh_hierarchy.claim_finalise();
+
+    if (stencil_width > 0) {
+      this->set_local_communication_width(stencil_width);
+    }
   };
 
   inline MPI_Comm get_comm() { return this->comm_cart; };
@@ -197,6 +206,62 @@ public:
     }
     this->allocated = false;
     mesh_hierarchy.free();
+  }
+
+  inline void set_local_communication_width(const int width) {
+    NESOASSERT(width >= 0, "Width should be non-negative");
+
+    int starts[3] = {0, 0, 0};
+    int ends[3] = {1, 1, 1};
+    int dims[3] = {1, 1, 1};
+
+    for (int dimx = 0; dimx < this->ndim; dimx++) {
+      starts[dimx] = this->cell_starts[dimx] - width;
+      ends[dimx] = this->cell_ends[dimx] - width;
+      dims[dimx] = this->dims[dimx];
+    }
+
+    // mesh tuple index
+    INT index_mesh[3];
+    // mesh_hierarchy tuple index
+    INT index_mh[6];
+
+    const int rank = this->mesh_hierarchy.comm_pair.rank_parent;
+
+    std::set<int> neighbour_ranks_set;
+    for (int cz = starts[2]; cz < ends[2]; cz++) {
+      const int czs = (cz + width * dims[2]) % dims[2];
+      index_mesh[2] = czs;
+      for (int cy = starts[1]; cy < ends[1]; cy++) {
+        const int cys = (cy + width * dims[1]) % dims[1];
+        index_mesh[1] = cys;
+        for (int cx = starts[0]; cx < ends[0]; cx++) {
+          const int cxs = (cx + width * dims[0]) % dims[0];
+          index_mesh[0] = cxs;
+          // convert mesh tuple index to mesh hierarchy tuple index
+          mesh_tuple_to_mh_tuple(index_mesh, index_mh);
+          // convert mesh hierarchy tuple index to global linear index in the
+          // MeshHierarchy
+          const INT index_global =
+              mesh_hierarchy.tuple_to_linear_global(index_mh);
+          // get the rank that owns that global cell
+          const int remote_rank = this->mesh_hierarchy.get_owner(index_global);
+
+          if (remote_rank != rank) {
+            neighbour_ranks_set.insert(remote_rank);
+          }
+        }
+      }
+    }
+
+    this->local_neighbours.reserve(neighbour_ranks_set.size());
+    for (auto &rankx : neighbour_ranks_set) {
+      this->local_neighbours.push_back(rankx);
+    }
+  }
+
+  inline std::vector<int> &get_local_communication_neighbours() {
+    return this->local_neighbours;
   }
 };
 
