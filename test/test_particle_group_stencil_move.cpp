@@ -15,7 +15,7 @@ TEST(ParticleGroup, stencil_move_multiple) {
   dims[1] = 8;
 
   const double cell_extent = 1.0;
-  const int subdivision_order = 0;
+  const int subdivision_order = 1;
   const int stencil_width = 1;
   CartesianHMesh mesh(MPI_COMM_WORLD, ndim, dims, cell_extent,
                       subdivision_order, stencil_width);

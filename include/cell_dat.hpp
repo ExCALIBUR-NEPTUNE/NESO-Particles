@@ -11,7 +11,6 @@
 
 #include "access.hpp"
 #include "compute_target.hpp"
-#include "domain.hpp"
 #include "profiling.hpp"
 #include "typedefs.hpp"
 
