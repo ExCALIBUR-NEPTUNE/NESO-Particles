@@ -2,6 +2,7 @@
 #define _NESO_CARTESIAN_MESH
 
 #include <CL/sycl.hpp>
+#include <memory>
 #include <mpi.h>
 
 #include "compute_target.hpp"
@@ -24,12 +25,12 @@ private:
   REAL cell_width_fine;
   REAL inverse_cell_width_fine;
 
+public:
   BufferDeviceHost<int> dh_lookup;
   BufferDeviceHost<int> dh_lookup_dims;
   BufferDeviceHost<int> dh_map;
   int lookup_stride;
 
-public:
   CartesianHMesh &mesh;
   CartesianHMeshLocalMapperT(SYCLTarget &sycl_target, CartesianHMesh &mesh)
       : sycl_target(sycl_target), mesh(mesh), dh_dims(sycl_target, mesh.ndim),
@@ -57,9 +58,12 @@ public:
 
     int map_size = 1;
     for (int dimx = 0; dimx < this->ndim; dimx++) {
-      map_size *= mesh.cell_counts[dimx] + 2 * mesh.stencil_width;
+      map_size *= mesh.cell_counts_local[dimx] + 2 * mesh.stencil_width;
     }
     this->dh_map.realloc_no_copy(map_size);
+    for (int mx = 0; mx < map_size; mx++) {
+      this->dh_map.h_buffer.ptr[mx] = -1;
+    }
 
     // populate which cells are owned in each dimension
     const auto stencil_width = this->mesh.stencil_width;
@@ -76,6 +80,8 @@ public:
         index++;
       }
       this->dh_lookup_dims.h_buffer.ptr[dimx] = index;
+      NESOASSERT(index == mesh.cell_counts_local[dimx] + 2 * stencil_width,
+                 "Bad index value");
     }
     this->dh_lookup.host_to_device();
     this->dh_lookup_dims.host_to_device();
@@ -107,11 +113,11 @@ public:
     for (int cz = starts[2]; cz < ends[2]; cz++) {
       const int czs = (cz + stencil_width * cell_counts[2]) % cell_counts[2];
       index_mesh[2] = czs;
-      const int local_tuple_z = h_lookup_z[czs];
+      const int local_tuple_z = (this->ndim > 2) ? h_lookup_z[czs] : 0;
       for (int cy = starts[1]; cy < ends[1]; cy++) {
         const int cys = (cy + stencil_width * cell_counts[1]) % cell_counts[1];
         index_mesh[1] = cys;
-        const int local_tuple_y = h_lookup_y[cys];
+        const int local_tuple_y = (this->ndim > 1) ? h_lookup_y[cys] : 0;
         for (int cx = starts[0]; cx < ends[0]; cx++) {
           const int cxs =
               (cx + stencil_width * cell_counts[0]) % cell_counts[0];
@@ -143,6 +149,8 @@ public:
                   ParticleDatShPtr<INT> &cell_id_dat,
                   ParticleDatShPtr<INT> &mpi_rank_dat) {
 
+    std::cout << "MAP START" << std::endl;
+
     // pointers to access dats in kernel
     auto k_position_dat = position_dat->cell_dat.device_ptr();
     auto k_mpi_rank_dat = mpi_rank_dat->cell_dat.device_ptr();
@@ -151,7 +159,10 @@ public:
     auto k_dims = this->dh_dims.d_buffer.ptr;
     auto k_cell_width_fine = this->cell_width_fine;
     auto k_inverse_cell_width_fine = this->inverse_cell_width_fine;
+    auto k_lookup = this->dh_lookup.d_buffer.ptr;
     auto k_lookup_stride = this->lookup_stride;
+    auto k_lookup_dims = this->dh_lookup_dims.d_buffer.ptr;
+    auto k_map = this->dh_map.d_buffer.ptr;
 
     // iteration set
     auto pl_iter_range = mpi_rank_dat->get_particle_loop_iter_range();
@@ -165,28 +176,61 @@ public:
                 NESO_PARTICLES_KERNEL_START
                 const INT cellx = NESO_PARTICLES_KERNEL_CELL;
                 const INT layerx = NESO_PARTICLES_KERNEL_LAYER;
+
+                int local_tuple[3] = {0, 0, 0};
+                int mask = 0;
                 // k_mpi_rank_dat[cellx][1][layerx];
                 for (int dimx = 0; dimx < k_ndim; dimx++) {
-                  // position relative to the mesh
                   const REAL pos = k_position_dat[cellx][dimx][layerx];
-                  const REAL tol = 1.0e-10;
                   int cell_fine = ((REAL)pos * k_inverse_cell_width_fine);
                   if (cell_fine >= k_dims[dimx]) {
                     cell_fine = k_dims[dimx] - 1;
                   } else if (cell_fine < 0) {
                     cell_fine = 0;
                   }
+                  // use the cell to get an index for the dimension
+                  const int dim_index =
+                      k_lookup[k_lookup_stride * dimx + cell_fine];
+                  local_tuple[dimx] = dim_index;
+
+                  // if the mask takes a negative value then a dim_index had a
+                  // negative value
+                  // => cell is not in the local map
+                  mask = MIN(mask, dim_index);
                 }
+
+                const int linear_index =
+                    local_tuple[0] +
+                    k_lookup_dims[0] *
+                        (local_tuple[1] + k_lookup_dims[1] * local_tuple[2]);
+
+                // const int remote_rank = (mask < 0) ? -1 :
+                // k_map[linear_index];
+
+                const int remote_rank = k_map[linear_index];
+                if ((remote_rank < 0) || (remote_rank > 11)) {
+                  std::cout << "remote rank " << remote_rank << " pos "
+                            << k_position_dat[cellx][0][layerx] << ", "
+                            << k_position_dat[cellx][1][layerx]
+                            << " local_tuple[0] " << local_tuple[0]
+                            << " local_tuple[1] " << local_tuple[1]
+                            << " mpi ranks " << k_mpi_rank_dat[cellx][0][layerx]
+                            << ", " << remote_rank << std::endl;
+                }
+
+                k_mpi_rank_dat[cellx][1][layerx] = remote_rank;
 
                 NESO_PARTICLES_KERNEL_END
               });
         })
         .wait_and_throw();
+
+    std::cout << "MAP END" << std::endl;
   };
 };
 
-inline LocalMapperShPtr CartesianHMeshLocalMapper(SYCLTarget &sycl_target,
-                                                  CartesianHMesh &mesh) {
+inline std::shared_ptr<CartesianHMeshLocalMapperT>
+CartesianHMeshLocalMapper(SYCLTarget &sycl_target, CartesianHMesh &mesh) {
   return std::make_shared<CartesianHMeshLocalMapperT>(sycl_target, mesh);
 }
 

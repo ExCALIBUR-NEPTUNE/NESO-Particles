@@ -2,6 +2,7 @@
 #define _NESO_PARTICLES_LOCAL_MAPPING
 
 #include <CL/sycl.hpp>
+#include <memory>
 #include <mpi.h>
 
 #include "compute_target.hpp"
@@ -18,9 +19,9 @@ namespace NESO::Particles {
  */
 class LocalMapper {
 public:
-  inline void map(ParticleDatShPtr<REAL> &position_dat,
-                  ParticleDatShPtr<INT> &cell_id_dat,
-                  ParticleDatShPtr<INT> &mpi_rank_dat);
+  virtual inline void map(ParticleDatShPtr<REAL> &position_dat,
+                          ParticleDatShPtr<INT> &cell_id_dat,
+                          ParticleDatShPtr<INT> &mpi_rank_dat) = 0;
 };
 
 typedef std::shared_ptr<LocalMapper> LocalMapperShPtr;
@@ -36,7 +37,7 @@ public:
                   ParticleDatShPtr<INT> &mpi_rank_dat){};
 };
 
-inline LocalMapperShPtr DummyLocalMapper() {
+inline std::shared_ptr<DummyLocalMapperT> DummyLocalMapper() {
   return std::make_shared<DummyLocalMapperT>();
 }
 
