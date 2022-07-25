@@ -122,6 +122,7 @@ public:
           const int cxs =
               (cx + stencil_width * cell_counts[0]) % cell_counts[0];
           index_mesh[0] = cxs;
+
           const int local_tuple_x = h_lookup_x[cxs];
           // convert mesh tuple index to mesh hierarchy tuple index
           this->mesh.mesh_tuple_to_mh_tuple(index_mesh, index_mh);
@@ -148,8 +149,6 @@ public:
   inline void map(ParticleDatShPtr<REAL> &position_dat,
                   ParticleDatShPtr<INT> &cell_id_dat,
                   ParticleDatShPtr<INT> &mpi_rank_dat) {
-
-    std::cout << "MAP START" << std::endl;
 
     // pointers to access dats in kernel
     auto k_position_dat = position_dat->cell_dat.device_ptr();
@@ -204,28 +203,13 @@ public:
                     k_lookup_dims[0] *
                         (local_tuple[1] + k_lookup_dims[1] * local_tuple[2]);
 
-                // const int remote_rank = (mask < 0) ? -1 :
-                // k_map[linear_index];
-
-                const int remote_rank = k_map[linear_index];
-                if ((remote_rank < 0) || (remote_rank > 11)) {
-                  std::cout << "remote rank " << remote_rank << " pos "
-                            << k_position_dat[cellx][0][layerx] << ", "
-                            << k_position_dat[cellx][1][layerx]
-                            << " local_tuple[0] " << local_tuple[0]
-                            << " local_tuple[1] " << local_tuple[1]
-                            << " mpi ranks " << k_mpi_rank_dat[cellx][0][layerx]
-                            << ", " << remote_rank << std::endl;
-                }
-
+                const int remote_rank = (mask < 0) ? -1 : k_map[linear_index];
                 k_mpi_rank_dat[cellx][1][layerx] = remote_rank;
 
                 NESO_PARTICLES_KERNEL_END
               });
         })
         .wait_and_throw();
-
-    std::cout << "MAP END" << std::endl;
   };
 };
 

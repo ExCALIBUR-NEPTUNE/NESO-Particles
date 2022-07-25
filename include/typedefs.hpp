@@ -67,6 +67,26 @@ void get_decomp_1d(const T N_compute_units, const T N_work_items,
   *rend = end;
 }
 
+template <typename U> inline void nprint_recurse(int flag, U next) {
+  if (flag) {
+    std::cout << " ";
+  }
+  std::cout << next << std::endl;
+}
+
+template <typename U, typename... T>
+inline void nprint_recurse(int flag, U next, T... args) {
+  if (flag) {
+    std::cout << " ";
+  }
+  std::cout << next;
+  nprint_recurse(++flag, args...);
+}
+
+template <typename... T> inline void nprint(T... args) {
+  nprint_recurse(0, args...);
+}
+
 #ifdef NESO_PARTICLES_DEVICE_TYPE_CPU
 
 #define NESO_PARTICLES_DEVICE_LABEL "CPU"
