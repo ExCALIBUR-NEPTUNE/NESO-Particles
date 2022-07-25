@@ -156,7 +156,6 @@ public:
 
     auto k_ndim = this->ndim;
     auto k_dims = this->dh_dims.d_buffer.ptr;
-    auto k_cell_width_fine = this->cell_width_fine;
     auto k_inverse_cell_width_fine = this->inverse_cell_width_fine;
     auto k_lookup = this->dh_lookup.d_buffer.ptr;
     auto k_lookup_stride = this->lookup_stride;

@@ -45,7 +45,7 @@ TEST(ParticleGroup, stencil_move_multiple) {
   // create object to map local cells + stencil to ranks
   auto cart_local_mapper = CartesianHMeshLocalMapper(sycl_target, mesh);
 
-  const int rank = sycl_target.comm_pair.rank_parent;
+  // const int rank = sycl_target.comm_pair.rank_parent;
   // const int size = sycl_target.comm_pair.size_parent;
 
   // test the map in the mapper
@@ -191,26 +191,6 @@ TEST(ParticleGroup, stencil_move_multiple) {
                 for (int dimx = 0; dimx < k_ndim; dimx++) {
                   k_P[cellx][dimx][layerx] += k_V[cellx][dimx][layerx] * k_dt;
                 }
-                NESO_PARTICLES_KERNEL_END
-              });
-        })
-        .wait_and_throw();
-  };
-
-  auto lambda_global_to_local = [&] {
-    auto k_MPI_RANK = A[Sym<INT>("NESO_MPI_RANK")]->cell_dat.device_ptr();
-    const auto pl_iter_range = A.mpi_rank_dat->get_particle_loop_iter_range();
-    const auto pl_stride = A.mpi_rank_dat->get_particle_loop_cell_stride();
-    const auto pl_npart_cell = A.mpi_rank_dat->get_particle_loop_npart_cell();
-
-    sycl_target.queue
-        .submit([&](sycl::handler &cgh) {
-          cgh.parallel_for<>(
-              sycl::range<1>(pl_iter_range), [=](sycl::id<1> idx) {
-                NESO_PARTICLES_KERNEL_START
-                const INT cellx = NESO_PARTICLES_KERNEL_CELL;
-                const INT layerx = NESO_PARTICLES_KERNEL_LAYER;
-                k_MPI_RANK[cellx][1][layerx] = k_MPI_RANK[cellx][0][layerx];
                 NESO_PARTICLES_KERNEL_END
               });
         })
