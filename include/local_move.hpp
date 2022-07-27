@@ -174,6 +174,7 @@ public:
     }
     // setup send
     for (int rankx = 0; rankx < this->num_remote_send_ranks; rankx++) {
+
       MPICHK(MPI_Isend(&this->h_send_rank_npart.ptr[rankx], 1, MPI_INT,
                        this->h_send_ranks.ptr[rankx], 43, this->comm,
                        &this->h_send_requests.ptr[rankx]));
@@ -273,7 +274,7 @@ public:
         this->departing_identify.d_pack_cells,
         this->departing_identify.d_pack_layers_src,
         this->departing_identify.d_pack_layers_dst, this->particle_dats_real,
-        this->particle_dats_int);
+        this->particle_dats_int, 1);
 
     // exchange the send/recv counts with neighbours
     this->npart_exchange_sendrecv();

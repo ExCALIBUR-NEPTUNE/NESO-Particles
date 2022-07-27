@@ -49,7 +49,12 @@ private:
   };
 
   // members for mpi communication
+  // global communication context
   GlobalMove global_move_ctx;
+  // method to map particle positions to global cells
+  std::shared_ptr<MeshHierarchyGlobalMap> mesh_heirarchy_global_map;
+  // neighbour communication context
+  LocalMove local_move_ctx;
   // members for moving particles between local cells
   CellMove cell_move_ctx;
 
@@ -86,6 +91,10 @@ public:
                          particle_dats_int),
         global_move_ctx(sycl_target, layer_compressor, particle_dats_real,
                         particle_dats_int),
+        local_move_ctx(sycl_target, layer_compressor, particle_dats_real,
+                       particle_dats_int,
+                       domain.mesh.get_local_communication_neighbours().size(),
+                       domain.mesh.get_local_communication_neighbours().data()),
         cell_move_ctx(this->ncell, sycl_target, layer_compressor,
                       particle_dats_real, particle_dats_int)
 
@@ -114,8 +123,13 @@ public:
         ParticleDat(sycl_target, ParticleProp(*mpi_rank_sym, 2), ncell);
     add_particle_dat(mpi_rank_dat);
     this->global_move_ctx.set_mpi_rank_dat(mpi_rank_dat);
+    this->local_move_ctx.set_mpi_rank_dat(mpi_rank_dat);
 
     this->layer_compressor.set_cell_id_dat(this->cell_id_dat);
+
+    this->mesh_heirarchy_global_map = std::make_shared<MeshHierarchyGlobalMap>(
+        this->sycl_target, this->domain.mesh, this->position_dat,
+        this->cell_id_dat, this->mpi_rank_dat);
   }
   ~ParticleGroup() {}
 
@@ -153,6 +167,8 @@ public:
   }
   inline ParticleSpec &get_particle_spec() { return this->particle_spec; }
   inline void global_move();
+  inline void local_move();
+  inline void hybrid_move();
   /*
    * Number of bytes required to store the data for one particle.
    */
@@ -180,6 +196,8 @@ public:
         })
         .wait_and_throw();
   }
+
+  template <typename... T> inline void print(T... args);
 };
 
 inline void
@@ -314,11 +332,116 @@ inline void ParticleGroup::remove_particles(const int npart,
 
 /*
  * Perform global move operation to send particles to the MPI ranks stored in
- * the NESO_MPI_RANK ParticleDat. Must be called collectively on the
- * communicator.
+ * the first component of the NESO_MPI_RANK ParticleDat. Must be called
+ * collectively on the communicator.
  */
 inline void ParticleGroup::global_move() {
   this->global_move_ctx.move();
+  this->set_npart_cell_from_dat();
+}
+
+/*
+ * Perform local move operation to send particles to the MPI ranks stored in
+ * the second component of the NESO_MPI_RANK ParticleDat. Must be called
+ * collectively on the communicator.
+ */
+inline void ParticleGroup::local_move() {
+  this->local_move_ctx.move();
+  this->set_npart_cell_from_dat();
+}
+
+inline std::string fixed_width_format(INT value) {
+  char buffer[128];
+  const int err = snprintf(buffer, 128, "%ld", value);
+  return std::string(buffer);
+}
+inline std::string fixed_width_format(REAL value) {
+  char buffer[128];
+  const int err = snprintf(buffer, 128, "%f", value);
+  return std::string(buffer);
+}
+
+template <typename... T> inline void ParticleGroup::print(T... args) {
+
+  PrintSpec print_spec(args...);
+
+  std::cout << "==============================================================="
+               "================="
+            << std::endl;
+  for (int cellx = 0; cellx < this->domain.mesh.get_cell_count(); cellx++) {
+
+    std::vector<CellData<REAL>> cell_data_real;
+    std::vector<CellData<INT>> cell_data_int;
+
+    int nrow = -1;
+    for (auto &symx : print_spec.syms_real) {
+      auto cell_data = this->particle_dats_real[symx]->cell_dat.get_cell(cellx);
+      cell_data_real.push_back(cell_data);
+      if (nrow >= 0) {
+        NESOASSERT(nrow == cell_data->nrow, "nrow missmatch");
+      }
+      nrow = cell_data->nrow;
+    }
+    for (auto &symx : print_spec.syms_int) {
+      auto cell_data = this->particle_dats_int[symx]->cell_dat.get_cell(cellx);
+      cell_data_int.push_back(cell_data);
+      if (nrow >= 0) {
+        NESOASSERT(nrow == cell_data->nrow, "nrow missmatch");
+      }
+      nrow = cell_data->nrow;
+    }
+
+    std::cout << "------- " << cellx << " -------" << std::endl;
+    for (auto &symx : print_spec.syms_real) {
+      std::cout << "| " << symx.name << " ";
+    }
+    for (auto &symx : print_spec.syms_int) {
+      std::cout << "| " << symx.name << " ";
+    }
+    std::cout << "|" << endl;
+
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      for (auto &cx : cell_data_real) {
+        std::cout << "| ";
+        for (int colx = 0; colx < cx->ncol; colx++) {
+          std::cout << fixed_width_format((*cx)[colx][rowx]) << " ";
+        }
+      }
+      for (auto &cx : cell_data_int) {
+        std::cout << "| ";
+        for (int colx = 0; colx < cx->ncol; colx++) {
+          std::cout << fixed_width_format((*cx)[colx][rowx]) << " ";
+        }
+      }
+
+      std::cout << "|" << std::endl;
+    }
+  }
+
+  std::cout << "==============================================================="
+               "================="
+            << std::endl;
+}
+
+/*
+ * Perform global move operation. Uses particle positions to determine
+ * global/neighbour MPI ranks and uses the global then local move methods (in
+ * that order). Must be called collectively on the communicator.
+ */
+inline void ParticleGroup::hybrid_move() {
+
+  reset_mpi_ranks(this->mpi_rank_dat);
+  this->domain.local_mapper->map(this->position_dat, this->cell_id_dat,
+                                 this->mpi_rank_dat);
+  this->mesh_heirarchy_global_map->execute();
+
+  this->global_move_ctx.move();
+  this->set_npart_cell_from_dat();
+
+  this->domain.local_mapper->map(this->position_dat, this->cell_id_dat,
+                                 this->mpi_rank_dat);
+
+  this->local_move_ctx.move();
   this->set_npart_cell_from_dat();
 }
 

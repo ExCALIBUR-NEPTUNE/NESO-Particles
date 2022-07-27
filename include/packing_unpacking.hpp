@@ -132,7 +132,8 @@ public:
        BufferDevice<int> &d_pack_cells, BufferDevice<int> &d_pack_layers_src,
        BufferDevice<int> &d_pack_layers_dst,
        std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
-       std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int) {
+       std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int,
+       const int rank_component = 0) {
 
     auto t0 = profile_timestamp();
 
@@ -168,6 +169,7 @@ public:
     const auto k_particle_dat_rank =
         particle_dats_int[Sym<INT>("NESO_MPI_RANK")]->cell_dat.device_ptr();
     const auto k_send_rank_map = dh_send_rank_map.d_buffer.ptr;
+    const int k_rank_component = rank_component;
 
     const auto k_pack_cells = d_pack_cells.ptr;
     const auto k_pack_layers_src = d_pack_layers_src.ptr;
@@ -188,7 +190,8 @@ public:
             const int cell = k_pack_cells[idx];
             const int layer_src = k_pack_layers_src[idx];
             const int layer_dst = k_pack_layers_dst[idx];
-            const int rank = k_particle_dat_rank[cell][0][layer_src];
+            const int rank =
+                k_particle_dat_rank[cell][k_rank_component][layer_src];
             const int rank_packing_cell = k_send_rank_map[rank];
 
             char *base_pack_ptr =

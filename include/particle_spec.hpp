@@ -55,6 +55,29 @@ public:
   ~ParticleSpec(){};
 };
 
+class PrintSpec {
+private:
+public:
+  template <typename... T> void push(T... args) { this->push(args...); }
+  void push(Sym<REAL> pp) { this->syms_real.push_back(pp); }
+  void push(Sym<INT> pp) { this->syms_int.push_back(pp); }
+  template <typename... T> void push(Sym<REAL> pp, T... args) {
+    this->syms_real.push_back(pp);
+    this->push(args...);
+  }
+  template <typename... T> void push(Sym<INT> pp, T... args) {
+    this->syms_int.push_back(pp);
+    this->push(args...);
+  }
+  std::vector<Sym<REAL>> syms_real;
+  std::vector<Sym<INT>> syms_int;
+
+  template <typename... T> PrintSpec(T... args) { this->push(args...); };
+
+  PrintSpec(){};
+  ~PrintSpec(){};
+};
+
 } // namespace NESO::Particles
 
 #endif

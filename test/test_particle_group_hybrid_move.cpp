@@ -7,7 +7,7 @@
 
 using namespace NESO::Particles;
 
-TEST(ParticleGroup, stencil_move_multiple) {
+TEST(ParticleGroup, hybrid_move_multiple) {
 
   const int ndim = 2;
   std::vector<int> dims(ndim);
@@ -22,7 +22,9 @@ TEST(ParticleGroup, stencil_move_multiple) {
 
   SYCLTarget sycl_target{GPU_SELECTOR, mesh.get_comm()};
 
-  Domain domain(mesh);
+  // create object to map local cells + stencil to ranks
+  auto cart_local_mapper = CartesianHMeshLocalMapper(sycl_target, mesh);
+  Domain domain(mesh, cart_local_mapper);
 
   ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
                              ParticleProp(Sym<REAL>("P_ORIG"), ndim),
@@ -35,129 +37,46 @@ TEST(ParticleGroup, stencil_move_multiple) {
   A.add_particle_dat(ParticleDat(sycl_target, ParticleProp(Sym<REAL>("FOO"), 3),
                                  domain.mesh.get_cell_count()));
 
-  // create object to map local cells + stencil to ranks
-  auto cart_local_mapper = CartesianHMeshLocalMapper(sycl_target, mesh);
-
   // const int rank = sycl_target.comm_pair.rank_parent;
   // const int size = sycl_target.comm_pair.size_parent;
 
-  // test the map in the mapper
-  INT index_mesh[3];
-  INT index_mh[6];
-
-  auto k_lookup = cart_local_mapper->dh_lookup.h_buffer.ptr;
-  auto k_lookup_stride = cart_local_mapper->lookup_stride;
-  auto k_lookup_dims = cart_local_mapper->dh_lookup_dims.h_buffer.ptr;
-  auto k_map = cart_local_mapper->dh_map.h_buffer.ptr;
-
-  std::vector<int> covered_cells_x;
-  std::vector<int> covered_cells_y;
-  std::vector<int> covered_cells_z;
-
-  for (int cx = mesh.cell_starts[0] - stencil_width;
-       cx < mesh.cell_ends[0] + stencil_width; cx++) {
-    int cx_wrapped =
-        (cx + mesh.cell_counts[0] * stencil_width) % mesh.cell_counts[0];
-    covered_cells_x.push_back(cx_wrapped);
-  }
-  for (int cx = mesh.cell_starts[1] - stencil_width;
-       cx < mesh.cell_ends[1] + stencil_width; cx++) {
-    int cx_wrapped = (cx + mesh.cell_counts[1] * stencil_width) %
-                     MAX(mesh.cell_counts[1], 1);
-    covered_cells_y.push_back(cx_wrapped);
-  }
-  for (int cx = mesh.cell_starts[2] - stencil_width;
-       cx < mesh.cell_ends[2] + stencil_width; cx++) {
-    int cx_wrapped = (cx + mesh.cell_counts[2] * stencil_width) %
-                     MAX(mesh.cell_counts[2], 1);
-    covered_cells_z.push_back(cx_wrapped);
-  }
-
-  std::vector<REAL> cell_centres[3];
-  cell_centres[0].reserve(mesh.get_cell_count());
-  cell_centres[1].reserve(mesh.get_cell_count());
-  cell_centres[2].reserve(mesh.get_cell_count());
-
-  int covered_cells = 0;
-  const REAL cell_width = mesh.cell_width_fine;
-
-  for (int cz = 0; cz < MAX(mesh.cell_counts[2], 1); cz++) {
-    index_mesh[2] = cz;
-    auto index_z = (ndim > 2) ? k_lookup[2 * k_lookup_stride + cz] : 0;
-
-    for (int cy = 0; cy < MAX(mesh.cell_counts[1], 1); cy++) {
-      index_mesh[1] = cy;
-      auto index_y = (ndim > 1) ? k_lookup[k_lookup_stride + cy] : 0;
-
-      for (int cx = 0; cx < mesh.cell_counts[0]; cx++) {
-        index_mesh[0] = cx;
-        auto index_x = k_lookup[cx];
-
-        if (std::count(covered_cells_x.begin(), covered_cells_x.end(), cx) &&
-            std::count(covered_cells_y.begin(), covered_cells_y.end(), cy) &&
-            std::count(covered_cells_z.begin(), covered_cells_z.end(), cz)) {
-
-          mesh.mesh_tuple_to_mh_tuple(index_mesh, index_mh);
-          const INT index_global =
-              mesh.get_mesh_hierarchy()->tuple_to_linear_global(index_mh);
-          // get the rank that owns that global cell
-          const int owning_rank =
-              mesh.get_mesh_hierarchy()->get_owner(index_global);
-
-          const int index_linear =
-              index_x +
-              k_lookup_dims[0] * (index_y + k_lookup_dims[1] * index_z);
-
-          const int test_rank = k_map[index_linear];
-
-          ASSERT_EQ(test_rank, owning_rank);
-          cell_centres[0].push_back((cx + 0.5) * cell_width);
-          cell_centres[1].push_back((cy + 0.5) * cell_width);
-          cell_centres[2].push_back((cz + 0.5) * cell_width);
-
-          covered_cells += 1;
-        }
-      }
-    }
-  }
-
+  std::mt19937 rng_pos(52234234);
   std::mt19937 rng_vel(52234231);
+  std::mt19937 rng_rank(18241);
 
-  const int N = covered_cells;
+  const int N = 1024;
   const int Ntest = 1024;
   const REAL dt = 1.0;
   const REAL tol = 1.0e-10;
   const int cell_count = domain.mesh.get_cell_count();
-  auto velocity_index = std::uniform_int_distribution<int>(0, 1);
-  auto cell_index =
-      std::uniform_int_distribution<int>(0, MAX(dims[0], dims[1]));
+
+  auto positions =
+      uniform_within_extents(N, ndim, mesh.global_extents, rng_pos);
+  auto velocities = NESO::Particles::normal_distribution(
+      N, 3, 0.0, dims[0] * cell_extent, rng_vel);
+
+  std::uniform_int_distribution<int> uniform_dist(
+      0, sycl_target.comm_pair.size_parent - 1);
 
   ParticleSet initial_distribution(N, A.get_particle_spec());
 
-  REAL vel_map[2] = {-1.0 / std::pow(2.0, subdivision_order),
-                     1.0 / std::pow(2.0, subdivision_order)};
   for (int px = 0; px < N; px++) {
-
-    // create particles in the centres of random cells
     for (int dimx = 0; dimx < ndim; dimx++) {
-      const REAL pos = cell_centres[dimx][px];
-      initial_distribution[Sym<REAL>("P")][px][dimx] = pos;
-      initial_distribution[Sym<REAL>("P_ORIG")][px][dimx] = pos;
+      initial_distribution[Sym<REAL>("P")][px][dimx] = positions[dimx][px];
+      initial_distribution[Sym<REAL>("P_ORIG")][px][dimx] = positions[dimx][px];
     }
-
-    // initialise velocities that are +-1 cell in each direction
     for (int dimx = 0; dimx < 3; dimx++) {
-      initial_distribution[Sym<REAL>("V")][px][dimx] =
-          vel_map[velocity_index(rng_vel)] * cell_extent;
+      initial_distribution[Sym<REAL>("V")][px][dimx] = velocities[dimx][px];
     }
-
+    initial_distribution[Sym<INT>("CELL_ID")][px][0] = 0;
     initial_distribution[Sym<INT>("ID")][px][0] = px;
+    const auto px_rank = uniform_dist(rng_rank);
+    initial_distribution[Sym<INT>("NESO_MPI_RANK")][px][0] = px_rank;
   }
 
-  A.add_particles_local(initial_distribution);
-
-  MeshHierarchyGlobalMap mesh_heirarchy_global_map(
-      sycl_target, domain.mesh, A.position_dat, A.cell_id_dat, A.mpi_rank_dat);
+  if (sycl_target.comm_pair.rank_parent == 0) {
+    A.add_particles_local(initial_distribution);
+  }
 
   CartesianPeriodic pbc(sycl_target, mesh, A.position_dat);
   CartesianCellBin ccb(sycl_target, mesh, A.position_dat, A.cell_id_dat);
@@ -192,16 +111,12 @@ TEST(ParticleGroup, stencil_move_multiple) {
 
   REAL T = 0.0;
 
-  int global_npart = 0;
-  MPICHK(MPI_Allreduce(&N, &global_npart, 1, MPI_INT, MPI_SUM,
-                       sycl_target.comm_pair.comm_parent));
-
   auto lambda_test = [&] {
     int npart_found = A.mpi_rank_dat->get_npart_local();
     int global_npart_found = 0;
     MPICHK(MPI_Allreduce(&npart_found, &global_npart_found, 1, MPI_INT, MPI_SUM,
                          sycl_target.comm_pair.comm_parent));
-    ASSERT_EQ(global_npart_found, global_npart);
+    ASSERT_EQ(global_npart_found, N);
 
     // for all cells
     for (int cellx = 0; cellx < cell_count; cellx++) {
@@ -271,44 +186,12 @@ TEST(ParticleGroup, stencil_move_multiple) {
     }
   };
 
-  auto lambda_test_mapping = [&] {
-    for (int cellx = 0; cellx < cell_count; cellx++) {
-      auto P = A[Sym<REAL>("P")]->cell_dat.get_cell(cellx);
-      auto C = A[Sym<INT>("CELL_ID")]->cell_dat.get_cell(cellx);
-      auto MPI_RANK = A[Sym<INT>("NESO_MPI_RANK")]->cell_dat.get_cell(cellx);
-
-      const int nrow = P->nrow;
-
-      // for each particle
-      for (int px = 0; px < nrow; px++) {
-        const int rank_global = (*MPI_RANK)[0][px];
-        const int rank_local = (*MPI_RANK)[1][px];
-
-        if (rank_local >= 0) {
-          ASSERT_EQ(rank_global, rank_local);
-        }
-      }
-    }
-  };
-
-  reset_mpi_ranks(A.mpi_rank_dat);
-  mesh_heirarchy_global_map.execute();
-  cart_local_mapper->map(A.position_dat, A.cell_id_dat, A.mpi_rank_dat);
-  lambda_test_mapping();
-
   for (int testx = 0; testx < Ntest; testx++) {
     pbc.execute();
 
-    reset_mpi_ranks(A.mpi_rank_dat);
-    mesh_heirarchy_global_map.execute();
-
-    cart_local_mapper->map(A.position_dat, A.cell_id_dat, A.mpi_rank_dat);
-    lambda_test_mapping();
-
-    A.local_move();
+    A.hybrid_move();
 
     ccb.execute();
-
     A.cell_move();
 
     lambda_test();
@@ -316,6 +199,5 @@ TEST(ParticleGroup, stencil_move_multiple) {
 
     T += dt;
   }
-
   mesh.free();
 }
