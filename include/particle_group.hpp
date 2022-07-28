@@ -37,9 +37,6 @@ private:
   // int
   BufferDevice<int> device_npart_cell;
 
-  template <typename T>
-  inline void compute_remove_compress_indicies(const int npart, T *usm_cells,
-                                               T *usm_layers);
   template <typename T> inline void realloc_dat(ParticleDatShPtr<T> &dat) {
     dat->realloc(this->npart_cell);
     dat->wait_realloc();

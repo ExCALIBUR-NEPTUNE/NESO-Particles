@@ -19,8 +19,16 @@
 using namespace cl;
 namespace NESO::Particles {
 
+/**
+ *  A LayerCompressor is a tool to remove rows from ParticleDat instances that
+ *  correspond to particle data where the particle has been removed. Particles
+ *  are removed when they move between cells and when they are transferred to
+ *  other MPI ranks. This ensures that particle data is not duplicated and that
+ *  the particle data is contiguous.
+ */
 class LayerCompressor {
 private:
+  SYCLTarget &sycl_target;
   const int ncell;
   BufferDevice<INT> d_remove_cells;
   BufferDevice<INT> d_remove_layers;
@@ -43,9 +51,17 @@ private:
   EventStack event_stack;
 
 public:
-  SYCLTarget &sycl_target;
-
   ~LayerCompressor() {}
+
+  /**
+   *  Construct a new layer compressor to compress all ParticleDat instances
+   *  that are contained within the passed containers.
+   *
+   *  @param sycl_target SYCLTarget to use as compute device.
+   *  @param ncell Number of cells within each ParticleDat.
+   *  @param particle_dats_real Container of ParticleDat instances of REAL type.
+   *  @param particle_dats_int Container of ParticleDat instances of INT type.
+   */
   LayerCompressor(
       SYCLTarget &sycl_target, const int ncell,
       std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
@@ -61,10 +77,27 @@ public:
 
   {}
 
+  /**
+   *  Set the ParticleDat which contains the cell ids of the particles. This is
+   *  not a function which is expected to be called by a user.
+   *
+   *  @param cell_id_dat ParticleDat containing particle cell ids.
+   */
   inline void set_cell_id_dat(ParticleDatShPtr<INT> cell_id_dat) {
     this->cell_id_dat = cell_id_dat;
   }
 
+  /**
+   *  For the specified N particles to remove at the given cells and rows
+   *  (layers) compute the data migration required to keep the particle data
+   *  contiguous.
+   *
+   *  @param npart Number of particles which are to be removed.
+   *  @param usm_cells Device accessible pointers to an array of length N that
+   * holds the cells of the particles that are to be removed.
+   *  @param usm_layers Device accessible pointers to an array of length N that
+   * holds the layers of the particles that are to be removed.
+   */
   template <typename T>
   inline void compute_remove_compress_indicies(const int npart, T *usm_cells,
                                                T *usm_layers) {
@@ -176,6 +209,13 @@ public:
                                 profile_elapsed(t0, profile_timestamp()));
   }
 
+  /**
+   * Remove particles from the ParticleDat instances.
+   *  
+   * @param npart Number of particles to remove.
+   * @param usm_cells Device accessible pointer to the particle cells.
+   * @param usm_layers Device accessible pointer to the particle rows (layers).
+   */
   template <typename T>
   inline void remove_particles(const int npart, T *usm_cells, T *usm_layers) {
     auto t0 = profile_timestamp();

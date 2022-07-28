@@ -16,9 +16,10 @@
 
 namespace NESO::Particles {
 
-/*
+/**
  * Container for the data within a single cell stored on the host. Data is
- * store column wise.
+ * store column wise. The data is typically particle data for a single
+ * ParticleDat for a single cell and exists as a 2D data structure.
  */
 template <typename T> class CellDataT {
 private:
@@ -34,12 +35,24 @@ private:
     return std::string(buffer);
   }
   std::string format(char value) { return std::string(1, value); }
+  SYCLTarget &sycl_target;
 
 public:
-  SYCLTarget &sycl_target;
+  /// Number of rows in the 2D data structure.
   const int nrow;
+  /// Number of columns in the 2D data structure.
   const int ncol;
+  // 2D data.
   std::vector<std::vector<T>> data;
+
+  /**
+   * Create a new, empty and uninitialised container for 2D data of the
+   * specified shape.
+   *
+   * @param sycl_target SYCLTarget to use as compute device.
+   * @param nrow Number of rows.
+   * @param ncol Number of columns.
+   */
   inline CellDataT(SYCLTarget &sycl_target, const int nrow, const int ncol)
       : sycl_target(sycl_target), nrow(nrow), ncol(ncol) {
     this->data = std::vector<std::vector<T>>(ncol);
@@ -48,7 +61,7 @@ public:
     }
   }
 
-  /*
+  /**
    *  Subscript operator for cell data. Data should be indexed by column then
    * row. e.g. CellData cell_data; T value = *cell_data[col][row];
    */
@@ -67,7 +80,7 @@ public:
 
 template <typename T> using CellData = std::shared_ptr<CellDataT<T>>;
 
-/*
+/**
  *  Container that allocates on the device a matrix of fixed size nrow X ncol
  *  for N cells. Data stored in column major format. i.e. Data order from
  *  slowest to fastest is: cell, column, row.
@@ -78,11 +91,24 @@ private:
   const int stride;
 
 public:
+  /// Compute device used by the instance.
   SYCLTarget &sycl_target;
+  /// Number of cells, labeled 0,...,N-1.
   const int ncells;
+  /// Number of rows in each cell.
   const int nrow;
+  /// Number of columns in each cell.
   const int ncol;
   ~CellDatConst() { sycl::free(this->d_ptr, sycl_target.queue); };
+  /**
+   * Create new CellDatConst on the specified compute target with a fixed cell
+   * count, fixed number of rows per cell and fixed number of columns per cell.
+   *
+   * @param sycl_target SYCLTarget to use as compute device.
+   * @param ncells Number of cells.
+   * @param nrow Number of rows.
+   * @param ncol Number of columns.
+   */
   CellDatConst(SYCLTarget &sycl_target, const int ncells, const int nrow,
                const int ncol)
       : sycl_target(sycl_target), ncells(ncells), nrow(nrow), ncol(ncol),
@@ -93,22 +119,32 @@ public:
     this->sycl_target.queue.wait();
   };
 
-  /*
+  /**
    * Helper function to index into the stored data. Note column major format.
+   *
+   * @param cell Cell index to index into.
+   * @param row Row to access.
+   * @param col Column to access.
+   * @returns Linear index into data structure for the specified row and column.
    */
   inline int idx(const int cell, const int row, const int col) {
     return (this->stride * cell) + (this->nrow * col + row);
   };
 
-  /*
+  /**
    * Get the device pointer for the underlying data. Only accessible on the
    * device.
+   *
+   * @return Returns a device pointer on the compute target.
    */
   T *device_ptr() { return this->d_ptr; };
 
-  /*
+  /**
    * Get the data stored in a provided cell on the host as a CellData
    * instance.
+   *
+   * @param cell Cell to access the underlying data for.
+   * @returns Cell data for cell.
    */
   inline CellData<T> get_cell(const int cell) {
     auto cell_data = std::make_shared<CellDataT<T>>(this->sycl_target,
@@ -122,8 +158,11 @@ public:
     this->sycl_target.queue.wait();
     return cell_data;
   }
-  /*
-   *  Set the data in a cell using a CellData instance.
+  /**
+   * Set the data in a cell using a CellData instance.
+   *
+   * @param cell Cell to set data for.
+   * @param cell_data Source data.
    */
   inline void set_cell(const int cell, CellData<T> cell_data) {
     NESOASSERT(cell_data->nrow >= this->nrow,
@@ -140,7 +179,7 @@ public:
   }
 };
 
-/*
+/**
  * Store data on each cell where the number of columns required per cell is
  * constant but the number of rows is variable. Data is stored in a column
  * major manner with a new device pointer per column.
@@ -156,10 +195,15 @@ private:
   std::stack<T *> stack_ptrs;
 
 public:
+  /// Compute device used by the instance.
   SYCLTarget &sycl_target;
+  /// Number of cells.
   const int ncells;
+  /// Number of rows in each cell.
   std::vector<INT> nrow;
+  /// Number of columns, uniform across all cells.
   const int ncol;
+  /// Number of rows currently allocated for each cell.
   std::vector<INT> nrow_alloc;
   ~CellDat() {
     // issues on cuda backend w/o this NULL check.
@@ -176,6 +220,15 @@ public:
     }
     sycl::free(this->d_ptr, sycl_target.queue);
   };
+
+  /**
+   * Create new CellDat on a specified compute target with a specified number of
+   * cells and number of columns per cell.
+   *
+   * @param sycl_target SYCLTarget to use as compute device.
+   * @param ncells Number of cells (fixed).
+   * @param ncol Number of columns in each cell (fixed).
+   */
   inline CellDat(SYCLTarget &sycl_target, const int ncells, const int ncol)
       : sycl_target(sycl_target), ncells(ncells), ncol(ncol), nrow_max(0) {
 
@@ -201,7 +254,7 @@ public:
     this->sycl_target.queue.wait();
   };
 
-  /*
+  /**
    * Set the number of rows required in a provided cell. This will realloc if
    * needed and copy the existing data into the new space. May not shrink the
    * array if the requested size is smaller than the existing size.
@@ -251,7 +304,7 @@ public:
                                 profile_elapsed(t0, profile_timestamp()));
   }
 
-  /*
+  /**
    * Wait for set_nrow to complete
    */
   inline void wait_set_nrow() {
@@ -267,8 +320,10 @@ public:
     }
   }
 
-  /*
+  /**
    *  Recompute nrow_max from current row counts.
+   *
+   *  @returns The maximum number of rows across all cells.
    */
   inline int compute_nrow_max() {
     this->nrow_max =
@@ -276,8 +331,10 @@ public:
     return this->nrow_max;
   }
 
-  /*
+  /**
    * Get the maximum number of rows across all cells.
+   *
+   * @returns The maximum number of rows across all cells.
    */
   inline int get_nrow_max() {
     if (this->nrow_max < 0) {
@@ -286,8 +343,11 @@ public:
     return this->nrow_max;
   }
 
-  /*
+  /**
    * Get the contents of a provided cell on the host as a CellData instance.
+   *
+   * @param cell Cell to get data from.
+   * @returns Cell contents of specified cell as CellData instance.
    */
   inline CellData<T> get_cell(const int cell) {
 
@@ -302,8 +362,11 @@ public:
     return cell_data;
   }
 
-  /*
+  /**
    * Set the contents of a cell on the device using a CellData instance.
+   *
+   * @param cell Cell index to set data in.
+   * @param cell_data New cell data to set.
    */
   inline void set_cell(const int cell, CellData<T> cell_data) {
     NESOASSERT(cell_data->nrow >= this->nrow[cell],
@@ -322,20 +385,33 @@ public:
     }
   }
 
-  /*
+  /**
    * Get the root device pointer for the data storage. Data can be accessed
    * on the device in SYCL kernels with access like:
-   *      d[cell_index][column_index][row_index]
+   *    d[cell_index][column_index][row_index]
+   *
+   * @returns Device pointer that can be used to access the underlying data.
    */
   T ***device_ptr() { return this->d_ptr; };
 
-  /*
+  /**
    * Get the device pointer for a column in a cell.
+   *
+   * @param cell Cell index to get pointer for.
+   * @param col Column in cell to get pointer for.
+   * @returns Device pointer to data for the specified column.
    */
   T *col_device_ptr(const int cell, const int col) {
     return this->h_ptr_cols[cell * this->ncol + col];
   }
 
+  /**
+   *  Helper function to print the contents of all cells or a specified range of
+   * cells.
+   *
+   *  @param start (optional) First cell to print.
+   *  @param end (option) Last cell minus one to print.
+   */
   inline void print(int start = -1, int end = -1) {
 
     start = (start < 0) ? 0 : start;
@@ -349,8 +425,10 @@ public:
     std::cout << "-----------------" << std::endl;
   }
 
-  /*
+  /**
    * Number of bytes to store a row of this CellDat
+   *
+   * @returns Number of bytes required to store a row.
    */
   inline size_t row_size() { return ((size_t)this->ncol) * sizeof(T); }
 };

@@ -14,16 +14,28 @@ using namespace std;
 
 namespace NESO::Particles {
 
+/**
+ * Periodic boundary conditions implementation designed to work with a
+ * CartesianHMesh.
+ */
 class CartesianPeriodic {
 private:
   BufferDevice<REAL> d_extents;
-
-public:
   SYCLTarget &sycl_target;
   CartesianHMesh &mesh;
   ParticleDatShPtr<REAL> position_dat;
 
+public:
   ~CartesianPeriodic(){};
+
+  /**
+   * Construct instance to apply periodic boundary conditions to particles
+   * within the passed ParticleDat.
+   *
+   * @param sycl_target SYCLTarget to use as compute device.
+   * @param mesh CartedianHMesh instance to use a domain for the particles.
+   * @param position_dat ParticleDat containing particle positions.
+   */
   CartesianPeriodic(SYCLTarget &sycl_target, CartesianHMesh &mesh,
                     ParticleDatShPtr<REAL> position_dat)
       : sycl_target(sycl_target), mesh(mesh), position_dat(position_dat),
@@ -39,6 +51,10 @@ public:
         .wait_and_throw();
   };
 
+  /**
+   * Apply periodic boundary conditions to the particle positions in the
+   * ParticleDat this instance was created with.
+   */
   inline void execute() {
 
     auto t0 = profile_timestamp();

@@ -14,19 +14,32 @@ using namespace std;
 
 namespace NESO::Particles {
 
+/**
+ * Bin particle positions into the cells of a CartesianHMesh.
+ */
 class CartesianCellBin {
 private:
   BufferDevice<int> d_cell_counts;
   BufferDevice<int> d_cell_starts;
   BufferDevice<int> d_cell_ends;
 
-public:
   SYCLTarget &sycl_target;
   CartesianHMesh &mesh;
   ParticleDatShPtr<REAL> position_dat;
   ParticleDatShPtr<INT> cell_id_dat;
 
+public:
   ~CartesianCellBin(){};
+
+  /**
+   * Create instance to bin particles into cells of a CartesianHMesh.
+   *
+   * @param sycl_target SYCLTarget to use as compute device.
+   * @param mesh CartesianHMesh to containing the particles.
+   * @param position_dat ParticleDat with components equal to the mesh dimension
+   * containing particle positions.
+   * @param cell_id_dat ParticleDat to write particle cell ids to.
+   */
   CartesianCellBin(SYCLTarget &sycl_target, CartesianHMesh &mesh,
                    ParticleDatShPtr<REAL> position_dat,
                    ParticleDatShPtr<INT> cell_id_dat)
@@ -52,6 +65,10 @@ public:
         .wait_and_throw();
   };
 
+  /**
+   *  Apply the cell binning kernel to each particle stored on this MPI rank.
+   *  Particles must be within the domain region owned by this MPI rank.
+   */
   inline void execute() {
     auto t0 = profile_timestamp();
 
