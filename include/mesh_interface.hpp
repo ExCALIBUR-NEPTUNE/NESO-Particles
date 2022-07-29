@@ -10,25 +10,101 @@
 
 namespace NESO::Particles {
 
+/**
+ *  Abstract base class for mesh types over which a MeshHierarchy is placed.
+ */
 class HMesh {
 
 public:
+  /**
+   * Get the MPI communicator of the mesh.
+   *
+   * @returns MPI communicator.
+   */
   virtual inline MPI_Comm get_comm() = 0;
+  /**
+   *  Get the number of dimensions of the mesh.
+   *
+   *  @returns Number of mesh dimensions.
+   */
   virtual inline int get_ndim() = 0;
+  /**
+   *  Get the Mesh dimensions.
+   *
+   *  @returns Mesh dimensions.
+   */
   virtual inline std::vector<int> &get_dims() = 0;
+  /**
+   * Get the subdivision order of the mesh.
+   *
+   * @returns Subdivision order.
+   */
   virtual inline int get_subdivision_order() = 0;
+  /**
+   * Get the total number of cells in the mesh.
+   *
+   * @returns Total number of mesh cells.
+   */
   virtual inline int get_cell_count() = 0;
+  /**
+   * Get the mesh width of the coarse cells in the MeshHierarchy.
+   *
+   * @returns MeshHierarchy coarse cell width.
+   */
   virtual inline double get_cell_width_coarse() = 0;
+  /**
+   * Get the mesh width of the fine cells in the MeshHierarchy.
+   *
+   * @returns MeshHierarchy fine cell width.
+   */
   virtual inline double get_cell_width_fine() = 0;
+  /**
+   * Get the inverse mesh width of the coarse cells in the MeshHierarchy.
+   *
+   * @returns MeshHierarchy inverse coarse cell width.
+   */
   virtual inline double get_inverse_cell_width_coarse() = 0;
+  /**
+   * Get the inverse mesh width of the fine cells in the MeshHierarchy.
+   *
+   * @returns MeshHierarchy inverse fine cell width.
+   */
   virtual inline double get_inverse_cell_width_fine() = 0;
+  /**
+   *  Get the global number of coarse cells.
+   *
+   *  @returns Global number of coarse cells.
+   */
   virtual inline int get_ncells_coarse() = 0;
+  /**
+   *  Get the number of fine cells per coarse cell.
+   *
+   *  @returns Number of fine cells per coarse cell.
+   */
   virtual inline int get_ncells_fine() = 0;
+  /**
+   * Get the MeshHierarchy instance placed over the mesh.
+   *
+   * @returns MeshHierarchy placed over the mesh.
+   */
   virtual inline MeshHierarchy *get_mesh_hierarchy() = 0;
+  /**
+   *  Free the mesh and associated communicators.
+   */
   virtual inline void free() = 0;
+  /**
+   *  Get a std::vector of MPI ranks which should be used to setup local
+   *  communication patterns.
+   *
+   *  @returns std::vector of MPI ranks.
+   */
   virtual inline std::vector<int> &get_local_communication_neighbours() = 0;
 };
 
+/**
+ * Example mesh that duplicates a MeshHierarchy as a HMesh for examples and
+ * testing.
+ */
 class CartesianHMesh : public HMesh {
 private:
   int cell_count;
@@ -43,23 +119,48 @@ private:
   std::vector<int> neighbour_ranks;
 
 public:
+  /// Holds the first cell this rank owns in each dimension.
   int cell_starts[3] = {0, 0, 0};
+  /// Holds the last cell+1 this ranks owns in each dimension.
   int cell_ends[3] = {1, 1, 1};
+  /// Global number of cells in each dimension.
   std::vector<int> cell_counts = {0, 0, 0};
+  /// Local number of cells in each dimension.
   int cell_counts_local[3] = {0, 0, 0};
+  /// Global extents of the mesh.
   double global_extents[3] = {0.0, 0.0, 0.0};
+  /// Width of the stencil used to determine which MPI ranks are neighbours.
   int stencil_width;
-
+  /// Number of dimensions of the mesh.
   const int ndim;
+  /// Vector holding the number of coarse cells in each dimension.
   std::vector<int> &dims;
+  /// Subdivision order to determine number of fine cells per coarse cell.
   const int subdivision_order;
+  /// Width of coarse cells, uniform in all dimensions.
   const double cell_width_coarse;
+  // Width of fine cells, uniform in all dimensions.
   const double cell_width_fine;
+  /// Inverse of the coarse cell width.
   const double inverse_cell_width_coarse;
+  /// Inverse of the fine cell width.
   const double inverse_cell_width_fine;
+  /// Global number of coarse cells.
   const int ncells_coarse;
+  /// Number of coarse cells per fine cell.
   const int ncells_fine;
-
+  /**
+   * Construct a mesh over a given MPI communicator with a specified shape.
+   *
+   * @param comm MPI Communicator to use for decomposition.
+   * @param ndim Number of dimensions.
+   * @param dims Number of coarse cells in each dimension.
+   * @param extent Width of each coarse cell in each dimension.
+   * @param subdivision_order Number of times to subdivide each coarse cell to
+   * produce the fine cells.
+   * @param stencil_width Width of the stencil, in number of cells, used to
+   * determine MPI neighbours.
+   */
   CartesianHMesh(MPI_Comm comm, const int ndim, std::vector<int> &dims,
                  const double extent = 1.0, const int subdivision_order = 1,
                  const int stencil_width = 0)
@@ -225,10 +326,13 @@ public:
   inline int get_cell_count() { return this->cell_count; };
   inline MeshHierarchy *get_mesh_hierarchy() { return &this->mesh_hierarchy; };
 
-  /*
+  /**
    * Convert a mesh index (index_x, index_y, ...) for this cartesian mesh to
    * the format for a MeshHierarchy: (coarse_x, coarse_y,.., fine_x,
    * fine_y,...).
+   *
+   * @param index_mesh Input tuple index on mesh.
+   * @param index_mh Output tuple index on MeshHierarchy.
    */
   inline void mesh_tuple_to_mh_tuple(const INT *index_mesh, INT *index_mh) {
     for (int dimx = 0; dimx < ndim; dimx++) {
@@ -239,6 +343,9 @@ public:
     }
   }
 
+  /**
+   *  Free the mesh and any associated communicators.
+   */
   inline void free() {
     int flag;
     MPICHK(MPI_Initialized(&flag))

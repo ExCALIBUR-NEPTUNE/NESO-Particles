@@ -16,6 +16,9 @@
 using namespace cl;
 namespace NESO::Particles {
 
+/**
+ *  Class to move particles on the global mesh.
+ */
 class GlobalMove {
 
 private:
@@ -35,9 +38,19 @@ private:
   BufferDeviceHost<int> dh_send_rank_npart;
 
 public:
+  /// Compute device used by the instance.
   SYCLTarget &sycl_target;
 
   ~GlobalMove(){};
+  /**
+   * Construct a new global move instance to move particles between the cells
+   * of a MeshHierarchy.
+   *
+   * @param sycl_target SYCLTarget to use as compute device.
+   * @param layer_compressor LayerCompressor to use to compress ParticleDat rows
+   * @param particle_dats_real Container of the REAL valued ParticleDats.
+   * @param particle_dats_int Container of the INT valued ParticleDats.
+   */
   GlobalMove(SYCLTarget &sycl_target, LayerCompressor &layer_compressor,
              std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
              std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int)
@@ -52,6 +65,11 @@ public:
     this->departing_identify.set_mpi_rank_dat(mpi_rank_dat);
   }
 
+  /**
+   *  Use the MPI ranks stored in the first component of the MPI rank dat to
+   *  move particles between the MPI ranks that own cells in a MeshHierarchy.
+   *  Particles are unpacked into cell 0 of the receiving MPI rank.
+   */
   inline void move() {
     auto t0 = profile_timestamp();
     // MPI RMA to inform remote ranks they will recv particles through the

@@ -16,6 +16,9 @@
 
 namespace NESO::Particles {
 
+/**
+ *  Class to pack particle data to send using MPI operations.
+ */
 class ParticlePacker {
 private:
   int num_dats_real = 0;
@@ -77,15 +80,25 @@ private:
   }
 
 public:
+  /// Number of bytes required per particle packed.
   int num_bytes_per_particle;
+  /// CellDat used to pack the particles to be sent to each remote rank on the
+  // device.
   CellDat<char> cell_dat;
-
+  /// Host buffer to copy packed data to before sending using MPI routines.
   BufferHost<char> h_send_buffer;
+  /// Vector of offsets to index into the host send buffer.
   BufferHost<INT> h_send_offsets;
+  /// Required length of the send buffer.
   INT required_send_buffer_length;
-
+  /// Compute device used by the instance.
   SYCLTarget &sycl_target;
   ~ParticlePacker(){};
+  /**
+   * Construct a particle packing object on a compute device.
+   *
+   * @param sycl_target SYCLTarget to use as compute device.
+   */
   ParticlePacker(SYCLTarget &sycl_target)
       : sycl_target(sycl_target),
         cell_dat(sycl_target, sycl_target.comm_pair.size_parent, 1),
@@ -95,8 +108,19 @@ public:
         dh_particle_dat_ncomp_real(sycl_target, 1),
         dh_particle_dat_ncomp_int(sycl_target, 1){};
 
+  /**
+   *  Reset the instance before packing particle data.
+   */
   inline void reset() {}
 
+  /**
+   * Get the packed particle data on the host such that it can be sent.
+   *
+   * @param num_remote_send_ranks Number of remote ranks involved in send.
+   * @param h_send_rank_npart_ptr Host accessible pointer holding the number of
+   * particles to be sent to each remote rank.
+   * @returns Pointer to host allocated buffer holding the packed particle data.
+   */
   inline char *get_packed_data_on_host(const int num_remote_send_ranks,
                                        const int *h_send_rank_npart_ptr) {
     this->h_send_buffer.realloc_no_copy(this->required_send_buffer_length);
@@ -126,6 +150,25 @@ public:
     return this->h_send_buffer.ptr;
   }
 
+  /**
+   *  Pack particle data on the device.
+   *
+   * @param num_remote_send_ranks Number of remote ranks involved in send.
+   * @param h_send_rank_npart Host buffer holding the number of particles to be
+   * sent to each remote rank.
+   * @param dh_send_rank_map Maps MPI ranks to the cell in the packing CellDat.
+   * @param num_particles_leaving Total number of particles to pack.
+   * @param d_pack_cells BufferDevice holding the cells of particles to pack.
+   * @param d_pack_layers_src BufferDevice holding the layers(rows) of particles
+   * to pack.
+   * @param d_pack_layers_dst BufferDevice holding the destination layers in
+   * the packing CellDat.
+   * @param particle_dats_real Container of REAL ParticleDat instances to pack.
+   * @param particle_dats_int Container of INT ParticleDat instances to pack.
+   * @param rank_component Component of MPI rank ParticleDat to inspect for
+   * destination MPI rank.
+   * @returns sycl::event to wait on for packing completion.
+   */
   inline sycl::event
   pack(const int num_remote_send_ranks, BufferHost<int> &h_send_rank_npart,
        BufferDeviceHost<int> &dh_send_rank_map, const int num_particles_leaving,
@@ -228,6 +271,9 @@ public:
   };
 };
 
+/**
+ * Class to unpack particle data which was packed using the ParticlePacker.
+ */
 class ParticleUnpacker {
 private:
   int num_dats_real = 0;
@@ -293,13 +339,24 @@ private:
   }
 
 public:
+  /// Host buffer to receive particle data into from MPI operations.
   BufferHost<char> h_recv_buffer;
+  /// Offsets into the recv buffer for each remote rank that will send to this
+  // rank.
   BufferHost<INT> h_recv_offsets;
+  /// Number of particles expected in the next/current recv operation.
   int npart_recv;
+  /// Number of bytes per particle.
   int num_bytes_per_particle;
-
+  /// Compute device used by the instance.
   SYCLTarget &sycl_target;
   ~ParticleUnpacker(){};
+
+  /**
+   * Construct an unpacking object.
+   *
+   * @param sycl_target SYCLTarget to use as compute device.
+   */
   ParticleUnpacker(SYCLTarget &sycl_target)
       : sycl_target(sycl_target), h_recv_buffer(sycl_target, 1),
         h_recv_offsets(sycl_target, 1), d_recv_buffer(sycl_target, 1),
@@ -308,6 +365,17 @@ public:
         dh_particle_dat_ncomp_real(sycl_target, 1),
         dh_particle_dat_ncomp_int(sycl_target, 1){};
 
+  /**
+   *  Reset the unpacker ready to unpack received particles.
+   *
+   *  @param num_remote_recv_ranks Number of MPI ranks that will send to this
+   * rank.
+   *  @param h_recv_rank_npart Number of particles each rank will send to this
+   * rank.
+   *  @param particle_dats_real Container of REAL ParticleDat instances to
+   * unpack.
+   *  @param particle_dats_int Container of INT ParticleDat instances to unpack.
+   */
   inline void
   reset(const int num_remote_recv_ranks, BufferHost<int> &h_recv_rank_npart,
         std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
@@ -334,9 +402,13 @@ public:
                                         this->num_bytes_per_particle);
   }
 
-  /*
+  /**
    * Unpack the recv buffer into the particle group. Particles unpack into cell
    * 0.
+   *
+   * @param particle_dats_real Container of REAL ParticleDat instances to
+   * unpack.
+   * @param particle_dats_int Container of INT ParticleDat instances to unpack.
    */
   inline void
   unpack(std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,

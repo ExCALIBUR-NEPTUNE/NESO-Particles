@@ -13,12 +13,19 @@
 using namespace cl;
 namespace NESO::Particles {
 
-/*
+/**
  * Abstract class to map positions to owning MPI ranks based on local
  * information, i.e. halo cells. Could also use or set the cell id.
  */
 class LocalMapper {
 public:
+  /**
+   * This function maps particle positions to cells on the underlying mesh.
+   *
+   * @param position_dat ParticleDat containing particle positions.
+   * @param cell_id_dat ParticleDat containing particle cell ids.
+   * @param mpi_rank_dat ParticleDat containing particle MPI ranks.
+   */
   virtual inline void map(ParticleDatShPtr<REAL> &position_dat,
                           ParticleDatShPtr<INT> &cell_id_dat,
                           ParticleDatShPtr<INT> &mpi_rank_dat) = 0;
@@ -26,12 +33,15 @@ public:
 
 typedef std::shared_ptr<LocalMapper> LocalMapperShPtr;
 
-/*
+/**
  *  Dummy LocalMapper implementation that does nothing to use as a default.
  */
 class DummyLocalMapperT : public LocalMapper {
 private:
 public:
+  /**
+   *  No-op implementation of map.
+   */
   inline void map(ParticleDatShPtr<REAL> &position_dat,
                   ParticleDatShPtr<INT> &cell_id_dat,
                   ParticleDatShPtr<INT> &mpi_rank_dat){};

@@ -13,6 +13,11 @@
 using namespace cl;
 namespace NESO::Particles {
 
+/**
+ * This class handles the efficient and asynchronous exchange of particle
+ * counts and data between MPI ranks when moving particles between cells of the
+ * MeshHierarchy.
+ */
 class GlobalMoveExchange {
 
 private:
@@ -26,16 +31,29 @@ private:
   BufferHost<MPI_Status> h_recv_status;
 
 public:
+  /// Number of remote ranks to send particles to.
   int num_remote_send_ranks;
+  /// Number of remote ranks to recv particles from.
   int num_remote_recv_ranks;
+  /// Host array of MPI ranks to send particles to.
   BufferHost<int> h_send_ranks;
+  /// Host array of MPI ranks to recv particles from.
   BufferHost<int> h_recv_ranks;
+  /// Host array of particle counts for each send rank.
   BufferHost<int> h_send_rank_npart;
+  /// Host array of particle counts for each recv rank.
   BufferHost<int> h_recv_rank_npart;
 
+  /// Compute device used by the instance.
   SYCLTarget &sycl_target;
 
   ~GlobalMoveExchange() { MPICHK(MPI_Win_free(&this->recv_win)); };
+
+  /**
+   * Construct a new instance to exchange particle counts and data.
+   *
+   * @param sycl_target SYCLTarget to use as compute device.
+   */
   GlobalMoveExchange(SYCLTarget &sycl_target)
       : sycl_target(sycl_target), h_send_ranks(sycl_target, 1),
         h_recv_ranks(sycl_target, 1), h_send_rank_npart(sycl_target, 1),
@@ -48,7 +66,7 @@ public:
                             &this->recv_win_data, &this->recv_win));
   };
 
-  /*
+  /**
    * Initialise the start of a new epoch where global communication is
    * identified. Collective on the communicator.
    */
@@ -61,9 +79,15 @@ public:
     MPICHK(MPI_Ibarrier(this->comm, &this->mpi_request));
   }
 
-  /*
+  /**
    * Communicate how many ranks will send particles to each rank. Collective on
    * the communicator.
+   *
+   * @param num_remote_send_ranks Number of remote ranks particles will be sent
+   * to.
+   * @param dh_send_ranks Array of remote ranks particles will be sent to.
+   * @param dh_send_rank_npart Array of particle counts that will be sent to
+   * each rank.
    */
   inline void npart_exchange_sendrecv(const int num_remote_send_ranks,
                                       BufferDeviceHost<int> &dh_send_ranks,
@@ -100,7 +124,7 @@ public:
     MPICHK(MPI_Ibarrier(this->comm, &this->mpi_request));
   }
 
-  /*
+  /**
    * Finalise the communication which indicates to remote ranks the number of
    * ranks that will send them particles.
    */
@@ -154,8 +178,12 @@ public:
                        this->h_recv_status.ptr));
   }
 
-  /*
+  /**
    *  Start the exchange the particle data. Collective on the communicator.
+   *
+   *  @param particle_packer ParticlePacker instance to pack particle data.
+   *  @param paticle_unpacker ParticleUnpacker instance to use to unpack
+   *  particle data.
    */
   inline void exchange_init(ParticlePacker &particle_packer,
                             ParticleUnpacker &particle_unpacker) {
@@ -199,8 +227,11 @@ public:
                                 profile_elapsed(t0, profile_timestamp()));
   }
 
-  /*
+  /**
    *  Finalise the exchange the particle data. Collective on the communicator.
+   *
+   *  @param particle_unpack ParticleUnpacker instance to use to unpack
+   *  particle data.
    */
   inline void exchange_finalise(ParticleUnpacker &particle_unpacker) {
 
