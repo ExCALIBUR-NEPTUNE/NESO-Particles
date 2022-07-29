@@ -25,6 +25,10 @@
 using namespace cl;
 namespace NESO::Particles {
 
+/**
+ *  Fundamentally a ParticleGroup is a collection of ParticleDats, domain and a
+ *  compute device.
+ */
 class ParticleGroup {
 private:
   int ncell;
@@ -56,28 +60,42 @@ private:
   CellMove cell_move_ctx;
 
 public:
+  /// Domain this instance is defined over.
   Domain domain;
+  /// Compute device used by the instance.
   SYCLTarget &sycl_target;
-
+  /// Map from Sym instances to REAL valued ParticleDat instances.
   std::map<Sym<REAL>, ParticleDatShPtr<REAL>> particle_dats_real{};
+  /// Map from Sym instances to INT valued ParticleDat instances.
   std::map<Sym<INT>, ParticleDatShPtr<INT>> particle_dats_int{};
 
-  // ParticleDat storing Positions
+  /// Sym of ParticleDat storing particle positions.
   std::shared_ptr<Sym<REAL>> position_sym;
+  /// ParticleDat storing particle positions.
   ParticleDatShPtr<REAL> position_dat;
-  // ParticleDat storing cell ids
+  /// Sym of ParticleDat storing particle cell ids.
   std::shared_ptr<Sym<INT>> cell_id_sym;
+  /// ParticleDat storing particle cell ids.
   ParticleDatShPtr<INT> cell_id_dat;
-  // ParticleDat storing MPI rank
+  /// Sym of ParticleDat storing particle MPI ranks.
   std::shared_ptr<Sym<INT>> mpi_rank_sym;
+  /// ParticleDat storing particle MPI ranks.
   ParticleDatShPtr<INT> mpi_rank_dat;
 
-  // ParticleSpec of all the ParticleDats of this ParticleGroup
+  /// ParticleSpec of all the ParticleDats of this ParticleGroup.
   ParticleSpec particle_spec;
 
-  // compression for dats when particles are removed
+  /// Layer compression instance for dats when particles are removed from cells.
   LayerCompressor layer_compressor;
 
+  /**
+   * Construct a new ParticleGroup.
+   *
+   * @param domain Domain instance containing these particles.
+   * @param particle_spec ParticleSpec that describes the ParticleDat instances
+   * required.
+   * @param sycl_target SYCLTarget to use as compute device.
+   */
   ParticleGroup(Domain domain, ParticleSpec &particle_spec,
                 SYCLTarget &sycl_target)
       : domain(domain), sycl_target(sycl_target),
@@ -131,53 +149,173 @@ public:
   }
   ~ParticleGroup() {}
 
+  /**
+   *  Add a ParticleDat to the ParticleGroup after construction.
+   *
+   *  @param particle_dat New ParticleDat to add.
+   */
   inline void add_particle_dat(ParticleDatShPtr<REAL> particle_dat);
+  /**
+   *  Add a ParticleDat to the ParticleGroup after construction.
+   *
+   *  @param particle_dat New ParticleDat to add.
+   */
   inline void add_particle_dat(ParticleDatShPtr<INT> particle_dat);
-
+  /**
+   *  Add particles to the ParticleGroup. Any rank may add particles that exist
+   *  anywhere in the domain. Implemetation TODO. This call is collective
+   *  across the ParticleGroup and ranks that do not add particles should not
+   *  pass any new particle data.
+   */
   inline void add_particles();
+
+  /**
+   *  Add particles to the ParticleGroup. Any rank may add particles that exist
+   *  anywhere in the domain. Implemetation TODO. This call is collective
+   *  across the ParticleGroup and ranks that do not add particles should not
+   *  pass any new particle data.
+   *
+   *  @param particle_data New particle data to add to the ParticleGroup.
+   */
   template <typename U> inline void add_particles(U particle_data);
+
+  /**
+   *  Add particles only to this MPI rank. It is assumed that the added
+   *  particles are in the domain region owned by this MPI rank. If not, see
+   *  `ParticleGroup::add_particles`.
+   *
+   *  @param particle_data New particles to add.
+   */
   inline void add_particles_local(ParticleSet &particle_data);
 
+  /**
+   *  Get the total number of particles on this MPI rank.
+   *
+   *  @returns Local particle count.
+   */
   inline int get_npart_local() { return this->position_dat->get_npart_local(); }
 
+  /**
+   *  Enables access to the ParticleDat instances using the subscript operators.
+   *
+   *  @param sym Sym<REAL> of ParticleDat to access.
+   */
   inline ParticleDatShPtr<REAL> &operator[](Sym<REAL> sym) {
     return this->particle_dats_real.at(sym);
   };
+  /**
+   *  Enables access to the ParticleDat instances using the subscript operators.
+   *
+   *  @param sym Sym<INT> of ParticleDat to access.
+   */
   inline ParticleDatShPtr<INT> &operator[](Sym<INT> sym) {
     return this->particle_dats_int.at(sym);
   };
 
+  /**
+   *  Get a CellData instance that holds all the particle data for a
+   *  ParticleDat for a cell.
+   *
+   *  @param sym Sym<REAL> indicating which ParticleDat to access.
+   *  @param cell Cell index to access.
+   *  @returns CellData for requested cell.
+   */
   inline CellData<REAL> get_cell(Sym<REAL> sym, const int cell) {
     return particle_dats_real[sym]->cell_dat.get_cell(cell);
   }
 
+  /**
+   *  Get a CellData instance that holds all the particle data for a
+   *  ParticleDat for a cell.
+   *
+   *  @param sym Sym<INT> indicating which ParticleDat to access.
+   *  @param cell Cell index to access.
+   *  @returns CellData for requested cell.
+   */
   inline CellData<INT> get_cell(Sym<INT> sym, const int cell) {
     return particle_dats_int[sym]->cell_dat.get_cell(cell);
   }
 
+  /**
+   *  Remove particles from the ParticleGroup.
+   *
+   *  @param npart Number of particles to remove.
+   *  @param cells Vector of particle cells.
+   *  @param layers Vector of particle layers(rows).
+   */
   inline void remove_particles(const int npart, const std::vector<INT> &cells,
                                const std::vector<INT> &layers);
+  /**
+   *  Remove particles from the ParticleGroup.
+   *
+   *  @param npart Number of particles to remove.
+   *  @param usm_cells Device accessible array of particle cells.
+   *  @param usm_layers Device accessible array of particle layers(rows).
+   */
   template <typename T>
   inline void remove_particles(const int npart, T *usm_cells, T *usm_layers);
 
+  /**
+   * Get the number of particles in a cell.
+   *
+   * @param cell Cell to query.
+   * @returns Number of particles in queried cell.
+   */
   inline INT get_npart_cell(const int cell) {
     return this->npart_cell.ptr[cell];
   }
+
+  /**
+   *  Get the ParticleSpec of the ParticleDats stored in this ParticleGroup.
+   *
+   *  @returns ParticleSpec of stored particles.
+   */
   inline ParticleSpec &get_particle_spec() { return this->particle_spec; }
+
+  /**
+   * Use the MPI ranks in the first component of the MPI rank dat to move
+   * particles globally using the MeshHierarchy of the mesh in the domain.
+   *
+   * Must be called collectively on the ParticleGroup.
+   */
   inline void global_move();
+  /**
+   * Use the MPI ranks in the second component of the MPI rank dat to move
+   * particles to neighbouring ranks using the neighbouring ranks defined on
+   * the mesh.
+   *
+   * Must be called collectively on the ParticleGroup.
+   */
   inline void local_move();
+  /**
+   * Perform a global move using non-negative MPI ranks in the first component
+   * of the MPI rank dat. Then bin moved particles into local cells to obtain
+   * any required ranks for the local move. Second perform a local move to move
+   * particles based on the MPI rank stored in the second component of the MPI
+   * rank dat.
+   *
+   * Must be called collectively on the ParticleGroup.
+   */
   inline void hybrid_move();
-  /*
+  /**
    * Number of bytes required to store the data for one particle.
+   *
+   * @returns Number of bytes required to store one particle.
    */
   inline size_t particle_size();
 
+  /**
+   *  Move particles between cells using the cell ids stored in the cell id dat.
+   */
   inline void cell_move() {
     this->cell_move_ctx.move();
     this->set_npart_cell_from_dat();
   };
 
-  // set the cell particle counts on the ParticleGroup from the position dat
+  /**
+   *  Copy the particle counts per cell from the position ParticleDat to the
+   *  npart cell array of the ParticleGroup.
+   */
   inline void set_npart_cell_from_dat() {
 
     const auto k_ncell = this->ncell;
@@ -195,6 +333,12 @@ public:
         .wait_and_throw();
   }
 
+  /**
+   *  Print particle data for all particles for the specified ParticleDats.
+   *
+   *  @param args Sym<REAL> or Sym<INT> instances that indicate which particle
+   *  data to print.
+   */
   template <typename... T> inline void print(T... args);
 };
 

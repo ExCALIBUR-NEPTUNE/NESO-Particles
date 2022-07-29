@@ -15,21 +15,40 @@ using namespace cl;
 
 namespace NESO::Particles {
 
+/**
+ *  Wrapper around a CellDat to store particle data on a per cell basis.
+ */
 template <typename T> class ParticleDatT {
 private:
 public:
+  /// Device only accessible array of the particle counts per cell.
   int *d_npart_cell;
+  /// Host only accessible array of particle counts per cell.
   int *h_npart_cell;
-
+  /// Sym object this ParticleDat was created with.
   const Sym<T> sym;
+  /// CellDat instance that contains the actual particle data.
   CellDat<T> cell_dat;
+  /// Number of components stored per particle (columns in the CellDat).
   const int ncomp;
+  /// Number of cells this ParticleDat is defined on.
   const int ncell;
+  /// Flat to indicate if this ParticleDat is to hold particle positions or
+  // cell ids.
   const bool positions;
+  /// Label given to the ParticleDat.
   const std::string name;
-
+  /// Compute device used by the instance.
   SYCLTarget &sycl_target;
 
+  /**
+   * Create a new ParticleDat.
+   *
+   * @param sycl_target SYCLTarget to use as compute device.
+   * @param sym Sym object that defines the type and label.
+   * @param ncell Number of cells this ParticleDat is defined over.
+   * @param positions Does this Dat hold particle positions or cell ids.
+   */
   ParticleDatT(SYCLTarget &sycl_target, const Sym<T> sym, int ncomp, int ncell,
                bool positions = false)
       : sycl_target(sycl_target), sym(sym), name(sym.name), ncomp(ncomp),
@@ -46,22 +65,40 @@ public:
     this->npart_host_to_device();
   }
 
+  /**
+   *  Copy cell particle counts from host buffer to device buffer.
+   */
   inline void npart_host_to_device() {
     this->sycl_target.queue
         .memcpy(this->d_npart_cell, this->h_npart_cell,
                 this->ncell * sizeof(int))
         .wait();
   }
+  /**
+   *  Asynchronously copy cell particle counts from host buffer to device
+   * buffer.
+   *
+   *  @returns sycl::event for copy operation.
+   */
   inline sycl::event async_npart_host_to_device() {
     return this->sycl_target.queue.memcpy(
         this->d_npart_cell, this->h_npart_cell, this->ncell * sizeof(int));
   }
+  /**
+   *  Copy cell particle counts from device buffer to host buffer.
+   */
   inline void npart_device_to_host() {
     this->sycl_target.queue
         .memcpy(this->h_npart_cell, this->d_npart_cell,
                 this->ncell * sizeof(int))
         .wait();
   }
+  /**
+   *  Asynchronously copy cell particle counts from device buffer to host
+   * buffer.
+   *
+   *  @returns sycl::event for copy operation.
+   */
   inline sycl::event async_npart_device_to_host() {
     return this->sycl_target.queue.memcpy(
         this->h_npart_cell, this->d_npart_cell, this->ncell * sizeof(int));
@@ -72,19 +109,62 @@ public:
     sycl::free(this->d_npart_cell, this->sycl_target.queue);
   }
 
-  inline void set_compute_target(SYCLTarget &sycl_target) {
-    this->sycl_target = sycl_target;
-  }
+  /**
+   *  Add particle data to the ParticleDat.
+   *
+   *  @param npart_new Number of new particles to add.
+   *  @param new_data_exists Indicate if there is new data to copy of if the
+   *  data should be initialised with zeros.
+   *  @param cells Cell indices of the new particles.
+   *  @param layers Layer (row) indices of the new particles.
+   *  @param data Particle data to copy into the ParticleDat.
+   */
   inline void append_particle_data(const int npart_new,
                                    const bool new_data_exists,
                                    std::vector<INT> &cells,
                                    std::vector<INT> &layers,
                                    std::vector<T> &data);
+  /**
+   *  Realloc the underlying CellDat such that the indicated new number of
+   *  particles can be stored.
+   *
+   *  @param npart_cell_new Particle counts for each cell.
+   */
   inline void realloc(std::vector<INT> &npart_cell_new);
+  /**
+   *  Realloc the underlying CellDat such that the indicated new number of
+   *  particles can be stored.
+   *
+   *  @param npart_cell_new Particle counts for each cell.
+   */
   template <typename U> inline void realloc(BufferShared<U> &npart_cell_new);
+  /**
+   *  Realloc the underlying CellDat such that the indicated new number of
+   *  particles can be stored.
+   *
+   *  @param npart_cell_new Particle counts for each cell.
+   */
   template <typename U> inline void realloc(BufferHost<U> &npart_cell_new);
+  /**
+   *  Realloc the underlying CellDat such that the indicated new number of
+   *  particles can be stored for a particular cell.
+   *
+   *  @param cell Cell index to reallocate.
+   *  @param npart_cell_new Particle counts for the cell.
+   */
   inline void realloc(const int cell, const int npart_cell_new);
 
+  /**
+   * Asynchronously copy particle data from old cells/layers to new
+   * cells/layers.
+   *
+   * @param npart Number of particles to copy.
+   * @param d_cells_old Device pointer to an array of old cells.
+   * @param d_cells_new Device pointer to an array of new cells.
+   * @param d_layers_old Device pointer to an array of old layers.
+   * @param d_layers_new Device pointer to an array of new layers.
+   * @returns sycl::event to wait on for data copy.
+   */
   inline sycl::event copy_particle_data(const int npart, const INT *d_cells_old,
                                         const INT *d_cells_new,
                                         const INT *d_layers_old,
@@ -114,8 +194,10 @@ public:
     return event;
   }
 
-  /*
+  /**
    * Get the number of particles stored in all cells
+   *
+   * @returns Total number of stored particles.
    */
   inline INT get_npart_local() {
     INT n = 0;
@@ -125,9 +207,13 @@ public:
     return n;
   }
 
-  /*
+  /**
    * Async call to set d_npart_cells from a device buffer. npart_device_to_host
    * must be called on event completion.
+   *
+   * @param d_npart_cell_in Device accessible pointer to an array containing new
+   * cell counts.
+   * @returns sycl::event to wait on for completion.
    */
   template <typename U>
   inline sycl::event set_npart_cells_device(const U *d_npart_cell_in) {
@@ -141,6 +227,12 @@ public:
     return event;
   }
 
+  /**
+   *  Set cell particle counts from host accessible pointer.
+   *  npart_host_to_device must be called to set counts on the device.
+   *
+   *  @param h_npart_cell_in Host pointer to cell particle counts.
+   */
   template <typename U>
   inline void set_npart_cells_host(const U *h_npart_cell_in) {
     for (int cellx = 0; cellx < this->ncell; cellx++) {
@@ -148,6 +240,12 @@ public:
     }
   }
 
+  /**
+   *  Set the particle count in a single cell. Assigns on both host and device.
+   *
+   *  @param cell Cell to set particle count for.
+   *  @param npart New particle count for cell.
+   */
   inline void set_npart_cell(const INT cell, const int npart) {
     this->h_npart_cell[cell] = npart;
     this->sycl_target.queue
@@ -156,6 +254,12 @@ public:
         .wait();
     return;
   }
+  /**
+   *  Set particle counts in cells from std::vector. Sets on both host and
+   * device.
+   *
+   *  @param npart std::vector of new particle counts per cell.
+   */
   inline void set_npart_cells(std::vector<INT> &npart) {
     NESOASSERT(npart.size() >= this->ncell, "bad vector size");
     for (int cellx = 0; cellx < this->ncell; cellx++) {
@@ -165,6 +269,12 @@ public:
     return;
   }
 
+  /**
+   *  Set the particle counts in cells from a BufferHost. Sets on both host and
+   *  device.
+   *
+   *  @param h_npart_cell_in New particle counts per cell.
+   */
   template <typename U>
   inline void set_npart_cells(const BufferHost<U> &h_npart_cell_in) {
     NESOASSERT(h_npart_cell_in.size >= this->ncell, "bad BufferHost size");
@@ -174,6 +284,14 @@ public:
     this->npart_host_to_device();
     return;
   }
+
+  /**
+   *  Asynchronously set the particle counts in cells from a BufferHost. Sets
+   *  on both host and device.
+   *
+   *  @param h_npart_cell_in New particle counts per cell.
+   *  @returns sycl::event to wait on for device assignment.
+   */
   template <typename U>
   inline sycl::event
   async_set_npart_cells(const BufferHost<U> &h_npart_cell_in) {
@@ -185,6 +303,13 @@ public:
   }
 
   inline void trim_cell_dat_rows();
+
+  /**
+   *  Utility function to print the contents of all or a select range of cells.
+   *
+   *  @param start Optional first cell to start printing from.
+   *  @param end Optional end cell +1 to end printing at.
+   */
   inline void print(const int start = 0, int end = -1) {
     if (end < 0) {
       end = this->ncell;
@@ -193,10 +318,22 @@ public:
     this->cell_dat.print(start, end);
   };
 
+  /**
+   *  Get an upper bound for the number of particles. May be a very bad
+   *  approximation.
+   *
+   *  @returns Upper bound for number of particles.
+   */
   inline INT get_npart_upper_bound() {
     return this->cell_dat.ncells * this->cell_dat.get_nrow_max();
   }
 
+  /**
+   *  Get the size of the iteration set required to loop over all particles
+   *  with the particle loop macros.
+   *
+   *  @returns Particle Loop iteration set size.
+   */
   inline INT get_particle_loop_iter_range() {
 #ifdef NESO_PARTICLES_ITER_PARTICLES
     return this->cell_dat.ncells * this->cell_dat.get_nrow_max();
@@ -204,13 +341,25 @@ public:
     return this->cell_dat.ncells;
 #endif
   }
+  /**
+   *  Get the size of the iteration set per cell stride required to loop over
+   *  all particles with the particle loop macros.
+   *
+   *  @returns Particle Loop iteration stride size.
+   */
   inline INT get_particle_loop_cell_stride() {
     return this->cell_dat.get_nrow_max();
   }
+  /**
+   *  Get a device pointer to the array that stores particle counts per cell
+   *  for the particle loop macros.
+   *
+   *  @returns Device pointer to particle counts per cell.
+   */
   inline int *get_particle_loop_npart_cell() { return this->d_npart_cell; }
 
-  /*
-   *  Wait for a realloc to complete
+  /**
+   *  Wait for a realloc to complete.
    */
   inline void wait_realloc() { this->cell_dat.wait_set_nrow(); }
 };
@@ -230,6 +379,7 @@ inline ParticleDatShPtr<T> ParticleDat(SYCLTarget &sycl_target,
   return std::make_shared<ParticleDatT<T>>(sycl_target, prop.sym, prop.ncomp,
                                            ncell, prop.positions);
 }
+
 template <typename T>
 inline void ParticleDatT<T>::realloc(std::vector<INT> &npart_cell_new) {
   NESOASSERT(npart_cell_new.size() >= this->ncell,

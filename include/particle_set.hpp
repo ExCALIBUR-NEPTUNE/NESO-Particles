@@ -13,6 +13,9 @@
 
 namespace NESO::Particles {
 
+/**
+ *  Container to hold particle data for a set of particles.
+ */
 class ParticleSet {
 
 private:
@@ -23,8 +26,16 @@ private:
   std::vector<INT> dummy_int;
 
 public:
+  /// Number of particles stored in the container.
   const int npart;
 
+  /**
+   *  Constructor for a set of particles.
+   *
+   *  @param npart Number of particles required.
+   *  @particle_spec ParticleSpec instance that describes the particle
+   *  properties.
+   */
   ParticleSet(const int npart, ParticleSpec particle_spec) : npart(npart) {
 
     for (auto const &spec : particle_spec.properties_real) {
@@ -47,6 +58,14 @@ public:
                                                     this->npart};
   };
 
+  /**
+   *  Get the vector of values describing the particle data for a given
+   *  Sym<REAL>. Will return an empty std::vector if the passed Sym is not a
+   *  stored property.
+   *
+   *  @param sym Sym<REAL> to access.
+   *  @returns std::vector of data or empty std::vector.
+   */
   inline std::vector<REAL> &get(Sym<REAL> const &sym) {
     if (contains(sym)) {
       return values_real[sym];
@@ -54,6 +73,14 @@ public:
       return dummy_real;
     }
   };
+  /**
+   *  Get the vector of values describing the particle data for a given
+   *  Sym<INT>. Will return an empty std::vector if the passed Sym is not a
+   *  stored property.
+   *
+   *  @param sym Sym<INT> to access.
+   *  @returns std::vector of data or empty std::vector.
+   */
   inline std::vector<INT> &get(Sym<INT> const &sym) {
     if (contains(sym)) {
       return values_int[sym];
@@ -61,9 +88,21 @@ public:
       return dummy_int;
     }
   };
+  /**
+   *  Test to see if this ParticleSet contains data for a given Sym<REAL>
+   *
+   *  @param Sym<REAL> to test for.
+   *  @returns Bool indicating if data exists.
+   */
   inline bool contains(Sym<REAL> const &sym) {
     return (this->values_real.count(sym) > 0);
   }
+  /**
+   *  Test to see if this ParticleSet contains data for a given Sym<INT>
+   *
+   *  @param Sym<INT> to test for.
+   *  @returns Bool indicating if data exists.
+   */
   inline bool contains(Sym<INT> const &sym) {
     return (this->values_int.count(sym) > 0);
   }
