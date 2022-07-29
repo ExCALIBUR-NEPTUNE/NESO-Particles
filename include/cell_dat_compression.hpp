@@ -211,7 +211,7 @@ public:
 
   /**
    * Remove particles from the ParticleDat instances.
-   *  
+   *
    * @param npart Number of particles to remove.
    * @param usm_cells Device accessible pointer to the particle cells.
    * @param usm_layers Device accessible pointer to the particle rows (layers).

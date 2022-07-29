@@ -92,7 +92,7 @@ public:
                        particle_dats_int,
                        domain.mesh.get_local_communication_neighbours().size(),
                        domain.mesh.get_local_communication_neighbours().data()),
-        cell_move_ctx(this->ncell, sycl_target, layer_compressor,
+        cell_move_ctx(sycl_target, this->ncell, layer_compressor,
                       particle_dats_real, particle_dats_int)
 
   {
@@ -123,6 +123,7 @@ public:
     this->local_move_ctx.set_mpi_rank_dat(mpi_rank_dat);
 
     this->layer_compressor.set_cell_id_dat(this->cell_id_dat);
+    this->cell_move_ctx.set_cell_id_dat(this->cell_id_dat);
 
     this->mesh_heirarchy_global_map = std::make_shared<MeshHierarchyGlobalMap>(
         this->sycl_target, this->domain.mesh, this->position_dat,

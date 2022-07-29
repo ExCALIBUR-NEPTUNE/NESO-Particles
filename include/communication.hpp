@@ -10,7 +10,7 @@
 
 namespace NESO::Particles {
 
-/*
+/**
  * Wrapper around a pair of inter and intra MPI Comms for shared memory
  * purposes.
  */
@@ -20,12 +20,36 @@ private:
   bool allocated = false;
 
 public:
-  MPI_Comm comm_parent, comm_inter, comm_intra;
-  int rank_parent, rank_inter, rank_intra;
-  int size_parent, size_inter, size_intra;
+  /// Parent (i.e. global for the simulation) MPI communicator.
+  MPI_Comm comm_parent;
+  /// Communicator between one rank on each shared memory region.
+  MPI_Comm comm_inter;
+  /// Communicator between the ranks in a shared memory region.
+  MPI_Comm comm_intra;
+  /// MPI rank in the parent communicator.
+  int rank_parent;
+  /// MPI rank in the inter shared memory region communicator.
+  int rank_inter;
+  /// MPI rank within the shared memory region communicator.
+  int rank_intra;
+  /// Size of the parent communicator.
+  int size_parent;
+  /// Size of the inter shared memory communicator.
+  int size_inter;
+  /// Size of the intra shared memory communicator.
+  int size_intra;
 
+  ~CommPair(){};
   CommPair(){};
 
+  /**
+   * Create a new set of inter and intra shared memory region communicators
+   * from a parent communicator. Must be called collectively on the parent
+   * communicator.
+   *
+   * @param comm_parent MPI communicator to derive intra and inter communicators
+   * from.
+   */
   CommPair(MPI_Comm comm_parent) {
     this->comm_parent = comm_parent;
 
@@ -51,6 +75,9 @@ public:
     }
   };
 
+  /**
+   * Free the communicators held by the CommPair instance.
+   */
   void free() {
     int flag;
     MPICHK(MPI_Initialized(&flag))
@@ -70,8 +97,6 @@ public:
     }
     this->allocated = false;
   }
-
-  ~CommPair(){};
 };
 
 } // namespace NESO::Particles

@@ -19,9 +19,16 @@
 using namespace cl;
 namespace NESO::Particles {
 
+/**
+ *  CellMove is the implementation that moves particles between cells. When a
+ *  particle moves to a new cell the corresponding data is moved to the new
+ *  cell in all the ParticleDat instances.
+ */
 class CellMove {
 private:
   const int ncell;
+
+  ParticleDatShPtr<INT> cell_id_dat;
   std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real;
   std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int;
 
@@ -105,10 +112,19 @@ private:
   }
 
 public:
+  /// Compute device used by the instance.
   SYCLTarget &sycl_target;
 
   ~CellMove() {}
-  CellMove(const int ncell, SYCLTarget &sycl_target,
+  /**
+   * Create a cell move instance to move particles between cells.
+   *
+   * @param sycl_target SYCLTarget to use as compute device.
+   * @param ncell Total number of cells.
+   * @param particle_dats_real Container of REAL ParticleDat.
+   * @param particle_dats_in Container of INT ParticleDat.
+   */
+  CellMove(SYCLTarget &sycl_target, const int ncell,
            LayerCompressor &layer_compressor,
            std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
            std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int)
@@ -131,6 +147,19 @@ public:
         d_particle_dat_ncomp_real(sycl_target, 1),
         d_particle_dat_ncomp_int(sycl_target, 1) {}
 
+  /**
+   * Set the ParticleDat to use as a source for cell ids.
+   *
+   * @param cell_id_dat ParticleDat to use for cell ids.
+   */
+  inline void set_cell_id_dat(ParticleDatShPtr<INT> cell_id_dat) {
+    this->cell_id_dat = cell_id_dat;
+  }
+
+  /**
+   * Move particles between cells (on this MPI rank) using the cell ids on the
+   * particles.
+   */
   inline void move() {
     auto t0 = profile_timestamp();
     // reset the particle counters on each cell
@@ -167,8 +196,7 @@ public:
     auto pl_iter_range = mpi_rank_dat->get_particle_loop_iter_range();
     auto pl_stride = mpi_rank_dat->get_particle_loop_cell_stride();
     auto pl_npart_cell = mpi_rank_dat->get_particle_loop_npart_cell();
-    auto k_cell_id_dat =
-        particle_dats_int[Sym<INT>("CELL_ID")]->cell_dat.device_ptr();
+    auto k_cell_id_dat = this->cell_id_dat->cell_dat.device_ptr();
 
     this->sycl_target.queue
         .submit([&](sycl::handler &cgh) {
