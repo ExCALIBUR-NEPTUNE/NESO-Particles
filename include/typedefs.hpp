@@ -87,17 +87,36 @@ template <typename... T> inline void nprint(T... args) {
   nprint_recurse(0, args...);
 }
 
+#ifndef NESO_PARTICLES_BLOCK_SIZE
+  #define NESO_PARTICLES_BLOCK_SIZE 1024
+#endif
+
 #ifdef NESO_PARTICLES_DEVICE_TYPE_CPU
+
+
+
 
 #define NESO_PARTICLES_DEVICE_LABEL "CPU"
 #define NESO_PARTICLES_ITER_CELLS 1
 
+//#define NESO_PARTICLES_KERNEL_START                                            \
+//  const int neso_npart = pl_npart_cell[idx];                                   \
+//  for (int neso_layer = 0; neso_layer < neso_npart; neso_layer++) {
+//#define NESO_PARTICLES_KERNEL_END }
+//#define NESO_PARTICLES_KERNEL_CELL idx
+//#define NESO_PARTICLES_KERNEL_LAYER neso_layer
+
 #define NESO_PARTICLES_KERNEL_START                                            \
-  const int neso_npart = pl_npart_cell[idx];                                   \
-  for (int neso_layer = 0; neso_layer < neso_npart; neso_layer++) {
+  const int neso_cell = (((INT)idx) / pl_stride);                               \
+  const int neso_npart = pl_npart_cell[neso_cell];                                   \
+  const int neso_layer_start = (((INT)idx) % pl_stride) * NESO_PARTICLES_BLOCK_SIZE; \
+  const int neso_layer_end = MIN(neso_layer_start + NESO_PARTICLES_BLOCK_SIZE, neso_npart); \
+  for (int neso_layer = neso_layer_start; neso_layer < neso_layer_end; neso_layer++) {
+
 #define NESO_PARTICLES_KERNEL_END }
-#define NESO_PARTICLES_KERNEL_CELL idx
-#define NESO_PARTICLES_KERNEL_LAYER neso_layer
+#define NESO_PARTICLES_KERNEL_CELL (((INT)idx) / pl_stride)
+#define NESO_PARTICLES_KERNEL_LAYER neso_layer 
+
 
 #else
 

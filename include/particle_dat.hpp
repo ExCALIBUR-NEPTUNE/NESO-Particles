@@ -3,6 +3,7 @@
 
 #include <CL/sycl.hpp>
 #include <memory>
+#include <cmath>
 
 #include "access.hpp"
 #include "cell_dat.hpp"
@@ -340,11 +341,15 @@ public:
    *  @returns Particle Loop iteration set size.
    */
   inline INT get_particle_loop_iter_range() {
-#ifdef NESO_PARTICLES_ITER_PARTICLES
-    return this->cell_dat.ncells * this->cell_dat.get_nrow_max();
-#else // case for NESO_PARTICLES_ITER_CELLS
-    return this->cell_dat.ncells;
-#endif
+//#ifdef NESO_PARTICLES_ITER_PARTICLES
+//    return this->cell_dat.ncells * this->cell_dat.get_nrow_max();
+//#else // case for NESO_PARTICLES_ITER_CELLS
+//    const auto n = this->cell_dat.get_nrow_max();
+//    const auto m = (n/NESO_PARTICLES_BLOCK_SIZE) + ((INT) (n % NESO_PARTICLES_BLOCK_SIZE > 0));
+//    return this->cell_dat.ncells * m;
+//#endif
+//
+    return this->cell_dat.ncells * this->get_particle_loop_cell_stride();
   }
   /**
    *  Get the size of the iteration set per cell stride required to loop over
@@ -353,7 +358,14 @@ public:
    *  @returns Particle Loop iteration stride size.
    */
   inline INT get_particle_loop_cell_stride() {
+
+#ifdef NESO_PARTICLES_ITER_PARTICLES
     return this->cell_dat.get_nrow_max();
+#else
+    const INT n = this->cell_dat.get_nrow_max();
+    const INT m = (n/NESO_PARTICLES_BLOCK_SIZE) + ((INT) (n % NESO_PARTICLES_BLOCK_SIZE > 0));
+    return m;
+#endif
   }
   /**
    *  Get a device pointer to the array that stores particle counts per cell
