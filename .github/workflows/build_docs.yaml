@@ -1,0 +1,17 @@
+name: Build Docs
+on: push
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v3
+      - name: Install Sphinx/Doxygen
+        run: |
+          sudo apt-get update
+          sudo apt-get install sphinx-common doxygen
+      - name: Install pip requirements
+        run |
+          ls -l
+          pip3 install breathe
