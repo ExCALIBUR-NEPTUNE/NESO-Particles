@@ -41,7 +41,7 @@ public:
    * @param gpu_device Specify how to search for SYCL device. 0 uses default
    * selector, 1 explicitly use a GPU selector and -1 use an explicit CPU
    * selector.
-   * @param sycl_target SYCLTarget to use as compute device.
+   * @param comm MPI Communicator on which the SYCLTarget is based.
    */
   SYCLTarget(const int gpu_device, MPI_Comm comm) : comm_pair(comm) {
     if (gpu_device > 0) {

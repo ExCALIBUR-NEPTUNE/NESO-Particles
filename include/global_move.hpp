@@ -60,6 +60,12 @@ public:
         particle_dats_int(particle_dats_int), particle_packer(sycl_target),
         particle_unpacker(sycl_target), global_move_exchange(sycl_target),
         dh_send_rank_npart(sycl_target, 1){};
+
+  /**
+   *  Set the ParticleDat to use for MPI ranks.
+   *
+   *  @param mpi_rank_dat ParticleDat to use for particle positions.
+   */
   inline void set_mpi_rank_dat(ParticleDatShPtr<INT> mpi_rank_dat) {
     this->mpi_rank_dat = mpi_rank_dat;
     this->departing_identify.set_mpi_rank_dat(mpi_rank_dat);

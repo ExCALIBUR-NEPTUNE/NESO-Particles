@@ -219,8 +219,8 @@ public:
    * 2D: (coarse_x, coarse_y, fine_x, fine_y)
    * 3D: (coarse_x, coarse_y, coarse_z, fine_x, fine_y, fine_z)
    *
-   * @param index_tuple Index represented as a tuple.
-   * @returns Tuple index.
+   * @param linear Linear index to convert.
+   * @param index Output, index represented as a tuple.
    */
   inline void linear_to_tuple_global(INT linear, INT *index) {
     auto pq = std::div((long long)linear, (long long)ncells_fine);
@@ -235,8 +235,8 @@ public:
    * 2D: (coarse_x, coarse_y)
    * 3D: (coarse_x, coarse_y, coarse_z,)
    *
-   * @param index_tuple Index represented as a tuple.
-   * @returns Tuple index.
+   * @param linear Linear index to convert.
+   * @param index Output, index represented as a tuple.
    */
   inline void linear_to_tuple_coarse(INT linear, INT *index) {
     for (int dimx = 0; dimx < ndim; dimx++) {
@@ -253,8 +253,8 @@ public:
    * 2D: (fine_x, fine_y)
    * 3D: (fine_x, fine_y, fine_z)
    *
-   * @param index_tuple Index represented as a tuple.
-   * @returns Tuple index.
+   * @param linear Linear index to convert.
+   * @param index Output, index represented as a tuple.
    */
   inline void linear_to_tuple_fine(INT linear, INT *index) {
     for (int dimx = 0; dimx < ndim; dimx++) {
@@ -381,7 +381,7 @@ public:
    *
    *  @param nqueries Number of cells to query.
    *  @param indices Array containing `nqueries` global index tuples.
-   *  @param rank Array owning ranks will be stored in.
+   *  @param ranks Array owning ranks will be stored in.
    */
   inline void get_owners(const int nqueries, INT *indices, int *ranks) {
     for (int qx = 0; qx < nqueries; qx++) {

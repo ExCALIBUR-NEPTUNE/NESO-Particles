@@ -17,9 +17,13 @@
 using namespace cl;
 namespace NESO::Particles {
 
+/**
+ *  Class to move particles between MPI ranks that are considered neighbours.
+ */
 class LocalMove {
 
 private:
+  SYCLTarget &sycl_target;
   std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real;
   std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int;
   ParticleDatShPtr<INT> mpi_rank_dat;
@@ -47,13 +51,29 @@ private:
   int in_flight_recvs;
 
 public:
-  SYCLTarget &sycl_target;
-
+  /// The MPI communicator in use by the instance.
   MPI_Comm comm;
+  /// Number of remote ranks this rank could send particles to.
   int num_remote_send_ranks;
+  /// Number of remote ranks this rank could receive from.
   int num_remote_recv_ranks;
 
   ~LocalMove(){};
+
+  /**
+   *  Construct a new instance to move particles between neighbouring MPI
+   *  ranks.
+   *
+   *  @param sycl_target SYCLTarget to use as compute device.
+   *  @param layer_compressor LayerCompressor instance used to compress
+   * ParticleDat instances.
+   *  @param particle_dats_real Container of REAL valued ParticleDat instances.
+   *  @param particle_dats_int Container of INT valued ParticleDat instances.
+   *  @param nranks Number of remote ranks to consider as neighbours that this
+   * rank could send to.
+   *  @param ranks Remote ranks to consider as neighbours that this rank could
+   * send to.
+   */
   LocalMove(SYCLTarget &sycl_target, LayerCompressor &layer_compressor,
             std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
             std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int,
@@ -159,11 +179,20 @@ public:
     this->dh_send_rank_map.host_to_device();
   };
 
+  /**
+   *  Set the ParticleDat to use for MPI ranks.
+   *
+   *  @param mpi_rank_dat ParticleDat to use for particle positions.
+   */
   inline void set_mpi_rank_dat(ParticleDatShPtr<INT> mpi_rank_dat) {
     this->mpi_rank_dat = mpi_rank_dat;
     this->departing_identify.set_mpi_rank_dat(this->mpi_rank_dat);
   }
 
+  /**
+   *  Exchange the particle counts that will be send and received between
+   *  neighbours.
+   */
   inline void npart_exchange_sendrecv() {
 
     // setup recv
@@ -187,6 +216,10 @@ public:
                        this->h_status.ptr));
   }
 
+  /**
+   *  Start the communication that exchanges particle data between neighbouring
+   *  ranks.
+   */
   inline void exchange_init() {
     // Get the packed particle data on the host
     auto h_send_buffer = this->particle_packer.get_packed_data_on_host(
@@ -227,6 +260,10 @@ public:
     }
   }
 
+  /**
+   *  Wait for the exchange of particle data to complete. Received data is
+   *  ready to be unpacked on completion.
+   */
   inline void exchange_finalise() {
     MPICHK(MPI_Waitall(this->in_flight_recvs, this->h_recv_requests.ptr,
                        this->h_status.ptr));
@@ -235,6 +272,10 @@ public:
                        this->h_status.ptr));
   }
 
+  /**
+   *  Top level method that performs all the required steps to transfer
+   *  particles between neighbouring MPI ranks.
+   */
   inline void move() {
     auto t0 = profile_timestamp();
 

@@ -14,8 +14,9 @@
 using namespace cl;
 namespace NESO::Particles {
 
-/*
- *  LocalMapper for CartesianHMesh
+/**
+ *  LocalMapper for CartesianHMesh. Maps particle positions within the stencil
+ *  width of each MPI subdomain to the owning rank.
  */
 class CartesianHMeshLocalMapperT : public LocalMapper {
 private:
@@ -26,12 +27,24 @@ private:
   REAL inverse_cell_width_fine;
 
 public:
+  /// Map from MPI rank to local index in the lookup map for each dimension.
   BufferDeviceHost<int> dh_lookup;
+  /// Strides of the lookup map such that tuple indices can be converted into a
+  // linear index.
   BufferDeviceHost<int> dh_lookup_dims;
+  /// Actual map from cells to owning MPI ranks.
   BufferDeviceHost<int> dh_map;
+  /// Stride for the local index lookup per dimension.
   int lookup_stride;
-
+  /// CartesianHMesh on which the lookup is based.
   CartesianHMesh &mesh;
+  /**
+   *  Construct a new mapper instance to map local particle positions to owing
+   * ranks.
+   *
+   *  @param sycl_target SYCLTarget to use as compute device.
+   *  @param mesh CartesianHMesh instance this mapping is based on.
+   */
   CartesianHMeshLocalMapperT(SYCLTarget &sycl_target, CartesianHMesh &mesh)
       : sycl_target(sycl_target), mesh(mesh), dh_dims(sycl_target, mesh.ndim),
         dh_map(sycl_target, 1), dh_lookup(sycl_target, 1),
@@ -146,6 +159,14 @@ public:
     this->dh_map.host_to_device();
   };
 
+  /**
+   *  Map positions to owning MPI ranks. Positions should be within the domain
+   *  prior to calling map, i.e. particles should be within the domain extents.
+   *
+   *  @param position_dat ParticleDat to use for particle positions.
+   *  @param cell_id_dat ParticleDat to use for particle cell ids.
+   *  @param mpi_rank_dat ParticleDat to use for particle MPI ranks (output).
+   */
   inline void map(ParticleDatShPtr<REAL> &position_dat,
                   ParticleDatShPtr<INT> &cell_id_dat,
                   ParticleDatShPtr<INT> &mpi_rank_dat) {

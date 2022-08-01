@@ -46,6 +46,7 @@ public:
    *
    * @param sycl_target SYCLTarget to use as compute device.
    * @param sym Sym object that defines the type and label.
+   * @param ncomp Number of components, of type defined in `sym`.
    * @param ncell Number of cells this ParticleDat is defined over.
    * @param positions Does this Dat hold particle positions or cell ids.
    */
@@ -302,6 +303,10 @@ public:
     return this->async_npart_host_to_device();
   }
 
+  /**
+   *  Reduce the row count of the underlying CellDat to the per cell particle
+   *  occupancies.
+   */
   inline void trim_cell_dat_rows();
 
   /**

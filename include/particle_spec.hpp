@@ -27,7 +27,12 @@ public:
    */
   Sym(const std::string name) : name(name) {}
 
-  // std::map uses std::less as default comparison operator
+  /** Comparison of Sym types.
+   *
+   * std::map uses std::less as default comparison operator
+   *
+   * @param sym Other Sym to compare against.
+   */
   bool operator<(const Sym &sym) const { return this->name < sym.name; }
 };
 

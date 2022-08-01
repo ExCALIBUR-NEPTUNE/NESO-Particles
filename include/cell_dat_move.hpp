@@ -121,8 +121,10 @@ public:
    *
    * @param sycl_target SYCLTarget to use as compute device.
    * @param ncell Total number of cells.
+   * @param layer_compressor LayerCompressor to use to compress ParticleDat
+   * instances.
    * @param particle_dats_real Container of REAL ParticleDat.
-   * @param particle_dats_in Container of INT ParticleDat.
+   * @param particle_dats_int Container of INT ParticleDat.
    */
   CellMove(SYCLTarget &sycl_target, const int ncell,
            LayerCompressor &layer_compressor,

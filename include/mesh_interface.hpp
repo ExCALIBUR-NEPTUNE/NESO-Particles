@@ -139,7 +139,7 @@ public:
   const int subdivision_order;
   /// Width of coarse cells, uniform in all dimensions.
   const double cell_width_coarse;
-  // Width of fine cells, uniform in all dimensions.
+  /// Width of fine cells, uniform in all dimensions.
   const double cell_width_fine;
   /// Inverse of the coarse cell width.
   const double inverse_cell_width_coarse;

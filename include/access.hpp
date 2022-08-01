@@ -85,7 +85,7 @@ public:
    * Create new instance to access data through a pointer which
    * stores 2D data in a column major format using a given stride.
    *
-   *  @param base pointer to index into.
+   *  @param d_ptr Base pointer to index into.
    *  @param stride Number of rows in the 2D object.
    *  @param rowx Row to access.
    */
@@ -117,7 +117,7 @@ public:
    * Create new instance to access data through a pointer which
    * stores 2D data in a column major format using a given stride.
    *
-   *  @param base Object to index into.
+   *  @param d_ptr Base Object to index into.
    *  @param stride Number of rows in the 2D object.
    */
   RawPointerColumnMajorRowAccessor(T *d_ptr, const int stride)

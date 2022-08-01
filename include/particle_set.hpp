@@ -33,7 +33,7 @@ public:
    *  Constructor for a set of particles.
    *
    *  @param npart Number of particles required.
-   *  @particle_spec ParticleSpec instance that describes the particle
+   *  @param particle_spec ParticleSpec instance that describes the particle
    *  properties.
    */
   ParticleSet(const int npart, ParticleSpec particle_spec) : npart(npart) {
@@ -49,10 +49,17 @@ public:
     }
   };
 
+  /**
+   *  Access the std::vectors that correspond to a Sym<REAL>.
+   */
   inline ColumnMajorRowAccessor<std::vector, REAL> operator[](Sym<REAL> sym) {
     return ColumnMajorRowAccessor<std::vector, REAL>{values_real[sym],
                                                      this->npart};
   };
+
+  /**
+   *  Access the std::vectors that correspond to a Sym<INT>.
+   */
   inline ColumnMajorRowAccessor<std::vector, INT> operator[](Sym<INT> sym) {
     return ColumnMajorRowAccessor<std::vector, INT>{values_int[sym],
                                                     this->npart};
@@ -91,7 +98,7 @@ public:
   /**
    *  Test to see if this ParticleSet contains data for a given Sym<REAL>
    *
-   *  @param Sym<REAL> to test for.
+   *  @param sym Sym<REAL> to test for.
    *  @returns Bool indicating if data exists.
    */
   inline bool contains(Sym<REAL> const &sym) {
@@ -100,7 +107,7 @@ public:
   /**
    *  Test to see if this ParticleSet contains data for a given Sym<INT>
    *
-   *  @param Sym<INT> to test for.
+   *  @param sym Sym<INT> to test for.
    *  @returns Bool indicating if data exists.
    */
   inline bool contains(Sym<INT> const &sym) {

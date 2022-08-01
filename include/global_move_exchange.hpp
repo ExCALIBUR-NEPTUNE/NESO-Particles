@@ -86,7 +86,7 @@ public:
    * @param num_remote_send_ranks Number of remote ranks particles will be sent
    * to.
    * @param dh_send_ranks Array of remote ranks particles will be sent to.
-   * @param dh_send_rank_npart Array of particle counts that will be sent to
+   * @param h_send_rank_npart Array of particle counts that will be sent to
    * each rank.
    */
   inline void npart_exchange_sendrecv(const int num_remote_send_ranks,
@@ -182,7 +182,7 @@ public:
    *  Start the exchange the particle data. Collective on the communicator.
    *
    *  @param particle_packer ParticlePacker instance to pack particle data.
-   *  @param paticle_unpacker ParticleUnpacker instance to use to unpack
+   *  @param particle_unpacker ParticleUnpacker instance to use to unpack
    *  particle data.
    */
   inline void exchange_init(ParticlePacker &particle_packer,
@@ -230,7 +230,7 @@ public:
   /**
    *  Finalise the exchange the particle data. Collective on the communicator.
    *
-   *  @param particle_unpack ParticleUnpacker instance to use to unpack
+   *  @param particle_unpacker ParticleUnpacker instance to use to unpack
    *  particle data.
    */
   inline void exchange_finalise(ParticleUnpacker &particle_unpacker) {

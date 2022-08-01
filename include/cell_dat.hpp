@@ -42,7 +42,7 @@ public:
   const int nrow;
   /// Number of columns in the 2D data structure.
   const int ncol;
-  // 2D data.
+  /// 2D data.
   std::vector<std::vector<T>> data;
 
   /**
@@ -67,6 +67,9 @@ public:
    */
   inline std::vector<T> &operator[](int col) { return this->data[col]; }
 
+  /**
+   *  Print the contents of the CellDataT instance.
+   */
   inline void print() {
 
     for (int rowx = 0; rowx < nrow; rowx++) {
@@ -100,6 +103,7 @@ public:
   /// Number of columns in each cell.
   const int ncol;
   ~CellDatConst() { sycl::free(this->d_ptr, sycl_target.queue); };
+
   /**
    * Create new CellDatConst on the specified compute target with a fixed cell
    * count, fixed number of rows per cell and fixed number of columns per cell.
