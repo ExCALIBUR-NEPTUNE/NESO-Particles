@@ -71,11 +71,11 @@ public:
 
     EventStack es;
         
-    const REAL tmp_extent0 = k_extents[0];
     es.push(this->sycl_target.queue
         .submit([&](sycl::handler &cgh) {
           cgh.parallel_for<>(
               sycl::range<1>(pl_iter_range), [=](sycl::id<1> idx) {
+                const REAL tmp_extent0 = k_extents[0];
                 NESO_PARTICLES_KERNEL_START
                 const INT cellx = NESO_PARTICLES_KERNEL_CELL;
                 const INT layerx = NESO_PARTICLES_KERNEL_LAYER;
@@ -93,11 +93,11 @@ public:
               });
         }));
 
-    const REAL tmp_extent1 = k_extents[1];
     es.push(this->sycl_target.queue
         .submit([&](sycl::handler &cgh) {
           cgh.parallel_for<>(
               sycl::range<1>(pl_iter_range), [=](sycl::id<1> idx) {
+                const REAL tmp_extent1 = k_extents[1];
                 NESO_PARTICLES_KERNEL_START
                 const INT cellx = NESO_PARTICLES_KERNEL_CELL;
                 const INT layerx = NESO_PARTICLES_KERNEL_LAYER;
