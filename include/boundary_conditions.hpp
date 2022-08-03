@@ -64,9 +64,60 @@ public:
     const int k_ndim = this->mesh.ndim;
 
     NESOASSERT(((k_ndim > 0) && (k_ndim < 4)), "Bad number of dimensions");
-    auto k_extents = this->d_extents.ptr;
+    const auto k_extents = this->d_extents.ptr;
     auto k_positions_dat = this->position_dat->cell_dat.device_ptr();
+    
+    if (k_ndim == 2) {
 
+    EventStack es;
+        
+    const REAL tmp_extent0 = k_extents[0];
+    es.push(this->sycl_target.queue
+        .submit([&](sycl::handler &cgh) {
+          cgh.parallel_for<>(
+              sycl::range<1>(pl_iter_range), [=](sycl::id<1> idx) {
+                NESO_PARTICLES_KERNEL_START
+                const INT cellx = NESO_PARTICLES_KERNEL_CELL;
+                const INT layerx = NESO_PARTICLES_KERNEL_LAYER;
+
+                  const REAL pos = k_positions_dat[cellx][0][layerx];
+                  // offset the position in the current dimension to be
+                  // positive by adding a value times the extent
+                  const REAL n_extent_offset_real = ABS(pos);
+                  const INT n_extent_offset_int = n_extent_offset_real + 2.0;
+                  const REAL pos_fmod =
+                      fmod(pos + n_extent_offset_int * tmp_extent0, tmp_extent0);
+                  k_positions_dat[cellx][0][layerx] = pos_fmod;
+
+                NESO_PARTICLES_KERNEL_END
+              });
+        }));
+
+    const REAL tmp_extent1 = k_extents[1];
+    es.push(this->sycl_target.queue
+        .submit([&](sycl::handler &cgh) {
+          cgh.parallel_for<>(
+              sycl::range<1>(pl_iter_range), [=](sycl::id<1> idx) {
+                NESO_PARTICLES_KERNEL_START
+                const INT cellx = NESO_PARTICLES_KERNEL_CELL;
+                const INT layerx = NESO_PARTICLES_KERNEL_LAYER;
+
+                  const REAL pos = k_positions_dat[cellx][1][layerx];
+                  // offset the position in the current dimension to be
+                  // positive by adding a value times the extent
+                  const REAL n_extent_offset_real = ABS(pos);
+                  const INT n_extent_offset_int = n_extent_offset_real + 2.0;
+                  const REAL pos_fmod =
+                      fmod(pos + n_extent_offset_int * tmp_extent1, tmp_extent1);
+                  k_positions_dat[cellx][1][layerx] = pos_fmod;
+
+                NESO_PARTICLES_KERNEL_END
+              });
+        }));
+    
+    es.wait();
+
+    } else {
     this->sycl_target.queue
         .submit([&](sycl::handler &cgh) {
           cgh.parallel_for<>(
@@ -77,18 +128,21 @@ public:
                 for (int dimx = 0; dimx < k_ndim; dimx++) {
                   const REAL pos = k_positions_dat[cellx][dimx][layerx];
                   // offset the position in the current dimension to be
-                  // positive by adding an integer times the extent
-                  const REAL n_extent_offset_real = ABS(pos / k_extents[dimx]);
+                  // positive by adding a value times the extent
+                  const REAL n_extent_offset_real = ABS(pos);
+                  const REAL tmp_extent = k_extents[dimx];
                   const INT n_extent_offset_int = n_extent_offset_real + 2.0;
                   const REAL pos_fmod =
-                      fmod(pos + n_extent_offset_int * k_extents[dimx],
-                           k_extents[dimx]);
+                      fmod(pos + n_extent_offset_int * tmp_extent, tmp_extent);
                   k_positions_dat[cellx][dimx][layerx] = pos_fmod;
                 }
                 NESO_PARTICLES_KERNEL_END
               });
         })
         .wait_and_throw();
+    }
+
+
     sycl_target.profile_map.inc("CartesianPeriodic", "execute", 1,
                                 profile_elapsed(t0, profile_timestamp()));
   }
