@@ -171,6 +171,7 @@ public:
                   ParticleDatShPtr<INT> &cell_id_dat,
                   ParticleDatShPtr<INT> &mpi_rank_dat) {
 
+    auto t0 = profile_timestamp();
     // pointers to access dats in kernel
     auto k_position_dat = position_dat->cell_dat.device_ptr();
     auto k_mpi_rank_dat = mpi_rank_dat->cell_dat.device_ptr();
@@ -196,40 +197,44 @@ public:
                 const INT cellx = NESO_PARTICLES_KERNEL_CELL;
                 const INT layerx = NESO_PARTICLES_KERNEL_LAYER;
 
-                int local_tuple[3] = {0, 0, 0};
-                int mask = 0;
-                // k_mpi_rank_dat[cellx][1][layerx];
-                for (int dimx = 0; dimx < k_ndim; dimx++) {
-                  const REAL pos = k_position_dat[cellx][dimx][layerx];
-                  int cell_fine = ((REAL)pos * k_inverse_cell_width_fine);
-                  if (cell_fine >= k_dims[dimx]) {
-                    cell_fine = k_dims[dimx] - 1;
-                  } else if (cell_fine < 0) {
-                    cell_fine = 0;
+                if (k_mpi_rank_dat[cellx][1][layerx] < 0) {
+                  int local_tuple[3] = {0, 0, 0};
+                  int mask = 0;
+                  // k_mpi_rank_dat[cellx][1][layerx];
+                  for (int dimx = 0; dimx < k_ndim; dimx++) {
+                    const REAL pos = k_position_dat[cellx][dimx][layerx];
+                    int cell_fine = ((REAL)pos * k_inverse_cell_width_fine);
+                    if (cell_fine >= k_dims[dimx]) {
+                      cell_fine = k_dims[dimx] - 1;
+                    } else if (cell_fine < 0) {
+                      cell_fine = 0;
+                    }
+                    // use the cell to get an index for the dimension
+                    const int dim_index =
+                        k_lookup[k_lookup_stride * dimx + cell_fine];
+                    local_tuple[dimx] = dim_index;
+
+                    // if the mask takes a negative value then a dim_index had a
+                    // negative value
+                    // => cell is not in the local map
+                    mask = MIN(mask, dim_index);
                   }
-                  // use the cell to get an index for the dimension
-                  const int dim_index =
-                      k_lookup[k_lookup_stride * dimx + cell_fine];
-                  local_tuple[dimx] = dim_index;
 
-                  // if the mask takes a negative value then a dim_index had a
-                  // negative value
-                  // => cell is not in the local map
-                  mask = MIN(mask, dim_index);
+                  const int linear_index =
+                      local_tuple[0] +
+                      k_lookup_dims[0] *
+                          (local_tuple[1] + k_lookup_dims[1] * local_tuple[2]);
+
+                  const int remote_rank = (mask < 0) ? -1 : k_map[linear_index];
+                  k_mpi_rank_dat[cellx][1][layerx] = remote_rank;
                 }
-
-                const int linear_index =
-                    local_tuple[0] +
-                    k_lookup_dims[0] *
-                        (local_tuple[1] + k_lookup_dims[1] * local_tuple[2]);
-
-                const int remote_rank = (mask < 0) ? -1 : k_map[linear_index];
-                k_mpi_rank_dat[cellx][1][layerx] = remote_rank;
 
                 NESO_PARTICLES_KERNEL_END
               });
         })
         .wait_and_throw();
+    sycl_target.profile_map.inc("CartesianHMeshLocalMapperT", "map", 1,
+                                profile_elapsed(t0, profile_timestamp()));
   };
 };
 
