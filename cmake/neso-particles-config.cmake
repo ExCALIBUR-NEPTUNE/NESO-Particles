@@ -17,3 +17,19 @@ else()
   add_definitions(-DNESO_PARTICLES_DEVICE_TYPE_GPU)
   message(STATUS "Using NESO_PARTICLES_DEVICE_TYPE_GPU")
 endif()
+
+set(HDF5_PREFER_PARALLEL TRUE)
+find_package(HDF5 QUIET)
+
+if(HDF5_FOUND)
+    message(STATUS "HDF5 found")
+    add_definitions(-DNESO_PARTICLES_HDF5)
+    add_definitions(${HDF5_DEFINITIONS})
+    set(NESO_PARTICLES_LIBRARIES ${NESO_PARTICLES_LIBRARIES} ${HDF5_LIBRARIES})
+    set(NESO_PARTICLES_INCLUDE_PATH ${NESO_PARTICLES_INCLUDE_PATH} ${HDF5_INCLUDE_DIRS})
+else()
+    message(STATUS "HDF5 NOT found")
+endif()
+
+
+
