@@ -15,6 +15,7 @@
 #include "mesh_interface.hpp"
 #include "particle_dat.hpp"
 #include "particle_group.hpp"
+#include "particle_io.hpp"
 #include "particle_set.hpp"
 #include "particle_spec.hpp"
 #include "profiling.hpp"
