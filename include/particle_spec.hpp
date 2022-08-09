@@ -110,7 +110,7 @@ public:
 /**
  *  Helper class to hold a collection of Sym instances for ParticleGroup::print.
  */
-class PrintSpec {
+class SymStore {
 private:
   template <typename... T> void push(T... args) { this->push(args...); }
   void push(Sym<REAL> pp) { this->syms_real.push_back(pp); }
@@ -130,15 +130,15 @@ public:
   /// Container of Sym<INT> symbols.
   std::vector<Sym<INT>> syms_int;
   /**
-   *  Constructor for PrintSpec should be called with a list of arguments which
+   *  Constructor for SymStore should be called with a list of arguments which
    *  are Sym instances.
    *
    *  @param args Passed arguments should be Sym<REAL> or Sym<INT>.
    */
-  template <typename... T> PrintSpec(T... args) { this->push(args...); };
+  template <typename... T> SymStore(T... args) { this->push(args...); };
 
-  PrintSpec(){};
-  ~PrintSpec(){};
+  SymStore(){};
+  ~SymStore(){};
 };
 
 } // namespace NESO::Particles

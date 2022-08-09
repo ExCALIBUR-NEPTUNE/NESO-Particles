@@ -505,7 +505,7 @@ inline std::string fixed_width_format(REAL value) {
 
 template <typename... T> inline void ParticleGroup::print(T... args) {
 
-  PrintSpec print_spec(args...);
+  SymStore print_spec(args...);
 
   std::cout << "==============================================================="
                "================="
