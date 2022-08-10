@@ -16,6 +16,10 @@ endif()
 # find MPI
 find_package(MPI REQUIRED)
 
+# find NESO-Particles config
+list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_LIST_DIR}")
+find_package(NESO-PARTICLES REQUIRED)
+
 # Include hipSYCL
 find_package(hipSYCL 0.9.2 QUIET)
 if(NOT hipSYCL_FOUND)
@@ -36,7 +40,7 @@ if(NOT COMMAND add_sycl_to_target)
   endfunction()
 endif()
 
-if( NESO_PARTICLES_DEVICE_TYPE STREQUAL CPU)
+if(NESO_PARTICLES_DEVICE_TYPE STREQUAL CPU)
   add_definitions(-DNESO_PARTICLES_DEVICE_TYPE_CPU)
   message(STATUS "Using NESO_PARTICLES_DEVICE_TYPE_CPU")
 else()

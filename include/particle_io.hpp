@@ -97,8 +97,11 @@ private:
         name = dat->name + "_" + std::to_string(cx);
       }
 
-      hid_t dset = H5Dcreate1(group_step, name.c_str(), memtypeid(dat),
-                              filespace, H5P_DEFAULT);
+      // hid_t dset = H5Dcreate1(group_step, name.c_str(), memtypeid(dat),
+      //                         filespace, H5P_DEFAULT);
+
+      hid_t dset = H5Dcreate2(group_step, name.c_str(), memtypeid(dat),
+                              filespace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
       H5CHK(H5Dwrite(dset, memtypeid(dat), memspace, filespace, dxpl,
                      pack_buffer.ptr + component_stride * cx));
 
@@ -150,9 +153,11 @@ private:
     H5CHK(H5Sselect_hyperslab(filespace, H5S_SELECT_SET, slab_offsets, NULL,
                               slab_counts, NULL));
 
-    hid_t dset = H5Dcreate1(group_step, name.c_str(), memtypeid(dat), filespace,
-                            H5P_DEFAULT);
-
+    // hid_t dset = H5Dcreate1(group_step, name.c_str(), memtypeid(dat),
+    // filespace,
+    //                         H5P_DEFAULT);
+    hid_t dset = H5Dcreate2(group_step, name.c_str(), memtypeid(dat), filespace,
+                            H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
     // write the 2D array
     H5CHK(H5Dwrite(dset, memtypeid(dat), memspace, filespace, dxpl,
                    pack_buffer.ptr));

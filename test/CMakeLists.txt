@@ -33,11 +33,13 @@ file(GLOB TEST_SRCS ${CMAKE_CURRENT_SOURCE_DIR}/test_*.cpp
      ${CMAKE_CURRENT_SOURCE_DIR}/*_test.cpp)
 
 # options common to both fftw/mkl
-set(LINK_LIBRARIES_COMMON ${MPI_CXX_LINK_FLAGS} ${MPI_CXX_LIBRARIES}
-                          GTest::gtest)
+set(LINK_LIBRARIES_COMMON
+    ${MPI_CXX_LINK_FLAGS} ${MPI_CXX_LIBRARIES} ${NESO_PARTICLES_LIBRARIES}
+    ${NESO_PARTICLES_LINK_FLAGS} GTest::gtest)
 
-set(INCLUDE_DIRECTORIES_COMMON ${CMAKE_SOURCE_DIR}/include
-                               ${MPI_CXX_INCLUDE_PATH})
+set(INCLUDE_DIRECTORIES_COMMON
+    ${CMAKE_SOURCE_DIR}/include ${MPI_CXX_INCLUDE_PATH}
+    ${NESO_PARTICLES_INCLUDE_PATH})
 
 # Build the tests individually
 include(GoogleTest)
@@ -55,10 +57,6 @@ foreach(TEST ${TEST_SRCS})
   add_sycl_to_target(TARGET ${TEST_NAME} SOURCES ${TEST_SOURCES})
   gtest_discover_tests(${TEST_NAME})
 endforeach()
-
-
-
-
 
 # Build a global test suite
 add_executable(${EXECUTABLE} ${TEST_MAIN} ${TEST_LIST})
