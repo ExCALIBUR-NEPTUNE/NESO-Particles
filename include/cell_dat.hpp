@@ -153,13 +153,14 @@ public:
   inline CellData<T> get_cell(const int cell) {
     auto cell_data = std::make_shared<CellDataT<T>>(this->sycl_target,
                                                     this->nrow, this->ncol);
+    EventStack se;
     for (int colx = 0; colx < this->ncol; colx++) {
-      this->sycl_target.queue.memcpy(
+      se.push(this->sycl_target.queue.memcpy(
           cell_data->data[colx].data(),
           &this->d_ptr[cell * this->stride + colx * this->nrow],
-          this->nrow * sizeof(T));
+          this->nrow * sizeof(T)));
     }
-    this->sycl_target.queue.wait();
+    se.wait();
     return cell_data;
   }
   /**
@@ -174,12 +175,13 @@ public:
     NESOASSERT(cell_data->ncol >= this->ncol,
                "CellData as insuffient column count.");
 
+    EventStack se;
     for (int colx = 0; colx < this->ncol; colx++) {
-      this->sycl_target.queue.memcpy(
+      se.push(this->sycl_target.queue.memcpy(
           &this->d_ptr[cell * this->stride + colx * this->nrow],
-          cell_data->data[colx].data(), this->nrow * sizeof(T));
+          cell_data->data[colx].data(), this->nrow * sizeof(T)));
     }
-    this->sycl_target.queue.wait();
+    se.wait();
   }
 };
 
