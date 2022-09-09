@@ -28,7 +28,8 @@ public:
    */
   virtual inline void map(ParticleDatShPtr<REAL> &position_dat,
                           ParticleDatShPtr<INT> &cell_id_dat,
-                          ParticleDatShPtr<INT> &mpi_rank_dat) = 0;
+                          ParticleDatShPtr<INT> &mpi_rank_dat,
+                          const int map_cell = -1) = 0;
 };
 
 typedef std::shared_ptr<LocalMapper> LocalMapperShPtr;
@@ -44,7 +45,8 @@ public:
    */
   inline void map(ParticleDatShPtr<REAL> &position_dat,
                   ParticleDatShPtr<INT> &cell_id_dat,
-                  ParticleDatShPtr<INT> &mpi_rank_dat){};
+                  ParticleDatShPtr<INT> &mpi_rank_dat,
+                  const int map_cell = -1){};
 };
 
 inline std::shared_ptr<DummyLocalMapperT> DummyLocalMapper() {

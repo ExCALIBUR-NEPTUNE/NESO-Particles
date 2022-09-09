@@ -169,7 +169,8 @@ public:
    */
   inline void map(ParticleDatShPtr<REAL> &position_dat,
                   ParticleDatShPtr<INT> &cell_id_dat,
-                  ParticleDatShPtr<INT> &mpi_rank_dat) {
+                  ParticleDatShPtr<INT> &mpi_rank_dat,
+                  const int map_cell = -1) {
 
     auto t0 = profile_timestamp();
     // pointers to access dats in kernel

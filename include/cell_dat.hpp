@@ -356,6 +356,7 @@ public:
    * @returns Cell contents of specified cell as CellData instance.
    */
   inline CellData<T> get_cell(const int cell) {
+    auto t0 = profile_timestamp();
 
     auto cell_data = std::make_shared<CellDataT<T>>(
         this->sycl_target, this->nrow[cell], this->ncol);
@@ -365,7 +366,39 @@ public:
                                      this->nrow[cell] * sizeof(T));
     }
     this->sycl_target.queue.wait();
+
+    sycl_target.profile_map.inc("CellDat", "get_cell", 1,
+                                profile_elapsed(t0, profile_timestamp()));
     return cell_data;
+  }
+
+  /**
+   * Get the contents of a provided cell on the host as a CellData instance.
+   *
+   * @param cell Cell to get data from.
+   * @param cell_data CellDataT instance to populate, must be sufficiently
+   * sized.
+   * @param event_stack EventStack instance to call wait on for copy.
+   */
+  inline void get_cell_async(const int cell, CellDataT<T> &cell_data,
+                             EventStack &event_stack) {
+    auto t0 = profile_timestamp();
+
+    NESOASSERT(cell_data.nrow >= this->nrow[cell],
+               "CellDataT has insufficent number of rows");
+    NESOASSERT(cell_data.ncol >= this->ncol,
+               "CellDataT has insufficent number of columns");
+
+    for (int colx = 0; colx < this->ncol; colx++) {
+      event_stack.push(this->sycl_target.queue.memcpy(
+          cell_data.data[colx].data(),
+          this->h_ptr_cols[cell * this->ncol + colx],
+          this->nrow[cell] * sizeof(T)));
+    }
+
+    sycl_target.profile_map.inc("CellDat", "get_cell_async", 1,
+                                profile_elapsed(t0, profile_timestamp()));
+    return;
   }
 
   /**
@@ -375,6 +408,8 @@ public:
    * @param cell_data New cell data to set.
    */
   inline void set_cell(const int cell, CellData<T> cell_data) {
+    auto t0 = profile_timestamp();
+
     NESOASSERT(cell_data->nrow >= this->nrow[cell],
                "CellData as insuffient row count.");
     NESOASSERT(cell_data->ncol >= this->ncol,
@@ -389,6 +424,38 @@ public:
       }
       this->sycl_target.queue.wait();
     }
+
+    sycl_target.profile_map.inc("CellDat", "set_cell", 1,
+                                profile_elapsed(t0, profile_timestamp()));
+  }
+
+  /**
+   * Set the contents of a cell on the device using a CellData instance.
+   *
+   * @param cell Cell index to set data in.
+   * @param cell_data New cell data to set.
+   * @param event_stack EventStack instance to wait on.
+   */
+  inline void set_cell_async(const int cell, CellDataT<T> &cell_data,
+                             EventStack &event_stack) {
+    auto t0 = profile_timestamp();
+
+    NESOASSERT(cell_data.nrow >= this->nrow[cell],
+               "CellData as insuffient row count.");
+    NESOASSERT(cell_data.ncol >= this->ncol,
+               "CellData as insuffient column count.");
+
+    if (this->nrow[cell] > 0) {
+      for (int colx = 0; colx < this->ncol; colx++) {
+
+        event_stack.push(this->sycl_target.queue.memcpy(
+            this->h_ptr_cols[cell * this->ncol + colx],
+            cell_data.data[colx].data(), this->nrow[cell] * sizeof(T)));
+      }
+    }
+
+    sycl_target.profile_map.inc("CellDat", "set_cell_async", 1,
+                                profile_elapsed(t0, profile_timestamp()));
   }
 
   /**

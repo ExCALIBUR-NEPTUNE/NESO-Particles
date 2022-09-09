@@ -92,6 +92,8 @@ public:
   inline void npart_exchange_sendrecv(const int num_remote_send_ranks,
                                       BufferDeviceHost<int> &dh_send_ranks,
                                       BufferHost<int> &h_send_rank_npart) {
+
+    auto t0 = profile_timestamp();
     this->h_send_ranks.realloc_no_copy(dh_send_ranks.size);
     this->h_send_rank_npart.realloc_no_copy(h_send_rank_npart.size);
     this->num_remote_send_ranks = num_remote_send_ranks;
@@ -111,9 +113,16 @@ public:
       this->h_send_rank_npart.ptr[rx] = npart_tmp;
     }
 
+    sycl_target.profile_map.inc("GlobalMoveExchange", "npart_exchange_sendrecv_pre_wait", 1,
+                                profile_elapsed(t0, profile_timestamp()));
     MPICHK(MPI_Wait(&this->mpi_request, MPI_STATUS_IGNORE));
+    sycl_target.profile_map.inc("GlobalMoveExchange", "npart_exchange_sendrecv_post_wait", 1,
+                                profile_elapsed(t0, profile_timestamp()));
+
     const int one[1] = {1};
     int recv[1];
+
+    auto t0_rma = profile_timestamp();
     for (int rankx = 0; rankx < this->num_remote_send_ranks; rankx++) {
       const int rank = this->h_send_ranks.ptr[rankx];
       MPICHK(MPI_Win_lock(MPI_LOCK_SHARED, rank, 0, this->recv_win));
@@ -121,7 +130,13 @@ public:
                                 MPI_INT, MPI_SUM, this->recv_win));
       MPICHK(MPI_Win_unlock(rank, this->recv_win));
     }
+    sycl_target.profile_map.inc("GlobalMoveExchange", "RMA", 1,
+                                profile_elapsed(t0_rma, profile_timestamp()));
+
     MPICHK(MPI_Ibarrier(this->comm, &this->mpi_request));
+
+    sycl_target.profile_map.inc("GlobalMoveExchange", "npart_exchange_sendrecv", 1,
+                                profile_elapsed(t0, profile_timestamp()));
   }
 
   /**
@@ -130,6 +145,7 @@ public:
    */
   inline void npart_exchange_finalise() {
 
+    auto t0_npart = profile_timestamp();
     // Wait for the accumulation that counts how many remote ranks will send to
     // this rank.
     MPICHK(MPI_Wait(&this->mpi_request, MPI_STATUS_IGNORE));
@@ -176,6 +192,8 @@ public:
 
     MPICHK(MPI_Waitall(this->num_remote_send_ranks, this->h_send_requests.ptr,
                        this->h_recv_status.ptr));
+    sycl_target.profile_map.inc("GlobalMoveExchange", "npart_send_recv", 1,
+                                profile_elapsed(t0_npart, profile_timestamp()));
   }
 
   /**

@@ -81,7 +81,8 @@ public:
     // MPI RMA to inform remote ranks they will recv particles through the
     // global move
     this->global_move_exchange.npart_exchange_init();
-
+    sycl_target.profile_map.inc("GlobalMove", "move_stage_m3", 1,
+                                profile_elapsed(t0, profile_timestamp()));
     // find particles leaving through the global interface
     this->departing_identify.identify(0);
 
@@ -95,7 +96,8 @@ public:
     auto k_send_ranks = this->departing_identify.dh_send_ranks.d_buffer.ptr;
     auto k_send_counts_all_ranks =
         this->departing_identify.dh_send_counts_all_ranks.d_buffer.ptr;
-
+    sycl_target.profile_map.inc("GlobalMove", "move_stage_m2", 1,
+                                profile_elapsed(t0, profile_timestamp()));
     this->sycl_target.queue
         .submit([&](sycl::handler &cgh) {
           cgh.parallel_for<>(sycl::range<1>(num_remote_send_ranks),
@@ -108,6 +110,8 @@ public:
         .wait_and_throw();
     this->dh_send_rank_npart.device_to_host();
 
+    sycl_target.profile_map.inc("GlobalMove", "move_stage_m1", 1,
+                                profile_elapsed(t0, profile_timestamp()));
     // We now have:
     // 1) n particles to send
     // 2) array length n of source cells
@@ -130,11 +134,18 @@ public:
         this->departing_identify.d_pack_layers_dst, this->particle_dats_real,
         this->particle_dats_int);
 
+    auto t0_npart_exchange = profile_timestamp();
     // start exchanging global send counts
     this->global_move_exchange.npart_exchange_sendrecv(
         num_remote_send_ranks, dh_send_ranks,
         this->dh_send_rank_npart.h_buffer);
     this->global_move_exchange.npart_exchange_finalise();
+    sycl_target.profile_map.inc(
+        "GlobalMove", "npart_exchange_sendrecv", 1,
+        profile_elapsed(t0_npart_exchange, profile_timestamp()));
+
+    sycl_target.profile_map.inc("GlobalMove", "move_stage_0", 1,
+                                profile_elapsed(t0, profile_timestamp()));
 
     // allocate space to recv packed particles
     particle_unpacker.reset(this->global_move_exchange.num_remote_recv_ranks,
