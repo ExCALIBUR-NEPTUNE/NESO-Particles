@@ -31,6 +31,6 @@ html_static_path = ['_static']
 breathe_projects = {"NESO-Particles": "../../build/doxygen/xml"}
 breathe_default_project = "NESO-Particles"
 
-
-
+# Enable referencing figures etc by number.
+numfig = True
 
