@@ -581,7 +581,7 @@ inline void ParticleGroup::hybrid_move() {
   this->set_npart_cell_from_dat();
 
   this->domain.local_mapper->map(this->position_dat, this->cell_id_dat,
-                                 this->mpi_rank_dat);
+                                 this->mpi_rank_dat, 0);
 
   this->local_move_ctx.move();
   this->set_npart_cell_from_dat();
