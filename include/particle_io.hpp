@@ -189,7 +189,8 @@ public:
         comm_pair(particle_group.sycl_target.comm_pair), sym_store(args...),
         multi_dim_mode(false) {
     this->plist_id = H5Pcreate(H5P_FILE_ACCESS);
-    H5CHK(H5Pset_fapl_mpio(this->plist_id, MPI_COMM_WORLD, MPI_INFO_NULL));
+    H5CHK(H5Pset_fapl_mpio(this->plist_id, this->comm_pair.comm_parent,
+                           MPI_INFO_NULL));
     this->file_id = H5Fcreate(this->filename.c_str(), H5F_ACC_TRUNC,
                               H5P_DEFAULT, this->plist_id);
     this->is_closed = false;

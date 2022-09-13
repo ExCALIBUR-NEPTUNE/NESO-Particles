@@ -113,10 +113,12 @@ public:
       this->h_send_rank_npart.ptr[rx] = npart_tmp;
     }
 
-    sycl_target.profile_map.inc("GlobalMoveExchange", "npart_exchange_sendrecv_pre_wait", 1,
+    sycl_target.profile_map.inc("GlobalMoveExchange",
+                                "npart_exchange_sendrecv_pre_wait", 1,
                                 profile_elapsed(t0, profile_timestamp()));
     MPICHK(MPI_Wait(&this->mpi_request, MPI_STATUS_IGNORE));
-    sycl_target.profile_map.inc("GlobalMoveExchange", "npart_exchange_sendrecv_post_wait", 1,
+    sycl_target.profile_map.inc("GlobalMoveExchange",
+                                "npart_exchange_sendrecv_post_wait", 1,
                                 profile_elapsed(t0, profile_timestamp()));
 
     const int one[1] = {1};
@@ -135,8 +137,8 @@ public:
 
     MPICHK(MPI_Ibarrier(this->comm, &this->mpi_request));
 
-    sycl_target.profile_map.inc("GlobalMoveExchange", "npart_exchange_sendrecv", 1,
-                                profile_elapsed(t0, profile_timestamp()));
+    sycl_target.profile_map.inc("GlobalMoveExchange", "npart_exchange_sendrecv",
+                                1, profile_elapsed(t0, profile_timestamp()));
   }
 
   /**
