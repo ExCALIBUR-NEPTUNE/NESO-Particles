@@ -24,7 +24,13 @@ find_package(NESO-PARTICLES REQUIRED)
 find_package(hipSYCL 0.9.2 QUIET)
 if(NOT hipSYCL_FOUND)
   message(WARNING "hipsycl not found")
-  find_package(IntelDPCPP REQUIRED)
+  find_package(IntelDPCPP QUIET)
+  if(NOT IntelDPCPP_FOUNT)
+    message(
+      WARNING
+        "Proceeding on the assumption that the CXX compiler is a SYCL2020 compiler."
+    )
+  endif()
 else()
   message(STATUS "hipsycl found")
   set(HIPSYCL_TARGETS "omp")
