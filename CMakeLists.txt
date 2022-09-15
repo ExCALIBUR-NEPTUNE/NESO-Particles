@@ -23,9 +23,8 @@ find_package(NESO-PARTICLES REQUIRED)
 # Include hipSYCL
 find_package(hipSYCL 0.9.2 QUIET)
 if(NOT hipSYCL_FOUND)
-  message(WARNING "hipsycl not found")
   find_package(IntelDPCPP QUIET)
-  if(NOT IntelDPCPP_FOUNT)
+  if(NOT IntelDPCPP_FOUND)
     message(
       WARNING
         "Proceeding on the assumption that the CXX compiler is a SYCL2020 compiler."
@@ -60,6 +59,12 @@ enable_testing()
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/bin)
 # put all libraries in lib
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
+
+# install the header files
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/include
+        DESTINATION ${CMAKE_INSTALL_PREFIX})
+# install the cmake files
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/cmake DESTINATION ${CMAKE_INSTALL_PREFIX})
 
 # Include test directory
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/test)

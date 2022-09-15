@@ -66,3 +66,6 @@ target_link_libraries(${EXECUTABLE} PRIVATE ${LINK_LIBRARIES_COMMON})
 # define the test executable as a sycl target
 add_sycl_to_target(TARGET ${EXECUTABLE} SOURCES ${TEST_MAIN} ${TEST_LIST})
 gtest_add_tests(TARGET ${EXECUTABLE} SOURCES ${TEST_MAIN})
+
+# install the combined test binary
+install(TARGETS ${EXECUTABLE} DESTINATION bin)
