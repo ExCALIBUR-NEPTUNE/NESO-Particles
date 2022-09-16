@@ -287,7 +287,7 @@ private:
   BufferDeviceHost<int> dh_particle_dat_ncomp_real;
   BufferDeviceHost<int> dh_particle_dat_ncomp_int;
 
-  BufferHost<char> d_recv_buffer;
+  BufferDevice<char> d_recv_buffer;
 
   inline size_t
   particle_size(std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
