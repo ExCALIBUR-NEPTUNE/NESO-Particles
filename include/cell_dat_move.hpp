@@ -92,23 +92,30 @@ private:
     }
 
     // copy to the device
-    auto e0 = this->sycl_target.queue.memcpy(
-        this->d_particle_dat_ptr_real.ptr, this->h_particle_dat_ptr_real.ptr,
-        this->h_particle_dat_ptr_real.size_bytes());
-    auto e1 = this->sycl_target.queue.memcpy(
-        this->d_particle_dat_ptr_int.ptr, this->h_particle_dat_ptr_int.ptr,
-        this->h_particle_dat_ptr_int.size_bytes());
-    auto e2 = this->sycl_target.queue.memcpy(
-        this->d_particle_dat_ncomp_real.ptr,
-        this->h_particle_dat_ncomp_real.ptr,
-        this->h_particle_dat_ncomp_real.size_bytes());
-    auto e3 = this->sycl_target.queue.memcpy(
-        this->d_particle_dat_ncomp_int.ptr, this->h_particle_dat_ncomp_int.ptr,
-        this->h_particle_dat_ncomp_int.size_bytes());
-    e0.wait();
-    e1.wait();
-    e2.wait();
-    e3.wait();
+    EventStack event_stack;
+    if (this->h_particle_dat_ptr_real.size_bytes() > 0) {
+      event_stack.push(this->sycl_target.queue.memcpy(
+          this->d_particle_dat_ptr_real.ptr, this->h_particle_dat_ptr_real.ptr,
+          this->h_particle_dat_ptr_real.size_bytes()));
+    }
+    if (this->h_particle_dat_ptr_int.size_bytes() > 0) {
+      event_stack.push(this->sycl_target.queue.memcpy(
+          this->d_particle_dat_ptr_int.ptr, this->h_particle_dat_ptr_int.ptr,
+          this->h_particle_dat_ptr_int.size_bytes()));
+    }
+    if (this->h_particle_dat_ncomp_real.size_bytes() > 0) {
+      event_stack.push(this->sycl_target.queue.memcpy(
+          this->d_particle_dat_ncomp_real.ptr,
+          this->h_particle_dat_ncomp_real.ptr,
+          this->h_particle_dat_ncomp_real.size_bytes()));
+    }
+    if (this->h_particle_dat_ncomp_int.size_bytes() > 0) {
+      event_stack.push(this->sycl_target.queue.memcpy(
+          this->d_particle_dat_ncomp_int.ptr,
+          this->h_particle_dat_ncomp_int.ptr,
+          this->h_particle_dat_ncomp_int.size_bytes()));
+    }
+    event_stack.wait();
   }
 
 public:
@@ -159,8 +166,8 @@ public:
   }
 
   /**
-   * Move particles between cells (on this MPI rank) using the cell ids on the
-   * particles.
+   * Move particles between cells (on this MPI rank) using the cell ids on
+   * the particles.
    */
   inline void move() {
     auto t0 = profile_timestamp();
@@ -194,7 +201,8 @@ public:
     auto k_layers_old = this->d_layers_old.ptr;
     auto k_layers_new = this->d_layers_new.ptr;
 
-    // loop over particles and identify the particles to be move between cells.
+    // loop over particles and identify the particles to be move between
+    // cells.
     auto pl_iter_range = mpi_rank_dat->get_particle_loop_iter_range();
     auto pl_stride = mpi_rank_dat->get_particle_loop_cell_stride();
     auto pl_npart_cell = mpi_rank_dat->get_particle_loop_npart_cell();
@@ -212,7 +220,8 @@ public:
                 // the particle needs moving.
                 const auto cell_on_dat = k_cell_id_dat[cellx][0][layerx];
                 if (cellx != cell_on_dat) {
-                  // Atomically increment the particle count for the new cell
+                  // Atomically increment the particle count for the new
+                  // cell
                   sycl::atomic_ref<int, sycl::memory_order::relaxed,
                                    sycl::memory_scope::device>
                       atomic_layer(k_npart_cell[cell_on_dat]);
@@ -236,10 +245,12 @@ public:
         .wait_and_throw();
 
     // Realloc the ParticleDat cells for the move
-    this->sycl_target.queue
-        .memcpy(this->h_npart_cell.ptr, this->d_npart_cell.ptr,
-                sizeof(int) * this->ncell)
-        .wait();
+    if (this->ncell > 0) {
+      this->sycl_target.queue
+          .memcpy(this->h_npart_cell.ptr, this->d_npart_cell.ptr,
+                  sizeof(int) * this->ncell)
+          .wait();
+    }
 
     for (auto &dat : particle_dats_real) {
       dat.second->realloc(this->h_npart_cell);

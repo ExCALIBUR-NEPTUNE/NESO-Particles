@@ -71,10 +71,12 @@ public:
    *  Copy cell particle counts from host buffer to device buffer.
    */
   inline void npart_host_to_device() {
-    this->sycl_target.queue
-        .memcpy(this->d_npart_cell, this->h_npart_cell,
-                this->ncell * sizeof(int))
-        .wait();
+    if (this->ncell > 0) {
+      this->sycl_target.queue
+          .memcpy(this->d_npart_cell, this->h_npart_cell,
+                  this->ncell * sizeof(int))
+          .wait();
+    }
   }
   /**
    *  Asynchronously copy cell particle counts from host buffer to device
@@ -83,6 +85,7 @@ public:
    *  @returns sycl::event for copy operation.
    */
   inline sycl::event async_npart_host_to_device() {
+    NESOASSERT(this->ncell > 0, "Zero sized memcpy issued");
     return this->sycl_target.queue.memcpy(
         this->d_npart_cell, this->h_npart_cell, this->ncell * sizeof(int));
   }
@@ -90,10 +93,12 @@ public:
    *  Copy cell particle counts from device buffer to host buffer.
    */
   inline void npart_device_to_host() {
-    this->sycl_target.queue
-        .memcpy(this->h_npart_cell, this->d_npart_cell,
-                this->ncell * sizeof(int))
-        .wait();
+    if (this->ncell > 0) {
+      this->sycl_target.queue
+          .memcpy(this->h_npart_cell, this->d_npart_cell,
+                  this->ncell * sizeof(int))
+          .wait();
+    }
   }
   /**
    *  Asynchronously copy cell particle counts from device buffer to host
@@ -102,6 +107,7 @@ public:
    *  @returns sycl::event for copy operation.
    */
   inline sycl::event async_npart_device_to_host() {
+    NESOASSERT(this->ncell > 0, "Zero sized memcpy issued");
     return this->sycl_target.queue.memcpy(
         this->h_npart_cell, this->d_npart_cell, this->ncell * sizeof(int));
   }

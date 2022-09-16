@@ -121,10 +121,12 @@ public:
     for (int cellx = 0; cellx < this->ncell; cellx++) {
       this->npart_cell.ptr[cellx] = 0;
     }
-    this->sycl_target.queue
-        .memcpy(this->device_npart_cell.ptr, this->npart_cell.ptr,
-                this->ncell * sizeof(int))
-        .wait();
+    if (this->ncell > 0) {
+      this->sycl_target.queue
+          .memcpy(this->device_npart_cell.ptr, this->npart_cell.ptr,
+                  this->ncell * sizeof(int))
+          .wait();
+    }
 
     for (auto &property : particle_spec.properties_real) {
       add_particle_dat(ParticleDat(sycl_target, property, this->ncell));

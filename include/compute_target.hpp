@@ -357,17 +357,21 @@ public:
    * Copy the contents of the host buffer to the device buffer.
    */
   inline void host_to_device() {
-    this->sycl_target.queue
-        .memcpy(this->d_buffer.ptr, this->h_buffer.ptr, this->size_bytes())
-        .wait();
+    if (this->size_bytes() > 0) {
+      this->sycl_target.queue
+          .memcpy(this->d_buffer.ptr, this->h_buffer.ptr, this->size_bytes())
+          .wait();
+    }
   }
   /**
    * Copy the contents of the device buffer to the host buffer.
    */
   inline void device_to_host() {
-    this->sycl_target.queue
-        .memcpy(this->h_buffer.ptr, this->d_buffer.ptr, this->size_bytes())
-        .wait();
+    if (this->size_bytes() > 0) {
+      this->sycl_target.queue
+          .memcpy(this->h_buffer.ptr, this->d_buffer.ptr, this->size_bytes())
+          .wait();
+    }
   }
   /**
    * Start an asynchronous copy of the host data to the device buffer.
@@ -375,6 +379,7 @@ public:
    * @returns sycl::event to wait on for completion of data movement.
    */
   inline sycl::event async_host_to_device() {
+    NESOASSERT(this->size_bytes() > 0, "Zero sized copy issued.");
     return this->sycl_target.queue.memcpy(
         this->d_buffer.ptr, this->h_buffer.ptr, this->size_bytes());
   }
@@ -384,6 +389,7 @@ public:
    * @returns sycl::event to wait on for completion of data movement.
    */
   inline sycl::event async_device_to_host() {
+    NESOASSERT(this->size_bytes() > 0, "Zero sized copy issued.");
     return this->sycl_target.queue.memcpy(
         this->h_buffer.ptr, this->d_buffer.ptr, this->size_bytes());
   }

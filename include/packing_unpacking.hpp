@@ -134,9 +134,12 @@ public:
     for (int rankx = 0; rankx < num_remote_send_ranks; rankx++) {
       const int npart_tmp = h_send_rank_npart_ptr[rankx];
       const int nbytes_tmp = npart_tmp * this->num_bytes_per_particle;
+
       auto device_ptr = this->cell_dat.col_device_ptr(rankx, 0);
-      copy_events.push(this->sycl_target.queue.memcpy(
-          &this->h_send_buffer.ptr[offset], device_ptr, nbytes_tmp));
+      if (nbytes_tmp > 0) {
+        copy_events.push(this->sycl_target.queue.memcpy(
+            &this->h_send_buffer.ptr[offset], device_ptr, nbytes_tmp));
+      }
       this->h_send_offsets.ptr[rankx] = offset;
       offset += nbytes_tmp;
     }
@@ -417,9 +420,13 @@ public:
     auto t0 = profile_timestamp();
 
     // copy packed data to device
-    auto event_memcpy = this->sycl_target.queue.memcpy(
-        this->d_recv_buffer.ptr, this->h_recv_buffer.ptr,
-        this->npart_recv * this->num_bytes_per_particle);
+
+    const int cpysize = this->npart_recv * this->num_bytes_per_particle;
+    sycl::event event_memcpy;
+    if (cpysize > 0) {
+      event_memcpy = this->sycl_target.queue.memcpy(
+          this->d_recv_buffer.ptr, this->h_recv_buffer.ptr, cpysize);
+    }
 
     // old cell occupancy
     auto mpi_rank_dat = particle_dats_int[Sym<INT>("NESO_MPI_RANK")];
@@ -463,7 +470,11 @@ public:
 
     sycl_target.profile_map.inc("ParticleUnpacker", "unpack_prepare", 1,
                                 profile_elapsed(t0, profile_timestamp()));
-    event_memcpy.wait_and_throw();
+
+    if (cpysize > 0) {
+      event_memcpy.wait_and_throw();
+    }
+
     this->sycl_target.queue
         .submit([&](sycl::handler &cgh) {
           cgh.parallel_for<>(

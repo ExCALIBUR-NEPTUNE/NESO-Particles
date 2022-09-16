@@ -228,9 +228,12 @@ public:
     auto t1 = profile_timestamp();
 
     // do this d->h copy once for all dats
-    this->event_stack.push(this->sycl_target.queue.memcpy(
-        this->h_npart_cell.ptr, this->d_npart_cell.ptr,
-        this->d_npart_cell.size_bytes()));
+    if (this->d_npart_cell.size_bytes() > 0) {
+      this->event_stack.push(this->sycl_target.queue.memcpy(
+          this->h_npart_cell.ptr, this->d_npart_cell.ptr,
+          this->d_npart_cell.size_bytes()));
+    }
+
     for (auto &dat : particle_dats_real) {
       this->event_stack.push(dat.second->copy_particle_data(
           npart, compress_cells_old_ptr, compress_cells_old_ptr,
