@@ -153,14 +153,16 @@ public:
   inline CellData<T> get_cell(const int cell) {
     auto cell_data = std::make_shared<CellDataT<T>>(this->sycl_target,
                                                     this->nrow, this->ncol);
-    EventStack se;
-    for (int colx = 0; colx < this->ncol; colx++) {
-      se.push(this->sycl_target.queue.memcpy(
-          cell_data->data[colx].data(),
-          &this->d_ptr[cell * this->stride + colx * this->nrow],
-          this->nrow * sizeof(T)));
+    if (this->nrow > 0) {
+      EventStack se;
+      for (int colx = 0; colx < this->ncol; colx++) {
+        se.push(this->sycl_target.queue.memcpy(
+            cell_data->data[colx].data(),
+            &this->d_ptr[cell * this->stride + colx * this->nrow],
+            this->nrow * sizeof(T)));
+      }
+      se.wait();
     }
-    se.wait();
     return cell_data;
   }
   /**
@@ -175,13 +177,15 @@ public:
     NESOASSERT(cell_data->ncol >= this->ncol,
                "CellData as insuffient column count.");
 
-    EventStack se;
-    for (int colx = 0; colx < this->ncol; colx++) {
-      se.push(this->sycl_target.queue.memcpy(
-          &this->d_ptr[cell * this->stride + colx * this->nrow],
-          cell_data->data[colx].data(), this->nrow * sizeof(T)));
+    if (this->nrow > 0) {
+      EventStack se;
+      for (int colx = 0; colx < this->ncol; colx++) {
+        se.push(this->sycl_target.queue.memcpy(
+            &this->d_ptr[cell * this->stride + colx * this->nrow],
+            cell_data->data[colx].data(), this->nrow * sizeof(T)));
+      }
+      se.wait();
     }
-    se.wait();
   }
 };
 
@@ -360,12 +364,16 @@ public:
 
     auto cell_data = std::make_shared<CellDataT<T>>(
         this->sycl_target, this->nrow[cell], this->ncol);
-    for (int colx = 0; colx < this->ncol; colx++) {
-      this->sycl_target.queue.memcpy(cell_data->data[colx].data(),
-                                     this->h_ptr_cols[cell * this->ncol + colx],
-                                     this->nrow[cell] * sizeof(T));
+
+    if (this->nrow[cell] > 0) {
+      for (int colx = 0; colx < this->ncol; colx++) {
+        this->sycl_target.queue.memcpy(
+            cell_data->data[colx].data(),
+            this->h_ptr_cols[cell * this->ncol + colx],
+            this->nrow[cell] * sizeof(T));
+      }
+      this->sycl_target.queue.wait();
     }
-    this->sycl_target.queue.wait();
 
     sycl_target.profile_map.inc("CellDat", "get_cell", 1,
                                 profile_elapsed(t0, profile_timestamp()));
@@ -389,11 +397,13 @@ public:
     NESOASSERT(cell_data.ncol >= this->ncol,
                "CellDataT has insufficent number of columns");
 
-    for (int colx = 0; colx < this->ncol; colx++) {
-      event_stack.push(this->sycl_target.queue.memcpy(
-          cell_data.data[colx].data(),
-          this->h_ptr_cols[cell * this->ncol + colx],
-          this->nrow[cell] * sizeof(T)));
+    if (this->nrow[cell] > 0) {
+      for (int colx = 0; colx < this->ncol; colx++) {
+        event_stack.push(this->sycl_target.queue.memcpy(
+            cell_data.data[colx].data(),
+            this->h_ptr_cols[cell * this->ncol + colx],
+            this->nrow[cell] * sizeof(T)));
+      }
     }
 
     sycl_target.profile_map.inc("CellDat", "get_cell_async", 1,
