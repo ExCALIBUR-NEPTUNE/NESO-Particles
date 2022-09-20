@@ -241,21 +241,25 @@ public:
         .wait_and_throw();
 
     // copy the computed indicies to the host
-    this->sycl_target.queue
-        .memcpy(this->h_lookup_global_cells.ptr,
-                this->d_lookup_global_cells.ptr,
-                this->d_lookup_global_cells.size_bytes())
-        .wait_and_throw();
-
+    if (this->d_lookup_global_cells.size_bytes() > 0) {
+      this->sycl_target.queue
+          .memcpy(this->h_lookup_global_cells.ptr,
+                  this->d_lookup_global_cells.ptr,
+                  this->d_lookup_global_cells.size_bytes())
+          .wait_and_throw();
+    }
     // get the mpi ranks
     mesh_heirarchy->get_owners(npart_query, this->h_lookup_global_cells.ptr,
                                this->h_lookup_ranks.ptr);
 
     // copy the mpi ranks back to the ParticleDat
-    this->sycl_target.queue
-        .memcpy(this->d_lookup_ranks.ptr, this->h_lookup_ranks.ptr,
-                this->h_lookup_ranks.size_bytes())
-        .wait_and_throw();
+    if (this->h_lookup_ranks.size_bytes() > 0) {
+      this->sycl_target.queue
+          .memcpy(this->d_lookup_ranks.ptr, this->h_lookup_ranks.ptr,
+                  this->h_lookup_ranks.size_bytes())
+          .wait_and_throw();
+    }
+
     this->sycl_target.queue
         .submit([&](sycl::handler &cgh) {
           cgh.parallel_for<>(sycl::range<1>(npart_query), [=](sycl::id<1> idx) {

@@ -6,7 +6,6 @@ set(CMAKE_CXX_STANDARD 17)
 
 add_definitions(-DGPU_SELECTOR=0)
 
-enable_testing()
 find_package(GTest QUIET)
 
 if(NOT GTest_FOUND)
@@ -55,7 +54,7 @@ foreach(TEST ${TEST_SRCS})
   target_include_directories(${TEST_NAME} PRIVATE ${INCLUDE_DIRECTORIES_COMMON})
 
   add_sycl_to_target(TARGET ${TEST_NAME} SOURCES ${TEST_SOURCES})
-  gtest_discover_tests(${TEST_NAME})
+  gtest_add_tests(TARGET ${TEST_NAME})
 endforeach()
 
 # Build a global test suite
@@ -66,4 +65,7 @@ target_link_libraries(${EXECUTABLE} PRIVATE ${LINK_LIBRARIES_COMMON})
 
 # define the test executable as a sycl target
 add_sycl_to_target(TARGET ${EXECUTABLE} SOURCES ${TEST_MAIN} ${TEST_LIST})
-gtest_discover_tests(${EXECUTABLE})
+gtest_add_tests(TARGET ${EXECUTABLE} SOURCES ${TEST_MAIN})
+
+# install the combined test binary
+install(TARGETS ${EXECUTABLE} DESTINATION bin)

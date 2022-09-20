@@ -1,6 +1,8 @@
 #ifndef _NESO_PARTICLES_COMPUTE_TARGET
 #define _NESO_PARTICLES_COMPUTE_TARGET
 
+#include <cstdlib>
+
 #include <CL/sycl.hpp>
 #include <mpi.h>
 #include <stack>
@@ -12,6 +14,37 @@
 using namespace cl;
 
 namespace NESO::Particles {
+
+/**
+ *  Determine a local MPI rank based on environment variables and shared memory
+ *  splitting.
+ *
+ *  @param comm  MPI_Comm to try and deduce local rank from.
+ *  @param default_rank (optional)  MPI rank to use if one cannot be determined
+ *  from environment variables or SHM intra comm.
+ */
+inline int get_local_mpi_rank(MPI_Comm comm, int default_rank = -1) {
+
+  if (const char *env_char = std::getenv("OMPI_COMM_WORLD_LOCAL_RANK")) {
+    std::string env_str = std::string(env_char);
+    const int env_int = std::stoi(env_str);
+    return env_int;
+  } else if (const char *env_char = std::getenv("MV2_COMM_WORLD_LOCAL_RANK")) {
+    std::string env_str = std::string(env_char);
+    const int env_int = std::stoi(env_str);
+    return env_int;
+  } else if (const char *env_char = std::getenv("MPI_LOCALRANKID")) {
+    std::string env_str = std::string(env_char);
+    const int env_int = std::stoi(env_str);
+    return env_int;
+  } else if (default_rank < 0) {
+    CommPair comm_pair(comm);
+    default_rank = comm_pair.rank_intra;
+    comm_pair.free();
+  }
+
+  return default_rank;
+}
 
 /**
  * Container for SYCL devices and queues such that they can be easily passed
@@ -42,8 +75,11 @@ public:
    * selector, 1 explicitly use a GPU selector and -1 use an explicit CPU
    * selector.
    * @param comm MPI Communicator on which the SYCLTarget is based.
+   * @param local_rank (optional) Explicitly pass the local rank used to assign
+   * devices to MPI ranks.
    */
-  SYCLTarget(const int gpu_device, MPI_Comm comm) : comm_pair(comm) {
+  SYCLTarget(const int gpu_device, MPI_Comm comm, int local_rank = -1)
+      : comm_pair(comm) {
     if (gpu_device > 0) {
       try {
         this->device = sycl::device(sycl::gpu_selector());
@@ -55,7 +91,31 @@ public:
     } else if (gpu_device < 0) {
       this->device = sycl::device(sycl::cpu_selector());
     } else {
-      this->device = sycl::device(sycl::default_selector());
+
+      // Get the default device and platform as they are most likely to be the
+      // desired device based on SYCL implementation/runtime/environment
+      // variables.
+      auto default_device = sycl::device(sycl::default_selector());
+      auto default_platform = default_device.get_platform();
+
+      // Get all devices from the default platform
+      auto devices = default_platform.get_devices();
+
+      // determine the local rank to use for round robin device assignment.
+      if (local_rank < 0) {
+        local_rank = get_local_mpi_rank(comm, this->comm_pair.rank_intra);
+      }
+
+      // round robin assign devices to local MPI ranks.
+      const int num_devices = devices.size();
+      const int device_index = local_rank % num_devices;
+      this->device = devices[device_index];
+
+      this->profile_map.set("MPI", "MPI_COMM_WORLD_rank_local", local_rank);
+      this->profile_map.set("SYCL", "DEVICE_COUNT", num_devices);
+      this->profile_map.set("SYCL", "DEVICE_INDEX", device_index);
+      this->profile_map.set(
+          "SYCL", this->device.get_info<sycl::info::device::name>(), 0);
     }
 
     if (this->comm_pair.rank_parent == 0) {
@@ -297,17 +357,21 @@ public:
    * Copy the contents of the host buffer to the device buffer.
    */
   inline void host_to_device() {
-    this->sycl_target.queue
-        .memcpy(this->d_buffer.ptr, this->h_buffer.ptr, this->size_bytes())
-        .wait();
+    if (this->size_bytes() > 0) {
+      this->sycl_target.queue
+          .memcpy(this->d_buffer.ptr, this->h_buffer.ptr, this->size_bytes())
+          .wait();
+    }
   }
   /**
    * Copy the contents of the device buffer to the host buffer.
    */
   inline void device_to_host() {
-    this->sycl_target.queue
-        .memcpy(this->h_buffer.ptr, this->d_buffer.ptr, this->size_bytes())
-        .wait();
+    if (this->size_bytes() > 0) {
+      this->sycl_target.queue
+          .memcpy(this->h_buffer.ptr, this->d_buffer.ptr, this->size_bytes())
+          .wait();
+    }
   }
   /**
    * Start an asynchronous copy of the host data to the device buffer.
@@ -315,6 +379,7 @@ public:
    * @returns sycl::event to wait on for completion of data movement.
    */
   inline sycl::event async_host_to_device() {
+    NESOASSERT(this->size_bytes() > 0, "Zero sized copy issued.");
     return this->sycl_target.queue.memcpy(
         this->d_buffer.ptr, this->h_buffer.ptr, this->size_bytes());
   }
@@ -324,6 +389,7 @@ public:
    * @returns sycl::event to wait on for completion of data movement.
    */
   inline sycl::event async_device_to_host() {
+    NESOASSERT(this->size_bytes() > 0, "Zero sized copy issued.");
     return this->sycl_target.queue.memcpy(
         this->h_buffer.ptr, this->d_buffer.ptr, this->size_bytes());
   }
