@@ -222,7 +222,12 @@ public:
 
     // Create the group for this time step.
     std::string step_name = "Step#";
-    step_name += std::to_string(this->step);
+    std::string step_number = std::to_string(this->step);
+    //Number used in string must have 5 integers.  Padded with zeros
+    unsigned int number_of_pre_zeros = 5 - step_number.length();
+    step_number.insert(0,number_of_pre_zeros,'0');
+
+    step_name +=  step_number;// std::to_string(this->step);
     hid_t group_step = H5Gcreate(file_id, step_name.c_str(), H5P_DEFAULT,
                                  H5P_DEFAULT, H5P_DEFAULT);
 
