@@ -13,6 +13,7 @@
 using namespace cl;
 namespace NESO::Particles {
 
+// Forward declaration of ParticleGroup
 class ParticleGroup;
 
 /**

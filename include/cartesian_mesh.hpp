@@ -164,14 +164,11 @@ public:
    *  Map positions to owning MPI ranks. Positions should be within the domain
    *  prior to calling map, i.e. particles should be within the domain extents.
    *
-   *  @param position_dat ParticleDat to use for particle positions.
-   *  @param cell_id_dat ParticleDat to use for particle cell ids.
-   *  @param mpi_rank_dat ParticleDat to use for particle MPI ranks (output).
+   *  @param particle_group ParticleGroup to use.
    */
   inline void map(ParticleGroup &particle_group, const int map_cell = -1) {
 
     ParticleDatShPtr<REAL> &position_dat = particle_group.position_dat;
-    ParticleDatShPtr<INT> &cell_id_dat = particle_group.cell_id_dat;
     ParticleDatShPtr<INT> &mpi_rank_dat = particle_group.mpi_rank_dat;
 
     auto t0 = profile_timestamp();
@@ -242,6 +239,8 @@ public:
 
   /**
    *  No-op implementation of callback.
+   *
+   *  @param particle_group ParticleGroup.
    */
   inline void particle_group_callback(ParticleGroup &particle_group){};
 };
