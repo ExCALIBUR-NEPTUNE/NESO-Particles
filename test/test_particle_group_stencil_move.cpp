@@ -293,7 +293,7 @@ TEST(ParticleGroup, stencil_move_multiple) {
 
   reset_mpi_ranks(A.mpi_rank_dat);
   mesh_heirarchy_global_map.execute();
-  cart_local_mapper->map(A.position_dat, A.cell_id_dat, A.mpi_rank_dat);
+  cart_local_mapper->map(A);
   lambda_test_mapping();
 
   for (int testx = 0; testx < Ntest; testx++) {
@@ -302,7 +302,7 @@ TEST(ParticleGroup, stencil_move_multiple) {
     reset_mpi_ranks(A.mpi_rank_dat);
     mesh_heirarchy_global_map.execute();
 
-    cart_local_mapper->map(A.position_dat, A.cell_id_dat, A.mpi_rank_dat);
+    cart_local_mapper->map(A);
     lambda_test_mapping();
 
     A.local_move();

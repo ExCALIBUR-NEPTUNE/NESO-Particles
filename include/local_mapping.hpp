@@ -13,6 +13,8 @@
 using namespace cl;
 namespace NESO::Particles {
 
+class ParticleGroup;
+
 /**
  * Abstract class to map positions to owning MPI ranks based on local
  * information, i.e. halo cells. Could also use or set the cell id.
@@ -22,14 +24,19 @@ public:
   /**
    * This function maps particle positions to cells on the underlying mesh.
    *
-   * @param position_dat ParticleDat containing particle positions.
-   * @param cell_id_dat ParticleDat containing particle cell ids.
-   * @param mpi_rank_dat ParticleDat containing particle MPI ranks.
+   * @param particle_group ParticleGroup containing particle positions.
    */
-  virtual inline void map(ParticleDatShPtr<REAL> &position_dat,
-                          ParticleDatShPtr<INT> &cell_id_dat,
-                          ParticleDatShPtr<INT> &mpi_rank_dat,
+  virtual inline void map(ParticleGroup &particle_group,
                           const int map_cell = -1) = 0;
+
+  /**
+   * Callback for ParticleGroup to execute for additional setup of the
+   * LocalMapper that may involve the ParticleGroup.
+   *
+   * @param particle_group ParticleGroup instance.
+   */
+  virtual inline void
+  particle_group_callback(ParticleGroup &particle_group) = 0;
 };
 
 typedef std::shared_ptr<LocalMapper> LocalMapperShPtr;
@@ -43,10 +50,12 @@ public:
   /**
    *  No-op implementation of map.
    */
-  inline void map(ParticleDatShPtr<REAL> &position_dat,
-                  ParticleDatShPtr<INT> &cell_id_dat,
-                  ParticleDatShPtr<INT> &mpi_rank_dat,
-                  const int map_cell = -1){};
+  inline void map(ParticleGroup &particle_group, const int map_cell = -1){};
+
+  /**
+   *  No-op implementation of callback.
+   */
+  inline void particle_group_callback(ParticleGroup &particle_group){};
 };
 
 inline std::shared_ptr<DummyLocalMapperT> DummyLocalMapper() {

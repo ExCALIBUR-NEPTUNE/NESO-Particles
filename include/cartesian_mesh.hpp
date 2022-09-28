@@ -8,6 +8,7 @@
 #include "compute_target.hpp"
 #include "local_mapping.hpp"
 #include "particle_dat.hpp"
+#include "particle_group.hpp"
 #include "profiling.hpp"
 #include "typedefs.hpp"
 
@@ -167,10 +168,11 @@ public:
    *  @param cell_id_dat ParticleDat to use for particle cell ids.
    *  @param mpi_rank_dat ParticleDat to use for particle MPI ranks (output).
    */
-  inline void map(ParticleDatShPtr<REAL> &position_dat,
-                  ParticleDatShPtr<INT> &cell_id_dat,
-                  ParticleDatShPtr<INT> &mpi_rank_dat,
-                  const int map_cell = -1) {
+  inline void map(ParticleGroup &particle_group, const int map_cell = -1) {
+
+    ParticleDatShPtr<REAL> &position_dat = particle_group.position_dat;
+    ParticleDatShPtr<INT> &cell_id_dat = particle_group.cell_id_dat;
+    ParticleDatShPtr<INT> &mpi_rank_dat = particle_group.mpi_rank_dat;
 
     auto t0 = profile_timestamp();
     // pointers to access dats in kernel
@@ -237,6 +239,11 @@ public:
     sycl_target.profile_map.inc("CartesianHMeshLocalMapperT", "map", 1,
                                 profile_elapsed(t0, profile_timestamp()));
   };
+
+  /**
+   *  No-op implementation of callback.
+   */
+  inline void particle_group_callback(ParticleGroup &particle_group){};
 };
 
 inline std::shared_ptr<CartesianHMeshLocalMapperT>

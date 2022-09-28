@@ -14,7 +14,9 @@
 #include "cell_dat_move.hpp"
 #include "compute_target.hpp"
 #include "domain.hpp"
+#include "global_mapping.hpp"
 #include "global_move.hpp"
+#include "local_move.hpp"
 #include "packing_unpacking.hpp"
 #include "particle_dat.hpp"
 #include "particle_set.hpp"
@@ -148,6 +150,10 @@ public:
     this->mesh_heirarchy_global_map = std::make_shared<MeshHierarchyGlobalMap>(
         this->sycl_target, this->domain.mesh, this->position_dat,
         this->cell_id_dat, this->mpi_rank_dat);
+
+    // call the callback on the local mapper to complete the setup of that
+    // object
+    this->domain.local_mapper->particle_group_callback(*this);
   }
   ~ParticleGroup() {}
 
@@ -575,15 +581,13 @@ template <typename... T> inline void ParticleGroup::print(T... args) {
 inline void ParticleGroup::hybrid_move() {
 
   reset_mpi_ranks(this->mpi_rank_dat);
-  this->domain.local_mapper->map(this->position_dat, this->cell_id_dat,
-                                 this->mpi_rank_dat);
+  this->domain.local_mapper->map(*this);
   this->mesh_heirarchy_global_map->execute();
 
   this->global_move_ctx.move();
   this->set_npart_cell_from_dat();
 
-  this->domain.local_mapper->map(this->position_dat, this->cell_id_dat,
-                                 this->mpi_rank_dat, 0);
+  this->domain.local_mapper->map(*this, 0);
 
   this->local_move_ctx.move();
   this->set_npart_cell_from_dat();
