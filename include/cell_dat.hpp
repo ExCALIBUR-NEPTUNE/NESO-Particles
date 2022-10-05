@@ -274,6 +274,10 @@ public:
 
     auto t0 = profile_timestamp();
 
+    NESOASSERT(cell >= 0, "Cell index is negative");
+    NESOASSERT(cell < this->ncells, "Cell index is >= ncells");
+    NESOASSERT(nrow_required >= 0, "Requested number of rows is negative");
+
     if (nrow_required < this->nrow[cell]) {
       this->nrow[cell] = nrow_required;
       this->nrow_max = -1;
@@ -282,9 +286,6 @@ public:
       return;
     }
 
-    NESOASSERT(cell >= 0, "Cell index is negative");
-    NESOASSERT(cell < this->ncells, "Cell index is >= ncells");
-    NESOASSERT(nrow_required >= 0, "Requested number of rows is negative");
     const INT nrow_alloced = this->nrow_alloc[cell];
     const INT nrow_existing = this->nrow[cell];
 
@@ -295,6 +296,7 @@ public:
           this->stack_ptrs.push(col_ptr_old);
           T *col_ptr_new =
               sycl::malloc_device<T>(nrow_required, this->sycl_target.queue);
+          NESOASSERT(col_ptr_new != nullptr, "bad pointer from malloc_device");
 
           if (nrow_alloced > 0) {
             this->stack_events.push(this->sycl_target.queue.memcpy(

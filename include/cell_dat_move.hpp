@@ -62,6 +62,9 @@ private:
   // layer compressor from the ParticleGroup for removing the old particle rows
   LayerCompressor &layer_compressor;
 
+  // ErrorPropagate object to detect bad cell indices
+  ErrorPropagate ep_bad_cell_indices;
+
   inline void get_particle_dat_info() {
 
     this->num_dats_real = this->particle_dats_real.size();
@@ -154,7 +157,8 @@ public:
         d_particle_dat_ptr_real(sycl_target, 1),
         d_particle_dat_ptr_int(sycl_target, 1),
         d_particle_dat_ncomp_real(sycl_target, 1),
-        d_particle_dat_ncomp_int(sycl_target, 1) {}
+        d_particle_dat_ncomp_int(sycl_target, 1),
+        ep_bad_cell_indices(sycl_target) {}
 
   /**
    * Set the ParticleDat to use as a source for cell ids.
@@ -208,6 +212,9 @@ public:
     auto pl_npart_cell = mpi_rank_dat->get_particle_loop_npart_cell();
     auto k_cell_id_dat = this->cell_id_dat->cell_dat.device_ptr();
 
+    // detect out of bounds particles
+    auto k_ep_indices = this->ep_bad_cell_indices.device_ptr();
+
     this->sycl_target.queue
         .submit([&](sycl::handler &cgh) {
           cgh.parallel_for<>(
@@ -219,7 +226,12 @@ public:
                 // if the cell on the particle is not the current cell then
                 // the particle needs moving.
                 const auto cell_on_dat = k_cell_id_dat[cellx][0][layerx];
-                if (cellx != cell_on_dat) {
+
+                const bool valid_cell =
+                    (cell_on_dat >= 0) && (cell_on_dat < k_ncell);
+                NESO_KERNEL_ASSERT(valid_cell, k_ep_indices);
+
+                if ((cellx != cell_on_dat) && valid_cell) {
                   // Atomically increment the particle count for the new
                   // cell
                   sycl::atomic_ref<int, sycl::memory_order::relaxed,
@@ -243,6 +255,8 @@ public:
               });
         })
         .wait_and_throw();
+    this->ep_bad_cell_indices.check_and_throw(
+        "Particle held bad cell id (not in [0,..,N_cell - 1]).");
 
     // Realloc the ParticleDat cells for the move
     if (this->ncell > 0) {

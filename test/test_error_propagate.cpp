@@ -10,7 +10,7 @@ TEST(ErrorPropagate, Flag) {
   // create an object to track that an error should be thrown
   ErrorPropagate ep(sycl_target);
 
-  auto k_ep = ep.get_device_ptr();
+  auto k_ep = ep.device_ptr();
   // get the kernel parameter
 
   sycl_target.queue

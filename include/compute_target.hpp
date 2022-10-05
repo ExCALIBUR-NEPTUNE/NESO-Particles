@@ -455,7 +455,7 @@ public:
    * be incremented atomically with some positive integer to indicate an error
    * occured in the kernel.
    */
-  inline int *get_device_ptr() { return this->dh_flag.d_buffer.ptr; }
+  inline int *device_ptr() { return this->dh_flag.d_buffer.ptr; }
 
   /**
    * Check the stored integer. If the integer is non-zero throw an error with
