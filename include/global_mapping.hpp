@@ -289,7 +289,7 @@ inline void reset_mpi_ranks(ParticleDatShPtr<INT> &mpi_rank_dat) {
 
   // pointers to access BufferDevices in the kernel
   auto k_mpi_rank_dat = mpi_rank_dat->cell_dat.device_ptr();
-  auto sycl_target = mpi_rank_dat->sycl_target;
+  auto &sycl_target = mpi_rank_dat->sycl_target;
   sycl_target.queue
       .submit([&](sycl::handler &cgh) {
         cgh.parallel_for<>(sycl::range<1>(pl_iter_range), [=](sycl::id<1> idx) {

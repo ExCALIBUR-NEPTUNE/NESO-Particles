@@ -130,6 +130,9 @@ template <typename... T> inline void nprint(T... args) {
 
 #endif
 
+//#define DEBUG_OOB_CHECK
+#define DEBUG_OOB_WIDTH 1000
+
 } // namespace NESO::Particles
 
 #endif

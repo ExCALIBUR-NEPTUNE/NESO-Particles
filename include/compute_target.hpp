@@ -4,6 +4,8 @@
 #include <cstdlib>
 
 #include <CL/sycl.hpp>
+#include <array>
+#include <map>
 #include <mpi.h>
 #include <stack>
 #include <string>
@@ -53,6 +55,13 @@ inline int get_local_mpi_rank(MPI_Comm comm, int default_rank = -1) {
  */
 class SYCLTarget {
 private:
+  std::map<unsigned char *, size_t> ptr_map;
+
+#ifdef DEBUG_OOB_CHECK
+  std::array<unsigned char, DEBUG_OOB_WIDTH> ptr_bit_mask;
+  std::array<unsigned char, DEBUG_OOB_WIDTH> ptr_bit_tmp;
+#endif
+
 public:
   /// SYCL device in use.
   sycl::device device;
@@ -67,6 +76,12 @@ public:
   ProfileMap profile_map;
 
   SYCLTarget(){};
+
+  SYCLTarget(const SYCLTarget &st) {
+    NESOASSERT(
+        false,
+        "SYCLTarget copy constructor called - this will cause problems.");
+  }
 
   /**
    * Create a new SYCLTarget using a flag to specifiy device type and a parent
@@ -132,13 +147,98 @@ public:
                           this->comm_pair.rank_parent);
     this->profile_map.set("MPI", "MPI_COMM_WORLD_size",
                           this->comm_pair.size_parent);
+
+#ifdef DEBUG_OOB_CHECK
+    for (int cx = 0; cx < DEBUG_OOB_WIDTH; cx++) {
+      this->ptr_bit_mask[cx] = static_cast<unsigned char>(255);
+    }
+#endif
   }
-  ~SYCLTarget() {}
+  ~SYCLTarget() {
+#ifdef DEBUG_OOB_CHECK
+    if (this->ptr_map.size() > 0) {
+      for (auto &px : this->ptr_map) {
+        nprint("NOT FREED:", (void *)px.first, px.second);
+      }
+    } else {
+      nprint("ALL FREED");
+    }
+#endif
+  }
 
   /**
    * Free the SYCLTarget and underlying CommPair.
    */
-  void free() { comm_pair.free(); }
+  inline void free() { comm_pair.free(); }
+
+  inline void *malloc_device(size_t size_bytes) {
+
+#ifndef DEBUG_OOB_CHECK
+    return sycl::malloc_device(size_bytes, this->queue);
+#else
+
+    unsigned char *ptr = (unsigned char *)sycl::malloc_device(
+        size_bytes + 2 * DEBUG_OOB_WIDTH, this->queue);
+    unsigned char *ptr_user = ptr + DEBUG_OOB_WIDTH;
+    this->ptr_map[ptr_user] = size_bytes;
+    NESOASSERT(ptr != nullptr, "pad pointer from malloc_device");
+
+    this->queue.memcpy(ptr, this->ptr_bit_mask.data(), DEBUG_OOB_WIDTH).wait();
+
+    this->queue
+        .memcpy(ptr_user + size_bytes, this->ptr_bit_mask.data(),
+                DEBUG_OOB_WIDTH)
+        .wait();
+
+    return (void *)ptr_user;
+    // return ptr;
+#endif
+  }
+
+  template <typename T> inline void free(T *ptr_in) {
+#ifndef DEBUG_OOB_CHECK
+    sycl::free(ptr_in, this->queue);
+#else
+    unsigned char *ptr = (unsigned char *)ptr_in;
+    NESOASSERT(this->ptr_map.count(ptr), "point not alloced correctly");
+
+    this->check_ptr(ptr, this->ptr_map[ptr]);
+
+    this->ptr_map.erase(ptr);
+    sycl::free((void *)(ptr - DEBUG_OOB_WIDTH), this->queue);
+    // sycl::free(ptr_in, this->queue);
+#endif
+  }
+
+  inline void check_ptrs() {
+    for (auto &px : this->ptr_map) {
+      this->check_ptr(px.first, px.second);
+    }
+    nprint("PTR CHECK PASSED");
+  }
+
+  inline void check_ptr(unsigned char *ptr_user, const size_t size_bytes) {
+
+    this->queue
+        .memcpy(this->ptr_bit_tmp.data(), ptr_user - DEBUG_OOB_WIDTH,
+                DEBUG_OOB_WIDTH)
+        .wait();
+
+    for (int cx = 0; cx < DEBUG_OOB_WIDTH; cx++) {
+      NESOASSERT(this->ptr_bit_tmp[cx] == static_cast<unsigned char>(255),
+                 "DEBUG PADDING START TOUCHED");
+    }
+
+    this->queue
+        .memcpy(this->ptr_bit_tmp.data(), ptr_user + size_bytes,
+                DEBUG_OOB_WIDTH)
+        .wait();
+
+    for (int cx = 0; cx < DEBUG_OOB_WIDTH; cx++) {
+      NESOASSERT(this->ptr_bit_tmp[cx] == static_cast<unsigned char>(255),
+                 "DEBUG PADDING END TOUCHED");
+    }
+  }
 };
 
 /**
@@ -163,7 +263,7 @@ public:
   BufferDevice(SYCLTarget &sycl_target, size_t size)
       : sycl_target(sycl_target) {
     this->size = size;
-    this->ptr = (T *)sycl::malloc_device(size * sizeof(T), sycl_target.queue);
+    this->ptr = (T *)this->sycl_target.malloc_device(size * sizeof(T));
   }
   /**
    * Get the size of the allocation in bytes.
@@ -181,15 +281,15 @@ public:
    */
   inline int realloc_no_copy(const size_t size) {
     if (size > this->size) {
-      sycl::free(this->ptr, this->sycl_target.queue);
-      this->ptr = (T *)sycl::malloc_device(size * sizeof(T), sycl_target.queue);
+      this->sycl_target.free(this->ptr);
+      this->ptr = (T *)this->sycl_target.malloc_device(size * sizeof(T));
       this->size = size;
     }
     return this->size;
   }
   ~BufferDevice() {
     if (this->ptr != NULL) {
-      sycl::free(this->ptr, sycl_target.queue);
+      this->sycl_target.free(this->ptr);
     }
   }
 };
@@ -239,6 +339,7 @@ public:
     }
     return this->size;
   }
+
   ~BufferShared() {
     if (this->ptr != NULL) {
       sycl::free(this->ptr, sycl_target.queue);
