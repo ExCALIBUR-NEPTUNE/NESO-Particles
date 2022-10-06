@@ -219,6 +219,7 @@ public:
 
   inline void check_ptr(unsigned char *ptr_user, const size_t size_bytes) {
 
+#ifdef DEBUG_OOB_CHECK
     this->queue
         .memcpy(this->ptr_bit_tmp.data(), ptr_user - DEBUG_OOB_WIDTH,
                 DEBUG_OOB_WIDTH)
@@ -238,6 +239,8 @@ public:
       NESOASSERT(this->ptr_bit_tmp[cx] == static_cast<unsigned char>(255),
                  "DEBUG PADDING END TOUCHED");
     }
+
+#endif
   }
 };
 
