@@ -57,6 +57,9 @@ private:
   /// Device buffer containing the dims of MeshHierarchy
   BufferDevice<int> d_dims;
 
+  /// ErrorPropagate for detecting errors in kernels
+  ErrorPropagate error_propagate;
+
 public:
   ~MeshHierarchyGlobalMap(){};
 
@@ -81,7 +84,7 @@ public:
         d_lookup_ranks(sycl_target, 1), d_lookup_local_cells(sycl_target, 1),
         d_lookup_local_layers(sycl_target, 1), h_origin(sycl_target, 3),
         d_origin(sycl_target, 3), h_dims(sycl_target, 3),
-        d_dims(sycl_target, 3){};
+        d_dims(sycl_target, 3), error_propagate(sycl_target){};
 
   /**
    * For each particle that does not have a non-negative MPI rank determined as
@@ -116,6 +119,10 @@ public:
     auto k_lookup_local_cells = this->d_lookup_local_cells.ptr;
     auto k_lookup_local_layers = this->d_lookup_local_layers.ptr;
 
+    // detect errors in the kernel
+    auto k_error_propagate = this->error_propagate.device_ptr();
+    const auto k_npart_local = npart_local;
+
     this->sycl_target.queue
         .submit([&](sycl::handler &cgh) {
           cgh.parallel_for<>(
@@ -133,6 +140,9 @@ public:
                       atomic_count(k_lookup_count[0]);
                   const int index = atomic_count.fetch_add(1);
 
+                  NESO_KERNEL_ASSERT((index >= 0) && (index < k_npart_local),
+                                     k_error_propagate);
+
                   // store this particles location so that it can be
                   // directly accessed later
                   k_lookup_local_cells[index] = cellx;
@@ -142,6 +152,7 @@ public:
               });
         })
         .wait_and_throw();
+    this->error_propagate.check_and_throw("Bad atomic index computed.");
 
     this->sycl_target.queue
         .memcpy(this->h_lookup_count.ptr, this->d_lookup_count.ptr,
