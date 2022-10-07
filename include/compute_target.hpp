@@ -171,6 +171,11 @@ public:
    */
   inline void free() { comm_pair.free(); }
 
+  /**
+   * Allocate memory on device using sycl::malloc_device.
+   *
+   * @param size_bytes Number of bytes to allocate.
+   */
   inline void *malloc_device(size_t size_bytes) {
 
 #ifndef DEBUG_OOB_CHECK
@@ -195,6 +200,40 @@ public:
 #endif
   }
 
+  /**
+   * Allocate memory on the host using sycl::malloc_host.
+   *
+   * @param size_bytes Number of bytes to allocate.
+   */
+  inline void *malloc_host(size_t size_bytes) {
+
+#ifndef DEBUG_OOB_CHECK
+    return sycl::malloc_host(size_bytes, this->queue);
+#else
+
+    unsigned char *ptr = (unsigned char *)sycl::malloc_host(
+        size_bytes + 2 * DEBUG_OOB_WIDTH, this->queue);
+    unsigned char *ptr_user = ptr + DEBUG_OOB_WIDTH;
+    this->ptr_map[ptr_user] = size_bytes;
+    NESOASSERT(ptr != nullptr, "pad pointer from malloc_host");
+
+    this->queue.memcpy(ptr, this->ptr_bit_mask.data(), DEBUG_OOB_WIDTH).wait();
+
+    this->queue
+        .memcpy(ptr_user + size_bytes, this->ptr_bit_mask.data(),
+                DEBUG_OOB_WIDTH)
+        .wait();
+
+    return (void *)ptr_user;
+    // return ptr;
+#endif
+  }
+
+  /**
+   *  Free a pointer allocated with malloc_device.
+   *
+   *  @param ptr_in Pointer to free.
+   */
   template <typename T> inline void free(T *ptr_in) {
 #ifndef DEBUG_OOB_CHECK
     sycl::free(ptr_in, this->queue);
@@ -205,6 +244,7 @@ public:
     this->check_ptr(ptr, this->ptr_map[ptr]);
 
     this->ptr_map.erase(ptr);
+
     sycl::free((void *)(ptr - DEBUG_OOB_WIDTH), this->queue);
     // sycl::free(ptr_in, this->queue);
 #endif
@@ -214,7 +254,6 @@ public:
     for (auto &px : this->ptr_map) {
       this->check_ptr(px.first, px.second);
     }
-    nprint("PTR CHECK PASSED");
   }
 
   inline void check_ptr(unsigned char *ptr_user, const size_t size_bytes) {
@@ -371,7 +410,7 @@ public:
    */
   BufferHost(SYCLTarget &sycl_target, size_t size) : sycl_target(sycl_target) {
     this->size = size;
-    this->ptr = (T *)sycl::malloc_host(size * sizeof(T), sycl_target.queue);
+    this->ptr = (T *)sycl_target.malloc_host(size * sizeof(T));
   }
 
   /**
@@ -390,15 +429,15 @@ public:
    */
   inline int realloc_no_copy(const size_t size) {
     if (size > this->size) {
-      sycl::free(this->ptr, this->sycl_target.queue);
-      this->ptr = (T *)sycl::malloc_host(size * sizeof(T), sycl_target.queue);
+      sycl_target.free(this->ptr);
+      this->ptr = (T *)sycl_target.malloc_host(size * sizeof(T));
       this->size = size;
     }
     return this->size;
   }
   ~BufferHost() {
     if (this->ptr != NULL) {
-      sycl::free(this->ptr, sycl_target.queue);
+      sycl_target.free(this->ptr);
     }
   }
 };

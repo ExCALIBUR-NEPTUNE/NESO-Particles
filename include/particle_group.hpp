@@ -411,9 +411,19 @@ inline void ParticleGroup::add_particles_local(ParticleSet &particle_data) {
   this->sycl_target.queue.wait();
   for (auto &dat : particle_dats_real) {
     dat.second->npart_host_to_device();
+    for (int cellx = 0; cellx < this->ncell; cellx++) {
+      NESOASSERT(dat.second->h_npart_cell[cellx] ==
+                     this->h_npart_cell.ptr[cellx],
+                 "Bad cell count");
+    }
   }
   for (auto &dat : particle_dats_int) {
     dat.second->npart_host_to_device();
+    for (int cellx = 0; cellx < this->ncell; cellx++) {
+      NESOASSERT(dat.second->h_npart_cell[cellx] ==
+                     this->h_npart_cell.ptr[cellx],
+                 "Bad cell count");
+    }
   }
 }
 
