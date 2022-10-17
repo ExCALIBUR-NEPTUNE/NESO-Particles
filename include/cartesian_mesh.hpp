@@ -8,6 +8,7 @@
 #include "compute_target.hpp"
 #include "local_mapping.hpp"
 #include "particle_dat.hpp"
+#include "particle_group.hpp"
 #include "profiling.hpp"
 #include "typedefs.hpp"
 
@@ -27,6 +28,12 @@ private:
   REAL inverse_cell_width_fine;
 
 public:
+  /// Disable (implicit) copies.
+  CartesianHMeshLocalMapperT(const CartesianHMeshLocalMapperT &st) = delete;
+  /// Disable (implicit) copies.
+  CartesianHMeshLocalMapperT &
+  operator=(CartesianHMeshLocalMapperT const &a) = delete;
+
   /// Map from MPI rank to local index in the lookup map for each dimension.
   BufferDeviceHost<int> dh_lookup;
   /// Strides of the lookup map such that tuple indices can be converted into a
@@ -163,14 +170,12 @@ public:
    *  Map positions to owning MPI ranks. Positions should be within the domain
    *  prior to calling map, i.e. particles should be within the domain extents.
    *
-   *  @param position_dat ParticleDat to use for particle positions.
-   *  @param cell_id_dat ParticleDat to use for particle cell ids.
-   *  @param mpi_rank_dat ParticleDat to use for particle MPI ranks (output).
+   *  @param particle_group ParticleGroup to use.
    */
-  inline void map(ParticleDatShPtr<REAL> &position_dat,
-                  ParticleDatShPtr<INT> &cell_id_dat,
-                  ParticleDatShPtr<INT> &mpi_rank_dat,
-                  const int map_cell = -1) {
+  inline void map(ParticleGroup &particle_group, const int map_cell = -1) {
+
+    ParticleDatShPtr<REAL> &position_dat = particle_group.position_dat;
+    ParticleDatShPtr<INT> &mpi_rank_dat = particle_group.mpi_rank_dat;
 
     auto t0 = profile_timestamp();
     // pointers to access dats in kernel
@@ -237,6 +242,13 @@ public:
     sycl_target.profile_map.inc("CartesianHMeshLocalMapperT", "map", 1,
                                 profile_elapsed(t0, profile_timestamp()));
   };
+
+  /**
+   *  No-op implementation of callback.
+   *
+   *  @param particle_group ParticleGroup.
+   */
+  inline void particle_group_callback(ParticleGroup &particle_group){};
 };
 
 inline std::shared_ptr<CartesianHMeshLocalMapperT>

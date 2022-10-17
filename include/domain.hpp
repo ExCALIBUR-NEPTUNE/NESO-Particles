@@ -21,6 +21,11 @@ namespace NESO::Particles {
 class Domain {
 private:
 public:
+  /// Disable (implicit) copies.
+  Domain(const Domain &st) = delete;
+  /// Disable (implicit) copies.
+  Domain &operator=(Domain const &a) = delete;
+
   /// HMesh derived mesh instance.
   HMesh &mesh;
   /// LocalMapper derived class instance to bin particles into mesh cells.

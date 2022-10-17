@@ -156,7 +156,7 @@ TEST(ParticleGroup, stencil_move_multiple) {
 
   A.add_particles_local(initial_distribution);
 
-  MeshHierarchyGlobalMap mesh_heirarchy_global_map(
+  MeshHierarchyGlobalMap mesh_hierarchy_global_map(
       sycl_target, domain.mesh, A.position_dat, A.cell_id_dat, A.mpi_rank_dat);
 
   CartesianPeriodic pbc(sycl_target, mesh, A.position_dat);
@@ -292,17 +292,17 @@ TEST(ParticleGroup, stencil_move_multiple) {
   };
 
   reset_mpi_ranks(A.mpi_rank_dat);
-  mesh_heirarchy_global_map.execute();
-  cart_local_mapper->map(A.position_dat, A.cell_id_dat, A.mpi_rank_dat);
+  mesh_hierarchy_global_map.execute();
+  cart_local_mapper->map(A);
   lambda_test_mapping();
 
   for (int testx = 0; testx < Ntest; testx++) {
     pbc.execute();
 
     reset_mpi_ranks(A.mpi_rank_dat);
-    mesh_heirarchy_global_map.execute();
+    mesh_hierarchy_global_map.execute();
 
-    cart_local_mapper->map(A.position_dat, A.cell_id_dat, A.mpi_rank_dat);
+    cart_local_mapper->map(A);
     lambda_test_mapping();
 
     A.local_move();

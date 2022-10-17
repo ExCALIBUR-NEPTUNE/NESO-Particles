@@ -38,6 +38,11 @@ private:
   SYCLTarget &sycl_target;
 
 public:
+  /// Disable (implicit) copies.
+  CellDataT(const CellDataT &st) = delete;
+  /// Disable (implicit) copies.
+  CellDataT &operator=(CellDataT const &a) = delete;
+
   /// Number of rows in the 2D data structure.
   const int nrow;
   /// Number of columns in the 2D data structure.
@@ -94,6 +99,11 @@ private:
   const int stride;
 
 public:
+  /// Disable (implicit) copies.
+  CellDatConst(const CellDatConst &st) = delete;
+  /// Disable (implicit) copies.
+  CellDatConst &operator=(CellDatConst const &a) = delete;
+
   /// Compute device used by the instance.
   SYCLTarget &sycl_target;
   /// Number of cells, labeled 0,...,N-1.
@@ -205,6 +215,11 @@ private:
   std::stack<T *> stack_ptrs;
 
 public:
+  /// Disable (implicit) copies.
+  CellDat(const CellDat &st) = delete;
+  /// Disable (implicit) copies.
+  CellDat &operator=(CellDat const &a) = delete;
+
   /// Compute device used by the instance.
   SYCLTarget &sycl_target;
   /// Number of cells.
@@ -216,19 +231,15 @@ public:
   /// Number of rows currently allocated for each cell.
   std::vector<INT> nrow_alloc;
   ~CellDat() {
-    // issues on cuda backend w/o this NULL check.
     for (int cellx = 0; cellx < ncells; cellx++) {
-      if ((this->nrow_alloc[cellx] != 0) &&
-          (this->h_ptr_cells[cellx] != NULL)) {
-        sycl::free(this->h_ptr_cells[cellx], sycl_target.queue);
-      }
+      this->sycl_target.free(this->h_ptr_cells[cellx]);
     }
     for (int colx = 0; colx < ncells * this->ncol; colx++) {
       if (this->h_ptr_cols[colx] != NULL) {
-        sycl::free(this->h_ptr_cols[colx], sycl_target.queue);
+        this->sycl_target.free(this->h_ptr_cols[colx]);
       }
     }
-    sycl::free(this->d_ptr, sycl_target.queue);
+    this->sycl_target.free(this->d_ptr);
   };
 
   /**
@@ -243,7 +254,7 @@ public:
       : sycl_target(sycl_target), ncells(ncells), ncol(ncol), nrow_max(0) {
 
     this->nrow = std::vector<INT>(ncells);
-    this->d_ptr = sycl::malloc_device<T **>(ncells, sycl_target.queue);
+    this->d_ptr = (T ***)this->sycl_target.malloc_device(ncells * sizeof(T **));
     this->h_ptr_cells = std::vector<T **>(ncells);
     this->h_ptr_cols = std::vector<T *>(ncells * ncol);
     this->nrow_alloc = std::vector<INT>(ncells);
@@ -252,7 +263,7 @@ public:
       this->nrow_alloc[cellx] = 0;
       this->nrow[cellx] = 0;
       this->h_ptr_cells[cellx] =
-          sycl::malloc_device<T *>(ncol, sycl_target.queue);
+          (T **)this->sycl_target.malloc_device(ncol * sizeof(T *));
       for (int colx = 0; colx < ncol; colx++) {
         this->h_ptr_cols[cellx * ncol + colx] = NULL;
       }
@@ -274,6 +285,10 @@ public:
 
     auto t0 = profile_timestamp();
 
+    NESOASSERT(cell >= 0, "Cell index is negative");
+    NESOASSERT(cell < this->ncells, "Cell index is >= ncells");
+    NESOASSERT(nrow_required >= 0, "Requested number of rows is negative");
+
     if (nrow_required < this->nrow[cell]) {
       this->nrow[cell] = nrow_required;
       this->nrow_max = -1;
@@ -282,9 +297,6 @@ public:
       return;
     }
 
-    NESOASSERT(cell >= 0, "Cell index is negative");
-    NESOASSERT(cell < this->ncells, "Cell index is >= ncells");
-    NESOASSERT(nrow_required >= 0, "Requested number of rows is negative");
     const INT nrow_alloced = this->nrow_alloc[cell];
     const INT nrow_existing = this->nrow[cell];
 
@@ -294,7 +306,8 @@ public:
           T *col_ptr_old = this->h_ptr_cols[cell * this->ncol + colx];
           this->stack_ptrs.push(col_ptr_old);
           T *col_ptr_new =
-              sycl::malloc_device<T>(nrow_required, this->sycl_target.queue);
+              (T *)this->sycl_target.malloc_device(nrow_required * sizeof(T));
+          NESOASSERT(col_ptr_new != nullptr, "bad pointer from malloc_device");
 
           if (nrow_alloced > 0) {
             this->stack_events.push(this->sycl_target.queue.memcpy(
@@ -324,7 +337,7 @@ public:
     while (!this->stack_ptrs.empty()) {
       auto ptr = this->stack_ptrs.top();
       if (ptr != NULL) {
-        sycl::free(ptr, this->sycl_target.queue);
+        this->sycl_target.free(ptr);
       }
       this->stack_ptrs.pop();
     }

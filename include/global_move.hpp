@@ -38,6 +38,11 @@ private:
   BufferDeviceHost<int> dh_send_rank_npart;
 
 public:
+  /// Disable (implicit) copies.
+  GlobalMove(const GlobalMove &st) = delete;
+  /// Disable (implicit) copies.
+  GlobalMove &operator=(GlobalMove const &a) = delete;
+
   /// Compute device used by the instance.
   SYCLTarget &sycl_target;
 

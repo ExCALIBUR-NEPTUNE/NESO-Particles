@@ -31,6 +31,11 @@ private:
   BufferHost<MPI_Status> h_recv_status;
 
 public:
+  /// Disable (implicit) copies.
+  GlobalMoveExchange(const GlobalMoveExchange &st) = delete;
+  /// Disable (implicit) copies.
+  GlobalMoveExchange &operator=(GlobalMoveExchange const &a) = delete;
+
   /// Number of remote ranks to send particles to.
   int num_remote_send_ranks;
   /// Number of remote ranks to recv particles from.

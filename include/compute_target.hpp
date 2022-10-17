@@ -4,8 +4,11 @@
 #include <cstdlib>
 
 #include <CL/sycl.hpp>
+#include <array>
+#include <map>
 #include <mpi.h>
 #include <stack>
+#include <string>
 
 #include "communication.hpp"
 #include "profiling.hpp"
@@ -52,6 +55,13 @@ inline int get_local_mpi_rank(MPI_Comm comm, int default_rank = -1) {
  */
 class SYCLTarget {
 private:
+  std::map<unsigned char *, size_t> ptr_map;
+
+#ifdef DEBUG_OOB_CHECK
+  std::array<unsigned char, DEBUG_OOB_WIDTH> ptr_bit_mask;
+  std::array<unsigned char, DEBUG_OOB_WIDTH> ptr_bit_tmp;
+#endif
+
 public:
   /// SYCL device in use.
   sycl::device device;
@@ -65,7 +75,10 @@ public:
   /// ProfileMap to log profiling data related to this SYCLTarget.
   ProfileMap profile_map;
 
-  SYCLTarget(){};
+  /// Disable (implicit) copies.
+  SYCLTarget(const SYCLTarget &st) = delete;
+  /// Disable (implicit) copies.
+  SYCLTarget &operator=(SYCLTarget const &a) = delete;
 
   /**
    * Create a new SYCLTarget using a flag to specifiy device type and a parent
@@ -131,13 +144,140 @@ public:
                           this->comm_pair.rank_parent);
     this->profile_map.set("MPI", "MPI_COMM_WORLD_size",
                           this->comm_pair.size_parent);
+
+#ifdef DEBUG_OOB_CHECK
+    for (int cx = 0; cx < DEBUG_OOB_WIDTH; cx++) {
+      this->ptr_bit_mask[cx] = static_cast<unsigned char>(255);
+    }
+#endif
   }
-  ~SYCLTarget() {}
+  ~SYCLTarget() {
+#ifdef DEBUG_OOB_CHECK
+    if (this->ptr_map.size() > 0) {
+      for (auto &px : this->ptr_map) {
+        nprint("NOT FREED:", (void *)px.first, px.second);
+      }
+    } else {
+      nprint("ALL FREED");
+    }
+#endif
+  }
 
   /**
    * Free the SYCLTarget and underlying CommPair.
    */
-  void free() { comm_pair.free(); }
+  inline void free() { comm_pair.free(); }
+
+  /**
+   * Allocate memory on device using sycl::malloc_device.
+   *
+   * @param size_bytes Number of bytes to allocate.
+   */
+  inline void *malloc_device(size_t size_bytes) {
+
+#ifndef DEBUG_OOB_CHECK
+    return sycl::malloc_device(size_bytes, this->queue);
+#else
+
+    unsigned char *ptr = (unsigned char *)sycl::malloc_device(
+        size_bytes + 2 * DEBUG_OOB_WIDTH, this->queue);
+    unsigned char *ptr_user = ptr + DEBUG_OOB_WIDTH;
+    this->ptr_map[ptr_user] = size_bytes;
+    NESOASSERT(ptr != nullptr, "pad pointer from malloc_device");
+
+    this->queue.memcpy(ptr, this->ptr_bit_mask.data(), DEBUG_OOB_WIDTH).wait();
+
+    this->queue
+        .memcpy(ptr_user + size_bytes, this->ptr_bit_mask.data(),
+                DEBUG_OOB_WIDTH)
+        .wait();
+
+    return (void *)ptr_user;
+    // return ptr;
+#endif
+  }
+
+  /**
+   * Allocate memory on the host using sycl::malloc_host.
+   *
+   * @param size_bytes Number of bytes to allocate.
+   */
+  inline void *malloc_host(size_t size_bytes) {
+
+#ifndef DEBUG_OOB_CHECK
+    return sycl::malloc_host(size_bytes, this->queue);
+#else
+
+    unsigned char *ptr = (unsigned char *)sycl::malloc_host(
+        size_bytes + 2 * DEBUG_OOB_WIDTH, this->queue);
+    unsigned char *ptr_user = ptr + DEBUG_OOB_WIDTH;
+    this->ptr_map[ptr_user] = size_bytes;
+    NESOASSERT(ptr != nullptr, "pad pointer from malloc_host");
+
+    this->queue.memcpy(ptr, this->ptr_bit_mask.data(), DEBUG_OOB_WIDTH).wait();
+
+    this->queue
+        .memcpy(ptr_user + size_bytes, this->ptr_bit_mask.data(),
+                DEBUG_OOB_WIDTH)
+        .wait();
+
+    return (void *)ptr_user;
+    // return ptr;
+#endif
+  }
+
+  /**
+   *  Free a pointer allocated with malloc_device.
+   *
+   *  @param ptr_in Pointer to free.
+   */
+  template <typename T> inline void free(T *ptr_in) {
+#ifndef DEBUG_OOB_CHECK
+    sycl::free(ptr_in, this->queue);
+#else
+    unsigned char *ptr = (unsigned char *)ptr_in;
+    NESOASSERT(this->ptr_map.count(ptr), "point not alloced correctly");
+
+    this->check_ptr(ptr, this->ptr_map[ptr]);
+
+    this->ptr_map.erase(ptr);
+
+    sycl::free((void *)(ptr - DEBUG_OOB_WIDTH), this->queue);
+    // sycl::free(ptr_in, this->queue);
+#endif
+  }
+
+  inline void check_ptrs() {
+    for (auto &px : this->ptr_map) {
+      this->check_ptr(px.first, px.second);
+    }
+  }
+
+  inline void check_ptr(unsigned char *ptr_user, const size_t size_bytes) {
+
+#ifdef DEBUG_OOB_CHECK
+    this->queue
+        .memcpy(this->ptr_bit_tmp.data(), ptr_user - DEBUG_OOB_WIDTH,
+                DEBUG_OOB_WIDTH)
+        .wait();
+
+    for (int cx = 0; cx < DEBUG_OOB_WIDTH; cx++) {
+      NESOASSERT(this->ptr_bit_tmp[cx] == static_cast<unsigned char>(255),
+                 "DEBUG PADDING START TOUCHED");
+    }
+
+    this->queue
+        .memcpy(this->ptr_bit_tmp.data(), ptr_user + size_bytes,
+                DEBUG_OOB_WIDTH)
+        .wait();
+
+    for (int cx = 0; cx < DEBUG_OOB_WIDTH; cx++) {
+      NESOASSERT(this->ptr_bit_tmp[cx] == static_cast<unsigned char>(255),
+                 "DEBUG PADDING END TOUCHED");
+    }
+
+#endif
+  }
 };
 
 /**
@@ -146,6 +286,11 @@ public:
 template <typename T> class BufferDevice {
 private:
 public:
+  /// Disable (implicit) copies.
+  BufferDevice(const BufferDevice &st) = delete;
+  /// Disable (implicit) copies.
+  BufferDevice &operator=(BufferDevice const &a) = delete;
+
   /// Compute device used by the instance.
   SYCLTarget &sycl_target;
   /// SYCL USM device pointer, only accessible on device.
@@ -162,7 +307,7 @@ public:
   BufferDevice(SYCLTarget &sycl_target, size_t size)
       : sycl_target(sycl_target) {
     this->size = size;
-    this->ptr = (T *)sycl::malloc_device(size * sizeof(T), sycl_target.queue);
+    this->ptr = (T *)this->sycl_target.malloc_device(size * sizeof(T));
   }
   /**
    * Get the size of the allocation in bytes.
@@ -180,15 +325,15 @@ public:
    */
   inline int realloc_no_copy(const size_t size) {
     if (size > this->size) {
-      sycl::free(this->ptr, this->sycl_target.queue);
-      this->ptr = (T *)sycl::malloc_device(size * sizeof(T), sycl_target.queue);
+      this->sycl_target.free(this->ptr);
+      this->ptr = (T *)this->sycl_target.malloc_device(size * sizeof(T));
       this->size = size;
     }
     return this->size;
   }
   ~BufferDevice() {
     if (this->ptr != NULL) {
-      sycl::free(this->ptr, sycl_target.queue);
+      this->sycl_target.free(this->ptr);
     }
   }
 };
@@ -199,6 +344,11 @@ public:
 template <typename T> class BufferShared {
 private:
 public:
+  /// Disable (implicit) copies.
+  BufferShared(const BufferShared &st) = delete;
+  /// Disable (implicit) copies.
+  BufferShared &operator=(BufferShared const &a) = delete;
+
   /// Compute device used by the instance.
   SYCLTarget &sycl_target;
   /// SYCL USM shared pointer, accessible on host and device.
@@ -238,6 +388,7 @@ public:
     }
     return this->size;
   }
+
   ~BufferShared() {
     if (this->ptr != NULL) {
       sycl::free(this->ptr, sycl_target.queue);
@@ -251,6 +402,11 @@ public:
 template <typename T> class BufferHost {
 private:
 public:
+  /// Disable (implicit) copies.
+  BufferHost(const BufferHost &st) = delete;
+  /// Disable (implicit) copies.
+  BufferHost &operator=(BufferHost const &a) = delete;
+
   /// Compute device used by the instance.
   SYCLTarget &sycl_target;
   /// SYCL USM shared pointer, accessible on host and device.
@@ -266,7 +422,7 @@ public:
    */
   BufferHost(SYCLTarget &sycl_target, size_t size) : sycl_target(sycl_target) {
     this->size = size;
-    this->ptr = (T *)sycl::malloc_host(size * sizeof(T), sycl_target.queue);
+    this->ptr = (T *)sycl_target.malloc_host(size * sizeof(T));
   }
 
   /**
@@ -285,15 +441,15 @@ public:
    */
   inline int realloc_no_copy(const size_t size) {
     if (size > this->size) {
-      sycl::free(this->ptr, this->sycl_target.queue);
-      this->ptr = (T *)sycl::malloc_host(size * sizeof(T), sycl_target.queue);
+      sycl_target.free(this->ptr);
+      this->ptr = (T *)sycl_target.malloc_host(size * sizeof(T));
       this->size = size;
     }
     return this->size;
   }
   ~BufferHost() {
     if (this->ptr != NULL) {
-      sycl::free(this->ptr, sycl_target.queue);
+      sycl_target.free(this->ptr);
     }
   }
 };
@@ -307,6 +463,11 @@ public:
 template <typename T> class BufferDeviceHost {
 private:
 public:
+  /// Disable (implicit) copies.
+  BufferDeviceHost(const BufferDeviceHost &st) = delete;
+  /// Disable (implicit) copies.
+  BufferDeviceHost &operator=(BufferDeviceHost const &a) = delete;
+
   /// Compute device used by the instance.
   SYCLTarget &sycl_target;
   /// Size of the allocation on device and host.
@@ -426,6 +587,73 @@ public:
     }
   };
 };
+
+/**
+ *  Helper class to propagate errors thrown from inside a SYCL kernel
+ */
+class ErrorPropagate {
+private:
+  SYCLTarget &sycl_target;
+  BufferDeviceHost<int> dh_flag;
+
+public:
+  /// Disable (implicit) copies.
+  ErrorPropagate(const ErrorPropagate &st) = delete;
+  /// Disable (implicit) copies.
+  ErrorPropagate &operator=(ErrorPropagate const &a) = delete;
+
+  ~ErrorPropagate(){};
+
+  /**
+   * Create a new instance to track assertions thrown in SYCL kernels.
+   *
+   * @param sycl_target SYCLTarget used for the kernel.
+   */
+  ErrorPropagate(SYCLTarget &sycl_target)
+      : sycl_target(sycl_target), dh_flag(sycl_target, 1) {
+    this->dh_flag.h_buffer.ptr[0] = 0;
+    this->dh_flag.host_to_device();
+  };
+
+  /**
+   * Get the int device pointer for use in a SYCL kernel. This pointer should
+   * be incremented atomically with some positive integer to indicate an error
+   * occured in the kernel.
+   */
+  inline int *device_ptr() { return this->dh_flag.d_buffer.ptr; }
+
+  /**
+   * Check the stored integer. If the integer is non-zero throw an error with
+   * the passed message.
+   *
+   * @param error_msg Message to throw if stored integer is non-zero.
+   */
+  inline void check_and_throw(const char *error_msg) {
+    NESOASSERT(this->get_flag() == 0, error_msg);
+  }
+
+  /**
+   *  Get the current value of the flag on the host.
+   *
+   *  @returns flag.
+   */
+  inline int get_flag() {
+    this->dh_flag.device_to_host();
+    return this->dh_flag.h_buffer.ptr[0];
+  }
+};
+
+/*
+ *  Helper preprocessor macro to atomically increment the pointer in an
+ *  ErrorPropagate class.
+ */
+#define NESO_KERNEL_ASSERT(expr, ep_ptr)                                       \
+  if (!(expr)) {                                                               \
+    sycl::atomic_ref<int, sycl::memory_order::relaxed,                         \
+                     sycl::memory_scope::device>                               \
+        neso_error_atomic(ep_ptr[0]);                                          \
+    neso_error_atomic.fetch_add(1);                                            \
+  }
 
 } // namespace NESO::Particles
 

@@ -3,6 +3,7 @@
 
 #include <CL/sycl.hpp>
 #include <cmath>
+#include <limits>
 #include <memory>
 
 #include "access.hpp"
@@ -22,6 +23,11 @@ namespace NESO::Particles {
 template <typename T> class ParticleDatT {
 private:
 public:
+  /// Disable (implicit) copies.
+  ParticleDatT(const ParticleDatT &st) = delete;
+  /// Disable (implicit) copies.
+  ParticleDatT &operator=(ParticleDatT const &a) = delete;
+
   /// Device only accessible array of the particle counts per cell.
   int *d_npart_cell;
   /// Host only accessible array of particle counts per cell.
@@ -355,7 +361,17 @@ public:
     //    NESO_PARTICLES_BLOCK_SIZE > 0)); return this->cell_dat.ncells * m;
     //#endif
     //
-    return this->cell_dat.ncells * this->get_particle_loop_cell_stride();
+
+    INT iter_range =
+        this->cell_dat.ncells * this->get_particle_loop_cell_stride();
+
+    // The scyl range takes a size_t but the implementations fail with larger
+    // than int arguments.
+    NESOASSERT(iter_range >= 0, "Negative iter_range?");
+    NESOASSERT(iter_range <= std::numeric_limits<int>::max(),
+               "ParticleLoop iter range exceeds int limits.");
+
+    return iter_range;
   }
   /**
    *  Get the size of the iteration set per cell stride required to loop over
