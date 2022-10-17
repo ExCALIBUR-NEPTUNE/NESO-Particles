@@ -4,6 +4,7 @@
 #include "typedefs.hpp"
 #include <cstdint>
 #include <cstdlib>
+#include <memory>
 #include <mpi.h>
 #include <set>
 #include <vector>
@@ -11,7 +12,8 @@
 namespace NESO::Particles {
 
 /**
- * TODO
+ * A simple HMesh type that does not attempt to build any global mapping data
+ * structures.
  */
 class LocalDecompositionHMesh : public HMesh {
 private:
@@ -23,7 +25,7 @@ public:
   /// MPI Communicator used.
   MPI_Comm comm;
   /// Underlying MeshHierarchy instance.
-  MeshHierarchy mesh_hierarchy;
+  std::shared_ptr<MeshHierarchy> mesh_hierarchy;
   /// Number of cells, i.e. Number of Nektar++ elements on this rank.
   int cell_count;
   /// Global origin of domain.
@@ -36,7 +38,13 @@ public:
   ~LocalDecompositionHMesh() {}
 
   /**
-   * TODO
+   * Create a new instance.
+   *
+   * @param ndim Number of dimensions.
+   * @param origin Origin to use.
+   * @param extents Cartesian extents of the domain.
+   * @param cell_count Number of cells in the mesh.
+   * @param comm MPI communicator to use.
    */
   LocalDecompositionHMesh(const int ndim, std::vector<double> origin,
                           std::vector<double> extents, const int cell_count,
@@ -51,8 +59,8 @@ public:
     }
 
     // create the mesh hierarchy
-    this->mesh_hierarchy =
-        MeshHierarchy(this->comm, this->ndim, dims, origin, 1.0, 0);
+    this->mesh_hierarchy = std::make_shared<MeshHierarchy>(
+        this->comm, this->ndim, dims, origin, 1.0, 0);
   };
 
   /**
@@ -72,14 +80,14 @@ public:
    *
    *  @returns Mesh dimensions.
    */
-  inline std::vector<int> &get_dims() { return this->mesh_hierarchy.dims; };
+  inline std::vector<int> &get_dims() { return this->mesh_hierarchy->dims; };
   /**
    * Get the subdivision order of the mesh.
    *
    * @returns Subdivision order.
    */
   inline int get_subdivision_order() {
-    return this->mesh_hierarchy.subdivision_order;
+    return this->mesh_hierarchy->subdivision_order;
   };
   /**
    * Get the total number of cells in the mesh on this MPI rank, i.e. the
@@ -94,7 +102,7 @@ public:
    * @returns MeshHierarchy coarse cell width.
    */
   inline double get_cell_width_coarse() {
-    return this->mesh_hierarchy.cell_width_coarse;
+    return this->mesh_hierarchy->cell_width_coarse;
   };
   /**
    * Get the mesh width of the fine cells in the MeshHierarchy.
@@ -102,7 +110,7 @@ public:
    * @returns MeshHierarchy fine cell width.
    */
   inline double get_cell_width_fine() {
-    return this->mesh_hierarchy.cell_width_fine;
+    return this->mesh_hierarchy->cell_width_fine;
   };
   /**
    * Get the inverse mesh width of the coarse cells in the MeshHierarchy.
@@ -110,7 +118,7 @@ public:
    * @returns MeshHierarchy inverse coarse cell width.
    */
   inline double get_inverse_cell_width_coarse() {
-    return this->mesh_hierarchy.inverse_cell_width_coarse;
+    return this->mesh_hierarchy->inverse_cell_width_coarse;
   };
   /**
    * Get the inverse mesh width of the fine cells in the MeshHierarchy.
@@ -118,7 +126,7 @@ public:
    * @returns MeshHierarchy inverse fine cell width.
    */
   inline double get_inverse_cell_width_fine() {
-    return this->mesh_hierarchy.inverse_cell_width_fine;
+    return this->mesh_hierarchy->inverse_cell_width_fine;
   };
   /**
    *  Get the global number of coarse cells.
@@ -126,7 +134,7 @@ public:
    *  @returns Global number of coarse cells.
    */
   inline int get_ncells_coarse() {
-    return static_cast<int>(this->mesh_hierarchy.ncells_coarse);
+    return static_cast<int>(this->mesh_hierarchy->ncells_coarse);
   };
   /**
    *  Get the number of fine cells per coarse cell.
@@ -134,20 +142,20 @@ public:
    *  @returns Number of fine cells per coarse cell.
    */
   inline int get_ncells_fine() {
-    return static_cast<int>(this->mesh_hierarchy.ncells_fine);
+    return static_cast<int>(this->mesh_hierarchy->ncells_fine);
   };
   /**
    * Get the MeshHierarchy instance placed over the mesh.
    *
    * @returns MeshHierarchy placed over the mesh.
    */
-  virtual inline MeshHierarchy *get_mesh_hierarchy() {
-    return &this->mesh_hierarchy;
+  virtual inline std::shared_ptr<MeshHierarchy> get_mesh_hierarchy() {
+    return this->mesh_hierarchy;
   };
   /**
    *  Free the mesh and associated communicators.
    */
-  inline void free() { this->mesh_hierarchy.free(); }
+  inline void free() { this->mesh_hierarchy->free(); }
   /**
    *  Get a std::vector of MPI ranks which should be used to setup local
    *  communication patterns.
