@@ -29,6 +29,11 @@ private:
   ParticleDatShPtr<INT> cell_id_dat;
 
 public:
+  /// Disable (implicit) copies.
+  CartesianCellBin(const CartesianCellBin &st) = delete;
+  /// Disable (implicit) copies.
+  CartesianCellBin &operator=(CartesianCellBin const &a) = delete;
+
   ~CartesianCellBin(){};
 
   /**

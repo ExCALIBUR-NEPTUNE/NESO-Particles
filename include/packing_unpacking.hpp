@@ -80,6 +80,11 @@ private:
   }
 
 public:
+  /// Disable (implicit) copies.
+  ParticlePacker(const ParticlePacker &st) = delete;
+  /// Disable (implicit) copies.
+  ParticlePacker &operator=(ParticlePacker const &a) = delete;
+
   /// Number of bytes required per particle packed.
   int num_bytes_per_particle;
   /// CellDat used to pack the particles to be sent to each remote rank on the
@@ -342,6 +347,11 @@ private:
   }
 
 public:
+  /// Disable (implicit) copies.
+  ParticleUnpacker(const ParticleUnpacker &st) = delete;
+  /// Disable (implicit) copies.
+  ParticleUnpacker &operator=(ParticleUnpacker const &a) = delete;
+
   /// Host buffer to receive particle data into from MPI operations.
   BufferHost<char> h_recv_buffer;
   /// Offsets into the recv buffer for each remote rank that will send to this

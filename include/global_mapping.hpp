@@ -61,6 +61,11 @@ private:
   ErrorPropagate error_propagate;
 
 public:
+  /// Disable (implicit) copies.
+  MeshHierarchyGlobalMap(const MeshHierarchyGlobalMap &st) = delete;
+  /// Disable (implicit) copies.
+  MeshHierarchyGlobalMap &operator=(MeshHierarchyGlobalMap const &a) = delete;
+
   ~MeshHierarchyGlobalMap(){};
 
   /**
@@ -160,7 +165,7 @@ public:
         .wait();
     const auto npart_query = this->h_lookup_count.ptr[0];
 
-    // these global indices are passed to the mesh heirarchy toget the rank
+    // these global indices are passed to the mesh hierarchy toget the rank
     this->d_lookup_global_cells.realloc_no_copy(npart_query * 6);
     this->h_lookup_global_cells.realloc_no_copy(npart_query * 6);
     this->h_lookup_ranks.realloc_no_copy(npart_query);
@@ -170,19 +175,19 @@ public:
     auto k_lookup_ranks = this->d_lookup_ranks.ptr;
 
     // variables required in the kernel to map positions to cells
-    auto mesh_heirarchy = this->h_mesh.get_mesh_hierarchy();
-    auto k_ndim = mesh_heirarchy->ndim;
+    auto mesh_hierarchy = this->h_mesh.get_mesh_hierarchy();
+    auto k_ndim = mesh_hierarchy->ndim;
     const REAL k_inverse_cell_width_coarse =
-        mesh_heirarchy->inverse_cell_width_coarse;
+        mesh_hierarchy->inverse_cell_width_coarse;
     const REAL k_inverse_cell_width_fine =
-        mesh_heirarchy->inverse_cell_width_fine;
-    const REAL k_cell_width_coarse = mesh_heirarchy->cell_width_coarse;
-    const REAL k_cell_width_fine = mesh_heirarchy->cell_width_fine;
-    const REAL k_ncells_dim_fine = mesh_heirarchy->ncells_dim_fine;
+        mesh_hierarchy->inverse_cell_width_fine;
+    const REAL k_cell_width_coarse = mesh_hierarchy->cell_width_coarse;
+    const REAL k_cell_width_fine = mesh_hierarchy->cell_width_fine;
+    const REAL k_ncells_dim_fine = mesh_hierarchy->ncells_dim_fine;
 
     for (int dimx = 0; dimx < k_ndim; dimx++) {
-      this->h_origin.ptr[dimx] = mesh_heirarchy->origin[dimx];
-      this->h_dims.ptr[dimx] = mesh_heirarchy->dims[dimx];
+      this->h_origin.ptr[dimx] = mesh_hierarchy->origin[dimx];
+      this->h_dims.ptr[dimx] = mesh_hierarchy->dims[dimx];
     }
     this->sycl_target.queue
         .memcpy(this->d_origin.ptr, this->h_origin.ptr,
@@ -195,7 +200,7 @@ public:
     auto k_origin = this->d_origin.ptr;
     auto k_dims = this->d_dims.ptr;
 
-    // map particles positions to coarse and fine cells in the mesh heirarchy
+    // map particles positions to coarse and fine cells in the mesh hierarchy
     this->sycl_target.queue
         .submit([&](sycl::handler &cgh) {
           cgh.parallel_for<>(sycl::range<1>(npart_query), [=](sycl::id<1> idx) {
@@ -260,7 +265,7 @@ public:
           .wait_and_throw();
     }
     // get the mpi ranks
-    mesh_heirarchy->get_owners(npart_query, this->h_lookup_global_cells.ptr,
+    mesh_hierarchy->get_owners(npart_query, this->h_lookup_global_cells.ptr,
                                this->h_lookup_ranks.ptr);
 
     // copy the mpi ranks back to the ParticleDat

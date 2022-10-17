@@ -23,6 +23,11 @@ namespace NESO::Particles {
 template <typename T> class ParticleDatT {
 private:
 public:
+  /// Disable (implicit) copies.
+  ParticleDatT(const ParticleDatT &st) = delete;
+  /// Disable (implicit) copies.
+  ParticleDatT &operator=(ParticleDatT const &a) = delete;
+
   /// Device only accessible array of the particle counts per cell.
   int *d_npart_cell;
   /// Host only accessible array of particle counts per cell.

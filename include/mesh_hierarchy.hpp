@@ -58,6 +58,11 @@ private:
   };
 
 public:
+  /// Disable (implicit) copies.
+  MeshHierarchy(const MeshHierarchy &st) = delete;
+  /// Disable (implicit) copies.
+  MeshHierarchy &operator=(MeshHierarchy const &a) = delete;
+
   /// MPI communicator on which this mesh is decomposed.
   MPI_Comm comm;
   /// CommPair instance that contains the inter and intra communicators.

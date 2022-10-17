@@ -75,13 +75,10 @@ public:
   /// ProfileMap to log profiling data related to this SYCLTarget.
   ProfileMap profile_map;
 
-  SYCLTarget(){};
-
-  SYCLTarget(const SYCLTarget &st) {
-    NESOASSERT(
-        false,
-        "SYCLTarget copy constructor called - this will cause problems.");
-  }
+  /// Disable (implicit) copies.
+  SYCLTarget(const SYCLTarget &st) = delete;
+  /// Disable (implicit) copies.
+  SYCLTarget &operator=(SYCLTarget const &a) = delete;
 
   /**
    * Create a new SYCLTarget using a flag to specifiy device type and a parent
@@ -289,6 +286,11 @@ public:
 template <typename T> class BufferDevice {
 private:
 public:
+  /// Disable (implicit) copies.
+  BufferDevice(const BufferDevice &st) = delete;
+  /// Disable (implicit) copies.
+  BufferDevice &operator=(BufferDevice const &a) = delete;
+
   /// Compute device used by the instance.
   SYCLTarget &sycl_target;
   /// SYCL USM device pointer, only accessible on device.
@@ -342,6 +344,11 @@ public:
 template <typename T> class BufferShared {
 private:
 public:
+  /// Disable (implicit) copies.
+  BufferShared(const BufferShared &st) = delete;
+  /// Disable (implicit) copies.
+  BufferShared &operator=(BufferShared const &a) = delete;
+
   /// Compute device used by the instance.
   SYCLTarget &sycl_target;
   /// SYCL USM shared pointer, accessible on host and device.
@@ -395,6 +402,11 @@ public:
 template <typename T> class BufferHost {
 private:
 public:
+  /// Disable (implicit) copies.
+  BufferHost(const BufferHost &st) = delete;
+  /// Disable (implicit) copies.
+  BufferHost &operator=(BufferHost const &a) = delete;
+
   /// Compute device used by the instance.
   SYCLTarget &sycl_target;
   /// SYCL USM shared pointer, accessible on host and device.
@@ -451,6 +463,11 @@ public:
 template <typename T> class BufferDeviceHost {
 private:
 public:
+  /// Disable (implicit) copies.
+  BufferDeviceHost(const BufferDeviceHost &st) = delete;
+  /// Disable (implicit) copies.
+  BufferDeviceHost &operator=(BufferDeviceHost const &a) = delete;
+
   /// Compute device used by the instance.
   SYCLTarget &sycl_target;
   /// Size of the allocation on device and host.
@@ -580,6 +597,11 @@ private:
   BufferDeviceHost<int> dh_flag;
 
 public:
+  /// Disable (implicit) copies.
+  ErrorPropagate(const ErrorPropagate &st) = delete;
+  /// Disable (implicit) copies.
+  ErrorPropagate &operator=(ErrorPropagate const &a) = delete;
+
   ~ErrorPropagate(){};
 
   /**

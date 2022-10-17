@@ -51,6 +51,11 @@ private:
   int in_flight_recvs;
 
 public:
+  /// Disable (implicit) copies.
+  LocalMove(const LocalMove &st) = delete;
+  /// Disable (implicit) copies.
+  LocalMove &operator=(LocalMove const &a) = delete;
+
   /// The MPI communicator in use by the instance.
   MPI_Comm comm;
   /// Number of remote ranks this rank could send particles to.

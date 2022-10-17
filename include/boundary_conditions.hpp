@@ -26,6 +26,11 @@ private:
   ParticleDatShPtr<REAL> position_dat;
 
 public:
+  /// Disable (implicit) copies.
+  CartesianPeriodic(const CartesianPeriodic &st) = delete;
+  /// Disable (implicit) copies.
+  CartesianPeriodic &operator=(CartesianPeriodic const &a) = delete;
+
   ~CartesianPeriodic(){};
 
   /**

@@ -51,6 +51,11 @@ private:
   EventStack event_stack;
 
 public:
+  /// Disable (implicit) copies.
+  LayerCompressor(const LayerCompressor &st) = delete;
+  /// Disable (implicit) copies.
+  LayerCompressor &operator=(LayerCompressor const &a) = delete;
+
   ~LayerCompressor() {}
 
   /**

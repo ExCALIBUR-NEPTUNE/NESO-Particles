@@ -38,6 +38,11 @@ private:
   SYCLTarget &sycl_target;
 
 public:
+  /// Disable (implicit) copies.
+  CellDataT(const CellDataT &st) = delete;
+  /// Disable (implicit) copies.
+  CellDataT &operator=(CellDataT const &a) = delete;
+
   /// Number of rows in the 2D data structure.
   const int nrow;
   /// Number of columns in the 2D data structure.
@@ -94,6 +99,11 @@ private:
   const int stride;
 
 public:
+  /// Disable (implicit) copies.
+  CellDatConst(const CellDatConst &st) = delete;
+  /// Disable (implicit) copies.
+  CellDatConst &operator=(CellDatConst const &a) = delete;
+
   /// Compute device used by the instance.
   SYCLTarget &sycl_target;
   /// Number of cells, labeled 0,...,N-1.
@@ -205,6 +215,11 @@ private:
   std::stack<T *> stack_ptrs;
 
 public:
+  /// Disable (implicit) copies.
+  CellDat(const CellDat &st) = delete;
+  /// Disable (implicit) copies.
+  CellDat &operator=(CellDat const &a) = delete;
+
   /// Compute device used by the instance.
   SYCLTarget &sycl_target;
   /// Number of cells.

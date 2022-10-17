@@ -20,6 +20,11 @@ private:
   bool allocated = false;
 
 public:
+  /// Disable (implicit) copies.
+  CommPair(const CommPair &st) = delete;
+  /// Disable (implicit) copies.
+  CommPair &operator=(CommPair const &a) = delete;
+
   /// Parent (i.e. global for the simulation) MPI communicator.
   MPI_Comm comm_parent;
   /// Communicator between one rank on each shared memory region.

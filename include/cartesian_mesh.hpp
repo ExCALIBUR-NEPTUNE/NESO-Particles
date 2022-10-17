@@ -28,6 +28,12 @@ private:
   REAL inverse_cell_width_fine;
 
 public:
+  /// Disable (implicit) copies.
+  CartesianHMeshLocalMapperT(const CartesianHMeshLocalMapperT &st) = delete;
+  /// Disable (implicit) copies.
+  CartesianHMeshLocalMapperT &
+  operator=(CartesianHMeshLocalMapperT const &a) = delete;
+
   /// Map from MPI rank to local index in the lookup map for each dimension.
   BufferDeviceHost<int> dh_lookup;
   /// Strides of the lookup map such that tuple indices can be converted into a

@@ -48,6 +48,18 @@ typedef std::shared_ptr<LocalMapper> LocalMapperShPtr;
 class DummyLocalMapperT : public LocalMapper {
 private:
 public:
+  /// Disable (implicit) copies.
+  DummyLocalMapperT(const DummyLocalMapperT &st) = delete;
+  /// Disable (implicit) copies.
+  DummyLocalMapperT &operator=(DummyLocalMapperT const &a) = delete;
+
+  ~DummyLocalMapperT(){};
+
+  /**
+   *  No-op Constructor.
+   */
+  DummyLocalMapperT(){};
+
   /**
    *  No-op implementation of map.
    */

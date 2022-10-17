@@ -22,6 +22,11 @@ private:
   SYCLTarget &sycl_target;
 
 public:
+  /// Disable (implicit) copies.
+  DepartingIdentify(const DepartingIdentify &st) = delete;
+  /// Disable (implicit) copies.
+  DepartingIdentify &operator=(DepartingIdentify const &a) = delete;
+
   /// Array of unique MPI ranks that particles should be sent to.
   BufferDeviceHost<int> dh_send_ranks;
   /// Array of length equal to the communicator size indicating how many

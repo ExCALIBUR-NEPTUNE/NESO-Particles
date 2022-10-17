@@ -169,6 +169,11 @@ private:
   }
 
 public:
+  /// Disable (implicit) copies.
+  H5Part(const H5Part &st) = delete;
+  /// Disable (implicit) copies.
+  H5Part &operator=(H5Part const &a) = delete;
+
   ~H5Part() {
     NESOASSERT(this->is_closed, "H5Part file was not closed correctly.");
   };
@@ -306,6 +311,11 @@ public:
 class H5Part {
 private:
 public:
+  /// Disable (implicit) copies.
+  H5Part(const H5Part &st) = delete;
+  /// Disable (implicit) copies.
+  H5Part &operator=(H5Part const &a) = delete;
+
   /**
    *  Construct a H5Part writer for a given set of ParticleDats described by
    *  Sym<type>(name) instances. Must be called collectively on the

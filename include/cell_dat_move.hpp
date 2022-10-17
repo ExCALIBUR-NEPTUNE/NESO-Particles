@@ -122,6 +122,11 @@ private:
   }
 
 public:
+  /// Disable (implicit) copies.
+  CellMove(const CellMove &st) = delete;
+  /// Disable (implicit) copies.
+  CellMove &operator=(CellMove const &a) = delete;
+
   /// Compute device used by the instance.
   SYCLTarget &sycl_target;
 

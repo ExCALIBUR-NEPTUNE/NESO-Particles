@@ -51,15 +51,20 @@ private:
   // global communication context
   GlobalMove global_move_ctx;
   // method to map particle positions to global cells
-  std::shared_ptr<MeshHierarchyGlobalMap> mesh_heirarchy_global_map;
+  std::shared_ptr<MeshHierarchyGlobalMap> mesh_hierarchy_global_map;
   // neighbour communication context
   LocalMove local_move_ctx;
   // members for moving particles between local cells
   CellMove cell_move_ctx;
 
 public:
+  /// Disable (implicit) copies.
+  ParticleGroup(const ParticleGroup &st) = delete;
+  /// Disable (implicit) copies.
+  ParticleGroup &operator=(ParticleGroup const &a) = delete;
+
   /// Domain this instance is defined over.
-  Domain domain;
+  Domain &domain;
   /// Compute device used by the instance.
   SYCLTarget &sycl_target;
   /// Map from Sym instances to REAL valued ParticleDat instances.
@@ -94,7 +99,7 @@ public:
    * required.
    * @param sycl_target SYCLTarget to use as compute device.
    */
-  ParticleGroup(Domain domain, ParticleSpec &particle_spec,
+  ParticleGroup(Domain &domain, ParticleSpec &particle_spec,
                 SYCLTarget &sycl_target)
       : domain(domain), sycl_target(sycl_target),
         ncell(domain.mesh.get_cell_count()), d_remove_cells(sycl_target, 1),
@@ -135,7 +140,7 @@ public:
     this->layer_compressor.set_cell_id_dat(this->cell_id_dat);
     this->cell_move_ctx.set_cell_id_dat(this->cell_id_dat);
 
-    this->mesh_heirarchy_global_map = std::make_shared<MeshHierarchyGlobalMap>(
+    this->mesh_hierarchy_global_map = std::make_shared<MeshHierarchyGlobalMap>(
         this->sycl_target, this->domain.mesh, this->position_dat,
         this->cell_id_dat, this->mpi_rank_dat);
 
@@ -568,7 +573,7 @@ inline void ParticleGroup::hybrid_move() {
 
   reset_mpi_ranks(this->mpi_rank_dat);
   this->domain.local_mapper->map(*this);
-  this->mesh_heirarchy_global_map->execute();
+  this->mesh_hierarchy_global_map->execute();
 
   this->global_move_ctx.move();
   this->set_npart_cell_from_dat();
