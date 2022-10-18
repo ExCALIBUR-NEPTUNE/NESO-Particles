@@ -21,8 +21,8 @@ namespace NESO::Particles {
 class CartesianPeriodic {
 private:
   BufferDevice<REAL> d_extents;
-  SYCLTarget &sycl_target;
-  CartesianHMesh &mesh;
+  SYCLTargetSharedPtr sycl_target;
+  std::shared_ptr<CartesianHMesh> mesh;
   ParticleDatShPtr<REAL> position_dat;
 
 public:
@@ -41,18 +41,19 @@ public:
    * @param mesh CartedianHMesh instance to use a domain for the particles.
    * @param position_dat ParticleDat containing particle positions.
    */
-  CartesianPeriodic(SYCLTarget &sycl_target, CartesianHMesh &mesh,
+  CartesianPeriodic(SYCLTargetSharedPtr sycl_target,
+                    std::shared_ptr<CartesianHMesh> mesh,
                     ParticleDatShPtr<REAL> position_dat)
       : sycl_target(sycl_target), mesh(mesh), position_dat(position_dat),
         d_extents(sycl_target, 3) {
 
-    NESOASSERT(mesh.ndim <= 3, "bad mesh ndim");
+    NESOASSERT(mesh->ndim <= 3, "bad mesh ndim");
     BufferHost<REAL> h_extents(sycl_target, 3);
-    for (int dimx = 0; dimx < mesh.ndim; dimx++) {
-      h_extents.ptr[dimx] = this->mesh.global_extents[dimx];
+    for (int dimx = 0; dimx < mesh->ndim; dimx++) {
+      h_extents.ptr[dimx] = this->mesh->global_extents[dimx];
     }
-    sycl_target.queue
-        .memcpy(this->d_extents.ptr, h_extents.ptr, mesh.ndim * sizeof(REAL))
+    sycl_target->queue
+        .memcpy(this->d_extents.ptr, h_extents.ptr, mesh->ndim * sizeof(REAL))
         .wait_and_throw();
   };
 
@@ -66,7 +67,7 @@ public:
     auto pl_iter_range = this->position_dat->get_particle_loop_iter_range();
     auto pl_stride = this->position_dat->get_particle_loop_cell_stride();
     auto pl_npart_cell = this->position_dat->get_particle_loop_npart_cell();
-    const int k_ndim = this->mesh.ndim;
+    const int k_ndim = this->mesh->ndim;
 
     NESOASSERT(((k_ndim > 0) && (k_ndim < 4)), "Bad number of dimensions");
     const auto k_extents = this->d_extents.ptr;
@@ -76,7 +77,7 @@ public:
 
       EventStack es;
 
-      es.push(this->sycl_target.queue.submit([&](sycl::handler &cgh) {
+      es.push(this->sycl_target->queue.submit([&](sycl::handler &cgh) {
         cgh.parallel_for<>(sycl::range<1>(pl_iter_range), [=](sycl::id<1> idx) {
           const REAL tmp_extent0 = k_extents[0];
           NESO_PARTICLES_KERNEL_START
@@ -96,7 +97,7 @@ public:
         });
       }));
 
-      es.push(this->sycl_target.queue.submit([&](sycl::handler &cgh) {
+      es.push(this->sycl_target->queue.submit([&](sycl::handler &cgh) {
         cgh.parallel_for<>(sycl::range<1>(pl_iter_range), [=](sycl::id<1> idx) {
           const REAL tmp_extent1 = k_extents[1];
           NESO_PARTICLES_KERNEL_START
@@ -119,7 +120,7 @@ public:
       es.wait();
 
     } else {
-      this->sycl_target.queue
+      this->sycl_target->queue
           .submit([&](sycl::handler &cgh) {
             cgh.parallel_for<>(
                 sycl::range<1>(pl_iter_range), [=](sycl::id<1> idx) {
@@ -143,8 +144,8 @@ public:
           .wait_and_throw();
     }
 
-    sycl_target.profile_map.inc("CartesianPeriodic", "execute", 1,
-                                profile_elapsed(t0, profile_timestamp()));
+    sycl_target->profile_map.inc("CartesianPeriodic", "execute", 1,
+                                 profile_elapsed(t0, profile_timestamp()));
   }
 };
 

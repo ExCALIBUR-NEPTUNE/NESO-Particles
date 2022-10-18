@@ -28,7 +28,7 @@ namespace NESO::Particles {
  */
 class LayerCompressor {
 private:
-  SYCLTarget &sycl_target;
+  SYCLTargetSharedPtr sycl_target;
   const int ncell;
   BufferDevice<INT> d_remove_cells;
   BufferDevice<INT> d_remove_layers;
@@ -62,13 +62,13 @@ public:
    *  Construct a new layer compressor to compress all ParticleDat instances
    *  that are contained within the passed containers.
    *
-   *  @param sycl_target SYCLTarget to use as compute device.
+   *  @param sycl_target SYCLTargetSharedPtr to use as compute device.
    *  @param ncell Number of cells within each ParticleDat.
    *  @param particle_dats_real Container of ParticleDat instances of REAL type.
    *  @param particle_dats_int Container of ParticleDat instances of INT type.
    */
   LayerCompressor(
-      SYCLTarget &sycl_target, const int ncell,
+      SYCLTargetSharedPtr sycl_target, const int ncell,
       std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
       std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int)
       : sycl_target(sycl_target), ncell(ncell), d_remove_cells(sycl_target, 1),
@@ -128,7 +128,7 @@ public:
     auto compress_layers_new_ptr = this->d_compress_layers_new.ptr;
 
     INT ***cell_ids_ptr = this->cell_id_dat->cell_dat.device_ptr();
-    this->sycl_target.queue
+    this->sycl_target->queue
         .submit([&](sycl::handler &cgh) {
           cgh.parallel_for<>(sycl::range<1>(static_cast<size_t>(ncell)),
                              [=](sycl::id<1> idx) {
@@ -139,7 +139,7 @@ public:
         })
         .wait();
 
-    this->sycl_target.queue
+    this->sycl_target->queue
         .submit([&](sycl::handler &cgh) {
           cgh.parallel_for<>(
               sycl::range<1>(static_cast<size_t>(npart)), [=](sycl::id<1> idx) {
@@ -159,7 +159,7 @@ public:
         })
         .wait();
 
-    this->sycl_target.queue
+    this->sycl_target->queue
         .submit([&](sycl::handler &cgh) {
           cgh.parallel_for<>(
               sycl::range<1>(static_cast<size_t>(npart)), [=](sycl::id<1> idx) {
@@ -209,9 +209,9 @@ public:
               });
         })
         .wait_and_throw();
-    sycl_target.profile_map.inc("LayerCompressor",
-                                "compute_remove_compress_indicies", 1,
-                                profile_elapsed(t0, profile_timestamp()));
+    sycl_target->profile_map.inc("LayerCompressor",
+                                 "compute_remove_compress_indicies", 1,
+                                 profile_elapsed(t0, profile_timestamp()));
   }
 
   /**
@@ -234,7 +234,7 @@ public:
 
     // do this d->h copy once for all dats
     if (this->d_npart_cell.size_bytes() > 0) {
-      this->event_stack.push(this->sycl_target.queue.memcpy(
+      this->event_stack.push(this->sycl_target->queue.memcpy(
           this->h_npart_cell.ptr, this->d_npart_cell.ptr,
           this->d_npart_cell.size_bytes()));
     }
@@ -257,8 +257,8 @@ public:
     // the move and set_npart calls are async
     this->event_stack.wait();
 
-    sycl_target.profile_map.inc("LayerCompressor", "data_movement", 1,
-                                profile_elapsed(t1, profile_timestamp()));
+    sycl_target->profile_map.inc("LayerCompressor", "data_movement", 1,
+                                 profile_elapsed(t1, profile_timestamp()));
 
     auto t2 = profile_timestamp();
     for (auto &dat : particle_dats_real) {
@@ -267,8 +267,8 @@ public:
     for (auto &dat : particle_dats_int) {
       dat.second->set_npart_cells_host(this->h_npart_cell.ptr);
     }
-    sycl_target.profile_map.inc("LayerCompressor", "host_npart_setting", 1,
-                                profile_elapsed(t2, profile_timestamp()));
+    sycl_target->profile_map.inc("LayerCompressor", "host_npart_setting", 1,
+                                 profile_elapsed(t2, profile_timestamp()));
 
     auto t3 = profile_timestamp();
     for (auto &dat : particle_dats_real) {
@@ -277,8 +277,8 @@ public:
     for (auto &dat : particle_dats_int) {
       dat.second->trim_cell_dat_rows();
     }
-    sycl_target.profile_map.inc("LayerCompressor", "dat_trimming", 1,
-                                profile_elapsed(t3, profile_timestamp()));
+    sycl_target->profile_map.inc("LayerCompressor", "dat_trimming", 1,
+                                 profile_elapsed(t3, profile_timestamp()));
 
     auto t4 = profile_timestamp();
     for (auto &dat : particle_dats_real) {
@@ -288,11 +288,11 @@ public:
       dat.second->cell_dat.wait_set_nrow();
     }
 
-    sycl_target.profile_map.inc("LayerCompressor", "dat_trimming_wait", 1,
-                                profile_elapsed(t4, profile_timestamp()));
+    sycl_target->profile_map.inc("LayerCompressor", "dat_trimming_wait", 1,
+                                 profile_elapsed(t4, profile_timestamp()));
 
-    sycl_target.profile_map.inc("LayerCompressor", "remove_particles", 1,
-                                profile_elapsed(t0, profile_timestamp()));
+    sycl_target->profile_map.inc("LayerCompressor", "remove_particles", 1,
+                                 profile_elapsed(t0, profile_timestamp()));
   }
 };
 

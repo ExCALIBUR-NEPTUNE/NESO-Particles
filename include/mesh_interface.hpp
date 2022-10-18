@@ -103,6 +103,8 @@ public:
   virtual inline std::vector<int> &get_local_communication_neighbours() = 0;
 };
 
+typedef std::shared_ptr<HMesh> HMeshSharedPtr;
+
 /**
  * Example mesh that duplicates a MeshHierarchy as a HMesh for examples and
  * testing.
@@ -370,6 +372,8 @@ public:
     return this->neighbour_ranks;
   }
 };
+
+typedef std::shared_ptr<CartesianHMesh> CartesianHMeshSharedPtr;
 
 } // namespace NESO::Particles
 

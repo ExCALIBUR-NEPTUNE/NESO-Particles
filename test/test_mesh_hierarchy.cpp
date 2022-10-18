@@ -5,7 +5,7 @@ using namespace NESO::Particles;
 
 TEST(MeshHierarchy, test_mesh_hierarchy_creation) {
 
-  SYCLTarget sycl_target{GPU_SELECTOR, MPI_COMM_WORLD};
+  auto sycl_target = std::make_shared<SYCLTarget>(GPU_SELECTOR, MPI_COMM_WORLD);
 
   std::vector<int> dims(2);
   dims[0] = 2;
@@ -26,7 +26,7 @@ TEST(MeshHierarchy, test_mesh_hierarchy_creation) {
   ASSERT_TRUE(mh.ncells_fine == 16);
 
   mh.free();
-  sycl_target.free();
+  sycl_target->free();
 }
 
 TEST(MeshHierarchy, test_mesh_hierarchy_indexing) {

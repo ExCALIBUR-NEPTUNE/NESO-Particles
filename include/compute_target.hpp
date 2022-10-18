@@ -280,6 +280,8 @@ public:
   }
 };
 
+typedef std::shared_ptr<SYCLTarget> SYCLTargetSharedPtr;
+
 /**
  * Container around USM device allocated memory that can be resized.
  */
@@ -292,7 +294,7 @@ public:
   BufferDevice &operator=(BufferDevice const &a) = delete;
 
   /// Compute device used by the instance.
-  SYCLTarget &sycl_target;
+  SYCLTargetSharedPtr sycl_target;
   /// SYCL USM device pointer, only accessible on device.
   T *ptr;
   /// Number of elements allocated.
@@ -301,13 +303,13 @@ public:
   /**
    * Create a new DeviceBuffer of a given number of elements.
    *
-   * @param sycl_target SYCLTarget to use as compute device.
+   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
    * @param size Number of elements.
    */
-  BufferDevice(SYCLTarget &sycl_target, size_t size)
+  BufferDevice(SYCLTargetSharedPtr &sycl_target, size_t size)
       : sycl_target(sycl_target) {
     this->size = size;
-    this->ptr = (T *)this->sycl_target.malloc_device(size * sizeof(T));
+    this->ptr = (T *)this->sycl_target->malloc_device(size * sizeof(T));
   }
   /**
    * Get the size of the allocation in bytes.
@@ -325,15 +327,15 @@ public:
    */
   inline int realloc_no_copy(const size_t size) {
     if (size > this->size) {
-      this->sycl_target.free(this->ptr);
-      this->ptr = (T *)this->sycl_target.malloc_device(size * sizeof(T));
+      this->sycl_target->free(this->ptr);
+      this->ptr = (T *)this->sycl_target->malloc_device(size * sizeof(T));
       this->size = size;
     }
     return this->size;
   }
   ~BufferDevice() {
     if (this->ptr != NULL) {
-      this->sycl_target.free(this->ptr);
+      this->sycl_target->free(this->ptr);
     }
   }
 };
@@ -350,7 +352,7 @@ public:
   BufferShared &operator=(BufferShared const &a) = delete;
 
   /// Compute device used by the instance.
-  SYCLTarget &sycl_target;
+  SYCLTargetSharedPtr sycl_target;
   /// SYCL USM shared pointer, accessible on host and device.
   T *ptr;
   /// Number of elements allocated.
@@ -359,13 +361,13 @@ public:
   /**
    * Create a new DeviceShared of a given number of elements.
    *
-   * @param sycl_target SYCLTarget to use as compute device.
+   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
    * @param size Number of elements.
    */
-  BufferShared(SYCLTarget &sycl_target, size_t size)
+  BufferShared(SYCLTargetSharedPtr sycl_target, size_t size)
       : sycl_target(sycl_target) {
     this->size = size;
-    this->ptr = (T *)sycl::malloc_shared(size * sizeof(T), sycl_target.queue);
+    this->ptr = (T *)sycl::malloc_shared(size * sizeof(T), sycl_target->queue);
   }
   /**
    * Get the size of the allocation in bytes.
@@ -382,8 +384,9 @@ public:
    */
   inline int realloc_no_copy(const size_t size) {
     if (size > this->size) {
-      sycl::free(this->ptr, this->sycl_target.queue);
-      this->ptr = (T *)sycl::malloc_shared(size * sizeof(T), sycl_target.queue);
+      sycl::free(this->ptr, this->sycl_target->queue);
+      this->ptr =
+          (T *)sycl::malloc_shared(size * sizeof(T), sycl_target->queue);
       this->size = size;
     }
     return this->size;
@@ -391,7 +394,7 @@ public:
 
   ~BufferShared() {
     if (this->ptr != NULL) {
-      sycl::free(this->ptr, sycl_target.queue);
+      sycl::free(this->ptr, sycl_target->queue);
     }
   }
 };
@@ -408,7 +411,7 @@ public:
   BufferHost &operator=(BufferHost const &a) = delete;
 
   /// Compute device used by the instance.
-  SYCLTarget &sycl_target;
+  SYCLTargetSharedPtr sycl_target;
   /// SYCL USM shared pointer, accessible on host and device.
   T *ptr;
   /// Number of elements allocated.
@@ -417,12 +420,13 @@ public:
   /**
    * Create a new DeviceHost of a given number of elements.
    *
-   * @param sycl_target SYCLTarget to use as compute device.
+   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
    * @param size Number of elements.
    */
-  BufferHost(SYCLTarget &sycl_target, size_t size) : sycl_target(sycl_target) {
+  BufferHost(SYCLTargetSharedPtr sycl_target, size_t size)
+      : sycl_target(sycl_target) {
     this->size = size;
-    this->ptr = (T *)sycl_target.malloc_host(size * sizeof(T));
+    this->ptr = (T *)sycl_target->malloc_host(size * sizeof(T));
   }
 
   /**
@@ -441,15 +445,15 @@ public:
    */
   inline int realloc_no_copy(const size_t size) {
     if (size > this->size) {
-      sycl_target.free(this->ptr);
-      this->ptr = (T *)sycl_target.malloc_host(size * sizeof(T));
+      sycl_target->free(this->ptr);
+      this->ptr = (T *)sycl_target->malloc_host(size * sizeof(T));
       this->size = size;
     }
     return this->size;
   }
   ~BufferHost() {
     if (this->ptr != NULL) {
-      sycl_target.free(this->ptr);
+      sycl_target->free(this->ptr);
     }
   }
 };
@@ -469,7 +473,7 @@ public:
   BufferDeviceHost &operator=(BufferDeviceHost const &a) = delete;
 
   /// Compute device used by the instance.
-  SYCLTarget &sycl_target;
+  SYCLTargetSharedPtr sycl_target;
   /// Size of the allocation on device and host.
   size_t size;
 
@@ -484,11 +488,11 @@ public:
    * Create a new BufferDeviceHost of the request size on the requested compute
    * target.
    *
-   * @param sycl_target SYCLTarget to use as compute device.
+   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
    * @param size Number of elements to initially allocate on the device and
    * host.
    */
-  BufferDeviceHost(SYCLTarget &sycl_target, size_t size)
+  BufferDeviceHost(SYCLTargetSharedPtr sycl_target, size_t size)
       : sycl_target(sycl_target), size(size), d_buffer(sycl_target, size),
         h_buffer(sycl_target, size){};
 
@@ -519,7 +523,7 @@ public:
    */
   inline void host_to_device() {
     if (this->size_bytes() > 0) {
-      this->sycl_target.queue
+      this->sycl_target->queue
           .memcpy(this->d_buffer.ptr, this->h_buffer.ptr, this->size_bytes())
           .wait();
     }
@@ -529,7 +533,7 @@ public:
    */
   inline void device_to_host() {
     if (this->size_bytes() > 0) {
-      this->sycl_target.queue
+      this->sycl_target->queue
           .memcpy(this->h_buffer.ptr, this->d_buffer.ptr, this->size_bytes())
           .wait();
     }
@@ -541,7 +545,7 @@ public:
    */
   inline sycl::event async_host_to_device() {
     NESOASSERT(this->size_bytes() > 0, "Zero sized copy issued.");
-    return this->sycl_target.queue.memcpy(
+    return this->sycl_target->queue.memcpy(
         this->d_buffer.ptr, this->h_buffer.ptr, this->size_bytes());
   }
   /**
@@ -551,7 +555,7 @@ public:
    */
   inline sycl::event async_device_to_host() {
     NESOASSERT(this->size_bytes() > 0, "Zero sized copy issued.");
-    return this->sycl_target.queue.memcpy(
+    return this->sycl_target->queue.memcpy(
         this->h_buffer.ptr, this->d_buffer.ptr, this->size_bytes());
   }
 };
@@ -593,7 +597,7 @@ public:
  */
 class ErrorPropagate {
 private:
-  SYCLTarget &sycl_target;
+  SYCLTargetSharedPtr sycl_target;
   BufferDeviceHost<int> dh_flag;
 
 public:
@@ -607,9 +611,9 @@ public:
   /**
    * Create a new instance to track assertions thrown in SYCL kernels.
    *
-   * @param sycl_target SYCLTarget used for the kernel.
+   * @param sycl_target SYCLTargetSharedPtr used for the kernel.
    */
-  ErrorPropagate(SYCLTarget &sycl_target)
+  ErrorPropagate(SYCLTargetSharedPtr sycl_target)
       : sycl_target(sycl_target), dh_flag(sycl_target, 1) {
     this->dh_flag.h_buffer.ptr[0] = 0;
     this->dh_flag.host_to_device();

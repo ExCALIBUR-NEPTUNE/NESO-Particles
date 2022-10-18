@@ -21,7 +21,7 @@ namespace NESO::Particles {
  */
 class CartesianHMeshLocalMapperT : public LocalMapper {
 private:
-  SYCLTarget &sycl_target;
+  SYCLTargetSharedPtr sycl_target;
   BufferDeviceHost<int> dh_dims;
   int ndim;
   REAL cell_width_fine;
@@ -44,29 +44,30 @@ public:
   /// Stride for the local index lookup per dimension.
   int lookup_stride;
   /// CartesianHMesh on which the lookup is based.
-  CartesianHMesh &mesh;
+  CartesianHMeshSharedPtr mesh;
   /**
    *  Construct a new mapper instance to map local particle positions to owing
    * ranks.
    *
-   *  @param sycl_target SYCLTarget to use as compute device.
+   *  @param sycl_target SYCLTargetSharedPtr to use as compute device.
    *  @param mesh CartesianHMesh instance this mapping is based on.
    */
-  CartesianHMeshLocalMapperT(SYCLTarget &sycl_target, CartesianHMesh &mesh)
-      : sycl_target(sycl_target), mesh(mesh), dh_dims(sycl_target, mesh.ndim),
+  CartesianHMeshLocalMapperT(SYCLTargetSharedPtr sycl_target,
+                             CartesianHMeshSharedPtr mesh)
+      : sycl_target(sycl_target), mesh(mesh), dh_dims(sycl_target, mesh->ndim),
         dh_map(sycl_target, 1), dh_lookup(sycl_target, 1),
-        dh_lookup_dims(sycl_target, mesh.ndim) {
-    this->ndim = mesh.ndim;
+        dh_lookup_dims(sycl_target, mesh->ndim) {
+    this->ndim = mesh->ndim;
 
     this->lookup_stride = 0;
     for (int dimx = 0; dimx < this->ndim; dimx++) {
-      const int cc = mesh.cell_counts[dimx];
+      const int cc = mesh->cell_counts[dimx];
       this->dh_dims.h_buffer.ptr[dimx] = cc;
       this->lookup_stride = MAX(cc, this->lookup_stride);
     }
     this->dh_dims.host_to_device();
-    this->cell_width_fine = mesh.get_cell_width_fine();
-    this->inverse_cell_width_fine = mesh.get_inverse_cell_width_fine();
+    this->cell_width_fine = mesh->get_cell_width_fine();
+    this->inverse_cell_width_fine = mesh->get_inverse_cell_width_fine();
 
     this->dh_lookup.realloc_no_copy(this->ndim * this->lookup_stride);
 
@@ -78,7 +79,7 @@ public:
 
     int map_size = 1;
     for (int dimx = 0; dimx < this->ndim; dimx++) {
-      map_size *= mesh.cell_counts_local[dimx] + 2 * mesh.stencil_width;
+      map_size *= mesh->cell_counts_local[dimx] + 2 * mesh->stencil_width;
     }
     this->dh_map.realloc_no_copy(map_size);
     for (int mx = 0; mx < map_size; mx++) {
@@ -86,12 +87,12 @@ public:
     }
 
     // populate which cells are owned in each dimension
-    const auto stencil_width = this->mesh.stencil_width;
+    const auto stencil_width = this->mesh->stencil_width;
     for (int dimx = 0; dimx < this->ndim; dimx++) {
       int index = 0;
-      const int start = this->mesh.cell_starts[dimx] - stencil_width;
-      const int end = this->mesh.cell_ends[dimx] + stencil_width;
-      auto cc = mesh.cell_counts[dimx];
+      const int start = this->mesh->cell_starts[dimx] - stencil_width;
+      const int end = this->mesh->cell_ends[dimx] + stencil_width;
+      auto cc = mesh->cell_counts[dimx];
       for (int cellx = start; cellx < end; cellx++) {
         // wrap the cell into the domain
         const int cell_wrapped = (cellx + stencil_width * cc) % cc;
@@ -100,7 +101,7 @@ public:
         index++;
       }
       this->dh_lookup_dims.h_buffer.ptr[dimx] = index;
-      NESOASSERT(index == mesh.cell_counts_local[dimx] + 2 * stencil_width,
+      NESOASSERT(index == mesh->cell_counts_local[dimx] + 2 * stencil_width,
                  "Bad index value");
     }
     this->dh_lookup.host_to_device();
@@ -113,9 +114,9 @@ public:
     int cell_counts[3] = {1, 1, 1};
 
     for (int dimx = 0; dimx < this->ndim; dimx++) {
-      starts[dimx] = this->mesh.cell_starts[dimx] - stencil_width;
-      ends[dimx] = this->mesh.cell_ends[dimx] + stencil_width;
-      cell_counts[dimx] = this->mesh.cell_counts[dimx];
+      starts[dimx] = this->mesh->cell_starts[dimx] - stencil_width;
+      ends[dimx] = this->mesh->cell_ends[dimx] + stencil_width;
+      cell_counts[dimx] = this->mesh->cell_counts[dimx];
     }
 
     // mesh tuple index
@@ -145,14 +146,15 @@ public:
 
           const int local_tuple_x = h_lookup_x[cxs];
           // convert mesh tuple index to mesh hierarchy tuple index
-          this->mesh.mesh_tuple_to_mh_tuple(index_mesh, index_mh);
+          this->mesh->mesh_tuple_to_mh_tuple(index_mesh, index_mh);
           // convert mesh hierarchy tuple index to global linear index in the
           // MeshHierarchy
           const INT index_global =
-              this->mesh.get_mesh_hierarchy()->tuple_to_linear_global(index_mh);
+              this->mesh->get_mesh_hierarchy()->tuple_to_linear_global(
+                  index_mh);
           // get the rank that owns that global cell
           const int remote_rank =
-              this->mesh.get_mesh_hierarchy()->get_owner(index_global);
+              this->mesh->get_mesh_hierarchy()->get_owner(index_global);
 
           const int linear_index =
               local_tuple_x +
@@ -195,7 +197,7 @@ public:
     auto pl_stride = mpi_rank_dat->get_particle_loop_cell_stride();
     auto pl_npart_cell = mpi_rank_dat->get_particle_loop_npart_cell();
 
-    this->sycl_target.queue
+    this->sycl_target->queue
         .submit([&](sycl::handler &cgh) {
           cgh.parallel_for<>(
               sycl::range<1>(pl_iter_range), [=](sycl::id<1> idx) {
@@ -239,8 +241,8 @@ public:
               });
         })
         .wait_and_throw();
-    sycl_target.profile_map.inc("CartesianHMeshLocalMapperT", "map", 1,
-                                profile_elapsed(t0, profile_timestamp()));
+    sycl_target->profile_map.inc("CartesianHMeshLocalMapperT", "map", 1,
+                                 profile_elapsed(t0, profile_timestamp()));
   };
 
   /**
@@ -252,7 +254,8 @@ public:
 };
 
 inline std::shared_ptr<CartesianHMeshLocalMapperT>
-CartesianHMeshLocalMapper(SYCLTarget &sycl_target, CartesianHMesh &mesh) {
+CartesianHMeshLocalMapper(SYCLTargetSharedPtr sycl_target,
+                          CartesianHMeshSharedPtr mesh) {
   return std::make_shared<CartesianHMeshLocalMapperT>(sycl_target, mesh);
 }
 

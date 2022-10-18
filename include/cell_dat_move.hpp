@@ -97,23 +97,23 @@ private:
     // copy to the device
     EventStack event_stack;
     if (this->h_particle_dat_ptr_real.size_bytes() > 0) {
-      event_stack.push(this->sycl_target.queue.memcpy(
+      event_stack.push(this->sycl_target->queue.memcpy(
           this->d_particle_dat_ptr_real.ptr, this->h_particle_dat_ptr_real.ptr,
           this->h_particle_dat_ptr_real.size_bytes()));
     }
     if (this->h_particle_dat_ptr_int.size_bytes() > 0) {
-      event_stack.push(this->sycl_target.queue.memcpy(
+      event_stack.push(this->sycl_target->queue.memcpy(
           this->d_particle_dat_ptr_int.ptr, this->h_particle_dat_ptr_int.ptr,
           this->h_particle_dat_ptr_int.size_bytes()));
     }
     if (this->h_particle_dat_ncomp_real.size_bytes() > 0) {
-      event_stack.push(this->sycl_target.queue.memcpy(
+      event_stack.push(this->sycl_target->queue.memcpy(
           this->d_particle_dat_ncomp_real.ptr,
           this->h_particle_dat_ncomp_real.ptr,
           this->h_particle_dat_ncomp_real.size_bytes()));
     }
     if (this->h_particle_dat_ncomp_int.size_bytes() > 0) {
-      event_stack.push(this->sycl_target.queue.memcpy(
+      event_stack.push(this->sycl_target->queue.memcpy(
           this->d_particle_dat_ncomp_int.ptr,
           this->h_particle_dat_ncomp_int.ptr,
           this->h_particle_dat_ncomp_int.size_bytes()));
@@ -128,20 +128,20 @@ public:
   CellMove &operator=(CellMove const &a) = delete;
 
   /// Compute device used by the instance.
-  SYCLTarget &sycl_target;
+  SYCLTargetSharedPtr sycl_target;
 
   ~CellMove() {}
   /**
    * Create a cell move instance to move particles between cells.
    *
-   * @param sycl_target SYCLTarget to use as compute device.
+   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
    * @param ncell Total number of cells.
    * @param layer_compressor LayerCompressor to use to compress ParticleDat
    * instances.
    * @param particle_dats_real Container of REAL ParticleDat.
    * @param particle_dats_int Container of INT ParticleDat.
    */
-  CellMove(SYCLTarget &sycl_target, const int ncell,
+  CellMove(SYCLTargetSharedPtr sycl_target, const int ncell,
            LayerCompressor &layer_compressor,
            std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
            std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int)
@@ -185,13 +185,13 @@ public:
     const auto k_ncell = this->ncell;
     auto k_npart_cell = d_npart_cell.ptr;
     auto k_mpi_npart_cell = mpi_rank_dat->d_npart_cell;
-    auto reset_event = this->sycl_target.queue.submit([&](sycl::handler &cgh) {
+    auto reset_event = this->sycl_target->queue.submit([&](sycl::handler &cgh) {
       cgh.parallel_for<>(sycl::range<1>(k_ncell), [=](sycl::id<1> idx) {
         k_npart_cell[idx] = k_mpi_npart_cell[idx];
       });
     });
     auto k_move_count = d_move_count.ptr;
-    this->sycl_target.queue
+    this->sycl_target->queue
         .submit([&](sycl::handler &cgh) {
           cgh.single_task<>([=]() { k_move_count[0] = 0; });
         })
@@ -220,7 +220,7 @@ public:
     // detect out of bounds particles
     auto k_ep_indices = this->ep_bad_cell_indices.device_ptr();
 
-    this->sycl_target.queue
+    this->sycl_target->queue
         .submit([&](sycl::handler &cgh) {
           cgh.parallel_for<>(
               sycl::range<1>(pl_iter_range), [=](sycl::id<1> idx) {
@@ -265,7 +265,7 @@ public:
 
     // Realloc the ParticleDat cells for the move
     if (this->ncell > 0) {
-      this->sycl_target.queue
+      this->sycl_target->queue
           .memcpy(this->h_npart_cell.ptr, this->d_npart_cell.ptr,
                   sizeof(int) * this->ncell)
           .wait();
@@ -285,7 +285,7 @@ public:
     for (auto &dat : particle_dats_int) {
       dat.second->wait_realloc();
     }
-    this->sycl_target.queue
+    this->sycl_target->queue
         .submit([&](sycl::handler &cgh) {
           cgh.parallel_for<class dummy>(
               sycl::range<1>(k_ncell),
@@ -303,7 +303,7 @@ public:
     tmp_stack.wait();
 
     // get the npart to move on the host
-    this->sycl_target.queue
+    this->sycl_target->queue
         .memcpy(this->h_move_count.ptr, this->d_move_count.ptr, sizeof(int))
         .wait();
     const int move_count = h_move_count.ptr[0];
@@ -320,7 +320,7 @@ public:
 
     auto t1 = profile_timestamp();
     // copy from old cells/layers to new cells/layers
-    this->sycl_target.queue
+    this->sycl_target->queue
         .submit([&](sycl::handler &cgh) {
           cgh.parallel_for<>(sycl::range<1>(move_count), [=](sycl::id<1> idx) {
             const auto cell_old = k_cells_old[idx];
@@ -352,18 +352,18 @@ public:
           });
         })
         .wait_and_throw();
-    sycl_target.profile_map.inc("CellMove", "cell_move", 1,
-                                profile_elapsed(t1, profile_timestamp()));
+    sycl_target->profile_map.inc("CellMove", "cell_move", 1,
+                                 profile_elapsed(t1, profile_timestamp()));
 
     auto t2 = profile_timestamp();
     // compress the data by removing the old rows
     this->layer_compressor.remove_particles(move_count, this->d_cells_old.ptr,
                                             this->d_layers_old.ptr);
 
-    sycl_target.profile_map.inc("CellMove", "remove_particles", 1,
-                                profile_elapsed(t2, profile_timestamp()));
-    sycl_target.profile_map.inc("CellMove", "move", 1,
-                                profile_elapsed(t0, profile_timestamp()));
+    sycl_target->profile_map.inc("CellMove", "remove_particles", 1,
+                                 profile_elapsed(t2, profile_timestamp()));
+    sycl_target->profile_map.inc("CellMove", "move", 1,
+                                 profile_elapsed(t0, profile_timestamp()));
   };
 };
 

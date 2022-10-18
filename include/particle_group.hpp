@@ -64,9 +64,9 @@ public:
   ParticleGroup &operator=(ParticleGroup const &a) = delete;
 
   /// Domain this instance is defined over.
-  Domain &domain;
+  DomainSharedPtr domain;
   /// Compute device used by the instance.
-  SYCLTarget &sycl_target;
+  SYCLTargetSharedPtr sycl_target;
   /// Map from Sym instances to REAL valued ParticleDat instances.
   std::map<Sym<REAL>, ParticleDatShPtr<REAL>> particle_dats_real{};
   /// Map from Sym instances to INT valued ParticleDat instances.
@@ -97,21 +97,22 @@ public:
    * @param domain Domain instance containing these particles.
    * @param particle_spec ParticleSpec that describes the ParticleDat instances
    * required.
-   * @param sycl_target SYCLTarget to use as compute device.
+   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
    */
-  ParticleGroup(Domain &domain, ParticleSpec &particle_spec,
-                SYCLTarget &sycl_target)
+  ParticleGroup(DomainSharedPtr domain, ParticleSpec &particle_spec,
+                SYCLTargetSharedPtr sycl_target)
       : domain(domain), sycl_target(sycl_target),
-        ncell(domain.mesh.get_cell_count()), d_remove_cells(sycl_target, 1),
+        ncell(domain->mesh->get_cell_count()), d_remove_cells(sycl_target, 1),
         d_remove_layers(sycl_target, 1), h_npart_cell(sycl_target, 1),
         layer_compressor(sycl_target, ncell, particle_dats_real,
                          particle_dats_int),
         global_move_ctx(sycl_target, layer_compressor, particle_dats_real,
                         particle_dats_int),
-        local_move_ctx(sycl_target, layer_compressor, particle_dats_real,
-                       particle_dats_int,
-                       domain.mesh.get_local_communication_neighbours().size(),
-                       domain.mesh.get_local_communication_neighbours().data()),
+        local_move_ctx(
+            sycl_target, layer_compressor, particle_dats_real,
+            particle_dats_int,
+            domain->mesh->get_local_communication_neighbours().size(),
+            domain->mesh->get_local_communication_neighbours().data()),
         cell_move_ctx(sycl_target, this->ncell, layer_compressor,
                       particle_dats_real, particle_dats_int)
 
@@ -141,12 +142,12 @@ public:
     this->cell_move_ctx.set_cell_id_dat(this->cell_id_dat);
 
     this->mesh_hierarchy_global_map = std::make_shared<MeshHierarchyGlobalMap>(
-        this->sycl_target, this->domain.mesh, this->position_dat,
+        this->sycl_target, this->domain->mesh, this->position_dat,
         this->cell_id_dat, this->mpi_rank_dat);
 
     // call the callback on the local mapper to complete the setup of that
     // object
-    this->domain.local_mapper->particle_group_callback(*this);
+    this->domain->local_mapper->particle_group_callback(*this);
   }
   ~ParticleGroup() {}
 
@@ -413,7 +414,7 @@ inline void ParticleGroup::add_particles_local(ParticleSet &particle_data) {
   }
 
   // The append is async
-  this->sycl_target.queue.wait();
+  this->sycl_target->queue.wait();
   for (auto &dat : particle_dats_real) {
     dat.second->npart_host_to_device();
     for (int cellx = 0; cellx < this->ncell; cellx++) {
@@ -455,7 +456,7 @@ inline void ParticleGroup::remove_particles(const int npart,
   auto b_cells = sycl::buffer<INT>(cells.data(), sycl::range<1>(npart));
   auto b_layers = sycl::buffer<INT>(layers.data(), sycl::range<1>(npart));
 
-  this->sycl_target.queue
+  this->sycl_target->queue
       .submit([&](sycl::handler &cgh) {
         auto a_cells = b_cells.get_access<sycl::access::mode::read>(cgh);
         auto a_layers = b_layers.get_access<sycl::access::mode::read>(cgh);
@@ -509,7 +510,7 @@ template <typename... T> inline void ParticleGroup::print(T... args) {
   std::cout << "==============================================================="
                "================="
             << std::endl;
-  for (int cellx = 0; cellx < this->domain.mesh.get_cell_count(); cellx++) {
+  for (int cellx = 0; cellx < this->domain->mesh->get_cell_count(); cellx++) {
 
     std::vector<CellData<REAL>> cell_data_real;
     std::vector<CellData<INT>> cell_data_int;
@@ -572,17 +573,19 @@ template <typename... T> inline void ParticleGroup::print(T... args) {
 inline void ParticleGroup::hybrid_move() {
 
   reset_mpi_ranks(this->mpi_rank_dat);
-  this->domain.local_mapper->map(*this);
+  this->domain->local_mapper->map(*this);
   this->mesh_hierarchy_global_map->execute();
 
   this->global_move_ctx.move();
   this->set_npart_cell_from_dat();
 
-  this->domain.local_mapper->map(*this, 0);
+  this->domain->local_mapper->map(*this, 0);
 
   this->local_move_ctx.move();
   this->set_npart_cell_from_dat();
 }
+
+typedef std::shared_ptr<ParticleGroup> ParticleGroupSharedPtr;
 
 } // namespace NESO::Particles
 

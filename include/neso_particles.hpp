@@ -1,6 +1,8 @@
 #ifndef _NESO_PARTICLES
 #define _NESO_PARTICLES
 
+#include <memory>
+
 #include "access.hpp"
 #include "boundary_conditions.hpp"
 #include "cartesian_mesh.hpp"

@@ -17,14 +17,16 @@ TEST(ParticleIO, H5Part) {
 
   const double cell_extent = 1.0;
   const int subdivision_order = 0;
-  CartesianHMesh mesh(MPI_COMM_WORLD, ndim, dims, cell_extent,
-                      subdivision_order);
+  auto mesh = std::make_shared<CartesianHMesh>(MPI_COMM_WORLD, ndim, dims,
+                                               cell_extent, subdivision_order);
 
-  SYCLTarget sycl_target{GPU_SELECTOR, mesh.get_comm()};
+  auto sycl_target =
+      std::make_shared<SYCLTarget>(GPU_SELECTOR, mesh->get_comm());
 
   // create object to map local cells + stencil to ranks
   auto cart_local_mapper = CartesianHMeshLocalMapper(sycl_target, mesh);
-  Domain domain(mesh, cart_local_mapper);
+
+  auto domain = std::make_shared<Domain>(mesh, cart_local_mapper);
 
   ParticleSpec particle_spec{
       ParticleProp(Sym<REAL>("P"), ndim, true),
@@ -40,7 +42,7 @@ TEST(ParticleIO, H5Part) {
   CartesianCellBin ccb(sycl_target, mesh, A.position_dat, A.cell_id_dat);
 
   A.add_particle_dat(ParticleDat(sycl_target, ParticleProp(Sym<REAL>("FOO"), 3),
-                                 domain.mesh.get_cell_count()));
+                                 domain->mesh->get_cell_count()));
 
   std::mt19937 rng_pos(52234234);
   std::mt19937 rng_vel(52234231);
@@ -49,12 +51,12 @@ TEST(ParticleIO, H5Part) {
   const int N = 1024;
 
   auto positions =
-      uniform_within_extents(N, ndim, mesh.global_extents, rng_pos);
+      uniform_within_extents(N, ndim, mesh->global_extents, rng_pos);
   auto velocities =
       NESO::Particles::normal_distribution(N, 3, 0.0, 1.0, rng_vel);
 
   std::uniform_int_distribution<int> uniform_dist(
-      0, sycl_target.comm_pair.size_parent - 1);
+      0, sycl_target->comm_pair.size_parent - 1);
 
   ParticleSet initial_distribution(N, A.get_particle_spec());
 
@@ -75,7 +77,7 @@ TEST(ParticleIO, H5Part) {
     mapping[px_rank].push_back(px);
   }
 
-  if (sycl_target.comm_pair.rank_parent == 0) {
+  if (sycl_target->comm_pair.rank_parent == 0) {
     A.add_particles_local(initial_distribution);
   }
 
@@ -89,7 +91,7 @@ TEST(ParticleIO, H5Part) {
   h5part.write();
   h5part.close();
 
-  if (sycl_target.comm_pair.rank_parent == 0) {
+  if (sycl_target->comm_pair.rank_parent == 0) {
     std::vector<long long> data_ll(N);
     std::vector<double> data_real(N);
     std::vector<long long> ordering(N);
@@ -192,7 +194,7 @@ TEST(ParticleIO, H5Part) {
     H5CHK(H5Fclose(file_id));
   }
 
-  mesh.free();
+  mesh->free();
 
 #endif
 }

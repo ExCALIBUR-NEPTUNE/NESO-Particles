@@ -27,7 +27,7 @@ public:
   Domain &operator=(Domain const &a) = delete;
 
   /// HMesh derived mesh instance.
-  HMesh &mesh;
+  HMeshSharedPtr mesh;
   /// LocalMapper derived class instance to bin particles into mesh cells.
   LocalMapperShPtr local_mapper;
   /**
@@ -36,10 +36,13 @@ public:
    * @param mesh HMesh derived mesh object.
    * @param local_mapper Object to map particle positions into mesh cells.
    */
-  Domain(HMesh &mesh, LocalMapperShPtr local_mapper = DummyLocalMapper())
+  Domain(HMeshSharedPtr mesh,
+         LocalMapperShPtr local_mapper = DummyLocalMapper())
       : mesh(mesh), local_mapper(local_mapper) {}
   ~Domain() {}
 };
+
+typedef std::shared_ptr<Domain> DomainSharedPtr;
 
 } // namespace NESO::Particles
 

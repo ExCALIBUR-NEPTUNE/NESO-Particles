@@ -44,19 +44,19 @@ public:
   GlobalMove &operator=(GlobalMove const &a) = delete;
 
   /// Compute device used by the instance.
-  SYCLTarget &sycl_target;
+  SYCLTargetSharedPtr sycl_target;
 
   ~GlobalMove(){};
   /**
    * Construct a new global move instance to move particles between the cells
    * of a MeshHierarchy.
    *
-   * @param sycl_target SYCLTarget to use as compute device.
+   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
    * @param layer_compressor LayerCompressor to use to compress ParticleDat rows
    * @param particle_dats_real Container of the REAL valued ParticleDats.
    * @param particle_dats_int Container of the INT valued ParticleDats.
    */
-  GlobalMove(SYCLTarget &sycl_target, LayerCompressor &layer_compressor,
+  GlobalMove(SYCLTargetSharedPtr sycl_target, LayerCompressor &layer_compressor,
              std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
              std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int)
       : sycl_target(sycl_target), departing_identify(sycl_target),
@@ -86,8 +86,8 @@ public:
     // MPI RMA to inform remote ranks they will recv particles through the
     // global move
     this->global_move_exchange.npart_exchange_init();
-    sycl_target.profile_map.inc("GlobalMove", "move_stage_m3", 1,
-                                profile_elapsed(t0, profile_timestamp()));
+    sycl_target->profile_map.inc("GlobalMove", "move_stage_m3", 1,
+                                 profile_elapsed(t0, profile_timestamp()));
     // find particles leaving through the global interface
     this->departing_identify.identify(0);
 
@@ -101,9 +101,9 @@ public:
     auto k_send_ranks = this->departing_identify.dh_send_ranks.d_buffer.ptr;
     auto k_send_counts_all_ranks =
         this->departing_identify.dh_send_counts_all_ranks.d_buffer.ptr;
-    sycl_target.profile_map.inc("GlobalMove", "move_stage_m2", 1,
-                                profile_elapsed(t0, profile_timestamp()));
-    this->sycl_target.queue
+    sycl_target->profile_map.inc("GlobalMove", "move_stage_m2", 1,
+                                 profile_elapsed(t0, profile_timestamp()));
+    this->sycl_target->queue
         .submit([&](sycl::handler &cgh) {
           cgh.parallel_for<>(sycl::range<1>(num_remote_send_ranks),
                              [=](sycl::id<1> idx) {
@@ -115,8 +115,8 @@ public:
         .wait_and_throw();
     this->dh_send_rank_npart.device_to_host();
 
-    sycl_target.profile_map.inc("GlobalMove", "move_stage_m1", 1,
-                                profile_elapsed(t0, profile_timestamp()));
+    sycl_target->profile_map.inc("GlobalMove", "move_stage_m1", 1,
+                                 profile_elapsed(t0, profile_timestamp()));
     // We now have:
     // 1) n particles to send
     // 2) array length n of source cells
@@ -145,12 +145,12 @@ public:
         num_remote_send_ranks, dh_send_ranks,
         this->dh_send_rank_npart.h_buffer);
     this->global_move_exchange.npart_exchange_finalise();
-    sycl_target.profile_map.inc(
+    sycl_target->profile_map.inc(
         "GlobalMove", "npart_exchange_sendrecv", 1,
         profile_elapsed(t0_npart_exchange, profile_timestamp()));
 
-    sycl_target.profile_map.inc("GlobalMove", "move_stage_0", 1,
-                                profile_elapsed(t0, profile_timestamp()));
+    sycl_target->profile_map.inc("GlobalMove", "move_stage_0", 1,
+                                 profile_elapsed(t0, profile_timestamp()));
 
     // allocate space to recv packed particles
     particle_unpacker.reset(this->global_move_exchange.num_remote_recv_ranks,
@@ -162,32 +162,32 @@ public:
     // wait for the local particles to be packed.
     global_pack_event.wait_and_throw();
 
-    sycl_target.profile_map.inc("GlobalMove", "move_stage_1", 1,
-                                profile_elapsed(t0, profile_timestamp()));
+    sycl_target->profile_map.inc("GlobalMove", "move_stage_1", 1,
+                                 profile_elapsed(t0, profile_timestamp()));
 
     // send and recv packed particles from particle_packer.cell_dat to
     // particle_unpacker.h_recv_buffer using h_recv_offsets.
     this->global_move_exchange.exchange_init(this->particle_packer,
                                              this->particle_unpacker);
 
-    sycl_target.profile_map.inc("GlobalMove", "move_stage_2", 1,
-                                profile_elapsed(t0, profile_timestamp()));
+    sycl_target->profile_map.inc("GlobalMove", "move_stage_2", 1,
+                                 profile_elapsed(t0, profile_timestamp()));
 
     // remove the sent particles whilst the communication occurs
     this->layer_compressor.remove_particles(
         num_particles_leaving, this->departing_identify.d_pack_cells.ptr,
         this->departing_identify.d_pack_layers_src.ptr);
 
-    sycl_target.profile_map.inc("GlobalMove", "move_stage_3", 1,
-                                profile_elapsed(t0, profile_timestamp()));
+    sycl_target->profile_map.inc("GlobalMove", "move_stage_3", 1,
+                                 profile_elapsed(t0, profile_timestamp()));
 
     // wait for particle data to be send/recv'd
     this->global_move_exchange.exchange_finalise(this->particle_unpacker);
 
     // Unpack the recv'd particles
     this->particle_unpacker.unpack(particle_dats_real, particle_dats_int);
-    sycl_target.profile_map.inc("GlobalMove", "move", 1,
-                                profile_elapsed(t0, profile_timestamp()));
+    sycl_target->profile_map.inc("GlobalMove", "move", 1,
+                                 profile_elapsed(t0, profile_timestamp()));
   }
 };
 

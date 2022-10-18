@@ -19,9 +19,9 @@ namespace NESO::Particles {
 class MeshHierarchyGlobalMap {
 private:
   /// Compute device used by the instance.
-  SYCLTarget &sycl_target;
+  SYCLTargetSharedPtr sycl_target;
   /// HMesh instance on which particles live.
-  HMesh &h_mesh;
+  HMeshSharedPtr h_mesh;
   /// ParticleDat storing Positions
   ParticleDatShPtr<REAL> &position_dat;
   /// ParticleDat storing cell ids
@@ -71,13 +71,13 @@ public:
   /**
    * Construct a new global mapping instance for MeshHierarchy.
    *
-   * @param sycl_target SYCLTarget to use as compute device.
+   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
    * @param h_mesh HMesh derived mesh to use for mapping.
    * @param position_dat ParticleDat containing particle positions.
    * @param cell_id_dat ParticleDat containg particle cell ids.
    * @param mpi_rank_dat ParticleDat containing the owning rank of particles.
    */
-  MeshHierarchyGlobalMap(SYCLTarget &sycl_target, HMesh &h_mesh,
+  MeshHierarchyGlobalMap(SYCLTargetSharedPtr sycl_target, HMeshSharedPtr h_mesh,
                          ParticleDatShPtr<REAL> &position_dat,
                          ParticleDatShPtr<INT> &cell_id_dat,
                          ParticleDatShPtr<INT> &mpi_rank_dat)
@@ -101,7 +101,7 @@ public:
 
     // reset the device count for cell ids that need mapping
     auto k_lookup_count = this->d_lookup_count.ptr;
-    auto reset_event = this->sycl_target.queue.submit([&](sycl::handler &cgh) {
+    auto reset_event = this->sycl_target->queue.submit([&](sycl::handler &cgh) {
       cgh.single_task<>([=]() { k_lookup_count[0] = 0; });
     });
 
@@ -128,7 +128,7 @@ public:
     auto k_error_propagate = this->error_propagate.device_ptr();
     const auto k_npart_local = npart_local;
 
-    this->sycl_target.queue
+    this->sycl_target->queue
         .submit([&](sycl::handler &cgh) {
           cgh.parallel_for<>(
               sycl::range<1>(pl_iter_range), [=](sycl::id<1> idx) {
@@ -159,7 +159,7 @@ public:
         .wait_and_throw();
     this->error_propagate.check_and_throw("Bad atomic index computed.");
 
-    this->sycl_target.queue
+    this->sycl_target->queue
         .memcpy(this->h_lookup_count.ptr, this->d_lookup_count.ptr,
                 this->d_lookup_count.size_bytes())
         .wait();
@@ -175,7 +175,7 @@ public:
     auto k_lookup_ranks = this->d_lookup_ranks.ptr;
 
     // variables required in the kernel to map positions to cells
-    auto mesh_hierarchy = this->h_mesh.get_mesh_hierarchy();
+    auto mesh_hierarchy = this->h_mesh->get_mesh_hierarchy();
     auto k_ndim = mesh_hierarchy->ndim;
     const REAL k_inverse_cell_width_coarse =
         mesh_hierarchy->inverse_cell_width_coarse;
@@ -189,11 +189,11 @@ public:
       this->h_origin.ptr[dimx] = mesh_hierarchy->origin[dimx];
       this->h_dims.ptr[dimx] = mesh_hierarchy->dims[dimx];
     }
-    this->sycl_target.queue
+    this->sycl_target->queue
         .memcpy(this->d_origin.ptr, this->h_origin.ptr,
                 this->h_origin.size_bytes())
         .wait();
-    this->sycl_target.queue
+    this->sycl_target->queue
         .memcpy(this->d_dims.ptr, this->h_dims.ptr, this->h_dims.size_bytes())
         .wait();
 
@@ -201,7 +201,7 @@ public:
     auto k_dims = this->d_dims.ptr;
 
     // map particles positions to coarse and fine cells in the mesh hierarchy
-    this->sycl_target.queue
+    this->sycl_target->queue
         .submit([&](sycl::handler &cgh) {
           cgh.parallel_for<>(sycl::range<1>(npart_query), [=](sycl::id<1> idx) {
             const INT cellx = k_lookup_local_cells[idx];
@@ -258,7 +258,7 @@ public:
 
     // copy the computed indicies to the host
     if (this->d_lookup_global_cells.size_bytes() > 0) {
-      this->sycl_target.queue
+      this->sycl_target->queue
           .memcpy(this->h_lookup_global_cells.ptr,
                   this->d_lookup_global_cells.ptr,
                   this->d_lookup_global_cells.size_bytes())
@@ -270,13 +270,13 @@ public:
 
     // copy the mpi ranks back to the ParticleDat
     if (this->h_lookup_ranks.size_bytes() > 0) {
-      this->sycl_target.queue
+      this->sycl_target->queue
           .memcpy(this->d_lookup_ranks.ptr, this->h_lookup_ranks.ptr,
                   this->h_lookup_ranks.size_bytes())
           .wait_and_throw();
     }
 
-    this->sycl_target.queue
+    this->sycl_target->queue
         .submit([&](sycl::handler &cgh) {
           cgh.parallel_for<>(sycl::range<1>(npart_query), [=](sycl::id<1> idx) {
             const INT cellx = k_lookup_local_cells[idx];
@@ -286,8 +286,8 @@ public:
         })
         .wait_and_throw();
 
-    sycl_target.profile_map.inc("MeshHierarchyGlobalMap", "execute", 1,
-                                profile_elapsed(t0, profile_timestamp()));
+    sycl_target->profile_map.inc("MeshHierarchyGlobalMap", "execute", 1,
+                                 profile_elapsed(t0, profile_timestamp()));
   };
 };
 
@@ -306,7 +306,7 @@ inline void reset_mpi_ranks(ParticleDatShPtr<INT> &mpi_rank_dat) {
   // pointers to access BufferDevices in the kernel
   auto k_mpi_rank_dat = mpi_rank_dat->cell_dat.device_ptr();
   auto &sycl_target = mpi_rank_dat->sycl_target;
-  sycl_target.queue
+  sycl_target->queue
       .submit([&](sycl::handler &cgh) {
         cgh.parallel_for<>(sycl::range<1>(pl_iter_range), [=](sycl::id<1> idx) {
           NESO_PARTICLES_KERNEL_START

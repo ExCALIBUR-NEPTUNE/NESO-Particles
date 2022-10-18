@@ -14,12 +14,13 @@ TEST(ParticleGroup, creation) {
 
   const double cell_extent = 1.0;
   const int subdivision_order = 2;
-  CartesianHMesh mesh(MPI_COMM_WORLD, ndim, dims, cell_extent,
-                      subdivision_order);
+  auto mesh = std::make_shared<CartesianHMesh>(MPI_COMM_WORLD, ndim, dims,
+                                               cell_extent, subdivision_order);
 
-  SYCLTarget sycl_target{GPU_SELECTOR, mesh.get_comm()};
+  auto sycl_target =
+      std::make_shared<SYCLTarget>(GPU_SELECTOR, mesh->get_comm());
 
-  Domain domain(mesh);
+  auto domain = std::make_shared<Domain>(mesh);
 
   ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
                              ParticleProp(Sym<REAL>("V"), 3),
@@ -28,7 +29,7 @@ TEST(ParticleGroup, creation) {
 
   ParticleGroup A(domain, particle_spec, sycl_target);
   A.add_particle_dat(ParticleDat(sycl_target, ParticleProp(Sym<REAL>("FOO"), 3),
-                                 domain.mesh.get_cell_count()));
+                                 domain->mesh->get_cell_count()));
 
   std::mt19937 rng_pos(52234234);
   std::mt19937 rng_vel(52234231);
@@ -36,7 +37,7 @@ TEST(ParticleGroup, creation) {
   const int N = 10;
 
   auto positions =
-      uniform_within_extents(N, ndim, mesh.global_extents, rng_pos);
+      uniform_within_extents(N, ndim, mesh->global_extents, rng_pos);
   auto velocities =
       NESO::Particles::normal_distribution(N, 3, 0.0, 1.0, rng_vel);
 
@@ -55,7 +56,7 @@ TEST(ParticleGroup, creation) {
 
   A.add_particles_local(initial_distribution);
 
-  for (int cellx = 0; cellx < mesh.get_cell_count(); cellx++) {
+  for (int cellx = 0; cellx < mesh->get_cell_count(); cellx++) {
     auto P = A.get_cell(Sym<REAL>("P"), cellx);
     auto V = A.get_cell(Sym<REAL>("V"), cellx);
     auto FOO = A.get_cell(Sym<REAL>("FOO"), cellx);
@@ -90,7 +91,7 @@ TEST(ParticleGroup, creation) {
     }
   }
 
-  mesh.free();
+  mesh->free();
 }
 
 TEST(ParticleGroup, compression_removal_all) {
@@ -102,14 +103,14 @@ TEST(ParticleGroup, compression_removal_all) {
 
   const double cell_extent = 1.0;
   const int subdivision_order = 1;
-  CartesianHMesh mesh(MPI_COMM_WORLD, ndim, dims, cell_extent,
-                      subdivision_order);
+  auto mesh = std::make_shared<CartesianHMesh>(MPI_COMM_WORLD, ndim, dims,
+                                               cell_extent, subdivision_order);
 
-  SYCLTarget sycl_target{GPU_SELECTOR, mesh.get_comm()};
+  auto sycl_target =
+      std::make_shared<SYCLTarget>(GPU_SELECTOR, mesh->get_comm());
 
-  Domain domain(mesh);
-
-  const int cell_count = domain.mesh.get_cell_count();
+  auto domain = std::make_shared<Domain>(mesh);
+  const int cell_count = domain->mesh->get_cell_count();
 
   ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
                              ParticleProp(Sym<REAL>("V"), 3),
@@ -119,7 +120,7 @@ TEST(ParticleGroup, compression_removal_all) {
   ParticleGroup A(domain, particle_spec, sycl_target);
 
   A.add_particle_dat(ParticleDat(sycl_target, ParticleProp(Sym<REAL>("FOO"), 3),
-                                 domain.mesh.get_cell_count()));
+                                 domain->mesh->get_cell_count()));
 
   std::mt19937 rng_pos(52234234);
   std::mt19937 rng_vel(52234231);
@@ -128,7 +129,7 @@ TEST(ParticleGroup, compression_removal_all) {
   const int N = 32;
 
   auto positions =
-      uniform_within_extents(N, ndim, mesh.global_extents, rng_pos);
+      uniform_within_extents(N, ndim, mesh->global_extents, rng_pos);
   auto velocities =
       NESO::Particles::normal_distribution(N, 3, 0.0, 1.0, rng_vel);
 
@@ -183,7 +184,7 @@ TEST(ParticleGroup, compression_removal_all) {
   ASSERT_EQ(A.get_npart_cell(0), 0);
 
   int tmp = -1;
-  sycl_target.queue
+  sycl_target->queue
       .memcpy(&tmp, &A[Sym<REAL>("P")]->d_npart_cell[0], sizeof(int))
       .wait();
   ASSERT_EQ(tmp, 0);
@@ -319,7 +320,7 @@ TEST(ParticleGroup, compression_removal_all) {
   }
   // cell 1 should be missing the first and last elements
 
-  mesh.free();
+  mesh->free();
 }
 
 TEST(ParticleGroup, add_particle_dat) {
@@ -331,12 +332,12 @@ TEST(ParticleGroup, add_particle_dat) {
 
   const double cell_extent = 1.0;
   const int subdivision_order = 2;
-  CartesianHMesh mesh(MPI_COMM_WORLD, ndim, dims, cell_extent,
-                      subdivision_order);
+  auto mesh = std::make_shared<CartesianHMesh>(MPI_COMM_WORLD, ndim, dims,
+                                               cell_extent, subdivision_order);
 
-  SYCLTarget sycl_target{GPU_SELECTOR, mesh.get_comm()};
-
-  Domain domain(mesh);
+  auto sycl_target =
+      std::make_shared<SYCLTarget>(GPU_SELECTOR, mesh->get_comm());
+  auto domain = std::make_shared<Domain>(mesh);
 
   ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
                              ParticleProp(Sym<REAL>("V"), 3),
@@ -346,7 +347,7 @@ TEST(ParticleGroup, add_particle_dat) {
   ParticleGroup A(domain, particle_spec, sycl_target);
 
   A.add_particle_dat(ParticleDat(sycl_target, ParticleProp(Sym<REAL>("FOO"), 3),
-                                 domain.mesh.get_cell_count()));
+                                 domain->mesh->get_cell_count()));
 
   std::mt19937 rng_pos(52234234);
   std::mt19937 rng_vel(52234231);
@@ -354,7 +355,7 @@ TEST(ParticleGroup, add_particle_dat) {
   const int N = 10;
 
   auto positions =
-      uniform_within_extents(N, ndim, mesh.global_extents, rng_pos);
+      uniform_within_extents(N, ndim, mesh->global_extents, rng_pos);
   auto velocities =
       NESO::Particles::normal_distribution(N, 3, 0.0, 1.0, rng_vel);
 
@@ -375,12 +376,12 @@ TEST(ParticleGroup, add_particle_dat) {
 
   // dats added after add_particles_* must have space allocated
   A.add_particle_dat(ParticleDat(sycl_target, ParticleProp(Sym<INT>("BAR"), 1),
-                                 domain.mesh.get_cell_count()));
+                                 domain->mesh->get_cell_count()));
 
-  for (int cellx = 0; cellx < mesh.get_cell_count(); cellx++) {
+  for (int cellx = 0; cellx < mesh->get_cell_count(); cellx++) {
     ASSERT_EQ(A[Sym<REAL>("P")]->cell_dat.nrow_alloc[cellx],
               A[Sym<INT>("BAR")]->cell_dat.nrow_alloc[cellx]);
   }
 
-  mesh.free();
+  mesh->free();
 }

@@ -6,7 +6,7 @@ using namespace NESO::Particles;
 
 TEST(CellDat, test_cell_dat_const_1) {
 
-  SYCLTarget sycl_target{GPU_SELECTOR, MPI_COMM_WORLD};
+  auto sycl_target = std::make_shared<SYCLTarget>(GPU_SELECTOR, MPI_COMM_WORLD);
 
   const int cell_count = 4;
   const int nrow = 3;
@@ -30,7 +30,7 @@ TEST(CellDat, test_cell_dat_const_1) {
       }
     }
   }
-  sycl_target.queue
+  sycl_target->queue
       .memcpy(cdc.device_ptr(), test_data.data(),
               test_data.size() * sizeof(INT))
       .wait();
@@ -51,7 +51,7 @@ TEST(CellDat, test_cell_dat_const_1) {
   }
 
   // check celldat data is correct
-  sycl_target.queue
+  sycl_target->queue
       .memcpy(test_data.data(), cdc.device_ptr(),
               test_data.size() * sizeof(INT))
       .wait();
@@ -68,7 +68,7 @@ TEST(CellDat, test_cell_dat_const_1) {
 
 TEST(CellDat, test_cell_dat_REAL_1) {
 
-  SYCLTarget sycl_target{GPU_SELECTOR, MPI_COMM_WORLD};
+  auto sycl_target = std::make_shared<SYCLTarget>(GPU_SELECTOR, MPI_COMM_WORLD);
 
   const int cell_count = 4;
   const int ncol = 2;
@@ -138,7 +138,7 @@ TEST(CellDat, test_cell_dat_REAL_1) {
 
 TEST(CellDat, test_cell_dat_INT_1) {
 
-  SYCLTarget sycl_target{GPU_SELECTOR, MPI_COMM_WORLD};
+  auto sycl_target = std::make_shared<SYCLTarget>(GPU_SELECTOR, MPI_COMM_WORLD);
 
   const int cell_count = 4;
   const int ncol = 2;

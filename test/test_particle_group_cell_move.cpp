@@ -14,12 +14,12 @@ TEST(ParticleGroup, cell_move) {
 
   const double cell_extent = 1.0;
   const int subdivision_order = 0;
-  CartesianHMesh mesh(MPI_COMM_WORLD, ndim, dims, cell_extent,
-                      subdivision_order);
+  auto mesh = std::make_shared<CartesianHMesh>(MPI_COMM_WORLD, ndim, dims,
+                                               cell_extent, subdivision_order);
 
-  SYCLTarget sycl_target{GPU_SELECTOR, mesh.get_comm()};
-
-  Domain domain(mesh);
+  auto sycl_target =
+      std::make_shared<SYCLTarget>(GPU_SELECTOR, mesh->get_comm());
+  auto domain = std::make_shared<Domain>(mesh);
 
   ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
                              ParticleProp(Sym<REAL>("V"), 3),
@@ -29,10 +29,10 @@ TEST(ParticleGroup, cell_move) {
   ParticleGroup A(domain, particle_spec, sycl_target);
 
   A.add_particle_dat(ParticleDat(sycl_target, ParticleProp(Sym<REAL>("FOO"), 3),
-                                 domain.mesh.get_cell_count()));
+                                 domain->mesh->get_cell_count()));
 
-  const int size = sycl_target.comm_pair.size_parent;
-  const int rank = sycl_target.comm_pair.rank_parent;
+  const int size = sycl_target->comm_pair.size_parent;
+  const int rank = sycl_target->comm_pair.rank_parent;
 
   std::mt19937 rng_pos(52234234);
   std::mt19937 rng_cell(18241 + rank);
@@ -42,9 +42,9 @@ TEST(ParticleGroup, cell_move) {
   const int Ntest = 20;
 
   auto positions =
-      uniform_within_extents(N, ndim, mesh.global_extents, rng_pos);
+      uniform_within_extents(N, ndim, mesh->global_extents, rng_pos);
 
-  const int cell_count = domain.mesh.get_cell_count();
+  const int cell_count = domain->mesh->get_cell_count();
   std::uniform_int_distribution<int> dist_cell(0, cell_count - 1);
   std::uniform_int_distribution<int> dist_rank(0, size - 1);
 
@@ -86,7 +86,7 @@ TEST(ParticleGroup, cell_move) {
     auto k_cell_id_dat = A[Sym<INT>("CELL_ID")]->cell_dat.device_ptr();
     auto k_new_cell_ids = new_cell_ids.ptr;
 
-    sycl_target.queue
+    sycl_target->queue
         .submit([&](sycl::handler &cgh) {
           cgh.parallel_for<>(
               sycl::range<1>(pl_iter_range), [=](sycl::id<1> idx) {
@@ -124,5 +124,5 @@ TEST(ParticleGroup, cell_move) {
     ASSERT_EQ(npart_found, N);
   }
 
-  mesh.free();
+  mesh->free();
 }
