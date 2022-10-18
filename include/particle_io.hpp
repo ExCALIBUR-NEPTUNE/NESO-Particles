@@ -24,17 +24,17 @@ private:
   bool is_closed = true;
   hid_t plist_id, file_id;
   INT step;
-  ParticleGroup &particle_group;
+  ParticleGroupSharedPtr particle_group;
   std::string position_labels[3] = {"x", "y", "z"};
   bool multi_dim_mode = false;
 
   inline size_t get_max_particle_size() {
     int max_ncomp = 0;
     for (auto &sym : this->sym_store.syms_real) {
-      max_ncomp = MAX(max_ncomp, this->particle_group[sym]->ncomp);
+      max_ncomp = MAX(max_ncomp, (*this->particle_group)[sym]->ncomp);
     }
     for (auto &sym : this->sym_store.syms_int) {
-      max_ncomp = MAX(max_ncomp, this->particle_group[sym]->ncomp);
+      max_ncomp = MAX(max_ncomp, (*this->particle_group)[sym]->ncomp);
     }
     size_t size_el = MAX(sizeof(double), sizeof(long long));
     return static_cast<size_t>(max_ncomp) * size_el;
@@ -184,14 +184,14 @@ public:
    * communicator.
    *
    *  @param filename Output filename, e.g. "foo.h5part".
-   *  @param particle_group ParticleGroup instance.
+   *  @param particle_group ParticleGroupSharedPtr instance.
    *  @param args Remaining arguments (variable length) should be sym instances
    *  indicating which ParticleDats are to be written.
    */
   template <typename... T>
-  H5Part(std::string filename, ParticleGroup &particle_group, T... args)
+  H5Part(std::string filename, ParticleGroupSharedPtr particle_group, T... args)
       : filename(filename), particle_group(particle_group),
-        comm_pair(particle_group.sycl_target.comm_pair), sym_store(args...),
+        comm_pair(particle_group->sycl_target->comm_pair), sym_store(args...),
         multi_dim_mode(false) {
     this->plist_id = H5Pcreate(H5P_FILE_ACCESS);
     H5CHK(H5Pset_fapl_mpio(this->plist_id, this->comm_pair.comm_parent,
@@ -234,7 +234,7 @@ public:
 
     // Perform the bookkeeping logic once for all ParticleDats
     const int64_t npart_local =
-        this->particle_group.position_dat->get_npart_local();
+        this->particle_group->position_dat->get_npart_local();
     int64_t offset;
     MPICHK(MPI_Scan(&npart_local, &offset, 1, MPI_INT64_T, MPI_SUM,
                     this->comm_pair.comm_parent));
@@ -263,36 +263,36 @@ public:
 
     // create a host buffer in which to serialise the particle data before
     // passing to HDF5
-    BufferHost<char> pack_buffer(this->particle_group.sycl_target,
+    BufferHost<char> pack_buffer(this->particle_group->sycl_target,
                                  npart_local * get_max_particle_size());
 
     // Write the positions explicitly in a way Paraview interprets as a H5Part
     // format.
     write_dat_column_wise(npart_local, pack_buffer,
-                          this->particle_group.position_dat, dxpl, group_step,
+                          this->particle_group->position_dat, dxpl, group_step,
                           memspace, filespace, true);
 
     // Write the particle data for each ParticleDat
     if (multi_dim_mode) {
       for (auto &sym : this->sym_store.syms_real) {
-        const auto dat = this->particle_group[sym];
+        const auto dat = (*this->particle_group)[sym];
         this->write_dat_2d(npart_total, npart_local, offset, pack_buffer, dat,
                            group_step, dxpl);
       }
       for (auto &sym : this->sym_store.syms_int) {
-        const auto dat = this->particle_group[sym];
+        const auto dat = (*this->particle_group)[sym];
         this->write_dat_2d(npart_total, npart_local, offset, pack_buffer, dat,
                            group_step, dxpl);
       }
     } else {
 
       for (auto &sym : this->sym_store.syms_real) {
-        const auto dat = this->particle_group[sym];
+        const auto dat = (*this->particle_group)[sym];
         write_dat_column_wise(npart_local, pack_buffer, dat, dxpl, group_step,
                               memspace, filespace, false);
       }
       for (auto &sym : this->sym_store.syms_int) {
-        const auto dat = this->particle_group[sym];
+        const auto dat = (*this->particle_group)[sym];
         write_dat_column_wise(npart_local, pack_buffer, dat, dxpl, group_step,
                               memspace, filespace, false);
       }
@@ -323,12 +323,13 @@ public:
    * communicator.
    *
    *  @param filename Output filename, e.g. "foo.h5part".
-   *  @param particle_group ParticleGroup instance.
+   *  @param particle_group ParticleGroupSharedPtr instance.
    *  @param args Remaining arguments (variable length) should be sym instances
    *  indicating which ParticleDats are to be written.
    */
   template <typename... T>
-  H5Part(std::string filename, ParticleGroup &particle_group, T... args){};
+  H5Part(std::string filename, ParticleGroupSharedPtr particle_group,
+         T... args){};
 
   /**
    *  Close the H5Part writer. Must be called. Must be called collectively on
