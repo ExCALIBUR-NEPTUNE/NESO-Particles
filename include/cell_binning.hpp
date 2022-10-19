@@ -25,8 +25,8 @@ private:
 
   SYCLTargetSharedPtr sycl_target;
   CartesianHMeshSharedPtr mesh;
-  ParticleDatShPtr<REAL> position_dat;
-  ParticleDatShPtr<INT> cell_id_dat;
+  ParticleDatSharedPtr<REAL> position_dat;
+  ParticleDatSharedPtr<INT> cell_id_dat;
 
 public:
   /// Disable (implicit) copies.
@@ -47,8 +47,8 @@ public:
    */
   CartesianCellBin(SYCLTargetSharedPtr sycl_target,
                    CartesianHMeshSharedPtr mesh,
-                   ParticleDatShPtr<REAL> position_dat,
-                   ParticleDatShPtr<INT> cell_id_dat)
+                   ParticleDatSharedPtr<REAL> position_dat,
+                   ParticleDatSharedPtr<INT> cell_id_dat)
       : sycl_target(sycl_target), mesh(mesh), position_dat(position_dat),
         cell_id_dat(cell_id_dat), d_cell_counts(sycl_target, 3),
         d_cell_starts(sycl_target, 3), d_cell_ends(sycl_target, 3) {

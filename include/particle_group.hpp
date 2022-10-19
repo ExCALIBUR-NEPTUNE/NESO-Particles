@@ -39,7 +39,7 @@ private:
   BufferDevice<INT> d_remove_cells;
   BufferDevice<INT> d_remove_layers;
 
-  template <typename T> inline void realloc_dat(ParticleDatShPtr<T> &dat) {
+  template <typename T> inline void realloc_dat(ParticleDatSharedPtr<T> &dat) {
     dat->realloc(this->h_npart_cell);
     dat->wait_realloc();
   };
@@ -68,22 +68,22 @@ public:
   /// Compute device used by the instance.
   SYCLTargetSharedPtr sycl_target;
   /// Map from Sym instances to REAL valued ParticleDat instances.
-  std::map<Sym<REAL>, ParticleDatShPtr<REAL>> particle_dats_real{};
+  std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> particle_dats_real{};
   /// Map from Sym instances to INT valued ParticleDat instances.
-  std::map<Sym<INT>, ParticleDatShPtr<INT>> particle_dats_int{};
+  std::map<Sym<INT>, ParticleDatSharedPtr<INT>> particle_dats_int{};
 
   /// Sym of ParticleDat storing particle positions.
   std::shared_ptr<Sym<REAL>> position_sym;
   /// ParticleDat storing particle positions.
-  ParticleDatShPtr<REAL> position_dat;
+  ParticleDatSharedPtr<REAL> position_dat;
   /// Sym of ParticleDat storing particle cell ids.
   std::shared_ptr<Sym<INT>> cell_id_sym;
   /// ParticleDat storing particle cell ids.
-  ParticleDatShPtr<INT> cell_id_dat;
+  ParticleDatSharedPtr<INT> cell_id_dat;
   /// Sym of ParticleDat storing particle MPI ranks.
   std::shared_ptr<Sym<INT>> mpi_rank_sym;
   /// ParticleDat storing particle MPI ranks.
-  ParticleDatShPtr<INT> mpi_rank_dat;
+  ParticleDatSharedPtr<INT> mpi_rank_dat;
 
   /// ParticleSpec of all the ParticleDats of this ParticleGroup.
   ParticleSpec particle_spec;
@@ -156,13 +156,13 @@ public:
    *
    *  @param particle_dat New ParticleDat to add.
    */
-  inline void add_particle_dat(ParticleDatShPtr<REAL> particle_dat);
+  inline void add_particle_dat(ParticleDatSharedPtr<REAL> particle_dat);
   /**
    *  Add a ParticleDat to the ParticleGroup after construction.
    *
    *  @param particle_dat New ParticleDat to add.
    */
-  inline void add_particle_dat(ParticleDatShPtr<INT> particle_dat);
+  inline void add_particle_dat(ParticleDatSharedPtr<INT> particle_dat);
   /**
    *  Add particles to the ParticleGroup. Any rank may add particles that exist
    *  anywhere in the domain. Implemetation TODO. This call is collective
@@ -202,7 +202,7 @@ public:
    *
    *  @param sym Sym<REAL> of ParticleDat to access.
    */
-  inline ParticleDatShPtr<REAL> &operator[](Sym<REAL> sym) {
+  inline ParticleDatSharedPtr<REAL> &operator[](Sym<REAL> sym) {
     return this->particle_dats_real.at(sym);
   };
   /**
@@ -210,7 +210,7 @@ public:
    *
    *  @param sym Sym<INT> of ParticleDat to access.
    */
-  inline ParticleDatShPtr<INT> &operator[](Sym<INT> sym) {
+  inline ParticleDatSharedPtr<INT> &operator[](Sym<INT> sym) {
     return this->particle_dats_int.at(sym);
   };
 
@@ -334,7 +334,7 @@ public:
 };
 
 inline void
-ParticleGroup::add_particle_dat(ParticleDatShPtr<REAL> particle_dat) {
+ParticleGroup::add_particle_dat(ParticleDatSharedPtr<REAL> particle_dat) {
   this->particle_dats_real[particle_dat->sym] = particle_dat;
   // Does this dat hold particle positions?
   if (particle_dat->positions) {
@@ -349,7 +349,7 @@ ParticleGroup::add_particle_dat(ParticleDatShPtr<REAL> particle_dat) {
   particle_dat->npart_host_to_device();
 }
 inline void
-ParticleGroup::add_particle_dat(ParticleDatShPtr<INT> particle_dat) {
+ParticleGroup::add_particle_dat(ParticleDatSharedPtr<INT> particle_dat) {
   this->particle_dats_int[particle_dat->sym] = particle_dat;
   // Does this dat hold particle cell ids?
   if (particle_dat->positions) {

@@ -40,7 +40,7 @@ public:
   particle_group_callback(ParticleGroup &particle_group) = 0;
 };
 
-typedef std::shared_ptr<LocalMapper> LocalMapperShPtr;
+typedef std::shared_ptr<LocalMapper> LocalMapperSharedPtr;
 
 /**
  *  Dummy LocalMapper implementation that does nothing to use as a default.

@@ -24,9 +24,9 @@ class LocalMove {
 
 private:
   SYCLTargetSharedPtr sycl_target;
-  std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real;
-  std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int;
-  ParticleDatShPtr<INT> mpi_rank_dat;
+  std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real;
+  std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int;
+  ParticleDatSharedPtr<INT> mpi_rank_dat;
 
   ParticlePacker particle_packer;
   ParticleUnpacker particle_unpacker;
@@ -80,8 +80,8 @@ public:
    * send to.
    */
   LocalMove(SYCLTargetSharedPtr sycl_target, LayerCompressor &layer_compressor,
-            std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
-            std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int,
+            std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
+            std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int,
             const int nranks = 0, const int *ranks = nullptr)
       : sycl_target(sycl_target), layer_compressor(layer_compressor),
         particle_dats_real(particle_dats_real),
@@ -189,7 +189,7 @@ public:
    *
    *  @param mpi_rank_dat ParticleDat to use for particle positions.
    */
-  inline void set_mpi_rank_dat(ParticleDatShPtr<INT> mpi_rank_dat) {
+  inline void set_mpi_rank_dat(ParticleDatSharedPtr<INT> mpi_rank_dat) {
     this->mpi_rank_dat = mpi_rank_dat;
     this->departing_identify.set_mpi_rank_dat(this->mpi_rank_dat);
   }

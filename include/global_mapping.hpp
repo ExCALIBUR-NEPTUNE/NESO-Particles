@@ -23,11 +23,11 @@ private:
   /// HMesh instance on which particles live.
   HMeshSharedPtr h_mesh;
   /// ParticleDat storing Positions
-  ParticleDatShPtr<REAL> &position_dat;
+  ParticleDatSharedPtr<REAL> &position_dat;
   /// ParticleDat storing cell ids
-  ParticleDatShPtr<INT> &cell_id_dat;
+  ParticleDatSharedPtr<INT> &cell_id_dat;
   /// ParticleDat storing MPI rank
-  ParticleDatShPtr<INT> &mpi_rank_dat;
+  ParticleDatSharedPtr<INT> &mpi_rank_dat;
 
   /// Host buffer containing the number of particles to query owning MPI rank
   BufferHost<int> h_lookup_count;
@@ -78,9 +78,9 @@ public:
    * @param mpi_rank_dat ParticleDat containing the owning rank of particles.
    */
   MeshHierarchyGlobalMap(SYCLTargetSharedPtr sycl_target, HMeshSharedPtr h_mesh,
-                         ParticleDatShPtr<REAL> &position_dat,
-                         ParticleDatShPtr<INT> &cell_id_dat,
-                         ParticleDatShPtr<INT> &mpi_rank_dat)
+                         ParticleDatSharedPtr<REAL> &position_dat,
+                         ParticleDatSharedPtr<INT> &cell_id_dat,
+                         ParticleDatSharedPtr<INT> &mpi_rank_dat)
       : sycl_target(sycl_target), h_mesh(h_mesh), position_dat(position_dat),
         cell_id_dat(cell_id_dat), mpi_rank_dat(mpi_rank_dat),
         h_lookup_count(sycl_target, 1), d_lookup_count(sycl_target, 1),
@@ -296,7 +296,7 @@ public:
  *
  *  @param mpi_rank_dat ParticleDat containing MPI ranks to reset.
  */
-inline void reset_mpi_ranks(ParticleDatShPtr<INT> &mpi_rank_dat) {
+inline void reset_mpi_ranks(ParticleDatSharedPtr<INT> &mpi_rank_dat) {
 
   // iteration set
   auto pl_iter_range = mpi_rank_dat->get_particle_loop_iter_range();

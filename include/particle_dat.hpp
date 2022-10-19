@@ -406,18 +406,19 @@ public:
   inline void wait_realloc() { this->cell_dat.wait_set_nrow(); }
 };
 
-template <typename T> using ParticleDatShPtr = std::shared_ptr<ParticleDatT<T>>;
+template <typename T>
+using ParticleDatSharedPtr = std::shared_ptr<ParticleDatT<T>>;
 
 template <typename T>
-inline ParticleDatShPtr<T> ParticleDat(SYCLTargetSharedPtr sycl_target,
-                                       const Sym<T> sym, int ncomp, int ncell,
-                                       bool positions = false) {
+inline ParticleDatSharedPtr<T> ParticleDat(SYCLTargetSharedPtr sycl_target,
+                                           const Sym<T> sym, int ncomp,
+                                           int ncell, bool positions = false) {
   return std::make_shared<ParticleDatT<T>>(sycl_target, sym, ncomp, ncell,
                                            positions);
 }
 template <typename T>
-inline ParticleDatShPtr<T> ParticleDat(SYCLTargetSharedPtr sycl_target,
-                                       ParticleProp<T> prop, int ncell) {
+inline ParticleDatSharedPtr<T> ParticleDat(SYCLTargetSharedPtr sycl_target,
+                                           ParticleProp<T> prop, int ncell) {
   return std::make_shared<ParticleDatT<T>>(sycl_target, prop.sym, prop.ncomp,
                                            ncell, prop.positions);
 }

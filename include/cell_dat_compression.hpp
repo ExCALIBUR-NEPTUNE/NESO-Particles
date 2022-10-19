@@ -44,9 +44,9 @@ private:
   BufferDevice<int> d_move_counters;
 
   // references to the ParticleGroup methods
-  ParticleDatShPtr<INT> cell_id_dat;
-  std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real;
-  std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int;
+  ParticleDatSharedPtr<INT> cell_id_dat;
+  std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real;
+  std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int;
 
   EventStack event_stack;
 
@@ -69,8 +69,8 @@ public:
    */
   LayerCompressor(
       SYCLTargetSharedPtr sycl_target, const int ncell,
-      std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
-      std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int)
+      std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
+      std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int)
       : sycl_target(sycl_target), ncell(ncell), d_remove_cells(sycl_target, 1),
         d_remove_layers(sycl_target, 1), d_compress_cells_old(sycl_target, 1),
         d_compress_cells_new(sycl_target, 1),
@@ -88,7 +88,7 @@ public:
    *
    *  @param cell_id_dat ParticleDat containing particle cell ids.
    */
-  inline void set_cell_id_dat(ParticleDatShPtr<INT> cell_id_dat) {
+  inline void set_cell_id_dat(ParticleDatSharedPtr<INT> cell_id_dat) {
     this->cell_id_dat = cell_id_dat;
   }
 

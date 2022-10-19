@@ -48,7 +48,7 @@ public:
   BufferDeviceHost<int> dh_num_particle_send;
 
   /// ParticleDat containing MPI ranks.
-  ParticleDatShPtr<INT> mpi_rank_dat;
+  ParticleDatSharedPtr<INT> mpi_rank_dat;
 
   ~DepartingIdentify(){};
 
@@ -72,7 +72,7 @@ public:
    *
    * @param mpi_rank_dat ParticleDat containing MPI ranks.
    */
-  inline void set_mpi_rank_dat(ParticleDatShPtr<INT> mpi_rank_dat) {
+  inline void set_mpi_rank_dat(ParticleDatSharedPtr<INT> mpi_rank_dat) {
     this->mpi_rank_dat = mpi_rank_dat;
   }
 

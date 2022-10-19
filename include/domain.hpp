@@ -29,7 +29,7 @@ public:
   /// HMesh derived mesh instance.
   HMeshSharedPtr mesh;
   /// LocalMapper derived class instance to bin particles into mesh cells.
-  LocalMapperShPtr local_mapper;
+  LocalMapperSharedPtr local_mapper;
   /**
    * Construct a new Domain.
    *
@@ -37,7 +37,7 @@ public:
    * @param local_mapper Object to map particle positions into mesh cells.
    */
   Domain(HMeshSharedPtr mesh,
-         LocalMapperShPtr local_mapper = DummyLocalMapper())
+         LocalMapperSharedPtr local_mapper = DummyLocalMapper())
       : mesh(mesh), local_mapper(local_mapper) {}
   ~Domain() {}
 };

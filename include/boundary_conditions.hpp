@@ -23,7 +23,7 @@ private:
   BufferDevice<REAL> d_extents;
   SYCLTargetSharedPtr sycl_target;
   std::shared_ptr<CartesianHMesh> mesh;
-  ParticleDatShPtr<REAL> position_dat;
+  ParticleDatSharedPtr<REAL> position_dat;
 
 public:
   /// Disable (implicit) copies.
@@ -43,7 +43,7 @@ public:
    */
   CartesianPeriodic(SYCLTargetSharedPtr sycl_target,
                     std::shared_ptr<CartesianHMesh> mesh,
-                    ParticleDatShPtr<REAL> position_dat)
+                    ParticleDatSharedPtr<REAL> position_dat)
       : sycl_target(sycl_target), mesh(mesh), position_dat(position_dat),
         d_extents(sycl_target, 3) {
 

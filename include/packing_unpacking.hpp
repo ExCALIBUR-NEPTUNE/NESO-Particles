@@ -28,9 +28,9 @@ private:
   BufferDeviceHost<int> dh_particle_dat_ncomp_real;
   BufferDeviceHost<int> dh_particle_dat_ncomp_int;
 
-  inline size_t
-  particle_size(std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
-                std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int) {
+  inline size_t particle_size(
+      std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
+      std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int) {
     size_t s = 0;
     for (auto &dat : particle_dats_real) {
       s += dat.second->cell_dat.row_size();
@@ -42,8 +42,8 @@ private:
   };
 
   inline void get_particle_dat_info(
-      std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
-      std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int) {
+      std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
+      std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int) {
 
     num_dats_real = particle_dats_real.size();
     dh_particle_dat_ptr_real.realloc_no_copy(num_dats_real);
@@ -182,8 +182,8 @@ public:
        BufferDeviceHost<int> &dh_send_rank_map, const int num_particles_leaving,
        BufferDevice<int> &d_pack_cells, BufferDevice<int> &d_pack_layers_src,
        BufferDevice<int> &d_pack_layers_dst,
-       std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
-       std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int,
+       std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
+       std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int,
        const int rank_component = 0) {
 
     auto t0 = profile_timestamp();
@@ -295,9 +295,9 @@ private:
 
   BufferDevice<char> d_recv_buffer;
 
-  inline size_t
-  particle_size(std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
-                std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int) {
+  inline size_t particle_size(
+      std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
+      std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int) {
     size_t s = 0;
     for (auto &dat : particle_dats_real) {
       s += dat.second->cell_dat.row_size();
@@ -310,8 +310,8 @@ private:
   };
 
   inline void get_particle_dat_info(
-      std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
-      std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int) {
+      std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
+      std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int) {
 
     num_dats_real = particle_dats_real.size();
     dh_particle_dat_ptr_real.realloc_no_copy(num_dats_real);
@@ -392,8 +392,8 @@ public:
    */
   inline void
   reset(const int num_remote_recv_ranks, BufferHost<int> &h_recv_rank_npart,
-        std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
-        std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int) {
+        std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
+        std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int) {
 
     // realloc the array that holds where in the recv buffer the data from each
     // remote rank should be placed
@@ -425,8 +425,8 @@ public:
    * @param particle_dats_int Container of INT ParticleDat instances to unpack.
    */
   inline void
-  unpack(std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
-         std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int) {
+  unpack(std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
+         std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int) {
 
     auto t0 = profile_timestamp();
 

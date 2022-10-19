@@ -57,8 +57,10 @@ private:
 
   // Get the HDF5 type that matches the datatype the particle data was cast to
   // when linearised on the host
-  inline hid_t memtypeid(ParticleDatShPtr<REAL>) { return H5T_NATIVE_DOUBLE; }
-  inline hid_t memtypeid(ParticleDatShPtr<INT>) { return H5T_NATIVE_LLONG; }
+  inline hid_t memtypeid(ParticleDatSharedPtr<REAL>) {
+    return H5T_NATIVE_DOUBLE;
+  }
+  inline hid_t memtypeid(ParticleDatSharedPtr<INT>) { return H5T_NATIVE_LLONG; }
 
   /**
    *  Write a ParticleDat to the HDF5 file where each component has its own
@@ -67,7 +69,7 @@ private:
   template <typename T>
   inline void write_dat_column_wise(const int64_t npart_local,
                                     BufferHost<char> &pack_buffer,
-                                    ParticleDatShPtr<T> dat, hid_t dxpl,
+                                    ParticleDatSharedPtr<T> dat, hid_t dxpl,
                                     hid_t group_step, hid_t memspace,
                                     hid_t filespace, bool is_position) {
     const int ncomp = dat->ncomp;
@@ -116,7 +118,7 @@ private:
   template <typename T>
   inline void write_dat_2d(const int64_t npart_total, const int64_t npart_local,
                            const int64_t offset, BufferHost<char> &pack_buffer,
-                           ParticleDatShPtr<T> dat, hid_t group_step,
+                           ParticleDatSharedPtr<T> dat, hid_t group_step,
                            hid_t dxpl) {
     const int ncomp = dat->ncomp;
     const int cell_count = dat->ncell;

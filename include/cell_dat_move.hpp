@@ -28,9 +28,9 @@ class CellMove {
 private:
   const int ncell;
 
-  ParticleDatShPtr<INT> cell_id_dat;
-  std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real;
-  std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int;
+  ParticleDatSharedPtr<INT> cell_id_dat;
+  std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real;
+  std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int;
 
   BufferHost<int> h_npart_cell;
   BufferDevice<int> d_npart_cell;
@@ -143,8 +143,8 @@ public:
    */
   CellMove(SYCLTargetSharedPtr sycl_target, const int ncell,
            LayerCompressor &layer_compressor,
-           std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
-           std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int)
+           std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
+           std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int)
       : ncell(ncell), sycl_target(sycl_target),
         layer_compressor(layer_compressor),
         particle_dats_real(particle_dats_real),
@@ -170,7 +170,7 @@ public:
    *
    * @param cell_id_dat ParticleDat to use for cell ids.
    */
-  inline void set_cell_id_dat(ParticleDatShPtr<INT> cell_id_dat) {
+  inline void set_cell_id_dat(ParticleDatSharedPtr<INT> cell_id_dat) {
     this->cell_id_dat = cell_id_dat;
   }
 

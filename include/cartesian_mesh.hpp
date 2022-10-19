@@ -176,8 +176,8 @@ public:
    */
   inline void map(ParticleGroup &particle_group, const int map_cell = -1) {
 
-    ParticleDatShPtr<REAL> &position_dat = particle_group.position_dat;
-    ParticleDatShPtr<INT> &mpi_rank_dat = particle_group.mpi_rank_dat;
+    ParticleDatSharedPtr<REAL> &position_dat = particle_group.position_dat;
+    ParticleDatSharedPtr<INT> &mpi_rank_dat = particle_group.mpi_rank_dat;
 
     auto t0 = profile_timestamp();
     // pointers to access dats in kernel
