@@ -46,6 +46,8 @@ public:
   /// Compute device used by the instance.
   SYCLTargetSharedPtr sycl_target;
 
+  inline void free() { this->global_move_exchange.free(); }
+
   ~GlobalMove(){};
   /**
    * Construct a new global move instance to move particles between the cells

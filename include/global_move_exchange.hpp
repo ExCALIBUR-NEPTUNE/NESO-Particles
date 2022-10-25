@@ -30,6 +30,8 @@ private:
   BufferHost<MPI_Request> h_recv_requests;
   BufferHost<MPI_Status> h_recv_status;
 
+  bool recv_win_allocated;
+
 public:
   /// Disable (implicit) copies.
   GlobalMoveExchange(const GlobalMoveExchange &st) = delete;
@@ -52,7 +54,15 @@ public:
   /// Compute device used by the instance.
   SYCLTargetSharedPtr sycl_target;
 
-  ~GlobalMoveExchange() { MPICHK(MPI_Win_free(&this->recv_win)); };
+  /// Explicitly free a ParticleGroup without relying on out-of-scope
+  // destructor calls.
+  inline void free() {
+    if (this->recv_win_allocated) {
+      MPICHK(MPI_Win_free(&this->recv_win));
+      this->recv_win_allocated = false;
+    }
+  };
+  ~GlobalMoveExchange() { this->free(); };
 
   /**
    * Construct a new instance to exchange particle counts and data.
@@ -69,6 +79,7 @@ public:
     // send particles to this rank.
     MPICHK(MPI_Win_allocate(sizeof(int), sizeof(int), MPI_INFO_NULL, this->comm,
                             &this->recv_win_data, &this->recv_win));
+    this->recv_win_allocated = true;
   };
 
   /**

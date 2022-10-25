@@ -91,6 +91,10 @@ public:
   /// Layer compression instance for dats when particles are removed from cells.
   LayerCompressor layer_compressor;
 
+  /// Explicitly free a ParticleGroup without relying on out-of-scope
+  // destructor calls.
+  inline void free() { this->global_move_ctx.free(); }
+
   /**
    * Construct a new ParticleGroup.
    *

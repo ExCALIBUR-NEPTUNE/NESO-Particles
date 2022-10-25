@@ -36,12 +36,12 @@ TEST(ParticleIO, H5Part) {
       ParticleProp(Sym<INT>("ID2"), 1),
   };
 
-  ParticleGroup A(domain, particle_spec, sycl_target);
+  auto A = std::make_shared<ParticleGroup>(domain, particle_spec, sycl_target);
 
-  CartesianPeriodic pbc(sycl_target, mesh, A.position_dat);
-  CartesianCellBin ccb(sycl_target, mesh, A.position_dat, A.cell_id_dat);
+  CartesianPeriodic pbc(sycl_target, mesh, A->position_dat);
+  CartesianCellBin ccb(sycl_target, mesh, A->position_dat, A->cell_id_dat);
 
-  A.add_particle_dat(ParticleDat(sycl_target, ParticleProp(Sym<REAL>("FOO"), 3),
+  A->add_particle_dat(ParticleDat(sycl_target, ParticleProp(Sym<REAL>("FOO"), 3),
                                  domain->mesh->get_cell_count()));
 
   std::mt19937 rng_pos(52234234);
@@ -58,7 +58,7 @@ TEST(ParticleIO, H5Part) {
   std::uniform_int_distribution<int> uniform_dist(
       0, sycl_target->comm_pair.size_parent - 1);
 
-  ParticleSet initial_distribution(N, A.get_particle_spec());
+  ParticleSet initial_distribution(N, A->get_particle_spec());
 
   // determine which particles should end up on which rank
   std::map<int, std::vector<int>> mapping;
@@ -78,12 +78,12 @@ TEST(ParticleIO, H5Part) {
   }
 
   if (sycl_target->comm_pair.rank_parent == 0) {
-    A.add_particles_local(initial_distribution);
+    A->add_particles_local(initial_distribution);
   }
 
-  A.hybrid_move();
+  A->hybrid_move();
   ccb.execute();
-  A.cell_move();
+  A->cell_move();
 
   H5Part h5part("test_dump.h5part", A, Sym<REAL>("P"), Sym<REAL>("V"),
                 Sym<INT>("ID"), Sym<INT>("ID2"), Sym<INT>("NESO_MPI_RANK"));
