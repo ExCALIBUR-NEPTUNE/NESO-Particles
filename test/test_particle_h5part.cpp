@@ -41,8 +41,9 @@ TEST(ParticleIO, H5Part) {
   CartesianPeriodic pbc(sycl_target, mesh, A->position_dat);
   CartesianCellBin ccb(sycl_target, mesh, A->position_dat, A->cell_id_dat);
 
-  A->add_particle_dat(ParticleDat(sycl_target, ParticleProp(Sym<REAL>("FOO"), 3),
-                                 domain->mesh->get_cell_count()));
+  A->add_particle_dat(ParticleDat(sycl_target,
+                                  ParticleProp(Sym<REAL>("FOO"), 3),
+                                  domain->mesh->get_cell_count()));
 
   std::mt19937 rng_pos(52234234);
   std::mt19937 rng_vel(52234231);
