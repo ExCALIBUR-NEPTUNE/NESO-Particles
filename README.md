@@ -2,6 +2,10 @@
 
 This is the particle component of NESO and is designed as a header only library.
 
+## Documentation
+
+[Documentation should be available here.](https://excalibur-neptune.github.io/NESO-Particles/)
+
 ## Dependencies
 
 * CMake 
