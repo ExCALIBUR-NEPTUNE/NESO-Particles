@@ -64,3 +64,59 @@ Furthermore the local exchange pattern is configurable to promote particle trans
 
 Transfer of Particle Data Globally
 ----------------------------------
+
+An unstructured mesh makes determining exactly which MPI rank owns a region of space particularly challenging. 
+In a particle code particles are free to leave the sub-domain owned by an MPI rank in any direction and potentially with a very high velocity.
+To determine which MPI rank should be assigned a particle when it leaves a sub-domain we employ an approach that combines a coarse structured mesh with halo cells.
+
+First a coarse mesh of squares is constructed that covers the global unstructured mesh.
+Each square in this coarse mesh is then subdivided to a given order to produce a finer structured mesh (in future this could be replaced with a standard octree).
+An illustration of this coarse mesh with subdivision is presented in Figure :numref:`mesh_overlay`.
+
+.. _mesh_overlay:
+.. figure:: figures/mesh_with_fine_overlay.svg
+   :class: with-border
+   :height: 240 pt
+
+   Unstructured global mesh with coarse mesh overlay and an order 2 sub-division.
+
+This structured mesh gives a computationally cheap approach to map a region of space to MPI ranks that could own that region of the computational domain the particle resides in.
+To determine exactly which MPI rank owns the point the particle resides at each we first determine a unique MPI ranks that owns each fine cell in the structured mesh.
+MPI rank assignment of the structured mesh is determined based on approximate overlap between structured mesh cell and the sub-domain of the unstructured mesh owned by the MPI rank.
+
+.. _mesh_overlay_assign:
+.. figure:: figures/mesh_with_fine_overlay_assign.svg
+   :class: with-border
+   :height: 240 pt
+
+   Region of the global unstructured mesh featuring two MPI ranks (yellow and green) with inter-rank boundary.
+
+Figure :numref:`mesh_overlay_assign` illustrates the resulting ownership pattern that could occur at the boundary between two MPI ranks.
+Note that due to the unstructured nature of the computational mesh there will always be a disparity between the computational unstructured mesh and the structured mesh that we overlay.
+We can use the coarse structured mesh to determine the MPI rank that owns the structured mesh cell and send the particle information to that MPI rank (using MPI3 RMA) but that receiving rank must be able to map all points in the structured mesh cells it owns to unstructured mesh cells on the original mesh.
+We build this map by extending the locally owned portion of the unstructured mesh with copies of all mesh cells that have an non-zero overlap with the owned structured mesh cells.
+
+.. _mesh_build_halo:
+.. figure:: figures/mesh_build_halo.svg
+   :class: with-border
+   :height: 240 pt
+
+   Region of the global unstructured mesh featuring owned by an MPI rank (yellow) extended with halo cells from a neighbouring MPI rank (green).
+
+In Figure :numref:`mesh_build_halo` the locally owned sub-domain in yellow is extended with halo cells from the neighbouring rank (green) such that all owned cells in the structured mesh are entirely covered by unstructured mesh elements.
+We assume that the copied elements are also tagged with the original owning rank (and the index of that cell on the remote rank).
+Hence when an MPI rank receives a particle through the global transfer mechanism the particle either exists on a locally owned mesh cell and is kept or exists on a halo mesh cell (of known owner) and is sent to the MPI rank that owns the halo element.
+
+An overview of the global transfer algorithm is as follows:
+
+1. Loop over all local particles:
+
+   1. If the particle is within the sub-domain keep the particle.
+   2. If the particle is in a halo cell push the particle onto the set of particles to send to that remote rank using point to point local transfer.
+   3. Otherwise determine the MPI rank that owns the overlayed structured mesh cells and push the particle onto the set of particle indices to send to that remote rank though the global communication mechanism.
+2. Exchange particles that must be exchanged using the global transfer mechanism (one sided MPI RMA).
+3. Loop over particles received though the global exchange:
+
+   1. If the particle is within the sub-domain keep the particle.
+   2. If the particle is in a halo cell push the particle onto the set of particles to send to that remote rank using point to point local transfer.
+4. Perform local point-to-point transfer of particles between neighbouring MPI ranks.
