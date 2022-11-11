@@ -23,45 +23,52 @@ private:
   BufferDevice<int> d_cell_starts;
   BufferDevice<int> d_cell_ends;
 
-  SYCLTarget &sycl_target;
-  CartesianHMesh &mesh;
-  ParticleDatShPtr<REAL> position_dat;
-  ParticleDatShPtr<INT> cell_id_dat;
+  SYCLTargetSharedPtr sycl_target;
+  CartesianHMeshSharedPtr mesh;
+  ParticleDatSharedPtr<REAL> position_dat;
+  ParticleDatSharedPtr<INT> cell_id_dat;
 
 public:
+  /// Disable (implicit) copies.
+  CartesianCellBin(const CartesianCellBin &st) = delete;
+  /// Disable (implicit) copies.
+  CartesianCellBin &operator=(CartesianCellBin const &a) = delete;
+
   ~CartesianCellBin(){};
 
   /**
    * Create instance to bin particles into cells of a CartesianHMesh.
    *
-   * @param sycl_target SYCLTarget to use as compute device.
-   * @param mesh CartesianHMesh to containing the particles.
+   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
+   * @param mesh CartesianHMeshSharedPtr to containing the particles.
    * @param position_dat ParticleDat with components equal to the mesh dimension
    * containing particle positions.
    * @param cell_id_dat ParticleDat to write particle cell ids to.
    */
-  CartesianCellBin(SYCLTarget &sycl_target, CartesianHMesh &mesh,
-                   ParticleDatShPtr<REAL> position_dat,
-                   ParticleDatShPtr<INT> cell_id_dat)
+  CartesianCellBin(SYCLTargetSharedPtr sycl_target,
+                   CartesianHMeshSharedPtr mesh,
+                   ParticleDatSharedPtr<REAL> position_dat,
+                   ParticleDatSharedPtr<INT> cell_id_dat)
       : sycl_target(sycl_target), mesh(mesh), position_dat(position_dat),
         cell_id_dat(cell_id_dat), d_cell_counts(sycl_target, 3),
         d_cell_starts(sycl_target, 3), d_cell_ends(sycl_target, 3) {
 
-    NESOASSERT(mesh.ndim <= 3, "bad mesh ndim");
+    NESOASSERT(mesh->ndim <= 3, "bad mesh ndim");
     BufferHost<int> h_cell_counts(sycl_target, 3);
-    for (int dimx = 0; dimx < mesh.ndim; dimx++) {
-      h_cell_counts.ptr[dimx] = this->mesh.cell_counts_local[dimx];
+    for (int dimx = 0; dimx < mesh->ndim; dimx++) {
+      h_cell_counts.ptr[dimx] = this->mesh->cell_counts_local[dimx];
     }
-    sycl_target.queue
+    sycl_target->queue
         .memcpy(this->d_cell_counts.ptr, h_cell_counts.ptr,
-                mesh.ndim * sizeof(int))
+                mesh->ndim * sizeof(int))
         .wait_and_throw();
-    sycl_target.queue
-        .memcpy(this->d_cell_starts.ptr, mesh.cell_starts,
-                mesh.ndim * sizeof(int))
+    sycl_target->queue
+        .memcpy(this->d_cell_starts.ptr, mesh->cell_starts,
+                mesh->ndim * sizeof(int))
         .wait_and_throw();
-    sycl_target.queue
-        .memcpy(this->d_cell_ends.ptr, mesh.cell_ends, mesh.ndim * sizeof(int))
+    sycl_target->queue
+        .memcpy(this->d_cell_ends.ptr, mesh->cell_ends,
+                mesh->ndim * sizeof(int))
         .wait_and_throw();
   };
 
@@ -75,19 +82,19 @@ public:
     auto pl_iter_range = this->position_dat->get_particle_loop_iter_range();
     auto pl_stride = this->position_dat->get_particle_loop_cell_stride();
     auto pl_npart_cell = this->position_dat->get_particle_loop_npart_cell();
-    const int k_ndim = this->mesh.ndim;
+    const int k_ndim = this->mesh->ndim;
 
     NESOASSERT(((k_ndim > 0) && (k_ndim < 4)), "Bad number of dimensions");
     auto k_positions_dat = this->position_dat->cell_dat.device_ptr();
     auto k_cell_id_dat = this->cell_id_dat->cell_dat.device_ptr();
-    auto k_inverse_cell_width_fine = this->mesh.inverse_cell_width_fine;
-    auto k_cell_width_fine = this->mesh.cell_width_fine;
+    auto k_inverse_cell_width_fine = this->mesh->inverse_cell_width_fine;
+    auto k_cell_width_fine = this->mesh->cell_width_fine;
 
     auto k_cell_counts = this->d_cell_counts.ptr;
     auto k_cell_starts = this->d_cell_starts.ptr;
     auto k_cell_ends = this->d_cell_ends.ptr;
 
-    this->sycl_target.queue
+    this->sycl_target->queue
         .submit([&](sycl::handler &cgh) {
           cgh.parallel_for<>(
               sycl::range<1>(pl_iter_range), [=](sycl::id<1> idx) {
@@ -119,8 +126,8 @@ public:
               });
         })
         .wait_and_throw();
-    sycl_target.profile_map.inc("CartesianCellBin", "execute", 1,
-                                profile_elapsed(t0, profile_timestamp()));
+    sycl_target->profile_map.inc("CartesianCellBin", "execute", 1,
+                                 profile_elapsed(t0, profile_timestamp()));
   }
 };
 

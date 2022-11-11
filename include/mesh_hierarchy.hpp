@@ -58,6 +58,11 @@ private:
   };
 
 public:
+  /// Disable (implicit) copies.
+  MeshHierarchy(const MeshHierarchy &st) = delete;
+  /// Disable (implicit) copies.
+  MeshHierarchy &operator=(MeshHierarchy const &a) = delete;
+
   /// MPI communicator on which this mesh is decomposed.
   MPI_Comm comm;
   /// CommPair instance that contains the inter and intra communicators.
@@ -124,6 +129,8 @@ public:
     NESOASSERT(subdivision_order >= 0, "Negative subdivision order passed.");
     ncells_dim_fine = std::pow(2, subdivision_order);
 
+    NESOASSERT(ncells_fine > 0, "Number of fine ncells does not make sense.");
+
     ncells_global = ncells_coarse * ncells_fine;
 
     // allocate space for the map stored on each shared memory region
@@ -132,6 +139,7 @@ public:
     MPICHK(MPI_Win_allocate_shared(num_alloc, sizeof(int), MPI_INFO_NULL,
                                    comm_pair.comm_intra,
                                    (void *)&this->map_base, &this->map_win))
+
     map_allocated = true;
     // map_base points to this ranks region - we want the base to the entire
     // allocated block in map.

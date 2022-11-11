@@ -2,8 +2,10 @@
 #define _NESO_PARTICLES_MESH_INTERFACE
 #include "mesh_hierarchy.hpp"
 #include "typedefs.hpp"
+
 #include <cstdint>
 #include <cstdlib>
+#include <memory>
 #include <mpi.h>
 #include <set>
 #include <vector>
@@ -87,7 +89,7 @@ public:
    *
    * @returns MeshHierarchy placed over the mesh.
    */
-  virtual inline MeshHierarchy *get_mesh_hierarchy() = 0;
+  virtual inline std::shared_ptr<MeshHierarchy> get_mesh_hierarchy() = 0;
   /**
    *  Free the mesh and associated communicators.
    */
@@ -101,6 +103,8 @@ public:
   virtual inline std::vector<int> &get_local_communication_neighbours() = 0;
 };
 
+typedef std::shared_ptr<HMesh> HMeshSharedPtr;
+
 /**
  * Example mesh that duplicates a MeshHierarchy as a HMesh for examples and
  * testing.
@@ -113,12 +117,17 @@ private:
   int periods[3] = {1, 1, 1};
   int coords[3] = {0, 0, 0};
   int mpi_dims[3] = {0, 0, 0};
-  MeshHierarchy mesh_hierarchy;
+  std::shared_ptr<MeshHierarchy> mesh_hierarchy;
   bool allocated = false;
 
   std::vector<int> neighbour_ranks;
 
 public:
+  /// Disable (implicit) copies.
+  CartesianHMesh(const CartesianHMesh &st) = delete;
+  /// Disable (implicit) copies.
+  CartesianHMesh &operator=(CartesianHMesh const &a) = delete;
+
   /// Holds the first cell this rank owns in each dimension.
   int cell_starts[3] = {0, 0, 0};
   /// Holds the last cell+1 this ranks owns in each dimension.
@@ -221,8 +230,8 @@ public:
     origin[0] = 0.0;
     origin[1] = 0.0;
     // for this mesh the hierarchy is simply a copy of the mesh
-    this->mesh_hierarchy = MeshHierarchy(comm_cart, ndim, dims, origin,
-                                         cell_width_coarse, subdivision_order);
+    this->mesh_hierarchy = std::make_shared<MeshHierarchy>(
+        comm_cart, ndim, dims, origin, cell_width_coarse, subdivision_order);
 
     // setup the hierarchy
 
@@ -231,7 +240,7 @@ public:
     // mesh_hierarchy tuple index
     INT index_mh[6];
 
-    mesh_hierarchy.claim_initialise();
+    mesh_hierarchy->claim_initialise();
 
     // store the size of the local subdomain such that local linear indices can
     // be computed
@@ -255,15 +264,15 @@ public:
           // convert mesh hierarchy tuple index to global linear index in the
           // MeshHierarchy
           const INT index_global =
-              mesh_hierarchy.tuple_to_linear_global(index_mh);
+              mesh_hierarchy->tuple_to_linear_global(index_mh);
           // claim ownership of the current cell in the MeshHierarchy
-          mesh_hierarchy.claim_cell(index_global, 1);
+          mesh_hierarchy->claim_cell(index_global, 1);
           this->cell_count++;
         }
       }
     }
 
-    mesh_hierarchy.claim_finalise();
+    mesh_hierarchy->claim_finalise();
 
     // get the MPI ranks owning cells within the stencil region
 
@@ -295,9 +304,9 @@ public:
           // convert mesh hierarchy tuple index to global linear index in the
           // MeshHierarchy
           const INT index_global =
-              mesh_hierarchy.tuple_to_linear_global(index_mh);
+              mesh_hierarchy->tuple_to_linear_global(index_mh);
           // claim ownership of the current cell in the MeshHierarchy
-          const int owning_rank = this->mesh_hierarchy.get_owner(index_global);
+          const int owning_rank = this->mesh_hierarchy->get_owner(index_global);
           neighbour_ranks_set.insert(owning_rank);
         }
       }
@@ -324,7 +333,9 @@ public:
   inline int get_ncells_coarse() { return this->ncells_coarse; };
   inline int get_ncells_fine() { return this->ncells_fine; };
   inline int get_cell_count() { return this->cell_count; };
-  inline MeshHierarchy *get_mesh_hierarchy() { return &this->mesh_hierarchy; };
+  inline std::shared_ptr<MeshHierarchy> get_mesh_hierarchy() {
+    return this->mesh_hierarchy;
+  };
 
   /**
    * Convert a mesh index (index_x, index_y, ...) for this cartesian mesh to
@@ -337,7 +348,7 @@ public:
   inline void mesh_tuple_to_mh_tuple(const INT *index_mesh, INT *index_mh) {
     for (int dimx = 0; dimx < ndim; dimx++) {
       auto pq = std::div((long long)index_mesh[dimx],
-                         (long long)mesh_hierarchy.ncells_dim_fine);
+                         (long long)mesh_hierarchy->ncells_dim_fine);
       index_mh[dimx] = pq.quot;
       index_mh[dimx + ndim] = pq.rem;
     }
@@ -354,13 +365,15 @@ public:
       this->comm_cart = MPI_COMM_NULL;
     }
     this->allocated = false;
-    mesh_hierarchy.free();
+    mesh_hierarchy->free();
   }
 
   inline std::vector<int> &get_local_communication_neighbours() {
     return this->neighbour_ranks;
   }
 };
+
+typedef std::shared_ptr<CartesianHMesh> CartesianHMeshSharedPtr;
 
 } // namespace NESO::Particles
 

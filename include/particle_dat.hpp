@@ -3,6 +3,7 @@
 
 #include <CL/sycl.hpp>
 #include <cmath>
+#include <limits>
 #include <memory>
 
 #include "access.hpp"
@@ -22,6 +23,11 @@ namespace NESO::Particles {
 template <typename T> class ParticleDatT {
 private:
 public:
+  /// Disable (implicit) copies.
+  ParticleDatT(const ParticleDatT &st) = delete;
+  /// Disable (implicit) copies.
+  ParticleDatT &operator=(ParticleDatT const &a) = delete;
+
   /// Device only accessible array of the particle counts per cell.
   int *d_npart_cell;
   /// Host only accessible array of particle counts per cell.
@@ -40,27 +46,27 @@ public:
   /// Label given to the ParticleDat.
   const std::string name;
   /// Compute device used by the instance.
-  SYCLTarget &sycl_target;
+  SYCLTargetSharedPtr sycl_target;
 
   /**
    * Create a new ParticleDat.
    *
-   * @param sycl_target SYCLTarget to use as compute device.
+   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
    * @param sym Sym object that defines the type and label.
    * @param ncomp Number of components, of type defined in `sym`.
    * @param ncell Number of cells this ParticleDat is defined over.
    * @param positions Does this Dat hold particle positions or cell ids.
    */
-  ParticleDatT(SYCLTarget &sycl_target, const Sym<T> sym, int ncomp, int ncell,
-               bool positions = false)
+  ParticleDatT(SYCLTargetSharedPtr sycl_target, const Sym<T> sym, int ncomp,
+               int ncell, bool positions = false)
       : sycl_target(sycl_target), sym(sym), name(sym.name), ncomp(ncomp),
         ncell(ncell), positions(positions),
         cell_dat(CellDat<T>(sycl_target, ncell, ncomp)) {
 
     this->h_npart_cell =
-        sycl::malloc_host<int>(this->ncell, this->sycl_target.queue);
+        sycl::malloc_host<int>(this->ncell, this->sycl_target->queue);
     this->d_npart_cell =
-        sycl::malloc_device<int>(this->ncell, this->sycl_target.queue);
+        sycl::malloc_device<int>(this->ncell, this->sycl_target->queue);
     for (int cellx = 0; cellx < this->ncell; cellx++) {
       this->h_npart_cell[cellx] = 0;
     }
@@ -71,10 +77,12 @@ public:
    *  Copy cell particle counts from host buffer to device buffer.
    */
   inline void npart_host_to_device() {
-    this->sycl_target.queue
-        .memcpy(this->d_npart_cell, this->h_npart_cell,
-                this->ncell * sizeof(int))
-        .wait();
+    if (this->ncell > 0) {
+      this->sycl_target->queue
+          .memcpy(this->d_npart_cell, this->h_npart_cell,
+                  this->ncell * sizeof(int))
+          .wait();
+    }
   }
   /**
    *  Asynchronously copy cell particle counts from host buffer to device
@@ -83,17 +91,20 @@ public:
    *  @returns sycl::event for copy operation.
    */
   inline sycl::event async_npart_host_to_device() {
-    return this->sycl_target.queue.memcpy(
+    NESOASSERT(this->ncell > 0, "Zero sized memcpy issued");
+    return this->sycl_target->queue.memcpy(
         this->d_npart_cell, this->h_npart_cell, this->ncell * sizeof(int));
   }
   /**
    *  Copy cell particle counts from device buffer to host buffer.
    */
   inline void npart_device_to_host() {
-    this->sycl_target.queue
-        .memcpy(this->h_npart_cell, this->d_npart_cell,
-                this->ncell * sizeof(int))
-        .wait();
+    if (this->ncell > 0) {
+      this->sycl_target->queue
+          .memcpy(this->h_npart_cell, this->d_npart_cell,
+                  this->ncell * sizeof(int))
+          .wait();
+    }
   }
   /**
    *  Asynchronously copy cell particle counts from device buffer to host
@@ -102,13 +113,14 @@ public:
    *  @returns sycl::event for copy operation.
    */
   inline sycl::event async_npart_device_to_host() {
-    return this->sycl_target.queue.memcpy(
+    NESOASSERT(this->ncell > 0, "Zero sized memcpy issued");
+    return this->sycl_target->queue.memcpy(
         this->h_npart_cell, this->d_npart_cell, this->ncell * sizeof(int));
   }
 
   ~ParticleDatT() {
-    sycl::free(this->h_npart_cell, this->sycl_target.queue);
-    sycl::free(this->d_npart_cell, this->sycl_target.queue);
+    sycl::free(this->h_npart_cell, this->sycl_target->queue);
+    sycl::free(this->d_npart_cell, this->sycl_target->queue);
   }
 
   /**
@@ -175,23 +187,24 @@ public:
     T ***d_cell_dat_ptr = this->cell_dat.device_ptr();
     const int ncomp = this->ncomp;
 
-    sycl::event event = this->sycl_target.queue.submit([&](sycl::handler &cgh) {
-      cgh.parallel_for<>(sycl::range<1>(npart_s), [=](sycl::id<1> idx) {
-        const INT cell_oldx = d_cells_old[idx];
-        // remove particles currently masks of elements using -1
-        if (cell_oldx > -1) {
-          const INT cell_newx = d_cells_old[idx];
-          const INT layer_oldx = d_layers_old[idx];
-          const INT layer_newx = d_layers_new[idx];
+    sycl::event event =
+        this->sycl_target->queue.submit([&](sycl::handler &cgh) {
+          cgh.parallel_for<>(sycl::range<1>(npart_s), [=](sycl::id<1> idx) {
+            const INT cell_oldx = d_cells_old[idx];
+            // remove particles currently masks of elements using -1
+            if (cell_oldx > -1) {
+              const INT cell_newx = d_cells_old[idx];
+              const INT layer_oldx = d_layers_old[idx];
+              const INT layer_newx = d_layers_new[idx];
 
-          // copy the data from old cell/layer to new cell/layer.
-          for (int cx = 0; cx < ncomp; cx++) {
-            d_cell_dat_ptr[cell_newx][cx][layer_newx] =
-                d_cell_dat_ptr[cell_oldx][cx][layer_oldx];
-          }
-        }
-      });
-    });
+              // copy the data from old cell/layer to new cell/layer.
+              for (int cx = 0; cx < ncomp; cx++) {
+                d_cell_dat_ptr[cell_newx][cx][layer_newx] =
+                    d_cell_dat_ptr[cell_oldx][cx][layer_oldx];
+              }
+            }
+          });
+        });
 
     return event;
   }
@@ -221,11 +234,12 @@ public:
   inline sycl::event set_npart_cells_device(const U *d_npart_cell_in) {
     const size_t ncell = static_cast<size_t>(this->ncell);
     int *k_npart_cell = this->d_npart_cell;
-    sycl::event event = this->sycl_target.queue.submit([&](sycl::handler &cgh) {
-      cgh.parallel_for<>(sycl::range<1>(ncell), [=](sycl::id<1> idx) {
-        k_npart_cell[idx] = static_cast<int>(d_npart_cell_in[idx]);
-      });
-    });
+    sycl::event event =
+        this->sycl_target->queue.submit([&](sycl::handler &cgh) {
+          cgh.parallel_for<>(sycl::range<1>(ncell), [=](sycl::id<1> idx) {
+            k_npart_cell[idx] = static_cast<int>(d_npart_cell_in[idx]);
+          });
+        });
     return event;
   }
 
@@ -250,7 +264,7 @@ public:
    */
   inline void set_npart_cell(const INT cell, const int npart) {
     this->h_npart_cell[cell] = npart;
-    this->sycl_target.queue
+    this->sycl_target->queue
         .memcpy(this->d_npart_cell + cell, this->h_npart_cell + cell,
                 sizeof(int))
         .wait();
@@ -349,7 +363,17 @@ public:
     //    NESO_PARTICLES_BLOCK_SIZE > 0)); return this->cell_dat.ncells * m;
     //#endif
     //
-    return this->cell_dat.ncells * this->get_particle_loop_cell_stride();
+
+    INT iter_range =
+        this->cell_dat.ncells * this->get_particle_loop_cell_stride();
+
+    // The scyl range takes a size_t but the implementations fail with larger
+    // than int arguments.
+    NESOASSERT(iter_range >= 0, "Negative iter_range?");
+    NESOASSERT(iter_range <= std::numeric_limits<int>::max(),
+               "ParticleLoop iter range exceeds int limits.");
+
+    return iter_range;
   }
   /**
    *  Get the size of the iteration set per cell stride required to loop over
@@ -382,18 +406,19 @@ public:
   inline void wait_realloc() { this->cell_dat.wait_set_nrow(); }
 };
 
-template <typename T> using ParticleDatShPtr = std::shared_ptr<ParticleDatT<T>>;
+template <typename T>
+using ParticleDatSharedPtr = std::shared_ptr<ParticleDatT<T>>;
 
 template <typename T>
-inline ParticleDatShPtr<T> ParticleDat(SYCLTarget &sycl_target,
-                                       const Sym<T> sym, int ncomp, int ncell,
-                                       bool positions = false) {
+inline ParticleDatSharedPtr<T> ParticleDat(SYCLTargetSharedPtr sycl_target,
+                                           const Sym<T> sym, int ncomp,
+                                           int ncell, bool positions = false) {
   return std::make_shared<ParticleDatT<T>>(sycl_target, sym, ncomp, ncell,
                                            positions);
 }
 template <typename T>
-inline ParticleDatShPtr<T> ParticleDat(SYCLTarget &sycl_target,
-                                       ParticleProp<T> prop, int ncell) {
+inline ParticleDatSharedPtr<T> ParticleDat(SYCLTargetSharedPtr sycl_target,
+                                           ParticleProp<T> prop, int ncell) {
   return std::make_shared<ParticleDatT<T>>(sycl_target, prop.sym, prop.ncomp,
                                            ncell, prop.positions);
 }
@@ -466,7 +491,7 @@ inline void ParticleDatT<T>::append_particle_data(const int npart_new,
   if (new_data_exists) {
     sycl::buffer<T, 1> b_data(data.data(),
                               sycl::range<1>{size_npart_new * this->ncomp});
-    this->sycl_target.queue.submit([&](sycl::handler &cgh) {
+    this->sycl_target->queue.submit([&](sycl::handler &cgh) {
       // The cell counts on this dat
       auto a_cells = b_cells.get_access<sycl::access::mode::read>(cgh);
       auto a_layers = b_layers.get_access<sycl::access::mode::read>(cgh);
@@ -482,7 +507,7 @@ inline void ParticleDatT<T>::append_particle_data(const int npart_new,
       });
     });
   } else {
-    this->sycl_target.queue.submit([&](sycl::handler &cgh) {
+    this->sycl_target->queue.submit([&](sycl::handler &cgh) {
       // The cell counts on this dat
       auto a_cells = b_cells.get_access<sycl::access::mode::read>(cgh);
       auto a_layers = b_layers.get_access<sycl::access::mode::read>(cgh);

@@ -35,9 +35,14 @@ private:
     return std::string(buffer);
   }
   std::string format(char value) { return std::string(1, value); }
-  SYCLTarget &sycl_target;
+  SYCLTargetSharedPtr sycl_target;
 
 public:
+  /// Disable (implicit) copies.
+  CellDataT(const CellDataT &st) = delete;
+  /// Disable (implicit) copies.
+  CellDataT &operator=(CellDataT const &a) = delete;
+
   /// Number of rows in the 2D data structure.
   const int nrow;
   /// Number of columns in the 2D data structure.
@@ -49,11 +54,12 @@ public:
    * Create a new, empty and uninitialised container for 2D data of the
    * specified shape.
    *
-   * @param sycl_target SYCLTarget to use as compute device.
+   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
    * @param nrow Number of rows.
    * @param ncol Number of columns.
    */
-  inline CellDataT(SYCLTarget &sycl_target, const int nrow, const int ncol)
+  inline CellDataT(SYCLTargetSharedPtr sycl_target, const int nrow,
+                   const int ncol)
       : sycl_target(sycl_target), nrow(nrow), ncol(ncol) {
     this->data = std::vector<std::vector<T>>(ncol);
     for (int colx = 0; colx < ncol; colx++) {
@@ -94,33 +100,38 @@ private:
   const int stride;
 
 public:
+  /// Disable (implicit) copies.
+  CellDatConst(const CellDatConst &st) = delete;
+  /// Disable (implicit) copies.
+  CellDatConst &operator=(CellDatConst const &a) = delete;
+
   /// Compute device used by the instance.
-  SYCLTarget &sycl_target;
+  SYCLTargetSharedPtr sycl_target;
   /// Number of cells, labeled 0,...,N-1.
   const int ncells;
   /// Number of rows in each cell.
   const int nrow;
   /// Number of columns in each cell.
   const int ncol;
-  ~CellDatConst() { sycl::free(this->d_ptr, sycl_target.queue); };
+  ~CellDatConst() { sycl::free(this->d_ptr, sycl_target->queue); };
 
   /**
    * Create new CellDatConst on the specified compute target with a fixed cell
    * count, fixed number of rows per cell and fixed number of columns per cell.
    *
-   * @param sycl_target SYCLTarget to use as compute device.
+   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
    * @param ncells Number of cells.
    * @param nrow Number of rows.
    * @param ncol Number of columns.
    */
-  CellDatConst(SYCLTarget &sycl_target, const int ncells, const int nrow,
-               const int ncol)
+  CellDatConst(SYCLTargetSharedPtr sycl_target, const int ncells,
+               const int nrow, const int ncol)
       : sycl_target(sycl_target), ncells(ncells), nrow(nrow), ncol(ncol),
         stride(nrow * ncol) {
     this->d_ptr =
-        sycl::malloc_device<T>(ncells * nrow * ncol, sycl_target.queue);
-    this->sycl_target.queue.fill(this->d_ptr, ((T)0), ncells * nrow * ncol);
-    this->sycl_target.queue.wait();
+        sycl::malloc_device<T>(ncells * nrow * ncol, sycl_target->queue);
+    this->sycl_target->queue.fill(this->d_ptr, ((T)0), ncells * nrow * ncol);
+    this->sycl_target->queue.wait();
   };
 
   /**
@@ -153,14 +164,16 @@ public:
   inline CellData<T> get_cell(const int cell) {
     auto cell_data = std::make_shared<CellDataT<T>>(this->sycl_target,
                                                     this->nrow, this->ncol);
-    EventStack se;
-    for (int colx = 0; colx < this->ncol; colx++) {
-      se.push(this->sycl_target.queue.memcpy(
-          cell_data->data[colx].data(),
-          &this->d_ptr[cell * this->stride + colx * this->nrow],
-          this->nrow * sizeof(T)));
+    if (this->nrow > 0) {
+      EventStack se;
+      for (int colx = 0; colx < this->ncol; colx++) {
+        se.push(this->sycl_target->queue.memcpy(
+            cell_data->data[colx].data(),
+            &this->d_ptr[cell * this->stride + colx * this->nrow],
+            this->nrow * sizeof(T)));
+      }
+      se.wait();
     }
-    se.wait();
     return cell_data;
   }
   /**
@@ -175,13 +188,15 @@ public:
     NESOASSERT(cell_data->ncol >= this->ncol,
                "CellData as insuffient column count.");
 
-    EventStack se;
-    for (int colx = 0; colx < this->ncol; colx++) {
-      se.push(this->sycl_target.queue.memcpy(
-          &this->d_ptr[cell * this->stride + colx * this->nrow],
-          cell_data->data[colx].data(), this->nrow * sizeof(T)));
+    if (this->nrow > 0) {
+      EventStack se;
+      for (int colx = 0; colx < this->ncol; colx++) {
+        se.push(this->sycl_target->queue.memcpy(
+            &this->d_ptr[cell * this->stride + colx * this->nrow],
+            cell_data->data[colx].data(), this->nrow * sizeof(T)));
+      }
+      se.wait();
     }
-    se.wait();
   }
 };
 
@@ -201,8 +216,13 @@ private:
   std::stack<T *> stack_ptrs;
 
 public:
+  /// Disable (implicit) copies.
+  CellDat(const CellDat &st) = delete;
+  /// Disable (implicit) copies.
+  CellDat &operator=(CellDat const &a) = delete;
+
   /// Compute device used by the instance.
-  SYCLTarget &sycl_target;
+  SYCLTargetSharedPtr sycl_target;
   /// Number of cells.
   const int ncells;
   /// Number of rows in each cell.
@@ -212,34 +232,32 @@ public:
   /// Number of rows currently allocated for each cell.
   std::vector<INT> nrow_alloc;
   ~CellDat() {
-    // issues on cuda backend w/o this NULL check.
     for (int cellx = 0; cellx < ncells; cellx++) {
-      if ((this->nrow_alloc[cellx] != 0) &&
-          (this->h_ptr_cells[cellx] != NULL)) {
-        sycl::free(this->h_ptr_cells[cellx], sycl_target.queue);
-      }
+      this->sycl_target->free(this->h_ptr_cells[cellx]);
     }
     for (int colx = 0; colx < ncells * this->ncol; colx++) {
       if (this->h_ptr_cols[colx] != NULL) {
-        sycl::free(this->h_ptr_cols[colx], sycl_target.queue);
+        this->sycl_target->free(this->h_ptr_cols[colx]);
       }
     }
-    sycl::free(this->d_ptr, sycl_target.queue);
+    this->sycl_target->free(this->d_ptr);
   };
 
   /**
    * Create new CellDat on a specified compute target with a specified number of
    * cells and number of columns per cell.
    *
-   * @param sycl_target SYCLTarget to use as compute device.
+   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
    * @param ncells Number of cells (fixed).
    * @param ncol Number of columns in each cell (fixed).
    */
-  inline CellDat(SYCLTarget &sycl_target, const int ncells, const int ncol)
+  inline CellDat(SYCLTargetSharedPtr sycl_target, const int ncells,
+                 const int ncol)
       : sycl_target(sycl_target), ncells(ncells), ncol(ncol), nrow_max(0) {
 
     this->nrow = std::vector<INT>(ncells);
-    this->d_ptr = sycl::malloc_device<T **>(ncells, sycl_target.queue);
+    this->d_ptr =
+        (T ***)this->sycl_target->malloc_device(ncells * sizeof(T **));
     this->h_ptr_cells = std::vector<T **>(ncells);
     this->h_ptr_cols = std::vector<T *>(ncells * ncol);
     this->nrow_alloc = std::vector<INT>(ncells);
@@ -248,16 +266,16 @@ public:
       this->nrow_alloc[cellx] = 0;
       this->nrow[cellx] = 0;
       this->h_ptr_cells[cellx] =
-          sycl::malloc_device<T *>(ncol, sycl_target.queue);
+          (T **)this->sycl_target->malloc_device(ncol * sizeof(T *));
       for (int colx = 0; colx < ncol; colx++) {
         this->h_ptr_cols[cellx * ncol + colx] = NULL;
       }
     }
 
-    sycl_target.queue.memcpy(d_ptr, this->h_ptr_cells.data(),
-                             ncells * sizeof(T *));
+    sycl_target->queue.memcpy(d_ptr, this->h_ptr_cells.data(),
+                              ncells * sizeof(T *));
 
-    this->sycl_target.queue.wait();
+    this->sycl_target->queue.wait();
   };
 
   /**
@@ -270,17 +288,18 @@ public:
 
     auto t0 = profile_timestamp();
 
-    if (nrow_required < this->nrow[cell]) {
-      this->nrow[cell] = nrow_required;
-      this->nrow_max = -1;
-      sycl_target.profile_map.inc("CellDat", "set_nrow", 1,
-                                  profile_elapsed(t0, profile_timestamp()));
-      return;
-    }
-
     NESOASSERT(cell >= 0, "Cell index is negative");
     NESOASSERT(cell < this->ncells, "Cell index is >= ncells");
     NESOASSERT(nrow_required >= 0, "Requested number of rows is negative");
+
+    if (nrow_required < this->nrow[cell]) {
+      this->nrow[cell] = nrow_required;
+      this->nrow_max = -1;
+      sycl_target->profile_map.inc("CellDat", "set_nrow", 1,
+                                   profile_elapsed(t0, profile_timestamp()));
+      return;
+    }
+
     const INT nrow_alloced = this->nrow_alloc[cell];
     const INT nrow_existing = this->nrow[cell];
 
@@ -290,24 +309,25 @@ public:
           T *col_ptr_old = this->h_ptr_cols[cell * this->ncol + colx];
           this->stack_ptrs.push(col_ptr_old);
           T *col_ptr_new =
-              sycl::malloc_device<T>(nrow_required, this->sycl_target.queue);
+              (T *)this->sycl_target->malloc_device(nrow_required * sizeof(T));
+          NESOASSERT(col_ptr_new != nullptr, "bad pointer from malloc_device");
 
           if (nrow_alloced > 0) {
-            this->stack_events.push(this->sycl_target.queue.memcpy(
+            this->stack_events.push(this->sycl_target->queue.memcpy(
                 col_ptr_new, col_ptr_old, nrow_existing * sizeof(T)));
           }
           this->h_ptr_cols[cell * this->ncol + colx] = col_ptr_new;
         }
         this->nrow_alloc[cell] = nrow_required;
-        this->stack_events.push(sycl_target.queue.memcpy(
+        this->stack_events.push(sycl_target->queue.memcpy(
             this->h_ptr_cells[cell], &this->h_ptr_cols[cell * this->ncol],
             this->ncol * sizeof(T *)));
       }
       this->nrow[cell] = nrow_required;
       this->nrow_max = -1;
     }
-    sycl_target.profile_map.inc("CellDat", "set_nrow", 1,
-                                profile_elapsed(t0, profile_timestamp()));
+    sycl_target->profile_map.inc("CellDat", "set_nrow", 1,
+                                 profile_elapsed(t0, profile_timestamp()));
   }
 
   /**
@@ -320,7 +340,7 @@ public:
     while (!this->stack_ptrs.empty()) {
       auto ptr = this->stack_ptrs.top();
       if (ptr != NULL) {
-        sycl::free(ptr, this->sycl_target.queue);
+        this->sycl_target->free(ptr);
       }
       this->stack_ptrs.pop();
     }
@@ -360,15 +380,19 @@ public:
 
     auto cell_data = std::make_shared<CellDataT<T>>(
         this->sycl_target, this->nrow[cell], this->ncol);
-    for (int colx = 0; colx < this->ncol; colx++) {
-      this->sycl_target.queue.memcpy(cell_data->data[colx].data(),
-                                     this->h_ptr_cols[cell * this->ncol + colx],
-                                     this->nrow[cell] * sizeof(T));
-    }
-    this->sycl_target.queue.wait();
 
-    sycl_target.profile_map.inc("CellDat", "get_cell", 1,
-                                profile_elapsed(t0, profile_timestamp()));
+    if (this->nrow[cell] > 0) {
+      for (int colx = 0; colx < this->ncol; colx++) {
+        this->sycl_target->queue.memcpy(
+            cell_data->data[colx].data(),
+            this->h_ptr_cols[cell * this->ncol + colx],
+            this->nrow[cell] * sizeof(T));
+      }
+      this->sycl_target->queue.wait();
+    }
+
+    sycl_target->profile_map.inc("CellDat", "get_cell", 1,
+                                 profile_elapsed(t0, profile_timestamp()));
     return cell_data;
   }
 
@@ -389,15 +413,17 @@ public:
     NESOASSERT(cell_data.ncol >= this->ncol,
                "CellDataT has insufficent number of columns");
 
-    for (int colx = 0; colx < this->ncol; colx++) {
-      event_stack.push(this->sycl_target.queue.memcpy(
-          cell_data.data[colx].data(),
-          this->h_ptr_cols[cell * this->ncol + colx],
-          this->nrow[cell] * sizeof(T)));
+    if (this->nrow[cell] > 0) {
+      for (int colx = 0; colx < this->ncol; colx++) {
+        event_stack.push(this->sycl_target->queue.memcpy(
+            cell_data.data[colx].data(),
+            this->h_ptr_cols[cell * this->ncol + colx],
+            this->nrow[cell] * sizeof(T)));
+      }
     }
 
-    sycl_target.profile_map.inc("CellDat", "get_cell_async", 1,
-                                profile_elapsed(t0, profile_timestamp()));
+    sycl_target->profile_map.inc("CellDat", "get_cell_async", 1,
+                                 profile_elapsed(t0, profile_timestamp()));
     return;
   }
 
@@ -418,15 +444,15 @@ public:
     if (this->nrow[cell] > 0) {
       for (int colx = 0; colx < this->ncol; colx++) {
 
-        this->sycl_target.queue.memcpy(
+        this->sycl_target->queue.memcpy(
             this->h_ptr_cols[cell * this->ncol + colx],
             cell_data->data[colx].data(), this->nrow[cell] * sizeof(T));
       }
-      this->sycl_target.queue.wait();
+      this->sycl_target->queue.wait();
     }
 
-    sycl_target.profile_map.inc("CellDat", "set_cell", 1,
-                                profile_elapsed(t0, profile_timestamp()));
+    sycl_target->profile_map.inc("CellDat", "set_cell", 1,
+                                 profile_elapsed(t0, profile_timestamp()));
   }
 
   /**
@@ -448,14 +474,14 @@ public:
     if (this->nrow[cell] > 0) {
       for (int colx = 0; colx < this->ncol; colx++) {
 
-        event_stack.push(this->sycl_target.queue.memcpy(
+        event_stack.push(this->sycl_target->queue.memcpy(
             this->h_ptr_cols[cell * this->ncol + colx],
             cell_data.data[colx].data(), this->nrow[cell] * sizeof(T)));
       }
     }
 
-    sycl_target.profile_map.inc("CellDat", "set_cell_async", 1,
-                                profile_elapsed(t0, profile_timestamp()));
+    sycl_target->profile_map.inc("CellDat", "set_cell_async", 1,
+                                 profile_elapsed(t0, profile_timestamp()));
   }
 
   /**

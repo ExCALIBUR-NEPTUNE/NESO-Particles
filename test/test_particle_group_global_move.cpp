@@ -15,12 +15,13 @@ TEST(ParticleGroup, global_move_single) {
 
   const double cell_extent = 1.0;
   const int subdivision_order = 0;
-  CartesianHMesh mesh(MPI_COMM_WORLD, ndim, dims, cell_extent,
-                      subdivision_order);
+  auto mesh = std::make_shared<CartesianHMesh>(MPI_COMM_WORLD, ndim, dims,
+                                               cell_extent, subdivision_order);
 
-  SYCLTarget sycl_target{GPU_SELECTOR, mesh.get_comm()};
+  auto sycl_target =
+      std::make_shared<SYCLTarget>(GPU_SELECTOR, mesh->get_comm());
 
-  Domain domain(mesh);
+  auto domain = std::make_shared<Domain>(mesh);
 
   ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
                              ParticleProp(Sym<REAL>("V"), 3),
@@ -30,7 +31,7 @@ TEST(ParticleGroup, global_move_single) {
   ParticleGroup A(domain, particle_spec, sycl_target);
 
   A.add_particle_dat(ParticleDat(sycl_target, ParticleProp(Sym<REAL>("FOO"), 3),
-                                 domain.mesh.get_cell_count()));
+                                 domain->mesh->get_cell_count()));
 
   std::mt19937 rng_pos(52234234);
   std::mt19937 rng_vel(52234231);
@@ -39,12 +40,12 @@ TEST(ParticleGroup, global_move_single) {
   const int N = 1024;
 
   auto positions =
-      uniform_within_extents(N, ndim, mesh.global_extents, rng_pos);
+      uniform_within_extents(N, ndim, mesh->global_extents, rng_pos);
   auto velocities =
       NESO::Particles::normal_distribution(N, 3, 0.0, 1.0, rng_vel);
 
   std::uniform_int_distribution<int> uniform_dist(
-      0, sycl_target.comm_pair.size_parent - 1);
+      0, sycl_target->comm_pair.size_parent - 1);
 
   ParticleSet initial_distribution(N, A.get_particle_spec());
 
@@ -64,13 +65,13 @@ TEST(ParticleGroup, global_move_single) {
     mapping[px_rank].push_back(px);
   }
 
-  if (sycl_target.comm_pair.rank_parent == 0) {
+  if (sycl_target->comm_pair.rank_parent == 0) {
     A.add_particles_local(initial_distribution);
   }
 
   A.global_move();
 
-  const int rank = sycl_target.comm_pair.rank_parent;
+  const int rank = sycl_target->comm_pair.rank_parent;
   const int correct_npart = mapping[rank].size();
 
   // check the dats hold the correct number of particles in all dats
@@ -109,7 +110,7 @@ TEST(ParticleGroup, global_move_single) {
     }
   }
 
-  mesh.free();
+  mesh->free();
 }
 
 TEST(ParticleGroup, global_move_multiple) {
@@ -121,12 +122,14 @@ TEST(ParticleGroup, global_move_multiple) {
 
   const double cell_extent = 1.0;
   const int subdivision_order = 0;
-  CartesianHMesh mesh(MPI_COMM_WORLD, ndim, dims, cell_extent,
-                      subdivision_order);
 
-  SYCLTarget sycl_target{GPU_SELECTOR, mesh.get_comm()};
+  auto mesh = std::make_shared<CartesianHMesh>(MPI_COMM_WORLD, ndim, dims,
+                                               cell_extent, subdivision_order);
 
-  Domain domain(mesh);
+  auto sycl_target =
+      std::make_shared<SYCLTarget>(GPU_SELECTOR, mesh->get_comm());
+
+  auto domain = std::make_shared<Domain>(mesh);
 
   ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
                              ParticleProp(Sym<REAL>("P_ORIG"), ndim),
@@ -137,7 +140,7 @@ TEST(ParticleGroup, global_move_multiple) {
   ParticleGroup A(domain, particle_spec, sycl_target);
 
   A.add_particle_dat(ParticleDat(sycl_target, ParticleProp(Sym<REAL>("FOO"), 3),
-                                 domain.mesh.get_cell_count()));
+                                 domain->mesh->get_cell_count()));
 
   std::mt19937 rng_pos(52234234);
   std::mt19937 rng_vel(52234231);
@@ -147,15 +150,15 @@ TEST(ParticleGroup, global_move_multiple) {
   const int Ntest = 1024;
   const REAL dt = 0.01;
   const REAL tol = 1.0e-10;
-  const int cell_count = domain.mesh.get_cell_count();
+  const int cell_count = domain->mesh->get_cell_count();
 
   auto positions =
-      uniform_within_extents(N, ndim, mesh.global_extents, rng_pos);
+      uniform_within_extents(N, ndim, mesh->global_extents, rng_pos);
   auto velocities = NESO::Particles::normal_distribution(
       N, 3, 0.0, dims[0] * cell_extent, rng_vel);
 
   std::uniform_int_distribution<int> uniform_dist(
-      0, sycl_target.comm_pair.size_parent - 1);
+      0, sycl_target->comm_pair.size_parent - 1);
 
   ParticleSet initial_distribution(N, A.get_particle_spec());
 
@@ -176,12 +179,12 @@ TEST(ParticleGroup, global_move_multiple) {
     mapping[px_rank].push_back(px);
   }
 
-  if (sycl_target.comm_pair.rank_parent == 0) {
+  if (sycl_target->comm_pair.rank_parent == 0) {
     A.add_particles_local(initial_distribution);
   }
 
-  MeshHierarchyGlobalMap mesh_heirarchy_global_map(
-      sycl_target, domain.mesh, A.position_dat, A.cell_id_dat, A.mpi_rank_dat);
+  MeshHierarchyGlobalMap mesh_hierarchy_global_map(
+      sycl_target, domain->mesh, A.position_dat, A.cell_id_dat, A.mpi_rank_dat);
 
   CartesianPeriodic pbc(sycl_target, mesh, A.position_dat);
   CartesianCellBin ccb(sycl_target, mesh, A.position_dat, A.cell_id_dat);
@@ -198,7 +201,7 @@ TEST(ParticleGroup, global_move_multiple) {
     const auto pl_stride = A.mpi_rank_dat->get_particle_loop_cell_stride();
     const auto pl_npart_cell = A.mpi_rank_dat->get_particle_loop_npart_cell();
 
-    sycl_target.queue
+    sycl_target->queue
         .submit([&](sycl::handler &cgh) {
           cgh.parallel_for<>(
               sycl::range<1>(pl_iter_range), [=](sycl::id<1> idx) {
@@ -219,7 +222,7 @@ TEST(ParticleGroup, global_move_multiple) {
     int npart_found = A.mpi_rank_dat->get_npart_local();
     int global_npart_found = 0;
     MPICHK(MPI_Allreduce(&npart_found, &global_npart_found, 1, MPI_INT, MPI_SUM,
-                         sycl_target.comm_pair.comm_parent));
+                         sycl_target->comm_pair.comm_parent));
     ASSERT_EQ(global_npart_found, N);
 
     // for all cells
@@ -241,7 +244,7 @@ TEST(ParticleGroup, global_move_multiple) {
           const REAL P_correct_abs = (*P_ORIG)[dimx][px] + T * (*V)[dimx][px];
           // map the absolute position back into the periodic domain
 
-          const REAL extent = mesh.global_extents[dimx];
+          const REAL extent = mesh->global_extents[dimx];
           const REAL P_correct =
               std::fmod(std::fmod(P_correct_abs, extent) + extent, extent);
 
@@ -257,9 +260,9 @@ TEST(ParticleGroup, global_move_multiple) {
           // check that the particle position is actually owned by this MPI
           // rank
           const int particle_cell =
-              ((REAL)(P_to_test * mesh.inverse_cell_width_fine));
-          ASSERT_TRUE(particle_cell >= mesh.cell_starts[dimx]);
-          ASSERT_TRUE(particle_cell < mesh.cell_ends[dimx]);
+              ((REAL)(P_to_test * mesh->inverse_cell_width_fine));
+          ASSERT_TRUE(particle_cell >= mesh->cell_starts[dimx]);
+          ASSERT_TRUE(particle_cell < mesh->cell_ends[dimx]);
         }
       }
 
@@ -269,13 +272,13 @@ TEST(ParticleGroup, global_move_multiple) {
         int index_tuple[3] = {0, 0, 0};
         for (int dimx = 0; dimx < ndim; dimx++) {
           const REAL P_CELL =
-              (*P)[dimx][px] - mesh.cell_starts[dimx] * mesh.cell_width_fine;
-          index_tuple[dimx] = ((REAL)P_CELL * mesh.inverse_cell_width_fine);
+              (*P)[dimx][px] - mesh->cell_starts[dimx] * mesh->cell_width_fine;
+          index_tuple[dimx] = ((REAL)P_CELL * mesh->inverse_cell_width_fine);
         }
         int index_linear =
             index_tuple[0] +
-            mesh.cell_counts_local[0] *
-                (index_tuple[1] + mesh.cell_counts_local[1] * index_tuple[2]);
+            mesh->cell_counts_local[0] *
+                (index_tuple[1] + mesh->cell_counts_local[1] * index_tuple[2]);
 
         ASSERT_EQ((*C)[0][px], index_linear);
       }
@@ -284,7 +287,7 @@ TEST(ParticleGroup, global_move_multiple) {
 
   for (int testx = 0; testx < Ntest; testx++) {
     pbc.execute();
-    mesh_heirarchy_global_map.execute();
+    mesh_hierarchy_global_map.execute();
     A.global_move();
     ccb.execute();
     A.cell_move();
@@ -294,5 +297,5 @@ TEST(ParticleGroup, global_move_multiple) {
 
     T += dt;
   }
-  mesh.free();
+  mesh->free();
 }

@@ -21,20 +21,28 @@ namespace NESO::Particles {
 class Domain {
 private:
 public:
+  /// Disable (implicit) copies.
+  Domain(const Domain &st) = delete;
+  /// Disable (implicit) copies.
+  Domain &operator=(Domain const &a) = delete;
+
   /// HMesh derived mesh instance.
-  HMesh &mesh;
+  HMeshSharedPtr mesh;
   /// LocalMapper derived class instance to bin particles into mesh cells.
-  LocalMapperShPtr local_mapper;
+  LocalMapperSharedPtr local_mapper;
   /**
    * Construct a new Domain.
    *
    * @param mesh HMesh derived mesh object.
    * @param local_mapper Object to map particle positions into mesh cells.
    */
-  Domain(HMesh &mesh, LocalMapperShPtr local_mapper = DummyLocalMapper())
+  Domain(HMeshSharedPtr mesh,
+         LocalMapperSharedPtr local_mapper = DummyLocalMapper())
       : mesh(mesh), local_mapper(local_mapper) {}
   ~Domain() {}
 };
+
+typedef std::shared_ptr<Domain> DomainSharedPtr;
 
 } // namespace NESO::Particles
 

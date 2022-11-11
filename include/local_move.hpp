@@ -23,10 +23,10 @@ namespace NESO::Particles {
 class LocalMove {
 
 private:
-  SYCLTarget &sycl_target;
-  std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real;
-  std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int;
-  ParticleDatShPtr<INT> mpi_rank_dat;
+  SYCLTargetSharedPtr sycl_target;
+  std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real;
+  std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int;
+  ParticleDatSharedPtr<INT> mpi_rank_dat;
 
   ParticlePacker particle_packer;
   ParticleUnpacker particle_unpacker;
@@ -51,6 +51,11 @@ private:
   int in_flight_recvs;
 
 public:
+  /// Disable (implicit) copies.
+  LocalMove(const LocalMove &st) = delete;
+  /// Disable (implicit) copies.
+  LocalMove &operator=(LocalMove const &a) = delete;
+
   /// The MPI communicator in use by the instance.
   MPI_Comm comm;
   /// Number of remote ranks this rank could send particles to.
@@ -64,7 +69,7 @@ public:
    *  Construct a new instance to move particles between neighbouring MPI
    *  ranks.
    *
-   *  @param sycl_target SYCLTarget to use as compute device.
+   *  @param sycl_target SYCLTargetSharedPtr to use as compute device.
    *  @param layer_compressor LayerCompressor instance used to compress
    * ParticleDat instances.
    *  @param particle_dats_real Container of REAL valued ParticleDat instances.
@@ -74,9 +79,9 @@ public:
    *  @param ranks Remote ranks to consider as neighbours that this rank could
    * send to.
    */
-  LocalMove(SYCLTarget &sycl_target, LayerCompressor &layer_compressor,
-            std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
-            std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int,
+  LocalMove(SYCLTargetSharedPtr sycl_target, LayerCompressor &layer_compressor,
+            std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
+            std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int,
             const int nranks = 0, const int *ranks = nullptr)
       : sycl_target(sycl_target), layer_compressor(layer_compressor),
         particle_dats_real(particle_dats_real),
@@ -84,14 +89,14 @@ public:
         particle_unpacker(sycl_target), h_send_ranks(sycl_target, 1),
         h_recv_ranks(sycl_target, 1), h_send_requests(sycl_target, 1),
         h_recv_requests(sycl_target, 1), h_status(sycl_target, 1),
-        dh_send_rank_map(sycl_target, sycl_target.comm_pair.size_parent),
+        dh_send_rank_map(sycl_target, sycl_target->comm_pair.size_parent),
         h_send_rank_npart(sycl_target, 1), h_recv_rank_npart(sycl_target, 1),
         departing_identify(sycl_target) {
 
     std::set<int> ranks_set{};
-    const int rank = this->sycl_target.comm_pair.rank_parent;
-    const int size = this->sycl_target.comm_pair.size_parent;
-    this->comm = this->sycl_target.comm_pair.comm_parent;
+    const int rank = this->sycl_target->comm_pair.rank_parent;
+    const int size = this->sycl_target->comm_pair.size_parent;
+    this->comm = this->sycl_target->comm_pair.comm_parent;
 
     // Get the set of remote ranks this rank can send to using a local pattern
     for (int rankx = 0; rankx < nranks; rankx++) {
@@ -184,7 +189,7 @@ public:
    *
    *  @param mpi_rank_dat ParticleDat to use for particle positions.
    */
-  inline void set_mpi_rank_dat(ParticleDatShPtr<INT> mpi_rank_dat) {
+  inline void set_mpi_rank_dat(ParticleDatSharedPtr<INT> mpi_rank_dat) {
     this->mpi_rank_dat = mpi_rank_dat;
     this->departing_identify.set_mpi_rank_dat(this->mpi_rank_dat);
   }
@@ -297,7 +302,7 @@ public:
       const int rank = this->h_send_ranks.ptr[rankx];
       this->departing_identify.dh_send_counts_all_ranks.h_buffer.ptr[rank] = 0;
     }
-    const int mpi_size = this->sycl_target.comm_pair.size_parent;
+    const int mpi_size = this->sycl_target->comm_pair.size_parent;
     for (int rank = 0; rank < mpi_size; rank++) {
       NESOASSERT(this->departing_identify.dh_send_counts_all_ranks.h_buffer
                          .ptr[rank] == 0,
@@ -345,8 +350,8 @@ public:
     // Unpack the recv'd particles
     this->particle_unpacker.unpack(particle_dats_real, particle_dats_int);
 
-    sycl_target.profile_map.inc("LocalMove", "Move", 1,
-                                profile_elapsed(t0, profile_timestamp()));
+    sycl_target->profile_map.inc("LocalMove", "Move", 1,
+                                 profile_elapsed(t0, profile_timestamp()));
   };
 };
 

@@ -11,7 +11,7 @@ using namespace NESO::Particles;
 
 TEST(ParticleDat, test_particle_dat_append_1) {
 
-  SYCLTarget sycl_target{GPU_SELECTOR, MPI_COMM_WORLD};
+  auto sycl_target = std::make_shared<SYCLTarget>(GPU_SELECTOR, MPI_COMM_WORLD);
 
   const int cell_count = 4;
   const int ncomp = 3;
@@ -54,7 +54,7 @@ TEST(ParticleDat, test_particle_dat_append_1) {
 
   A->append_particle_data(N, false, cells0, layers0, data0);
   // the append is async
-  sycl_target.queue.wait();
+  sycl_target->queue.wait();
 
   for (int cellx = 0; cellx < cell_count; cellx++) {
     ASSERT_TRUE(A->h_npart_cell[cellx] == counts[cellx]);
@@ -81,7 +81,7 @@ TEST(ParticleDat, test_particle_dat_append_1) {
 
   A->append_particle_data(N, true, cells0, layers0, data0);
   // the append is async
-  sycl_target.queue.wait();
+  sycl_target->queue.wait();
 
   for (int cellx = 0; cellx < cell_count; cellx++) {
 

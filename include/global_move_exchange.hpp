@@ -30,7 +30,14 @@ private:
   BufferHost<MPI_Request> h_recv_requests;
   BufferHost<MPI_Status> h_recv_status;
 
+  bool recv_win_allocated;
+
 public:
+  /// Disable (implicit) copies.
+  GlobalMoveExchange(const GlobalMoveExchange &st) = delete;
+  /// Disable (implicit) copies.
+  GlobalMoveExchange &operator=(GlobalMoveExchange const &a) = delete;
+
   /// Number of remote ranks to send particles to.
   int num_remote_send_ranks;
   /// Number of remote ranks to recv particles from.
@@ -45,25 +52,34 @@ public:
   BufferHost<int> h_recv_rank_npart;
 
   /// Compute device used by the instance.
-  SYCLTarget &sycl_target;
+  SYCLTargetSharedPtr sycl_target;
 
-  ~GlobalMoveExchange() { MPICHK(MPI_Win_free(&this->recv_win)); };
+  /// Explicitly free a ParticleGroup without relying on out-of-scope
+  // destructor calls.
+  inline void free() {
+    if (this->recv_win_allocated) {
+      MPICHK(MPI_Win_free(&this->recv_win));
+      this->recv_win_allocated = false;
+    }
+  };
+  ~GlobalMoveExchange() { this->free(); };
 
   /**
    * Construct a new instance to exchange particle counts and data.
    *
-   * @param sycl_target SYCLTarget to use as compute device.
+   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
    */
-  GlobalMoveExchange(SYCLTarget &sycl_target)
+  GlobalMoveExchange(SYCLTargetSharedPtr sycl_target)
       : sycl_target(sycl_target), h_send_ranks(sycl_target, 1),
         h_recv_ranks(sycl_target, 1), h_send_rank_npart(sycl_target, 1),
         h_recv_rank_npart(sycl_target, 1), h_send_requests(sycl_target, 1),
         h_recv_requests(sycl_target, 1), h_recv_status(sycl_target, 1),
-        comm(sycl_target.comm_pair.comm_parent) {
+        comm(sycl_target->comm_pair.comm_parent) {
     // Create a MPI_Win used to sum the number of remote ranks that will
     // send particles to this rank.
     MPICHK(MPI_Win_allocate(sizeof(int), sizeof(int), MPI_INFO_NULL, this->comm,
                             &this->recv_win_data, &this->recv_win));
+    this->recv_win_allocated = true;
   };
 
   /**
@@ -105,7 +121,7 @@ public:
     for (int rx = 0; rx < num_remote_send_ranks; rx++) {
       const int rank_tmp = dh_send_ranks.h_buffer.ptr[rx];
       NESOASSERT(
-          ((rank_tmp >= 0) && (rank_tmp < sycl_target.comm_pair.size_parent)),
+          ((rank_tmp >= 0) && (rank_tmp < sycl_target->comm_pair.size_parent)),
           "Invalid rank");
       this->h_send_ranks.ptr[rx] = rank_tmp;
       const int npart_tmp = h_send_rank_npart.ptr[rx];
@@ -113,11 +129,13 @@ public:
       this->h_send_rank_npart.ptr[rx] = npart_tmp;
     }
 
-    sycl_target.profile_map.inc("GlobalMoveExchange", "npart_exchange_sendrecv_pre_wait", 1,
-                                profile_elapsed(t0, profile_timestamp()));
+    sycl_target->profile_map.inc("GlobalMoveExchange",
+                                 "npart_exchange_sendrecv_pre_wait", 1,
+                                 profile_elapsed(t0, profile_timestamp()));
     MPICHK(MPI_Wait(&this->mpi_request, MPI_STATUS_IGNORE));
-    sycl_target.profile_map.inc("GlobalMoveExchange", "npart_exchange_sendrecv_post_wait", 1,
-                                profile_elapsed(t0, profile_timestamp()));
+    sycl_target->profile_map.inc("GlobalMoveExchange",
+                                 "npart_exchange_sendrecv_post_wait", 1,
+                                 profile_elapsed(t0, profile_timestamp()));
 
     const int one[1] = {1};
     int recv[1];
@@ -130,13 +148,14 @@ public:
                                 MPI_INT, MPI_SUM, this->recv_win));
       MPICHK(MPI_Win_unlock(rank, this->recv_win));
     }
-    sycl_target.profile_map.inc("GlobalMoveExchange", "RMA", 1,
-                                profile_elapsed(t0_rma, profile_timestamp()));
+    sycl_target->profile_map.inc("GlobalMoveExchange", "RMA", 1,
+                                 profile_elapsed(t0_rma, profile_timestamp()));
 
     MPICHK(MPI_Ibarrier(this->comm, &this->mpi_request));
 
-    sycl_target.profile_map.inc("GlobalMoveExchange", "npart_exchange_sendrecv", 1,
-                                profile_elapsed(t0, profile_timestamp()));
+    sycl_target->profile_map.inc("GlobalMoveExchange",
+                                 "npart_exchange_sendrecv", 1,
+                                 profile_elapsed(t0, profile_timestamp()));
   }
 
   /**
@@ -183,7 +202,7 @@ public:
       const int remote_rank = this->h_recv_status.ptr[rankx].MPI_SOURCE;
       this->h_recv_ranks.ptr[rankx] = remote_rank;
       NESOASSERT(((remote_rank >= 0) &&
-                  (remote_rank < this->sycl_target.comm_pair.size_parent)),
+                  (remote_rank < this->sycl_target->comm_pair.size_parent)),
                  "Recv rank is invalid.");
       NESOASSERT((this->h_recv_rank_npart.ptr[rankx] > 0),
                  "A remote rank is trying to send 0 (or fewer) particles to "
@@ -192,8 +211,9 @@ public:
 
     MPICHK(MPI_Waitall(this->num_remote_send_ranks, this->h_send_requests.ptr,
                        this->h_recv_status.ptr));
-    sycl_target.profile_map.inc("GlobalMoveExchange", "npart_send_recv", 1,
-                                profile_elapsed(t0_npart, profile_timestamp()));
+    sycl_target->profile_map.inc(
+        "GlobalMoveExchange", "npart_send_recv", 1,
+        profile_elapsed(t0_npart, profile_timestamp()));
   }
 
   /**
@@ -241,8 +261,8 @@ public:
                     &this->h_send_requests.ptr[rankx]));
     }
 
-    sycl_target.profile_map.inc("GlobalMoveExchange", "exchange_init", 1,
-                                profile_elapsed(t0, profile_timestamp()));
+    sycl_target->profile_map.inc("GlobalMoveExchange", "exchange_init", 1,
+                                 profile_elapsed(t0, profile_timestamp()));
   }
 
   /**

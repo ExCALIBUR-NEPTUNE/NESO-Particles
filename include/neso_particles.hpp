@@ -1,6 +1,8 @@
 #ifndef _NESO_PARTICLES
 #define _NESO_PARTICLES
 
+#include <memory>
+
 #include "access.hpp"
 #include "boundary_conditions.hpp"
 #include "cartesian_mesh.hpp"
@@ -13,6 +15,7 @@
 #include "local_move.hpp"
 #include "mesh_hierarchy.hpp"
 #include "mesh_interface.hpp"
+#include "mesh_interface_local_decomp.hpp"
 #include "particle_dat.hpp"
 #include "particle_group.hpp"
 #include "particle_io.hpp"

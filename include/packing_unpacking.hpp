@@ -28,9 +28,9 @@ private:
   BufferDeviceHost<int> dh_particle_dat_ncomp_real;
   BufferDeviceHost<int> dh_particle_dat_ncomp_int;
 
-  inline size_t
-  particle_size(std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
-                std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int) {
+  inline size_t particle_size(
+      std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
+      std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int) {
     size_t s = 0;
     for (auto &dat : particle_dats_real) {
       s += dat.second->cell_dat.row_size();
@@ -42,8 +42,8 @@ private:
   };
 
   inline void get_particle_dat_info(
-      std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
-      std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int) {
+      std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
+      std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int) {
 
     num_dats_real = particle_dats_real.size();
     dh_particle_dat_ptr_real.realloc_no_copy(num_dats_real);
@@ -80,6 +80,11 @@ private:
   }
 
 public:
+  /// Disable (implicit) copies.
+  ParticlePacker(const ParticlePacker &st) = delete;
+  /// Disable (implicit) copies.
+  ParticlePacker &operator=(ParticlePacker const &a) = delete;
+
   /// Number of bytes required per particle packed.
   int num_bytes_per_particle;
   /// CellDat used to pack the particles to be sent to each remote rank on the
@@ -92,16 +97,16 @@ public:
   /// Required length of the send buffer.
   INT required_send_buffer_length;
   /// Compute device used by the instance.
-  SYCLTarget &sycl_target;
+  SYCLTargetSharedPtr sycl_target;
   ~ParticlePacker(){};
   /**
    * Construct a particle packing object on a compute device.
    *
-   * @param sycl_target SYCLTarget to use as compute device.
+   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
    */
-  ParticlePacker(SYCLTarget &sycl_target)
+  ParticlePacker(SYCLTargetSharedPtr sycl_target)
       : sycl_target(sycl_target),
-        cell_dat(sycl_target, sycl_target.comm_pair.size_parent, 1),
+        cell_dat(sycl_target, sycl_target->comm_pair.size_parent, 1),
         h_send_buffer(sycl_target, 1), h_send_offsets(sycl_target, 1),
         dh_particle_dat_ptr_real(sycl_target, 1),
         dh_particle_dat_ptr_int(sycl_target, 1),
@@ -126,7 +131,7 @@ public:
     this->h_send_buffer.realloc_no_copy(this->required_send_buffer_length);
     this->h_send_offsets.realloc_no_copy(num_remote_send_ranks);
     NESOASSERT((this->cell_dat.ncells) >=
-                   (this->sycl_target.comm_pair.size_parent),
+                   (this->sycl_target->comm_pair.size_parent),
                "Insuffient cells");
 
     INT offset = 0;
@@ -134,9 +139,12 @@ public:
     for (int rankx = 0; rankx < num_remote_send_ranks; rankx++) {
       const int npart_tmp = h_send_rank_npart_ptr[rankx];
       const int nbytes_tmp = npart_tmp * this->num_bytes_per_particle;
+
       auto device_ptr = this->cell_dat.col_device_ptr(rankx, 0);
-      copy_events.push(this->sycl_target.queue.memcpy(
-          &this->h_send_buffer.ptr[offset], device_ptr, nbytes_tmp));
+      if (nbytes_tmp > 0) {
+        copy_events.push(this->sycl_target->queue.memcpy(
+            &this->h_send_buffer.ptr[offset], device_ptr, nbytes_tmp));
+      }
       this->h_send_offsets.ptr[rankx] = offset;
       offset += nbytes_tmp;
     }
@@ -174,8 +182,8 @@ public:
        BufferDeviceHost<int> &dh_send_rank_map, const int num_particles_leaving,
        BufferDevice<int> &d_pack_cells, BufferDevice<int> &d_pack_layers_src,
        BufferDevice<int> &d_pack_layers_dst,
-       std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
-       std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int,
+       std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
+       std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int,
        const int rank_component = 0) {
 
     auto t0 = profile_timestamp();
@@ -222,50 +230,51 @@ public:
 
     auto k_pack_cell_dat = this->cell_dat.device_ptr();
 
-    sycl_target.profile_map.inc("ParticlePacker", "pack_prepare", 1,
-                                profile_elapsed(t0, profile_timestamp()));
+    sycl_target->profile_map.inc("ParticlePacker", "pack_prepare", 1,
+                                 profile_elapsed(t0, profile_timestamp()));
 
-    sycl::event event = this->sycl_target.queue.submit([&](sycl::handler &cgh) {
-      cgh.parallel_for<>(
-          // for each leaving particle
-          sycl::range<1>(static_cast<size_t>(num_particles_leaving)),
-          [=](sycl::id<1> idx) {
-            const int cell = k_pack_cells[idx];
-            const int layer_src = k_pack_layers_src[idx];
-            const int layer_dst = k_pack_layers_dst[idx];
-            const int rank =
-                k_particle_dat_rank[cell][k_rank_component][layer_src];
-            const int rank_packing_cell = k_send_rank_map[rank];
+    sycl::event event =
+        this->sycl_target->queue.submit([&](sycl::handler &cgh) {
+          cgh.parallel_for<>(
+              // for each leaving particle
+              sycl::range<1>(static_cast<size_t>(num_particles_leaving)),
+              [=](sycl::id<1> idx) {
+                const int cell = k_pack_cells[idx];
+                const int layer_src = k_pack_layers_src[idx];
+                const int layer_dst = k_pack_layers_dst[idx];
+                const int rank =
+                    k_particle_dat_rank[cell][k_rank_component][layer_src];
+                const int rank_packing_cell = k_send_rank_map[rank];
 
-            char *base_pack_ptr =
-                &k_pack_cell_dat[rank_packing_cell][0]
-                                [layer_dst * k_num_bytes_per_particle];
-            REAL *pack_ptr_real = (REAL *)base_pack_ptr;
-            // for each real dat
-            int index = 0;
-            for (int dx = 0; dx < k_num_dats_real; dx++) {
-              REAL ***dat_ptr = k_particle_dat_ptr_real[dx];
-              const int ncomp = k_particle_dat_ncomp_real[dx];
-              // for each component
-              for (int cx = 0; cx < ncomp; cx++) {
-                pack_ptr_real[index + cx] = dat_ptr[cell][cx][layer_src];
-              }
-              index += ncomp;
-            }
-            // for each int dat
-            INT *pack_ptr_int = (INT *)(pack_ptr_real + index);
-            index = 0;
-            for (int dx = 0; dx < k_num_dats_int; dx++) {
-              INT ***dat_ptr = k_particle_dat_ptr_int[dx];
-              const int ncomp = k_particle_dat_ncomp_int[dx];
-              // for each component
-              for (int cx = 0; cx < ncomp; cx++) {
-                pack_ptr_int[index + cx] = dat_ptr[cell][cx][layer_src];
-              }
-              index += ncomp;
-            }
-          });
-    });
+                char *base_pack_ptr =
+                    &k_pack_cell_dat[rank_packing_cell][0]
+                                    [layer_dst * k_num_bytes_per_particle];
+                REAL *pack_ptr_real = (REAL *)base_pack_ptr;
+                // for each real dat
+                int index = 0;
+                for (int dx = 0; dx < k_num_dats_real; dx++) {
+                  REAL ***dat_ptr = k_particle_dat_ptr_real[dx];
+                  const int ncomp = k_particle_dat_ncomp_real[dx];
+                  // for each component
+                  for (int cx = 0; cx < ncomp; cx++) {
+                    pack_ptr_real[index + cx] = dat_ptr[cell][cx][layer_src];
+                  }
+                  index += ncomp;
+                }
+                // for each int dat
+                INT *pack_ptr_int = (INT *)(pack_ptr_real + index);
+                index = 0;
+                for (int dx = 0; dx < k_num_dats_int; dx++) {
+                  INT ***dat_ptr = k_particle_dat_ptr_int[dx];
+                  const int ncomp = k_particle_dat_ncomp_int[dx];
+                  // for each component
+                  for (int cx = 0; cx < ncomp; cx++) {
+                    pack_ptr_int[index + cx] = dat_ptr[cell][cx][layer_src];
+                  }
+                  index += ncomp;
+                }
+              });
+        });
 
     return event;
   };
@@ -284,11 +293,11 @@ private:
   BufferDeviceHost<int> dh_particle_dat_ncomp_real;
   BufferDeviceHost<int> dh_particle_dat_ncomp_int;
 
-  BufferHost<char> d_recv_buffer;
+  BufferDevice<char> d_recv_buffer;
 
-  inline size_t
-  particle_size(std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
-                std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int) {
+  inline size_t particle_size(
+      std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
+      std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int) {
     size_t s = 0;
     for (auto &dat : particle_dats_real) {
       s += dat.second->cell_dat.row_size();
@@ -301,8 +310,8 @@ private:
   };
 
   inline void get_particle_dat_info(
-      std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
-      std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int) {
+      std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
+      std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int) {
 
     num_dats_real = particle_dats_real.size();
     dh_particle_dat_ptr_real.realloc_no_copy(num_dats_real);
@@ -339,6 +348,11 @@ private:
   }
 
 public:
+  /// Disable (implicit) copies.
+  ParticleUnpacker(const ParticleUnpacker &st) = delete;
+  /// Disable (implicit) copies.
+  ParticleUnpacker &operator=(ParticleUnpacker const &a) = delete;
+
   /// Host buffer to receive particle data into from MPI operations.
   BufferHost<char> h_recv_buffer;
   /// Offsets into the recv buffer for each remote rank that will send to this
@@ -349,15 +363,15 @@ public:
   /// Number of bytes per particle.
   int num_bytes_per_particle;
   /// Compute device used by the instance.
-  SYCLTarget &sycl_target;
+  SYCLTargetSharedPtr sycl_target;
   ~ParticleUnpacker(){};
 
   /**
    * Construct an unpacking object.
    *
-   * @param sycl_target SYCLTarget to use as compute device.
+   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
    */
-  ParticleUnpacker(SYCLTarget &sycl_target)
+  ParticleUnpacker(SYCLTargetSharedPtr sycl_target)
       : sycl_target(sycl_target), h_recv_buffer(sycl_target, 1),
         h_recv_offsets(sycl_target, 1), d_recv_buffer(sycl_target, 1),
         dh_particle_dat_ptr_real(sycl_target, 1),
@@ -378,8 +392,8 @@ public:
    */
   inline void
   reset(const int num_remote_recv_ranks, BufferHost<int> &h_recv_rank_npart,
-        std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
-        std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int) {
+        std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
+        std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int) {
 
     // realloc the array that holds where in the recv buffer the data from each
     // remote rank should be placed
@@ -411,15 +425,19 @@ public:
    * @param particle_dats_int Container of INT ParticleDat instances to unpack.
    */
   inline void
-  unpack(std::map<Sym<REAL>, ParticleDatShPtr<REAL>> &particle_dats_real,
-         std::map<Sym<INT>, ParticleDatShPtr<INT>> &particle_dats_int) {
+  unpack(std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
+         std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int) {
 
     auto t0 = profile_timestamp();
 
     // copy packed data to device
-    auto event_memcpy = this->sycl_target.queue.memcpy(
-        this->d_recv_buffer.ptr, this->h_recv_buffer.ptr,
-        this->npart_recv * this->num_bytes_per_particle);
+
+    const int cpysize = this->npart_recv * this->num_bytes_per_particle;
+    sycl::event event_memcpy;
+    if (cpysize > 0) {
+      event_memcpy = this->sycl_target->queue.memcpy(
+          this->d_recv_buffer.ptr, this->h_recv_buffer.ptr, cpysize);
+    }
 
     // old cell occupancy
     auto mpi_rank_dat = particle_dats_int[Sym<INT>("NESO_MPI_RANK")];
@@ -461,10 +479,14 @@ public:
         this->dh_particle_dat_ncomp_int.d_buffer.ptr;
     char *k_recv_buffer = this->d_recv_buffer.ptr;
 
-    sycl_target.profile_map.inc("ParticleUnpacker", "unpack_prepare", 1,
-                                profile_elapsed(t0, profile_timestamp()));
-    event_memcpy.wait_and_throw();
-    this->sycl_target.queue
+    sycl_target->profile_map.inc("ParticleUnpacker", "unpack_prepare", 1,
+                                 profile_elapsed(t0, profile_timestamp()));
+
+    if (cpysize > 0) {
+      event_memcpy.wait_and_throw();
+    }
+
+    this->sycl_target->queue
         .submit([&](sycl::handler &cgh) {
           cgh.parallel_for<>(
               // for each new particle

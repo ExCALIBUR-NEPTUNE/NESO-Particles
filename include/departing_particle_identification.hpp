@@ -19,9 +19,14 @@ namespace NESO::Particles {
 class DepartingIdentify {
 
 private:
-  SYCLTarget &sycl_target;
+  SYCLTargetSharedPtr sycl_target;
 
 public:
+  /// Disable (implicit) copies.
+  DepartingIdentify(const DepartingIdentify &st) = delete;
+  /// Disable (implicit) copies.
+  DepartingIdentify &operator=(DepartingIdentify const &a) = delete;
+
   /// Array of unique MPI ranks that particles should be sent to.
   BufferDeviceHost<int> dh_send_ranks;
   /// Array of length equal to the communicator size indicating how many
@@ -43,21 +48,21 @@ public:
   BufferDeviceHost<int> dh_num_particle_send;
 
   /// ParticleDat containing MPI ranks.
-  ParticleDatShPtr<INT> mpi_rank_dat;
+  ParticleDatSharedPtr<INT> mpi_rank_dat;
 
   ~DepartingIdentify(){};
 
   /**
    * Create a new instance of this class.
    *
-   * @param sycl_target SYCLTarget to use as compute device.
+   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
    */
-  DepartingIdentify(SYCLTarget &sycl_target)
+  DepartingIdentify(SYCLTargetSharedPtr sycl_target)
       : sycl_target(sycl_target),
-        dh_send_ranks(sycl_target, sycl_target.comm_pair.size_parent),
+        dh_send_ranks(sycl_target, sycl_target->comm_pair.size_parent),
         dh_send_counts_all_ranks(sycl_target,
-                                 sycl_target.comm_pair.size_parent),
-        dh_send_rank_map(sycl_target, sycl_target.comm_pair.size_parent),
+                                 sycl_target->comm_pair.size_parent),
+        dh_send_rank_map(sycl_target, sycl_target->comm_pair.size_parent),
         d_pack_cells(sycl_target, 1), d_pack_layers_src(sycl_target, 1),
         d_pack_layers_dst(sycl_target, 1), dh_num_ranks_send(sycl_target, 1),
         dh_num_particle_send(sycl_target, 1){};
@@ -67,7 +72,7 @@ public:
    *
    * @param mpi_rank_dat ParticleDat containing MPI ranks.
    */
-  inline void set_mpi_rank_dat(ParticleDatShPtr<INT> mpi_rank_dat) {
+  inline void set_mpi_rank_dat(ParticleDatSharedPtr<INT> mpi_rank_dat) {
     this->mpi_rank_dat = mpi_rank_dat;
   }
 
@@ -85,8 +90,8 @@ public:
   inline void identify(const int rank_component = 0) {
     auto t0 = profile_timestamp();
 
-    const int comm_size = this->sycl_target.comm_pair.size_parent;
-    const int comm_rank = this->sycl_target.comm_pair.rank_parent;
+    const int comm_size = this->sycl_target->comm_pair.size_parent;
+    const int comm_rank = this->sycl_target->comm_pair.rank_parent;
 
     NESOASSERT(this->mpi_rank_dat.get() != nullptr,
                "MPI rank dat is not defined");
@@ -109,20 +114,20 @@ public:
     auto k_num_particle_send = this->dh_num_particle_send.d_buffer.ptr;
 
     // zero the send/recv counts
-    this->sycl_target.queue.submit([&](sycl::handler &cgh) {
+    this->sycl_target->queue.submit([&](sycl::handler &cgh) {
       cgh.parallel_for<>(sycl::range<1>(comm_size), [=](sycl::id<1> idx) {
         k_send_ranks[idx] = 0;
         k_send_counts_all_ranks[idx] = 0;
       });
     });
     // zero the number of ranks involved with send/recv
-    this->sycl_target.queue.submit([&](sycl::handler &cgh) {
+    this->sycl_target->queue.submit([&](sycl::handler &cgh) {
       cgh.single_task<>([=]() {
         k_num_ranks_send[0] = 0;
         k_num_particle_send[0] = 0;
       });
     });
-    sycl_target.queue.wait_and_throw();
+    sycl_target->queue.wait_and_throw();
     // loop over all particles - for leaving particles atomically compute the
     // packing layer by incrementing the send count for the report rank and
     // increment the counter for the number of remote ranks to send to
@@ -130,7 +135,7 @@ public:
     const INT INT_comm_rank = static_cast<INT>(comm_rank);
     auto d_neso_mpi_rank = this->mpi_rank_dat->cell_dat.device_ptr();
 
-    this->sycl_target.queue
+    this->sycl_target->queue
         .submit([&](sycl::handler &cgh) {
           cgh.parallel_for<>(
               sycl::range<1>(pl_iter_range), [=](sycl::id<1> idx) {
@@ -192,8 +197,8 @@ public:
     e3.wait();
     e4.wait();
 
-    sycl_target.profile_map.inc("DepartingIdentify", "identify", 1,
-                                profile_elapsed(t0, profile_timestamp()));
+    sycl_target->profile_map.inc("DepartingIdentify", "identify", 1,
+                                 profile_elapsed(t0, profile_timestamp()));
   }
 };
 
