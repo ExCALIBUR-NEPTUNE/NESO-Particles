@@ -66,5 +66,9 @@ install(DIRECTORY ${CMAKE_SOURCE_DIR}/include
 # install the cmake files
 install(DIRECTORY ${CMAKE_SOURCE_DIR}/cmake DESTINATION ${CMAKE_INSTALL_PREFIX})
 
+option(ENABLE_NESO_PARTICLES_TESTS "Build unit tests for this project." ON)
+
 # Include test directory
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/test)
+if(ENABLE_NESO_PARTICLES_TESTS)
+  add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/test)
+endif()
