@@ -17,23 +17,16 @@ jobs:
         run: |
           ls -l
           pip3 install -r ./docs/sphinx/requirements.txt
-      - name: Doxygen build
-        working-directory: ./docs/doxygen
+      - name: Build docs
+        working-directory: ./docs/
         run: |
-          make
-          ls ../build
-      - name: Sphinx build
-        working-directory: ./docs/sphinx
-        run: |
-          make html
-          ls ../build
+          bash build_branch_docs.sh
       - name: Build Website
         working-directory: ./docs/
         run: |
           ls build
           mkdir -p /tmp/gh-pages
-          cp -r ./build/sphinx/html/* /tmp/gh-pages/.
-          cp -r ./build/doxygen /tmp/gh-pages/.
+          cp -r ./build/* /tmp/gh-pages/.
           touch /tmp/gh-pages/.nojekyll
           ls /tmp/gh-pages
       - name: Push Website
