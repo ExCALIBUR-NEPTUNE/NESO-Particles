@@ -15,6 +15,8 @@ do
     echo $BX
     echo $(pwd)
     git checkout $BX
+    echo "$BX" > ./sphinx/docs_version
+    cat ./sphinx/docs_version
     make
     BRANCH_OUTPUT=${OUTPUT_DIR}/$BX
     mkdir -p ${BRANCH_OUTPUT}

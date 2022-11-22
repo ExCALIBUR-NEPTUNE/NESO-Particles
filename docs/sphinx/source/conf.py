@@ -32,13 +32,17 @@ html_sidebars = {
     "*": ["sidebar-nav-bs"]
 }
 
+with open("./docs_version") as fh:
+    version = fh.read().strip()
+
 html_theme_options = {
     "check_switcher": False,
     "switcher": {
         "json_url": "http://127.0.0.1:8000/switcher.json",
-    }
+        "version_match": version,
+    },
+    "navbar_start": ["navbar-logo", "version-switcher"]
 }
-
 
 breathe_projects = {"NESO-Particles": "../../build/doxygen/xml"}
 breathe_default_project = "NESO-Particles"
