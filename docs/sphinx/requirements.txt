@@ -1,2 +1,3 @@
 sphinx
 breathe
+pydata-sphinx-theme

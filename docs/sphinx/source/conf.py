@@ -24,8 +24,20 @@ exclude_patterns = []
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
-html_theme = 'alabaster'
+#html_theme = 'alabaster'
+html_theme = "pydata_sphinx_theme"
 html_static_path = ['_static']
+
+html_sidebars = {
+    "*": ["sidebar-nav-bs"]
+}
+
+html_theme_options = {
+    "check_switcher": False,
+    "switcher": {
+        "json_url": "http://127.0.0.1:8000/switcher.json",
+    }
+}
 
 
 breathe_projects = {"NESO-Particles": "../../build/doxygen/xml"}
