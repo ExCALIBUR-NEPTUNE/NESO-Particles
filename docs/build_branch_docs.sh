@@ -2,7 +2,8 @@
 
 OUTPUT_DIR=$(pwd)/build
 mkdir -p ${OUTPUT_DIR}
-BRANCHES="dev-docs"
+BRANCHES=$(python3 -c "import json; print(' '.join([fx['version'] for fx in json.loads(open('./switcher.json').read())]))")
+echo $BRANCHES
 REPO=https://github.com/ExCALIBUR-NEPTUNE/NESO-Particles.git
 
 mkdir /tmp/repo-checkout
@@ -15,7 +16,7 @@ do
     echo $BX
     echo $(pwd)
     git checkout $BX
-    echo "$BX" > ./sphinx/docs_version
+    echo "$BX" > ./sphinx/source/docs_version
     cat ./sphinx/docs_version
     make
     BRANCH_OUTPUT=${OUTPUT_DIR}/$BX
