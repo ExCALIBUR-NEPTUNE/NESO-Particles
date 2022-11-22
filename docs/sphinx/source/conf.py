@@ -38,7 +38,7 @@ with open("./docs_version") as fh:
 html_theme_options = {
     "check_switcher": False,
     "switcher": {
-        "json_url": "http://127.0.0.1:8000/switcher.json",
+        "json_url": "https://raw.githubusercontent.com/ExCALIBUR-NEPTUNE/NESO-Particles/dev-docs/docs/switcher.json",
         "version_match": version,
     },
     "navbar_start": ["navbar-logo", "version-switcher"]
