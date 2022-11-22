@@ -1,5 +1,9 @@
 [
     {
+        "version": "main",
+        "url": "https://excalibur-neptune.github.io/NESO-Particles/main/sphinx/html/"
+    },
+    {
         "version": "dev-docs",
         "url": "https://excalibur-neptune.github.io/NESO-Particles/dev-docs/sphinx/html/"
     }

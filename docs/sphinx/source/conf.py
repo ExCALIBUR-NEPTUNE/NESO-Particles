@@ -28,9 +28,9 @@ exclude_patterns = []
 html_theme = "pydata_sphinx_theme"
 html_static_path = ['_static']
 
-html_sidebars = {
-    "*": ["sidebar-nav-bs"]
-}
+#html_sidebars = {
+#    "*": ["sidebar-nav-bs"]
+#}
 
 with open("./docs_version") as fh:
     version = fh.read().strip()
@@ -38,11 +38,16 @@ with open("./docs_version") as fh:
 html_theme_options = {
     "check_switcher": False,
     "switcher": {
-        "json_url": "https://raw.githubusercontent.com/ExCALIBUR-NEPTUNE/NESO-Particles/dev-docs/docs/switcher.json",
+        "json_url": "https://raw.githubusercontent.com/ExCALIBUR-NEPTUNE/NESO-Particles/main/docs/switcher.json",
         "version_match": version,
     },
-    "navbar_start": ["navbar-logo", "version-switcher"]
+    "navbar_start": ["navbar-logo", "version-switcher"],
+    "primary_sidebar_end": [],
 }
+
+#html_sidebars = {
+#    "*": ["sidebar-nav-bs",]
+#}
 
 breathe_projects = {"NESO-Particles": "../../build/doxygen/xml"}
 breathe_default_project = "NESO-Particles"
