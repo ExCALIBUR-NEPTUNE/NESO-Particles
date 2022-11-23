@@ -16,7 +16,7 @@ release = '0.0.1'
 
 extensions = ["breathe"]
 
-templates_path = ['_templates']
+# templates_path = ['_templates']
 exclude_patterns = []
 
 
@@ -32,18 +32,23 @@ html_static_path = ['_static']
 #    "*": ["sidebar-nav-bs"]
 #}
 
-with open("./docs_version") as fh:
-    version = fh.read().strip()
 
-html_theme_options = {
-    "check_switcher": False,
-    "switcher": {
-        "json_url": "https://raw.githubusercontent.com/ExCALIBUR-NEPTUNE/NESO-Particles/main/docs/switcher.json",
-        "version_match": version,
-    },
-    "navbar_start": ["navbar-logo", "version-switcher"],
-    "primary_sidebar_end": [],
-}
+import os
+docs_version = "./docs_version"
+if os.path.exists(docs_version):
+
+    with open(docs_version) as fh:
+        version = fh.read().strip()
+
+    html_theme_options = {
+        "check_switcher": False,
+        "switcher": {
+            "json_url": "https://raw.githubusercontent.com/ExCALIBUR-NEPTUNE/NESO-Particles/main/docs/switcher.json",
+            "version_match": version,
+        },
+        "navbar_start": ["navbar-logo", "version-switcher"],
+        "primary_sidebar_end": [],
+    }
 
 #html_sidebars = {
 #    "*": ["sidebar-nav-bs",]
