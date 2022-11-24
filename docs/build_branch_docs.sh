@@ -20,6 +20,9 @@ cd /tmp/repo-checkout
 git clone $REPO
 cd NESO-Particles/docs
 
+# copy the redirecting index to the output directory
+cp ./redirect_index.html ${OUTPUT_DIR}/index.html
+
 # checkout each version to build and build the docs for that version in tmp
 for BX in $BRANCHES
 do

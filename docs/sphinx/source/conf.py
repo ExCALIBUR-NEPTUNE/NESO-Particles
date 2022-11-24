@@ -9,7 +9,7 @@
 project = 'NESO-Particles'
 copyright = '2022, UKAEA'
 author = 'UKAEA'
-release = '0.0.1'
+release = ''
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -31,6 +31,8 @@ html_sidebars = {
 }
 
 html_theme_options = {
+    "navbar_start": ["navbar-logo"],
+    "navbar_align": "left",
     "primary_sidebar_end": [],
     "navigation_depth": 0,
     "show_nav_level": 3
