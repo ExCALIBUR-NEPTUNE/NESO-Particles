@@ -46,7 +46,7 @@ if os.path.exists(docs_version):
     html_theme_options.update({
         "check_switcher": False,
         "switcher": {
-            "json_url": "https://raw.githubusercontent.com/ExCALIBUR-NEPTUNE/NESO-Particles/main/docs/switcher.json",
+            "json_url": "https://excalibur-neptune.github.io/NESO-Particles/switcher.json",
             "version_match": version,
         },
         "navbar_start": ["navbar-logo", "version-switcher"]
