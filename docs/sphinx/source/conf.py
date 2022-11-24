@@ -16,22 +16,25 @@ release = '0.0.1'
 
 extensions = ["breathe"]
 
-# templates_path = ['_templates']
+#templates_path = ['_templates']
 exclude_patterns = []
-
 
 
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
-#html_theme = 'alabaster'
 html_theme = "pydata_sphinx_theme"
 html_static_path = ['_static']
 
-#html_sidebars = {
-#    "*": ["sidebar-nav-bs"]
-#}
+html_sidebars = {
+    "**": ["globaltoc.html"]
+}
 
+html_theme_options = {
+    "primary_sidebar_end": [],
+    "navigation_depth": 0,
+    "show_nav_level": 3
+}
 
 import os
 docs_version = "./docs_version"
@@ -40,19 +43,14 @@ if os.path.exists(docs_version):
     with open(docs_version) as fh:
         version = fh.read().strip()
 
-    html_theme_options = {
+    html_theme_options.update({
         "check_switcher": False,
         "switcher": {
             "json_url": "https://raw.githubusercontent.com/ExCALIBUR-NEPTUNE/NESO-Particles/main/docs/switcher.json",
             "version_match": version,
         },
-        "navbar_start": ["navbar-logo", "version-switcher"],
-        "primary_sidebar_end": [],
-    }
-
-#html_sidebars = {
-#    "*": ["sidebar-nav-bs",]
-#}
+        "navbar_start": ["navbar-logo", "version-switcher"]
+    })
 
 breathe_projects = {"NESO-Particles": "../../build/doxygen/xml"}
 breathe_default_project = "NESO-Particles"
