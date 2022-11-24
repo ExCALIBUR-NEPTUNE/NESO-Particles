@@ -4,6 +4,11 @@
 OUTPUT_DIR=$(pwd)/build
 mkdir -p ${OUTPUT_DIR}
 
+# create the versions.json
+python3 generate_versions_json.py
+# copy the generated versions.json to the output dir so that it is included in the deployed website
+cp switcher.json ${OUTPUT_DIR}/.
+
 # determine the branches from the switcher json (could also list tags instead)
 BRANCHES=$(python3 -c "import json; print(' '.join([fx['version'] for fx in json.loads(open('./switcher.json').read())]))")
 echo $BRANCHES
