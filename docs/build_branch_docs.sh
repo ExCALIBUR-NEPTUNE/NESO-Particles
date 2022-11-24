@@ -5,8 +5,8 @@ OUTPUT_DIR=$(pwd)/build
 mkdir -p ${OUTPUT_DIR}
 
 # determine the branches from the switcher json (could also list tags instead)
-BRANCHES=$(python3 -c "import json; print(' '.join([fx['version'] for fx in json.loads(open('./switcher.json').read())]))")
-echo $BRANCHES
+DOCSVERSIONS=$(python3 -c "import json; print(' '.join([fx['version'] for fx in json.loads(open('./switcher.json').read())]))")
+echo $DOCSVERSIONS
 
 # clone the repo into a temporary place
 REPO=https://github.com/ExCALIBUR-NEPTUNE/NESO-Particles.git
@@ -16,7 +16,7 @@ git clone $REPO
 cd NESO-Particles/docs
 
 # checkout each version to build and build the docs for that version in tmp
-for BX in $BRANCHES
+for BX in $DOCSVERSIONS
 do
     echo $BX
     echo $(pwd)
