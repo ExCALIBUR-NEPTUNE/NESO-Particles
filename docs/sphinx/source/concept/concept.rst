@@ -1,6 +1,6 @@
-**********************************
-Overaching Concepts and Motivation
-**********************************
+***********************************
+Overarching Concepts and Motivation
+***********************************
 
 Introduction
 ============
@@ -115,7 +115,7 @@ An overview of the global transfer algorithm is as follows:
 
    1. If the particle is within the sub-domain keep the particle.
    2. If the particle is in a halo cell push the particle onto the set of particles to send to that remote rank using point to point local transfer.
-   3. Otherwise determine the MPI rank that owns the overlayed structured mesh cells and push the particle onto the set of particle indices to send to that remote rank though the global communication mechanism.
+   3. Otherwise determine the MPI rank that owns the super imposed structured mesh cells and push the particle onto the set of particle indices to send to that remote rank though the global communication mechanism.
 2. Exchange particles that must be exchanged using the global transfer mechanism (one sided MPI RMA).
 3. Loop over particles received though the global exchange:
 
