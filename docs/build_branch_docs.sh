@@ -4,9 +4,16 @@
 OUTPUT_DIR=$(pwd)/build
 mkdir -p ${OUTPUT_DIR}
 
-# create the versions.json
+# ensure the tags are up to date
+git fetch
+git fetch --tags
+
+# list tags
+git tag -l
+
+# create the switcher.json
 python3 generate_versions_json.py
-# copy the generated versions.json to the output dir so that it is included in the deployed website
+# copy the generated switcher.json to the output dir so that it is included in the deployed website
 cp switcher.json ${OUTPUT_DIR}/.
 
 # determine the branches from the switcher json (could also list tags instead)
