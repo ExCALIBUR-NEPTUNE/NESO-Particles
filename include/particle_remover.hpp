@@ -8,9 +8,13 @@
 
 namespace NESO::Particles {
 
+/**
+ *  Utility to aid removing particles from a ParticleGroup based on a
+ *  condition.
+ */
 class ParticleRemover {
 private:
-  BufferDeviceHost<INT> dh_remove_count;
+  BufferDeviceHost<int> dh_remove_count;
   BufferDevice<INT> d_remove_cells;
   BufferDevice<INT> d_remove_layers;
   SYCLTargetSharedPtr sycl_target;
@@ -21,6 +25,12 @@ public:
   /// Disable (implicit) copies.
   ParticleRemover &operator=(ParticleRemover const &a) = delete;
 
+  /**
+   *  Construct a remover that operates on ParticleGroups that use the given
+   * SYCLTarget.
+   *
+   *  @param sycl_target SYCLTarget instance.
+   */
   ParticleRemover(SYCLTargetSharedPtr sycl_target)
       : sycl_target(sycl_target), dh_remove_count(sycl_target, 1),
         d_remove_cells(sycl_target, 1), d_remove_layers(sycl_target, 1) {}
@@ -35,9 +45,13 @@ public:
    * should be removed.
    * @param key Key to compare particle values with for removal.
    */
-  template <typename T>
+  template <typename T, typename U>
   inline void remove(ParticleGroupSharedPtr particle_group,
-                     ParticleDatSharedPtr<T> particle_dat, const T key) {
+                     ParticleDatSharedPtr<T> particle_dat, const U key) {
+
+    NESOASSERT(this->sycl_target == particle_group->sycl_target,
+               "Passed ParticleGroup does not contain the sycl_target this "
+               "ParticleRemover was created with.");
 
     auto pl_iter_range = particle_dat->get_particle_loop_iter_range();
     auto pl_stride = particle_dat->get_particle_loop_cell_stride();
@@ -61,7 +75,7 @@ public:
                 const T compare_value = k_compare_dat[cellx][0][layerx];
                 // Is this particle is getting removed?
                 if (compare_value == k_key) {
-                  sycl::atomic_ref<INT, sycl::memory_order::relaxed,
+                  sycl::atomic_ref<int, sycl::memory_order::relaxed,
                                    sycl::memory_scope::device>
                       remove_count_atomic{k_leave_count[0]};
                   remove_count_atomic.fetch_add(1);
@@ -73,7 +87,7 @@ public:
 
     // read from the device the number of particles to remove
     this->dh_remove_count.device_to_host();
-    const INT remove_count = this->dh_remove_count.h_buffer.ptr[0];
+    const int remove_count = this->dh_remove_count.h_buffer.ptr[0];
     if (remove_count > 0) {
       // reset the leave count
       this->dh_remove_count.h_buffer.ptr[0] = 0;
@@ -95,10 +109,10 @@ public:
                   const T compare_value = k_compare_dat[cellx][0][layerx];
                   // Is this particle is getting removed?
                   if (compare_value == k_key) {
-                    sycl::atomic_ref<INT, sycl::memory_order::relaxed,
+                    sycl::atomic_ref<int, sycl::memory_order::relaxed,
                                      sycl::memory_scope::device>
                         remove_count_atomic{k_leave_count[0]};
-                    const INT index = remove_count_atomic.fetch_add(1);
+                    const int index = remove_count_atomic.fetch_add(1);
                     k_remove_cells[index] = cellx;
                     k_remove_layers[index] = layerx;
                   }
@@ -108,8 +122,8 @@ public:
           .wait_and_throw();
 
       // remove the particles from the particle_group
-      particle_group->remove_particles(static_cast<int>(remove_count),
-                                       k_remove_cells, k_remove_layers);
+      particle_group->remove_particles(remove_count, k_remove_cells,
+                                       k_remove_layers);
     }
   }
 };
