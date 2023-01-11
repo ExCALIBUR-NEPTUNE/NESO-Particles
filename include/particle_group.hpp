@@ -544,7 +544,7 @@ template <typename... T> inline void ParticleGroup::print(T... args) {
     for (auto &symx : print_spec.syms_int) {
       std::cout << "| " << symx.name << " ";
     }
-    std::cout << "|" << endl;
+    std::cout << "|" << std::endl;
 
     for (int rowx = 0; rowx < nrow; rowx++) {
       for (auto &cx : cell_data_real) {
