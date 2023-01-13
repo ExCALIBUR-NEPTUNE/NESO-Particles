@@ -101,6 +101,16 @@ public:
    *  @returns std::vector of MPI ranks.
    */
   virtual inline std::vector<int> &get_local_communication_neighbours() = 0;
+  /**
+   *  Get a point in the domain that should be in, or at least close to, the
+   *  sub-domain on this MPI process. Useful for parallel initialisation.
+   *  Returns false if this mesh implementation does not implement this
+   *  feature.
+   *
+   *  @param point Pointer to array of size equal to at least the number of mesh
+   * dimensions.
+   */
+  virtual inline bool get_point_in_subdomain(double *point) { return false; };
 };
 
 typedef std::shared_ptr<HMesh> HMeshSharedPtr;
@@ -371,6 +381,15 @@ public:
   inline std::vector<int> &get_local_communication_neighbours() {
     return this->neighbour_ranks;
   }
+
+  inline bool get_point_in_subdomain(double *point) {
+    for (int dimx = 0; dimx < ndim; dimx++) {
+      const double start = this->cell_starts[dimx] * this->cell_width_fine;
+      const double end = this->cell_ends[dimx] * this->cell_width_fine;
+      point[dimx] = 0.5 * (start + end);
+    }
+    return true;
+  };
 };
 
 typedef std::shared_ptr<CartesianHMesh> CartesianHMeshSharedPtr;
