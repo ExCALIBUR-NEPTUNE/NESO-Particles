@@ -137,7 +137,7 @@ inline void parallel_advection_restore(ParticleGroupSharedPtr particle_group) {
 
 /**
  *  Function used by parallel_advection_initialisation to step particles along a
- * line to destination positions.
+ *  line to the original positions specified by the user.
  *
  *  @param particle_group ParticleGroup being initialised.
  *  @param num_steps Number of steps over which the stepping occurs.
