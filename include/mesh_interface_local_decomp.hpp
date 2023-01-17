@@ -149,7 +149,7 @@ public:
    *
    * @returns MeshHierarchy placed over the mesh.
    */
-  virtual inline std::shared_ptr<MeshHierarchy> get_mesh_hierarchy() {
+  inline std::shared_ptr<MeshHierarchy> get_mesh_hierarchy() {
     return this->mesh_hierarchy;
   };
   /**
@@ -162,8 +162,20 @@ public:
    *
    *  @returns std::vector of MPI ranks.
    */
-  virtual inline std::vector<int> &get_local_communication_neighbours() {
+  inline std::vector<int> &get_local_communication_neighbours() {
     return this->neighbour_ranks;
+  };
+  /**
+   *  Get a point in the domain that should be in, or at least close to, the
+   *  sub-domain on this MPI process. Useful for parallel initialisation.
+   *
+   *  @param point Pointer to array of size equal to at least the number of mesh
+   * dimensions.
+   */
+  inline void get_point_in_subdomain(double *point) {
+    for (int dimx = 0; dimx < this->ndim; dimx++) {
+      point[dimx] = this->global_origin[dimx];
+    }
   };
 };
 

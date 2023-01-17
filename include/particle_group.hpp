@@ -335,10 +335,33 @@ public:
    *  data to print.
    */
   template <typename... T> inline void print(T... args);
+
+  /**
+   *  Remove a ParticleDat from the ParticleGroup
+   *
+   *  @param sym Sym object that refers to a ParticleDat
+   */
+  inline void remove_particle_dat(Sym<REAL> sym) {
+    NESOASSERT(this->particle_dats_real.count(sym) == 1,
+               "ParticleDat not found.");
+    this->particle_dats_real.erase(sym);
+  }
+  /**
+   *  Remove a ParticleDat from the ParticleGroup
+   *
+   *  @param sym Sym object that refers to a ParticleDat
+   */
+  inline void remove_particle_dat(Sym<INT> sym) {
+    NESOASSERT(this->particle_dats_int.count(sym) == 1,
+               "ParticleDat not found.");
+    this->particle_dats_int.erase(sym);
+  }
 };
 
 inline void
 ParticleGroup::add_particle_dat(ParticleDatSharedPtr<REAL> particle_dat) {
+  NESOASSERT(this->particle_dats_real.count(particle_dat->sym) == 0,
+             "ParticleDat Sym already exists in ParticleGroup.");
   this->particle_dats_real[particle_dat->sym] = particle_dat;
   // Does this dat hold particle positions?
   if (particle_dat->positions) {
@@ -354,6 +377,8 @@ ParticleGroup::add_particle_dat(ParticleDatSharedPtr<REAL> particle_dat) {
 }
 inline void
 ParticleGroup::add_particle_dat(ParticleDatSharedPtr<INT> particle_dat) {
+  NESOASSERT(this->particle_dats_int.count(particle_dat->sym) == 0,
+             "ParticleDat Sym already exists in ParticleGroup.");
   this->particle_dats_int[particle_dat->sym] = particle_dat;
   // Does this dat hold particle cell ids?
   if (particle_dat->positions) {

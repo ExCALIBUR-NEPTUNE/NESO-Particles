@@ -45,7 +45,7 @@ include(GoogleTest)
 foreach(TEST ${TEST_SRCS})
   get_filename_component(TEST_NAME ${TEST} NAME_WLE)
   message(STATUS "Found test - ${TEST_NAME}")
-  set(TEST_LIST ${TEST_LIST} ${TEST_NAME})
+  set(TEST_LIST ${TEST_LIST} ${TEST})
 
   set(TEST_SOURCES ${TEST_MAIN} ${TEST})
   add_executable(${TEST_NAME} ${TEST_SOURCES})

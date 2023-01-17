@@ -16,6 +16,7 @@
 #include "mesh_hierarchy.hpp"
 #include "mesh_interface.hpp"
 #include "mesh_interface_local_decomp.hpp"
+#include "parallel_initialisation.hpp"
 #include "particle_dat.hpp"
 #include "particle_group.hpp"
 #include "particle_io.hpp"
