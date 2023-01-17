@@ -18,12 +18,7 @@ namespace {
  */
 inline void get_point_in_local_domain(ParticleGroupSharedPtr particle_group,
                                       double *point) {
-
-  auto mesh = particle_group->domain->mesh;
-  bool is_defined = mesh->get_point_in_subdomain(point);
-  NESOASSERT(is_defined,
-             "This mesh type does not define get_point_in_subdomain which is "
-             "required to use this parallel initialisation system.");
+  particle_group->domain->mesh->get_point_in_subdomain(point);
 }
 
 /**
