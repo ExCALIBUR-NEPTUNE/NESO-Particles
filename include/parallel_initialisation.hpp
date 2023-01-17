@@ -109,9 +109,16 @@ inline void parallel_advection_restore(ParticleGroupSharedPtr particle_group) {
           const INT layerx = NESO_PARTICLES_KERNEL_LAYER;
 
           for (int nx = 0; nx < space_ncomp; nx++) {
+            const REAL position_original = k_ORIG_POS[cellx][nx][layerx];
+            const REAL position_current = k_P[cellx][nx][layerx];
 
-            const bool valid = ABS(k_ORIG_POS[cellx][nx][layerx] -
-                                   k_P[cellx][nx][layerx]) < 1.0e-6;
+            const REAL error_abs = ABS(position_original - position_current);
+            const bool valid_abs = error_abs < 1.0e-6;
+            const REAL position_abs = ABS(position_original);
+            const REAL error_rel =
+                (position_abs == 0) ? 0.0 : error_abs / position_abs;
+            const bool valid_rel = error_rel < 1.0e-6;
+            const bool valid = valid_abs || valid_rel;
 
             NESO_KERNEL_ASSERT(valid, k_ep);
             k_P[cellx][nx][layerx] = k_ORIG_POS[cellx][nx][layerx];
