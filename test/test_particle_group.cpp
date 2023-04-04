@@ -385,3 +385,33 @@ TEST(ParticleGroup, add_particle_dat) {
 
   mesh->free();
 }
+
+TEST(ParticleGroup, get_dat) {
+
+  const int ndim = 2;
+  std::vector<int> dims(ndim);
+  dims[0] = 4;
+  dims[1] = 8;
+
+  const double cell_extent = 1.0;
+  const int subdivision_order = 2;
+  auto mesh = std::make_shared<CartesianHMesh>(MPI_COMM_WORLD, ndim, dims,
+                                               cell_extent, subdivision_order);
+
+  auto sycl_target =
+      std::make_shared<SYCLTarget>(GPU_SELECTOR, mesh->get_comm());
+
+  auto domain = std::make_shared<Domain>(mesh);
+
+  ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
+                             ParticleProp(Sym<REAL>("V"), 3),
+                             ParticleProp(Sym<INT>("CELL_ID"), 1, true),
+                             ParticleProp(Sym<INT>("ID"), 1)};
+
+  auto A = std::make_shared<ParticleGroup>(domain, particle_spec, sycl_target);
+
+  ASSERT_EQ((*A)[Sym<REAL>("P")], A->get_dat(Sym<REAL>("P")));
+
+  ASSERT_EQ((*A)[Sym<INT>("ID")], A->get_dat(Sym<INT>("ID")));
+  mesh->free();
+}
