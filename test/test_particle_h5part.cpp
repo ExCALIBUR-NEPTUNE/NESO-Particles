@@ -45,6 +45,12 @@ TEST(ParticleIO, H5Part) {
                                   ParticleProp(Sym<REAL>("FOO"), 3),
                                   domain->mesh->get_cell_count()));
 
+  H5Part h5parte("test_empty_dump.h5part", A, Sym<REAL>("P"), Sym<REAL>("V"),
+                 Sym<INT>("ID"), Sym<INT>("ID2"), Sym<INT>("NESO_MPI_RANK"));
+
+  h5parte.write();
+  h5parte.close();
+
   std::mt19937 rng_pos(52234234);
   std::mt19937 rng_vel(52234231);
   std::mt19937 rng_rank(18241);
@@ -88,7 +94,6 @@ TEST(ParticleIO, H5Part) {
 
   H5Part h5part("test_dump.h5part", A, Sym<REAL>("P"), Sym<REAL>("V"),
                 Sym<INT>("ID"), Sym<INT>("ID2"), Sym<INT>("NESO_MPI_RANK"));
-
   h5part.write();
   h5part.close();
 
