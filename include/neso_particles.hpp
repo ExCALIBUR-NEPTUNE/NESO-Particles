@@ -26,5 +26,6 @@
 #include "profiling.hpp"
 #include "typedefs.hpp"
 #include "utility.hpp"
+#include "utility_mesh_hierarchy_plotting.hpp"
 
 #endif
