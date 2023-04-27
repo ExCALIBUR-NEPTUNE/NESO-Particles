@@ -72,10 +72,10 @@ protected:
     }
 
     if (ndim > 2) {
-      lines.push_back({{bx, by, bz}, {bx + 1, by, bz + 1}});
-      lines.push_back({{bx, by + 1, bz}, {bx + 1, by + 1, bz + 1}});
-      lines.push_back({{bx, by, bz}, {bx, by + 1, bz + 1}});
-      lines.push_back({{bx + 1, by, bz}, {bx + 1, by + 1, bz + 1}});
+      lines.push_back({{bx, by, bz + 1}, {bx + 1, by, bz + 1}});
+      lines.push_back({{bx, by + 1, bz + 1}, {bx + 1, by + 1, bz + 1}});
+      lines.push_back({{bx, by, bz + 1}, {bx, by + 1, bz + 1}});
+      lines.push_back({{bx + 1, by, bz + 1}, {bx + 1, by + 1, bz + 1}});
 
       lines.push_back({{bx, by, bz}, {bx, by, bz + 1}});
       lines.push_back({{bx + 1, by, bz}, {bx + 1, by, bz + 1}});
