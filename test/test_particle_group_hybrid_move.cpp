@@ -7,12 +7,15 @@
 
 using namespace NESO::Particles;
 
-TEST(ParticleGroup, hybrid_move_multiple) {
+class ParticleGroupHybridMove : public testing::TestWithParam<int> {};
 
-  const int ndim = 2;
-  std::vector<int> dims(ndim);
-  dims[0] = 8;
-  dims[1] = 4;
+TEST_P(ParticleGroupHybridMove, multiple) {
+
+  const int ndim = GetParam();
+  std::vector<int> dims(3);
+  dims[0] = (ndim == 2) ? 8 : 5;
+  dims[1] = (ndim == 2) ? 5 : 4;
+  dims[2] = 3;
 
   const double cell_extent = 1.0;
   const int subdivision_order = 1;
@@ -204,3 +207,6 @@ TEST(ParticleGroup, hybrid_move_multiple) {
   }
   mesh->free();
 }
+
+INSTANTIATE_TEST_SUITE_P(MultipleDim, ParticleGroupHybridMove,
+                         testing::Values(2, 3));
