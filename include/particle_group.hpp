@@ -202,6 +202,17 @@ public:
   inline int get_npart_local() { return this->position_dat->get_npart_local(); }
 
   /**
+   * Template for get_dat method called like:
+   * ParticleGroup::get_dat(Sym<REAL>("POS")) for a real valued ParticleDat.
+   *
+   * @param name Name of ParticleDat.
+   * @returns ParticleDatSharedPtr<T> particle dat.
+   */
+  template <typename T> inline ParticleDatSharedPtr<T> get_dat(Sym<T> sym) {
+    return (*this)[sym];
+  }
+
+  /**
    *  Enables access to the ParticleDat instances using the subscript operators.
    *
    *  @param sym Sym<REAL> of ParticleDat to access.
