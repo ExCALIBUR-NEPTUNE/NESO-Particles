@@ -234,9 +234,10 @@ public:
                     &cell_starts[dimx], &cell_ends[dimx]);
     }
 
-    std::vector<double> origin(2);
-    origin[0] = 0.0;
-    origin[1] = 0.0;
+    std::vector<double> origin(ndim);
+    for (int dimx = 0; dimx < ndim; dimx++) {
+      origin[dimx] = 0.0;
+    }
     // for this mesh the hierarchy is simply a copy of the mesh
     this->mesh_hierarchy = std::make_shared<MeshHierarchy>(
         comm_cart, ndim, dims, origin, cell_width_coarse, subdivision_order);

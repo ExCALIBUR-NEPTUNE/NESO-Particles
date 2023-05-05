@@ -122,6 +122,7 @@ public:
         ncells_coarse(reduce_mul(ndim, dims)),
         ncells_fine(std::pow(std::pow(2, subdivision_order), ndim)) {
     NESOASSERT(dims.size() >= ndim, "vector of dims too small");
+    NESOASSERT(origin.size() >= ndim, "vector of origin too small");
     for (int dimx = 0; dimx < ndim; dimx++) {
       NESOASSERT(dims[dimx] > 0, "Dim size is <= 0 in a direction.");
     }
