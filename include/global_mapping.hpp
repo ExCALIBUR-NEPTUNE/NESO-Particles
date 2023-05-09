@@ -189,10 +189,12 @@ public:
       this->h_origin.ptr[dimx] = mesh_hierarchy->origin[dimx];
       this->h_dims.ptr[dimx] = mesh_hierarchy->dims[dimx];
     }
+
     this->sycl_target->queue
         .memcpy(this->d_origin.ptr, this->h_origin.ptr,
                 this->h_origin.size_bytes())
         .wait();
+
     this->sycl_target->queue
         .memcpy(this->d_dims.ptr, this->h_dims.ptr, this->h_dims.size_bytes())
         .wait();
@@ -227,6 +229,7 @@ public:
                 } else {
                   cell_coarse = 0;
                   k_lookup_global_cells[(idx * k_ndim * 2) + dimx] = -2;
+                  NESO_KERNEL_ASSERT(false, k_error_propagate);
                 }
               } else {
                 k_lookup_global_cells[(idx * k_ndim * 2) + dimx] = cell_coarse;
@@ -246,6 +249,7 @@ public:
                 } else {
                   k_lookup_global_cells[(idx * k_ndim * 2) + dimx + k_ndim] =
                       -2;
+                  NESO_KERNEL_ASSERT(false, k_error_propagate);
                 }
               } else {
                 k_lookup_global_cells[(idx * k_ndim * 2) + dimx + k_ndim] =
@@ -255,6 +259,8 @@ public:
           });
         })
         .wait_and_throw();
+    this->error_propagate.check_and_throw(
+        "Could not bin into MeshHierarchy cell.");
 
     // copy the computed indicies to the host
     if (this->d_lookup_global_cells.size_bytes() > 0) {
