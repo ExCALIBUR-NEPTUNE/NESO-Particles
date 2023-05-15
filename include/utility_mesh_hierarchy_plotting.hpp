@@ -137,7 +137,13 @@ public:
     vtk_file << "POINTS " << this->index_to_verts.size() << " float\n";
 
     const double cell_width = this->mesh_hierarchy->cell_width_fine;
-    auto origin = this->mesh_hierarchy->origin;
+
+    auto origin_mh = this->mesh_hierarchy->origin;
+    double origin[3] = {0.0, 0.0, 0.0};
+    for (int dimx = 0; dimx < ndim; dimx++) {
+      origin[dimx] = origin_mh[dimx];
+    }
+
     for (INT vx = 0; vx < this->next_vert_index; vx++) {
       auto vertex = this->index_to_verts[vx];
       const double x = ((double)std::get<0>(vertex)) * cell_width + origin[0];
