@@ -615,9 +615,17 @@ public:
    */
   ErrorPropagate(SYCLTargetSharedPtr sycl_target)
       : sycl_target(sycl_target), dh_flag(sycl_target, 1) {
+    this->reset();
+  }
+
+  /**
+   *  Reset the internal state. Useful if the instance is used to indicate
+   *  events occurred in a parallel loop that are non fatal.
+   */
+  inline void reset() {
     this->dh_flag.h_buffer.ptr[0] = 0;
     this->dh_flag.host_to_device();
-  };
+  }
 
   /**
    * Get the int device pointer for use in a SYCL kernel. This pointer should
