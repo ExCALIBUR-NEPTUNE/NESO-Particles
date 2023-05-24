@@ -23,4 +23,6 @@ TEST(ErrorPropagate, Flag) {
 
   ASSERT_EQ(ep.get_flag(), 8);
   // ep.check_and_throw("This should abort.");
+  ep.reset();
+  ASSERT_EQ(ep.get_flag(), 0);
 }
