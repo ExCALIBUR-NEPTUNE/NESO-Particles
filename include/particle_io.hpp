@@ -9,7 +9,9 @@
 #include <cstring>
 #include <mpi.h>
 #include <string>
+#ifdef NESO_PARTICLES_HDF5
 #include <hdf5.h>
+#endif
 
 namespace NESO::Particles {
 #ifdef NESO_PARTICLES_HDF5
