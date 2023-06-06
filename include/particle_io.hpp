@@ -15,8 +15,7 @@
 #include <hdf5.h>
 
 #define H5CHK(cmd) NESOASSERT((cmd) >= 0, "HDF5 ERROR");
-namespace NESO {
-namespace Particles {
+namespace NESO::Particles {
 class H5Part {
 
 private:
@@ -312,11 +311,9 @@ public:
     this->step++;
   };
 };
-} // namespace Particles
-} // namespace NESO
+} // namespace NESO::Particles
 #else
-namespace NESO {
-namespace Particles {
+namespace NESO::Particles {
 class H5Part {
 private:
 public:
@@ -356,8 +353,7 @@ public:
    */
   inline void write(INT step_in = -1){};
 };
-} // namespace Particles
-} // namespace NESO
+} // namespace Neso::Particles
 #endif
 
 
