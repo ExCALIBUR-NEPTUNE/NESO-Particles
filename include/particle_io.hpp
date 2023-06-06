@@ -9,13 +9,13 @@
 #include <cstring>
 #include <mpi.h>
 #include <string>
-
-
-#ifdef NESO_PARTICLES_HDF5
 #include <hdf5.h>
 
-#define H5CHK(cmd) NESOASSERT((cmd) >= 0, "HDF5 ERROR");
 namespace NESO::Particles {
+#ifdef NESO_PARTICLES_HDF5
+
+#define H5CHK(cmd) NESOASSERT((cmd) >= 0, "HDF5 ERROR");
+
 class H5Part {
 
 private:
@@ -311,9 +311,9 @@ public:
     this->step++;
   };
 };
-} // namespace NESO::Particles
+
 #else
-namespace NESO::Particles {
+
 class H5Part {
 private:
 public:
@@ -353,8 +353,8 @@ public:
    */
   inline void write(INT step_in = -1){};
 };
-} // namespace Neso::Particles
-#endif
 
+#endif
+} // namespace Neso::Particles
 
 #endif
