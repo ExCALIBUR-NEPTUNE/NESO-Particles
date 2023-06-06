@@ -4,18 +4,18 @@
 #include "particle_group.hpp"
 #include "particle_spec.hpp"
 #include "typedefs.hpp"
-#include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <mpi.h>
 #include <string>
 
-namespace NESO::Particles {
+
 #ifdef NESO_PARTICLES_HDF5
 #include <hdf5.h>
 
 #define H5CHK(cmd) NESOASSERT((cmd) >= 0, "HDF5 ERROR");
-
+namespace NESO {
+namespace Particles {
 class H5Part {
 
 private:
@@ -248,72 +248,72 @@ public:
                      this->comm_pair.comm_parent));
     offset -= npart_local;
 
-    if (npart_total > 0) {
+    // Create a memspace and filespace for the columnwise writes.
+    hsize_t dims_memspace[1] = {static_cast<hsize_t>(npart_local)};
+    hid_t memspace = H5Screate_simple(1, dims_memspace, NULL);
 
-      // Create a memspace and filespace for the columnwise writes.
-      hsize_t dims_memspace[1] = {static_cast<hsize_t>(npart_local)};
-      hid_t memspace = H5Screate_simple(1, dims_memspace, NULL);
+    hsize_t dims_filespace[1] = {static_cast<hsize_t>(npart_total)};
+    hid_t filespace = H5Screate_simple(1, dims_filespace, NULL);
 
-      hsize_t dims_filespace[1] = {static_cast<hsize_t>(npart_total)};
-      hid_t filespace = H5Screate_simple(1, dims_filespace, NULL);
+    hsize_t slab_offsets[1] = {static_cast<hsize_t>(offset)};
+    hsize_t slab_counts[1] = {static_cast<hsize_t>(npart_local)};
 
-      hsize_t slab_offsets[1] = {static_cast<hsize_t>(offset)};
-      hsize_t slab_counts[1] = {static_cast<hsize_t>(npart_local)};
+    // select the hyperslab for the columnwite writes.
+    H5CHK(H5Sselect_hyperslab(filespace, H5S_SELECT_SET, slab_offsets, NULL,
+                              slab_counts, NULL));
+    hid_t dxpl = H5Pcreate(H5P_DATASET_XFER);
+    H5CHK(H5Pset_dxpl_mpio(dxpl, H5FD_MPIO_COLLECTIVE));
 
-      // select the hyperslab for the columnwite writes.
-      H5CHK(H5Sselect_hyperslab(filespace, H5S_SELECT_SET, slab_offsets, NULL,
-                                slab_counts, NULL));
-      hid_t dxpl = H5Pcreate(H5P_DATASET_XFER);
-      H5CHK(H5Pset_dxpl_mpio(dxpl, H5FD_MPIO_COLLECTIVE));
+    // create a host buffer in which to serialise the particle data before
+    // passing to HDF5
+    BufferHost<char> pack_buffer(this->particle_group->sycl_target,
+                                 npart_local * get_max_particle_size());
 
-      // create a host buffer in which to serialise the particle data before
-      // passing to HDF5
-      BufferHost<char> pack_buffer(this->particle_group->sycl_target,
-                                   npart_local * get_max_particle_size());
+    // Write the positions explicitly in a way Paraview interprets as a H5Part
+    // format.
+    write_dat_column_wise(npart_local, pack_buffer,
+                          this->particle_group->position_dat, dxpl, group_step,
+                          memspace, filespace, true);
 
-      // Write the positions explicitly in a way Paraview interprets as a H5Part
-      // format.
-      write_dat_column_wise(npart_local, pack_buffer,
-                            this->particle_group->position_dat, dxpl,
-                            group_step, memspace, filespace, true);
-
-      // Write the particle data for each ParticleDat
-      if (multi_dim_mode) {
-        for (auto &sym : this->sym_store.syms_real) {
-          const auto dat = (*this->particle_group)[sym];
-          this->write_dat_2d(npart_total, npart_local, offset, pack_buffer, dat,
-                             group_step, dxpl);
-        }
-        for (auto &sym : this->sym_store.syms_int) {
-          const auto dat = (*this->particle_group)[sym];
-          this->write_dat_2d(npart_total, npart_local, offset, pack_buffer, dat,
-                             group_step, dxpl);
-        }
-      } else {
-
-        for (auto &sym : this->sym_store.syms_real) {
-          const auto dat = (*this->particle_group)[sym];
-          write_dat_column_wise(npart_local, pack_buffer, dat, dxpl, group_step,
-                                memspace, filespace, false);
-        }
-        for (auto &sym : this->sym_store.syms_int) {
-          const auto dat = (*this->particle_group)[sym];
-          write_dat_column_wise(npart_local, pack_buffer, dat, dxpl, group_step,
-                                memspace, filespace, false);
-        }
+    // Write the particle data for each ParticleDat
+    if (multi_dim_mode) {
+      for (auto &sym : this->sym_store.syms_real) {
+        const auto dat = (*this->particle_group)[sym];
+        this->write_dat_2d(npart_total, npart_local, offset, pack_buffer, dat,
+                           group_step, dxpl);
       }
+      for (auto &sym : this->sym_store.syms_int) {
+        const auto dat = (*this->particle_group)[sym];
+        this->write_dat_2d(npart_total, npart_local, offset, pack_buffer, dat,
+                           group_step, dxpl);
+      }
+    } else {
 
-      H5CHK(H5Pclose(dxpl));
-      H5CHK(H5Sclose(filespace));
-      H5CHK(H5Sclose(memspace));
+      for (auto &sym : this->sym_store.syms_real) {
+        const auto dat = (*this->particle_group)[sym];
+        write_dat_column_wise(npart_local, pack_buffer, dat, dxpl, group_step,
+                              memspace, filespace, false);
+      }
+      for (auto &sym : this->sym_store.syms_int) {
+        const auto dat = (*this->particle_group)[sym];
+        write_dat_column_wise(npart_local, pack_buffer, dat, dxpl, group_step,
+                              memspace, filespace, false);
+      }
     }
+
+    H5CHK(H5Pclose(dxpl));
+    H5CHK(H5Sclose(filespace));
+    H5CHK(H5Sclose(memspace));
+
     H5CHK(H5Gclose(group_step));
     this->step++;
   };
 };
-
+} // namespace Particles
+} // namespace NESO
 #else
-
+namespace NESO {
+namespace Particles {
 class H5Part {
 private:
 public:
@@ -353,8 +353,9 @@ public:
    */
   inline void write(INT step_in = -1){};
 };
-
+} // namespace Particles
+} // namespace NESO
 #endif
 
-} // namespace NESO::Particles
+
 #endif
