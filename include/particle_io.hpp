@@ -357,6 +357,6 @@ public:
 };
 
 #endif
-} // namespace Neso::Particles
+} // namespace NESO::Particles
 
 #endif
