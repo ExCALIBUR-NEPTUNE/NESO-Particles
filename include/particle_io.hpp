@@ -9,10 +9,12 @@
 #include <cstring>
 #include <mpi.h>
 #include <string>
+#ifdef NESO_PARTICLES_HDF5
+#include <hdf5.h>
+#endif
 
 namespace NESO::Particles {
 #ifdef NESO_PARTICLES_HDF5
-#include <hdf5.h>
 
 #define H5CHK(cmd) NESOASSERT((cmd) >= 0, "HDF5 ERROR");
 
@@ -355,6 +357,6 @@ public:
 };
 
 #endif
-
 } // namespace NESO::Particles
+
 #endif
