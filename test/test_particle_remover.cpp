@@ -23,8 +23,9 @@ TEST(ParticleRemover, atomics) {
       std::make_shared<SYCLTarget>(GPU_SELECTOR, mesh->get_comm());
 
   const int N = 1024;
-  BufferDeviceHost<int> dh_a(sycl_target, 1);
+  BufferDeviceHost<int> dh_a(sycl_target, 2);
   dh_a.h_buffer.ptr[0] = 0;
+  dh_a.h_buffer.ptr[1] = 0;
   dh_a.host_to_device();
   auto k_ptr = dh_a.d_buffer.ptr;
 
@@ -35,12 +36,18 @@ TEST(ParticleRemover, atomics) {
                            sycl::memory_scope::device>
               remove_count_atomic{k_ptr[0]};
           remove_count_atomic.fetch_add(1);
+          if (id == 0) {
+            k_ptr[1] = 42;
+          }
         });
       })
       .wait_and_throw();
 
   dh_a.device_to_host();
 
+  // test kernel actually ran
+  ASSERT_EQ(dh_a.h_buffer.ptr[1], 42);
+  // test atomics work
   ASSERT_EQ(dh_a.h_buffer.ptr[0], 1024);
 
   mesh->free();
