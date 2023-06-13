@@ -5,7 +5,7 @@
 using namespace NESO::Particles;
 
 // test that int atomics are functional
-TEST(ErrorPropagate, atomics) {
+TEST(ErrorPropagate, Atomics) {
 
   const int ndim = 2;
   std::vector<int> dims(ndim);
