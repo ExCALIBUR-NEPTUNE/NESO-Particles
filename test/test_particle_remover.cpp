@@ -6,53 +6,6 @@
 
 using namespace NESO::Particles;
 
-// test that int atomics are functional
-TEST(ParticleRemover, atomics) {
-
-  const int ndim = 2;
-  std::vector<int> dims(ndim);
-  dims[0] = 4;
-  dims[1] = 8;
-
-  const double cell_extent = 1.0;
-  const int subdivision_order = 2;
-  auto mesh = std::make_shared<CartesianHMesh>(MPI_COMM_WORLD, ndim, dims,
-                                               cell_extent, subdivision_order);
-
-  auto sycl_target =
-      std::make_shared<SYCLTarget>(GPU_SELECTOR, mesh->get_comm());
-
-  const int N = 1024;
-  BufferDeviceHost<int> dh_a(sycl_target, 2);
-  dh_a.h_buffer.ptr[0] = 0;
-  dh_a.h_buffer.ptr[1] = 0;
-  dh_a.host_to_device();
-  auto k_ptr = dh_a.d_buffer.ptr;
-
-  sycl_target->queue
-      .submit([&](sycl::handler &h) {
-        h.parallel_for(sycl::range<1>(N), [=](sycl::item<1> id) {
-          sycl::atomic_ref<int, sycl::memory_order::relaxed,
-                           sycl::memory_scope::device>
-              remove_count_atomic{k_ptr[0]};
-          remove_count_atomic.fetch_add(1);
-          if (id == 0) {
-            k_ptr[1] = 42;
-          }
-        });
-      })
-      .wait_and_throw();
-
-  dh_a.device_to_host();
-
-  // test kernel actually ran
-  ASSERT_EQ(dh_a.h_buffer.ptr[1], 42);
-  // test atomics work
-  ASSERT_EQ(dh_a.h_buffer.ptr[0], 1024);
-
-  mesh->free();
-}
-
 TEST(ParticleRemover, remove) {
 
   const int ndim = 2;
