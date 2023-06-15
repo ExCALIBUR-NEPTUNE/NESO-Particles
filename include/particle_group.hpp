@@ -613,8 +613,8 @@ inline void ParticleGroup::hybrid_move() {
 
   reset_mpi_ranks(this->mpi_rank_dat);
   this->domain->local_mapper->map(*this);
-  this->mesh_hierarchy_global_map->execute(this->position_dat,
-        this->cell_id_dat, this->mpi_rank_dat);
+  this->mesh_hierarchy_global_map->execute(
+      this->position_dat, this->cell_id_dat, this->mpi_rank_dat);
 
   this->global_move_ctx.move();
   this->set_npart_cell_from_dat();

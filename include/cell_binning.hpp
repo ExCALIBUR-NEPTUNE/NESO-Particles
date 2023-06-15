@@ -42,8 +42,7 @@ public:
    */
   CartesianCellBin(SYCLTargetSharedPtr sycl_target,
                    CartesianHMeshSharedPtr mesh)
-      : sycl_target(sycl_target), mesh(mesh),
-        d_cell_counts(sycl_target, 3),
+      : sycl_target(sycl_target), mesh(mesh), d_cell_counts(sycl_target, 3),
         d_cell_starts(sycl_target, 3), d_cell_ends(sycl_target, 3) {
 
     NESOASSERT(mesh->ndim <= 3, "bad mesh ndim");
@@ -73,10 +72,8 @@ public:
    * containing particle positions.
    * @param cell_id_dat ParticleDat to write particle cell ids to.
    */
-  inline void execute(
-    ParticleDatSharedPtr<REAL> position_dat,
-    ParticleDatSharedPtr<INT> cell_id_dat
-      ) {
+  inline void execute(ParticleDatSharedPtr<REAL> position_dat,
+                      ParticleDatSharedPtr<INT> cell_id_dat) {
     auto t0 = profile_timestamp();
 
     auto pl_iter_range = position_dat->get_particle_loop_iter_range();

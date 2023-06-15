@@ -355,13 +355,13 @@ public:
    *  @returns Particle Loop iteration set size.
    */
   inline INT get_particle_loop_iter_range() {
-    //#ifdef NESO_PARTICLES_ITER_PARTICLES
-    //    return this->cell_dat.ncells * this->cell_dat.get_nrow_max();
-    //#else // case for NESO_PARTICLES_ITER_CELLS
-    //    const auto n = this->cell_dat.get_nrow_max();
-    //    const auto m = (n/NESO_PARTICLES_BLOCK_SIZE) + ((INT) (n %
-    //    NESO_PARTICLES_BLOCK_SIZE > 0)); return this->cell_dat.ncells * m;
-    //#endif
+    // #ifdef NESO_PARTICLES_ITER_PARTICLES
+    //     return this->cell_dat.ncells * this->cell_dat.get_nrow_max();
+    // #else // case for NESO_PARTICLES_ITER_CELLS
+    //     const auto n = this->cell_dat.get_nrow_max();
+    //     const auto m = (n/NESO_PARTICLES_BLOCK_SIZE) + ((INT) (n %
+    //     NESO_PARTICLES_BLOCK_SIZE > 0)); return this->cell_dat.ncells * m;
+    // #endif
     //
 
     INT iter_range =

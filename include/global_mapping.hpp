@@ -87,11 +87,9 @@ public:
    * @param cell_id_dat ParticleDat containg particle cell ids.
    * @param mpi_rank_dat ParticleDat containing the owning rank of particles.
    */
-  inline void execute(
-                         ParticleDatSharedPtr<REAL> &position_dat,
-                         ParticleDatSharedPtr<INT> &cell_id_dat,
-                         ParticleDatSharedPtr<INT> &mpi_rank_dat
-      ) {
+  inline void execute(ParticleDatSharedPtr<REAL> &position_dat,
+                      ParticleDatSharedPtr<INT> &cell_id_dat,
+                      ParticleDatSharedPtr<INT> &mpi_rank_dat) {
     auto t0 = profile_timestamp();
 
     // reset the device count for cell ids that need mapping

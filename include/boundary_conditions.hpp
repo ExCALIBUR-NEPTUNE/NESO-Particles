@@ -41,8 +41,7 @@ public:
    */
   CartesianPeriodic(SYCLTargetSharedPtr sycl_target,
                     std::shared_ptr<CartesianHMesh> mesh)
-      : sycl_target(sycl_target), mesh(mesh),
-        d_extents(sycl_target, 3) {
+      : sycl_target(sycl_target), mesh(mesh), d_extents(sycl_target, 3) {
 
     NESOASSERT(mesh->ndim <= 3, "bad mesh ndim");
     BufferHost<REAL> h_extents(sycl_target, 3);
