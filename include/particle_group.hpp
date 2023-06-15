@@ -146,8 +146,7 @@ public:
     this->cell_move_ctx.set_cell_id_dat(this->cell_id_dat);
 
     this->mesh_hierarchy_global_map = std::make_shared<MeshHierarchyGlobalMap>(
-        this->sycl_target, this->domain->mesh, this->position_dat,
-        this->cell_id_dat, this->mpi_rank_dat);
+        this->sycl_target, this->domain->mesh);
 
     // call the callback on the local mapper to complete the setup of that
     // object
@@ -614,7 +613,8 @@ inline void ParticleGroup::hybrid_move() {
 
   reset_mpi_ranks(this->mpi_rank_dat);
   this->domain->local_mapper->map(*this);
-  this->mesh_hierarchy_global_map->execute();
+  this->mesh_hierarchy_global_map->execute(this->position_dat,
+        this->cell_id_dat, this->mpi_rank_dat);
 
   this->global_move_ctx.move();
   this->set_npart_cell_from_dat();

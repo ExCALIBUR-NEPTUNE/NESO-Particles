@@ -25,8 +25,6 @@ private:
 
   SYCLTargetSharedPtr sycl_target;
   CartesianHMeshSharedPtr mesh;
-  ParticleDatSharedPtr<REAL> position_dat;
-  ParticleDatSharedPtr<INT> cell_id_dat;
 
 public:
   /// Disable (implicit) copies.
@@ -41,16 +39,11 @@ public:
    *
    * @param sycl_target SYCLTargetSharedPtr to use as compute device.
    * @param mesh CartesianHMeshSharedPtr to containing the particles.
-   * @param position_dat ParticleDat with components equal to the mesh dimension
-   * containing particle positions.
-   * @param cell_id_dat ParticleDat to write particle cell ids to.
    */
   CartesianCellBin(SYCLTargetSharedPtr sycl_target,
-                   CartesianHMeshSharedPtr mesh,
-                   ParticleDatSharedPtr<REAL> position_dat,
-                   ParticleDatSharedPtr<INT> cell_id_dat)
-      : sycl_target(sycl_target), mesh(mesh), position_dat(position_dat),
-        cell_id_dat(cell_id_dat), d_cell_counts(sycl_target, 3),
+                   CartesianHMeshSharedPtr mesh)
+      : sycl_target(sycl_target), mesh(mesh),
+        d_cell_counts(sycl_target, 3),
         d_cell_starts(sycl_target, 3), d_cell_ends(sycl_target, 3) {
 
     NESOASSERT(mesh->ndim <= 3, "bad mesh ndim");
@@ -75,18 +68,25 @@ public:
   /**
    *  Apply the cell binning kernel to each particle stored on this MPI rank.
    *  Particles must be within the domain region owned by this MPI rank.
+   *
+   * @param position_dat ParticleDat with components equal to the mesh dimension
+   * containing particle positions.
+   * @param cell_id_dat ParticleDat to write particle cell ids to.
    */
-  inline void execute() {
+  inline void execute(
+    ParticleDatSharedPtr<REAL> position_dat,
+    ParticleDatSharedPtr<INT> cell_id_dat
+      ) {
     auto t0 = profile_timestamp();
 
-    auto pl_iter_range = this->position_dat->get_particle_loop_iter_range();
-    auto pl_stride = this->position_dat->get_particle_loop_cell_stride();
-    auto pl_npart_cell = this->position_dat->get_particle_loop_npart_cell();
+    auto pl_iter_range = position_dat->get_particle_loop_iter_range();
+    auto pl_stride = position_dat->get_particle_loop_cell_stride();
+    auto pl_npart_cell = position_dat->get_particle_loop_npart_cell();
     const int k_ndim = this->mesh->ndim;
 
     NESOASSERT(((k_ndim > 0) && (k_ndim < 4)), "Bad number of dimensions");
-    auto k_positions_dat = this->position_dat->cell_dat.device_ptr();
-    auto k_cell_id_dat = this->cell_id_dat->cell_dat.device_ptr();
+    auto k_positions_dat = position_dat->cell_dat.device_ptr();
+    auto k_cell_id_dat = cell_id_dat->cell_dat.device_ptr();
     auto k_inverse_cell_width_fine = this->mesh->inverse_cell_width_fine;
     auto k_cell_width_fine = this->mesh->cell_width_fine;
 

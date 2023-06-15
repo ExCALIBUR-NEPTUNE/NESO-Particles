@@ -80,10 +80,10 @@ TEST(ParticleGroup, local_move_multiple) {
   }
 
   MeshHierarchyGlobalMap mesh_hierarchy_global_map(
-      sycl_target, domain->mesh, A.position_dat, A.cell_id_dat, A.mpi_rank_dat);
+      sycl_target, domain->mesh);
 
-  CartesianPeriodic pbc(sycl_target, mesh, A.position_dat);
-  CartesianCellBin ccb(sycl_target, mesh, A.position_dat, A.cell_id_dat);
+  CartesianPeriodic pbc(sycl_target, mesh);
+  CartesianCellBin ccb(sycl_target, mesh);
 
   reset_mpi_ranks(A[Sym<INT>("NESO_MPI_RANK")]);
 
@@ -224,16 +224,16 @@ TEST(ParticleGroup, local_move_multiple) {
   local_move_ctx.set_mpi_rank_dat(A.mpi_rank_dat);
 
   for (int testx = 0; testx < Ntest; testx++) {
-    pbc.execute();
+    pbc.execute(A.position_dat);
 
     reset_mpi_ranks(A.mpi_rank_dat);
-    mesh_hierarchy_global_map.execute();
+    mesh_hierarchy_global_map.execute(A.position_dat, A.cell_id_dat, A.mpi_rank_dat);
     lambda_global_to_local();
 
     local_move_ctx.move();
     A.set_npart_cell_from_dat();
 
-    ccb.execute();
+    ccb.execute(A.position_dat, A.cell_id_dat);
     A.cell_move();
 
     lambda_test();

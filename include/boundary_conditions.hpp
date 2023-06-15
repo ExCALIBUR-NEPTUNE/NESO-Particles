@@ -23,7 +23,6 @@ private:
   BufferDevice<REAL> d_extents;
   SYCLTargetSharedPtr sycl_target;
   std::shared_ptr<CartesianHMesh> mesh;
-  ParticleDatSharedPtr<REAL> position_dat;
 
 public:
   /// Disable (implicit) copies.
@@ -39,12 +38,10 @@ public:
    *
    * @param sycl_target SYCLTarget to use as compute device.
    * @param mesh CartedianHMesh instance to use a domain for the particles.
-   * @param position_dat ParticleDat containing particle positions.
    */
   CartesianPeriodic(SYCLTargetSharedPtr sycl_target,
-                    std::shared_ptr<CartesianHMesh> mesh,
-                    ParticleDatSharedPtr<REAL> position_dat)
-      : sycl_target(sycl_target), mesh(mesh), position_dat(position_dat),
+                    std::shared_ptr<CartesianHMesh> mesh)
+      : sycl_target(sycl_target), mesh(mesh),
         d_extents(sycl_target, 3) {
 
     NESOASSERT(mesh->ndim <= 3, "bad mesh ndim");
@@ -60,18 +57,20 @@ public:
   /**
    * Apply periodic boundary conditions to the particle positions in the
    * ParticleDat this instance was created with.
+   *
+   * @param position_dat ParticleDat containing particle positions.
    */
-  inline void execute() {
+  inline void execute(ParticleDatSharedPtr<REAL> position_dat) {
 
     auto t0 = profile_timestamp();
-    auto pl_iter_range = this->position_dat->get_particle_loop_iter_range();
-    auto pl_stride = this->position_dat->get_particle_loop_cell_stride();
-    auto pl_npart_cell = this->position_dat->get_particle_loop_npart_cell();
+    auto pl_iter_range = position_dat->get_particle_loop_iter_range();
+    auto pl_stride = position_dat->get_particle_loop_cell_stride();
+    auto pl_npart_cell = position_dat->get_particle_loop_npart_cell();
     const int k_ndim = this->mesh->ndim;
 
     NESOASSERT(((k_ndim > 0) && (k_ndim < 4)), "Bad number of dimensions");
     const auto k_extents = this->d_extents.ptr;
-    auto k_positions_dat = this->position_dat->cell_dat.device_ptr();
+    auto k_positions_dat = position_dat->cell_dat.device_ptr();
 
     if (k_ndim == 2) {
 
