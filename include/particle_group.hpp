@@ -613,7 +613,12 @@ template <typename... T> inline void ParticleGroup::print(T... args) {
 inline void ParticleGroup::hybrid_move() {
 
   reset_mpi_ranks(this->mpi_rank_dat);
+
+  this->print(Sym<REAL>("P"), Sym<INT>("NESO_MPI_RANK"), Sym<REAL>("DEBUG"));
+
   this->domain->local_mapper->map(*this);
+
+  this->print(Sym<REAL>("P"), Sym<INT>("NESO_MPI_RANK"), Sym<REAL>("DEBUG"));
   this->mesh_hierarchy_global_map->execute();
 
   this->global_move_ctx.move();
