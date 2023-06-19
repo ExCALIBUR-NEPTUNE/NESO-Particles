@@ -149,7 +149,6 @@ public:
     this->dh_dims = std::make_unique<BufferDeviceHost<int>>(sycl_target, 3);
     for (int dx = 0; dx < 3; dx++) {
       this->dh_dims->h_buffer.ptr[dx] = dims[dx];
-      nprint("DIMS:", dx, dims[dx]);
     }
     this->dh_dims->host_to_device();
     for (int d0 = 0; d0 < dims[0]; d0++) {
@@ -242,10 +241,6 @@ public:
     // pointers to access dats in kernel
     auto k_position_dat = position_dat->cell_dat.device_ptr();
     auto k_mpi_rank_dat = mpi_rank_dat->cell_dat.device_ptr();
-  
-    // TODO
-    auto D = particle_group.get_dat(Sym<REAL>("DEBUG"))->cell_dat.device_ptr();
-    // TODO
 
     auto k_ndim = this->ndim;
     auto k_cell_counts = this->dh_cell_counts->d_buffer.ptr;
@@ -269,10 +264,8 @@ public:
 
                 if (k_mpi_rank_dat[cellx][1][layerx] < 0) {
 
-                  int coords[4] = {0, 0, 0, 67};
+                  int coords[3] = {0, 0, 0};
 
-                  /*
-                  //int foobar[1] = {67};
                   // k_mpi_rank_dat[cellx][1][layerx];
                   for (int dimx = 0; dimx < k_ndim; dimx++) {
                     const REAL pos = k_position_dat[cellx][dimx][layerx];
@@ -284,84 +277,21 @@ public:
                     }
                     const int dim_index = k_cell_lookup[dimx][cell_fine];
                     coords[dimx] = dim_index;
-
-                    // if the mask takes a negative value then a dim_index had a
-                    // negative value
-                    // => cell is not in the local map
-                    coords[3] = (dim_index < 0) ? -1 : coords[3];
-
                   }
-  */
-                  {
-                    const REAL pos = k_position_dat[cellx][0][layerx];
-                    int cell_fine = ((REAL)pos * k_inverse_cell_width_fine);
-                    if (cell_fine >= k_cell_counts[0]) {
-                      cell_fine = k_cell_counts[0] - 1;
-                    } else if (cell_fine < 0) {
-                      cell_fine = 0;
-                    }
-                    const int dim_index = k_cell_lookup[0][cell_fine];
-                    coords[0] = dim_index;
-
-                    // if the mask takes a negative value then a dim_index had a
-                    // negative value
-                    // => cell is not in the local map
-                    coords[3] = (dim_index < 0) ? -1 : coords[3];
-                  }
-                  if(k_ndim > 1){
-                    const REAL pos = k_position_dat[cellx][1][layerx];
-                    int cell_fine = ((REAL)pos * k_inverse_cell_width_fine);
-                    if (cell_fine >= k_cell_counts[1]) {
-                      cell_fine = k_cell_counts[1] - 1;
-                    } else if (cell_fine < 0) {
-                      cell_fine = 0;
-                    }
-                    const int dim_index = k_cell_lookup[1][cell_fine];
-                    coords[1] = dim_index;
-
-                    // if the mask takes a negative value then a dim_index had a
-                    // negative value
-                    // => cell is not in the local map
-                    coords[3] = (dim_index < 0) ? -1 : coords[3];
-                  }
-                  if(k_ndim > 2){
-                    const REAL pos = k_position_dat[cellx][2][layerx];
-                    int cell_fine = ((REAL)pos * k_inverse_cell_width_fine);
-                    if (cell_fine >= k_cell_counts[2]) {
-                      cell_fine = k_cell_counts[2] - 1;
-                    } else if (cell_fine < 0) {
-                      cell_fine = 0;
-                    }
-                    const int dim_index = k_cell_lookup[2][cell_fine];
-                    coords[2] = dim_index;
-
-                    // if the mask takes a negative value then a dim_index had a
-                    // negative value
-                    // => cell is not in the local map
-                    coords[3] = (dim_index < 0) ? -1 : coords[3];
-                  }
-
-
-// k_mpi_rank_dat[cellx][1][layerx] = foobar[0];
-
-                  //D[cellx][1][layerx] = coords[0];
-                  //D[cellx][2][layerx] = coords[1];
-                  //D[cellx][3][layerx] = coords[2];
                   const int rank_linear = coords[0] + coords[1] * k_dims[0] +
                                           coords[2] * k_dims[0] * k_dims[1];
 
+                  const bool cell_found =
+                      (coords[0] >= 0) && (coords[1] >= 0) && (coords[2] >= 0);
                   const int remote_rank =
-                      (coords[3] < 0) ? -1 : k_rank_map[rank_linear];
-
+                      cell_found ? k_rank_map[rank_linear] : -1;
                   k_mpi_rank_dat[cellx][1][layerx] = remote_rank;
-
                 }
 
                 NESO_PARTICLES_KERNEL_END
               });
         })
         .wait_and_throw();
-    nprint("RUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUN");
     sycl_target->profile_map.inc("CartesianHMeshLocalMapperT", "map", 1,
                                  profile_elapsed(t0, profile_timestamp()));
   };

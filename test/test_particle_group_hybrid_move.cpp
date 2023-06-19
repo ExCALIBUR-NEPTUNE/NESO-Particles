@@ -35,7 +35,6 @@ TEST_P(ParticleGroupHybridMove, multiple) {
   ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
                              ParticleProp(Sym<REAL>("P_ORIG"), ndim),
                              ParticleProp(Sym<REAL>("V"), 3),
-                             ParticleProp(Sym<REAL>("DEBUG"), 16),
                              ParticleProp(Sym<INT>("CELL_ID"), 1, true),
                              ParticleProp(Sym<INT>("ID"), 1)};
 
@@ -44,18 +43,12 @@ TEST_P(ParticleGroupHybridMove, multiple) {
   A.add_particle_dat(ParticleDat(sycl_target, ParticleProp(Sym<REAL>("FOO"), 3),
                                  domain->mesh->get_cell_count()));
 
-  const int rank = sycl_target->comm_pair.rank_parent;
-  nprint("rank:", rank);
-  // const int size = sycl_target->comm_pair.size_parent;
-
   std::mt19937 rng_pos(52234234);
   std::mt19937 rng_vel(52234231);
   std::mt19937 rng_rank(18241);
 
-  // const int N = 1024;
-  const int N = 10;
-  //const int Ntest = 1024;
-  const int Ntest = 1;
+  const int N = 1024;
+  const int Ntest = 1024;
   const REAL dt = 1.0;
   const REAL tol = 1.0e-10;
   const int cell_count = domain->mesh->get_cell_count();
@@ -122,8 +115,6 @@ TEST_P(ParticleGroupHybridMove, multiple) {
   REAL T = 0.0;
 
   auto lambda_test = [&] {
-    A.print(Sym<REAL>("P"), Sym<INT>("NESO_MPI_RANK"), Sym<REAL>("DEBUG"));
-
     int npart_found = A.mpi_rank_dat->get_npart_local();
     int global_npart_found = 0;
     MPICHK(MPI_Allreduce(&npart_found, &global_npart_found, 1, MPI_INT, MPI_SUM,
@@ -199,7 +190,6 @@ TEST_P(ParticleGroupHybridMove, multiple) {
   };
 
   for (int testx = 0; testx < Ntest; testx++) {
-    nprint("testx:", testx);
     pbc.execute();
 
     A.hybrid_move();
