@@ -7,6 +7,26 @@
 
 using namespace NESO::Particles;
 
+class CartesianHMeshLocalMapperTester : public CartesianHMeshLocalMapperT {
+
+public:
+  CartesianHMeshLocalMapperTester(SYCLTargetSharedPtr sycl_target,
+                                  CartesianHMeshSharedPtr mesh)
+      : CartesianHMeshLocalMapperT(sycl_target, mesh){};
+
+  inline int get_cell_lookups(int dim, int cell) {
+    if ((dim < 0) || (dim >= (this->ndim))) {
+      return 0;
+    } else {
+      return this->dh_cell_lookups[dim]->h_buffer.ptr[cell];
+    }
+  }
+  inline int get_dims(int cell) { return this->dh_dims->h_buffer.ptr[cell]; }
+  inline int get_rank_map(int cell) {
+    return this->dh_rank_map->h_buffer.ptr[cell];
+  }
+};
+
 TEST(ParticleGroup, stencil_move_multiple) {
 
   const int ndim = 2;
@@ -39,7 +59,9 @@ TEST(ParticleGroup, stencil_move_multiple) {
                                  domain->mesh->get_cell_count()));
 
   // create object to map local cells + stencil to ranks
-  auto cart_local_mapper = CartesianHMeshLocalMapper(sycl_target, mesh);
+  // auto cart_local_mapper = CartesianHMeshLocalMapper(sycl_target, mesh);
+  auto cart_local_mapper =
+      std::make_shared<CartesianHMeshLocalMapperTester>(sycl_target, mesh);
 
   // const int rank = sycl_target->comm_pair.rank_parent;
   // const int size = sycl_target->comm_pair.size_parent;
@@ -47,11 +69,6 @@ TEST(ParticleGroup, stencil_move_multiple) {
   // test the map in the mapper
   INT index_mesh[3];
   INT index_mh[6];
-
-  auto k_lookup = cart_local_mapper->dh_lookup.h_buffer.ptr;
-  auto k_lookup_stride = cart_local_mapper->lookup_stride;
-  auto k_lookup_dims = cart_local_mapper->dh_lookup_dims.h_buffer.ptr;
-  auto k_map = cart_local_mapper->dh_map.h_buffer.ptr;
 
   std::vector<int> covered_cells_x;
   std::vector<int> covered_cells_y;
@@ -84,21 +101,23 @@ TEST(ParticleGroup, stencil_move_multiple) {
   int covered_cells = 0;
   const REAL cell_width = mesh->cell_width_fine;
 
+  int cart_dims[3];
+  cart_dims[0] = cart_local_mapper->get_dims(0);
+  cart_dims[1] = cart_local_mapper->get_dims(1);
+  cart_dims[2] = cart_local_mapper->get_dims(2);
+  int coord[3];
+
   for (int cz = 0; cz < MAX(mesh->cell_counts[2], 1); cz++) {
     index_mesh[2] = cz;
-    auto index_z = (ndim > 2) ? k_lookup[2 * k_lookup_stride + cz] : 0;
-
+    coord[2] = cart_local_mapper->get_cell_lookups(2, cz);
     for (int cy = 0; cy < MAX(mesh->cell_counts[1], 1); cy++) {
       index_mesh[1] = cy;
-      auto index_y = (ndim > 1) ? k_lookup[k_lookup_stride + cy] : 0;
-
+      coord[1] = cart_local_mapper->get_cell_lookups(1, cy);
       for (int cx = 0; cx < mesh->cell_counts[0]; cx++) {
         index_mesh[0] = cx;
-        auto index_x = k_lookup[cx];
+        coord[0] = cart_local_mapper->get_cell_lookups(0, cx);
 
-        if (std::count(covered_cells_x.begin(), covered_cells_x.end(), cx) &&
-            std::count(covered_cells_y.begin(), covered_cells_y.end(), cy) &&
-            std::count(covered_cells_z.begin(), covered_cells_z.end(), cz)) {
+        if ((coord[0] > -1) && (coord[1] > -1) && (coord[2] > -1)) {
 
           mesh->mesh_tuple_to_mh_tuple(index_mesh, index_mh);
           const INT index_global =
@@ -107,13 +126,11 @@ TEST(ParticleGroup, stencil_move_multiple) {
           const int owning_rank =
               mesh->get_mesh_hierarchy()->get_owner(index_global);
 
-          const int index_linear =
-              index_x +
-              k_lookup_dims[0] * (index_y + k_lookup_dims[1] * index_z);
+          const int rank_linear = coord[0] + coord[1] * cart_dims[0] +
+                                  coord[2] * cart_dims[1] * cart_dims[0];
+          const int rank_impl = cart_local_mapper->get_rank_map(rank_linear);
 
-          const int test_rank = k_map[index_linear];
-
-          ASSERT_EQ(test_rank, owning_rank);
+          ASSERT_EQ(rank_impl, owning_rank);
           cell_centres[0].push_back((cx + 0.5) * cell_width);
           cell_centres[1].push_back((cy + 0.5) * cell_width);
           cell_centres[2].push_back((cz + 0.5) * cell_width);

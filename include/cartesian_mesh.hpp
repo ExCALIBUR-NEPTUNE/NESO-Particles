@@ -20,7 +20,7 @@ namespace NESO::Particles {
  *  width of each MPI subdomain to the owning rank.
  */
 class CartesianHMeshLocalMapperT : public LocalMapper {
-private:
+protected:
   SYCLTargetSharedPtr sycl_target;
   int ndim;
   REAL cell_width_fine;
