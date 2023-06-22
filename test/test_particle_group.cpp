@@ -413,5 +413,11 @@ TEST(ParticleGroup, get_dat) {
   ASSERT_EQ((*A)[Sym<REAL>("P")], A->get_dat(Sym<REAL>("P")));
 
   ASSERT_EQ((*A)[Sym<INT>("ID")], A->get_dat(Sym<INT>("ID")));
+
+  ASSERT_EQ(A->contains_dat(Sym<REAL>("FOO")), false);
+  ASSERT_EQ(A->contains_dat(Sym<INT>("FOO")), false);
+  ASSERT_EQ(A->contains_dat(Sym<REAL>("P")), true);
+  ASSERT_EQ(A->contains_dat(Sym<INT>("ID")), true);
+
   mesh->free();
 }
