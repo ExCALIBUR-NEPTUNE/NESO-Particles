@@ -173,6 +173,21 @@ private:
     H5CHK(H5Sclose(memspace));
   }
 
+  /**
+   *  Check the ParticleDat the user passed actually exists at the time of
+   *  writing.
+   */
+  template <typename T>
+  inline void check_dat_exists_write(ParticleGroupSharedPtr particle_group,
+                                     T sym) {
+    if (!particle_group->contains_dat(sym)) {
+      std::string msg = "H5Part::write called with Sym '" + sym.name +
+                        "' which does not exist in the ParticleGroup (check "
+                        "datatype/spelling).";
+      NESOASSERT(false, msg.c_str());
+    }
+  }
+
 public:
   /// Disable (implicit) copies.
   H5Part(const H5Part &st) = delete;
@@ -231,6 +246,14 @@ public:
       this->step = step_in;
     }
 
+    // check the ParticleDats actually exist
+    for (auto &sym : this->sym_store.syms_real) {
+      this->check_dat_exists_write(particle_group, sym);
+    }
+    for (auto &sym : this->sym_store.syms_int) {
+      this->check_dat_exists_write(particle_group, sym);
+    }
+
     // Create the group for this time step.
     std::string step_name = "Step#";
     step_name += std::to_string(this->step);
@@ -282,12 +305,12 @@ public:
       // Write the particle data for each ParticleDat
       if (multi_dim_mode) {
         for (auto &sym : this->sym_store.syms_real) {
-          const auto dat = (*this->particle_group)[sym];
+          const auto dat = this->particle_group->get_dat(sym, false);
           this->write_dat_2d(npart_total, npart_local, offset, pack_buffer, dat,
                              group_step, dxpl);
         }
         for (auto &sym : this->sym_store.syms_int) {
-          const auto dat = (*this->particle_group)[sym];
+          const auto dat = this->particle_group->get_dat(sym, false);
           this->write_dat_2d(npart_total, npart_local, offset, pack_buffer, dat,
                              group_step, dxpl);
         }

@@ -201,17 +201,46 @@ public:
   inline int get_npart_local() { return this->position_dat->get_npart_local(); }
 
   /**
+   *  Determine if the ParticleGroup contains a ParticleDat of a given name.
+   *
+   *  @param sym Symbol of ParticleDat.
+   *  @returns True if ParticleDat exists on this ParticleGroup.
+   */
+  inline bool contains_dat(Sym<REAL> sym) {
+    return (bool)this->particle_dats_real.count(sym);
+  }
+
+  /**
+   *  Determine if the ParticleGroup contains a ParticleDat of a given name.
+   *
+   *  @param sym Symbol of ParticleDat.
+   *  @returns True if ParticleDat exists on this ParticleGroup.
+   */
+  inline bool contains_dat(Sym<INT> sym) {
+    return (bool)this->particle_dats_int.count(sym);
+  }
+
+  /**
    * Template for get_dat method called like:
    * ParticleGroup::get_dat(Sym<REAL>("POS")) for a real valued ParticleDat.
    *
    * @param name Name of ParticleDat.
+   * @param check_exists Check if the dat exists, default true.
    * @returns ParticleDatSharedPtr<T> particle dat.
    */
-  template <typename T> inline ParticleDatSharedPtr<T> get_dat(Sym<T> sym) {
+  template <typename T>
+  inline ParticleDatSharedPtr<T> get_dat(Sym<T> sym,
+                                         const bool check_exists = true) {
+    if (check_exists) {
+      const bool dat_exists = this->contains_dat(sym);
+      NESOASSERT(dat_exists,
+                 "This ParticleGroup does not contain the requested dat.");
+    }
     return (*this)[sym];
   }
 
   /**
+   *  Users are recomended to use "get_dat" instead.
    *  Enables access to the ParticleDat instances using the subscript operators.
    *
    *  @param sym Sym<REAL> of ParticleDat to access.
@@ -220,6 +249,7 @@ public:
     return this->particle_dats_real.at(sym);
   };
   /**
+   *  Users are recomended to use "get_dat" instead.
    *  Enables access to the ParticleDat instances using the subscript operators.
    *
    *  @param sym Sym<INT> of ParticleDat to access.
