@@ -43,9 +43,6 @@ TEST_P(ParticleGroupHybridMove, multiple) {
   A.add_particle_dat(ParticleDat(sycl_target, ParticleProp(Sym<REAL>("FOO"), 3),
                                  domain->mesh->get_cell_count()));
 
-  // const int rank = sycl_target->comm_pair.rank_parent;
-  // const int size = sycl_target->comm_pair.size_parent;
-
   std::mt19937 rng_pos(52234234);
   std::mt19937 rng_vel(52234231);
   std::mt19937 rng_rank(18241);
