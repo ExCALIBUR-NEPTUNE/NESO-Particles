@@ -9,6 +9,7 @@
 #include <mpi.h>
 #include <stack>
 #include <string>
+#include <vector>
 
 #include "communication.hpp"
 #include "profiling.hpp"
@@ -301,7 +302,7 @@ public:
   size_t size;
 
   /**
-   * Create a new DeviceBuffer of a given number of elements.
+   * Create a new BufferDevice of a given number of elements.
    *
    * @param sycl_target SYCLTargetSharedPtr to use as compute device.
    * @param size Number of elements.
@@ -311,6 +312,35 @@ public:
     this->size = size;
     this->ptr = (T *)this->sycl_target->malloc_device(size * sizeof(T));
   }
+
+  /**
+   * Create a new BufferDevice from a std::vector. Note, this does not operate
+   * like a sycl::buffer and is a copy of the source vector.
+   *
+   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
+   * @param vec Input vector to copy data from.
+   */
+  BufferDevice(SYCLTargetSharedPtr sycl_target, const std::vector<T> &vec)
+      : BufferDevice(sycl_target, vec.size()) {
+    if (this->size > 0) {
+      this->sycl_target->queue.memcpy(this->ptr, vec.data(), this->size_bytes())
+          .wait();
+
+      auto k_ptr = this->ptr;
+
+      sycl::buffer<T, 1> b_vec(vec.data(), vec.size());
+      sycl_target->queue
+          .submit([&](sycl::handler &cgh) {
+            auto a_vec =
+                b_vec.template get_access<sycl::access::mode::read>(cgh);
+            cgh.parallel_for<>(
+                sycl::range<1>(this->size),
+                [=](sycl::id<1> idx) { k_ptr[idx] = a_vec[idx]; });
+          })
+          .wait_and_throw();
+    }
+  }
+
   /**
    * Get the size of the allocation in bytes.
    *
@@ -418,7 +448,7 @@ public:
   size_t size;
 
   /**
-   * Create a new DeviceHost of a given number of elements.
+   * Create a new BufferHost of a given number of elements.
    *
    * @param sycl_target SYCLTargetSharedPtr to use as compute device.
    * @param size Number of elements.
@@ -427,6 +457,21 @@ public:
       : sycl_target(sycl_target) {
     this->size = size;
     this->ptr = (T *)sycl_target->malloc_host(size * sizeof(T));
+  }
+
+  /**
+   * Create a new BufferHost from a std::vector. Note, this does not operate
+   * like a sycl::buffer and is a copy of the source vector.
+   *
+   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
+   * @param vec Input vector to copy data from.
+   */
+  BufferHost(SYCLTargetSharedPtr sycl_target, const std::vector<T> &vec)
+      : BufferHost(sycl_target, vec.size()) {
+    if (this->size > 0) {
+      this->sycl_target->queue.memcpy(this->ptr, vec.data(), this->size_bytes())
+          .wait();
+    }
   }
 
   /**
@@ -495,6 +540,17 @@ public:
   BufferDeviceHost(SYCLTargetSharedPtr sycl_target, size_t size)
       : sycl_target(sycl_target), size(size), d_buffer(sycl_target, size),
         h_buffer(sycl_target, size){};
+
+  /**
+   * Create a new BufferDeviceHost from a std::vector. Note, this does not
+   * operate like a sycl::buffer and is a copy of the source vector.
+   *
+   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
+   * @param vec Input vector to copy data from.
+   */
+  BufferDeviceHost(SYCLTargetSharedPtr sycl_target, const std::vector<T> &vec)
+      : sycl_target(sycl_target), size(vec.size()), d_buffer(sycl_target, vec),
+        h_buffer(sycl_target, vec){};
 
   /**
    * Get the size in bytes of the allocation on the host and device.
