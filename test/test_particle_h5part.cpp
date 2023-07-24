@@ -94,6 +94,7 @@ TEST(ParticleIO, H5Part) {
 
   H5Part h5part("test_dump.h5part", A, Sym<REAL>("P"), Sym<REAL>("V"),
                 Sym<INT>("ID"), Sym<INT>("ID2"), Sym<INT>("NESO_MPI_RANK"));
+
   h5part.write();
   h5part.close();
 
