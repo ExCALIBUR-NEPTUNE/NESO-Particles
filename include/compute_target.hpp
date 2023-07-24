@@ -131,12 +131,6 @@ public:
           "SYCL", this->device.get_info<sycl::info::device::name>(), 0);
     }
 
-    if (this->comm_pair.rank_parent == 0) {
-      std::cout << "Using " << this->device.get_info<sycl::info::device::name>()
-                << std::endl;
-      std::cout << "Kernel type: " << NESO_PARTICLES_DEVICE_LABEL << std::endl;
-    }
-
     this->queue = sycl::queue(this->device);
     this->comm = comm;
 
@@ -161,6 +155,17 @@ public:
       nprint("ALL FREED");
     }
 #endif
+  }
+
+  /**
+   * Print information to stdout about the current SYCL device (on MPI rank 0).
+   */
+  inline void print_device_info() {
+    if (this->comm_pair.rank_parent == 0) {
+      std::cout << "Using " << this->device.get_info<sycl::info::device::name>()
+                << std::endl;
+      std::cout << "Kernel type: " << NESO_PARTICLES_DEVICE_LABEL << std::endl;
+    }
   }
 
   /**
