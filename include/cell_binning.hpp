@@ -10,7 +10,6 @@
 #include "typedefs.hpp"
 
 using namespace cl;
-using namespace std;
 
 namespace NESO::Particles {
 
