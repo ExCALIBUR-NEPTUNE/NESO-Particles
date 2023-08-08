@@ -9,19 +9,29 @@
 namespace NESO::Particles {
 
 /**
- *  TODO
+ *  Generic node in a tree where each node stores an array of VALUE_TYPE
+ *  elements of length WIDTH. `IntKeyValueMap` is the class that actually
+ *  creates the tree. This type should be trivially copyable to the device.
  */
 template <typename KEY_TYPE, typename VALUE_TYPE, INT WIDTH>
 struct IntKeyValueNode {
 
+  /// The starting key this node in the tree holds, i.e. with WIDTH=8 node 2
+  /// holds keys [8,15].
   KEY_TYPE node_key;
+  /// Pointer to the node which forms the left hand branch from this node. May
+  /// be nullptr if this node does not exist.
   IntKeyValueNode<KEY_TYPE, VALUE_TYPE, WIDTH> *lhs;
+  /// Pointer to the node which forms the right hand branch from this node. May
+  /// be nullptr if this node does not exist.
   IntKeyValueNode<KEY_TYPE, VALUE_TYPE, WIDTH> *rhs;
+  /// Bools that indicate if the entries in the data member are actual values.
   bool exists[WIDTH];
+  /// The storage for the values the tree holds.
   VALUE_TYPE data[WIDTH];
 
   /**
-   * TODO
+   * Reset the node to a default state with no child nodes and no data held.
    */
   inline void reset() {
     this->lhs = nullptr;
@@ -31,8 +41,14 @@ struct IntKeyValueNode {
       this->data[ix] = 0;
     }
   }
+
   /**
-   * TODO
+   * For a given input key (in the global key space) get the node key which
+   * contains the values for the key.
+   *
+   * @param key Input key to index into the tree with.
+   * @returns Node key that indicates the node in the tree which contains the
+   * key.
    */
   static inline KEY_TYPE get_node_key(const KEY_TYPE key) {
     const INT cast_key = static_cast<INT>(key);
@@ -43,8 +59,14 @@ struct IntKeyValueNode {
       return cast_key / WIDTH;
     }
   }
+
   /**
-   * TODO
+   * For a given input key (in the global key space) get the leaf key which can
+   * be used to index into the data member on the node which contains the key -
+   * see `get_node_key`.
+   *
+   * @param key Input key to index into container.
+   * @returns Index into data member that corresponds to the input key.
    */
   static inline KEY_TYPE get_leaf_key(const KEY_TYPE key) {
     const INT cast_key = static_cast<INT>(key);
@@ -54,24 +76,24 @@ struct IntKeyValueNode {
       return cast_key % WIDTH;
     }
   }
+
   /**
-   * TODO
+   * Test if the node corresponds to the input node key.#
+   *
+   * @param node_key Node key to test.
+   * @returns True if this node corresponds to the input node key.
    */
   inline bool is_node(const KEY_TYPE node_key) {
     return (node_key == this->node_key);
   }
+
   /**
-   * TODO
-   */
-  inline bool is_leaf_set(const KEY_TYPE leaf_key) { return exists[leaf_key]; }
-  /**
-   * TODO
-   */
-  inline VALUE_TYPE get_value(const KEY_TYPE leaf_key) {
-    return this->data[leaf_key];
-  }
-  /**
-   * TODO
+   * Assuming a node does not match a requested node key, return the child
+   * branch which might contain the node. If the node key matches the current
+   * node returns the current node.
+   *
+   * @param node_key Node key currently being searched for.
+   * @returns Pointer to child node (may be nullptr).
    */
   inline IntKeyValueNode<KEY_TYPE, VALUE_TYPE, WIDTH> *
   next(const KEY_TYPE node_key) {
@@ -83,8 +105,19 @@ struct IntKeyValueNode {
       return this;
     }
   }
+
   /**
-   * TODO
+   * For a given global key find the leaf location for the value and the bool
+   * that indicates if the value is set. If the key is not in the tree return
+   * false.
+   *
+   * @param[in] key Global key to find location of value for.
+   * @param[in, out] leaf_set Return location that points to the flag that
+   * indicates if the value is set.
+   * @param[in, out] value Return location for a pointer to the value.
+   * @returns True if the key is located in the tree otherwise false. The
+   * leaf_set and value parameters only contain meaningful values if the return
+   * value is true.
    */
   inline bool get_location(const KEY_TYPE key, bool **leaf_set,
                            VALUE_TYPE **value) {
@@ -109,6 +142,13 @@ struct IntKeyValueNode {
     }
   }
 
+  /**
+   *  For a given key find and return the stored value.
+   *
+   *  @param[in] key Input global key to retrieve value for.
+   *  @param[in, out] value Pointer to value, only valid if the key is found.
+   *  @returns True if the key is found in the tree otherwise false.
+   */
   inline bool get(const KEY_TYPE key, VALUE_TYPE *value) {
     VALUE_TYPE *value_location;
     bool *leaf_set;
@@ -121,6 +161,17 @@ struct IntKeyValueNode {
     }
   }
 
+  /**
+   *  For a given key store the corresponding value in the tree. This function
+   *  assumes that the node is already allocated and placed in the tree
+   *  according to the node_key.
+   *
+   *  @param key Global key to store value against.
+   *  @param value Input value to store pointed to by key.
+   *  @param Returns true if the value was successfully stored. A return value
+   *  of false indicates the node which should store the value is not present
+   *  in the tree.
+   */
   inline bool set(const KEY_TYPE key, const VALUE_TYPE value) {
     bool *leaf_set;
     VALUE_TYPE *value_location;
@@ -134,9 +185,15 @@ struct IntKeyValueNode {
     }
   }
 
-  inline void add_node(const KEY_TYPE node_key,
-                       IntKeyValueNode<KEY_TYPE, VALUE_TYPE, WIDTH> *node) {
+  /**
+   * Add an allocated node to the tree under a given node key. The `node_key`
+   * member of the added node will be used to determine tree placement.
+   *
+   * @param node Node to place into the tree.
+   */
+  inline void add_node(IntKeyValueNode<KEY_TYPE, VALUE_TYPE, WIDTH> *node) {
 
+    const KEY_TYPE node_key = node->node_key;
     IntKeyValueNode<KEY_TYPE, VALUE_TYPE, WIDTH> *current_node = this;
     IntKeyValueNode<KEY_TYPE, VALUE_TYPE, WIDTH> *next_node =
         current_node->next(node_key);
@@ -157,7 +214,8 @@ struct IntKeyValueNode {
 };
 
 /**
- *  TODO
+ *  Create a blocked key-value map with a given block size. This class creates
+ *  the tree and provides methods to get and set key-value pairs.
  */
 template <typename KEY_TYPE, typename VALUE_TYPE, INT WIDTH>
 class IntKeyValueMap {
@@ -165,9 +223,9 @@ protected:
   std::map<KEY_TYPE, IntKeyValueNode<KEY_TYPE, VALUE_TYPE, WIDTH> *> nodes;
 
 public:
-  /// TODO
+  /// The SYCLTarget on which the tree is allocated.
   SYCLTargetSharedPtr sycl_target;
-  /// TODO
+  /// The root node of the tree.
   IntKeyValueNode<KEY_TYPE, VALUE_TYPE, WIDTH> *root;
 
   ~IntKeyValueMap() {
@@ -177,7 +235,7 @@ public:
   }
 
   /**
-   *  TODO
+   *  Create a new tree on a given SYCL device.
    */
   IntKeyValueMap(SYCLTargetSharedPtr sycl_target) : sycl_target(sycl_target) {
 
@@ -186,6 +244,13 @@ public:
                   "IntKeyValueNode is not trivially copyable to device");
     this->root = nullptr;
   }
+
+  /**
+   * Add a key-value pair to the container.
+   *
+   * @param key Key to add to container.
+   * @param value Value to add to container under given key.
+   */
   inline void add(const KEY_TYPE key, const VALUE_TYPE value) {
 
     const KEY_TYPE node_key =
@@ -219,7 +284,7 @@ public:
               new_node->data[leaf_key] = value;
 
               if (add_to_tree) {
-                k_root->add_node(node_key, new_node);
+                k_root->add_node(new_node);
               }
             });
           })
@@ -237,7 +302,11 @@ public:
   }
 
   /**
-   * TODO
+   * Host callable method to retrieve the value that corresponds to a given key.
+   *
+   * @param[in] key Key to retrieve value for.
+   * @param[in, out] value Pointer to value type in which to place output value.
+   * @returns True if the key is found in the container otherwise false.
    */
   inline bool host_get(const KEY_TYPE key, VALUE_TYPE *value) {
     if (this->root == nullptr) {
