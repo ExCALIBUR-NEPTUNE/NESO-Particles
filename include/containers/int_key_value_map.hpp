@@ -242,6 +242,8 @@ public:
     static_assert(std::is_trivially_copyable_v<
                       IntKeyValueNode<KEY_TYPE, VALUE_TYPE, WIDTH>> == true,
                   "IntKeyValueNode is not trivially copyable to device");
+    static_assert(std::is_integral<KEY_TYPE>::value,
+                  "KEY_TYPE is not an integral type.");
     this->root = nullptr;
   }
 
