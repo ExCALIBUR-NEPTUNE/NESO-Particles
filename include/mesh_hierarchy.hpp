@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <memory>
 #include <mpi.h>
 #include <stack>
 #include <utility>
@@ -400,6 +401,169 @@ public:
       ranks[qx] = rank;
     }
   };
+};
+
+/**
+ *  TODO
+ */
+struct MeshHierarchyDeviceMapper {
+  INT ndim;
+  REAL *origin;
+  INT *dims;
+  REAL inverse_cell_width_coarse;
+  REAL inverse_cell_width_fine;
+  REAL cell_width_coarse;
+  REAL cell_width_fine;
+  INT ncells_dim_fine;
+
+  /**
+   * TODO
+   */
+  inline void map_to_mh_tuple(const REAL *const position, INT *cell) {
+    for (int dimx = 0; dimx < ndim; dimx++) {
+      // position relative to the mesh origin
+      const REAL pos = position[dimx] - origin[dimx];
+      const REAL tol = 1.0e-10;
+
+      // coarse grid index
+      INT cell_coarse = ((REAL)pos * inverse_cell_width_coarse);
+      // bounds check the cell at the upper extent
+      if (cell_coarse >= dims[dimx]) {
+        // if the particle is within a given tolerance assume the
+        // out of bounds is a floating point issue.
+        if ((ABS(pos - dims[dimx] * cell_width_coarse) / ABS(pos)) <= tol) {
+          cell_coarse = dims[dimx] - 1;
+          cell[dimx] = cell_coarse;
+        } else {
+          cell_coarse = 0;
+          cell[dimx] = -2;
+        }
+      } else {
+        cell[dimx] = cell_coarse;
+      }
+
+      // use the coarse cell index to offset the origin and compute
+      // the fine cell index
+      const REAL pos_fine = pos - cell_coarse * cell_width_coarse;
+      INT cell_fine = ((REAL)pos_fine * inverse_cell_width_fine);
+
+      if (cell_fine >= ncells_dim_fine) {
+        if ((ABS(pos_fine - ncells_dim_fine * cell_width_fine) /
+             ABS(pos_fine)) <= tol) {
+          cell_fine = ncells_dim_fine - 1;
+          cell[dimx + ndim] = cell_fine;
+        } else {
+          cell[dimx + ndim] = -2;
+        }
+      } else {
+        cell[dimx + ndim] = cell_fine;
+      }
+    }
+  }
+
+  /**
+   * TODO
+   */
+  inline void map_mh_tuple_cart_tuple(const INT *const mh_tuple,
+                                      INT *cart_tuple) {
+    for (int dimx = 0; dimx < ndim; dimx++) {
+      cart_tuple[dimx] = mh_tuple[ndim + dimx] + mh_tuple[dimx];
+    }
+  }
+
+  /**
+   * TODO
+   * Map position into the cartesian grid. Do not attempt to trucate the
+   * position into the mesh.
+   */
+  inline void map_to_cart_tuple_no_trunc(const REAL *const position,
+                                         INT *cell) {
+    for (int dimx = 0; dimx < ndim; dimx++) {
+      const REAL origin_dim = origin[dimx];
+      const REAL pos = position[dimx];
+      if (pos < origin_dim) {
+        const REAL offset = origin_dim - pos;
+        const REAL real_cell = offset * inverse_cell_width_fine;
+        const INT int_cell = static_cast<INT>(real_cell) + 1;
+        const INT relative_cell = -int_cell;
+        cell[dimx] = relative_cell;
+      } else {
+        const REAL real_cell = (pos - origin_dim) * inverse_cell_width_fine;
+        // rounds towards 0
+        const INT int_cell = static_cast<INT>(real_cell);
+        cell[dimx] = int_cell;
+      }
+    }
+  }
+};
+
+/**
+ * TODO
+ */
+class MeshHierarchyMapper {
+private:
+  std::unique_ptr<BufferDeviceHost<REAL>> dh_origin;
+  std::unique_ptr<BufferDeviceHost<INT>> dh_dims;
+  std::shared_ptr<MeshHierarchy> mesh_hierarchy;
+
+  inline MeshHierarchyDeviceMapper get_generic_mapper() {
+
+    MeshHierarchyDeviceMapper mapper;
+    mapper.ndim = this->mesh_hierarchy->ndim;
+    mapper.inverse_cell_width_coarse =
+        this->mesh_hierarchy->inverse_cell_width_coarse;
+    mapper.inverse_cell_width_fine =
+        this->mesh_hierarchy->inverse_cell_width_fine;
+    mapper.cell_width_coarse = this->mesh_hierarchy->cell_width_coarse;
+    mapper.cell_width_fine = this->mesh_hierarchy->cell_width_fine;
+    mapper.ncells_dim_fine = this->mesh_hierarchy->ncells_dim_fine;
+    return mapper;
+  }
+
+public:
+  /**
+   * TODO
+   */
+  MeshHierarchyMapper(SYCLTargetSharedPtr sycl_target,
+                      std::shared_ptr<MeshHierarchy> mesh_hierarchy)
+      : mesh_hierarchy(mesh_hierarchy) {
+
+    static_assert(
+        std::is_trivially_copyable_v<MeshHierarchyDeviceMapper> == true,
+        "MeshHierarchyDeviceMapper is not trivially copyable to device");
+
+    const int ndim = mesh_hierarchy->ndim;
+    std::vector<INT> dims_tmp(ndim);
+    std::vector<REAL> origin_tmp(ndim);
+    for (int dimx = 0; dimx < ndim; dimx++) {
+      dims_tmp[dimx] = mesh_hierarchy->dims[dimx];
+      origin_tmp[dimx] = mesh_hierarchy->origin[dimx];
+    }
+    this->dh_origin =
+        std::make_unique<BufferDeviceHost<REAL>>(sycl_target, origin_tmp);
+    this->dh_dims =
+        std::make_unique<BufferDeviceHost<INT>>(sycl_target, dims_tmp);
+  }
+
+  /**
+   * TODO
+   */
+  inline MeshHierarchyDeviceMapper get_device_mapper() {
+    MeshHierarchyDeviceMapper mapper = this->get_generic_mapper();
+    mapper.origin = this->dh_origin->d_buffer.ptr;
+    mapper.dims = this->dh_dims->d_buffer.ptr;
+    return mapper;
+  }
+
+  /**
+   * TODO
+   */
+  inline MeshHierarchyDeviceMapper get_host_mapper() {
+    MeshHierarchyDeviceMapper mapper = this->get_generic_mapper();
+    mapper.origin = this->dh_origin->h_buffer.ptr;
+    mapper.dims = this->dh_dims->h_buffer.ptr;
+    return mapper;
+  }
 };
 
 } // namespace NESO::Particles

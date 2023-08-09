@@ -125,3 +125,55 @@ TEST(MeshHierarchy, test_mesh_hierarchy_ownership) {
 
   mesh.free();
 }
+
+TEST(MeshHierarchyMappers, cart_no_trunc) {
+
+  const int ndim = 3;
+  std::vector<int> dims(ndim);
+  dims[0] = 4;
+  dims[1] = 8;
+  dims[2] = 6;
+  std::vector<double> origin(ndim);
+  origin[0] = 0.5;
+  origin[1] = 0;
+  origin[2] = 0;
+
+  const double cell_extent = 1.0;
+  const int subdivision_order = 1;
+
+  auto mh = std::make_shared<MeshHierarchy>(MPI_COMM_WORLD, ndim, dims, origin,
+                                            cell_extent, subdivision_order);
+
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+  auto mapper = std::make_shared<MeshHierarchyMapper>(sycl_target, mh);
+  auto host_mapper = mapper->get_host_mapper();
+
+  REAL position[3];
+  INT cell[3];
+
+  position[0] = 1.1;
+  position[1] = 1.1;
+  position[2] = 1.6;
+  host_mapper.map_to_cart_tuple_no_trunc(position, cell);
+  ASSERT_EQ(cell[0], 1);
+  ASSERT_EQ(cell[1], 2);
+  ASSERT_EQ(cell[2], 3);
+
+  position[0] = 5.1;
+  position[1] = 9.1;
+  position[2] = 7.6;
+  host_mapper.map_to_cart_tuple_no_trunc(position, cell);
+  ASSERT_EQ(cell[0], 4 * 2 + 1);
+  ASSERT_EQ(cell[1], 8 * 2 + 2);
+  ASSERT_EQ(cell[2], 6 * 2 + 3);
+
+  position[0] = 0.1;
+  position[1] = -1.1;
+  position[2] = 7.6;
+  host_mapper.map_to_cart_tuple_no_trunc(position, cell);
+  ASSERT_EQ(cell[0], -1);
+  ASSERT_EQ(cell[1], -3);
+  ASSERT_EQ(cell[2], 6 * 2 + 3);
+
+  mh->free();
+}
