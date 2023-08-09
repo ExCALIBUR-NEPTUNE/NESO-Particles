@@ -7,47 +7,47 @@
 
 using namespace NESO::Particles;
 
-TEST(IntKeyValueMap, Indexing) {
+TEST(BlockedBinaryTree, Indexing) {
   INT to_test;
 
   // test node key indexing
-  to_test = IntKeyValueNode<INT, double, 8>::get_node_key(16);
+  to_test = BlockedBinaryNode<INT, double, 8>::get_node_key(16);
   ASSERT_EQ(to_test, 2);
-  to_test = IntKeyValueNode<INT, double, 8>::get_node_key(15);
+  to_test = BlockedBinaryNode<INT, double, 8>::get_node_key(15);
   ASSERT_EQ(to_test, 1);
-  to_test = IntKeyValueNode<INT, double, 8>::get_node_key(8);
+  to_test = BlockedBinaryNode<INT, double, 8>::get_node_key(8);
   ASSERT_EQ(to_test, 1);
-  to_test = IntKeyValueNode<INT, double, 8>::get_node_key(7);
+  to_test = BlockedBinaryNode<INT, double, 8>::get_node_key(7);
   ASSERT_EQ(to_test, 0);
-  to_test = IntKeyValueNode<INT, double, 8>::get_node_key(0);
+  to_test = BlockedBinaryNode<INT, double, 8>::get_node_key(0);
   ASSERT_EQ(to_test, 0);
-  to_test = IntKeyValueNode<INT, double, 8>::get_node_key(-1);
+  to_test = BlockedBinaryNode<INT, double, 8>::get_node_key(-1);
   ASSERT_EQ(to_test, -1);
-  to_test = IntKeyValueNode<INT, double, 8>::get_node_key(-8);
+  to_test = BlockedBinaryNode<INT, double, 8>::get_node_key(-8);
   ASSERT_EQ(to_test, -1);
-  to_test = IntKeyValueNode<INT, double, 8>::get_node_key(-9);
+  to_test = BlockedBinaryNode<INT, double, 8>::get_node_key(-9);
   ASSERT_EQ(to_test, -2);
-  to_test = IntKeyValueNode<INT, double, 8>::get_node_key(-16);
+  to_test = BlockedBinaryNode<INT, double, 8>::get_node_key(-16);
   ASSERT_EQ(to_test, -2);
 
   // test leaf key indexing
-  to_test = IntKeyValueNode<INT, double, 8>::get_leaf_key(16);
+  to_test = BlockedBinaryNode<INT, double, 8>::get_leaf_key(16);
   ASSERT_EQ(to_test, 0);
-  to_test = IntKeyValueNode<INT, double, 8>::get_leaf_key(15);
+  to_test = BlockedBinaryNode<INT, double, 8>::get_leaf_key(15);
   ASSERT_EQ(to_test, 7);
-  to_test = IntKeyValueNode<INT, double, 8>::get_leaf_key(8);
+  to_test = BlockedBinaryNode<INT, double, 8>::get_leaf_key(8);
   ASSERT_EQ(to_test, 0);
-  to_test = IntKeyValueNode<INT, double, 8>::get_leaf_key(7);
+  to_test = BlockedBinaryNode<INT, double, 8>::get_leaf_key(7);
   ASSERT_EQ(to_test, 7);
-  to_test = IntKeyValueNode<INT, double, 8>::get_leaf_key(0);
+  to_test = BlockedBinaryNode<INT, double, 8>::get_leaf_key(0);
   ASSERT_EQ(to_test, 0);
-  to_test = IntKeyValueNode<INT, double, 8>::get_leaf_key(-1);
+  to_test = BlockedBinaryNode<INT, double, 8>::get_leaf_key(-1);
   ASSERT_EQ(to_test, 7);
-  to_test = IntKeyValueNode<INT, double, 8>::get_leaf_key(-8);
+  to_test = BlockedBinaryNode<INT, double, 8>::get_leaf_key(-8);
   ASSERT_EQ(to_test, 0);
-  to_test = IntKeyValueNode<INT, double, 8>::get_leaf_key(-9);
+  to_test = BlockedBinaryNode<INT, double, 8>::get_leaf_key(-9);
   ASSERT_EQ(to_test, 7);
-  to_test = IntKeyValueNode<INT, double, 8>::get_leaf_key(-16);
+  to_test = BlockedBinaryNode<INT, double, 8>::get_leaf_key(-16);
   ASSERT_EQ(to_test, 0);
 }
 
@@ -55,7 +55,8 @@ template <INT WIDTH> static inline void tree_wrapper() {
 
   auto sycl_target = std::make_shared<SYCLTarget>(GPU_SELECTOR, MPI_COMM_WORLD);
 
-  auto map = std::make_shared<IntKeyValueMap<INT, double, WIDTH>>(sycl_target);
+  auto map =
+      std::make_shared<BlockedBinaryTree<INT, double, WIDTH>>(sycl_target);
 
   double output;
   ASSERT_EQ(map->host_get(1, &output), false);
@@ -97,9 +98,9 @@ template <INT WIDTH> static inline void tree_wrapper() {
   }
 }
 
-TEST(IntKeyValueMap, BinaryTree) {
+TEST(BlockedBinaryTree, BinaryTree) {
   // width = 1 is a binary tree
   tree_wrapper<1>();
 }
 
-TEST(IntKeyValueMap, OctTree) { tree_wrapper<8>(); }
+TEST(BlockedBinaryTree, EightBlockTree) { tree_wrapper<8>(); }

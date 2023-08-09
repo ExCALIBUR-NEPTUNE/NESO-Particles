@@ -10,21 +10,21 @@ namespace NESO::Particles {
 
 /**
  *  Generic node in a tree where each node stores an array of VALUE_TYPE
- *  elements of length WIDTH. `IntKeyValueMap` is the class that actually
+ *  elements of length WIDTH. `BlockedBinaryTree` is the class that actually
  *  creates the tree. This type should be trivially copyable to the device.
  */
 template <typename KEY_TYPE, typename VALUE_TYPE, INT WIDTH>
-struct IntKeyValueNode {
+struct BlockedBinaryNode {
 
   /// The starting key this node in the tree holds, i.e. with WIDTH=8 node 2
   /// holds keys [8,15].
   KEY_TYPE node_key;
   /// Pointer to the node which forms the left hand branch from this node. May
   /// be nullptr if this node does not exist.
-  IntKeyValueNode<KEY_TYPE, VALUE_TYPE, WIDTH> *lhs;
+  BlockedBinaryNode<KEY_TYPE, VALUE_TYPE, WIDTH> *lhs;
   /// Pointer to the node which forms the right hand branch from this node. May
   /// be nullptr if this node does not exist.
-  IntKeyValueNode<KEY_TYPE, VALUE_TYPE, WIDTH> *rhs;
+  BlockedBinaryNode<KEY_TYPE, VALUE_TYPE, WIDTH> *rhs;
   /// Bools that indicate if the entries in the data member are actual values.
   bool exists[WIDTH];
   /// The storage for the values the tree holds.
@@ -95,7 +95,7 @@ struct IntKeyValueNode {
    * @param node_key Node key currently being searched for.
    * @returns Pointer to child node (may be nullptr).
    */
-  inline IntKeyValueNode<KEY_TYPE, VALUE_TYPE, WIDTH> *
+  inline BlockedBinaryNode<KEY_TYPE, VALUE_TYPE, WIDTH> *
   next(const KEY_TYPE node_key) {
     if (node_key < this->node_key) {
       return lhs;
@@ -124,7 +124,7 @@ struct IntKeyValueNode {
     const KEY_TYPE node_key = get_node_key(key);
     const KEY_TYPE leaf_key = get_leaf_key(key);
 
-    IntKeyValueNode<KEY_TYPE, VALUE_TYPE, WIDTH> *next = this;
+    BlockedBinaryNode<KEY_TYPE, VALUE_TYPE, WIDTH> *next = this;
 
     bool node_found = this->is_node(node_key);
     while ((!node_found) && (next != nullptr)) {
@@ -191,11 +191,11 @@ struct IntKeyValueNode {
    *
    * @param node Node to place into the tree.
    */
-  inline void add_node(IntKeyValueNode<KEY_TYPE, VALUE_TYPE, WIDTH> *node) {
+  inline void add_node(BlockedBinaryNode<KEY_TYPE, VALUE_TYPE, WIDTH> *node) {
 
     const KEY_TYPE node_key = node->node_key;
-    IntKeyValueNode<KEY_TYPE, VALUE_TYPE, WIDTH> *current_node = this;
-    IntKeyValueNode<KEY_TYPE, VALUE_TYPE, WIDTH> *next_node =
+    BlockedBinaryNode<KEY_TYPE, VALUE_TYPE, WIDTH> *current_node = this;
+    BlockedBinaryNode<KEY_TYPE, VALUE_TYPE, WIDTH> *next_node =
         current_node->next(node_key);
 
     // travel down the tree until we find a branch not populated
@@ -218,17 +218,17 @@ struct IntKeyValueNode {
  *  the tree and provides methods to get and set key-value pairs.
  */
 template <typename KEY_TYPE, typename VALUE_TYPE, INT WIDTH>
-class IntKeyValueMap {
+class BlockedBinaryTree {
 protected:
-  std::map<KEY_TYPE, IntKeyValueNode<KEY_TYPE, VALUE_TYPE, WIDTH> *> nodes;
+  std::map<KEY_TYPE, BlockedBinaryNode<KEY_TYPE, VALUE_TYPE, WIDTH> *> nodes;
 
 public:
   /// The SYCLTarget on which the tree is allocated.
   SYCLTargetSharedPtr sycl_target;
   /// The root node of the tree.
-  IntKeyValueNode<KEY_TYPE, VALUE_TYPE, WIDTH> *root;
+  BlockedBinaryNode<KEY_TYPE, VALUE_TYPE, WIDTH> *root;
 
-  ~IntKeyValueMap() {
+  ~BlockedBinaryTree() {
     for (auto &nx : this->nodes) {
       this->sycl_target->free(nx.second);
     }
@@ -237,11 +237,12 @@ public:
   /**
    *  Create a new tree on a given SYCL device.
    */
-  IntKeyValueMap(SYCLTargetSharedPtr sycl_target) : sycl_target(sycl_target) {
+  BlockedBinaryTree(SYCLTargetSharedPtr sycl_target)
+      : sycl_target(sycl_target) {
 
     static_assert(std::is_trivially_copyable_v<
-                      IntKeyValueNode<KEY_TYPE, VALUE_TYPE, WIDTH>> == true,
-                  "IntKeyValueNode is not trivially copyable to device");
+                      BlockedBinaryNode<KEY_TYPE, VALUE_TYPE, WIDTH>> == true,
+                  "BlockedBinaryNode is not trivially copyable to device");
     static_assert(std::is_integral<KEY_TYPE>::value,
                   "KEY_TYPE is not an integral type.");
     this->root = nullptr;
@@ -256,18 +257,18 @@ public:
   inline void add(const KEY_TYPE key, const VALUE_TYPE value) {
 
     const KEY_TYPE node_key =
-        IntKeyValueNode<KEY_TYPE, VALUE_TYPE, WIDTH>::get_node_key(key);
+        BlockedBinaryNode<KEY_TYPE, VALUE_TYPE, WIDTH>::get_node_key(key);
     const KEY_TYPE leaf_key =
-        IntKeyValueNode<KEY_TYPE, VALUE_TYPE, WIDTH>::get_leaf_key(key);
+        BlockedBinaryNode<KEY_TYPE, VALUE_TYPE, WIDTH>::get_leaf_key(key);
     const bool node_exists = static_cast<bool>(this->nodes.count(node_key));
 
     // need to allocate a new node
     if (!node_exists) {
 
-      IntKeyValueNode<KEY_TYPE, VALUE_TYPE, WIDTH> *new_node = nullptr;
-      new_node = static_cast<IntKeyValueNode<KEY_TYPE, VALUE_TYPE, WIDTH> *>(
+      BlockedBinaryNode<KEY_TYPE, VALUE_TYPE, WIDTH> *new_node = nullptr;
+      new_node = static_cast<BlockedBinaryNode<KEY_TYPE, VALUE_TYPE, WIDTH> *>(
           this->sycl_target->malloc_device(
-              sizeof(IntKeyValueNode<KEY_TYPE, VALUE_TYPE, WIDTH>)));
+              sizeof(BlockedBinaryNode<KEY_TYPE, VALUE_TYPE, WIDTH>)));
       this->nodes[node_key] = new_node;
 
       bool add_to_tree = true;

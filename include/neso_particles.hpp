@@ -9,7 +9,7 @@
 #include "cell_binning.hpp"
 #include "cell_dat.hpp"
 #include "compute_target.hpp"
-#include "containers/int_key_value_map.hpp"
+#include "containers/blocked_binary_tree.hpp"
 #include "domain.hpp"
 #include "global_mapping.hpp"
 #include "local_mapping.hpp"
