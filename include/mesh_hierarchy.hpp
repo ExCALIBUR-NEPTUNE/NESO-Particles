@@ -415,11 +415,12 @@ struct MeshHierarchyDeviceMapper {
   REAL cell_width_coarse;
   REAL cell_width_fine;
   INT ncells_dim_fine;
+  INT ncells_fine;
 
   /**
    * TODO
    */
-  inline void map_to_mh_tuple(const REAL *const position, INT *cell) {
+  inline void map_to_tuple(const REAL *position, INT *cell) const {
     for (int dimx = 0; dimx < ndim; dimx++) {
       // position relative to the mesh origin
       const REAL pos = position[dimx] - origin[dimx];
@@ -464,8 +465,8 @@ struct MeshHierarchyDeviceMapper {
   /**
    * TODO
    */
-  inline void map_mh_tuple_cart_tuple(const INT *const mh_tuple,
-                                      INT *cart_tuple) {
+  inline void map_tuple_to_cart_tuple(const INT *mh_tuple,
+                                      INT *cart_tuple) const {
     for (int dimx = 0; dimx < ndim; dimx++) {
       cart_tuple[dimx] = mh_tuple[ndim + dimx] + mh_tuple[dimx];
     }
@@ -476,8 +477,8 @@ struct MeshHierarchyDeviceMapper {
    * Map position into the cartesian grid. Do not attempt to trucate the
    * position into the mesh.
    */
-  inline void map_to_cart_tuple_no_trunc(const REAL *const position,
-                                         INT *cell) {
+  inline void map_to_cart_tuple_no_trunc(const REAL *position,
+                                         INT *cell) const {
     for (int dimx = 0; dimx < ndim; dimx++) {
       const REAL origin_dim = origin[dimx];
       const REAL pos = position[dimx];
@@ -495,6 +496,73 @@ struct MeshHierarchyDeviceMapper {
       }
     }
   }
+
+  /**
+   * TODO
+   */
+  inline void cart_tuple_to_tuple(const INT *cart_tuple, INT *mh_tuple) const {
+    for (int dimx = 0; dimx < ndim; dimx++) {
+      const INT cell_coarse = cart_tuple[dimx] / ncells_dim_fine;
+      const INT cell_fine = cart_tuple[dimx] % ncells_dim_fine;
+      mh_tuple[dimx] = cell_coarse;
+      mh_tuple[ndim + dimx] = cell_fine;
+    }
+  }
+
+  /**
+   * Convert a global index represented by a tuple into a linear index.
+   * tuple should be:
+   * 1D: (coarse_x, fine_x)
+   * 2D: (coarse_x, coarse_y, fine_x, fine_y)
+   * 3D: (coarse_x, coarse_y, coarse_z, fine_x, fine_y, fine_z)
+   *
+   * @param index_tuple Index represented as a tuple.
+   * @returns Linear index.
+   */
+  inline INT tuple_to_linear_global(INT *index_tuple) const {
+    INT index_coarse = tuple_to_linear_coarse(index_tuple);
+    INT index_fine = tuple_to_linear_fine(&index_tuple[ndim]);
+    INT index = index_coarse * ncells_fine + index_fine;
+    return index;
+  };
+
+  /**
+   * Convert a coarse mesh index represented by a tuple into a linear index.
+   * tuple should be:
+   * 1D: (coarse_x)
+   * 2D: (coarse_x, coarse_y)
+   * 3D: (coarse_x, coarse_y, coarse_z)
+   *
+   * @param index_tuple Index represented as a tuple.
+   * @returns Linear index.
+   */
+  inline INT tuple_to_linear_coarse(INT *index_tuple) const {
+    INT index = index_tuple[ndim - 1];
+    for (int dimx = ndim - 2; dimx >= 0; dimx--) {
+      index *= dims[dimx];
+      index += index_tuple[dimx];
+    }
+    return index;
+  };
+
+  /**
+   * Convert a fine mesh index represented by a tuple into a linear index.
+   * tuple should be:
+   * 1D: (fine_x)
+   * 2D: (fine_x, fine_y)
+   * 3D: (fine_x, fine_y, fine_z)
+   *
+   * @param index_tuple Index represented as a tuple.
+   * @returns Linear index.
+   */
+  inline INT tuple_to_linear_fine(INT *index_tuple) const {
+    INT index = index_tuple[ndim - 1];
+    for (int dimx = ndim - 2; dimx >= 0; dimx--) {
+      index *= ncells_dim_fine;
+      index += index_tuple[dimx];
+    }
+    return index;
+  }
 };
 
 /**
@@ -502,8 +570,8 @@ struct MeshHierarchyDeviceMapper {
  */
 class MeshHierarchyMapper {
 private:
-  std::unique_ptr<BufferDeviceHost<REAL>> dh_origin;
-  std::unique_ptr<BufferDeviceHost<INT>> dh_dims;
+  std::shared_ptr<BufferDeviceHost<REAL>> dh_origin;
+  std::shared_ptr<BufferDeviceHost<INT>> dh_dims;
   std::shared_ptr<MeshHierarchy> mesh_hierarchy;
 
   inline MeshHierarchyDeviceMapper get_generic_mapper() {
@@ -517,6 +585,7 @@ private:
     mapper.cell_width_coarse = this->mesh_hierarchy->cell_width_coarse;
     mapper.cell_width_fine = this->mesh_hierarchy->cell_width_fine;
     mapper.ncells_dim_fine = this->mesh_hierarchy->ncells_dim_fine;
+    mapper.ncells_fine = this->mesh_hierarchy->ncells_fine;
     return mapper;
   }
 
@@ -540,9 +609,9 @@ public:
       origin_tmp[dimx] = mesh_hierarchy->origin[dimx];
     }
     this->dh_origin =
-        std::make_unique<BufferDeviceHost<REAL>>(sycl_target, origin_tmp);
+        std::make_shared<BufferDeviceHost<REAL>>(sycl_target, origin_tmp);
     this->dh_dims =
-        std::make_unique<BufferDeviceHost<INT>>(sycl_target, dims_tmp);
+        std::make_shared<BufferDeviceHost<INT>>(sycl_target, dims_tmp);
   }
 
   /**
