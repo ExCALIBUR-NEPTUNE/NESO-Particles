@@ -20,12 +20,13 @@ namespace NESO::Particles {
  *  @param N Number of points to generate.
  *  @param ndim Number of dimensions.
  *  @param extents Extent of each of the dimensions.
- *  @param rng Optional RNG to use.
+ *  @param rng RNG to use.
  *  @returns (N)x(ndim) set of positions stored for each column.
  */
+template <typename RNG>
 inline std::vector<std::vector<double>>
 uniform_within_extents(const int N, const int ndim, const double *extents,
-                       std::mt19937 rng = std::mt19937()) {
+                       RNG &rng) {
 
   std::uniform_real_distribution<double> uniform_rng(0.0, 1.0);
   std::vector<std::vector<double>> positions(ndim);
@@ -47,12 +48,13 @@ uniform_within_extents(const int N, const int ndim, const double *extents,
  *  @param ndim Number of dimensions.
  *  @param mu Mean to use for Gaussian distribution.
  *  @param sigma Sigma to use for Gaussian distribution.
- *  @param rng Optional RNG to use.
+ *  @param rng RNG to use.
  *  @returns (N)x(ndim) set of samples stored per column.
  */
+template <typename RNG>
 inline std::vector<std::vector<double>>
 normal_distribution(const int N, const int ndim, const double mu,
-                    const double sigma, std::mt19937 rng = std::mt19937()) {
+                    const double sigma, RNG &rng) {
 
   std::normal_distribution<> d{mu, sigma};
   std::vector<std::vector<double>> array(ndim);
@@ -64,6 +66,36 @@ normal_distribution(const int N, const int ndim, const double mu,
   }
 
   return array;
+}
+
+/**
+ *  Create a uniform distribution of particle positions within a set of extents.
+ *
+ *  @param N Number of points to generate.
+ *  @param ndim Number of dimensions.
+ *  @param extents Extent of each of the dimensions.
+ *  @returns (N)x(ndim) set of positions stored for each column.
+ */
+inline std::vector<std::vector<double>>
+uniform_within_extents(const int N, const int ndim, const double *extents) {
+  std::mt19937 rng = std::mt19937(std::random_device{}());
+  return uniform_within_extents(N, ndim, extents, rng);
+}
+
+/**
+ *  Create (N)x(ndim) set of samples from a Gaussian distribution.
+ *
+ *  @param N Number of points to generate.
+ *  @param ndim Number of dimensions.
+ *  @param mu Mean to use for Gaussian distribution.
+ *  @param sigma Sigma to use for Gaussian distribution.
+ *  @returns (N)x(ndim) set of samples stored per column.
+ */
+inline std::vector<std::vector<double>>
+normal_distribution(const int N, const int ndim, const double mu,
+                    const double sigma) {
+  std::mt19937 rng = std::mt19937(std::random_device{}());
+  return normal_distribution(N, ndim, mu, sigma, rng);
 }
 
 } // namespace NESO::Particles
