@@ -17,7 +17,7 @@ TEST(Utility, UniformWithinExtents) {
     const double extents[1] = {1.0};
     auto u0 = uniform_within_extents(1, 1, extents);
     auto u1 = uniform_within_extents(1, 1, extents);
-    ASSERT_TRUE(u0[0][0] != u1[0][0]);
+    EXPECT_TRUE(u0[0][0] != u1[0][0]);
   }
 
   {
@@ -55,7 +55,7 @@ TEST(Utility, NormalDistribution) {
   {
     auto u0 = NESO::Particles::normal_distribution(1, 1, 1.0, 1.0);
     auto u1 = NESO::Particles::normal_distribution(1, 1, 1.0, 1.0);
-    ASSERT_TRUE(u0[0][0] != u1[0][0]);
+    EXPECT_TRUE(u0[0][0] != u1[0][0]);
   }
 
   {
