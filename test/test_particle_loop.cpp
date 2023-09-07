@@ -11,22 +11,16 @@ template <typename T> struct ParticleDatAccess {
   T &operator[](const int component) { return ptr[component][this->layer]; }
 };
 
-
-template<typename SPEC> struct KernelParameter{
-  using type = void;
-};
-template<typename U> struct KernelParameter<Sym<U>>{
+template <typename SPEC> struct KernelParameter { using type = void; };
+template <typename U> struct KernelParameter<Sym<U>> {
   using type = ParticleDatAccess<U>;
 };
 
-template< class T >
-using kernel_parameter_t = typename KernelParameter<T>::type;
-
-
+template <class T> using kernel_parameter_t = typename KernelParameter<T>::type;
 
 template <typename KERNEL, typename... ARGS> class ParticleLoop {
 protected:
-  using kernel_parameter_types = std::tuple<kernel_parameter_t<ARGS> ...>;
+  using kernel_parameter_types = std::tuple<kernel_parameter_t<ARGS>...>;
   std::tuple<ARGS...> args;
 
   template <size_t INDEX, typename U> inline void unpack_args(U a0) {
@@ -48,26 +42,29 @@ public:
       : particle_group(particle_group), kernel(kernel) {
     this->unpack_args<0>(args...);
   };
-  
-  inline void execute(){
 
-    auto pl_iter_range = this->particle_group->position_dat->get_particle_loop_iter_range();
-    auto pl_stride = this->particle_group->position_dat->get_particle_loop_cell_stride();
-    auto pl_npart_cell = this->particle_group->position_dat->get_particle_loop_npart_cell();
+  inline void execute() {
+
+    auto pl_iter_range =
+        this->particle_group->position_dat->get_particle_loop_iter_range();
+    auto pl_stride =
+        this->particle_group->position_dat->get_particle_loop_cell_stride();
+    auto pl_npart_cell =
+        this->particle_group->position_dat->get_particle_loop_npart_cell();
 
     this->particle_group->sycl_target->queue
         .submit([&](sycl::handler &cgh) {
-          cgh.parallel_for<>(sycl::range<1>(pl_iter_range), [=](sycl::id<1> idx) {
-            NESO_PARTICLES_KERNEL_START
-            const INT cellx = NESO_PARTICLES_KERNEL_CELL;
-            const INT layerx = NESO_PARTICLES_KERNEL_LAYER;
+          cgh.parallel_for<>(sycl::range<1>(pl_iter_range),
+                             [=](sycl::id<1> idx) {
+                               NESO_PARTICLES_KERNEL_START
+                               const INT cellx = NESO_PARTICLES_KERNEL_CELL;
+                               const INT layerx = NESO_PARTICLES_KERNEL_LAYER;
 
-          NESO_PARTICLES_KERNEL_END
-          });
-        }).wait_and_throw();
-
+                               NESO_PARTICLES_KERNEL_END
+                             });
+        })
+        .wait_and_throw();
   }
-
 };
 
 TEST(ParticleLoop, Base2) {
@@ -123,18 +120,13 @@ TEST(ParticleLoop, Base2) {
   A->add_particles(initial_distribution);
 
   ParticleLoop particle_loop(
-    A,
-    [=](
-      ParticleDatAccess<REAL> P,
-      ParticleDatAccess<REAL> V,
-      ParticleDatAccess<INT> ID
-    ) {
-      P[0] += V[0] * 0.001;
-    }, 
-    Sym<REAL>("P"), 
-    Sym<REAL>("V"), 
-    Sym<INT>("ID")
-  );
+      A, // ParticleGroup
+      [=](ParticleDatAccess<REAL> P, ParticleDatAccess<REAL> V,
+          ParticleDatAccess<INT> ID) {
+        P[0] += V[0] * 0.001;
+        P[1] += V[1] * 0.001;
+      },
+      Sym<REAL>("POS"), Sym<REAL>("V"), Sym<INT>("ID"));
 
   particle_loop.execute();
 
