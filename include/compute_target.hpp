@@ -330,19 +330,6 @@ public:
     if (this->size > 0) {
       this->sycl_target->queue.memcpy(this->ptr, vec.data(), this->size_bytes())
           .wait();
-
-      auto k_ptr = this->ptr;
-
-      sycl::buffer<T, 1> b_vec(vec.data(), vec.size());
-      sycl_target->queue
-          .submit([&](sycl::handler &cgh) {
-            auto a_vec =
-                b_vec.template get_access<sycl::access::mode::read>(cgh);
-            cgh.parallel_for<>(
-                sycl::range<1>(this->size),
-                [=](sycl::id<1> idx) { k_ptr[idx] = a_vec[idx]; });
-          })
-          .wait_and_throw();
     }
   }
 
