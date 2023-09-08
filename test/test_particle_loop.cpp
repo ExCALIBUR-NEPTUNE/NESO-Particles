@@ -10,16 +10,6 @@ namespace NESO::Particles::Tuple {
 template <std::size_t INDEX, typename U> struct TupleImpl {
   U value;
   TupleImpl() = default;
-
-  /*
-   TupleImpl(U const &v) {
-    value = v;
-   }
-
-   TupleImpl(U &&v) {
-    value = std::move(v);
-   }
-   */
   U &get() { return value; }
 };
 
@@ -31,7 +21,6 @@ template <size_t INDEX, typename U, typename... V>
 struct TupleBaseRec<INDEX, U, V...> : TupleImpl<INDEX, U>,
                                       TupleBaseRec<INDEX + 1, V...> {
   TupleBaseRec() = default;
-  // TupleBaseRec(U &u) : TupleImpl<INDEX, U>(u) {};
 };
 
 template <typename U, typename... V> struct Tuple : TupleBaseRec<0, U, V...> {
@@ -55,7 +44,6 @@ template <size_t INDEX, typename... U> auto &get(Tuple<U...> &u) {
 } // namespace NESO::Particles::Tuple
 
 TEST(ParticleLoop, Tuple) {
-
   using Tuple0 = Tuple::Tuple<int, int64_t, double>;
   static_assert(std::is_trivially_copyable<Tuple0>::value == true);
   static_assert(std::is_same<Tuple::GetIndexType<0, int, int64_t, double>::type,
@@ -82,6 +70,59 @@ TEST(ParticleLoop, Tuple) {
 
   EXPECT_EQ(Tuple::get<0>(t), 43);
   EXPECT_EQ(Tuple::get<2>(t), 3.141);
+}
+
+namespace NESO::Particles::Apply {
+
+template <size_t...> struct IntSequence {};
+
+template <size_t N, size_t... S> struct GenerateIntSequence {
+  using type = typename GenerateIntSequence<N - 1, N - 1, S...>::type;
+};
+
+template <size_t... S> struct GenerateIntSequence<0, S...> {
+  using type = IntSequence<S...>;
+};
+
+template <typename KERNEL, size_t... S, typename... ARGS>
+auto apply_inner(KERNEL &kernel, IntSequence<S...>,
+                 Tuple::Tuple<ARGS...> &args) {
+  return kernel(Tuple::get<S>(args)...);
+}
+
+template <typename KERNEL, typename... ARGS>
+auto apply(KERNEL kernel, Tuple::Tuple<ARGS...> &args) {
+  return apply_inner(
+      kernel, typename GenerateIntSequence<sizeof...(ARGS)>::type(), args);
+}
+
+} // namespace NESO::Particles::Apply
+
+TEST(ParticleLoop, Call) {
+  using Tuple0 = Tuple::Tuple<int, int64_t, double>;
+  Tuple0 t;
+  Tuple::get<0>(t) = -42;
+  Tuple::get<1>(t) = 43;
+  Tuple::get<2>(t) = 3.141;
+  
+  int aa;
+  int64_t bb;
+  double cc;
+
+  const int to_test = Apply::apply(
+      [&](const int a, const int64_t b, const double c) {
+        aa = a;
+        bb = b;
+        cc = c;
+        return 53;
+      },
+      t);
+
+  EXPECT_EQ(to_test, 53);
+  EXPECT_EQ(get<0>(t), aa);
+  EXPECT_EQ(get<1>(t), bb);
+  EXPECT_EQ(get<2>(t), cc);
+
 }
 
 template <typename T> struct ParticleDatAccess {
