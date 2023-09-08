@@ -11,6 +11,7 @@ template <std::size_t INDEX, typename U> struct TupleImpl {
   U value;
   TupleImpl() = default;
   U &get() { return value; }
+  const U &get_const() const { return value; }
 };
 
 template <size_t INDEX, typename... V> struct TupleBaseRec {
@@ -39,6 +40,12 @@ template <size_t INDEX, typename... U> auto &get(Tuple<U...> &u) {
   return static_cast<
              TupleImpl<INDEX, typename GetIndexType<INDEX, U...>::type> &>(u)
       .get();
+}
+
+template <size_t INDEX, typename... U> const auto &get(const Tuple<U...> &u) {
+  return static_cast<const TupleImpl<
+      INDEX, typename GetIndexType<INDEX, U...>::type> &>(u)
+      .get_const();
 }
 
 } // namespace NESO::Particles::Tuple
@@ -98,13 +105,13 @@ auto apply(KERNEL kernel, Tuple::Tuple<ARGS...> &args) {
 
 } // namespace NESO::Particles::Apply
 
-TEST(ParticleLoop, Call) {
+TEST(ParticleLoop, Apply) {
   using Tuple0 = Tuple::Tuple<int, int64_t, double>;
   Tuple0 t;
   Tuple::get<0>(t) = -42;
   Tuple::get<1>(t) = 43;
   Tuple::get<2>(t) = 3.141;
-  
+
   int aa;
   int64_t bb;
   double cc;
@@ -122,7 +129,6 @@ TEST(ParticleLoop, Call) {
   EXPECT_EQ(get<0>(t), aa);
   EXPECT_EQ(get<1>(t), bb);
   EXPECT_EQ(get<2>(t), cc);
-
 }
 
 template <typename T> struct ParticleDatAccess {
@@ -132,15 +138,31 @@ template <typename T> struct ParticleDatAccess {
 };
 
 template <typename SPEC> struct KernelParameter { using type = void; };
-template <typename U> struct KernelParameter<Sym<U>> {
-  using type = ParticleDatAccess<U>;
+template <typename SPEC> struct KernelParameter<Sym<SPEC>> {
+  using type = ParticleDatAccess<SPEC>;
+};
+
+template <typename SPEC> struct LoopParameter { using type = void *; };
+template <typename SPEC> struct LoopParameter<Sym<SPEC>> {
+  using type = SPEC ***;
 };
 
 template <class T> using kernel_parameter_t = typename KernelParameter<T>::type;
+template <class T> using loop_parameter_t = typename LoopParameter<T>::type;
+
+template <typename SPEC>
+inline void create_kernel_arg(const int cellx, const int layerx, SPEC ***rhs,
+                              ParticleDatAccess<SPEC> &lhs) {
+  lhs.layer = layerx;
+  lhs.ptr = rhs[cellx];
+}
 
 template <typename KERNEL, typename... ARGS> class ParticleLoop {
+
 protected:
-  using kernel_parameter_types = std::tuple<kernel_parameter_t<ARGS>...>;
+  using kernel_parameter_type = Tuple::Tuple<kernel_parameter_t<ARGS>...>;
+  using loop_parameter_type = Tuple::Tuple<loop_parameter_t<ARGS>...>;
+
   std::tuple<ARGS...> args;
 
   template <size_t INDEX, typename U> inline void unpack_args(U a0) {
@@ -151,6 +173,43 @@ protected:
   inline void unpack_args(U a0, V... args) {
     std::get<INDEX>(this->args) = a0;
     this->unpack_args<INDEX + 1>(args...);
+  }
+
+  template <typename SPEC> inline auto get_loop_arg(Sym<SPEC> sym) {
+    return this->particle_group->get_dat(sym)->cell_dat.device_ptr();
+  }
+
+  template <size_t INDEX, size_t SIZE, typename PARAM>
+  inline void create_loop_args_inner(PARAM &loop_args) {
+    if constexpr (INDEX < SIZE) {
+      Tuple::get<INDEX>(loop_args) = get_loop_arg(std::get<INDEX>(this->args));
+      create_loop_args_inner<INDEX + 1, SIZE>(loop_args);
+    }
+  }
+
+  inline void create_loop_args(loop_parameter_type &loop_args) {
+    create_loop_args_inner<0, sizeof...(ARGS)>(loop_args);
+  }
+
+  template <size_t INDEX, size_t SIZE>
+  inline void create_kernel_args_inner(const int cellx, const int layerx,
+                                       const loop_parameter_type &loop_args,
+                                       kernel_parameter_type &kernel_args) {
+
+    if constexpr (INDEX < SIZE) {
+      auto arg = Tuple::get<INDEX>(loop_args);
+      create_kernel_arg(cellx, layerx, arg, Tuple::get<INDEX>(kernel_args));
+      create_kernel_args_inner<INDEX + 1, SIZE>(cellx, layerx, loop_args,
+                                                kernel_args);
+    }
+  }
+
+  inline void create_kernel_args(const int cellx, const int layerx,
+                                 const loop_parameter_type &loop_args,
+                                 kernel_parameter_type &kernel_args) {
+
+    create_kernel_args_inner<0, sizeof...(ARGS)>(cellx, layerx, loop_args,
+                                                 kernel_args);
   }
 
   ParticleGroupSharedPtr particle_group;
@@ -172,16 +231,27 @@ public:
     auto pl_npart_cell =
         this->particle_group->position_dat->get_particle_loop_npart_cell();
 
+    loop_parameter_type loop_args;
+    create_loop_args(loop_args);
+
+    auto k_kernel = this->kernel;
+
     this->particle_group->sycl_target->queue
         .submit([&](sycl::handler &cgh) {
-          cgh.parallel_for<>(sycl::range<1>(pl_iter_range),
-                             [=](sycl::id<1> idx) {
-                               NESO_PARTICLES_KERNEL_START
-                               const INT cellx = NESO_PARTICLES_KERNEL_CELL;
-                               const INT layerx = NESO_PARTICLES_KERNEL_LAYER;
+          cgh.parallel_for<>(
+              sycl::range<1>(pl_iter_range), [=](sycl::id<1> idx) {
+                NESO_PARTICLES_KERNEL_START
+                const INT cellx = NESO_PARTICLES_KERNEL_CELL;
+                const INT layerx = NESO_PARTICLES_KERNEL_LAYER;
 
-                               NESO_PARTICLES_KERNEL_END
-                             });
+                kernel_parameter_type kernel_args;
+
+                create_kernel_args(cellx, layerx, loop_args, kernel_args);
+
+                Apply::apply(k_kernel, kernel_args);
+
+                NESO_PARTICLES_KERNEL_END
+              });
         })
         .wait_and_throw();
   }
@@ -237,196 +307,23 @@ TEST(ParticleLoop, Base2) {
     initial_distribution[Sym<INT>("ID")][px][0] = px;
   }
 
-  A->add_particles(initial_distribution);
+  A->add_particles_local(initial_distribution);
+
+  A->print(Sym<REAL>("P"), Sym<REAL>("V"), Sym<INT>("ID"));
 
   ParticleLoop particle_loop(
       A,
       [=](ParticleDatAccess<REAL> P, ParticleDatAccess<REAL> V,
-          ParticleDatAccess<INT> ID) { P[0] += V[0] * 0.001; },
+          ParticleDatAccess<INT> ID) {
+        P[0] += V[0];
+        ID[0] = -42;
+      },
       Sym<REAL>("P"), Sym<REAL>("V"), Sym<INT>("ID"));
 
   particle_loop.execute();
 
-  A->free();
-  mesh->free();
-}
-
-/*
-
-template <typename SPECIALISATION>
-struct ParticleLoopKernel {
-  inline void pre_kernel_v(sycl::handler &cgh){
-    auto &underlying = static_cast<SPECIALISATION &>(*this);
-    underlying.pre_kernel(cgh);
-  }
-  inline void kernel_v(const INT cellx, const INT layerx) const {
-    auto &underlying = static_cast<const SPECIALISATION &>(*this);
-    underlying.kernel(cellx, layerx);
-  }
-
-  inline void pre_kernel(sycl::handler &cgh){
-    printf("Base pre_kernel\n");
-  }
-  inline void kernel(const INT cellx, const INT layerx) const {
-    printf("Base kernel\n");
-  }
-};
-
-
-template <typename LAMBDA_TYPE>
-struct ParticleLoopKernelLambda :
-ParticleLoopKernel<ParticleLoopKernelLambda<LAMBDA_TYPE>> { LAMBDA_TYPE
-lambda_kernel;
-
-  ParticleLoopKernelLambda(LAMBDA_TYPE lambda_kernel) :
-lambda_kernel(lambda_kernel) {
-
-    lambda_kernel(-3, -3);
-    this->lambda_kernel(-4, -4);
-    this->kernel(-5, -5);
-
-
-  };
-
-  inline void kernel(const INT cellx, const INT layerx) const {
-    lambda_kernel(cellx, layerx);
-  }
-
-
-};
-
-
-
-
-template <typename T, typename U>
-inline sycl::event particle_loop(
-    ParticleDatSharedPtr<T> particle_dat,
-    //ParticleLoopKernel<U> kernel
-    U kernel
-  ) {
-
-  auto pl_iter_range = particle_dat->get_particle_loop_iter_range();
-  auto pl_stride = particle_dat->get_particle_loop_cell_stride();
-  auto pl_npart_cell = particle_dat->get_particle_loop_npart_cell();
-  auto sycl_target = particle_dat->sycl_target;
-
-
-  kernel.kernel(-6, -6);
-  //kernel.kernel_v(-1, -1);
-
-  return sycl_target->queue
-      .submit([&](sycl::handler &cgh) {
-        kernel.pre_kernel_v(cgh);
-        cgh.parallel_for<>(sycl::range<1>(pl_iter_range), [=](sycl::id<1> idx) {
-          NESO_PARTICLES_KERNEL_START
-          const INT cellx = NESO_PARTICLES_KERNEL_CELL;
-          const INT layerx = NESO_PARTICLES_KERNEL_LAYER;
-          kernel.kernel(cellx, layerx);
-          NESO_PARTICLES_KERNEL_END
-        });
-      });
-}
-
-
-
-
-TEST(ParticleLoop, Base) {
-
-  const int ndim = 2;
-  std::vector<int> dims(ndim);
-  dims[0] = 4;
-  dims[1] = 8;
-
-  const double cell_extent = 1.0;
-  const int subdivision_order = 2;
-  auto mesh = std::make_shared<CartesianHMesh>(MPI_COMM_WORLD, ndim, dims,
-                                               cell_extent, subdivision_order);
-
-  auto sycl_target =
-      std::make_shared<SYCLTarget>(GPU_SELECTOR, mesh->get_comm());
-
-  auto domain = std::make_shared<Domain>(mesh);
-
-  ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
-                             ParticleProp(Sym<REAL>("V"), 3),
-                             ParticleProp(Sym<INT>("CELL_ID"), 1, true),
-                             ParticleProp(Sym<INT>("ID"), 1)};
-
-  auto A = std::make_shared<ParticleGroup>(domain, particle_spec, sycl_target);
-  A->add_particle_dat(ParticleDat(sycl_target,
-                                  ParticleProp(Sym<REAL>("FOO"), 3),
-                                  domain->mesh->get_cell_count()));
-
-  std::mt19937 rng_pos(52234234);
-  std::mt19937 rng_vel(52234231);
-
-  const int N = 10;
-
-  auto positions =
-      uniform_within_extents(N, ndim, mesh->global_extents, rng_pos);
-  auto velocities =
-      NESO::Particles::normal_distribution(N, 3, 0.0, 1.0, rng_vel);
-
-  ParticleSet initial_distribution(N, particle_spec);
-
-  for (int px = 0; px < N; px++) {
-    for (int dimx = 0; dimx < ndim; dimx++) {
-      initial_distribution[Sym<REAL>("P")][px][dimx] = positions[dimx][px];
-    }
-    for (int dimx = 0; dimx < 3; dimx++) {
-      initial_distribution[Sym<REAL>("V")][px][dimx] = velocities[dimx][px];
-    }
-    initial_distribution[Sym<INT>("CELL_ID")][px][0] = 0;
-    initial_distribution[Sym<INT>("ID")][px][0] = px;
-  }
-
-  A->add_particles_local(initial_distribution);
-
-  auto k_P = A->get_dat(Sym<REAL>("P"))->cell_dat.device_ptr();
-  auto k_V = A->get_dat(Sym<REAL>("V"))->cell_dat.device_ptr();
-  auto pl_iter_range = A->position_dat->get_particle_loop_iter_range();
-  auto pl_stride = A->position_dat->get_particle_loop_cell_stride();
-  auto pl_npart_cell = A->position_dat->get_particle_loop_npart_cell();
-
-  printf("%ld, %ld\n", k_V, k_P);
-
-  sycl_target->queue
-      .submit([&](sycl::handler &cgh) {
-        cgh.parallel_for<>(sycl::range<1>(pl_iter_range), [=](sycl::id<1> idx) {
-          NESO_PARTICLES_KERNEL_START
-          const INT cellx = NESO_PARTICLES_KERNEL_CELL;
-          const INT layerx = NESO_PARTICLES_KERNEL_LAYER;
-          printf("T ndim %d, %ld, %ld, %d, %d, %ld, %f\n", ndim, k_V, k_P,
-cellx, layerx, k_V[cellx], k_V[cellx][0][layerx]); NESO_PARTICLES_KERNEL_END
-        });
-      }).wait_and_throw();
-
-
-  //struct Foo : ParticleLoopKernel<Foo> {
-  //  inline void kernel(const INT cellx, const INT layerx) const {
-  //
-  //  }
-  //};
-
-
-  auto inner = [=](const INT cellx, const INT layerx){
-      printf("ndim %d, %ld, %ld, %d, %d, %ld\n", ndim, k_V, k_P, cellx, layerx,
-k_V); for(int dimx=0 ; dimx<ndim ; dimx++){
-        //k_V[cellx][dimx][layerx] = 0.001 * k_P[cellx][dimx][layerx];
-      }
-    };
-
-  inner(-2, -2);
-
-
-  ParticleLoopKernelLambda bar(
-    inner
-  );
-
-  auto e = particle_loop(A->position_dat, bar);
-  e.wait_and_throw();
+  A->print(Sym<REAL>("P"), Sym<REAL>("V"), Sym<INT>("ID"));
 
   A->free();
   mesh->free();
 }
-*/
