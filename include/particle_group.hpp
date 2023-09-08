@@ -161,25 +161,27 @@ public:
    *  @param particle_dat New ParticleDat to add.
    */
   inline void add_particle_dat(ParticleDatSharedPtr<REAL> particle_dat);
+
   /**
    *  Add a ParticleDat to the ParticleGroup after construction.
    *
    *  @param particle_dat New ParticleDat to add.
    */
   inline void add_particle_dat(ParticleDatSharedPtr<INT> particle_dat);
+
   /**
    *  Add particles to the ParticleGroup. Any rank may add particles that exist
-   *  anywhere in the domain. Implemetation TODO. This call is collective
-   *  across the ParticleGroup and ranks that do not add particles should not
-   *  pass any new particle data.
+   *  anywhere in the domain. This call is collective across the ParticleGroup
+   *  and ranks that do not add particles should not pass any new particle
+   *  data.
    */
   inline void add_particles();
 
   /**
    *  Add particles to the ParticleGroup. Any rank may add particles that exist
-   *  anywhere in the domain. Implemetation TODO. This call is collective
-   *  across the ParticleGroup and ranks that do not add particles should not
-   *  pass any new particle data.
+   *  anywhere in the domain. This call is collective across the ParticleGroup
+   *  and ranks that do not add particles should not pass any new particle
+   *  data.
    *
    *  @param particle_data New particle data to add to the ParticleGroup.
    */

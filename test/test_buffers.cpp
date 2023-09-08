@@ -24,6 +24,11 @@ TEST(Buffer, Host) {
 
   std::vector<double> empty(0);
   BufferHost to_test_empty{sycl_target, empty};
+
+  BufferHost to_test_vector{sycl_target, correct};
+  for (int ix = 0; ix < N; ix++) {
+    EXPECT_EQ(correct[ix], to_test_vector.ptr[ix]);
+  }
 }
 
 TEST(Buffer, Device) {
@@ -36,7 +41,7 @@ TEST(Buffer, Device) {
   }
   sycl::buffer<int, 1> b_to_test(to_test.data(), to_test.size());
 
-  BufferHost buffer{sycl_target, correct};
+  BufferDevice buffer{sycl_target, correct};
 
   EXPECT_EQ(buffer.size, N);
   EXPECT_EQ(buffer.size_bytes(), N * sizeof(int));
@@ -58,6 +63,29 @@ TEST(Buffer, Device) {
 
   std::vector<double> empty(0);
   BufferDevice to_test_empty{sycl_target, empty};
+
+  for (int ix = 0; ix < N; ix++) {
+    correct[ix] *= 2;
+  }
+
+  BufferDevice to_test_vector{sycl_target, correct};
+  auto k_to_test_vector = to_test_vector.ptr;
+
+  std::vector<int> to_test2(N);
+  sycl::buffer<int, 1> b_to_test2(to_test2.data(), to_test2.size());
+  sycl_target->queue
+      .submit([&](sycl::handler &cgh) {
+        auto a_to_test = b_to_test2.get_access<sycl::access::mode::write>(cgh);
+        cgh.parallel_for<>(sycl::range<1>(N), [=](sycl::id<1> idx) {
+          a_to_test[idx] = k_to_test_vector[idx];
+        });
+      })
+      .wait_and_throw();
+
+  auto h_to_test2 = b_to_test2.get_host_access();
+  for (int ix = 0; ix < N; ix++) {
+    EXPECT_EQ(correct[ix], h_to_test2[ix]);
+  }
 }
 
 TEST(Buffer, DeviceHost) {
@@ -118,4 +146,28 @@ TEST(Buffer, DeviceHost) {
 
   std::vector<double> empty(0);
   BufferDeviceHost to_test_empty{sycl_target, empty};
+
+  for (int ix = 0; ix < N; ix++) {
+    correct.at(ix) *= 2;
+  }
+
+  {
+    BufferDeviceHost to_test_vector{sycl_target, correct};
+    auto k_to_test_vector = to_test_vector.d_buffer.ptr;
+    sycl_target->queue
+        .submit([&](sycl::handler &cgh) {
+          cgh.parallel_for<>(sycl::range<1>(N), [=](sycl::id<1> idx) {
+            k_to_test_vector[idx] *= 2;
+          });
+        })
+        .wait_and_throw();
+
+    for (int ix = 0; ix < N; ix++) {
+      EXPECT_EQ(correct[ix], to_test_vector.h_buffer.ptr[ix]);
+    }
+    to_test_vector.device_to_host();
+    for (int ix = 0; ix < N; ix++) {
+      EXPECT_EQ(correct[ix] * 2, to_test_vector.h_buffer.ptr[ix]);
+    }
+  }
 }

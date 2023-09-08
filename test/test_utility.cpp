@@ -60,7 +60,6 @@ TEST(Utility, NormalDistribution) {
 
   {
     std::mt19937 rng0 = std::mt19937(123);
-    const double extents[1] = {1.0};
     auto u0 = NESO::Particles::normal_distribution(1, 1, 2.0, 3.0, rng0);
 
     std::mt19937 rng1 = std::mt19937(123);
