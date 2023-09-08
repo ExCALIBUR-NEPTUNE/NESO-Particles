@@ -192,9 +192,10 @@ protected:
   }
 
   template <size_t INDEX, size_t SIZE>
-  inline void create_kernel_args_inner(const int cellx, const int layerx,
-                                       const loop_parameter_type &loop_args,
-                                       kernel_parameter_type &kernel_args) {
+  static inline constexpr void
+  create_kernel_args_inner(const int cellx, const int layerx,
+                           const loop_parameter_type &loop_args,
+                           kernel_parameter_type &kernel_args) {
 
     if constexpr (INDEX < SIZE) {
       auto arg = Tuple::get<INDEX>(loop_args);
@@ -204,9 +205,10 @@ protected:
     }
   }
 
-  inline void create_kernel_args(const int cellx, const int layerx,
-                                 const loop_parameter_type &loop_args,
-                                 kernel_parameter_type &kernel_args) {
+  static inline constexpr void
+  create_kernel_args(const int cellx, const int layerx,
+                     const loop_parameter_type &loop_args,
+                     kernel_parameter_type &kernel_args) {
 
     create_kernel_args_inner<0, sizeof...(ARGS)>(cellx, layerx, loop_args,
                                                  kernel_args);
