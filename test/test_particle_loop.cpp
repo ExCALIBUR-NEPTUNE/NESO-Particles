@@ -5,28 +5,101 @@
 
 using namespace NESO::Particles;
 
+namespace NESO::Particles::Tuple {
+
+template <std::size_t INDEX, typename U> struct TupleImpl {
+  U value;
+  TupleImpl() = default;
+
+  /*
+   TupleImpl(U const &v) {
+    value = v;
+   }
+
+   TupleImpl(U &&v) {
+    value = std::move(v);
+   }
+   */
+  U &get() { return value; }
+};
+
+template <size_t INDEX, typename... V> struct TupleBaseRec {
+  TupleBaseRec() = default;
+};
+
+template <size_t INDEX, typename U, typename... V>
+struct TupleBaseRec<INDEX, U, V...> : TupleImpl<INDEX, U>,
+                                      TupleBaseRec<INDEX + 1, V...> {
+  TupleBaseRec() = default;
+  // TupleBaseRec(U &u) : TupleImpl<INDEX, U>(u) {};
+};
+
+template <typename U, typename... V> struct Tuple : TupleBaseRec<0, U, V...> {
+  Tuple() = default;
+};
+
+template <size_t INDEX, typename T, typename... U> struct GetIndexType {
+  using type = typename GetIndexType<INDEX - 1, U...>::type;
+};
+
+template <typename T, typename... U> struct GetIndexType<0, T, U...> {
+  using type = T;
+};
+
+template <size_t INDEX, typename... U> auto &get(Tuple<U...> &u) {
+  return static_cast<
+             TupleImpl<INDEX, typename GetIndexType<INDEX, U...>::type> &>(u)
+      .get();
+}
+
+} // namespace NESO::Particles::Tuple
+
+TEST(ParticleLoop, Tuple) {
+
+  using Tuple0 = Tuple::Tuple<int, int64_t, double>;
+  static_assert(std::is_trivially_copyable<Tuple0>::value == true);
+  static_assert(std::is_same<Tuple::GetIndexType<0, int, int64_t, double>::type,
+                             int>::value == true);
+  static_assert(std::is_same<Tuple::GetIndexType<1, int, int64_t, double>::type,
+                             int64_t>::value == true);
+  static_assert(std::is_same<Tuple::GetIndexType<2, int, int64_t, double>::type,
+                             double>::value == true);
+
+  Tuple0 t;
+
+  auto t0 = static_cast<Tuple::TupleImpl<0, int> *>(&t);
+  t0->value = 42;
+  auto t1 = static_cast<Tuple::TupleImpl<2, double> *>(&t);
+  t1->value = 3.14;
+
+  auto to_test_0 = static_cast<Tuple::TupleImpl<0, int> *>(&t)->value;
+  auto to_test_1 = static_cast<Tuple::TupleImpl<2, double> *>(&t)->value;
+  EXPECT_EQ(to_test_0, 42);
+  EXPECT_EQ(to_test_1, 3.14);
+
+  Tuple::get<0>(t) = 43;
+  Tuple::get<2>(t) = 3.141;
+
+  EXPECT_EQ(Tuple::get<0>(t), 43);
+  EXPECT_EQ(Tuple::get<2>(t), 3.141);
+}
+
 template <typename T> struct ParticleDatAccess {
   T **ptr;
   int layer;
   T &operator[](const int component) { return ptr[component][this->layer]; }
 };
 
-
-template<typename SPEC> struct KernelParameter{
-  using type = void;
-};
-template<typename U> struct KernelParameter<Sym<U>>{
+template <typename SPEC> struct KernelParameter { using type = void; };
+template <typename U> struct KernelParameter<Sym<U>> {
   using type = ParticleDatAccess<U>;
 };
 
-template< class T >
-using kernel_parameter_t = typename KernelParameter<T>::type;
-
-
+template <class T> using kernel_parameter_t = typename KernelParameter<T>::type;
 
 template <typename KERNEL, typename... ARGS> class ParticleLoop {
 protected:
-  using kernel_parameter_types = std::tuple<kernel_parameter_t<ARGS> ...>;
+  using kernel_parameter_types = std::tuple<kernel_parameter_t<ARGS>...>;
   std::tuple<ARGS...> args;
 
   template <size_t INDEX, typename U> inline void unpack_args(U a0) {
@@ -48,26 +121,29 @@ public:
       : particle_group(particle_group), kernel(kernel) {
     this->unpack_args<0>(args...);
   };
-  
-  inline void execute(){
 
-    auto pl_iter_range = this->particle_group->position_dat->get_particle_loop_iter_range();
-    auto pl_stride = this->particle_group->position_dat->get_particle_loop_cell_stride();
-    auto pl_npart_cell = this->particle_group->position_dat->get_particle_loop_npart_cell();
+  inline void execute() {
+
+    auto pl_iter_range =
+        this->particle_group->position_dat->get_particle_loop_iter_range();
+    auto pl_stride =
+        this->particle_group->position_dat->get_particle_loop_cell_stride();
+    auto pl_npart_cell =
+        this->particle_group->position_dat->get_particle_loop_npart_cell();
 
     this->particle_group->sycl_target->queue
         .submit([&](sycl::handler &cgh) {
-          cgh.parallel_for<>(sycl::range<1>(pl_iter_range), [=](sycl::id<1> idx) {
-            NESO_PARTICLES_KERNEL_START
-            const INT cellx = NESO_PARTICLES_KERNEL_CELL;
-            const INT layerx = NESO_PARTICLES_KERNEL_LAYER;
+          cgh.parallel_for<>(sycl::range<1>(pl_iter_range),
+                             [=](sycl::id<1> idx) {
+                               NESO_PARTICLES_KERNEL_START
+                               const INT cellx = NESO_PARTICLES_KERNEL_CELL;
+                               const INT layerx = NESO_PARTICLES_KERNEL_LAYER;
 
-          NESO_PARTICLES_KERNEL_END
-          });
-        }).wait_and_throw();
-
+                               NESO_PARTICLES_KERNEL_END
+                             });
+        })
+        .wait_and_throw();
   }
-
 };
 
 TEST(ParticleLoop, Base2) {
@@ -123,18 +199,10 @@ TEST(ParticleLoop, Base2) {
   A->add_particles(initial_distribution);
 
   ParticleLoop particle_loop(
-    A,
-    [=](
-      ParticleDatAccess<REAL> P,
-      ParticleDatAccess<REAL> V,
-      ParticleDatAccess<INT> ID
-    ) {
-      P[0] += V[0] * 0.001;
-    }, 
-    Sym<REAL>("P"), 
-    Sym<REAL>("V"), 
-    Sym<INT>("ID")
-  );
+      A,
+      [=](ParticleDatAccess<REAL> P, ParticleDatAccess<REAL> V,
+          ParticleDatAccess<INT> ID) { P[0] += V[0] * 0.001; },
+      Sym<REAL>("P"), Sym<REAL>("V"), Sym<INT>("ID"));
 
   particle_loop.execute();
 
