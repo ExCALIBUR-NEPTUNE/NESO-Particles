@@ -1,4 +1,4 @@
 breathe
-GitPython==3.1.33
+GitPython==3.1.35
 pydata-sphinx-theme
 sphinx
