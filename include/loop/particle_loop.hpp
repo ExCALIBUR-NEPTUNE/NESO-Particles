@@ -64,10 +64,12 @@ namespace NESO::Particles::Access::ParticleDat {
  */
 template <typename T> struct Read {
   /// Pointer to underlying data for a cell.
-  T **ptr;
+  T const *const *ptr;
   /// Stores which particle in the cell this instance refers to.
   int layer;
-  T &operator[](const int component) { return ptr[component][this->layer]; }
+  T const &operator[](const int component) {
+    return ptr[component][this->layer];
+  }
 };
 
 template <typename T> struct Write {

@@ -6,7 +6,7 @@
 
 using namespace NESO::Particles;
 
-TEST(ParticleLoop, Base2) {
+TEST(ParticleLoop, Base) {
 
   const int ndim = 2;
   std::vector<int> dims(ndim);
