@@ -404,21 +404,38 @@ public:
 };
 
 /**
- *  TODO
+ *  A struct to aid binning points into MeshHierarchy cells. This type is
+ *  device copyable such that points can be easilly binned into cells on the
+ *  device.
  */
 struct MeshHierarchyDeviceMapper {
+  /// Number of spatial dimensions.
   INT ndim;
+  /// ndim sized array holding the mesh origin.
   REAL *origin;
+  /// ndim sized array holding the number of coarse cells in each direction.
   INT *dims;
+  /// The inverse of the coarse cell width.
   REAL inverse_cell_width_coarse;
+  /// The inverse of the fine cell width.
   REAL inverse_cell_width_fine;
+  /// The coarse cell width.
   REAL cell_width_coarse;
+  /// The fine cell width.
   REAL cell_width_fine;
+  /// The number of fine cells in each dimension per dimension.
   INT ncells_dim_fine;
+  /// The total number of fine cells per coarse cell.
   INT ncells_fine;
 
   /**
-   * TODO
+   * For an input point find the MeshHierarchy cell that contains the point in
+   * tuple form. Output tuple should be: 1D: (coarse_x, fine_x) 2D: (coarse_x,
+   * coarse_y, fine_x, fine_y) 3D: (coarse_x, coarse_y, coarse_z, fine_x,
+   * fine_y, fine_z)
+   *
+   * @param[in] position Input position.
+   * @param[out] cell Ouput, index represented as a tuple.
    */
   inline void map_to_tuple(const REAL *position, INT *cell) const {
     for (int dimx = 0; dimx < ndim; dimx++) {
@@ -463,7 +480,16 @@ struct MeshHierarchyDeviceMapper {
   }
 
   /**
-   * TODO
+   * For an input MeshHierarchy tuple output the tuple which would index into a
+   * standard Cartesian mesh of the same structure.
+   * Input tuple should be:
+   * 1D: (coarse_x, fine_x)
+   * 2D: (coarse_x, coarse_y, fine_x, fine_y)
+   * 3D: (coarse_x, coarse_y, coarse_z, fine_x, fine_y, fine_z)
+   *
+   * @param[in] mh_tuple Input tuple in global MeshHierarchy form.
+   * @param[out] cart_tuple N dimensional tuple which indexes into the Cartesian
+   * mesh view of the MeshHierarchy.
    */
   inline void map_tuple_to_cart_tuple(const INT *mh_tuple,
                                       INT *cart_tuple) const {
@@ -473,9 +499,13 @@ struct MeshHierarchyDeviceMapper {
   }
 
   /**
-   * TODO
    * Map position into the cartesian grid. Do not attempt to trucate the
    * position into the mesh.
+   *
+   * @param[in] position Input position to map into the Cartesian view of the
+   * MeshHierarchy.
+   * @param[in, out] cell N dimensional tuple that maps into the Cartesian view
+   * of the MeshHierarchy.
    */
   inline void map_to_cart_tuple_no_trunc(const REAL *position,
                                          INT *cell) const {
@@ -498,7 +528,11 @@ struct MeshHierarchyDeviceMapper {
   }
 
   /**
-   * TODO
+   * Convert a Cartesian tuple index into a MeshHierarchy global tuple index.
+   *
+   * @param[in] cart_tuple Cartesian tuple to convert.
+   * @param[in, out] mh_tuple MeshHierarchy global tuple representation of input
+   * tuple.
    */
   inline void cart_tuple_to_tuple(const INT *cart_tuple, INT *mh_tuple) const {
     for (int dimx = 0; dimx < ndim; dimx++) {
@@ -566,7 +600,8 @@ struct MeshHierarchyDeviceMapper {
 };
 
 /**
- * TODO
+ * A class to provide methods to bin points into MeshHierarchy cells and
+ * transform between representations of MeshHierarchy indexing.
  */
 class MeshHierarchyMapper {
 private:
@@ -591,7 +626,12 @@ private:
 
 public:
   /**
-   * TODO
+   * Create new instance of helper mapper class.
+   *
+   * @param[in] sycl_target The compute device to provide device copyable mapper
+   * structs for.
+   * @param[in] mesh_hierarchy The MeshHierarchy for which to create a mapper
+   * class for.
    */
   MeshHierarchyMapper(SYCLTargetSharedPtr sycl_target,
                       std::shared_ptr<MeshHierarchy> mesh_hierarchy)
@@ -615,7 +655,10 @@ public:
   }
 
   /**
-   * TODO
+   * Get a device copyable struct with device callable methods for interfacing
+   * with a MeshHierarchy.
+   *
+   * @returns New mapper struct.
    */
   inline MeshHierarchyDeviceMapper get_device_mapper() {
     MeshHierarchyDeviceMapper mapper = this->get_generic_mapper();
@@ -625,7 +668,9 @@ public:
   }
 
   /**
-   * TODO
+   * Get a host struct with methods to interface with a MeshHierarchy instance.
+   *
+   * @returns New mapper struct.
    */
   inline MeshHierarchyDeviceMapper get_host_mapper() {
     MeshHierarchyDeviceMapper mapper = this->get_generic_mapper();
