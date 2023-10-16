@@ -38,8 +38,7 @@ TEST(ParticleIO, H5Part) {
 
   auto A = std::make_shared<ParticleGroup>(domain, particle_spec, sycl_target);
 
-  CartesianPeriodic pbc(sycl_target, mesh, A->position_dat);
-  CartesianCellBin ccb(sycl_target, mesh, A->position_dat, A->cell_id_dat);
+  CartesianCellBin ccb(sycl_target, mesh);
 
   A->add_particle_dat(ParticleDat(sycl_target,
                                   ParticleProp(Sym<REAL>("FOO"), 3),
@@ -89,7 +88,7 @@ TEST(ParticleIO, H5Part) {
   }
 
   A->hybrid_move();
-  ccb.execute();
+  ccb.execute(A->position_dat, A->cell_id_dat);
   A->cell_move();
 
   H5Part h5part("test_dump.h5part", A, Sym<REAL>("P"), Sym<REAL>("V"),

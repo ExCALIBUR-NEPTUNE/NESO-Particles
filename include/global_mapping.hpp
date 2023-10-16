@@ -22,12 +22,6 @@ private:
   SYCLTargetSharedPtr sycl_target;
   /// HMesh instance on which particles live.
   HMeshSharedPtr h_mesh;
-  /// ParticleDat storing Positions
-  ParticleDatSharedPtr<REAL> &position_dat;
-  /// ParticleDat storing cell ids
-  ParticleDatSharedPtr<INT> &cell_id_dat;
-  /// ParticleDat storing MPI rank
-  ParticleDatSharedPtr<INT> &mpi_rank_dat;
 
   /// Host buffer containing the number of particles to query owning MPI rank
   BufferHost<int> h_lookup_count;
@@ -73,16 +67,9 @@ public:
    *
    * @param sycl_target SYCLTargetSharedPtr to use as compute device.
    * @param h_mesh HMesh derived mesh to use for mapping.
-   * @param position_dat ParticleDat containing particle positions.
-   * @param cell_id_dat ParticleDat containg particle cell ids.
-   * @param mpi_rank_dat ParticleDat containing the owning rank of particles.
    */
-  MeshHierarchyGlobalMap(SYCLTargetSharedPtr sycl_target, HMeshSharedPtr h_mesh,
-                         ParticleDatSharedPtr<REAL> &position_dat,
-                         ParticleDatSharedPtr<INT> &cell_id_dat,
-                         ParticleDatSharedPtr<INT> &mpi_rank_dat)
-      : sycl_target(sycl_target), h_mesh(h_mesh), position_dat(position_dat),
-        cell_id_dat(cell_id_dat), mpi_rank_dat(mpi_rank_dat),
+  MeshHierarchyGlobalMap(SYCLTargetSharedPtr sycl_target, HMeshSharedPtr h_mesh)
+      : sycl_target(sycl_target), h_mesh(h_mesh),
         h_lookup_count(sycl_target, 1), d_lookup_count(sycl_target, 1),
         h_lookup_global_cells(sycl_target, 1),
         d_lookup_global_cells(sycl_target, 1), h_lookup_ranks(sycl_target, 1),
@@ -95,8 +82,14 @@ public:
    * For each particle that does not have a non-negative MPI rank determined as
    * a local owner obtain the MPI rank that owns the global cell which contains
    * the particle.
+   *
+   * @param position_dat ParticleDat containing particle positions.
+   * @param cell_id_dat ParticleDat containg particle cell ids.
+   * @param mpi_rank_dat ParticleDat containing the owning rank of particles.
    */
-  inline void execute() {
+  inline void execute(ParticleDatSharedPtr<REAL> &position_dat,
+                      ParticleDatSharedPtr<INT> &cell_id_dat,
+                      ParticleDatSharedPtr<INT> &mpi_rank_dat) {
     auto t0 = profile_timestamp();
 
     // reset the device count for cell ids that need mapping
@@ -105,20 +98,20 @@ public:
       cgh.single_task<>([=]() { k_lookup_count[0] = 0; });
     });
 
-    const auto npart_local = this->mpi_rank_dat->get_npart_local();
+    const auto npart_local = mpi_rank_dat->get_npart_local();
     this->d_lookup_local_cells.realloc_no_copy(npart_local);
     this->d_lookup_local_layers.realloc_no_copy(npart_local);
 
     reset_event.wait();
 
     // pointers to access dats in kernel
-    auto k_position_dat = this->position_dat->cell_dat.device_ptr();
-    auto k_mpi_rank_dat = this->mpi_rank_dat->cell_dat.device_ptr();
+    auto k_position_dat = position_dat->cell_dat.device_ptr();
+    auto k_mpi_rank_dat = mpi_rank_dat->cell_dat.device_ptr();
 
     // iteration set
-    auto pl_iter_range = this->mpi_rank_dat->get_particle_loop_iter_range();
-    auto pl_stride = this->mpi_rank_dat->get_particle_loop_cell_stride();
-    auto pl_npart_cell = this->mpi_rank_dat->get_particle_loop_npart_cell();
+    auto pl_iter_range = mpi_rank_dat->get_particle_loop_iter_range();
+    auto pl_stride = mpi_rank_dat->get_particle_loop_cell_stride();
+    auto pl_npart_cell = mpi_rank_dat->get_particle_loop_npart_cell();
 
     // pointers to access BufferDevices in the kernel
     auto k_lookup_local_cells = this->d_lookup_local_cells.ptr;

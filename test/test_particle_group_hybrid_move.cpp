@@ -81,8 +81,8 @@ TEST_P(ParticleGroupHybridMove, multiple) {
     A.add_particles_local(initial_distribution);
   }
 
-  CartesianPeriodic pbc(sycl_target, mesh, A.position_dat);
-  CartesianCellBin ccb(sycl_target, mesh, A.position_dat, A.cell_id_dat);
+  CartesianPeriodic pbc(sycl_target, mesh);
+  CartesianCellBin ccb(sycl_target, mesh);
 
   reset_mpi_ranks(A[Sym<INT>("NESO_MPI_RANK")]);
 
@@ -190,11 +190,11 @@ TEST_P(ParticleGroupHybridMove, multiple) {
   };
 
   for (int testx = 0; testx < Ntest; testx++) {
-    pbc.execute();
+    pbc.execute(A.position_dat);
 
     A.hybrid_move();
 
-    ccb.execute();
+    ccb.execute(A.position_dat, A.cell_id_dat);
     A.cell_move();
 
     lambda_test();
