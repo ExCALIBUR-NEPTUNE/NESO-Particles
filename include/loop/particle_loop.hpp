@@ -41,6 +41,8 @@ template <typename T> struct Write {
 
 namespace NESO::Particles {
 
+namespace {
+
 template <typename SPEC> struct LoopParameter { using type = void *; };
 template <typename SPEC> struct LoopParameter<Access::Read<Sym<SPEC>>> {
   using type = SPEC ***;
@@ -71,6 +73,8 @@ inline void create_kernel_arg(const int cellx, const int layerx, SPEC ***rhs,
   lhs.layer = layerx;
   lhs.ptr = rhs[cellx];
 }
+
+} // namespace
 
 template <typename KERNEL, typename... ARGS> class ParticleLoop {
 
@@ -146,39 +150,59 @@ public:
     this->unpack_args<0>(args...);
   };
 
-  inline void execute() {
+  inline void execute(EventStack &event_stack) {
 
-    auto pl_iter_range =
-        this->particle_group->position_dat->get_particle_loop_iter_range();
-    auto pl_stride =
-        this->particle_group->position_dat->get_particle_loop_cell_stride();
-    auto pl_npart_cell =
-        this->particle_group->position_dat->get_particle_loop_npart_cell();
+    auto h_npart_cell = this->particle_group->position_dat->h_npart_cell;
+    const int ncell = this->particle_group->position_dat->ncell;
 
     loop_parameter_type loop_args;
-
     create_loop_args(loop_args);
-
     auto k_kernel = this->kernel;
 
-    this->particle_group->sycl_target->queue
-        .submit([&](sycl::handler &cgh) {
-          cgh.parallel_for<>(
-              sycl::range<1>(pl_iter_range), [=](sycl::id<1> idx) {
-                NESO_PARTICLES_KERNEL_START
-                const INT cellx = NESO_PARTICLES_KERNEL_CELL;
-                const INT layerx = NESO_PARTICLES_KERNEL_LAYER;
+    for (int cellh = 0; cellh < ncell; cellh++) {
+      const int cellx = cellh;
+      const int num_particles = h_npart_cell[cellh];
 
-                kernel_parameter_type kernel_args;
+      if (num_particles > 0) {
+        auto iteration_set = get_nd_range_peel_1d(num_particles, 256);
 
-                create_kernel_args(cellx, layerx, loop_args, kernel_args);
+        event_stack.push(this->particle_group->sycl_target->queue.submit(
+            [&](sycl::handler &cgh) {
+              cgh.parallel_for<>(
+                  iteration_set.loop_main, [=](sycl::nd_item<1> idx) {
+                    const int layerx =
+                        static_cast<int>(idx.get_global_linear_id());
+                    kernel_parameter_type kernel_args;
+                    create_kernel_args(cellx, layerx, loop_args, kernel_args);
+                    Tuple::apply(k_kernel, kernel_args);
+                  });
+            }));
+        if (iteration_set.peel_exists) {
+          const std::size_t k_offset = iteration_set.offset;
+          event_stack.push(this->particle_group->sycl_target->queue.submit(
+              [&](sycl::handler &cgh) {
+                cgh.parallel_for<>(
+                    iteration_set.loop_peel, [=](sycl::nd_item<1> idx) {
+                      const size_t layers =
+                          idx.get_global_linear_id() + k_offset;
+                      const int layerx = static_cast<int>(layers);
+                      if (layerx < num_particles) {
+                        kernel_parameter_type kernel_args;
+                        create_kernel_args(cellx, layerx, loop_args,
+                                           kernel_args);
+                        Tuple::apply(k_kernel, kernel_args);
+                      }
+                    });
+              }));
+        }
+      }
+    }
+  }
 
-                Tuple::apply(k_kernel, kernel_args);
-
-                NESO_PARTICLES_KERNEL_END
-              });
-        })
-        .wait_and_throw();
+  inline void execute() {
+    EventStack es;
+    this->execute(es);
+    es.wait();
   }
 };
 

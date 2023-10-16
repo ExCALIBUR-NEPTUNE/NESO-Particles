@@ -18,6 +18,8 @@ TEST(ParticleLoop, Base2) {
   auto mesh = std::make_shared<CartesianHMesh>(MPI_COMM_WORLD, ndim, dims,
                                                cell_extent, subdivision_order);
 
+  const int cell_count = mesh->get_cell_count();
+
   auto sycl_target =
       std::make_shared<SYCLTarget>(GPU_SELECTOR, mesh->get_comm());
 
@@ -25,6 +27,7 @@ TEST(ParticleLoop, Base2) {
 
   ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
                              ParticleProp(Sym<REAL>("V"), 3),
+                             ParticleProp(Sym<REAL>("P2"), ndim),
                              ParticleProp(Sym<INT>("CELL_ID"), 1, true),
                              ParticleProp(Sym<INT>("ID"), 1)};
 
@@ -36,7 +39,7 @@ TEST(ParticleLoop, Base2) {
   std::mt19937 rng_pos(52234234);
   std::mt19937 rng_vel(52234231);
 
-  const int N = 10;
+  const int N = 7901; // prime
 
   auto positions =
       uniform_within_extents(N, ndim, mesh->global_extents, rng_pos);
@@ -57,35 +60,64 @@ TEST(ParticleLoop, Base2) {
   }
 
   A->add_particles_local(initial_distribution);
-
-  // A->print(Sym<REAL>("P"), Sym<REAL>("V"), Sym<INT>("ID"));
+  parallel_advection_initialisation(A, 16);
 
   ParticleLoop particle_loop(
       A,
-      [=](Access::ParticleDat::Write<REAL> P, Access::ParticleDat::Read<REAL> V,
-          Access::ParticleDat::Write<INT> ID) {
-        P[0] += V[0];
-        ID[0] = -42;
+      [=](Access::ParticleDat::Write<REAL> P2,
+          Access::ParticleDat::Read<REAL> P) {
+        for (int dx = 0; dx < ndim; dx++) {
+          P2[dx] = P[dx];
+        }
       },
-      Access::write(Sym<REAL>("P")), Access::read(Sym<REAL>("V")),
-      Access::write(Sym<INT>("ID")));
+      Access::write(Sym<REAL>("P2")), Access::read(Sym<REAL>("P")));
 
   particle_loop.execute();
 
-  A->print(Sym<REAL>("P"), Sym<REAL>("V"), Sym<INT>("ID"));
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto p = A->get_dat(Sym<REAL>("P"))->cell_dat.get_cell(cellx);
+    auto p2 = A->get_dat(Sym<REAL>("P2"))->cell_dat.get_cell(cellx);
+    const int nrow = p->nrow;
+
+    // for each particle in the cell
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      // for each dimension
+      for (int dimx = 0; dimx < ndim; dimx++) {
+        ASSERT_EQ((*p)[dimx][rowx], (*p2)[dimx][rowx]);
+      }
+    }
+  }
 
   ParticleLoop particle_loop_auto(
       A,
-      [=](auto P, auto V, auto ID) {
-        P[0] += V[0];
-        ID[0] = 43;
+      [=](auto ID, auto P, auto V) {
+        ID[0] = 42;
+        for (int dx = 0; dx < ndim; dx++) {
+          P[dx] += V[dx];
+        }
       },
-      Access::write(Sym<REAL>("P")), Access::read(Sym<REAL>("V")),
-      Access::write(Sym<INT>("ID")));
+      Access::write(Sym<INT>("ID")), Access::write(Sym<REAL>("P")),
+      Access::read(Sym<REAL>("V")));
 
   particle_loop_auto.execute();
 
-  A->print(Sym<REAL>("P"), Sym<REAL>("V"), Sym<INT>("ID"));
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto p = A->get_dat(Sym<REAL>("P"))->cell_dat.get_cell(cellx);
+    auto p2 = A->get_dat(Sym<REAL>("P2"))->cell_dat.get_cell(cellx);
+    auto v = A->get_dat(Sym<REAL>("V"))->cell_dat.get_cell(cellx);
+    auto id = A->get_dat(Sym<INT>("ID"))->cell_dat.get_cell(cellx);
+    const int nrow = p->nrow;
+
+    // for each particle in the cell
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      ASSERT_EQ((*id)[0][rowx], 42);
+      // for each dimension
+      for (int dimx = 0; dimx < ndim; dimx++) {
+        ASSERT_TRUE(std::abs((*p)[dimx][rowx] - (*v)[dimx][rowx] -
+                             (*p2)[dimx][rowx]) < 1.0e-10);
+      }
+    }
+  }
 
   A->free();
   mesh->free();
