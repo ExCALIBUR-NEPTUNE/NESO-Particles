@@ -96,20 +96,20 @@ public:
       : comm_pair(comm) {
     if (gpu_device > 0) {
       try {
-        this->device = sycl::device{sycl::gpu_selector_v};
+        this->device = sycl::device{sycl::gpu_selector()};
       } catch (sycl::exception const &e) {
         std::cout << "Cannot select a GPU\n" << e.what() << "\n";
         std::cout << "Using a CPU device\n";
-        this->device = sycl::device{sycl::cpu_selector_v};
+        this->device = sycl::device{sycl::cpu_selector()};
       }
     } else if (gpu_device < 0) {
-      this->device = sycl::device{sycl::cpu_selector_v};
+      this->device = sycl::device{sycl::cpu_selector()};
     } else {
 
       // Get the default device and platform as they are most likely to be the
       // desired device based on SYCL implementation/runtime/environment
       // variables.
-      sycl::device default_device{sycl::default_selector_v};
+      sycl::device default_device{sycl::default_selector()};
       auto default_platform = default_device.get_platform();
 
       // Get all devices from the default platform

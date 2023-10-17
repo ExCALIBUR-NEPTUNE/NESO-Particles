@@ -147,9 +147,8 @@ namespace NESO::Particles::Access::LocalArray {
  */
 template <typename T> struct Read {
   /// Pointer to underlying data for the array.
-
-  sycl::accessor<T, 1, sycl::access_mode::read> ptr;
-  Read<T>() = default;
+  Read() = default;
+  T const *ptr;
   const T &operator[](const int component) { return ptr[component]; }
 };
 
@@ -183,7 +182,7 @@ template <typename SPEC> struct LoopParameter<Access::Write<Sym<SPEC>>> {
  *  Loop parameter for read access of a LocalArray.
  */
 template <typename T> struct LoopParameter<Access::Read<LocalArray<T>>> {
-  using type = sycl::accessor<T, 1, sycl::access_mode::read>;
+  using type = T const *;
 };
 
 /**
@@ -247,8 +246,7 @@ inline void create_kernel_arg(const int cellx, const int layerx, SPEC ***rhs,
  *  Function to create the kernel argument for LocalArray read access.
  */
 template <typename T>
-inline void create_kernel_arg(const int cellx, const int layerx,
-                              sycl::accessor<T, 1, sycl::access_mode::read> rhs,
+inline void create_kernel_arg(const int cellx, const int layerx, T const *rhs,
                               Access::LocalArray::Read<T> &lhs) {
   lhs.ptr = rhs;
 }
@@ -298,9 +296,7 @@ protected:
   template <typename SPEC>
   inline auto get_loop_arg(sycl::handler &cgh,
                            Access::Read<LocalArray<SPEC>> a) {
-    sycl::accessor<SPEC, 1, sycl::access_mode::read> a_data{
-        *a.obj.get_buffer(), cgh, sycl::read_only};
-    return a_data;
+    return a.obj.impl_get_const();
   }
 
   /// Recursively assemble the outer loop arguments.
