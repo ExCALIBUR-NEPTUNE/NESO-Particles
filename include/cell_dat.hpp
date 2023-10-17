@@ -211,6 +211,7 @@ private:
   std::vector<T **> h_ptr_cells;
   std::vector<T *> h_ptr_cols;
   int nrow_max = -1;
+  int nrow_min = -1;
 
   EventStack stack_events;
   std::stack<T *> stack_ptrs;
@@ -354,6 +355,8 @@ public:
   inline int compute_nrow_max() {
     this->nrow_max =
         *std::max_element(std::begin(this->nrow), std::end(this->nrow));
+    this->nrow_min =
+        *std::min_element(std::begin(this->nrow), std::end(this->nrow));
     return this->nrow_max;
   }
 
@@ -367,6 +370,18 @@ public:
       this->compute_nrow_max();
     }
     return this->nrow_max;
+  }
+
+  /**
+   * Get the minimum number of rows across all cells.
+   *
+   * @returns The minimum number of rows across all cells.
+   */
+  inline int get_nrow_min() {
+    if (this->nrow_max < 0) {
+      this->compute_nrow_max();
+    }
+    return this->nrow_min;
   }
 
   /**
