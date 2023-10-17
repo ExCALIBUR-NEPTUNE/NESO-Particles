@@ -84,6 +84,11 @@ template <typename T> struct Read : AccessGeneric<T> {};
 template <typename T> struct Write : AccessGeneric<T> {};
 
 /**
+ *  Atomic add access descriptor.
+ */
+template <typename T> struct Add : AccessGeneric<T> {};
+
+/**
  *  Helper function that allows a loop to be constructed with a read-only
  *  parameter passed like:
  *
@@ -105,6 +110,17 @@ template <typename T> inline Read<T> read(T t) { return Read<T>{t}; }
  */
 template <typename T> inline Write<T> write(T t) { return Write<T>{t}; }
 
+/**
+ *  Helper function that allows a loop to be constructed with a write
+ *  parameter which is atomic addition passed like:
+ *
+ *    Access::add(object)
+ *
+ * @param t Object to pass with atomic add access.
+ * @returns Access::Add object that wraps passed object.
+ */
+template <typename T> inline Add<T> add(T t) { return Add<T>{t}; }
+
 } // namespace NESO::Particles::Access
 
 /**
@@ -113,7 +129,7 @@ template <typename T> inline Write<T> write(T t) { return Write<T>{t}; }
 namespace NESO::Particles::Access::ParticleDat {
 
 /**
- * Access:ParticleDat::Read<REAL> and Access:ParticleDat::Read<REAL> are the
+ * Access:ParticleDat::Read<T> and Access:ParticleDat::Read<T> are the
  * kernel argument types for accessing particle data in a kernel.
  */
 template <typename T> struct Read {
@@ -142,7 +158,7 @@ template <typename T> struct Write {
 namespace NESO::Particles::Access::LocalArray {
 
 /**
- * Access:LocalArray::Read<REAL> and Access:LocalArray::Read<REAL> are the
+ * Access:LocalArray::Read<T> and Access:LocalArray::Add<T> are the
  * kernel argument types for accessing LocalArray data in a kernel.
  */
 template <typename T> struct Read {
@@ -150,6 +166,21 @@ template <typename T> struct Read {
   Read() = default;
   T const *ptr;
   const T &operator[](const int component) { return ptr[component]; }
+};
+
+/**
+ * Access:LocalArray::Read<T> and Access:LocalArray::Add<T> are the
+ * kernel argument types for accessing LocalArray data in a kernel.
+ */
+template <typename T> struct Add {
+  /// Pointer to underlying data for the array.
+  Add() = default;
+  T *ptr;
+  T operator()(const int component, const T value) {
+    sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>
+        element_atomic(ptr[component]);
+    return element_atomic.fetch_add(value);
+  }
 };
 
 } // namespace NESO::Particles::Access::LocalArray
@@ -184,6 +215,12 @@ template <typename SPEC> struct LoopParameter<Access::Write<Sym<SPEC>>> {
 template <typename T> struct LoopParameter<Access::Read<LocalArray<T>>> {
   using type = T const *;
 };
+/**
+ *  Loop parameter for add access of a LocalArray.
+ */
+template <typename T> struct LoopParameter<Access::Add<LocalArray<T>>> {
+  using type = T *;
+};
 
 /**
  *  This is a metafunction which is passed a input data type and returns the
@@ -214,6 +251,12 @@ template <typename SPEC> struct KernelParameter<Access::Write<Sym<SPEC>>> {
  */
 template <typename T> struct KernelParameter<Access::Read<LocalArray<T>>> {
   using type = Access::LocalArray::Read<T>;
+};
+/**
+ *  KernelParameter type for add access to a LocalArray.
+ */
+template <typename T> struct KernelParameter<Access::Add<LocalArray<T>>> {
+  using type = Access::LocalArray::Add<T>;
 };
 /**
  *  Function to map access descriptor and data structure type to kernel type.
@@ -248,6 +291,14 @@ inline void create_kernel_arg(const int cellx, const int layerx, SPEC ***rhs,
 template <typename T>
 inline void create_kernel_arg(const int cellx, const int layerx, T const *rhs,
                               Access::LocalArray::Read<T> &lhs) {
+  lhs.ptr = rhs;
+}
+/**
+ *  Function to create the kernel argument for LocalArray read access.
+ */
+template <typename T>
+inline void create_kernel_arg(const int cellx, const int layerx, T *rhs,
+                              Access::LocalArray::Add<T> &lhs) {
   lhs.ptr = rhs;
 }
 
@@ -292,11 +343,17 @@ protected:
     return this->particle_group->get_dat(sym)->cell_dat.device_ptr();
   }
 
-  /// Method to compute access to a particle dat (write)
+  /// Method to compute access to a LocalArray (read)
   template <typename SPEC>
   inline auto get_loop_arg(sycl::handler &cgh,
                            Access::Read<LocalArray<SPEC>> a) {
     return a.obj.impl_get_const();
+  }
+  /// Method to compute access to a LocalArray (read)
+  template <typename SPEC>
+  inline auto get_loop_arg(sycl::handler &cgh,
+                           Access::Add<LocalArray<SPEC>> a) {
+    return a.obj.impl_get();
   }
 
   /// Recursively assemble the outer loop arguments.

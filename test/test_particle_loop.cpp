@@ -160,18 +160,39 @@ TEST(ParticleLoop, local_array) {
 
   particle_loop.execute();
 
+  int local_count = 0;
   for (int cellx = 0; cellx < cell_count; cellx++) {
     auto p2 = A->get_dat(Sym<REAL>("P2"))->cell_dat.get_cell(cellx);
     const int nrow = p2->nrow;
 
     // for each particle in the cell
     for (int rowx = 0; rowx < nrow; rowx++) {
+      local_count++;
       // for each dimension
       for (int dimx = 0; dimx < ndim; dimx++) {
         EXPECT_EQ((*p2)[dimx][rowx], d0[dimx]);
       }
     }
   }
+
+  std::vector<int> d1(3);
+  std::fill(d1.begin(), d1.end(), 0);
+  LocalArray<int> l1(sycl_target, d1);
+
+  ParticleLoop particle_loop_add(
+      A,
+      [=](Access::LocalArray::Add<int> L1) {
+        L1(0, 1);
+        L1(1, 2);
+        L1(2, 3);
+      },
+      Access::add(l1));
+
+  particle_loop_add.execute();
+  l1.get(d1);
+  EXPECT_EQ(d1[0], local_count);
+  EXPECT_EQ(d1[1], local_count * 2);
+  EXPECT_EQ(d1[2], local_count * 3);
 
   A->free();
   mesh->free();
