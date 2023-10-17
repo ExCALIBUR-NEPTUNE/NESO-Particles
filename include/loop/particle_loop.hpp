@@ -2,6 +2,7 @@
 #define _NESO_PARTICLES_PARTICLE_LOOP_H_
 
 #include "../compute_target.hpp"
+#include "../containers/local_array.hpp"
 #include "../containers/tuple.hpp"
 #include "../particle_dat.hpp"
 #include "../particle_group.hpp"
@@ -135,6 +136,25 @@ template <typename T> struct Write {
 
 } // namespace NESO::Particles::Access::ParticleDat
 
+/**
+ *  Defines the access implementations and types for LocalArray objects.
+ */
+namespace NESO::Particles::Access::LocalArray {
+
+/**
+ * Access:LocalArray::Read<REAL> and Access:LocalArray::Read<REAL> are the
+ * kernel argument types for accessing LocalArray data in a kernel.
+ */
+template <typename T> struct Read {
+  /// Pointer to underlying data for the array.
+
+  sycl::accessor<T, 1, sycl::access_mode::read> ptr;
+  Read<T>() = default;
+  const T &operator[](const int component) { return ptr[component]; }
+};
+
+} // namespace NESO::Particles::Access::LocalArray
+
 namespace NESO::Particles {
 
 namespace {
@@ -160,6 +180,13 @@ template <typename SPEC> struct LoopParameter<Access::Write<Sym<SPEC>>> {
   using type = SPEC ***;
 };
 /**
+ *  Loop parameter for read access of a LocalArray.
+ */
+template <typename T> struct LoopParameter<Access::Read<LocalArray<T>>> {
+  using type = sycl::accessor<T, 1, sycl::access_mode::read>;
+};
+
+/**
  *  This is a metafunction which is passed a input data type and returns the
  *  LoopParamter type that corresponds to the input type (by using the structs
  * defined above).
@@ -182,6 +209,12 @@ template <typename SPEC> struct KernelParameter<Access::Read<Sym<SPEC>>> {
  */
 template <typename SPEC> struct KernelParameter<Access::Write<Sym<SPEC>>> {
   using type = Access::ParticleDat::Write<SPEC>;
+};
+/**
+ *  KernelParameter type for read access to a LocalArray.
+ */
+template <typename T> struct KernelParameter<Access::Read<LocalArray<T>>> {
+  using type = Access::LocalArray::Read<T>;
 };
 /**
  *  Function to map access descriptor and data structure type to kernel type.
@@ -209,6 +242,15 @@ inline void create_kernel_arg(const int cellx, const int layerx, SPEC ***rhs,
                               Access::ParticleDat::Write<SPEC> &lhs) {
   lhs.layer = layerx;
   lhs.ptr = rhs[cellx];
+}
+/**
+ *  Function to create the kernel argument for LocalArray read access.
+ */
+template <typename T>
+inline void create_kernel_arg(const int cellx, const int layerx,
+                              sycl::accessor<T, 1, sycl::access_mode::read> rhs,
+                              Access::LocalArray::Read<T> &lhs) {
+  lhs.ptr = rhs;
 }
 
 } // namespace
@@ -239,27 +281,40 @@ protected:
   }
 
   /// Method to compute access to a particle dat (read)
-  template <typename SPEC> inline auto get_loop_arg(Access::Read<Sym<SPEC>> a) {
+  template <typename SPEC>
+  inline auto get_loop_arg(sycl::handler &cgh, Access::Read<Sym<SPEC>> a) {
     auto sym = a.obj;
     return this->particle_group->get_dat(sym)->cell_dat.device_ptr();
   }
 
   /// Method to compute access to a particle dat (write)
   template <typename SPEC>
-  inline auto get_loop_arg(Access::Write<Sym<SPEC>> a) {
+  inline auto get_loop_arg(sycl::handler &cgh, Access::Write<Sym<SPEC>> a) {
     auto sym = a.obj;
     return this->particle_group->get_dat(sym)->cell_dat.device_ptr();
   }
+
+  /// Method to compute access to a particle dat (write)
+  template <typename SPEC>
+  inline auto get_loop_arg(sycl::handler &cgh,
+                           Access::Read<LocalArray<SPEC>> a) {
+    sycl::accessor<SPEC, 1, sycl::access_mode::read> a_data{
+        *a.obj.get_buffer(), cgh, sycl::read_only};
+    return a_data;
+  }
+
   /// Recursively assemble the outer loop arguments.
   template <size_t INDEX, size_t SIZE, typename PARAM>
-  inline void create_loop_args_inner(PARAM &loop_args) {
+  inline void create_loop_args_inner(sycl::handler &cgh, PARAM &loop_args) {
     if constexpr (INDEX < SIZE) {
-      Tuple::get<INDEX>(loop_args) = get_loop_arg(std::get<INDEX>(this->args));
-      create_loop_args_inner<INDEX + 1, SIZE>(loop_args);
+      Tuple::get<INDEX>(loop_args) =
+          get_loop_arg(cgh, std::get<INDEX>(this->args));
+      create_loop_args_inner<INDEX + 1, SIZE>(cgh, loop_args);
     }
   }
-  inline void create_loop_args(loop_parameter_type &loop_args) {
-    create_loop_args_inner<0, sizeof...(ARGS)>(loop_args);
+  inline void create_loop_args(sycl::handler &cgh,
+                               loop_parameter_type &loop_args) {
+    create_loop_args_inner<0, sizeof...(ARGS)>(cgh, loop_args);
   }
 
   /// recusively assemble the kernel arguments from the loop arguments
@@ -303,11 +358,7 @@ protected:
     auto t0 = profile_timestamp();
     auto position_dat = this->particle_group->position_dat;
     auto d_npart_cell = position_dat->d_npart_cell;
-
     auto is = this->iteration_set->get();
-    loop_parameter_type loop_argst;
-    create_loop_args(loop_argst);
-    const loop_parameter_type loop_args = loop_argst;
     auto k_kernel = this->kernel;
 
     const int nbin = std::get<0>(is);
@@ -319,6 +370,8 @@ protected:
       const size_t cell_offset = std::get<2>(is).at(binx);
       event_stack.push(this->particle_group->sycl_target->queue.submit(
           [&](sycl::handler &cgh) {
+            loop_parameter_type loop_args;
+            create_loop_args(cgh, loop_args);
             cgh.parallel_for<>(ndr, [=](sycl::nd_item<2> idx) {
               const size_t cellxs = idx.get_global_id(0) + cell_offset;
               const size_t layerxs = idx.get_global_id(1);
@@ -335,6 +388,11 @@ protected:
   }
 
 public:
+  /// Disable (implicit) copies.
+  ParticleLoop(const ParticleLoop &st) = delete;
+  /// Disable (implicit) copies.
+  ParticleLoop &operator=(ParticleLoop const &a) = delete;
+
   /**
    *  Create a ParticleLoop that executes a kernel for all particles in the
    * ParticleGroup.
