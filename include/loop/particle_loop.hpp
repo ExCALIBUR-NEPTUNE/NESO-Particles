@@ -18,20 +18,46 @@ using namespace NESO::Particles;
 
 namespace {
 
+/**
+ * For a set of cells containing particles create several sycl::nd_range
+ * instances which cover the iteration space of all particles. This exists to
+ * create an iteration set over all particles which is blocked, to reduce the
+ * number of kernel launches, and reasonably robust to non-uniform.
+ */
 struct ParticleLoopIterationSet {
 
+  /// The number of blocks of cells.
   const int nbin;
+  /// The number of cells.
   const int ncell;
+  /// Host accessible pointer to the number of particles in each cell.
   int *h_npart_cell;
+  /// Container to store the sycl::nd_ranges.
   std::vector<sycl::nd_range<2>> iteration_set;
+  /// Offsets to add to the cell index to map to the correct cell.
   std::vector<std::size_t> cell_offsets;
 
+  /**
+   *  Creates iteration set creator for a given set of cell particle counts.
+   *
+   *  @param nbin Number of blocks of cells.
+   *  @param ncell Number of cells.
+   *  @param h_npart_cell Host accessible array of cell particle counts.
+   */
   ParticleLoopIterationSet(const int nbin, const int ncell, int *h_npart_cell)
       : nbin(std::min(ncell, nbin)), ncell(ncell), h_npart_cell(h_npart_cell) {
     this->iteration_set.reserve(nbin);
     this->cell_offsets.resize(nbin);
   }
 
+  /**
+   *  Create and return an iteration set which is formed as nbin
+   *  sycl::nd_ranges.
+   *
+   *  @param local_size Optional size of SYCL work groups.
+   *  @returns Tuple containing: Number of bins, sycl::nd_ranges, cell index
+   *  offsets.
+   */
   inline std::tuple<int, std::vector<sycl::nd_range<2>> &,
                     std::vector<std::size_t> &>
   get(const size_t local_size = 256) {
@@ -196,18 +222,18 @@ namespace {
  * LoopParameter is the pointer type that points to the data for all cells,
  * layers and components.
  */
-template <typename SPEC> struct LoopParameter { using type = void *; };
+template <typename T> struct LoopParameter { using type = void *; };
 /**
  *  Loop parameter for read access of a ParticleDat.
  */
-template <typename SPEC> struct LoopParameter<Access::Read<Sym<SPEC>>> {
-  using type = SPEC ***;
+template <typename T> struct LoopParameter<Access::Read<Sym<T>>> {
+  using type = T ***;
 };
 /**
  *  Loop parameter for write access of a ParticleDat.
  */
-template <typename SPEC> struct LoopParameter<Access::Write<Sym<SPEC>>> {
-  using type = SPEC ***;
+template <typename T> struct LoopParameter<Access::Write<Sym<T>>> {
+  using type = T ***;
 };
 /**
  *  Loop parameter for read access of a LocalArray.
@@ -233,18 +259,18 @@ template <class T> using loop_parameter_t = typename LoopParameter<T>::type;
  * The KernelParameter types define the types passed to the kernel for each
  * data structure type for each access descriptor.
  */
-template <typename SPEC> struct KernelParameter { using type = void; };
+template <typename T> struct KernelParameter { using type = void; };
 /**
  *  KernelParameter type for read-only access to a ParticleDat.
  */
-template <typename SPEC> struct KernelParameter<Access::Read<Sym<SPEC>>> {
-  using type = Access::ParticleDat::Read<SPEC>;
+template <typename T> struct KernelParameter<Access::Read<Sym<T>>> {
+  using type = Access::ParticleDat::Read<T>;
 };
 /**
  *  KernelParameter type for write access to a ParticleDat.
  */
-template <typename SPEC> struct KernelParameter<Access::Write<Sym<SPEC>>> {
-  using type = Access::ParticleDat::Write<SPEC>;
+template <typename T> struct KernelParameter<Access::Write<Sym<T>>> {
+  using type = Access::ParticleDat::Write<T>;
 };
 /**
  *  KernelParameter type for read access to a LocalArray.
@@ -263,95 +289,121 @@ template <typename T> struct KernelParameter<Access::Add<LocalArray<T>>> {
  */
 template <class T> using kernel_parameter_t = typename KernelParameter<T>::type;
 
-/**
- * create_kernel_arg is overloaded for each valid pair of access descriptor and
- * data structure which can be passesd to a loop.
- */
-/**
- *  Function to create the kernel argument for ParticleDat read access.
- */
-template <typename SPEC>
-inline void create_kernel_arg(const int cellx, const int layerx, SPEC ***rhs,
-                              Access::ParticleDat::Read<SPEC> &lhs) {
-  lhs.layer = layerx;
-  lhs.ptr = rhs[cellx];
-}
-/**
- *  Function to create the kernel argument for ParticleDat write access.
- */
-template <typename SPEC>
-inline void create_kernel_arg(const int cellx, const int layerx, SPEC ***rhs,
-                              Access::ParticleDat::Write<SPEC> &lhs) {
-  lhs.layer = layerx;
-  lhs.ptr = rhs[cellx];
-}
-/**
- *  Function to create the kernel argument for LocalArray read access.
- */
-template <typename T>
-inline void create_kernel_arg(const int cellx, const int layerx, T const *rhs,
-                              Access::LocalArray::Read<T> &lhs) {
-  lhs.ptr = rhs;
-}
-/**
- *  Function to create the kernel argument for LocalArray read access.
- */
-template <typename T>
-inline void create_kernel_arg(const int cellx, const int layerx, T *rhs,
-                              Access::LocalArray::Add<T> &lhs) {
-  lhs.ptr = rhs;
-}
-
-/**
- *  get_loop_arg is defined for each container and valid access type
- *  combination.
- */
-/**
- * Method to compute access to a particle dat (read)
- */
-template <typename SPEC>
-inline auto get_loop_arg(ParticleGroup *particle_group, sycl::handler &cgh,
-                         Access::Read<Sym<SPEC>> a) {
-  auto sym = a.obj;
-  return particle_group->get_dat(sym)->cell_dat.device_ptr();
-}
-/**
- * Method to compute access to a particle dat (write)
- */
-template <typename SPEC>
-inline auto get_loop_arg(ParticleGroup *particle_group, sycl::handler &cgh,
-                         Access::Write<Sym<SPEC>> a) {
-  auto sym = a.obj;
-  return particle_group->get_dat(sym)->cell_dat.device_ptr();
-}
-
-/**
- * Method to compute access to a LocalArray (read)
- */
-template <typename SPEC>
-inline auto get_loop_arg(ParticleGroup *particle_group, sycl::handler &cgh,
-                         Access::Read<LocalArray<SPEC>> a) {
-  return a.obj.impl_get_const();
-}
-/**
- * Method to compute access to a LocalArray (add)
- */
-template <typename SPEC>
-inline auto get_loop_arg(ParticleGroup *particle_group, sycl::handler &cgh,
-                         Access::Add<LocalArray<SPEC>> a) {
-  return a.obj.impl_get();
-}
-
 } // namespace
 
+// clang-format off
 /**
  *  ParticleLoop loop type. The particle loop applies the given kernel to all
  *  particles in a ParticleGroup. The kernel must be independent of the
  *  execution order (i.e. parallel and unsequenced in C++ terminology).
+ *
+ *  Data Structure  | Access Descriptors | Kernel Argument Type | Notes |
+ *  --------------  | ------------------ | -------------------- | ----- |
+ *  ParticleDat<T> | Read, Write | Access::ParticleDat::Read<T>, Access::ParticleDat::Write<T> | Loop is called with the Sym<T>, e.g Access::read(Sym<T>("A")) |
+ *  LocalArray<T>  | Read, Add | Access::LocalArray::Read<T>, Access::LocalArray::Add<T> | Loop is called with the array, e.g LocalArray l0(...), Access::read(l0) |
+ *
  */
+// clang-format on
 template <typename KERNEL, typename... ARGS> class ParticleLoop {
 
 protected:
+  /*
+   * =================================================================
+   */
+
+  /**
+   * create_kernel_arg is overloaded for each valid pair of access descriptor
+   * and data structure which can be passesd to a loop.
+   */
+  /**
+   *  Function to create the kernel argument for ParticleDat read access.
+   */
+  template <typename T>
+  static inline void create_kernel_arg(const int cellx, const int layerx,
+                                       T ***rhs,
+                                       Access::ParticleDat::Read<T> &lhs) {
+    lhs.layer = layerx;
+    lhs.ptr = rhs[cellx];
+  }
+  /**
+   *  Function to create the kernel argument for ParticleDat write access.
+   */
+  template <typename T>
+  static inline void create_kernel_arg(const int cellx, const int layerx,
+                                       T ***rhs,
+                                       Access::ParticleDat::Write<T> &lhs) {
+    lhs.layer = layerx;
+    lhs.ptr = rhs[cellx];
+  }
+  /**
+   *  Function to create the kernel argument for LocalArray read access.
+   */
+  template <typename T>
+  static inline void create_kernel_arg(const int cellx, const int layerx,
+                                       T const *rhs,
+                                       Access::LocalArray::Read<T> &lhs) {
+    lhs.ptr = rhs;
+  }
+  /**
+   *  Function to create the kernel argument for LocalArray read access.
+   */
+  template <typename T>
+  static inline void create_kernel_arg(const int cellx, const int layerx,
+                                       T *rhs,
+                                       Access::LocalArray::Add<T> &lhs) {
+    lhs.ptr = rhs;
+  }
+
+  /*
+   * -----------------------------------------------------------------
+   */
+
+  /**
+   *  get_loop_arg is defined for each container and valid access type
+   *  combination.
+   */
+  /**
+   * Method to compute access to a particle dat (read)
+   */
+  template <typename T>
+  static inline auto get_loop_arg(ParticleGroup *particle_group,
+                                  sycl::handler &cgh, Access::Read<Sym<T>> a) {
+    auto sym = a.obj;
+    return particle_group->get_dat(sym)->cell_dat.device_ptr();
+  }
+  /**
+   * Method to compute access to a particle dat (write)
+   */
+  template <typename T>
+  static inline auto get_loop_arg(ParticleGroup *particle_group,
+                                  sycl::handler &cgh, Access::Write<Sym<T>> a) {
+    auto sym = a.obj;
+    return particle_group->get_dat(sym)->cell_dat.device_ptr();
+  }
+
+  /**
+   * Method to compute access to a LocalArray (read)
+   */
+  template <typename T>
+  static inline auto get_loop_arg(ParticleGroup *particle_group,
+                                  sycl::handler &cgh,
+                                  Access::Read<LocalArray<T>> a) {
+    return a.obj.impl_get_const();
+  }
+  /**
+   * Method to compute access to a LocalArray (add)
+   */
+  template <typename T>
+  static inline auto get_loop_arg(ParticleGroup *particle_group,
+                                  sycl::handler &cgh,
+                                  Access::Add<LocalArray<T>> a) {
+    return a.obj.impl_get();
+  }
+
+  /*
+   * =================================================================
+   */
+
   /// The types of the parameters for the outside loops.
   using loop_parameter_type = Tuple::Tuple<loop_parameter_t<ARGS>...>;
   /// The types of the arguments passed to the kernel.

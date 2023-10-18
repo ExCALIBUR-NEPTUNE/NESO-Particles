@@ -5,6 +5,18 @@
 
 using namespace NESO::Particles;
 
+TEST(LocalArray, init) {
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+  const int N = 6151;
+  std::vector<int> d0(N);
+  LocalArray<int> l0(sycl_target, N, 42);
+
+  l0.get(d0);
+  for (int ix = 0; ix < N; ix++) {
+    EXPECT_EQ(42, d0[ix]);
+  }
+}
+
 TEST(LocalArray, get_set) {
   auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
   const int N = 6151;
@@ -25,5 +37,11 @@ TEST(LocalArray, get_set) {
   l0.get(d0);
   for (int ix = 0; ix < N; ix++) {
     EXPECT_EQ(ix * 2, d0[ix]);
+  }
+
+  LocalArray<int> l2(sycl_target, N, 43);
+  auto d3 = l2.get();
+  for (int ix = 0; ix < N; ix++) {
+    EXPECT_EQ(43, d3[ix]);
   }
 }
