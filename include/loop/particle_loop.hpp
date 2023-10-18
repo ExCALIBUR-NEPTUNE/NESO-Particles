@@ -359,15 +359,16 @@ protected:
    */
 
   /**
-   *  get_loop_arg is defined for each container and valid access type
+   *  create_loop_arg is defined for each container and valid access type
    *  combination.
    */
   /**
    * Method to compute access to a particle dat (read)
    */
   template <typename T>
-  static inline auto get_loop_arg(ParticleGroup *particle_group,
-                                  sycl::handler &cgh, Access::Read<Sym<T>> a) {
+  static inline auto create_loop_arg(ParticleGroup *particle_group,
+                                     sycl::handler &cgh,
+                                     Access::Read<Sym<T>> a) {
     auto sym = a.obj;
     return particle_group->get_dat(sym)->cell_dat.device_ptr();
   }
@@ -375,8 +376,9 @@ protected:
    * Method to compute access to a particle dat (write)
    */
   template <typename T>
-  static inline auto get_loop_arg(ParticleGroup *particle_group,
-                                  sycl::handler &cgh, Access::Write<Sym<T>> a) {
+  static inline auto create_loop_arg(ParticleGroup *particle_group,
+                                     sycl::handler &cgh,
+                                     Access::Write<Sym<T>> a) {
     auto sym = a.obj;
     return particle_group->get_dat(sym)->cell_dat.device_ptr();
   }
@@ -385,18 +387,18 @@ protected:
    * Method to compute access to a LocalArray (read)
    */
   template <typename T>
-  static inline auto get_loop_arg(ParticleGroup *particle_group,
-                                  sycl::handler &cgh,
-                                  Access::Read<LocalArray<T>> a) {
+  static inline auto create_loop_arg(ParticleGroup *particle_group,
+                                     sycl::handler &cgh,
+                                     Access::Read<LocalArray<T>> a) {
     return a.obj.impl_get_const();
   }
   /**
    * Method to compute access to a LocalArray (add)
    */
   template <typename T>
-  static inline auto get_loop_arg(ParticleGroup *particle_group,
-                                  sycl::handler &cgh,
-                                  Access::Add<LocalArray<T>> a) {
+  static inline auto create_loop_arg(ParticleGroup *particle_group,
+                                     sycl::handler &cgh,
+                                     Access::Add<LocalArray<T>> a) {
     return a.obj.impl_get();
   }
 
@@ -427,7 +429,7 @@ protected:
                                      PARAM &loop_args) {
     if constexpr (INDEX < SIZE) {
       Tuple::get<INDEX>(loop_args) =
-          get_loop_arg(pg, cgh, std::get<INDEX>(this->args));
+          create_loop_arg(pg, cgh, std::get<INDEX>(this->args));
       create_loop_args_inner<INDEX + 1, SIZE>(pg, cgh, loop_args);
     }
   }
