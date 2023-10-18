@@ -302,6 +302,46 @@ inline void create_kernel_arg(const int cellx, const int layerx, T *rhs,
   lhs.ptr = rhs;
 }
 
+/**
+ *  get_loop_arg is defined for each container and valid access type
+ *  combination.
+ */
+/**
+ * Method to compute access to a particle dat (read)
+ */
+template <typename SPEC>
+inline auto get_loop_arg(ParticleGroup *particle_group, sycl::handler &cgh,
+                         Access::Read<Sym<SPEC>> a) {
+  auto sym = a.obj;
+  return particle_group->get_dat(sym)->cell_dat.device_ptr();
+}
+/**
+ * Method to compute access to a particle dat (write)
+ */
+template <typename SPEC>
+inline auto get_loop_arg(ParticleGroup *particle_group, sycl::handler &cgh,
+                         Access::Write<Sym<SPEC>> a) {
+  auto sym = a.obj;
+  return particle_group->get_dat(sym)->cell_dat.device_ptr();
+}
+
+/**
+ * Method to compute access to a LocalArray (read)
+ */
+template <typename SPEC>
+inline auto get_loop_arg(ParticleGroup *particle_group, sycl::handler &cgh,
+                         Access::Read<LocalArray<SPEC>> a) {
+  return a.obj.impl_get_const();
+}
+/**
+ * Method to compute access to a LocalArray (add)
+ */
+template <typename SPEC>
+inline auto get_loop_arg(ParticleGroup *particle_group, sycl::handler &cgh,
+                         Access::Add<LocalArray<SPEC>> a) {
+  return a.obj.impl_get();
+}
+
 } // namespace
 
 /**
@@ -329,45 +369,20 @@ protected:
     this->unpack_args<INDEX + 1>(args...);
   }
 
-  /// Method to compute access to a particle dat (read)
-  template <typename SPEC>
-  inline auto get_loop_arg(sycl::handler &cgh, Access::Read<Sym<SPEC>> a) {
-    auto sym = a.obj;
-    return this->particle_group->get_dat(sym)->cell_dat.device_ptr();
-  }
-
-  /// Method to compute access to a particle dat (write)
-  template <typename SPEC>
-  inline auto get_loop_arg(sycl::handler &cgh, Access::Write<Sym<SPEC>> a) {
-    auto sym = a.obj;
-    return this->particle_group->get_dat(sym)->cell_dat.device_ptr();
-  }
-
-  /// Method to compute access to a LocalArray (read)
-  template <typename SPEC>
-  inline auto get_loop_arg(sycl::handler &cgh,
-                           Access::Read<LocalArray<SPEC>> a) {
-    return a.obj.impl_get_const();
-  }
-  /// Method to compute access to a LocalArray (read)
-  template <typename SPEC>
-  inline auto get_loop_arg(sycl::handler &cgh,
-                           Access::Add<LocalArray<SPEC>> a) {
-    return a.obj.impl_get();
-  }
-
   /// Recursively assemble the outer loop arguments.
   template <size_t INDEX, size_t SIZE, typename PARAM>
-  inline void create_loop_args_inner(sycl::handler &cgh, PARAM &loop_args) {
+  inline void create_loop_args_inner(ParticleGroup *pg, sycl::handler &cgh,
+                                     PARAM &loop_args) {
     if constexpr (INDEX < SIZE) {
       Tuple::get<INDEX>(loop_args) =
-          get_loop_arg(cgh, std::get<INDEX>(this->args));
-      create_loop_args_inner<INDEX + 1, SIZE>(cgh, loop_args);
+          get_loop_arg(pg, cgh, std::get<INDEX>(this->args));
+      create_loop_args_inner<INDEX + 1, SIZE>(pg, cgh, loop_args);
     }
   }
   inline void create_loop_args(sycl::handler &cgh,
                                loop_parameter_type &loop_args) {
-    create_loop_args_inner<0, sizeof...(ARGS)>(cgh, loop_args);
+    auto pg = this->particle_group.get();
+    create_loop_args_inner<0, sizeof...(ARGS)>(pg, cgh, loop_args);
   }
 
   /// recusively assemble the kernel arguments from the loop arguments
