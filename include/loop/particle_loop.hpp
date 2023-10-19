@@ -211,6 +211,28 @@ template <typename T> struct Add {
 
 } // namespace NESO::Particles::Access::LocalArray
 
+/**
+ * The type to pass to a ParticleLoop to read the ParticleLoop loop index in a
+ * kernel.
+ */
+struct ParticleLoopIndex {};
+
+/**
+ * Defines the access type for the cell, layer indexing.
+ */
+namespace NESO::Particles::Access::LoopIndex {
+/**
+ * ParticleLoop index containing the cell and layer.
+ */
+struct Read {
+  /// The cell containing the particle.
+  INT cell;
+  /// The layer of the particle.
+  INT layer;
+};
+
+} // namespace NESO::Particles::Access::LoopIndex
+
 namespace NESO::Particles {
 
 namespace {
@@ -246,6 +268,12 @@ template <typename T> struct LoopParameter<Access::Read<LocalArray<T>>> {
  */
 template <typename T> struct LoopParameter<Access::Add<LocalArray<T>>> {
   using type = T *;
+};
+/**
+ *  Loop parameter for read access of a ParticleLoopIndex.
+ */
+template <> struct LoopParameter<Access::Read<ParticleLoopIndex>> {
+  using type = void *;
 };
 
 /**
@@ -283,6 +311,12 @@ template <typename T> struct KernelParameter<Access::Read<LocalArray<T>>> {
  */
 template <typename T> struct KernelParameter<Access::Add<LocalArray<T>>> {
   using type = Access::LocalArray::Add<T>;
+};
+/**
+ *  KernelParameter type for read-only access to a ParticleLoopIndex.
+ */
+template <> struct KernelParameter<Access::Read<ParticleLoopIndex>> {
+  using type = Access::LoopIndex::Read;
 };
 /**
  *  Function to map access descriptor and data structure type to kernel type.
@@ -363,6 +397,14 @@ protected:
                                        Access::LocalArray::Add<T> &lhs) {
     lhs.ptr = rhs;
   }
+  /**
+   *  Function to create the kernel argument for ParticleLoopIndex read access.
+   */
+  static inline void create_kernel_arg(const int cellx, const int layerx,
+                                       void *, Access::LoopIndex::Read &lhs) {
+    lhs.cell = cellx;
+    lhs.layer = layerx;
+  }
 
   /*
    * -----------------------------------------------------------------
@@ -410,6 +452,14 @@ protected:
                                      sycl::handler &cgh,
                                      Access::Add<LocalArray<T>> a) {
     return a.obj.impl_get();
+  }
+  /**
+   * Method to compute access to a ParticleLoopIndex (read)
+   */
+  static inline void *create_loop_arg(ParticleGroup *particle_group,
+                                      sycl::handler &cgh,
+                                      Access::Read<ParticleLoopIndex> a) {
+    return nullptr;
   }
 
   /*

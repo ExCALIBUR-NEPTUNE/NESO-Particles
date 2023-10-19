@@ -87,14 +87,14 @@ public:
    */
   inline sycl::event set_async(const std::vector<T> &data) {
     NESOASSERT(data.size() == this->size, "Input data is incorrectly sized.");
-    sycl::buffer<T> b_data(data.data(), sycl::range<1>(data.size()));
-    T *ptr = this->buffer->ptr;
-    sycl::event copy_event =
-        this->sycl_target->queue.submit([&](sycl::handler &cgh) {
-          sycl::accessor a_data{b_data, cgh, sycl::read_only};
-          cgh.copy(a_data, ptr);
-        });
-    return copy_event;
+    const std::size_t size_bytes = sizeof(T) * this->size;
+    if (size_bytes) {
+      auto copy_event =
+          sycl_target->queue.memcpy(this->buffer->ptr, data.data(), size_bytes);
+      return copy_event;
+    } else {
+      return sycl::event();
+    }
   }
 
   /**
@@ -115,14 +115,14 @@ public:
    */
   inline sycl::event get_async(std::vector<T> &data) {
     NESOASSERT(data.size() == this->size, "Input data is incorrectly sized.");
-    sycl::buffer<T> b_data(data.data(), sycl::range<1>(data.size()));
-    T *ptr = this->buffer->ptr;
-    sycl::event copy_event =
-        this->sycl_target->queue.submit([&](sycl::handler &cgh) {
-          sycl::accessor a_data{b_data, cgh, sycl::write_only, sycl::no_init};
-          cgh.copy(ptr, a_data);
-        });
-    return copy_event;
+    const std::size_t size_bytes = sizeof(T) * this->size;
+    if (size_bytes) {
+      auto copy_event =
+          sycl_target->queue.memcpy(data.data(), this->buffer->ptr, size_bytes);
+      return copy_event;
+    } else {
+      return sycl::event();
+    }
   }
 
   /**

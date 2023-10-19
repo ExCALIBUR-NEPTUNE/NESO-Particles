@@ -84,11 +84,24 @@ TEST(ParticleSubGroup, selector) {
   const int cell_count = mesh->get_cell_count();
   auto sycl_target = A->sycl_target;
 
-  SubGroupSelector selector(
+  A->print(Sym<INT>("ID"));
+
+  ParticleSubGroup aa(
       A, [=](auto ID) { return ID[0] == 42; }, Access::read(Sym<INT>("ID")));
 
-  selector.get();
+  aa.create();
+
+  std::vector<INT> cells;
+  std::vector<INT> layers;
+
+  const int num_particles = aa.get_cells_layers(cells, layers);
+  for (int px = 0; px < num_particles; px++) {
+    const int cell = cells.at(px);
+    const int layer = layers.at(px);
+    nprint(cell, layer);
+  }
 
   A->free();
+  sycl_target->free();
   mesh->free();
 }

@@ -33,6 +33,7 @@ ParticleGroupSharedPtr particle_loop_common() {
                              ParticleProp(Sym<REAL>("V"), 3),
                              ParticleProp(Sym<REAL>("P2"), ndim),
                              ParticleProp(Sym<INT>("CELL_ID"), 1, true),
+                             ParticleProp(Sym<INT>("LOOP_INDEX"), 2),
                              ParticleProp(Sym<INT>("ID"), 1)};
 
   auto A = std::make_shared<ParticleGroup>(domain, particle_spec, sycl_target);
@@ -82,6 +83,7 @@ TEST(ParticleLoop, base) {
   auto domain = A->domain;
   auto mesh = domain->mesh;
   const int cell_count = mesh->get_cell_count();
+  auto sycl_target = A->sycl_target;
 
   ParticleLoop pl(
       A,
@@ -141,6 +143,7 @@ TEST(ParticleLoop, base) {
   }
 
   A->free();
+  sycl_target->free();
   mesh->free();
 }
 
@@ -203,6 +206,7 @@ TEST(ParticleLoop, local_array) {
   EXPECT_EQ(d1[2], local_count * 3);
 
   A->free();
+  sycl_target->free();
   mesh->free();
 }
 
@@ -267,6 +271,7 @@ TEST(ParticleLoop, base_pointer) {
   auto domain = A->domain;
   auto mesh = domain->mesh;
   const int cell_count = mesh->get_cell_count();
+  auto sycl_target = A->sycl_target;
 
   auto pl = particle_loop(
       A,
@@ -295,5 +300,42 @@ TEST(ParticleLoop, base_pointer) {
   }
 
   A->free();
+  sycl_target->free();
+  mesh->free();
+}
+
+TEST(ParticleLoop, loop_index) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  const int cell_count = mesh->get_cell_count();
+  auto sycl_target = A->sycl_target;
+
+  auto pl = particle_loop(
+      A,
+      [=](Access::LoopIndex::Read cell_layer,
+          Access::ParticleDat::Write<INT> loop_index) {
+        loop_index[0] = cell_layer.cell;
+        loop_index[1] = cell_layer.layer;
+      },
+      Access::read(ParticleLoopIndex{}), Access::write(Sym<INT>("LOOP_INDEX")));
+
+  pl->execute();
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto loop_index =
+        A->get_dat(Sym<INT>("LOOP_INDEX"))->cell_dat.get_cell(cellx);
+    const int nrow = loop_index->nrow;
+
+    // for each particle in the cell
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      // for each dimension
+      ASSERT_EQ((*loop_index)[0][rowx], cellx);
+      ASSERT_EQ((*loop_index)[1][rowx], rowx);
+    }
+  }
+
+  A->free();
+  sycl_target->free();
   mesh->free();
 }

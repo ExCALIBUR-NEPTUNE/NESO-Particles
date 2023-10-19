@@ -15,6 +15,8 @@ TEST(LocalArray, init) {
   for (int ix = 0; ix < N; ix++) {
     EXPECT_EQ(42, d0[ix]);
   }
+
+  sycl_target->free();
 }
 
 TEST(LocalArray, get_set) {
@@ -44,4 +46,6 @@ TEST(LocalArray, get_set) {
   for (int ix = 0; ix < N; ix++) {
     EXPECT_EQ(43, d3[ix]);
   }
+
+  sycl_target->free();
 }
