@@ -291,6 +291,15 @@ template <class T> using kernel_parameter_t = typename KernelParameter<T>::type;
 
 } // namespace
 
+/**
+ * TODO
+ */
+class ParticleLoopBase {
+public:
+  virtual inline void execute() = 0;
+};
+typedef std::shared_ptr<ParticleLoopBase> ParticleLoopSharedPtr;
+
 // clang-format off
 /**
  *  ParticleLoop loop type. The particle loop applies the given kernel to all
@@ -304,7 +313,8 @@ template <class T> using kernel_parameter_t = typename KernelParameter<T>::type;
  *
  */
 // clang-format on
-template <typename KERNEL, typename... ARGS> class ParticleLoop {
+template <typename KERNEL, typename... ARGS>
+class ParticleLoop : public ParticleLoopBase {
 
 protected:
   /*
@@ -564,6 +574,34 @@ public:
         profile_elapsed(t0, profile_timestamp()));
   }
 };
+
+/**
+ *  TODO
+ */
+template <typename KERNEL, typename... ARGS>
+inline ParticleLoopSharedPtr
+particle_loop(ParticleGroupSharedPtr particle_group, KERNEL kernel,
+              ARGS... args) {
+  auto p = std::make_shared<ParticleLoop<KERNEL, ARGS...>>(particle_group,
+                                                           kernel, args...);
+  auto b = std::dynamic_pointer_cast<ParticleLoopBase>(p);
+  NESOASSERT(b != nullptr, "ParticleLoop pointer cast failed.");
+  return b;
+}
+
+/**
+ *  TODO
+ */
+template <typename KERNEL, typename... ARGS>
+inline ParticleLoopSharedPtr
+particle_loop(const std::string name, ParticleGroupSharedPtr particle_group,
+              KERNEL kernel, ARGS... args) {
+  auto p = std::make_shared<ParticleLoop<KERNEL, ARGS...>>(name, particle_group,
+                                                           kernel, args...);
+  auto b = std::dynamic_pointer_cast<ParticleLoopBase>(p);
+  NESOASSERT(b != nullptr, "ParticleLoop pointer cast failed.");
+  return b;
+}
 
 } // namespace NESO::Particles
 

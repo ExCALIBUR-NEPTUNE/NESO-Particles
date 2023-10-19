@@ -54,10 +54,18 @@ public:
       : sycl_target(sycl_target), size(size) {
     this->buffer = std::make_shared<BufferDevice<T>>(sycl_target, size);
     if (init_value) {
-      T *ptr = this->buffer->ptr;
-      const T value = init_value.value();
-      sycl_target->queue.fill(ptr, value, size).wait_and_throw();
+      this->fill(init_value.value());
     }
+  }
+
+  /**
+   *  Fill the array with a value.
+   *
+   *  @param value Value to fill the array with.
+   */
+  inline void fill(const T value) {
+    T *ptr = this->buffer->ptr;
+    sycl_target->queue.fill(ptr, value, size).wait_and_throw();
   }
 
   /**

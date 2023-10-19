@@ -26,6 +26,7 @@
 #include "particle_remover.hpp"
 #include "particle_set.hpp"
 #include "particle_spec.hpp"
+#include "particle_sub_group.hpp"
 #include "profiling.hpp"
 #include "typedefs.hpp"
 #include "utility.hpp"
