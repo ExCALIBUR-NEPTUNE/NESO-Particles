@@ -2,7 +2,9 @@
 #define _NESO_PARTICLES_LOCAL_ARRAY_H_
 
 #include "../compute_target.hpp"
+#include <memory>
 #include <optional>
+#include <vector>
 
 namespace NESO::Particles {
 // Forward declaration of ParticleLoop such that LocalArray can define

@@ -17,6 +17,7 @@ ParticleGroupSharedPtr particle_loop_common() {
 
   const double cell_extent = 1.0;
   const int subdivision_order = 2;
+
   auto mesh = std::make_shared<CartesianHMesh>(MPI_COMM_WORLD, ndim, dims,
                                                cell_extent, subdivision_order);
 
@@ -25,7 +26,8 @@ ParticleGroupSharedPtr particle_loop_common() {
   auto sycl_target =
       std::make_shared<SYCLTarget>(GPU_SELECTOR, mesh->get_comm());
 
-  auto domain = std::make_shared<Domain>(mesh);
+  auto cart_local_mapper = CartesianHMeshLocalMapper(sycl_target, mesh);
+  auto domain = std::make_shared<Domain>(mesh, cart_local_mapper);
 
   ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
                              ParticleProp(Sym<REAL>("V"), 3),
@@ -63,6 +65,12 @@ ParticleGroupSharedPtr particle_loop_common() {
 
   A->add_particles_local(initial_distribution);
   parallel_advection_initialisation(A, 16);
+
+  auto ccb = std::make_shared<CartesianCellBin>(
+      sycl_target, mesh, A->position_dat, A->cell_id_dat);
+
+  ccb->execute();
+  A->cell_move();
 
   return A;
 }

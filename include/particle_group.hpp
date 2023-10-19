@@ -373,6 +373,7 @@ public:
 
   /**
    *  Print particle data for all particles for the specified ParticleDats.
+   *  Empty cells are not printed.
    *
    *  @param args Sym<REAL> or Sym<INT> instances that indicate which particle
    *  data to print.
@@ -583,52 +584,56 @@ template <typename... T> inline void ParticleGroup::print(T... args) {
                "================="
             << std::endl;
   for (int cellx = 0; cellx < this->domain->mesh->get_cell_count(); cellx++) {
+    if (this->h_npart_cell.ptr[cellx] > 0) {
 
-    std::vector<CellData<REAL>> cell_data_real;
-    std::vector<CellData<INT>> cell_data_int;
+      std::vector<CellData<REAL>> cell_data_real;
+      std::vector<CellData<INT>> cell_data_int;
 
-    int nrow = -1;
-    for (auto &symx : print_spec.syms_real) {
-      auto cell_data = this->particle_dats_real[symx]->cell_dat.get_cell(cellx);
-      cell_data_real.push_back(cell_data);
-      if (nrow >= 0) {
-        NESOASSERT(nrow == cell_data->nrow, "nrow missmatch");
-      }
-      nrow = cell_data->nrow;
-    }
-    for (auto &symx : print_spec.syms_int) {
-      auto cell_data = this->particle_dats_int[symx]->cell_dat.get_cell(cellx);
-      cell_data_int.push_back(cell_data);
-      if (nrow >= 0) {
-        NESOASSERT(nrow == cell_data->nrow, "nrow missmatch");
-      }
-      nrow = cell_data->nrow;
-    }
-
-    std::cout << "------- " << cellx << " -------" << std::endl;
-    for (auto &symx : print_spec.syms_real) {
-      std::cout << "| " << symx.name << " ";
-    }
-    for (auto &symx : print_spec.syms_int) {
-      std::cout << "| " << symx.name << " ";
-    }
-    std::cout << "|" << std::endl;
-
-    for (int rowx = 0; rowx < nrow; rowx++) {
-      for (auto &cx : cell_data_real) {
-        std::cout << "| ";
-        for (int colx = 0; colx < cx->ncol; colx++) {
-          std::cout << fixed_width_format((*cx)[colx][rowx]) << " ";
+      int nrow = -1;
+      for (auto &symx : print_spec.syms_real) {
+        auto cell_data =
+            this->particle_dats_real[symx]->cell_dat.get_cell(cellx);
+        cell_data_real.push_back(cell_data);
+        if (nrow >= 0) {
+          NESOASSERT(nrow == cell_data->nrow, "nrow missmatch");
         }
+        nrow = cell_data->nrow;
       }
-      for (auto &cx : cell_data_int) {
-        std::cout << "| ";
-        for (int colx = 0; colx < cx->ncol; colx++) {
-          std::cout << fixed_width_format((*cx)[colx][rowx]) << " ";
+      for (auto &symx : print_spec.syms_int) {
+        auto cell_data =
+            this->particle_dats_int[symx]->cell_dat.get_cell(cellx);
+        cell_data_int.push_back(cell_data);
+        if (nrow >= 0) {
+          NESOASSERT(nrow == cell_data->nrow, "nrow missmatch");
         }
+        nrow = cell_data->nrow;
       }
 
+      std::cout << "------- " << cellx << " -------" << std::endl;
+      for (auto &symx : print_spec.syms_real) {
+        std::cout << "| " << symx.name << " ";
+      }
+      for (auto &symx : print_spec.syms_int) {
+        std::cout << "| " << symx.name << " ";
+      }
       std::cout << "|" << std::endl;
+
+      for (int rowx = 0; rowx < nrow; rowx++) {
+        for (auto &cx : cell_data_real) {
+          std::cout << "| ";
+          for (int colx = 0; colx < cx->ncol; colx++) {
+            std::cout << fixed_width_format((*cx)[colx][rowx]) << " ";
+          }
+        }
+        for (auto &cx : cell_data_int) {
+          std::cout << "| ";
+          for (int colx = 0; colx < cx->ncol; colx++) {
+            std::cout << fixed_width_format((*cx)[colx][rowx]) << " ";
+          }
+        }
+
+        std::cout << "|" << std::endl;
+      }
     }
   }
 
