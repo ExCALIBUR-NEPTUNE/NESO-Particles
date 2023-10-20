@@ -33,7 +33,8 @@ ParticleGroupSharedPtr particle_loop_common() {
                              ParticleProp(Sym<REAL>("V"), 3),
                              ParticleProp(Sym<REAL>("P2"), ndim),
                              ParticleProp(Sym<INT>("CELL_ID"), 1, true),
-                             ParticleProp(Sym<INT>("ID"), 1)};
+                             ParticleProp(Sym<INT>("ID"), 1),
+                             ParticleProp(Sym<INT>("MARKER"), 1)};
 
   auto A = std::make_shared<ParticleGroup>(domain, particle_spec, sycl_target);
   A->add_particle_dat(ParticleDat(sycl_target,
@@ -148,12 +149,17 @@ TEST(ParticleSubGroup, particle_loop) {
       A, [=](auto ID) { return ((ID[0] % 2) == 0); },
       Access::read(Sym<INT>("ID")));
 
-  LocalArray<int> counter2(sycl_target, 1, 0);
+  LocalArray<int> counter2(sycl_target, 2, 0);
 
   auto pl_counter2 = particle_loop(
       std::dynamic_pointer_cast<ParticleSubGroup>(bb),
-      [=](Access::LocalArray::Add<int> G1) { G1(0, 1); },
-      Access::add(counter2));
+      [=](auto G1, auto ID, auto MARKER) {
+        G1(0, 1);
+        G1(1, ID[0]);
+        MARKER[0] = 1;
+      },
+      Access::add(counter2), Access::read(Sym<INT>("ID")),
+      Access::write(Sym<INT>("MARKER")));
 
   pl_counter2->execute();
   auto vector_b = counter2.get();
@@ -163,6 +169,32 @@ TEST(ParticleSubGroup, particle_loop) {
   const int num_particles = bb->test_get_cells_layers(cells, layers);
 
   EXPECT_EQ(num_particles, vector_b.at(0));
+
+  int id_counter = 0;
+  for (int px = 0; px < num_particles; px++) {
+    const int cellx = cells.at(px);
+    const int layerx = layers.at(px);
+
+    auto id = A->get_dat(Sym<INT>("ID"))->cell_dat.get_cell(cellx);
+    id_counter += (*id)[0][layerx];
+  }
+
+  EXPECT_EQ(id_counter, vector_b.at(1));
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto id = A->get_dat(Sym<INT>("ID"))->cell_dat.get_cell(cellx);
+    auto marker = A->get_dat(Sym<INT>("MARKER"))->cell_dat.get_cell(cellx);
+    const int nrow = id->nrow;
+
+    // for each particle in the cell
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      if ((*id)[0][rowx] % 2 == 0) {
+        EXPECT_EQ((*marker)[0][rowx], 1);
+      } else {
+        EXPECT_EQ((*marker)[0][rowx], 0);
+      }
+    }
+  }
 
   A->free();
   sycl_target->free();
