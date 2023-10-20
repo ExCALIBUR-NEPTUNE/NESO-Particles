@@ -661,6 +661,7 @@ protected:
   ParticleGroupSharedPtr particle_group;
   KERNEL kernel;
   std::unique_ptr<ParticleLoopIterationSet> iteration_set;
+  std::string loop_type;
   std::string name;
   EventStack event_stack;
   bool loop_running = {false};
@@ -685,6 +686,8 @@ public:
   ParticleLoop(const std::string name, ParticleGroupSharedPtr particle_group,
                KERNEL kernel, ARGS... args)
       : name(name), particle_group(particle_group), kernel(kernel) {
+
+    this->loop_type = "ParticleLoop";
     this->unpack_args<0>(args...);
 
     const int ncell = this->particle_group->position_dat->ncell;
@@ -777,7 +780,7 @@ public:
     this->submit();
     this->wait();
     this->particle_group->sycl_target->profile_map.inc(
-        "ParticleLoop", this->name, 1,
+        this->loop_type, this->name, 1,
         profile_elapsed(t0, profile_timestamp()));
   }
 };
