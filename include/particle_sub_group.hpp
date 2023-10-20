@@ -112,17 +112,35 @@ protected:
   std::shared_ptr<BufferDeviceHost<INT>> dh_layers;
   int npart_local;
 
+  template <template <typename> typename T, typename U>
+  inline void check_sym_type(T<U> arg) {
+    static_assert(std::is_same<T<U>, Sym<U>>::value == true,
+                  "Filtering lambda arguments must be read access particle "
+                  "properties (Sym instances). Sym type check failed.");
+  }
+  template <template <typename> typename T, typename U>
+  inline void check_read_access(T<U> arg) {
+    static_assert(std::is_same<T<U>, Access::Read<U>>::value == true,
+                  "Filtering lambda arguments must be read access particle "
+                  "properties (Sym instances). Read access check failed.");
+    check_sym_type(arg.obj);
+  }
+
   ParticleSubGroup(SubGroupSelector selector)
       : particle_group(selector.particle_group), selector(selector) {}
 
 public:
   /**
    * TODO
+   *
+   * arg should be Syms only
    */
   template <typename KERNEL, typename... ARGS>
   ParticleSubGroup(ParticleGroupSharedPtr particle_group, KERNEL kernel,
                    ARGS... args)
-      : ParticleSubGroup(SubGroupSelector(particle_group, kernel, args...)) {}
+      : ParticleSubGroup(SubGroupSelector(particle_group, kernel, args...)) {
+    (check_read_access(args), ...);
+  }
 
   inline void create() {
     auto buffers = this->selector.get();
@@ -130,7 +148,7 @@ public:
     this->dh_cells = std::get<1>(buffers);
     this->dh_layers = std::get<2>(buffers);
   }
-  
+
   /**
    * TODO - protect?
    */

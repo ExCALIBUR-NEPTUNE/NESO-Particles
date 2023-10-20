@@ -40,6 +40,10 @@ public:
   std::size_t size;
 
   LocalArray() = default;
+
+  /**
+   * Note that the copy operator creates shallow copies of the array.
+   */
   LocalArray<T> &operator=(const LocalArray<T> &) = default;
 
   /**
