@@ -44,7 +44,7 @@ protected:
     std::vector<T> tmp(this->size);
     T *t_ptr = tmp.data();
     T *d_ptr = this->buffer->d_buffer.ptr;
-    T *h_ptr = this->buffer->d_buffer.ptr;
+    T *h_ptr = this->buffer->h_buffer.ptr;
     const std::size_t size_bytes = sizeof(T) * this->size;
     sycl_target->queue.memcpy(t_ptr, d_ptr, size_bytes).wait_and_throw();
 
@@ -81,7 +81,7 @@ public:
               const std::optional<T> init_value = std::nullopt)
       : sycl_target(sycl_target), comm(comm), size(size) {
 
-    this->buffer = std::make_shared<BufferDevice<T>>(sycl_target, size);
+    this->buffer = std::make_shared<BufferDeviceHost<T>>(sycl_target, size);
     if (init_value) {
       this->fill(init_value.value());
     }

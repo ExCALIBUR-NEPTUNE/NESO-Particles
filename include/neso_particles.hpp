@@ -9,6 +9,7 @@
 #include "cell_binning.hpp"
 #include "cell_dat.hpp"
 #include "compute_target.hpp"
+#include "containers/global_array.hpp"
 #include "containers/local_array.hpp"
 #include "containers/tuple.hpp"
 #include "domain.hpp"
