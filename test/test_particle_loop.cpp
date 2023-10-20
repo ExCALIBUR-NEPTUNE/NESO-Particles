@@ -10,7 +10,7 @@ namespace {
 
 const int ndim = 2;
 
-ParticleGroupSharedPtr particle_loop_common() {
+ParticleGroupSharedPtr particle_loop_common(const int N = 1093) {
   std::vector<int> dims(ndim);
   dims[0] = 4;
   dims[1] = 8;
@@ -41,10 +41,12 @@ ParticleGroupSharedPtr particle_loop_common() {
                                   ParticleProp(Sym<REAL>("FOO"), 3),
                                   domain->mesh->get_cell_count()));
 
-  std::mt19937 rng_pos(52234234);
-  std::mt19937 rng_vel(52234231);
+  const int rank = sycl_target->comm_pair.rank_parent;
+  const int size = sycl_target->comm_pair.size_parent;
+  const INT id_offset = rank * N;
 
-  const int N = 7901; // prime
+  std::mt19937 rng_pos(52234234 + rank);
+  std::mt19937 rng_vel(52234231 + rank);
 
   auto positions =
       uniform_within_extents(N, ndim, mesh->global_extents, rng_pos);
@@ -61,7 +63,7 @@ ParticleGroupSharedPtr particle_loop_common() {
       initial_distribution[Sym<REAL>("V")][px][dimx] = velocities[dimx][px];
     }
     initial_distribution[Sym<INT>("CELL_ID")][px][0] = 0;
-    initial_distribution[Sym<INT>("ID")][px][0] = px;
+    initial_distribution[Sym<INT>("ID")][px][0] = px + id_offset;
   }
 
   A->add_particles_local(initial_distribution);
@@ -334,6 +336,71 @@ TEST(ParticleLoop, loop_index) {
       ASSERT_EQ((*loop_index)[1][rowx], rowx);
     }
   }
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}
+
+TEST(ParticleLoop, global_array) {
+  const int N_per_rank = 1093;
+  auto A = particle_loop_common(N_per_rank);
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  const int cell_count = mesh->get_cell_count();
+  auto sycl_target = A->sycl_target;
+
+  const int rank = sycl_target->comm_pair.rank_parent;
+  const int size = sycl_target->comm_pair.size_parent;
+
+  const int N = 3;
+  GlobalArray<REAL> g0(sycl_target, N, 53);
+
+  ParticleLoop pl(
+      A,
+      [=](Access::ParticleDat::Write<REAL> P2,
+          Access::GlobalArray::Read<REAL> G0) {
+        for (int dx = 0; dx < ndim; dx++) {
+          P2[dx] = G0[dx];
+        }
+      },
+      Access::write(Sym<REAL>("P2")), Access::read(g0));
+
+  pl.execute();
+  int local_count = 0;
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto p2 = A->get_dat(Sym<REAL>("P2"))->cell_dat.get_cell(cellx);
+    const int nrow = p2->nrow;
+
+    // for each particle in the cell
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      local_count++;
+      // for each dimension
+      for (int dimx = 0; dimx < ndim; dimx++) {
+        EXPECT_EQ((*p2)[dimx][rowx], 53);
+      }
+    }
+  }
+
+  GlobalArray<int> g1(sycl_target, N, 0);
+
+  ParticleLoop pl_add(
+      A,
+      [=](Access::GlobalArray::Add<int> G1) {
+        G1(0, 1);
+        G1(1, 2);
+        G1(2, 3);
+      },
+      Access::add(g1));
+
+  pl_add.execute();
+
+  auto d1 = g1.get();
+
+  const int N_total = N_per_rank * size;
+  ASSERT_EQ(d1.at(0), N_total);
+  ASSERT_EQ(d1.at(1), N_total * 2);
+  ASSERT_EQ(d1.at(2), N_total * 3);
 
   A->free();
   sycl_target->free();

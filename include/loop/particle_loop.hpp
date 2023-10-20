@@ -2,6 +2,7 @@
 #define _NESO_PARTICLES_PARTICLE_LOOP_H_
 
 #include "../compute_target.hpp"
+#include "../containers/global_array.hpp"
 #include "../containers/local_array.hpp"
 #include "../containers/tuple.hpp"
 #include "../particle_dat.hpp"
@@ -212,6 +213,39 @@ template <typename T> struct Add {
 } // namespace NESO::Particles::Access::LocalArray
 
 /**
+ *  Defines the access implementations and types for GlobalArray objects.
+ */
+namespace NESO::Particles::Access::GlobalArray {
+
+/**
+ * Access:GlobalArray::Read<T> and Access:GlobalArray::Add<T> are the
+ * kernel argument types for accessing GlobalArray data in a kernel.
+ */
+template <typename T> struct Read {
+  /// Pointer to underlying data for the array.
+  Read() = default;
+  T const *ptr;
+  const T &operator[](const int component) { return ptr[component]; }
+};
+
+/**
+ * Access:GlobalArray::Read<T> and Access:GlobalArray::Add<T> are the
+ * kernel argument types for accessing GlobalArray data in a kernel.
+ */
+template <typename T> struct Add {
+  /// Pointer to underlying data for the array.
+  Add() = default;
+  T *ptr;
+  T operator()(const int component, const T value) {
+    sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>
+        element_atomic(ptr[component]);
+    return element_atomic.fetch_add(value);
+  }
+};
+
+} // namespace NESO::Particles::Access::GlobalArray
+
+/**
  * The type to pass to a ParticleLoop to read the ParticleLoop loop index in a
  * kernel.
  */
@@ -270,6 +304,18 @@ template <typename T> struct LoopParameter<Access::Add<LocalArray<T>>> {
   using type = T *;
 };
 /**
+ *  Loop parameter for read access of a GlobalArray.
+ */
+template <typename T> struct LoopParameter<Access::Read<GlobalArray<T>>> {
+  using type = T const *;
+};
+/**
+ *  Loop parameter for add access of a GlobalArray.
+ */
+template <typename T> struct LoopParameter<Access::Add<GlobalArray<T>>> {
+  using type = T *;
+};
+/**
  *  Loop parameter for read access of a ParticleLoopIndex.
  */
 template <> struct LoopParameter<Access::Read<ParticleLoopIndex>> {
@@ -313,6 +359,18 @@ template <typename T> struct KernelParameter<Access::Add<LocalArray<T>>> {
   using type = Access::LocalArray::Add<T>;
 };
 /**
+ *  KernelParameter type for read access to a GlobalArray.
+ */
+template <typename T> struct KernelParameter<Access::Read<GlobalArray<T>>> {
+  using type = Access::GlobalArray::Read<T>;
+};
+/**
+ *  KernelParameter type for add access to a GlobalArray.
+ */
+template <typename T> struct KernelParameter<Access::Add<GlobalArray<T>>> {
+  using type = Access::GlobalArray::Add<T>;
+};
+/**
  *  KernelParameter type for read-only access to a ParticleLoopIndex.
  */
 template <> struct KernelParameter<Access::Read<ParticleLoopIndex>> {
@@ -326,11 +384,29 @@ template <class T> using kernel_parameter_t = typename KernelParameter<T>::type;
 } // namespace
 
 /**
- * TODO
+ * Abstract base class for ParticleLoop such that the templated ParticleLoop
+ * can be cast to a base type for storage.
  */
 class ParticleLoopBase {
 public:
+  /**
+   *  Execute the particle loop and block until completion. Must be called
+   *  Collectively on the communicator.
+   */
   virtual inline void execute() = 0;
+
+  /**
+   *  Launch the ParticleLoop and return. Must be called collectively over the
+   *  MPI communicator of the ParticleGroup. Loop execution is complete when
+   *  the corresponding call to wait returns.
+   */
+  virtual inline void submit() = 0;
+
+  /**
+   * Wait for loop execution to complete. On completion perform post-loop
+   * actions. Must be called collectively on communicator.
+   */
+  virtual inline void wait() = 0;
 };
 typedef std::shared_ptr<ParticleLoopBase> ParticleLoopSharedPtr;
 
@@ -344,6 +420,7 @@ typedef std::shared_ptr<ParticleLoopBase> ParticleLoopSharedPtr;
  *  --------------  | ------------------ | -------------------- | ----- |
  *  ParticleDat<T> | Read, Write | Access::ParticleDat::Read<T>, Access::ParticleDat::Write<T> | Loop is called with the Sym<T>, e.g Access::read(Sym<T>("A")) |
  *  LocalArray<T>  | Read, Add | Access::LocalArray::Read<T>, Access::LocalArray::Add<T> | Loop is called with the array, e.g LocalArray l0(...), Access::read(l0) |
+ *  GlobalArray<T>  | Read, Add | Access::GlobalArray::Read<T>, Access::GlobalArray::Add<T> | Loop is called with the array, e.g GlobalArray g0(...), Access::read(g0). After loop completion values are reduced across the MPI communicator automatically. |
  *
  */
 // clang-format on
@@ -395,6 +472,24 @@ protected:
   static inline void create_kernel_arg(const int cellx, const int layerx,
                                        T *rhs,
                                        Access::LocalArray::Add<T> &lhs) {
+    lhs.ptr = rhs;
+  }
+  /**
+   *  Function to create the kernel argument for GlobalArray read access.
+   */
+  template <typename T>
+  static inline void create_kernel_arg(const int cellx, const int layerx,
+                                       T const *rhs,
+                                       Access::GlobalArray::Read<T> &lhs) {
+    lhs.ptr = rhs;
+  }
+  /**
+   *  Function to create the kernel argument for GlobalArray read access.
+   */
+  template <typename T>
+  static inline void create_kernel_arg(const int cellx, const int layerx,
+                                       T *rhs,
+                                       Access::GlobalArray::Add<T> &lhs) {
     lhs.ptr = rhs;
   }
   /**
@@ -453,6 +548,26 @@ protected:
                                      Access::Add<LocalArray<T>> a) {
     return a.obj.impl_get();
   }
+
+  /**
+   * Method to compute access to a GlobalArray (read)
+   */
+  template <typename T>
+  static inline auto create_loop_arg(ParticleGroup *particle_group,
+                                     sycl::handler &cgh,
+                                     Access::Read<GlobalArray<T>> a) {
+    return a.obj.impl_get_const();
+  }
+  /**
+   * Method to compute access to a GlobalArray (add)
+   */
+  template <typename T>
+  static inline auto create_loop_arg(ParticleGroup *particle_group,
+                                     sycl::handler &cgh,
+                                     Access::Add<GlobalArray<T>> a) {
+    return a.obj.impl_get();
+  }
+
   /**
    * Method to compute access to a ParticleLoopIndex (read)
    */
@@ -460,6 +575,25 @@ protected:
                                       sycl::handler &cgh,
                                       Access::Read<ParticleLoopIndex> a) {
     return nullptr;
+  }
+
+  /*
+   * -----------------------------------------------------------------
+   */
+
+  /**
+   * The functions to run for each argument to the kernel post loop completion.
+   */
+  /**
+   * Default post loop execution function.
+   */
+  template <typename T> inline void post_loop(T &arg) {}
+  /**
+   * Post loop execution function for GlobalArray write.
+   */
+  template <typename T>
+  inline void post_loop(Access::Add<GlobalArray<T>> &arg) {
+    arg.obj.impl_post_loop_add();
   }
 
   /*
@@ -528,46 +662,8 @@ protected:
   KERNEL kernel;
   std::unique_ptr<ParticleLoopIterationSet> iteration_set;
   std::string name;
-
-  /**
-   *  Launch the ParticleLoop and return. Pushes events onto an event stack
-   *  that must be waited on for completion of the ParticleLoop.
-   *
-   *  @param event_stack EventStack to use for events.
-   */
-  inline void execute(EventStack &event_stack) {
-
-    auto t0 = profile_timestamp();
-    auto position_dat = this->particle_group->position_dat;
-    auto d_npart_cell = position_dat->d_npart_cell;
-    auto is = this->iteration_set->get();
-    auto k_kernel = this->kernel;
-
-    const int nbin = std::get<0>(is);
-    this->particle_group->sycl_target->profile_map.inc(
-        "ParticleLoop", "Init", 1, profile_elapsed(t0, profile_timestamp()));
-
-    for (int binx = 0; binx < nbin; binx++) {
-      sycl::nd_range<2> ndr = std::get<1>(is).at(binx);
-      const size_t cell_offset = std::get<2>(is).at(binx);
-      event_stack.push(this->particle_group->sycl_target->queue.submit(
-          [&](sycl::handler &cgh) {
-            loop_parameter_type loop_args;
-            create_loop_args(cgh, loop_args);
-            cgh.parallel_for<>(ndr, [=](sycl::nd_item<2> idx) {
-              const size_t cellxs = idx.get_global_id(0) + cell_offset;
-              const size_t layerxs = idx.get_global_id(1);
-              const int cellx = static_cast<int>(cellxs);
-              const int layerx = static_cast<int>(layerxs);
-              if (layerx < d_npart_cell[cellx]) {
-                kernel_parameter_type kernel_args;
-                create_kernel_args(cellx, layerx, loop_args, kernel_args);
-                Tuple::apply(k_kernel, kernel_args);
-              }
-            });
-          }));
-    }
-  }
+  EventStack event_stack;
+  bool loop_running = {false};
 
 public:
   /// Disable (implicit) copies.
@@ -612,13 +708,74 @@ public:
       : ParticleLoop("unnamed_kernel", particle_group, kernel, args...){};
 
   /**
-   *  Execute the ParticleLoop and block until execution is complete.
+   *  Launch the ParticleLoop and return. Must be called collectively over the
+   *  MPI communicator of the ParticleGroup. Loop execution is complete when
+   *  the corresponding call to wait returns.
+   */
+  inline void submit() {
+    NESOASSERT(
+        !this->loop_running,
+        "ParticleLoop::submit called - but the loop is already submitted.");
+    this->loop_running = true;
+
+    auto t0 = profile_timestamp();
+    auto position_dat = this->particle_group->position_dat;
+    auto d_npart_cell = position_dat->d_npart_cell;
+    auto is = this->iteration_set->get();
+    auto k_kernel = this->kernel;
+
+    const int nbin = std::get<0>(is);
+    this->particle_group->sycl_target->profile_map.inc(
+        "ParticleLoop", "Init", 1, profile_elapsed(t0, profile_timestamp()));
+
+    for (int binx = 0; binx < nbin; binx++) {
+      sycl::nd_range<2> ndr = std::get<1>(is).at(binx);
+      const size_t cell_offset = std::get<2>(is).at(binx);
+      this->event_stack.push(this->particle_group->sycl_target->queue.submit(
+          [&](sycl::handler &cgh) {
+            loop_parameter_type loop_args;
+            create_loop_args(cgh, loop_args);
+            cgh.parallel_for<>(ndr, [=](sycl::nd_item<2> idx) {
+              const size_t cellxs = idx.get_global_id(0) + cell_offset;
+              const size_t layerxs = idx.get_global_id(1);
+              const int cellx = static_cast<int>(cellxs);
+              const int layerx = static_cast<int>(layerxs);
+              if (layerx < d_npart_cell[cellx]) {
+                kernel_parameter_type kernel_args;
+                create_kernel_args(cellx, layerx, loop_args, kernel_args);
+                Tuple::apply(k_kernel, kernel_args);
+              }
+            });
+          }));
+    }
+  }
+
+  /**
+   * Wait for loop execution to complete. On completion perform post-loop
+   * actions. Must be called collectively on communicator.
+   */
+  inline void wait() {
+    NESOASSERT(this->loop_running,
+               "ParticleLoop::wait called - but the loop is not submitted.");
+    // wait for the loop execution to complete
+    this->event_stack.wait();
+
+    auto post_loop_caller = [&](auto... as) { (post_loop(as), ...); };
+
+    std::apply(post_loop_caller, this->args);
+
+    this->loop_running = false;
+  }
+
+  /**
+   *  Execute the ParticleLoop and block until execution is complete. Must be
+   *  called collectively on the MPI communicator associated with the
+   *  SYCLTarget this loop is over.
    */
   inline void execute() {
     auto t0 = profile_timestamp();
-    EventStack es;
-    this->execute(es);
-    es.wait();
+    this->submit();
+    this->wait();
     this->particle_group->sycl_target->profile_map.inc(
         "ParticleLoop", this->name, 1,
         profile_elapsed(t0, profile_timestamp()));
@@ -626,7 +783,14 @@ public:
 };
 
 /**
- *  TODO
+ *  Create a ParticleLoop that executes a kernel for all particles in the
+ * ParticleGroup.
+ *
+ *  @param particle_group ParticleGroup to execute kernel for all particles.
+ *  @param kernel Kernel to execute for all particles in the ParticleGroup.
+ *  @param args The remaining arguments are arguments to be passed to the
+ *              kernel. All arguments must be wrapped in an access descriptor
+ * type.
  */
 template <typename KERNEL, typename... ARGS>
 inline ParticleLoopSharedPtr
@@ -640,7 +804,15 @@ particle_loop(ParticleGroupSharedPtr particle_group, KERNEL kernel,
 }
 
 /**
- *  TODO
+ *  Create a ParticleLoop that executes a kernel for all particles in the
+ * ParticleGroup.
+ *
+ *  @param name Identifier for particle loop.
+ *  @param particle_group ParticleGroup to execute kernel for all particles.
+ *  @param kernel Kernel to execute for all particles in the ParticleGroup.
+ *  @param args The remaining arguments are arguments to be passed to the
+ *              kernel. All arguments must be wrapped in an access descriptor
+ * type.
  */
 template <typename KERNEL, typename... ARGS>
 inline ParticleLoopSharedPtr

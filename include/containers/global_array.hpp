@@ -16,6 +16,11 @@ namespace NESO::Particles {
 // ParticleLoop as a friend class.
 template <typename KERNEL, typename... ARGS> class ParticleLoop;
 
+/**
+ *  GlobalArray is an array type which can be accessed from kernels in read or
+ *  atomic add mode. Post loop execution, with add access mode, the global
+ *  array values are automatically reduced across the MPI communicator.
+ */
 template <typename T> class GlobalArray {
   // This allows the ParticleLoop to access the implementation methods.
   template <typename KERNEL, typename... ARGS> friend class ParticleLoop;
@@ -72,14 +77,13 @@ public:
    *  Create a new GlobalArray on a compute target and given size.
    *
    *  @param sycl_target Device to create GlobalArray on.
-   *  @param comm MPI_Comm array exists on.
    *  @param size Number of elements in array.
    *  @param Default value to initialise values to.
    */
-  GlobalArray(SYCLTargetSharedPtr sycl_target, MPI_Comm comm,
-              const std::size_t size,
+  GlobalArray(SYCLTargetSharedPtr sycl_target, const std::size_t size,
               const std::optional<T> init_value = std::nullopt)
-      : sycl_target(sycl_target), comm(comm), size(size) {
+      : sycl_target(sycl_target), comm(sycl_target->comm_pair.comm_parent),
+        size(size) {
 
     this->buffer = std::make_shared<BufferDeviceHost<T>>(sycl_target, size);
     if (init_value) {

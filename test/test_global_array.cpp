@@ -9,10 +9,9 @@ namespace {
 
 template <typename T> class TestGlobalArray : public GlobalArray<T> {
 public:
-  TestGlobalArray(SYCLTargetSharedPtr sycl_target, MPI_Comm comm,
-                  const std::size_t size,
+  TestGlobalArray(SYCLTargetSharedPtr sycl_target, const std::size_t size,
                   const std::optional<T> init_value = std::nullopt)
-      : GlobalArray<T>(sycl_target, comm, size, init_value) {}
+      : GlobalArray<T>(sycl_target, size, init_value) {}
 
   inline void test_reduction_set(std::vector<T> &data) {
     T *d_ptr = this->buffer->d_buffer.ptr;
@@ -29,7 +28,7 @@ public:
 TEST(GlobalArray, init) {
   auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
   const int N = 6151;
-  GlobalArray<int> g0(sycl_target, MPI_COMM_WORLD, N, 42);
+  GlobalArray<int> g0(sycl_target, N, 42);
 
   auto d0 = g0.get();
   for (auto &dx : d0) {
@@ -41,7 +40,7 @@ TEST(GlobalArray, init) {
 TEST(GlobalArray, kernel_add) {
   auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
   const int N = 13;
-  TestGlobalArray<int> g0(sycl_target, MPI_COMM_WORLD, N, 0);
+  TestGlobalArray<int> g0(sycl_target, N, 0);
   auto d0 = g0.get();
   for (auto &dx : d0) {
     EXPECT_EQ(dx, 0);
