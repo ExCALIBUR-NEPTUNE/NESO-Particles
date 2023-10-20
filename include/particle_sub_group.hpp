@@ -16,6 +16,9 @@ namespace NESO::Particles {
 
 namespace {
 
+/**
+ * TODO
+ */
 class SubGroupSelector {
 protected:
   LocalArray<int> index;
@@ -52,6 +55,9 @@ public:
         Access::read(this->ptrs), args...);
   }
 
+  /**
+   * TODO
+   */
   inline std::tuple<int, std::shared_ptr<BufferDeviceHost<INT>>,
                     std::shared_ptr<BufferDeviceHost<INT>>>
   get() {
