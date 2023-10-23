@@ -4,7 +4,6 @@
 #include "loop/particle_loop.hpp"
 #include "particle_group.hpp"
 #include "typedefs.hpp"
-#include <gtest/gtest.h>
 #include <map>
 #include <random>
 #include <tuple>
