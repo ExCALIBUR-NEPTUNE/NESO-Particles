@@ -24,6 +24,7 @@ class ParticleGroup;
 // ParticleLoop as a friend class.
 template <typename KERNEL, typename... ARGS> class ParticleLoop;
 class MeshHierarchyGlobalMap;
+class CellMove;
 
 /**
  *  Wrapper around a CellDat to store particle data on a per cell basis.
@@ -33,6 +34,7 @@ template <typename T> class ParticleDatT {
   template <typename KERNEL, typename... ARGS> friend class ParticleLoop;
   friend class ParticleGroup;
   friend class MeshHierarchyGlobalMap;
+  friend class CellMove;
 
 private:
 protected:

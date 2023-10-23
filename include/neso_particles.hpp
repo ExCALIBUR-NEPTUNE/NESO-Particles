@@ -33,6 +33,7 @@
 #include "utility.hpp"
 #include "utility_mesh_hierarchy_plotting.hpp"
 // Implementations
+#include "cell_dat_move_impl.hpp"
 #include "departing_particle_identification_impl.hpp"
 #include "global_mapping_impl.hpp"
 #endif
