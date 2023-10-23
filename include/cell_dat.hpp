@@ -16,6 +16,11 @@
 
 namespace NESO::Particles {
 
+// Forward declaration of ParticleLoop such that LocalArray can define
+// ParticleLoop as a friend class.
+template <typename KERNEL, typename... ARGS> class ParticleLoop;
+template <typename T> class ParticleDatT;
+
 /**
  * Container for the data within a single cell stored on the host. Data is
  * store column wise. The data is typically particle data for a single
@@ -206,6 +211,10 @@ public:
  * major manner with a new device pointer per column.
  */
 template <typename T> class CellDat {
+  // This allows the ParticleLoop to access the implementation methods.
+  template <typename KERNEL, typename... ARGS> friend class ParticleLoop;
+  template <typename U> friend class ParticleDatT;
+
 private:
   T ***d_ptr;
   std::vector<T **> h_ptr_cells;
@@ -215,6 +224,19 @@ private:
 
   EventStack stack_events;
   std::stack<T *> stack_ptrs;
+
+protected:
+  /**
+   * Non-const pointer to underlying device data. Intended for friend access
+   * from ParticleLoop.
+   */
+  inline T ***impl_get() { return this->d_ptr; }
+
+  /**
+   * Const pointer to underlying device data. Intended for friend access
+   * from ParticleLoop.
+   */
+  inline T ***impl_get_const() { return this->d_ptr; }
 
 public:
   /// Disable (implicit) copies.

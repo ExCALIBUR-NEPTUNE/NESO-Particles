@@ -20,12 +20,19 @@ namespace NESO::Particles {
 // forward declaration such that ParticleDat can define ParticleGroup as a
 // friend class.
 class ParticleGroup;
+// Forward declaration of ParticleLoop such that LocalArray can define
+// ParticleLoop as a friend class.
+template <typename KERNEL, typename... ARGS> class ParticleLoop;
+class MeshHierarchyGlobalMap;
 
 /**
  *  Wrapper around a CellDat to store particle data on a per cell basis.
  */
 template <typename T> class ParticleDatT {
+  // This allows the ParticleLoop to access the implementation methods.
+  template <typename KERNEL, typename... ARGS> friend class ParticleLoop;
   friend class ParticleGroup;
+  friend class MeshHierarchyGlobalMap;
 
 private:
 protected:
@@ -34,6 +41,18 @@ protected:
   set_particle_group(std::shared_ptr<ParticleGroup> particle_group) {
     this->particle_group = particle_group;
   }
+
+  /**
+   * Non-const pointer to underlying device data. Intended for friend access
+   * from ParticleLoop.
+   */
+  inline T ***impl_get() { return this->cell_dat.impl_get(); }
+
+  /**
+   * Const pointer to underlying device data. Intended for friend access
+   * from ParticleLoop.
+   */
+  inline T ***impl_get_const() { return this->cell_dat.impl_get_const(); }
 
 public:
   /**
