@@ -32,5 +32,6 @@
 #include "typedefs.hpp"
 #include "utility.hpp"
 #include "utility_mesh_hierarchy_plotting.hpp"
-
+// Implementations
+#include "departing_particle_identification_impl.hpp"
 #endif
