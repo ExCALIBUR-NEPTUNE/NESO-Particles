@@ -57,6 +57,17 @@ private:
   // members for moving particles between local cells
   CellMove cell_move_ctx;
 
+  template <typename T>
+  inline void add_particle_dat_common(ParticleDatSharedPtr<T> particle_dat) {
+    realloc_dat(particle_dat);
+    push_particle_spec(ParticleProp(particle_dat->sym, particle_dat->ncomp,
+                                    particle_dat->positions));
+    particle_dat->set_npart_cells_host(this->h_npart_cell.ptr);
+    particle_dat->npart_host_to_device();
+    particle_dat->set_particle_group(
+        std::shared_ptr<ParticleGroup>(this, [](auto ptr) {}));
+  }
+
 public:
   /// Disable (implicit) copies.
   ParticleGroup(const ParticleGroup &st) = delete;
@@ -412,12 +423,7 @@ ParticleGroup::add_particle_dat(ParticleDatSharedPtr<REAL> particle_dat) {
     this->position_dat = particle_dat;
     this->position_sym = std::make_shared<Sym<REAL>>(particle_dat->sym.name);
   }
-  realloc_dat(particle_dat);
-  // TODO clean up this ParticleProp handling
-  push_particle_spec(ParticleProp(particle_dat->sym, particle_dat->ncomp,
-                                  particle_dat->positions));
-  particle_dat->set_npart_cells_host(this->h_npart_cell.ptr);
-  particle_dat->npart_host_to_device();
+  add_particle_dat_common(particle_dat);
 }
 inline void
 ParticleGroup::add_particle_dat(ParticleDatSharedPtr<INT> particle_dat) {
@@ -429,12 +435,7 @@ ParticleGroup::add_particle_dat(ParticleDatSharedPtr<INT> particle_dat) {
     this->cell_id_dat = particle_dat;
     this->cell_id_sym = std::make_shared<Sym<INT>>(particle_dat->sym.name);
   }
-  realloc_dat(particle_dat);
-  // TODO clean up this ParticleProp handling
-  push_particle_spec(ParticleProp(particle_dat->sym, particle_dat->ncomp,
-                                  particle_dat->positions));
-  particle_dat->set_npart_cells_host(this->h_npart_cell.ptr);
-  particle_dat->npart_host_to_device();
+  add_particle_dat_common(particle_dat);
 }
 
 inline void ParticleGroup::add_particles(){};

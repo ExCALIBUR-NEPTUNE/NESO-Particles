@@ -17,12 +17,33 @@ using namespace cl;
 
 namespace NESO::Particles {
 
+// forward declaration such that ParticleDat can define ParticleGroup as a
+// friend class.
+class ParticleGroup;
+
 /**
  *  Wrapper around a CellDat to store particle data on a per cell basis.
  */
 template <typename T> class ParticleDatT {
+  friend class ParticleGroup;
+
 private:
+protected:
+  std::shared_ptr<ParticleGroup> particle_group;
+  inline void
+  set_particle_group(std::shared_ptr<ParticleGroup> particle_group) {
+    this->particle_group = particle_group;
+  }
+
 public:
+  /**
+   *  Returns the shared ptr to the ParticleGroup the ParticleDat is a member
+   * of.
+   */
+  inline std::shared_ptr<ParticleGroup> get_particle_group() {
+    return this->particle_group;
+  }
+
   /// Disable (implicit) copies.
   ParticleDatT(const ParticleDatT &st) = delete;
   /// Disable (implicit) copies.
