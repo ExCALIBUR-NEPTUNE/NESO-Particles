@@ -3,6 +3,7 @@
 #include "mesh_hierarchy.hpp"
 #include "typedefs.hpp"
 
+#include <array>
 #include <cstdint>
 #include <cstdlib>
 #include <memory>
@@ -388,6 +389,27 @@ public:
       point[dimx] = 0.5 * (start + end);
     }
   };
+
+  /**
+   * Get a vector of the cells owned by this MPI rank.
+   *
+   * @returns vector of owned cells in order of the cell ids of the cells.
+   */
+  inline std::vector<std::array<int, 3>> get_owned_cells() {
+    std::vector<std::array<int, 3>> cells(this->cell_count);
+    int index = 0;
+    for (int cz = cell_starts[2]; cz < cell_ends[2]; cz++) {
+      for (int cy = cell_starts[1]; cy < cell_ends[1]; cy++) {
+        for (int cx = cell_starts[0]; cx < cell_ends[0]; cx++) {
+          cells[index][0] = cx;
+          cells[index][1] = cy;
+          cells[index][2] = cz;
+          index++;
+        }
+      }
+    }
+    return cells;
+  }
 };
 
 typedef std::shared_ptr<CartesianHMesh> CartesianHMeshSharedPtr;
