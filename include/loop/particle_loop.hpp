@@ -323,6 +323,14 @@ template <> struct LoopParameter<Access::Read<ParticleLoopIndex>> {
 };
 
 /**
+ * Catch all for args passed as shared ptrs
+ */
+template <template <typename> typename T, typename U>
+struct LoopParameter<T<std::shared_ptr<U>>> {
+  using type = typename LoopParameter<T<U>>::type;
+};
+
+/**
  *  This is a metafunction which is passed a input data type and returns the
  *  LoopParamter type that corresponds to the input type (by using the structs
  * defined above).
@@ -376,6 +384,14 @@ template <typename T> struct KernelParameter<Access::Add<GlobalArray<T>>> {
 template <> struct KernelParameter<Access::Read<ParticleLoopIndex>> {
   using type = Access::LoopIndex::Read;
 };
+/**
+ * Catch all for args passed as shared ptrs
+ */
+template <template <typename> typename T, typename U>
+struct KernelParameter<T<std::shared_ptr<U>>> {
+  using type = typename KernelParameter<T<U>>::type;
+};
+
 /**
  *  Function to map access descriptor and data structure type to kernel type.
  */
@@ -515,8 +531,8 @@ protected:
   template <typename T>
   static inline auto create_loop_arg(ParticleGroup *particle_group,
                                      sycl::handler &cgh,
-                                     Access::Read<Sym<T>> a) {
-    auto sym = a.obj;
+                                     Access::Read<Sym<T> *> &a) {
+    auto sym = *a.obj;
     return particle_group->get_dat(sym)->cell_dat.device_ptr();
   }
   /**
@@ -525,8 +541,8 @@ protected:
   template <typename T>
   static inline auto create_loop_arg(ParticleGroup *particle_group,
                                      sycl::handler &cgh,
-                                     Access::Write<Sym<T>> a) {
-    auto sym = a.obj;
+                                     Access::Write<Sym<T> *> &a) {
+    auto sym = *a.obj;
     return particle_group->get_dat(sym)->cell_dat.device_ptr();
   }
 
@@ -536,8 +552,8 @@ protected:
   template <typename T>
   static inline auto create_loop_arg(ParticleGroup *particle_group,
                                      sycl::handler &cgh,
-                                     Access::Read<LocalArray<T>> a) {
-    return a.obj.impl_get_const();
+                                     Access::Read<LocalArray<T> *> &a) {
+    return a.obj->impl_get_const();
   }
   /**
    * Method to compute access to a LocalArray (add)
@@ -545,8 +561,8 @@ protected:
   template <typename T>
   static inline auto create_loop_arg(ParticleGroup *particle_group,
                                      sycl::handler &cgh,
-                                     Access::Add<LocalArray<T>> a) {
-    return a.obj.impl_get();
+                                     Access::Add<LocalArray<T> *> &a) {
+    return a.obj->impl_get();
   }
 
   /**
@@ -555,8 +571,8 @@ protected:
   template <typename T>
   static inline auto create_loop_arg(ParticleGroup *particle_group,
                                      sycl::handler &cgh,
-                                     Access::Read<GlobalArray<T>> a) {
-    return a.obj.impl_get_const();
+                                     Access::Read<GlobalArray<T> *> &a) {
+    return a.obj->impl_get_const();
   }
   /**
    * Method to compute access to a GlobalArray (add)
@@ -564,8 +580,8 @@ protected:
   template <typename T>
   static inline auto create_loop_arg(ParticleGroup *particle_group,
                                      sycl::handler &cgh,
-                                     Access::Add<GlobalArray<T>> a) {
-    return a.obj.impl_get();
+                                     Access::Add<GlobalArray<T> *> &a) {
+    return a.obj->impl_get();
   }
 
   /**
@@ -573,8 +589,28 @@ protected:
    */
   static inline void *create_loop_arg(ParticleGroup *particle_group,
                                       sycl::handler &cgh,
-                                      Access::Read<ParticleLoopIndex> a) {
+                                      Access::Read<ParticleLoopIndex *> &a) {
     return nullptr;
+  }
+
+  /**
+   * Method to compute access to a type wrapped in a shared_ptr.
+   */
+  template <template <typename> typename T, typename U>
+  static inline auto create_loop_arg_cast(ParticleGroup *particle_group,
+                                          sycl::handler &cgh,
+                                          T<std::shared_ptr<U>> a) {
+    T<U *> c = {a.obj.get()};
+    return create_loop_arg(particle_group, cgh, c);
+  }
+  /**
+   * Method to compute access to a type not wrapper in a shared_ptr
+   */
+  template <template <typename> typename T, typename U>
+  static inline auto create_loop_arg_cast(ParticleGroup *particle_group,
+                                          sycl::handler &cgh, T<U> a) {
+    T<U *> c = {&a.obj};
+    return create_loop_arg(particle_group, cgh, c);
   }
 
   /*
@@ -587,13 +623,33 @@ protected:
   /**
    * Default post loop execution function.
    */
-  template <typename T> inline void post_loop(T &arg) {}
+  template <typename T>
+  static inline void post_loop(ParticleGroup *particle_group, T &arg) {}
   /**
    * Post loop execution function for GlobalArray write.
    */
   template <typename T>
-  inline void post_loop(Access::Add<GlobalArray<T>> &arg) {
-    arg.obj.impl_post_loop_add();
+  static inline void post_loop(ParticleGroup *particle_group,
+                               Access::Add<GlobalArray<T> *> &arg) {
+    arg.obj->impl_post_loop_add();
+  }
+
+  /**
+   * Method to compute access to a type wrapped in a shared_ptr.
+   */
+  template <template <typename> typename T, typename U>
+  static inline auto post_loop_cast(ParticleGroup *particle_group,
+                                    T<std::shared_ptr<U>> a) {
+    T<U *> c = {a.obj.get()};
+    post_loop(particle_group, c);
+  }
+  /**
+   * Method to compute access to a type not wrapper in a shared_ptr
+   */
+  template <template <typename> typename T, typename U>
+  static inline auto post_loop_cast(ParticleGroup *particle_group, T<U> a) {
+    T<U *> c = {&a.obj};
+    post_loop(particle_group, c);
   }
 
   /*
@@ -623,7 +679,7 @@ protected:
                                      PARAM &loop_args) {
     if constexpr (INDEX < SIZE) {
       Tuple::get<INDEX>(loop_args) =
-          create_loop_arg(pg, cgh, std::get<INDEX>(this->args));
+          create_loop_arg_cast(pg, cgh, std::get<INDEX>(this->args));
       create_loop_args_inner<INDEX + 1, SIZE>(pg, cgh, loop_args);
     }
   }
@@ -762,11 +818,11 @@ public:
                "ParticleLoop::wait called - but the loop is not submitted.");
     // wait for the loop execution to complete
     this->event_stack.wait();
-
-    auto post_loop_caller = [&](auto... as) { (post_loop(as), ...); };
-
+    auto cast_wrapper = [=](auto t) {
+      post_loop_cast(this->particle_group.get(), t);
+    };
+    auto post_loop_caller = [&](auto... as) { (cast_wrapper(as), ...); };
     std::apply(post_loop_caller, this->args);
-
     this->loop_running = false;
   }
 
