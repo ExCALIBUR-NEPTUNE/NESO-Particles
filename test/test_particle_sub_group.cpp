@@ -137,7 +137,7 @@ TEST(ParticleSubGroup, particle_loop) {
   GlobalArray<int> counter(sycl_target, 1, 0);
 
   auto pl_counter = particle_loop(
-      aa, [=](Access::GlobalArray::Add<int> G1) { G1(0, 1); },
+      aa, [=](Access::GlobalArray::Add<int> G1) { G1.add(0, 1); },
       Access::add(counter));
 
   pl_counter->execute();
@@ -154,8 +154,8 @@ TEST(ParticleSubGroup, particle_loop) {
   auto pl_counter2 = particle_loop(
       std::dynamic_pointer_cast<ParticleSubGroup>(bb),
       [=](auto G1, auto ID, auto MARKER) {
-        G1(0, 1);
-        G1(1, ID[0]);
+        G1.add(0, 1);
+        G1.add(1, ID[0]);
         MARKER[0] = 1;
       },
       Access::add(counter2), Access::read(Sym<INT>("ID")),

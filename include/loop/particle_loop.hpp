@@ -1,6 +1,7 @@
 #ifndef _NESO_PARTICLES_PARTICLE_LOOP_H_
 #define _NESO_PARTICLES_PARTICLE_LOOP_H_
 
+#include "../cell_dat.hpp"
 #include "../compute_target.hpp"
 #include "../containers/global_array.hpp"
 #include "../containers/local_array.hpp"
@@ -192,6 +193,7 @@ template <typename T> struct Read {
   /// Pointer to underlying data for the array.
   Read() = default;
   T const *ptr;
+  const T at(const int component) { return ptr[component]; }
   const T &operator[](const int component) { return ptr[component]; }
 };
 
@@ -203,7 +205,7 @@ template <typename T> struct Add {
   /// Pointer to underlying data for the array.
   Add() = default;
   T *ptr;
-  T operator()(const int component, const T value) {
+  inline T add(const int component, const T value) {
     sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>
         element_atomic(ptr[component]);
     return element_atomic.fetch_add(value);
@@ -225,7 +227,8 @@ template <typename T> struct Read {
   /// Pointer to underlying data for the array.
   Read() = default;
   T const *ptr;
-  const T &operator[](const int component) { return ptr[component]; }
+  inline const T at(const int component) { return ptr[component]; }
+  inline const T &operator[](const int component) { return ptr[component]; }
 };
 
 /**
@@ -236,7 +239,7 @@ template <typename T> struct Add {
   /// Pointer to underlying data for the array.
   Add() = default;
   T *ptr;
-  T operator()(const int component, const T value) {
+  inline T add(const int component, const T value) {
     sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>
         element_atomic(ptr[component]);
     return element_atomic.fetch_add(value);
@@ -244,6 +247,44 @@ template <typename T> struct Add {
 };
 
 } // namespace NESO::Particles::Access::GlobalArray
+
+/**
+ *  Defines the access implementations and types for GlobalArray objects.
+ */
+namespace NESO::Particles::Access::CellDatConst {
+
+/**
+ * Access:CellDatConst::Read<T> and Access:CellDatConst::Add<T> are the
+ * kernel argument types for accessing CellDatConst data in a kernel.
+ */
+template <typename T> struct Read {
+  /// Pointer to underlying data for the array.
+  Read() = default;
+  T const *ptr;
+  int nrow;
+  inline const T at(const int row, const int col) {
+    return ptr[nrow * col + row];
+  }
+  inline const T &operator[](const int component) { return ptr[component]; }
+};
+
+/**
+ * Access:CellDatConst::Read<T> and Access:CellDatConst::Add<T> are the
+ * kernel argument types for accessing CellDatConst data in a kernel.
+ */
+template <typename T> struct Add {
+  /// Pointer to underlying data for the array.
+  Add() = default;
+  T *ptr;
+  int nrow;
+  inline T add(const int row, const int col, const T value) {
+    sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>
+        element_atomic(ptr[nrow * col + row]);
+    return element_atomic.fetch_add(value);
+  }
+};
+
+} // namespace NESO::Particles::Access::CellDatConst
 
 /**
  * The type to pass to a ParticleLoop to read the ParticleLoop loop index in a
@@ -321,7 +362,18 @@ template <typename T> struct LoopParameter<Access::Add<GlobalArray<T>>> {
 template <> struct LoopParameter<Access::Read<ParticleLoopIndex>> {
   using type = void *;
 };
-
+/**
+ *  Loop parameter for read access of a CellDatConst.
+ */
+template <typename T> struct LoopParameter<Access::Read<CellDatConst<T>>> {
+  using type = CellDatConstDeviceTypeConst<T>;
+};
+/**
+ *  Loop parameter for add access of a CellDatConst.
+ */
+template <typename T> struct LoopParameter<Access::Add<CellDatConst<T>>> {
+  using type = CellDatConstDeviceType<T>;
+};
 /**
  * Catch all for args passed as shared ptrs
  */
@@ -377,6 +429,18 @@ template <typename T> struct KernelParameter<Access::Read<GlobalArray<T>>> {
  */
 template <typename T> struct KernelParameter<Access::Add<GlobalArray<T>>> {
   using type = Access::GlobalArray::Add<T>;
+};
+/**
+ *  KernelParameter type for read access to a CellDatConst.
+ */
+template <typename T> struct KernelParameter<Access::Read<CellDatConst<T>>> {
+  using type = Access::CellDatConst::Read<T>;
+};
+/**
+ *  KernelParameter type for add access to a CellDatConst.
+ */
+template <typename T> struct KernelParameter<Access::Add<CellDatConst<T>>> {
+  using type = Access::CellDatConst::Add<T>;
 };
 /**
  *  KernelParameter type for read-only access to a ParticleLoopIndex.
@@ -500,13 +564,36 @@ protected:
     lhs.ptr = rhs;
   }
   /**
-   *  Function to create the kernel argument for GlobalArray read access.
+   *  Function to create the kernel argument for GlobalArray add access.
    */
   template <typename T>
   static inline void create_kernel_arg(const int cellx, const int layerx,
                                        T *rhs,
                                        Access::GlobalArray::Add<T> &lhs) {
     lhs.ptr = rhs;
+  }
+  /**
+   *  Function to create the kernel argument for CellDatConst read access.
+   */
+  template <typename T>
+  static inline void create_kernel_arg(const int cellx, const int layerx,
+                                       CellDatConstDeviceTypeConst<T> &rhs,
+                                       Access::CellDatConst::Read<T> &lhs) {
+    T const *ptr = rhs.ptr + cellx * rhs.stride;
+    lhs.ptr = ptr;
+    lhs.nrow = rhs.nrow;
+  }
+
+  /**
+   *  Function to create the kernel argument for CellDatConst add access.
+   */
+  template <typename T>
+  static inline void create_kernel_arg(const int cellx, const int layerx,
+                                       CellDatConstDeviceType<T> &rhs,
+                                       Access::CellDatConst::Add<T> &lhs) {
+    T *ptr = rhs.ptr + cellx * rhs.stride;
+    lhs.ptr = ptr;
+    lhs.nrow = rhs.nrow;
   }
   /**
    *  Function to create the kernel argument for ParticleLoopIndex read access.
@@ -581,6 +668,25 @@ protected:
   static inline auto create_loop_arg(ParticleGroup *particle_group,
                                      sycl::handler &cgh,
                                      Access::Add<GlobalArray<T> *> &a) {
+    return a.obj->impl_get();
+  }
+
+  /**
+   * Method to compute access to a CellDatConst (read)
+   */
+  template <typename T>
+  static inline auto create_loop_arg(ParticleGroup *particle_group,
+                                     sycl::handler &cgh,
+                                     Access::Read<CellDatConst<T> *> &a) {
+    return a.obj->impl_get_const();
+  }
+  /**
+   * Method to compute access to a CellDatConst (add)
+   */
+  template <typename T>
+  static inline auto create_loop_arg(ParticleGroup *particle_group,
+                                     sycl::handler &cgh,
+                                     Access::Add<CellDatConst<T> *> &a) {
     return a.obj->impl_get();
   }
 

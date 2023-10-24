@@ -16,7 +16,7 @@
 
 namespace NESO::Particles {
 
-// Forward declaration of ParticleLoop such that LocalArray can define
+// Forward declaration of ParticleLoop such that these classes can define
 // ParticleLoop as a friend class.
 template <typename KERNEL, typename... ARGS> class ParticleLoop;
 template <typename T> class ParticleDatT;
@@ -95,14 +95,53 @@ public:
 template <typename T> using CellData = std::shared_ptr<CellDataT<T>>;
 
 /**
+ *  Type the implementation methods return;
+ */
+template <typename T> struct CellDatConstDeviceType {
+  T *ptr;
+  int stride;
+  int nrow;
+};
+
+template <typename T> struct CellDatConstDeviceTypeConst {
+  T const *ptr;
+  int stride;
+  int nrow;
+};
+
+/**
  *  Container that allocates on the device a matrix of fixed size nrow X ncol
  *  for N cells. Data stored in column major format. i.e. Data order from
  *  slowest to fastest is: cell, column, row.
  */
 template <typename T> class CellDatConst {
+  template <typename KERNEL, typename... ARGS> friend class ParticleLoop;
+
 private:
   T *d_ptr;
   const int stride;
+
+protected:
+  /**
+   * Non-const pointer to underlying device data. Intended for friend access
+   * from ParticleLoop.
+   */
+  inline CellDatConstDeviceType<T> impl_get() {
+    static_assert(
+        std::is_trivially_copyable<CellDatConstDeviceType<T>>::value == true);
+    return {this->d_ptr, this->stride, this->nrow};
+  }
+
+  /**
+   * Const pointer to underlying device data. Intended for friend access
+   * from ParticleLoop.
+   */
+  inline CellDatConstDeviceTypeConst<T> impl_get_const() {
+    static_assert(
+        std::is_trivially_copyable<CellDatConstDeviceTypeConst<T>>::value ==
+        true);
+    return {this->d_ptr, this->stride, this->nrow};
+  }
 
 public:
   /// Disable (implicit) copies.
