@@ -501,6 +501,7 @@ typedef std::shared_ptr<ParticleLoopBase> ParticleLoopSharedPtr;
  *  ParticleDat<T> | Read, Write | Access::ParticleDat::Read<T>, Access::ParticleDat::Write<T> | Loop is called with the Sym<T>, e.g Access::read(Sym<T>("A")) |
  *  LocalArray<T>  | Read, Add | Access::LocalArray::Read<T>, Access::LocalArray::Add<T> | Loop is called with the array, e.g LocalArray l0(...), Access::read(l0) |
  *  GlobalArray<T>  | Read, Add | Access::GlobalArray::Read<T>, Access::GlobalArray::Add<T> | Loop is called with the array, e.g GlobalArray g0(...), Access::read(g0). After loop completion values are reduced across the MPI communicator automatically. |
+ *  CellDatConst<T>  | Read, Add | Access::CellDatConst::Read<T>, Access::CellDatConst::Add<T> | Loop is called with the array, e.g auto g0 = std::make_shared<CellDatConst<T>>(...), Access::read(g0). Access is supplied to the elements for each cell only. Passed object must be a shared pointer. |
  *
  */
 // clang-format on

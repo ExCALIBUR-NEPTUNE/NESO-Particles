@@ -25,6 +25,9 @@ class ParticleGroup;
 template <typename KERNEL, typename... ARGS> class ParticleLoop;
 class MeshHierarchyGlobalMap;
 class CellMove;
+class LayerCompressor;
+class ParticlePacker;
+class ParticleUnpacker;
 
 /**
  *  Wrapper around a CellDat to store particle data on a per cell basis.
@@ -35,6 +38,9 @@ template <typename T> class ParticleDatT {
   friend class ParticleGroup;
   friend class MeshHierarchyGlobalMap;
   friend class CellMove;
+  friend class LayerCompressor;
+  friend class ParticlePacker;
+  friend class ParticleUnpacker;
 
 private:
 protected:
@@ -46,13 +52,15 @@ protected:
 
   /**
    * Non-const pointer to underlying device data. Intended for friend access
-   * from ParticleLoop.
+   * from ParticleLoop. These pointers must not be cached then used later
+   * without recalling this function.
    */
   inline T ***impl_get() { return this->cell_dat.impl_get(); }
 
   /**
    * Const pointer to underlying device data. Intended for friend access
-   * from ParticleLoop.
+   * from ParticleLoop. These pointers must not be cached then used later
+   * without recalling this function.
    */
   inline T *const *const *impl_get_const() {
     return this->cell_dat.impl_get_const();
@@ -228,7 +236,7 @@ public:
                                         const INT *d_layers_old,
                                         const INT *d_layers_new) {
     const size_t npart_s = static_cast<size_t>(npart);
-    T ***d_cell_dat_ptr = this->cell_dat.device_ptr();
+    T ***d_cell_dat_ptr = this->cell_dat.impl_get();
     const int ncomp = this->ncomp;
 
     sycl::event event =
@@ -526,7 +534,7 @@ inline void ParticleDatT<T>::append_particle_data(const int npart_new,
   // copy here.
   const size_t size_npart_new = static_cast<size_t>(npart_new);
   const int ncomp = this->ncomp;
-  T ***d_cell_dat_ptr = this->cell_dat.device_ptr();
+  T ***d_cell_dat_ptr = this->cell_dat.impl_get();
 
   sycl::buffer<INT, 1> b_cells(cells.data(), sycl::range<1>{size_npart_new});
   sycl::buffer<INT, 1> b_layers(layers.data(), sycl::range<1>{size_npart_new});

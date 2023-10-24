@@ -239,10 +239,6 @@ public:
     ParticleDatSharedPtr<INT> &mpi_rank_dat = particle_group.mpi_rank_dat;
 
     auto t0 = profile_timestamp();
-    // pointers to access dats in kernel
-    auto k_position_dat = position_dat->cell_dat.device_ptr();
-    auto k_mpi_rank_dat = mpi_rank_dat->cell_dat.device_ptr();
-
     auto k_ndim = this->ndim;
     auto k_cell_counts = this->dh_cell_counts->d_buffer.ptr;
     auto k_dims = this->dh_dims->d_buffer.ptr;
@@ -250,12 +246,8 @@ public:
     auto k_inverse_cell_width_fine = this->inverse_cell_width_fine;
     auto k_rank_map = this->dh_rank_map->d_buffer.ptr;
 
-    // TODO make the particle loop interface / mapping interface avoid this?
-    ParticleGroupSharedPtr particle_group_shr_ptr;
-    particle_group_shr_ptr.reset(&particle_group, [](auto ptr) {});
-
     ParticleLoop pl(
-        "CartesianHMeshLocalMapper", particle_group_shr_ptr,
+        "CartesianHMeshLocalMapper", position_dat->get_particle_group(),
         [=](auto position, auto mpi_rank) {
           if (mpi_rank[1] < 0) {
             int coords[3] = {0, 0, 0};

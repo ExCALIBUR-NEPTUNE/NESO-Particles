@@ -23,8 +23,8 @@ class ParticlePacker {
 private:
   int num_dats_real = 0;
   int num_dats_int = 0;
-  BufferDeviceHost<REAL ***> dh_particle_dat_ptr_real;
-  BufferDeviceHost<INT ***> dh_particle_dat_ptr_int;
+  BufferDeviceHost<REAL *const *const *> dh_particle_dat_ptr_real;
+  BufferDeviceHost<INT *const *const *> dh_particle_dat_ptr_int;
   BufferDeviceHost<int> dh_particle_dat_ncomp_real;
   BufferDeviceHost<int> dh_particle_dat_ncomp_int;
 
@@ -56,7 +56,7 @@ private:
     int index = 0;
     for (auto &dat : particle_dats_real) {
       dh_particle_dat_ptr_real.h_buffer.ptr[index] =
-          dat.second->cell_dat.device_ptr();
+          dat.second->impl_get_const();
       dh_particle_dat_ncomp_real.h_buffer.ptr[index] = dat.second->ncomp;
       index++;
     }
@@ -65,7 +65,7 @@ private:
     index = 0;
     for (auto &dat : particle_dats_int) {
       dh_particle_dat_ptr_int.h_buffer.ptr[index] =
-          dat.second->cell_dat.device_ptr();
+          dat.second->impl_get_const();
       dh_particle_dat_ncomp_int.h_buffer.ptr[index] = dat.second->ncomp;
       index++;
     }
@@ -218,7 +218,7 @@ public:
     const auto k_particle_dat_ncomp_int =
         dh_particle_dat_ncomp_int.d_buffer.ptr;
     const auto k_particle_dat_rank =
-        particle_dats_int[Sym<INT>("NESO_MPI_RANK")]->cell_dat.device_ptr();
+        particle_dats_int[Sym<INT>("NESO_MPI_RANK")]->impl_get_const();
     const auto k_send_rank_map = dh_send_rank_map.d_buffer.ptr;
     const int k_rank_component = rank_component;
 
@@ -253,7 +253,7 @@ public:
                 // for each real dat
                 int index = 0;
                 for (int dx = 0; dx < k_num_dats_real; dx++) {
-                  REAL ***dat_ptr = k_particle_dat_ptr_real[dx];
+                  auto dat_ptr = k_particle_dat_ptr_real[dx];
                   const int ncomp = k_particle_dat_ncomp_real[dx];
                   // for each component
                   for (int cx = 0; cx < ncomp; cx++) {
@@ -265,7 +265,7 @@ public:
                 INT *pack_ptr_int = (INT *)(pack_ptr_real + index);
                 index = 0;
                 for (int dx = 0; dx < k_num_dats_int; dx++) {
-                  INT ***dat_ptr = k_particle_dat_ptr_int[dx];
+                  auto dat_ptr = k_particle_dat_ptr_int[dx];
                   const int ncomp = k_particle_dat_ncomp_int[dx];
                   // for each component
                   for (int cx = 0; cx < ncomp; cx++) {
@@ -323,8 +323,7 @@ private:
 
     int index = 0;
     for (auto &dat : particle_dats_real) {
-      dh_particle_dat_ptr_real.h_buffer.ptr[index] =
-          dat.second->cell_dat.device_ptr();
+      dh_particle_dat_ptr_real.h_buffer.ptr[index] = dat.second->impl_get();
       dh_particle_dat_ncomp_real.h_buffer.ptr[index] = dat.second->ncomp;
       index++;
     }
@@ -332,8 +331,7 @@ private:
     auto e1 = dh_particle_dat_ncomp_real.async_host_to_device();
     index = 0;
     for (auto &dat : particle_dats_int) {
-      dh_particle_dat_ptr_int.h_buffer.ptr[index] =
-          dat.second->cell_dat.device_ptr();
+      dh_particle_dat_ptr_int.h_buffer.ptr[index] = dat.second->impl_get();
       dh_particle_dat_ncomp_int.h_buffer.ptr[index] = dat.second->ncomp;
       index++;
     }
