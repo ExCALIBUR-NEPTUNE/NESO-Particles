@@ -236,7 +236,7 @@ public:
                                         const INT *d_layers_old,
                                         const INT *d_layers_new) {
     const size_t npart_s = static_cast<size_t>(npart);
-    T ***d_cell_dat_ptr = this->cell_dat.impl_get();
+    T ***d_cell_dat_ptr = this->impl_get();
     const int ncomp = this->ncomp;
 
     sycl::event event =
@@ -534,7 +534,7 @@ inline void ParticleDatT<T>::append_particle_data(const int npart_new,
   // copy here.
   const size_t size_npart_new = static_cast<size_t>(npart_new);
   const int ncomp = this->ncomp;
-  T ***d_cell_dat_ptr = this->cell_dat.impl_get();
+  T ***d_cell_dat_ptr = this->impl_get();
 
   sycl::buffer<INT, 1> b_cells(cells.data(), sycl::range<1>{size_npart_new});
   sycl::buffer<INT, 1> b_layers(layers.data(), sycl::range<1>{size_npart_new});
