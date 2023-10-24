@@ -54,7 +54,9 @@ protected:
    * Const pointer to underlying device data. Intended for friend access
    * from ParticleLoop.
    */
-  inline T ***impl_get_const() { return this->cell_dat.impl_get_const(); }
+  inline T *const *const *impl_get_const() {
+    return this->cell_dat.impl_get_const();
+  }
 
 public:
   /**

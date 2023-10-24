@@ -324,7 +324,7 @@ template <typename T> struct LoopParameter { using type = void *; };
  *  Loop parameter for read access of a ParticleDat.
  */
 template <typename T> struct LoopParameter<Access::Read<Sym<T>>> {
-  using type = T ***;
+  using type = T *const *const *;
 };
 /**
  *  Loop parameter for write access of a ParticleDat.
@@ -521,7 +521,7 @@ protected:
    */
   template <typename T>
   static inline void create_kernel_arg(const int cellx, const int layerx,
-                                       T ***rhs,
+                                       T *const *const *rhs,
                                        Access::ParticleDat::Read<T> &lhs) {
     lhs.layer = layerx;
     lhs.ptr = rhs[cellx];
@@ -620,7 +620,7 @@ protected:
                                      sycl::handler &cgh,
                                      Access::Read<Sym<T> *> &a) {
     auto sym = *a.obj;
-    return particle_group->get_dat(sym)->cell_dat.device_ptr();
+    return particle_group->get_dat(sym)->impl_get_const();
   }
   /**
    * Method to compute access to a particle dat (write)
@@ -630,7 +630,7 @@ protected:
                                      sycl::handler &cgh,
                                      Access::Write<Sym<T> *> &a) {
     auto sym = *a.obj;
-    return particle_group->get_dat(sym)->cell_dat.device_ptr();
+    return particle_group->get_dat(sym)->impl_get();
   }
 
   /**

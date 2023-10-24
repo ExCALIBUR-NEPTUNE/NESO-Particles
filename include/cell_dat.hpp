@@ -275,7 +275,7 @@ protected:
    * Const pointer to underlying device data. Intended for friend access
    * from ParticleLoop.
    */
-  inline T ***impl_get_const() { return this->d_ptr; }
+  inline T *const *const *impl_get_const() { return this->d_ptr; }
 
 public:
   /// Disable (implicit) copies.
