@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <mpi.h>
 #include <numeric>
 #include <vector>
 
@@ -29,7 +30,13 @@ inline void neso_particle_assert(const char *expr_str, bool expr,
     std::cerr << "NESO Particles Assertion error:\t" << msg << "\n"
               << "Expected value:\t" << expr_str << "\n"
               << "Source location:\t\t" << file << ", line " << line << "\n";
-    abort();
+    int flag = 0;
+    MPI_Initialized(&flag);
+    if (flag) {
+      MPI_Abort(MPI_COMM_WORLD, -1);
+    } else {
+      std::abort();
+    }
   }
 }
 
