@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <mpi.h>
 #include <numeric>
 #include <vector>
 
@@ -20,16 +21,47 @@ static inline int reduce_mul(const int nel, std::vector<int> &values) {
   return v;
 }
 
+/**
+ * \def NESOASSERT(expr, msg)
+ * This is a helper macro to call the function neso_particles_assert. Users
+ * should call this helper macro NESOASSERT like
+ *
+ *   NESOASSERT(conditional, message);
+ *
+ * To check conditionals within their code.
+ */
 #define NESOASSERT(expr, msg)                                                  \
-  neso_particle_assert(#expr, expr, __FILE__, __LINE__, msg)
+  NESO::Particles::neso_particles_assert(#expr, expr, __FILE__, __LINE__, msg)
 
-inline void neso_particle_assert(const char *expr_str, bool expr,
-                                 const char *file, int line, const char *msg) {
+/**
+ * This is a helper function to assert conditions are satisfied and terminate
+ * execution if not. An error is output on stderr and MPI_Abort is called if
+ * MPI is initialised. Users should call the corresponding helper macro
+ * NESOASSERT like
+ *
+ *   NESOASSERT(conditional, message);
+ *
+ * To check conditionals within their code.
+ *
+ * @param expr_str A string identifying the conditional to check.
+ * @param expr Bool resulting from the evaluation of the expression.
+ * @param file Filename containing the call to neso_particles_assert.
+ * @param line Line number for the call to neso_particles assert.
+ * @param msg Message to print to stderr on evaluation of conditional to false.
+ */
+inline void neso_particles_assert(const char *expr_str, bool expr,
+                                  const char *file, int line, const char *msg) {
   if (!expr) {
     std::cerr << "NESO Particles Assertion error:\t" << msg << "\n"
               << "Expected value:\t" << expr_str << "\n"
               << "Source location:\t\t" << file << ", line " << line << "\n";
-    abort();
+    int flag = 0;
+    MPI_Initialized(&flag);
+    if (flag) {
+      MPI_Abort(MPI_COMM_WORLD, -1);
+    } else {
+      std::abort();
+    }
   }
 }
 

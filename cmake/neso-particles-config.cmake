@@ -21,7 +21,7 @@ endif()
 set(HDF5_PREFER_PARALLEL TRUE)
 find_package(HDF5 QUIET)
 
-if(HDF5_FOUND)
+if(HDF5_FOUND AND HDF5_IS_PARALLEL)
     message(STATUS "HDF5 found")
     add_definitions(-DNESO_PARTICLES_HDF5)
     add_definitions(${HDF5_DEFINITIONS})
@@ -30,6 +30,5 @@ if(HDF5_FOUND)
 else()
     message(STATUS "HDF5 NOT found")
 endif()
-
-
+message(STATUS "HDF5_IS_PARALLEL " ${HDF5_IS_PARALLEL})
 
