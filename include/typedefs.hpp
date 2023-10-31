@@ -22,7 +22,7 @@ static inline int reduce_mul(const int nel, std::vector<int> &values) {
 }
 
 #define NESOASSERT(expr, msg)                                                  \
-  neso_particles_assert(#expr, expr, __FILE__, __LINE__, msg)
+  NESO::Particles::neso_particles_assert(#expr, expr, __FILE__, __LINE__, msg)
 
 /**
  * This is a helper function to assert conditions are satisfied and terminate
