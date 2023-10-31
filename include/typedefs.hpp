@@ -21,6 +21,15 @@ static inline int reduce_mul(const int nel, std::vector<int> &values) {
   return v;
 }
 
+/**
+ * \def NESOASSERT(expr, msg)
+ * This is a helper macro to call the function neso_particles_assert. Users
+ * should call this helper macro NESOASSERT like
+ *
+ *   NESOASSERT(conditional, message);
+ *
+ * To check conditionals within their code.
+ */
 #define NESOASSERT(expr, msg)                                                  \
   NESO::Particles::neso_particles_assert(#expr, expr, __FILE__, __LINE__, msg)
 
