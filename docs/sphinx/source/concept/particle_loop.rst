@@ -51,4 +51,21 @@ LocalArray
    :caption: Particle loop example where a local array is incremented by each particle and another local array is read by each particle. 
 
 
+
+GlobalArray
+~~~~~~~~~~~
+
+.. literalinclude:: ../example_sources/example_particle_loop_global_array.hpp
+   :language: cpp
+   :caption: Particle loop example where a global array is incremented by each particle. 
+
+
+CellDatConst
+~~~~~~~~~~~~
+
+.. literalinclude:: ../example_sources/example_particle_loop_cell_dat_const.hpp
+   :language: cpp
+   :caption: Particle loop example where a CellDatConst is accessed by the ParticleLoop. 
+
+
 .. [SAUNDERS2018] A domain specific language for performance portable molecular dynamics algorithms. `CPC <https://doi.org/10.1016/j.cpc.2017.11.006>`_ , `arXiv <https://arxiv.org/abs/1704.03329>`_.

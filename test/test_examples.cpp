@@ -82,6 +82,8 @@ ParticleGroupSharedPtr particle_loop_common(const int N = 1093) {
 
 #include "example_sources/example_particle_loop_0.hpp"
 #include "example_sources/example_particle_loop_0_nc.hpp"
+#include "example_sources/example_particle_loop_cell_dat_const.hpp"
+#include "example_sources/example_particle_loop_global_array.hpp"
 #include "example_sources/example_particle_loop_local_array.hpp"
 
 TEST(Examples, particle_loop_base) {
@@ -93,6 +95,8 @@ TEST(Examples, particle_loop_base) {
   advection_example(A);
   advection_example_no_comments(A);
   local_array_example(A);
+  global_array_example(A);
+  cell_dat_const_example(A);
 
   A->free();
   sycl_target->free();

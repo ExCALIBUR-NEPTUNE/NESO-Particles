@@ -79,6 +79,14 @@ public:
   inline std::vector<T> &operator[](int col) { return this->data[col]; }
 
   /**
+   *  Access data in standard lexicographic manner.
+   *
+   *  @param row Row to access.
+   *  @param col Column to access.
+   */
+  inline T &at(const int row, const int col) { return data[col][row]; }
+
+  /**
    *  Print the contents of the CellDataT instance.
    */
   inline void print() {

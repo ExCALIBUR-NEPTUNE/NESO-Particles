@@ -41,11 +41,13 @@ inline void local_array_example(
     Access::add(local_array_add),
     Access::read(local_array_read)
   );
+
+  // Execute the loop.
+  loop->execute();
   
   // Get the contents of the local array in a std::vector.
   auto vec0 = local_array_add->get();
 
-  loop->execute();
   return; 
 }
 // clang-format on

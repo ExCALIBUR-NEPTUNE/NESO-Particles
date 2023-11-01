@@ -569,6 +569,31 @@ TEST(ParticleLoop, cell_dat_const) {
 
   auto g1 = std::make_shared<CellDatConst<int>>(sycl_target, cell_count, 2, 2);
 
+  for (int cx = 0; cx < cell_count; cx++) {
+    auto cell_data = g1->get_cell(cx);
+    cell_data->at(0, 0) = 1.0;
+    cell_data->at(0, 1) = 2.0;
+    cell_data->at(1, 0) = 3.0;
+    cell_data->at(1, 1) = 4.0;
+    g1->set_cell(cx, cell_data);
+  }
+  for (int cx = 0; cx < cell_count; cx++) {
+    auto cell_data = g1->get_cell(cx);
+    EXPECT_EQ(cell_data->at(0, 0), 1.0);
+    EXPECT_EQ(cell_data->at(0, 1), 2.0);
+    EXPECT_EQ(cell_data->at(1, 0), 3.0);
+    EXPECT_EQ(cell_data->at(1, 1), 4.0);
+  }
+
+  for (int cx = 0; cx < cell_count; cx++) {
+    auto cell_data = g1->get_cell(cx);
+    cell_data->at(0, 0) = 0.0;
+    cell_data->at(0, 1) = 0.0;
+    cell_data->at(1, 0) = 0.0;
+    cell_data->at(1, 1) = 0.0;
+    g1->set_cell(cx, cell_data);
+  }
+
   auto pl2 = particle_loop(
       A,
       [=](auto G1) {
@@ -582,10 +607,10 @@ TEST(ParticleLoop, cell_dat_const) {
   pl2->execute();
   for (int cx = 0; cx < cell_count; cx++) {
     auto cell_data = g1->get_cell(cx);
-    EXPECT_EQ((*cell_data)[0][0], correct_add.at(cx * 4 + 0));
-    EXPECT_EQ((*cell_data)[1][0], correct_add.at(cx * 4 + 1));
-    EXPECT_EQ((*cell_data)[0][1], correct_add.at(cx * 4 + 2));
-    EXPECT_EQ((*cell_data)[1][1], correct_add.at(cx * 4 + 3));
+    EXPECT_EQ(cell_data->at(0, 0), correct_add.at(cx * 4 + 0));
+    EXPECT_EQ(cell_data->at(0, 1), correct_add.at(cx * 4 + 1));
+    EXPECT_EQ(cell_data->at(1, 0), correct_add.at(cx * 4 + 2));
+    EXPECT_EQ(cell_data->at(1, 1), correct_add.at(cx * 4 + 3));
   }
 
   A->free();
