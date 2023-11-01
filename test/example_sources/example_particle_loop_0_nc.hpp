@@ -17,7 +17,7 @@ inline void advection_example_no_comments(
     Access::write(Sym<REAL>("P")),
     Access::read(Sym<REAL>("V"))
   );
-
+  
   loop->execute();
   return; 
 }
