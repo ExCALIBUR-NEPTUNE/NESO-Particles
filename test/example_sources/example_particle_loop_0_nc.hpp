@@ -17,8 +17,12 @@ inline void advection_example_no_comments(
     Access::write(Sym<REAL>("P")),
     Access::read(Sym<REAL>("V"))
   );
-  
-  loop->execute();
+
+  // Launch the particle loop.
+  loop->submit();
+
+  // Wait for execution of the particle loop to complete.
+  loop->wait();
   return; 
 }
 // clang-format on

@@ -23,10 +23,11 @@ This example loop assumes that a ParticleGroup has been created with "P" and "V"
    :language: cpp
    :caption: Example of a ParticleLoop which performs a simple advection operation.
 
+The particle loop can be executed asynchronously via calls to "submit" and "wait".
 
 .. literalinclude:: ../example_sources/example_particle_loop_0_nc.hpp
    :language: cpp
-   :caption: Duplicate of the advection ParticleLoop example with the comments removed.
+   :caption: Duplicate of the advection ParticleLoop example with the comments removed and asynchronous execution.
 
 
 Additional Data Structures
