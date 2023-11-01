@@ -81,12 +81,16 @@ ParticleGroupSharedPtr particle_loop_common(const int N = 1093) {
 } // namespace
 
 #include "example_sources/example_particle_loop_0.hpp"
+#include "example_sources/example_particle_loop_0_nc.hpp"
 
 TEST(Examples, particle_loop_base) {
   auto A = particle_loop_common();
   auto domain = A->domain;
   auto mesh = domain->mesh;
   auto sycl_target = A->sycl_target;
+
+  advection_example(A);
+  advection_example_no_comments(A);
 
   A->free();
   sycl_target->free();
