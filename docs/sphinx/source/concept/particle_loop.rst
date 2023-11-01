@@ -46,14 +46,21 @@ In practice only commutative access modes are defined for these data structures 
 LocalArray
 ~~~~~~~~~~
 
+The local array type is local to each MPI rank. No communication between MPI ranks is performed by the particle loop. 
+The local array can be accessed in particle loops with "read" and "add" access modes.
+
 .. literalinclude:: ../example_sources/example_particle_loop_local_array.hpp
    :language: cpp
    :caption: Particle loop example where a local array is incremented by each particle and another local array is read by each particle. 
 
 
-
 GlobalArray
 ~~~~~~~~~~~
+
+Unlike the local array, a global array is intended to have identical values across MPI ranks.
+The global array can be accessed in "read" and "add" access modes.
+When accessed with "add" access modes the particle loop must be executed collectively across all MPI ranks.
+On completion of the loop the local entries of each global array are globally combined (Allreduce).
 
 .. literalinclude:: ../example_sources/example_particle_loop_global_array.hpp
    :language: cpp
@@ -62,6 +69,9 @@ GlobalArray
 
 CellDatConst
 ~~~~~~~~~~~~
+
+The CellDatConst data structure stores a constant sized matrix per mesh cell.
+When accessed from a particle loop both the read and add access descriptors expose the matrix which corresponds to the cell in which the particle resides.
 
 .. literalinclude:: ../example_sources/example_particle_loop_cell_dat_const.hpp
    :language: cpp
