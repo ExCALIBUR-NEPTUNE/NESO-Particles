@@ -18,7 +18,7 @@
 
 using namespace NESO::Particles;
 
-namespace {
+namespace NESO::Particles::ParticleLoopImplementation {
 
 /**
  * For a set of cells containing particles create several sycl::nd_range
@@ -89,7 +89,7 @@ struct ParticleLoopIterationSet {
   }
 };
 
-} // namespace
+} // namespace NESO::Particles::ParticleLoopImplementation
 
 /**
  *  Types and functions relating to access descriptors for loops.
@@ -823,7 +823,8 @@ protected:
 
   ParticleGroupSharedPtr particle_group;
   KERNEL kernel;
-  std::unique_ptr<ParticleLoopIterationSet> iteration_set;
+  std::unique_ptr<ParticleLoopImplementation::ParticleLoopIterationSet>
+      iteration_set;
   std::string loop_type;
   std::string name;
   EventStack event_stack;
@@ -856,7 +857,8 @@ public:
     const int ncell = this->particle_group->position_dat->ncell;
     auto h_npart_cell = this->particle_group->position_dat->h_npart_cell;
     this->iteration_set =
-        std::make_unique<ParticleLoopIterationSet>(1, ncell, h_npart_cell);
+        std::make_unique<ParticleLoopImplementation::ParticleLoopIterationSet>(
+            1, ncell, h_npart_cell);
   };
 
   /**
@@ -959,7 +961,7 @@ public:
  * type.
  */
 template <typename KERNEL, typename... ARGS>
-inline ParticleLoopSharedPtr
+[[nodiscard]] inline ParticleLoopSharedPtr
 particle_loop(ParticleGroupSharedPtr particle_group, KERNEL kernel,
               ARGS... args) {
   auto p = std::make_shared<ParticleLoop<KERNEL, ARGS...>>(particle_group,
@@ -981,7 +983,7 @@ particle_loop(ParticleGroupSharedPtr particle_group, KERNEL kernel,
  * type.
  */
 template <typename KERNEL, typename... ARGS>
-inline ParticleLoopSharedPtr
+[[nodiscard]] inline ParticleLoopSharedPtr
 particle_loop(const std::string name, ParticleGroupSharedPtr particle_group,
               KERNEL kernel, ARGS... args) {
   auto p = std::make_shared<ParticleLoop<KERNEL, ARGS...>>(name, particle_group,

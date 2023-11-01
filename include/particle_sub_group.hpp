@@ -13,7 +13,7 @@ using namespace NESO::Particles;
 
 namespace NESO::Particles {
 
-namespace {
+namespace ParticleSubGroupImplementation {
 
 /**
  * TODO
@@ -103,7 +103,7 @@ public:
   }
 };
 
-} // namespace
+} // namespace ParticleSubGroupImplementation
 
 // This allows the ParticleLoop to access the implementation methods.
 template <typename KERNEL, typename... ARGS> class ParticleLoopSubGroup;
@@ -118,7 +118,7 @@ class ParticleSubGroup {
 
 protected:
   ParticleGroupSharedPtr particle_group;
-  SubGroupSelector selector;
+  ParticleSubGroupImplementation::SubGroupSelector selector;
 
   std::shared_ptr<BufferDeviceHost<INT>> dh_cells;
   std::shared_ptr<BufferDeviceHost<INT>> dh_layers;
@@ -138,7 +138,7 @@ protected:
     check_sym_type(arg.obj);
   }
 
-  ParticleSubGroup(SubGroupSelector selector)
+  ParticleSubGroup(ParticleSubGroupImplementation::SubGroupSelector selector)
       : particle_group(selector.particle_group), selector(selector) {}
 
   /**
@@ -165,7 +165,8 @@ public:
   template <typename KERNEL, typename... ARGS>
   ParticleSubGroup(ParticleGroupSharedPtr particle_group, KERNEL kernel,
                    ARGS... args)
-      : ParticleSubGroup(SubGroupSelector(particle_group, kernel, args...)) {
+      : ParticleSubGroup(ParticleSubGroupImplementation::SubGroupSelector(
+            particle_group, kernel, args...)) {
     (check_read_access(args), ...);
   }
 
@@ -273,7 +274,7 @@ public:
  * type.
  */
 template <typename KERNEL, typename... ARGS>
-inline ParticleLoopSharedPtr
+[[nodiscard]] inline ParticleLoopSharedPtr
 particle_loop(ParticleSubGroupSharedPtr particle_group, KERNEL kernel,
               ARGS... args) {
   auto p = std::make_shared<ParticleLoopSubGroup<KERNEL, ARGS...>>(
@@ -295,7 +296,7 @@ particle_loop(ParticleSubGroupSharedPtr particle_group, KERNEL kernel,
  * type.
  */
 template <typename KERNEL, typename... ARGS>
-inline ParticleLoopSharedPtr
+[[nodiscard]] inline ParticleLoopSharedPtr
 particle_loop(const std::string name, ParticleSubGroupSharedPtr particle_group,
               KERNEL kernel, ARGS... args) {
   auto p = std::make_shared<ParticleLoopSubGroup<KERNEL, ARGS...>>(
