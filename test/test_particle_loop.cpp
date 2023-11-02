@@ -617,3 +617,44 @@ TEST(ParticleLoop, cell_dat_const) {
   sycl_target->free();
   mesh->free();
 }
+
+TEST(ParticleLoop, particle_dat_iterset) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  const int cell_count = mesh->get_cell_count();
+  auto sycl_target = A->sycl_target;
+
+  auto P = A->get_dat(Sym<REAL>("P"));
+  auto P2 = A->get_dat(Sym<REAL>("P2"));
+
+  ParticleLoop pl(
+      A,
+      [=](Access::ParticleDat::Write<REAL> P2,
+          Access::ParticleDat::Read<REAL> P) {
+        for (int dx = 0; dx < ndim; dx++) {
+          P2[dx] = P[dx];
+        }
+      },
+      Access::write(P), Access::read(P2));
+
+  pl.execute();
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto p = A->get_dat(Sym<REAL>("P"))->cell_dat.get_cell(cellx);
+    auto p2 = A->get_dat(Sym<REAL>("P2"))->cell_dat.get_cell(cellx);
+    const int nrow = p->nrow;
+
+    // for each particle in the cell
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      // for each dimension
+      for (int dimx = 0; dimx < ndim; dimx++) {
+        ASSERT_EQ((*p)[dimx][rowx], (*p2)[dimx][rowx]);
+      }
+    }
+  }
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}

@@ -321,15 +321,27 @@ namespace {
  */
 template <typename T> struct LoopParameter { using type = void *; };
 /**
- *  Loop parameter for read access of a ParticleDat.
+ *  Loop parameter for read access of a ParticleDat via Sym.
  */
 template <typename T> struct LoopParameter<Access::Read<Sym<T>>> {
   using type = T *const *const *;
 };
 /**
- *  Loop parameter for write access of a ParticleDat.
+ *  Loop parameter for write access of a ParticleDat via Sym.
  */
 template <typename T> struct LoopParameter<Access::Write<Sym<T>>> {
+  using type = T ***;
+};
+/**
+ *  Loop parameter for read access of a ParticleDat.
+ */
+template <typename T> struct LoopParameter<Access::Read<ParticleDatT<T>>> {
+  using type = T *const *const *;
+};
+/**
+ *  Loop parameter for write access of a ParticleDat.
+ */
+template <typename T> struct LoopParameter<Access::Write<ParticleDatT<T>>> {
   using type = T ***;
 };
 /**
@@ -394,16 +406,29 @@ template <class T> using loop_parameter_t = typename LoopParameter<T>::type;
  * data structure type for each access descriptor.
  */
 template <typename T> struct KernelParameter { using type = void; };
+
 /**
- *  KernelParameter type for read-only access to a ParticleDat.
+ *  KernelParameter type for read-only access to a ParticleDat - via Sym.
  */
 template <typename T> struct KernelParameter<Access::Read<Sym<T>>> {
   using type = Access::ParticleDat::Read<T>;
 };
 /**
- *  KernelParameter type for write access to a ParticleDat.
+ *  KernelParameter type for write access to a ParticleDat - via Sym.
  */
 template <typename T> struct KernelParameter<Access::Write<Sym<T>>> {
+  using type = Access::ParticleDat::Write<T>;
+};
+/**
+ *  KernelParameter type for read-only access to a ParticleDat.
+ */
+template <typename T> struct KernelParameter<Access::Read<ParticleDatT<T>>> {
+  using type = Access::ParticleDat::Read<T>;
+};
+/**
+ *  KernelParameter type for write access to a ParticleDat.
+ */
+template <typename T> struct KernelParameter<Access::Write<ParticleDatT<T>>> {
   using type = Access::ParticleDat::Write<T>;
 };
 /**
@@ -614,7 +639,7 @@ protected:
    *  combination.
    */
   /**
-   * Method to compute access to a particle dat (read)
+   * Method to compute access to a particle dat (read) - via Sym.
    */
   template <typename T>
   static inline auto create_loop_arg(ParticleGroup *particle_group,
@@ -624,7 +649,7 @@ protected:
     return particle_group->get_dat(sym)->impl_get_const();
   }
   /**
-   * Method to compute access to a particle dat (write)
+   * Method to compute access to a particle dat (write) - via Sym
    */
   template <typename T>
   static inline auto create_loop_arg(ParticleGroup *particle_group,
@@ -633,7 +658,24 @@ protected:
     auto sym = *a.obj;
     return particle_group->get_dat(sym)->impl_get();
   }
-
+  /**
+   * Method to compute access to a particle dat (read).
+   */
+  template <typename T>
+  static inline auto create_loop_arg(ParticleGroup *particle_group,
+                                     sycl::handler &cgh,
+                                     Access::Read<ParticleDatT<T> *> &a) {
+    return a.obj->impl_get_const();
+  }
+  /**
+   * Method to compute access to a particle dat (write).
+   */
+  template <typename T>
+  static inline auto create_loop_arg(ParticleGroup *particle_group,
+                                     sycl::handler &cgh,
+                                     Access::Write<ParticleDatT<T> *> &a) {
+    return a.obj->impl_get();
+  }
   /**
    * Method to compute access to a LocalArray (read)
    */
