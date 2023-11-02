@@ -64,8 +64,6 @@ private:
                                     particle_dat->positions));
     particle_dat->set_npart_cells_host(this->h_npart_cell.ptr);
     particle_dat->npart_host_to_device();
-    particle_dat->set_particle_group(
-        std::shared_ptr<ParticleGroup>(this, [](auto ptr) {}));
   }
 
 public:

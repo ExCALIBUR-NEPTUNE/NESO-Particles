@@ -44,12 +44,6 @@ template <typename T> class ParticleDatT {
 
 private:
 protected:
-  std::shared_ptr<ParticleGroup> particle_group;
-  inline void
-  set_particle_group(std::shared_ptr<ParticleGroup> particle_group) {
-    this->particle_group = particle_group;
-  }
-
   /**
    * Non-const pointer to underlying device data. Intended for friend access
    * from ParticleLoop. These pointers must not be cached then used later
@@ -67,14 +61,6 @@ protected:
   }
 
 public:
-  /**
-   *  Returns the shared ptr to the ParticleGroup the ParticleDat is a member
-   * of.
-   */
-  inline std::shared_ptr<ParticleGroup> get_particle_group() {
-    return this->particle_group;
-  }
-
   /// Disable (implicit) copies.
   ParticleDatT(const ParticleDatT &st) = delete;
   /// Disable (implicit) copies.

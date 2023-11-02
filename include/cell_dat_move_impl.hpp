@@ -49,7 +49,7 @@ inline void CellMove::move() {
   // loop over particles and identify the particles to be move between
   // cells.
   ParticleLoop(
-      "cell_move_identify", this->cell_id_dat->get_particle_group(),
+      "cell_move_identify", this->cell_id_dat,
       [=](auto loop_index, auto cell_id_dat) {
         const INT cellx = loop_index.cell;
         const INT layerx = loop_index.layer;
@@ -81,7 +81,7 @@ inline void CellMove::move() {
           k_layers_new[array_index] = layer_new;
         }
       },
-      Access::read(ParticleLoopIndex{}), Access::read(this->cell_id_dat->sym))
+      Access::read(ParticleLoopIndex{}), Access::read(this->cell_id_dat))
       .execute();
 
   this->ep_bad_cell_indices.check_and_throw(

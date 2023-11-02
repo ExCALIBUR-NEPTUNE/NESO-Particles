@@ -38,10 +38,8 @@ inline void MeshHierarchyGlobalMap::execute() {
   auto k_error_propagate = this->error_propagate.device_ptr();
   const auto k_npart_local = npart_local;
 
-  auto particle_group = this->mpi_rank_dat->get_particle_group();
-
   ParticleLoop(
-      "global_map_stage_0", particle_group,
+      "global_map_stage_0", this->mpi_rank_dat,
       [=](auto loop_index, auto mpi_rank_dat) {
         const int cellx = loop_index.cell;
         const int layerx = loop_index.layer;
@@ -64,7 +62,7 @@ inline void MeshHierarchyGlobalMap::execute() {
           k_lookup_local_layers[index] = layerx;
         }
       },
-      Access::read(ParticleLoopIndex{}), Access::read(mpi_rank_dat->sym))
+      Access::read(ParticleLoopIndex{}), Access::read(this->mpi_rank_dat))
       .execute();
 
   this->error_propagate.check_and_throw("Bad atomic index computed.");
@@ -212,12 +210,12 @@ inline void MeshHierarchyGlobalMap::execute() {
  */
 inline void reset_mpi_ranks(ParticleDatSharedPtr<INT> &mpi_rank_dat) {
   ParticleLoop(
-      "reset_mpi_ranks", mpi_rank_dat->get_particle_group(),
+      "reset_mpi_ranks", mpi_rank_dat,
       [=](auto mpi_rank_dat) {
         mpi_rank_dat[0] = -1;
         mpi_rank_dat[1] = -1;
       },
-      Access::write(mpi_rank_dat->sym))
+      Access::write(mpi_rank_dat))
       .execute();
 }
 

@@ -247,7 +247,7 @@ public:
     auto k_rank_map = this->dh_rank_map->d_buffer.ptr;
 
     ParticleLoop pl(
-        "CartesianHMeshLocalMapper", position_dat->get_particle_group(),
+        "CartesianHMeshLocalMapper", position_dat,
         [=](auto position, auto mpi_rank) {
           if (mpi_rank[1] < 0) {
             int coords[3] = {0, 0, 0};
@@ -273,7 +273,7 @@ public:
             mpi_rank[1] = remote_rank;
           }
         },
-        Access::read(position_dat->sym), Access::write(mpi_rank_dat->sym));
+        Access::read(position_dat), Access::write(mpi_rank_dat));
 
     pl.execute();
   };

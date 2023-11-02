@@ -895,6 +895,8 @@ protected:
         "Sym based arguments cannot be passed to ParticleLoop with a "
         "ParticleDat iterator. Pass the ParticleDatSharedPtr instead.");
   }
+  template <typename T>
+  inline void check_is_sym_inner([[maybe_unused]] T arg) {}
   template <template <typename> typename T, typename U>
   inline void check_is_sym_outer(T<U> arg) {
     check_is_sym_inner(arg.obj);

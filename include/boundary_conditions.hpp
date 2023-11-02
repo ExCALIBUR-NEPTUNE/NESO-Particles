@@ -47,20 +47,8 @@ public:
   CartesianPeriodic(SYCLTargetSharedPtr sycl_target,
                     std::shared_ptr<CartesianHMesh> mesh,
                     ParticleDatSharedPtr<REAL> position_dat)
-      : CartesianPeriodic(mesh, position_dat->get_particle_group()){};
-
-  /**
-   * Construct instance to apply periodic boundary conditions to particles
-   * within the passed ParticleDat.
-   *
-   * @param mesh CartedianHMesh instance to use a domain for the particles.
-   * @param particle_group ParticleGroup to apply periodic boundary conditions
-   * to.
-   */
-  CartesianPeriodic(std::shared_ptr<CartesianHMesh> mesh,
-                    ParticleGroupSharedPtr particle_group)
-      : mesh(mesh), sycl_target(particle_group->sycl_target),
-        d_extents(particle_group->sycl_target, 3) {
+      : mesh(mesh), sycl_target(sycl_target), d_extents(sycl_target, 3),
+        position_dat(position_dat) {
 
     NESOASSERT(mesh->ndim <= 3, "bad mesh ndim");
     BufferHost<REAL> h_extents(sycl_target, 3);
@@ -71,13 +59,12 @@ public:
         .memcpy(this->d_extents.ptr, h_extents.ptr, mesh->ndim * sizeof(REAL))
         .wait_and_throw();
 
-    auto position_sym = particle_group->position_dat->sym;
     const int k_ndim = this->mesh->ndim;
     NESOASSERT(((k_ndim > 0) && (k_ndim < 4)), "Bad number of dimensions");
     const auto k_extents = this->d_extents.ptr;
 
     this->pbc_loop = particle_loop(
-        "CartesianPeriodicPBC", particle_group,
+        "CartesianPeriodicPBC", position_dat,
         [=](auto P) {
           for (int dimx = 0; dimx < k_ndim; dimx++) {
             const REAL pos = P[dimx];
@@ -91,8 +78,23 @@ public:
             P[dimx] = pos_fmod;
           }
         },
-        Access::write(position_sym));
+        Access::write(position_dat));
   };
+
+  /**
+   * Construct instance to apply periodic boundary conditions to particles
+   * within the passed ParticleDat.
+   *
+   * @param mesh CartedianHMesh instance to use a domain for the particles.
+   * @param particle_group ParticleGroup to apply periodic boundary conditions
+   * to.
+   */
+  CartesianPeriodic(std::shared_ptr<CartesianHMesh> mesh,
+                    ParticleGroupSharedPtr particle_group)
+      : CartesianPeriodic(particle_group->sycl_target, mesh,
+                          particle_group->position_dat){
+
+        };
 
   /**
    * Apply periodic boundary conditions to the particle positions in the

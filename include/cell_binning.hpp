@@ -83,7 +83,7 @@ public:
     auto k_cell_ends = this->d_cell_ends.ptr;
 
     this->loop = particle_loop(
-        "CartesianCellBin", position_dat->get_particle_group(),
+        "CartesianCellBin", position_dat,
         [=](auto positions, auto cell_id) {
           int cell_tmps[3];
 
@@ -105,7 +105,7 @@ public:
           }
           cell_id[0] = linear_index;
         },
-        Access::read(position_dat->sym), Access::write(cell_id_dat->sym));
+        Access::read(position_dat), Access::write(cell_id_dat));
   };
 
   /**

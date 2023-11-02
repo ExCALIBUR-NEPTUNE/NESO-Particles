@@ -63,7 +63,7 @@ inline void DepartingIdentify::identify(const int rank_component) {
   const INT INT_comm_rank = static_cast<INT>(comm_rank);
 
   auto loop = particle_loop(
-      "DepartingIdentify", this->mpi_rank_dat->get_particle_group(),
+      "DepartingIdentify", this->mpi_rank_dat,
       [=](auto loop_index, auto neso_mpi_rank) {
         const int cellx = loop_index.cell;
         const int layerx = loop_index.layer;
@@ -105,7 +105,7 @@ inline void DepartingIdentify::identify(const int rank_component) {
           }
         }
       },
-      Access::read(ParticleLoopIndex{}), Access::read(this->mpi_rank_dat->sym));
+      Access::read(ParticleLoopIndex{}), Access::read(this->mpi_rank_dat));
 
   loop->execute();
 
