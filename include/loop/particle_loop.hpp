@@ -609,7 +609,6 @@ protected:
     lhs.ptr = ptr;
     lhs.nrow = rhs.nrow;
   }
-
   /**
    *  Function to create the kernel argument for CellDatConst add access.
    */
@@ -834,7 +833,7 @@ protected:
   }
   inline void create_loop_args(sycl::handler &cgh,
                                loop_parameter_type &loop_args) {
-    auto pg = this->particle_group.get();
+    auto pg = this->particle_group_ptr;
     create_loop_args_inner<0, sizeof...(ARGS)>(pg, cgh, loop_args);
   }
 
@@ -863,7 +862,9 @@ protected:
                                                  kernel_args);
   }
 
-  ParticleGroupSharedPtr particle_group;
+  ParticleGroupSharedPtr particle_group_shrptr;
+  ParticleGroup *particle_group_ptr = {nullptr};
+  SYCLTargetSharedPtr sycl_target;
   KERNEL kernel;
   std::unique_ptr<ParticleLoopImplementation::ParticleLoopIterationSet>
       iteration_set;
@@ -871,6 +872,17 @@ protected:
   std::string name;
   EventStack event_stack;
   bool loop_running = {false};
+  int *d_npart_cell;
+
+  template <typename T>
+  inline void init_from_particle_dat(ParticleDatSharedPtr<T> particle_dat) {
+    const int ncell = particle_dat->ncell;
+    auto h_npart_cell = particle_dat->h_npart_cell;
+    this->d_npart_cell = particle_dat->d_npart_cell;
+    this->iteration_set =
+        std::make_unique<ParticleLoopImplementation::ParticleLoopIterationSet>(
+            1, ncell, h_npart_cell);
+  }
 
 public:
   /// Disable (implicit) copies.
@@ -891,16 +903,13 @@ public:
    */
   ParticleLoop(const std::string name, ParticleGroupSharedPtr particle_group,
                KERNEL kernel, ARGS... args)
-      : name(name), particle_group(particle_group), kernel(kernel) {
+      : name(name), particle_group_shrptr(particle_group), kernel(kernel) {
 
+    this->sycl_target = particle_group->sycl_target;
+    this->particle_group_ptr = this->particle_group_shrptr.get();
     this->loop_type = "ParticleLoop";
+    this->init_from_particle_dat(particle_group->position_dat);
     this->unpack_args<0>(args...);
-
-    const int ncell = this->particle_group->position_dat->ncell;
-    auto h_npart_cell = this->particle_group->position_dat->h_npart_cell;
-    this->iteration_set =
-        std::make_unique<ParticleLoopImplementation::ParticleLoopIterationSet>(
-            1, ncell, h_npart_cell);
   };
 
   /**
@@ -929,20 +938,19 @@ public:
     this->loop_running = true;
 
     auto t0 = profile_timestamp();
-    auto position_dat = this->particle_group->position_dat;
-    auto d_npart_cell = position_dat->d_npart_cell;
+    auto k_npart_cell = this->d_npart_cell;
     auto is = this->iteration_set->get();
     auto k_kernel = this->kernel;
 
     const int nbin = std::get<0>(is);
-    this->particle_group->sycl_target->profile_map.inc(
+    this->sycl_target->profile_map.inc(
         "ParticleLoop", "Init", 1, profile_elapsed(t0, profile_timestamp()));
 
     for (int binx = 0; binx < nbin; binx++) {
       sycl::nd_range<2> ndr = std::get<1>(is).at(binx);
       const size_t cell_offset = std::get<2>(is).at(binx);
-      this->event_stack.push(this->particle_group->sycl_target->queue.submit(
-          [&](sycl::handler &cgh) {
+      this->event_stack.push(
+          this->sycl_target->queue.submit([&](sycl::handler &cgh) {
             loop_parameter_type loop_args;
             create_loop_args(cgh, loop_args);
             cgh.parallel_for<>(ndr, [=](sycl::nd_item<2> idx) {
@@ -950,7 +958,7 @@ public:
               const size_t layerxs = idx.get_global_id(1);
               const int cellx = static_cast<int>(cellxs);
               const int layerx = static_cast<int>(layerxs);
-              if (layerx < d_npart_cell[cellx]) {
+              if (layerx < k_npart_cell[cellx]) {
                 kernel_parameter_type kernel_args;
                 create_kernel_args(cellx, layerx, loop_args, kernel_args);
                 Tuple::apply(k_kernel, kernel_args);
@@ -970,7 +978,7 @@ public:
     // wait for the loop execution to complete
     this->event_stack.wait();
     auto cast_wrapper = [=](auto t) {
-      post_loop_cast(this->particle_group.get(), t);
+      post_loop_cast(this->particle_group_ptr, t);
     };
     auto post_loop_caller = [&](auto... as) { (cast_wrapper(as), ...); };
     std::apply(post_loop_caller, this->args);
@@ -986,7 +994,7 @@ public:
     auto t0 = profile_timestamp();
     this->submit();
     this->wait();
-    this->particle_group->sycl_target->profile_map.inc(
+    this->sycl_target->profile_map.inc(
         this->loop_type, this->name, 1,
         profile_elapsed(t0, profile_timestamp()));
   }

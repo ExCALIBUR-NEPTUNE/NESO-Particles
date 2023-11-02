@@ -223,8 +223,6 @@ public:
     this->loop_running = true;
 
     auto t0 = profile_timestamp();
-    auto position_dat = this->particle_group->position_dat;
-    auto d_npart_cell = position_dat->d_npart_cell;
     auto is = this->iteration_set->get();
     auto k_kernel = this->kernel;
 
@@ -234,7 +232,7 @@ public:
     const INT *d_layers = this->particle_sub_group->dh_layers->d_buffer.ptr;
 
     const int nbin = std::get<0>(is);
-    this->particle_group->sycl_target->profile_map.inc(
+    this->sycl_target->profile_map.inc(
         "ParticleLoop", "Init", 1, profile_elapsed(t0, profile_timestamp()));
 
     const std::size_t npart_local =
@@ -245,7 +243,7 @@ public:
 
     sycl::nd_range<1> iteration_set = get_nd_range_1d(npart_local, 256);
 
-    this->event_stack.push(this->particle_group->sycl_target->queue.submit(
+    this->event_stack.push(this->sycl_target->queue.submit(
         [&](sycl::handler &cgh) {
           loop_parameter_type loop_args;
           create_loop_args(cgh, loop_args);
