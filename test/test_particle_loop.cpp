@@ -628,8 +628,8 @@ TEST(ParticleLoop, particle_dat_iterset) {
   auto P = A->get_dat(Sym<REAL>("P"));
   auto P2 = A->get_dat(Sym<REAL>("P2"));
 
-  ParticleLoop pl(
-      A,
+  auto pl = particle_loop(
+      P,
       [=](Access::ParticleDat::Write<REAL> P2,
           Access::ParticleDat::Read<REAL> P) {
         for (int dx = 0; dx < ndim; dx++) {
@@ -638,7 +638,7 @@ TEST(ParticleLoop, particle_dat_iterset) {
       },
       Access::write(P), Access::read(P2));
 
-  pl.execute();
+  pl->execute();
 
   for (int cellx = 0; cellx < cell_count; cellx++) {
     auto p = A->get_dat(Sym<REAL>("P"))->cell_dat.get_cell(cellx);

@@ -243,8 +243,8 @@ public:
 
     sycl::nd_range<1> iteration_set = get_nd_range_1d(npart_local, 256);
 
-    this->event_stack.push(this->sycl_target->queue.submit(
-        [&](sycl::handler &cgh) {
+    this->event_stack.push(
+        this->sycl_target->queue.submit([&](sycl::handler &cgh) {
           loop_parameter_type loop_args;
           create_loop_args(cgh, loop_args);
           cgh.parallel_for<>(iteration_set, [=](sycl::nd_item<1> idx) {
