@@ -28,11 +28,15 @@
 using namespace cl;
 namespace NESO::Particles {
 
+class ParticleSubGroup;
+
 /**
  *  Fundamentally a ParticleGroup is a collection of ParticleDats, domain and a
  *  compute device.
  */
 class ParticleGroup {
+  friend class ParticleSubGroup;
+
 private:
   int ncell;
   BufferHost<INT> h_npart_cell;
@@ -92,6 +96,24 @@ private:
   }
 
 protected:
+  /**
+   * Returns true if the passed version is behind and was updated.
+   */
+  [[nodiscard]] inline bool check_validation(
+      std::map<std::variant<Sym<INT>, Sym<REAL>>, int64_t> &to_check) {
+    bool updated = false;
+    for (auto &item : to_check) {
+      const auto key = item.first;
+      const int64_t to_check_value = item.second;
+      const int64_t local_value = this->particle_dat_versions.at(key);
+      if (local_value != to_check_value) {
+        updated = true;
+        to_check.at(key) = local_value;
+      }
+    }
+    return updated;
+  }
+
 public:
   /// Disable (implicit) copies.
   ParticleGroup(const ParticleGroup &st) = delete;

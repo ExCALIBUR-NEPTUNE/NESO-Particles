@@ -145,12 +145,16 @@ protected:
   std::shared_ptr<BufferDeviceHost<INT>> dh_cells;
   std::shared_ptr<BufferDeviceHost<INT>> dh_layers;
   int npart_local;
+  std::map<std::variant<Sym<INT>, Sym<REAL>>, int64_t> particle_dat_versions;
 
   template <template <typename> typename T, typename U>
   inline void check_sym_type(T<U> arg) {
     static_assert(std::is_same<T<U>, Sym<U>>::value == true,
                   "Filtering lambda arguments must be read access particle "
                   "properties (Sym instances). Sym type check failed.");
+
+    // add this sym to the version checker signature
+    this->particle_dat_versions[arg] = 0;
   }
   template <template <typename> typename T, typename U>
   inline void check_read_access(T<U> arg) {
@@ -220,6 +224,15 @@ public:
     this->dh_cells = std::get<1>(buffers);
     this->dh_layers = std::get<2>(buffers);
   }
+
+  /**
+   * Re-create the sub group if required.
+   */
+  inline void create_if_required() {
+    if (this->particle_group->check_validation(this->particle_dat_versions)) {
+      this->create();
+    }
+  }
 };
 
 typedef std::shared_ptr<ParticleSubGroup> ParticleSubGroupSharedPtr;
@@ -274,11 +287,8 @@ public:
    */
   ParticleLoopSubGroup(ParticleSubGroupSharedPtr particle_sub_group,
                        KERNEL kernel, ARGS... args)
-      : ParticleLoop<KERNEL, ARGS...>(particle_sub_group->particle_group,
-                                      kernel, args...),
-        particle_sub_group(particle_sub_group) {
-    this->loop_type = "ParticleLoopSubGroup";
-  }
+      : ParticleLoopSubGroup("unnamed_kernel", particle_sub_group, kernel,
+                             args...) {}
 
   /**
    *  Launch the ParticleLoop and return. Must be called collectively over the
@@ -295,8 +305,7 @@ public:
     auto is = this->iteration_set->get();
     auto k_kernel = this->kernel;
 
-    // TODO track remaking better
-    this->particle_sub_group->create();
+    this->particle_sub_group->create_if_required();
     const INT *d_cells = this->particle_sub_group->dh_cells->d_buffer.ptr;
     const INT *d_layers = this->particle_sub_group->dh_layers->d_buffer.ptr;
 
