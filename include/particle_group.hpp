@@ -7,6 +7,7 @@
 #include <memory>
 #include <mpi.h>
 #include <string>
+#include <variant>
 
 #include "access.hpp"
 #include "cell_dat.hpp"
@@ -57,6 +58,28 @@ private:
   // members for moving particles between local cells
   CellMove cell_move_ctx;
 
+  std::map<std::variant<Sym<INT>, Sym<REAL>>, int64_t> particle_dat_versions;
+
+  inline void invalidate_callback_int(const Sym<INT> &sym, const int mode) {
+    this->particle_dat_versions.at(sym)++;
+  }
+
+  inline void invalidate_callback_real(const Sym<REAL> &sym, const int mode) {
+    this->particle_dat_versions.at(sym)++;
+  }
+
+  inline void add_invalidate_callback(ParticleDatSharedPtr<INT> particle_dat) {
+    particle_dat->add_write_callback(
+        std::bind(&ParticleGroup::invalidate_callback_int, this,
+                  std::placeholders::_1, std::placeholders::_2));
+  }
+
+  inline void add_invalidate_callback(ParticleDatSharedPtr<REAL> particle_dat) {
+    particle_dat->add_write_callback(
+        std::bind(&ParticleGroup::invalidate_callback_real, this,
+                  std::placeholders::_1, std::placeholders::_2));
+  }
+
   template <typename T>
   inline void add_particle_dat_common(ParticleDatSharedPtr<T> particle_dat) {
     realloc_dat(particle_dat);
@@ -64,8 +87,11 @@ private:
                                     particle_dat->positions));
     particle_dat->set_npart_cells_host(this->h_npart_cell.ptr);
     particle_dat->npart_host_to_device();
+    this->add_invalidate_callback(particle_dat);
+    this->particle_dat_versions[particle_dat->sym] = 0;
   }
 
+protected:
 public:
   /// Disable (implicit) copies.
   ParticleGroup(const ParticleGroup &st) = delete;
@@ -398,6 +424,7 @@ public:
     NESOASSERT(this->particle_dats_real.count(sym) == 1,
                "ParticleDat not found.");
     this->particle_dats_real.erase(sym);
+    this->particle_dat_versions.erase(sym);
   }
   /**
    *  Remove a ParticleDat from the ParticleGroup
@@ -408,6 +435,7 @@ public:
     NESOASSERT(this->particle_dats_int.count(sym) == 1,
                "ParticleDat not found.");
     this->particle_dats_int.erase(sym);
+    this->particle_dat_versions.erase(sym);
   }
 };
 

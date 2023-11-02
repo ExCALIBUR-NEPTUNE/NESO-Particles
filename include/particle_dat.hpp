@@ -3,6 +3,7 @@
 
 #include <CL/sycl.hpp>
 #include <cmath>
+#include <functional>
 #include <limits>
 #include <memory>
 
@@ -44,12 +45,28 @@ template <typename T> class ParticleDatT {
 
 private:
 protected:
+  std::function<void(const Sym<T> &, const int)> write_callback;
+
+  inline void
+  add_write_callback(std::function<void(const Sym<T> &, const int)> fn) {
+    this->write_callback = fn;
+  }
+
+  inline void write_callback_wrapper(const int mode) {
+    if (this->write_callback) {
+      this->write_callback(this->sym, mode);
+    }
+  }
+
   /**
    * Non-const pointer to underlying device data. Intended for friend access
    * from ParticleLoop. These pointers must not be cached then used later
    * without recalling this function.
    */
-  inline T ***impl_get() { return this->cell_dat.impl_get(); }
+  inline T ***impl_get() {
+    // write_callback is called in the cell dat
+    return this->cell_dat.impl_get();
+  }
 
   /**
    * Const pointer to underlying device data. Intended for friend access
@@ -100,6 +117,9 @@ public:
       : sycl_target(sycl_target), sym(sym), name(sym.name), ncomp(ncomp),
         ncell(ncell), positions(positions),
         cell_dat(CellDat<T>(sycl_target, ncell, ncomp)) {
+
+    this->cell_dat.add_write_callback(std::bind(
+        &ParticleDatT<T>::write_callback_wrapper, this, std::placeholders::_1));
 
     this->h_npart_cell =
         sycl::malloc_host<int>(this->ncell, this->sycl_target->queue);
@@ -221,6 +241,7 @@ public:
                                         const INT *d_cells_new,
                                         const INT *d_layers_old,
                                         const INT *d_layers_new) {
+    this->write_callback_wrapper(0);
     const size_t npart_s = static_cast<size_t>(npart);
     T ***d_cell_dat_ptr = this->impl_get();
     const int ncomp = this->ncomp;
@@ -500,6 +521,7 @@ template <typename T> inline void ParticleDatT<T>::trim_cell_dat_rows() {
     // call wait immediately
     // this->cell_dat.wait_set_nrow();
   }
+  this->write_callback_wrapper(0);
 }
 
 /*
@@ -513,6 +535,7 @@ inline void ParticleDatT<T>::append_particle_data(const int npart_new,
                                                   std::vector<INT> &cells,
                                                   std::vector<INT> &layers,
                                                   std::vector<T> &data) {
+  this->write_callback_wrapper(0);
 
   NESOASSERT(npart_new <= cells.size(), "incorrect number of cells");
 

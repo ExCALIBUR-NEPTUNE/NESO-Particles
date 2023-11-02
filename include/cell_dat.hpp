@@ -4,6 +4,7 @@
 #include <CL/sycl.hpp>
 #include <algorithm>
 #include <cstdio>
+#include <functional>
 #include <memory>
 #include <stack>
 #include <string>
@@ -274,11 +275,21 @@ private:
   std::stack<T *> stack_ptrs;
 
 protected:
+  std::function<void(const int)> write_callback;
+  inline void add_write_callback(std::function<void(const int)> fn) {
+    this->write_callback = fn;
+  }
+
   /**
    * Non-const pointer to underlying device data. Intended for friend access
    * from ParticleLoop.
    */
-  inline T ***impl_get() { return this->d_ptr; }
+  inline T ***impl_get() {
+    if (this->write_callback) {
+      this->write_callback(0);
+    }
+    return this->d_ptr;
+  }
 
   /**
    * Const pointer to underlying device data. Intended for friend access
@@ -520,7 +531,9 @@ public:
    */
   inline void set_cell(const int cell, CellData<T> cell_data) {
     auto t0 = profile_timestamp();
-
+    if (this->write_callback) {
+      this->write_callback(0);
+    }
     NESOASSERT(cell_data->nrow >= this->nrow[cell],
                "CellData as insuffient row count.");
     NESOASSERT(cell_data->ncol >= this->ncol,
@@ -550,7 +563,9 @@ public:
   inline void set_cell_async(const int cell, CellDataT<T> &cell_data,
                              EventStack &event_stack) {
     auto t0 = profile_timestamp();
-
+    if (this->write_callback) {
+      this->write_callback(0);
+    }
     NESOASSERT(cell_data.nrow >= this->nrow[cell],
                "CellData as insuffient row count.");
     NESOASSERT(cell_data.ncol >= this->ncol,
@@ -576,7 +591,12 @@ public:
    *
    * @returns Device pointer that can be used to access the underlying data.
    */
-  T ***device_ptr() { return this->d_ptr; };
+  T ***device_ptr() {
+    if (this->write_callback) {
+      this->write_callback(1);
+    }
+    return this->d_ptr;
+  };
 
   /**
    * Get the device pointer for a column in a cell.
@@ -586,6 +606,9 @@ public:
    * @returns Device pointer to data for the specified column.
    */
   T *col_device_ptr(const int cell, const int col) {
+    if (this->write_callback) {
+      this->write_callback(1);
+    }
     return this->h_ptr_cols[cell * this->ncol + col];
   }
 
