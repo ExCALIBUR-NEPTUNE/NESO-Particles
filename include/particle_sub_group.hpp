@@ -16,7 +16,9 @@ namespace NESO::Particles {
 namespace ParticleSubGroupImplementation {
 
 /**
- * TODO
+ * Class to consume the lambda which selects which particles are to be in a
+ * ParticleSubGroup and provide to the ParticleSubGroup a list of cells and
+ * layers.
  */
 class SubGroupSelector {
 protected:
@@ -27,6 +29,20 @@ protected:
 public:
   ParticleGroupSharedPtr particle_group;
 
+  /**
+   * Create a selector based on a kernel and arguments. The selector kernel
+   * must be a lambda which returns true for particles which are in the sub
+   * group and false for particles which are not in the sub group. The
+   * arguments for the selector kernel must be read access Syms, i.e.
+   * Access::read(Sym<T>("name")).
+   *
+   * @param particle_group Parent ParticleGroup from which to form
+   * ParticleSubGroup.
+   * @param kernel Lambda function (like a ParticleLoop kernel) that returns
+   * true for the particles which should be in the ParticleSubGroup.
+   * @param args Arguments in the form of access descriptors wrapping objects
+   * to pass to the kernel.
+   */
   template <typename KERNEL, typename... ARGS>
   SubGroupSelector(ParticleGroupSharedPtr particle_group, KERNEL kernel,
                    ARGS... args)
@@ -55,7 +71,10 @@ public:
   }
 
   /**
-   * TODO
+   * Get two BufferDeviceHost objects that hold the cells and layers of the
+   * particles which currently are selected by the selector kernel.
+   *
+   * @returns List of cells and layers of particles in the sub group.
    */
   inline std::tuple<int, std::shared_ptr<BufferDeviceHost<INT>>,
                     std::shared_ptr<BufferDeviceHost<INT>>>
@@ -109,7 +128,10 @@ public:
 template <typename KERNEL, typename... ARGS> class ParticleLoopSubGroup;
 
 /**
- * TODO
+ * A ParticleSubGroup is a container that holds the description of a subset of
+ * the particles in a ParticleGroup. For example a sub group could be
+ * constructed with all particles of even id. A ParticleSubGroup is a valid
+ * iteration set for a ParticleLoop.
  */
 class ParticleSubGroup {
   // This allows the ParticleLoop to access the implementation methods.
@@ -158,9 +180,28 @@ protected:
 
 public:
   /**
-   * TODO
+   * Create a ParticleSubGroup based on a kernel and arguments. The selector
+   * kernel must be a lambda which returns true for particles which are in the
+   * sub group and false for particles which are not in the sub group. The
+   * arguments for the selector kernel must be read access Syms, i.e.
+   * Access::read(Sym<T>("name")).
    *
-   * arg should be Syms only
+   * For example if A is a ParticleGroup with an INT ParticleProp "ID" that
+   * holds particle ids then the following line creates a ParticleSubGroup from
+   * the particles with even ids.
+   *
+   *    auto A_even = std::make_shared<ParticleSubGroup>(
+   *      A, [=](auto ID) {
+   *        return ((ID[0] % 2) == 0);
+   *      },
+   *      Access::read(Sym<INT>("ID")));
+   *
+   * @param particle_group Parent ParticleGroup from which to form
+   * ParticleSubGroup.
+   * @param kernel Lambda function (like a ParticleLoop kernel) that returns
+   * true for the particles which should be in the ParticleSubGroup.
+   * @param args Arguments in the form of access descriptors wrapping objects
+   * to pass to the kernel.
    */
   template <typename KERNEL, typename... ARGS>
   ParticleSubGroup(ParticleGroupSharedPtr particle_group, KERNEL kernel,
@@ -170,6 +211,9 @@ public:
     (check_read_access(args), ...);
   }
 
+  /**
+   * Explicitly re-create the sub group.
+   */
   inline void create() {
     auto buffers = this->selector.get();
     this->npart_local = std::get<0>(buffers);
@@ -181,7 +225,8 @@ public:
 typedef std::shared_ptr<ParticleSubGroup> ParticleSubGroupSharedPtr;
 
 /**
- * TODO
+ * Derived ParticleLoop type which implements the particle loop over iteration
+ * sets defined by ParticleSubGroups.
  */
 template <typename KERNEL, typename... ARGS>
 class ParticleLoopSubGroup : public ParticleLoop<KERNEL, ARGS...> {
@@ -195,6 +240,18 @@ protected:
   using ParticleLoop<KERNEL, ARGS...>::create_kernel_args;
 
 public:
+  /**
+   *  Create a ParticleLoop that executes a kernel for all particles in the
+   * ParticleSubGroup.
+   *
+   *  @param name Identifier for particle loop.
+   *  @param particle_group ParticleSubGroup to execute kernel for all
+   * particles.
+   *  @param kernel Kernel to execute for all particles in the ParticleGroup.
+   *  @param args The remaining arguments are arguments to be passed to the
+   *              kernel. All arguments must be wrapped in an access descriptor
+   * type.
+   */
   ParticleLoopSubGroup(const std::string name,
                        ParticleSubGroupSharedPtr particle_sub_group,
                        KERNEL kernel, ARGS... args)
@@ -203,6 +260,18 @@ public:
         particle_sub_group(particle_sub_group) {
     this->loop_type = "ParticleLoopSubGroup";
   }
+
+  /**
+   *  Create a ParticleLoop that executes a kernel for all particles in the
+   * ParticleSubGroup.
+   *
+   *  @param particle_group ParticleSubGroup to execute kernel for all
+   * particles.
+   *  @param kernel Kernel to execute for all particles in the ParticleGroup.
+   *  @param args The remaining arguments are arguments to be passed to the
+   *              kernel. All arguments must be wrapped in an access descriptor
+   * type.
+   */
   ParticleLoopSubGroup(ParticleSubGroupSharedPtr particle_sub_group,
                        KERNEL kernel, ARGS... args)
       : ParticleLoop<KERNEL, ARGS...>(particle_sub_group->particle_group,
