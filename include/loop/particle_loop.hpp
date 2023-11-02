@@ -865,6 +865,10 @@ protected:
   ParticleGroupSharedPtr particle_group_shrptr;
   ParticleGroup *particle_group_ptr = {nullptr};
   SYCLTargetSharedPtr sycl_target;
+  /// This stores the particle dat the loop was created with to prevent use
+  /// after free errors in the case when the ParticleLoop is created with a
+  /// ParticleDat.
+  std::shared_ptr<void> particle_dat_init;
   KERNEL kernel;
   std::unique_ptr<ParticleLoopImplementation::ParticleLoopIterationSet>
       iteration_set;
@@ -882,6 +886,18 @@ protected:
     this->iteration_set =
         std::make_unique<ParticleLoopImplementation::ParticleLoopIterationSet>(
             1, ncell, h_npart_cell);
+  }
+
+  template <template <typename> typename T, typename U>
+  inline void check_is_sym_inner(T<U> arg) {
+    static_assert(
+        std::is_same<T<U>, Sym<U>>::value == false,
+        "Sym based arguments cannot be passed to ParticleLoop with a "
+        "ParticleDat iterator. Pass the ParticleDatSharedPtr instead.");
+  }
+  template <template <typename> typename T, typename U>
+  inline void check_is_sym_outer(T<U> arg) {
+    check_is_sym_inner(arg.obj);
   }
 
 public:
@@ -948,7 +964,9 @@ public:
     this->particle_group_ptr = nullptr;
     this->loop_type = "ParticleLoop";
     this->init_from_particle_dat(particle_dat);
+    this->particle_dat_init = std::static_pointer_cast<void>(particle_dat);
     this->unpack_args<0>(args...);
+    (check_is_sym_outer(args), ...);
   };
 
   /**
