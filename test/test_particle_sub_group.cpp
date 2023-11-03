@@ -154,8 +154,8 @@ TEST(ParticleSubGroup, particle_loop) {
   auto pl_counter2 = particle_loop(
       std::dynamic_pointer_cast<ParticleSubGroup>(bb),
       [=](auto G1, auto ID, auto MARKER) {
-        G1.add(0, 1);
-        G1.add(1, ID[0]);
+        G1.fetch_add(0, 1);
+        G1.fetch_add(1, ID[0]);
         MARKER[0] = 1;
       },
       Access::add(counter2), Access::read(Sym<INT>("ID")),

@@ -29,6 +29,19 @@ The particle loop can be executed asynchronously via calls to "submit" and "wait
    :language: cpp
    :caption: Duplicate of the advection ParticleLoop example with the comments removed and asynchronous execution.
 
+.. list-table:: ParticleDat<T> Access
+   :header-rows: 1
+
+   * - Access Descriptors
+     - Kernel Types
+     - Notes
+   * - Read
+     - Access::ParticleDat::Read<T>
+     - Components accessed for the particle via .at or subscript which returns a const reference.
+   * - Write
+     - Access::ParticleDat::Write<T>
+     - Components accessed for the particle via .at or subscript which returns a modifiable reference.
+
 
 Additional Data Structures
 ==========================
@@ -54,6 +67,19 @@ The local array can be accessed in particle loops with "read" and "add" access m
    :language: cpp
    :caption: Particle loop example where a local array is incremented by each particle and another local array is read by each particle. 
 
+.. list-table:: LocalArray<T> Access
+   :header-rows: 1
+
+   * - Access Descriptors
+     - Kernel Types
+     - Notes
+   * - Read
+     - Access::LocalArray::Read<T>
+     - Components accessed for each array element via .at or subscript which returns a const reference.
+   * - Add
+     - Access::LocalArray::Add<T>
+     - fetch_add(index, value) atomically increments the element referenced by the index with the passed value. Returns the previous value stored at the index. Users may assume that the memory region accessed is the same for all invocations of the kernel. Hence adding 1 for each particle gives a total ordering for each participating calls.
+
 
 GlobalArray
 ~~~~~~~~~~~
@@ -67,6 +93,19 @@ On completion of the loop the local entries of each global array are globally co
    :language: cpp
    :caption: Particle loop example where a global array is incremented by each particle. 
 
+.. list-table:: GlobalArray<T> Access
+   :header-rows: 1
+
+   * - Access Descriptors
+     - Kernel Types
+     - Notes
+   * - Read
+     - Access::GlobalArray::Read<T>
+     - Components accessed for each array element via .at or subscript which returns a const reference.
+   * - Add
+     - Access::GlobalArray::Add<T>
+     - add(index, value) atomically increments the element referenced by the index with the passed value. On loop execution completion values are all-reduced across all MPI ranks.
+
 
 CellDatConst
 ~~~~~~~~~~~~
@@ -77,6 +116,19 @@ When accessed from a particle loop both the read and add access descriptors expo
 .. literalinclude:: ../example_sources/example_particle_loop_cell_dat_const.hpp
    :language: cpp
    :caption: Particle loop example where a CellDatConst is accessed by the ParticleLoop. 
+
+.. list-table:: CellDatConst<T> Access
+   :header-rows: 1
+
+   * - Access Descriptors
+     - Kernel Types
+     - Notes
+   * - Read
+     - Access::CellDatConst::Read<T>
+     - Components accessed for each array element via .at or subscript which returns a const reference.
+   * - Add
+     - Access::CellDatConst::Add<T>
+     - fetch_add(index, value) atomically increments the element referenced by the index with the passed value. Returns the previous value stored at the index. Users may assume that the memory region accessed is the same for all invocations of the kernel. Hence adding 1 for each particle gives a total ordering for each participating calls.
 
 
 .. [SAUNDERS2018] A domain specific language for performance portable molecular dynamics algorithms. `CPC <https://doi.org/10.1016/j.cpc.2017.11.006>`_ , `arXiv <https://arxiv.org/abs/1704.03329>`_.

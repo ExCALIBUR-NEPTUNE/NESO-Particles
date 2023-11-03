@@ -11,7 +11,8 @@ inline void advection_example_no_comments(
     particle_group,
     [=](auto P, auto V){
       for(int dimx=0 ; dimx<ndim ; dimx++){
-        P[dimx] += dt * V[dimx];
+        // .at is an alternative access method
+        P.at(dimx) += dt * V.at(dimx);
       }
     },
     Access::write(Sym<REAL>("P")),

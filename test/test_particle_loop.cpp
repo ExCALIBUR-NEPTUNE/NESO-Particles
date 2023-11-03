@@ -220,9 +220,9 @@ TEST(ParticleLoop, local_array) {
   ParticleLoop particle_loop_add(
       A,
       [=](Access::LocalArray::Add<int> L1) {
-        L1.add(0, 1);
-        L1.add(1, 2);
-        L1.add(2, 3);
+        L1.fetch_add(0, 1);
+        L1.fetch_add(1, 2);
+        L1.fetch_add(2, 3);
       },
       Access::add(l1));
 
@@ -597,10 +597,10 @@ TEST(ParticleLoop, cell_dat_const) {
   auto pl2 = particle_loop(
       A,
       [=](auto G1) {
-        G1.add(0, 0, 1);
-        G1.add(0, 1, 2);
-        G1.add(1, 0, 3);
-        G1.add(1, 1, 4);
+        G1.fetch_add(0, 0, 1);
+        G1.fetch_add(0, 1, 2);
+        G1.fetch_add(1, 0, 3);
+        G1.fetch_add(1, 1, 4);
       },
       Access::add(g1));
 

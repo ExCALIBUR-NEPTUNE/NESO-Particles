@@ -26,9 +26,9 @@ inline void cell_dat_const_example(
     [=](auto V, auto GA){
       // Increment the matrix in each cell with the velocities of particles in
       // that cell.
-      GA.add(0, 0, V[0]);
-      GA.add(1, 0, V[1]);
-      GA.add(2, 0, V[2]);
+      GA.fetch_add(0, 0, V[0]);
+      GA.fetch_add(1, 0, V[1]);
+      GA.fetch_add(2, 0, V[2]);
     },
     // Particle property access descriptor.
     Access::read(Sym<REAL>("V")),

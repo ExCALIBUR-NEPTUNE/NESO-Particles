@@ -59,7 +59,7 @@ public:
           if (required) {
             // increment the counter by 1 to get the index to store this
             // particle in
-            const INT store_index = k_index.add(0, 1);
+            const INT store_index = k_index.fetch_add(0, 1);
             INT *cells = k_ptrs[0];
             INT *layers = k_ptrs[1];
             cells[store_index] = loop_index.cell;

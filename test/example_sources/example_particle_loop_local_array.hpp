@@ -25,9 +25,9 @@ inline void local_array_example(
     [=](auto ID, auto V, auto LA_ADD, auto LA_READ){
       
       // Increment the first component of LA_ADD by 1.
-      LA_ADD.add(0, 1);
+      LA_ADD.fetch_add(0, 1);
       // Increment the second component of LA_ADD with the entry in ID[0].
-      LA_ADD.add(1, ID[0]);
+      LA_ADD.fetch_add(1, ID[0]);
       
       // Read from LA_READ and assign the values to the V particle component.
       V[0] = LA_READ.at(0);

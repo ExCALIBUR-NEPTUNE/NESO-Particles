@@ -168,6 +168,7 @@ template <typename T> struct Read {
   T const &operator[](const int component) {
     return ptr[component][this->layer];
   }
+  T const &at(const int component) { return ptr[component][this->layer]; }
 };
 
 template <typename T> struct Write {
@@ -176,6 +177,7 @@ template <typename T> struct Write {
   /// Stores which particle in the cell this instance refers to.
   int layer;
   T &operator[](const int component) { return ptr[component][this->layer]; }
+  T &at(const int component) { return ptr[component][this->layer]; }
 };
 
 } // namespace NESO::Particles::Access::ParticleDat
@@ -205,7 +207,11 @@ template <typename T> struct Add {
   /// Pointer to underlying data for the array.
   Add() = default;
   T *ptr;
-  inline T add(const int component, const T value) {
+  /**
+   * The local array is local to the MPI rank where the partial sum is a
+   * meaningful value.
+   */
+  inline T fetch_add(const int component, const T value) {
     sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>
         element_atomic(ptr[component]);
     return element_atomic.fetch_add(value);
@@ -239,10 +245,14 @@ template <typename T> struct Add {
   /// Pointer to underlying data for the array.
   Add() = default;
   T *ptr;
-  inline T add(const int component, const T value) {
+  /**
+   * This does not return a value as the returned value would be a partial sum
+   * on this MPI rank.
+   */
+  inline void add(const int component, const T value) {
     sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>
         element_atomic(ptr[component]);
-    return element_atomic.fetch_add(value);
+    element_atomic.fetch_add(value);
   }
 };
 
@@ -277,7 +287,7 @@ template <typename T> struct Add {
   Add() = default;
   T *ptr;
   int nrow;
-  inline T add(const int row, const int col, const T value) {
+  inline T fetch_add(const int row, const int col, const T value) {
     sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>
         element_atomic(ptr[nrow * col + row]);
     return element_atomic.fetch_add(value);
