@@ -170,6 +170,16 @@ public:
   ~CellDatConst() { sycl::free(this->d_ptr, sycl_target->queue); };
 
   /**
+   * Fill all the entries with a given value.
+   *
+   * @param value Value to place in all entries.
+   */
+  inline void fill(const T value) {
+    this->sycl_target->queue.fill(this->d_ptr, value, ncells * nrow * ncol);
+    this->sycl_target->queue.wait();
+  }
+
+  /**
    * Create new CellDatConst on the specified compute target with a fixed cell
    * count, fixed number of rows per cell and fixed number of columns per cell.
    *
@@ -184,8 +194,7 @@ public:
         stride(nrow * ncol) {
     this->d_ptr =
         sycl::malloc_device<T>(ncells * nrow * ncol, sycl_target->queue);
-    this->sycl_target->queue.fill(this->d_ptr, ((T)0), ncells * nrow * ncol);
-    this->sycl_target->queue.wait();
+    this->fill(0);
   };
 
   /**
