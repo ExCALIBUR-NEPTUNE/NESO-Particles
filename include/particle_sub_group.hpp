@@ -182,6 +182,18 @@ protected:
     return npart_local;
   }
 
+  inline void create_inner() {
+    auto buffers = this->selector.get();
+    this->npart_local = std::get<0>(buffers);
+    this->dh_cells = std::get<1>(buffers);
+    this->dh_layers = std::get<2>(buffers);
+  }
+
+  inline void create_and_update_cache() {
+    create_inner();
+    this->particle_group->check_validation(this->particle_dat_versions);
+  }
+
 public:
   /**
    * Create a ParticleSubGroup based on a kernel and arguments. The selector
@@ -218,20 +230,19 @@ public:
   /**
    * Explicitly re-create the sub group.
    */
-  inline void create() {
-    auto buffers = this->selector.get();
-    this->npart_local = std::get<0>(buffers);
-    this->dh_cells = std::get<1>(buffers);
-    this->dh_layers = std::get<2>(buffers);
-  }
+  inline void create() { this->create_and_update_cache(); }
 
   /**
    * Re-create the sub group if required.
+   *
+   * @returns True if an update occured otherwise false.
    */
-  inline void create_if_required() {
+  inline bool create_if_required() {
     if (this->particle_group->check_validation(this->particle_dat_versions)) {
-      this->create();
+      this->create_inner();
+      return true;
     }
+    return false;
   }
 };
 

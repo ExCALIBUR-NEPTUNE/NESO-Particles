@@ -62,14 +62,21 @@ private:
   // members for moving particles between local cells
   CellMove cell_move_ctx;
 
-  std::map<std::variant<Sym<INT>, Sym<REAL>>, int64_t> particle_dat_versions;
+  std::map<std::variant<Sym<INT>, Sym<REAL>>, std::tuple<int64_t, bool>>
+      particle_dat_versions;
+
+  inline void invalidate_callback_inner(std::variant<Sym<INT>, Sym<REAL>> sym,
+                                        const int mode) {
+    std::get<0>(this->particle_dat_versions.at(sym))++;
+    std::get<1>(this->particle_dat_versions.at(sym)) = (bool)mode;
+  }
 
   inline void invalidate_callback_int(const Sym<INT> &sym, const int mode) {
-    this->particle_dat_versions.at(sym)++;
+    this->invalidate_callback_inner(sym, mode);
   }
 
   inline void invalidate_callback_real(const Sym<REAL> &sym, const int mode) {
-    this->particle_dat_versions.at(sym)++;
+    this->invalidate_callback_inner(sym, mode);
   }
 
   inline void add_invalidate_callback(ParticleDatSharedPtr<INT> particle_dat) {
@@ -92,23 +99,33 @@ private:
     particle_dat->set_npart_cells_host(this->h_npart_cell.ptr);
     particle_dat->npart_host_to_device();
     this->add_invalidate_callback(particle_dat);
-    this->particle_dat_versions[particle_dat->sym] = 0;
+    // This store is initialised with 1 and the to test keys should be
+    // initialised with 0.
+    this->particle_dat_versions[particle_dat->sym] = {1, false};
   }
 
 protected:
   /**
    * Returns true if the passed version is behind and was updated.
    */
-  [[nodiscard]] inline bool check_validation(
+  inline bool check_validation(
       std::map<std::variant<Sym<INT>, Sym<REAL>>, int64_t> &to_check) {
     bool updated = false;
     for (auto &item : to_check) {
       const auto key = item.first;
       const int64_t to_check_value = item.second;
-      const int64_t local_value = this->particle_dat_versions.at(key);
+      const auto local_entry = this->particle_dat_versions.at(key);
+      const int64_t local_value = std::get<0>(local_entry);
+      const bool local_bool = std::get<1>(local_entry);
+      // If a local count is different to the count on the to_check then an
+      // updated is required on the object that holds to check.
       if (local_value != to_check_value) {
         updated = true;
         to_check.at(key) = local_value;
+      }
+      // If this bool has been set then an update is always required.
+      if (local_bool) {
+        updated = true;
       }
     }
     return updated;

@@ -200,3 +200,85 @@ TEST(ParticleSubGroup, particle_loop) {
   sycl_target->free();
   mesh->free();
 }
+
+TEST(ParticleSubGroup, creating) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  const int cell_count = mesh->get_cell_count();
+  auto sycl_target = A->sycl_target;
+
+  auto aa = std::make_shared<ParticleSubGroup>(
+      A, [=](auto ID) { return ID[0] == 42; }, Access::read(Sym<INT>("ID")));
+
+  EXPECT_TRUE(aa->create_if_required());
+  EXPECT_FALSE(aa->create_if_required());
+
+  A->cell_move();
+  EXPECT_TRUE(aa->create_if_required());
+  EXPECT_FALSE(aa->create_if_required());
+
+  A->local_move();
+  EXPECT_TRUE(aa->create_if_required());
+  EXPECT_FALSE(aa->create_if_required());
+
+  A->global_move();
+  EXPECT_TRUE(aa->create_if_required());
+  EXPECT_FALSE(aa->create_if_required());
+
+  A->hybrid_move();
+  EXPECT_TRUE(aa->create_if_required());
+  EXPECT_FALSE(aa->create_if_required());
+
+  auto remover = std::make_shared<ParticleRemover>(A->sycl_target);
+  remover->remove(A, A->get_dat(Sym<INT>("ID")), 1);
+  EXPECT_TRUE(aa->create_if_required());
+  EXPECT_FALSE(aa->create_if_required());
+
+  auto p0 = particle_loop(
+      A, [](auto ID, auto V) { V[0] += 0.0001; }, Access::read(Sym<INT>("ID")),
+      Access::write(Sym<REAL>("V")));
+  p0->execute();
+  EXPECT_FALSE(aa->create_if_required());
+
+  auto p1 = particle_loop(
+      aa, [](auto ID, auto V) { V[0] += 0.0001; }, Access::read(Sym<INT>("ID")),
+      Access::write(Sym<REAL>("V")));
+  p1->execute();
+  EXPECT_FALSE(aa->create_if_required());
+
+  p1->execute();
+  p1->execute();
+  EXPECT_FALSE(aa->create_if_required());
+
+  auto p2 = particle_loop(
+      A, [](auto ID) { ID[0] += 1; }, Access::write(Sym<INT>("ID")));
+  p2->execute();
+  EXPECT_TRUE(aa->create_if_required());
+  EXPECT_FALSE(aa->create_if_required());
+
+  auto p3 = particle_loop(
+      aa, [](auto ID) { ID[0] += 1; }, Access::write(Sym<INT>("ID")));
+  p3->execute();
+  EXPECT_TRUE(aa->create_if_required());
+  EXPECT_FALSE(aa->create_if_required());
+
+  ParticleSet distribution(1, A->particle_spec);
+  A->add_particles_local(distribution);
+
+  EXPECT_TRUE(aa->create_if_required());
+  EXPECT_FALSE(aa->create_if_required());
+
+  // This sets the P pointer to be "possibly cached"
+  A->get_dat(Sym<REAL>("P"))->cell_dat.device_ptr();
+  EXPECT_FALSE(aa->create_if_required());
+
+  // This sets the ID pointer to be "possibly cached"
+  A->get_dat(Sym<INT>("ID"))->cell_dat.device_ptr();
+  EXPECT_TRUE(aa->create_if_required());
+  EXPECT_TRUE(aa->create_if_required());
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}

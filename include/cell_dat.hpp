@@ -254,6 +254,8 @@ public:
   }
 };
 
+class ParticlePacker;
+
 /**
  * Store data on each cell where the number of columns required per cell is
  * constant but the number of rows is variable. Data is stored in a column
@@ -263,6 +265,7 @@ template <typename T> class CellDat {
   // This allows the ParticleLoop to access the implementation methods.
   template <typename KERNEL, typename... ARGS> friend class ParticleLoop;
   template <typename U> friend class ParticleDatT;
+  friend class ParticlePacker;
 
 private:
   T ***d_ptr;
@@ -296,6 +299,17 @@ protected:
    * from ParticleLoop.
    */
   inline T *const *const *impl_get_const() { return this->d_ptr; }
+
+  /**
+   * Get the device pointer for a column in a cell.
+   *
+   * @param cell Cell index to get pointer for.
+   * @param col Column in cell to get pointer for.
+   * @returns Device pointer to data for the specified column.
+   */
+  T *col_device_ptr(const int cell, const int col) {
+    return this->h_ptr_cols[cell * this->ncol + col];
+  }
 
 public:
   /// Disable (implicit) copies.
@@ -597,20 +611,6 @@ public:
     }
     return this->d_ptr;
   };
-
-  /**
-   * Get the device pointer for a column in a cell.
-   *
-   * @param cell Cell index to get pointer for.
-   * @param col Column in cell to get pointer for.
-   * @returns Device pointer to data for the specified column.
-   */
-  T *col_device_ptr(const int cell, const int col) {
-    if (this->write_callback) {
-      this->write_callback(1);
-    }
-    return this->h_ptr_cols[cell * this->ncol + col];
-  }
 
   /**
    *  Helper function to print the contents of all cells or a specified range of
