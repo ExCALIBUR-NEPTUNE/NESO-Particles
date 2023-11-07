@@ -42,7 +42,7 @@ inline void parallel_advection_store(ParticleGroupSharedPtr particle_group) {
   BufferDevice<REAL> d_local_point(sycl_target, local_point);
 
   const auto k_local_point = d_local_point.ptr;
-
+  auto pos_sym = particle_group->position_dat->sym;
   ParticleLoop l(
       "parallel_advection_store", particle_group,
       [=](auto P, auto ORIG_P) {
@@ -51,7 +51,7 @@ inline void parallel_advection_store(ParticleGroupSharedPtr particle_group) {
           P[dx] = k_local_point[dx];
         }
       },
-      Access::write(Sym<REAL>("P")), Access::write(Sym<REAL>("NESO_ORIG_POS")));
+      Access::write(pos_sym), Access::write(Sym<REAL>("NESO_ORIG_POS")));
   l.execute();
 }
 
@@ -69,6 +69,7 @@ inline void parallel_advection_restore(ParticleGroupSharedPtr particle_group) {
   ErrorPropagate ep(sycl_target);
   auto k_ep = ep.device_ptr();
 
+  auto pos_sym = particle_group->position_dat->sym;
   ParticleLoop l(
       "parallel_advection_restore", particle_group,
       [=](auto P, auto ORIG_P) {
@@ -86,7 +87,7 @@ inline void parallel_advection_restore(ParticleGroupSharedPtr particle_group) {
           NESO_KERNEL_ASSERT(valid, k_ep);
         }
       },
-      Access::write(Sym<REAL>("P")), Access::read(Sym<REAL>("NESO_ORIG_POS")));
+      Access::write(pos_sym), Access::read(Sym<REAL>("NESO_ORIG_POS")));
   l.execute();
 
   ep.check_and_throw("Advected particle was very far from intended position.");
@@ -111,6 +112,7 @@ inline void parallel_advection_step(ParticleGroupSharedPtr particle_group,
   const double steps_left = ((double)num_steps) - ((double)step);
   const double inverse_steps_left = 1.0 / steps_left;
 
+  auto pos_sym = particle_group->position_dat->sym;
   ParticleLoop l(
       "parallel_advection_step", particle_group,
       [=](auto P, auto ORIG_P) {
@@ -119,7 +121,7 @@ inline void parallel_advection_step(ParticleGroupSharedPtr particle_group,
           P[dx] += inverse_steps_left * offset;
         }
       },
-      Access::write(Sym<REAL>("P")), Access::read(Sym<REAL>("NESO_ORIG_POS")));
+      Access::write(pos_sym), Access::read(Sym<REAL>("NESO_ORIG_POS")));
   l.execute();
 }
 
