@@ -19,6 +19,7 @@ else()
 endif()
 
 set(HDF5_PREFER_PARALLEL TRUE)
+enable_language(C)
 find_package(HDF5 QUIET)
 
 if(HDF5_FOUND AND HDF5_IS_PARALLEL)
