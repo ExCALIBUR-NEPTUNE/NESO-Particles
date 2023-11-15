@@ -1,6 +1,7 @@
 #include "gtest/gtest.h"
 #include <iostream>
 #include <mpi.h>
+#include <typedefs.hpp>
 
 /*
  *  If an exception is thrown try and abort MPI cleanly to prevent a deadlock.
@@ -12,10 +13,7 @@ void TerminateHandler() {
 
 int main(int argc, char **argv) {
 
-  if (MPI_Init(&argc, &argv) != MPI_SUCCESS) {
-    std::cout << "ERROR: MPI_Init != MPI_SUCCESS" << std::endl;
-    return -1;
-  }
+  NESO::Particles::initialise_mpi(&argc, &argv);
 
 #if GTEST_HAS_EXCEPTIONS
   std::set_terminate(&TerminateHandler);
