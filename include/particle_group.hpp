@@ -112,7 +112,7 @@ protected:
       std::map<std::variant<Sym<INT>, Sym<REAL>>, int64_t> &to_check) {
     bool updated = false;
     for (auto &item : to_check) {
-      const auto key = item.first;
+      const auto &key = item.first;
       const int64_t to_check_value = item.second;
       const auto local_entry = this->particle_dat_versions.at(key);
       const int64_t local_value = std::get<0>(local_entry);
