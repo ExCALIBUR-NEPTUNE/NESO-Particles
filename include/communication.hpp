@@ -129,7 +129,7 @@ template <> constexpr MPI_Datatype map_ctype_mpi_type_inner<double>() {
  *  @param i Input argument of type T.
  *  @returns MPI_Datatype that matches the input type T.
  */
-template <typename T> MPI_Datatype map_ctype_mpi_type() {
+template <typename T> inline MPI_Datatype map_ctype_mpi_type() {
   constexpr MPI_Datatype t = map_ctype_mpi_type_inner<T>();
   NESOASSERT(t != MPI_DATATYPE_NULL,
              "Could not find MPI_Datatype matching passed type.");
