@@ -165,6 +165,43 @@ template <typename... T> inline void nprint(T... args) {
 //#define DEBUG_OOB_CHECK
 #define DEBUG_OOB_WIDTH 1000
 
+/**
+ * Get the MPI thread level required by NESO-Particles. MPI should be
+ * initialised by calling MPI_Init_thread with a required thread level greater
+ * than or equal to the value returned by this function.
+ *
+ * @returns MPI thread level.
+ */
+inline int get_required_mpi_thread_level() { return MPI_THREAD_FUNNELED; }
+
+/**
+ * Test that a provided MPI thread level is sufficient for NESO-Particles.
+ *
+ * @param level Provided thread level.
+ */
+inline void test_provided_thread_level(const int level) {
+  NESOASSERT(level >= get_required_mpi_thread_level(),
+             "Provided MPI thread level is insufficient for NESO-Particles.");
+}
+
+/**
+ * Helper function to initialise MPI and check that the provided thread level
+ * is sufficient. Calling this function is equivalent to calling
+ * MPI_Init_thread with the required thread level from
+ * get_required_mpi_thread_level and checking the provided thread level is
+ * equal to or greater than this required level.
+ *
+ * @param argc Pointer to the number of arguments.
+ * @param argv Argument vector.
+ */
+inline void initialise_mpi(int *argc, char ***argv) {
+  int provided_thread_level;
+  NESOASSERT(MPI_Init_thread(argc, argv, get_required_mpi_thread_level(),
+                             &provided_thread_level) == MPI_SUCCESS,
+             "ERROR: MPI_Init_thread != MPI_SUCCESS");
+  test_provided_thread_level(provided_thread_level);
+}
+
 } // namespace NESO::Particles
 
 #endif
