@@ -105,19 +105,19 @@ public:
 };
 
 namespace {
-template <typename T> constexpr MPI_Datatype map_ctype_mpi_type_inner() {
+template <typename T> inline MPI_Datatype map_ctype_mpi_type_inner() {
   return MPI_DATATYPE_NULL;
 }
-template <> constexpr MPI_Datatype map_ctype_mpi_type_inner<int>() {
+template <> inline MPI_Datatype map_ctype_mpi_type_inner<int>() {
   return MPI_INT;
 }
-template <> constexpr MPI_Datatype map_ctype_mpi_type_inner<int64_t>() {
+template <> inline MPI_Datatype map_ctype_mpi_type_inner<int64_t>() {
   return MPI_INT64_T;
 }
-template <> constexpr MPI_Datatype map_ctype_mpi_type_inner<uint64_t>() {
+template <> inline MPI_Datatype map_ctype_mpi_type_inner<uint64_t>() {
   return MPI_UINT64_T;
 }
-template <> constexpr MPI_Datatype map_ctype_mpi_type_inner<double>() {
+template <> inline MPI_Datatype map_ctype_mpi_type_inner<double>() {
   return MPI_DOUBLE;
 }
 
@@ -130,7 +130,7 @@ template <> constexpr MPI_Datatype map_ctype_mpi_type_inner<double>() {
  *  @returns MPI_Datatype that matches the input type T.
  */
 template <typename T> inline MPI_Datatype map_ctype_mpi_type() {
-  constexpr MPI_Datatype t = map_ctype_mpi_type_inner<T>();
+  const MPI_Datatype t = map_ctype_mpi_type_inner<T>();
   NESOASSERT(t != MPI_DATATYPE_NULL,
              "Could not find MPI_Datatype matching passed type.");
   return t;
