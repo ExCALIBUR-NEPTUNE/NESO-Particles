@@ -96,20 +96,20 @@ public:
       : comm_pair(comm) {
     if (gpu_device > 0) {
       try {
-        this->device = sycl::device(sycl::gpu_selector());
+        this->device = sycl::device{sycl::gpu_selector()};
       } catch (sycl::exception const &e) {
         std::cout << "Cannot select a GPU\n" << e.what() << "\n";
         std::cout << "Using a CPU device\n";
-        this->device = sycl::device(sycl::cpu_selector());
+        this->device = sycl::device{sycl::cpu_selector()};
       }
     } else if (gpu_device < 0) {
-      this->device = sycl::device(sycl::cpu_selector());
+      this->device = sycl::device{sycl::cpu_selector()};
     } else {
 
       // Get the default device and platform as they are most likely to be the
       // desired device based on SYCL implementation/runtime/environment
       // variables.
-      auto default_device = sycl::device(sycl::default_selector());
+      sycl::device default_device{sycl::default_selector()};
       auto default_platform = default_device.get_platform();
 
       // Get all devices from the default platform
@@ -714,6 +714,69 @@ public:
         neso_error_atomic(ep_ptr[0]);                                          \
     neso_error_atomic.fetch_add(1);                                            \
   }
+
+/**
+ * Get an 1D nd_range for a given iteration set global size and local size.
+ *
+ * @param size Global iteration set size.
+ * @param local_size Local iteration set size (work group size).
+ * @returns nd_range large enough to cover global iteration set. May be larger
+ * than size.
+ */
+inline sycl::nd_range<1> get_nd_range_1d(const std::size_t size,
+                                         const std::size_t local_size) {
+  const auto div_mod = std::div(static_cast<long long>(size),
+                                static_cast<long long>(local_size));
+  const std::size_t outer_size =
+      static_cast<std::size_t>(div_mod.quot + (div_mod.rem == 0 ? 0 : 1));
+  return sycl::nd_range(sycl::range<1>(outer_size * local_size),
+                        sycl::range<1>(local_size));
+}
+
+/**
+ *  Main loop with peel loop for 1D nd_range. The peel loop should be masked to
+ *  remove the workitems past the loop extents.
+ */
+struct NDRangePeel1D {
+  /// The main iteration set which does not need masking.
+  sycl::nd_range<1> loop_main;
+  /// Bool to indicate if there is a peel loop.
+  const bool peel_exists;
+  /// Offset to apply to peel loop indices.
+  const size_t offset;
+  /// Peel loop description. Indicies from the loop should have offset added to
+  /// compute the global index. This loop should be masked by a conditional for
+  /// the original loop bounds.
+  sycl::nd_range<1> loop_peel;
+};
+
+/**
+ * Create two nd_ranges that cover a 1D iteration set. The first is a main
+ * iteration set that does not need a mask. The second is an iteration set that
+ * requires 1) the offset adding to the iteration index and 2) a conditional to
+ * test the resulting index is less than the loop bound.
+ *
+ * @param size Global iteration set size.
+ * @param local_size Local iteration set size (SYCL workgroup size).
+ * @returns NDRangePeel1D instance describing loop iteration sets.
+ */
+inline NDRangePeel1D get_nd_range_peel_1d(const std::size_t size,
+                                          const std::size_t local_size) {
+  const auto div_mod = std::div(static_cast<long long>(size),
+                                static_cast<long long>(local_size));
+
+  const std::size_t outer_size =
+      static_cast<std::size_t>(div_mod.quot) * local_size;
+  const bool peel_exists = !(div_mod.rem == 0);
+  const std::size_t outer_size_peel = (peel_exists ? 1 : 0) * local_size;
+  const size_t offset = outer_size;
+
+  return NDRangePeel1D{
+      sycl::nd_range<1>(sycl::range<1>(outer_size), sycl::range<1>(local_size)),
+      peel_exists, offset,
+      sycl::nd_range<1>(sycl::range<1>(outer_size_peel),
+                        sycl::range<1>(local_size))};
+}
 
 } // namespace NESO::Particles
 

@@ -7,6 +7,7 @@
 
 #include "compute_target.hpp"
 #include "local_mapping.hpp"
+#include "loop/particle_loop.hpp"
 #include "particle_dat.hpp"
 #include "particle_group.hpp"
 #include "profiling.hpp"
@@ -238,10 +239,6 @@ public:
     ParticleDatSharedPtr<INT> &mpi_rank_dat = particle_group.mpi_rank_dat;
 
     auto t0 = profile_timestamp();
-    // pointers to access dats in kernel
-    auto k_position_dat = position_dat->cell_dat.device_ptr();
-    auto k_mpi_rank_dat = mpi_rank_dat->cell_dat.device_ptr();
-
     auto k_ndim = this->ndim;
     auto k_cell_counts = this->dh_cell_counts->d_buffer.ptr;
     auto k_dims = this->dh_dims->d_buffer.ptr;
@@ -249,51 +246,36 @@ public:
     auto k_inverse_cell_width_fine = this->inverse_cell_width_fine;
     auto k_rank_map = this->dh_rank_map->d_buffer.ptr;
 
-    // iteration set
-    auto pl_iter_range = mpi_rank_dat->get_particle_loop_iter_range();
-    auto pl_stride = mpi_rank_dat->get_particle_loop_cell_stride();
-    auto pl_npart_cell = mpi_rank_dat->get_particle_loop_npart_cell();
+    ParticleLoop pl(
+        "CartesianHMeshLocalMapper", position_dat,
+        [=](auto position, auto mpi_rank) {
+          if (mpi_rank[1] < 0) {
+            int coords[3] = {0, 0, 0};
 
-    this->sycl_target->queue
-        .submit([&](sycl::handler &cgh) {
-          cgh.parallel_for<>(
-              sycl::range<1>(pl_iter_range), [=](sycl::id<1> idx) {
-                NESO_PARTICLES_KERNEL_START
-                const INT cellx = NESO_PARTICLES_KERNEL_CELL;
-                const INT layerx = NESO_PARTICLES_KERNEL_LAYER;
+            for (int dimx = 0; dimx < k_ndim; dimx++) {
+              const REAL pos = position[dimx];
+              int cell_fine = ((REAL)pos * k_inverse_cell_width_fine);
+              if (cell_fine >= k_cell_counts[dimx]) {
+                cell_fine = k_cell_counts[dimx] - 1;
+              } else if (cell_fine < 0) {
+                cell_fine = 0;
+              }
+              const int dim_index = k_cell_lookup[dimx][cell_fine];
+              coords[dimx] = dim_index;
+            }
+            const int rank_linear = coords[0] + coords[1] * k_dims[0] +
+                                    coords[2] * k_dims[0] * k_dims[1];
 
-                if (k_mpi_rank_dat[cellx][1][layerx] < 0) {
+            const bool cell_found =
+                (coords[0] >= 0) && (coords[1] >= 0) && (coords[2] >= 0);
+            const int remote_rank = cell_found ? k_rank_map[rank_linear] : -1;
 
-                  int coords[3] = {0, 0, 0};
+            mpi_rank[1] = remote_rank;
+          }
+        },
+        Access::read(position_dat), Access::write(mpi_rank_dat));
 
-                  // k_mpi_rank_dat[cellx][1][layerx];
-                  for (int dimx = 0; dimx < k_ndim; dimx++) {
-                    const REAL pos = k_position_dat[cellx][dimx][layerx];
-                    int cell_fine = ((REAL)pos * k_inverse_cell_width_fine);
-                    if (cell_fine >= k_cell_counts[dimx]) {
-                      cell_fine = k_cell_counts[dimx] - 1;
-                    } else if (cell_fine < 0) {
-                      cell_fine = 0;
-                    }
-                    const int dim_index = k_cell_lookup[dimx][cell_fine];
-                    coords[dimx] = dim_index;
-                  }
-                  const int rank_linear = coords[0] + coords[1] * k_dims[0] +
-                                          coords[2] * k_dims[0] * k_dims[1];
-
-                  const bool cell_found =
-                      (coords[0] >= 0) && (coords[1] >= 0) && (coords[2] >= 0);
-                  const int remote_rank =
-                      cell_found ? k_rank_map[rank_linear] : -1;
-                  k_mpi_rank_dat[cellx][1][layerx] = remote_rank;
-                }
-
-                NESO_PARTICLES_KERNEL_END
-              });
-        })
-        .wait_and_throw();
-    sycl_target->profile_map.inc("CartesianHMeshLocalMapperT", "map", 1,
-                                 profile_elapsed(t0, profile_timestamp()));
+    pl.execute();
   };
 
   /**

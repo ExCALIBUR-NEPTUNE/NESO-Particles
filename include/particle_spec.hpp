@@ -18,7 +18,10 @@ template <typename U> class Sym {
 private:
 public:
   /// Name of the symbol.
-  const std::string name;
+  std::string name;
+
+  Sym() = default;
+  Sym<U> &operator=(const Sym<U> &) = default;
 
   /**
    * Construct a new Sym object.

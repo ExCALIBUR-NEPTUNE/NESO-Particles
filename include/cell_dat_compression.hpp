@@ -127,7 +127,7 @@ public:
     auto compress_layers_old_ptr = this->d_compress_layers_old.ptr;
     auto compress_layers_new_ptr = this->d_compress_layers_new.ptr;
 
-    INT ***cell_ids_ptr = this->cell_id_dat->cell_dat.device_ptr();
+    INT ***cell_ids_ptr = this->cell_id_dat->impl_get();
     this->sycl_target->queue
         .submit([&](sycl::handler &cgh) {
           cgh.parallel_for<>(sycl::range<1>(static_cast<size_t>(ncell)),

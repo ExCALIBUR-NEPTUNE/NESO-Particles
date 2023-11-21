@@ -205,3 +205,26 @@ TEST(CellDat, test_cell_dat_INT_1) {
     }
   }
 }
+
+TEST(CellDatConst, fill) {
+
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+  const int cell_count = 4;
+  const int nrow = 2;
+  const int ncol = 2;
+
+  auto cdc =
+      std::make_shared<CellDatConst<INT>>(sycl_target, cell_count, nrow, ncol);
+  const INT value = 7;
+
+  cdc->fill(value);
+
+  for (int cx = 0; cx < cell_count; cx++) {
+    auto cell_data = cdc->get_cell(cx);
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      for (int colx = 0; colx < ncol; colx++) {
+        EXPECT_EQ(cell_data->at(rowx, colx), value);
+      }
+    }
+  }
+}

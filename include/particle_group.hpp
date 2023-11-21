@@ -7,6 +7,7 @@
 #include <memory>
 #include <mpi.h>
 #include <string>
+#include <variant>
 
 #include "access.hpp"
 #include "cell_dat.hpp"
@@ -27,11 +28,15 @@
 using namespace cl;
 namespace NESO::Particles {
 
+class ParticleSubGroup;
+
 /**
  *  Fundamentally a ParticleGroup is a collection of ParticleDats, domain and a
  *  compute device.
  */
 class ParticleGroup {
+  friend class ParticleSubGroup;
+
 private:
   int ncell;
   BufferHost<INT> h_npart_cell;
@@ -56,6 +61,75 @@ private:
   LocalMove local_move_ctx;
   // members for moving particles between local cells
   CellMove cell_move_ctx;
+
+  std::map<std::variant<Sym<INT>, Sym<REAL>>, std::tuple<int64_t, bool>>
+      particle_dat_versions;
+
+  inline void invalidate_callback_inner(std::variant<Sym<INT>, Sym<REAL>> sym,
+                                        const int mode) {
+    std::get<0>(this->particle_dat_versions.at(sym))++;
+    std::get<1>(this->particle_dat_versions.at(sym)) = (bool)mode;
+  }
+
+  inline void invalidate_callback_int(const Sym<INT> &sym, const int mode) {
+    this->invalidate_callback_inner(sym, mode);
+  }
+
+  inline void invalidate_callback_real(const Sym<REAL> &sym, const int mode) {
+    this->invalidate_callback_inner(sym, mode);
+  }
+
+  inline void add_invalidate_callback(ParticleDatSharedPtr<INT> particle_dat) {
+    particle_dat->add_write_callback(
+        std::bind(&ParticleGroup::invalidate_callback_int, this,
+                  std::placeholders::_1, std::placeholders::_2));
+  }
+
+  inline void add_invalidate_callback(ParticleDatSharedPtr<REAL> particle_dat) {
+    particle_dat->add_write_callback(
+        std::bind(&ParticleGroup::invalidate_callback_real, this,
+                  std::placeholders::_1, std::placeholders::_2));
+  }
+
+  template <typename T>
+  inline void add_particle_dat_common(ParticleDatSharedPtr<T> particle_dat) {
+    realloc_dat(particle_dat);
+    push_particle_spec(ParticleProp(particle_dat->sym, particle_dat->ncomp,
+                                    particle_dat->positions));
+    particle_dat->set_npart_cells_host(this->h_npart_cell.ptr);
+    particle_dat->npart_host_to_device();
+    this->add_invalidate_callback(particle_dat);
+    // This store is initialised with 1 and the to test keys should be
+    // initialised with 0.
+    this->particle_dat_versions[particle_dat->sym] = {1, false};
+  }
+
+protected:
+  /**
+   * Returns true if the passed version is behind and was updated.
+   */
+  inline bool check_validation(
+      std::map<std::variant<Sym<INT>, Sym<REAL>>, int64_t> &to_check) {
+    bool updated = false;
+    for (auto &item : to_check) {
+      const auto &key = item.first;
+      const int64_t to_check_value = item.second;
+      const auto local_entry = this->particle_dat_versions.at(key);
+      const int64_t local_value = std::get<0>(local_entry);
+      const bool local_bool = std::get<1>(local_entry);
+      // If a local count is different to the count on the to_check then an
+      // updated is required on the object that holds to check.
+      if (local_value != to_check_value) {
+        updated = true;
+        to_check.at(key) = local_value;
+      }
+      // If this bool has been set then an update is always required.
+      if (local_bool) {
+        updated = true;
+      }
+    }
+    return updated;
+  }
 
 public:
   /// Disable (implicit) copies.
@@ -373,6 +447,7 @@ public:
 
   /**
    *  Print particle data for all particles for the specified ParticleDats.
+   *  Empty cells are not printed.
    *
    *  @param args Sym<REAL> or Sym<INT> instances that indicate which particle
    *  data to print.
@@ -388,6 +463,7 @@ public:
     NESOASSERT(this->particle_dats_real.count(sym) == 1,
                "ParticleDat not found.");
     this->particle_dats_real.erase(sym);
+    this->particle_dat_versions.erase(sym);
   }
   /**
    *  Remove a ParticleDat from the ParticleGroup
@@ -398,6 +474,7 @@ public:
     NESOASSERT(this->particle_dats_int.count(sym) == 1,
                "ParticleDat not found.");
     this->particle_dats_int.erase(sym);
+    this->particle_dat_versions.erase(sym);
   }
 };
 
@@ -411,12 +488,7 @@ ParticleGroup::add_particle_dat(ParticleDatSharedPtr<REAL> particle_dat) {
     this->position_dat = particle_dat;
     this->position_sym = std::make_shared<Sym<REAL>>(particle_dat->sym.name);
   }
-  realloc_dat(particle_dat);
-  // TODO clean up this ParticleProp handling
-  push_particle_spec(ParticleProp(particle_dat->sym, particle_dat->ncomp,
-                                  particle_dat->positions));
-  particle_dat->set_npart_cells_host(this->h_npart_cell.ptr);
-  particle_dat->npart_host_to_device();
+  add_particle_dat_common(particle_dat);
 }
 inline void
 ParticleGroup::add_particle_dat(ParticleDatSharedPtr<INT> particle_dat) {
@@ -428,12 +500,7 @@ ParticleGroup::add_particle_dat(ParticleDatSharedPtr<INT> particle_dat) {
     this->cell_id_dat = particle_dat;
     this->cell_id_sym = std::make_shared<Sym<INT>>(particle_dat->sym.name);
   }
-  realloc_dat(particle_dat);
-  // TODO clean up this ParticleProp handling
-  push_particle_spec(ParticleProp(particle_dat->sym, particle_dat->ncomp,
-                                  particle_dat->positions));
-  particle_dat->set_npart_cells_host(this->h_npart_cell.ptr);
-  particle_dat->npart_host_to_device();
+  add_particle_dat_common(particle_dat);
 }
 
 inline void ParticleGroup::add_particles(){};
@@ -583,52 +650,56 @@ template <typename... T> inline void ParticleGroup::print(T... args) {
                "================="
             << std::endl;
   for (int cellx = 0; cellx < this->domain->mesh->get_cell_count(); cellx++) {
+    if (this->h_npart_cell.ptr[cellx] > 0) {
 
-    std::vector<CellData<REAL>> cell_data_real;
-    std::vector<CellData<INT>> cell_data_int;
+      std::vector<CellData<REAL>> cell_data_real;
+      std::vector<CellData<INT>> cell_data_int;
 
-    int nrow = -1;
-    for (auto &symx : print_spec.syms_real) {
-      auto cell_data = this->particle_dats_real[symx]->cell_dat.get_cell(cellx);
-      cell_data_real.push_back(cell_data);
-      if (nrow >= 0) {
-        NESOASSERT(nrow == cell_data->nrow, "nrow missmatch");
-      }
-      nrow = cell_data->nrow;
-    }
-    for (auto &symx : print_spec.syms_int) {
-      auto cell_data = this->particle_dats_int[symx]->cell_dat.get_cell(cellx);
-      cell_data_int.push_back(cell_data);
-      if (nrow >= 0) {
-        NESOASSERT(nrow == cell_data->nrow, "nrow missmatch");
-      }
-      nrow = cell_data->nrow;
-    }
-
-    std::cout << "------- " << cellx << " -------" << std::endl;
-    for (auto &symx : print_spec.syms_real) {
-      std::cout << "| " << symx.name << " ";
-    }
-    for (auto &symx : print_spec.syms_int) {
-      std::cout << "| " << symx.name << " ";
-    }
-    std::cout << "|" << std::endl;
-
-    for (int rowx = 0; rowx < nrow; rowx++) {
-      for (auto &cx : cell_data_real) {
-        std::cout << "| ";
-        for (int colx = 0; colx < cx->ncol; colx++) {
-          std::cout << fixed_width_format((*cx)[colx][rowx]) << " ";
+      int nrow = -1;
+      for (auto &symx : print_spec.syms_real) {
+        auto cell_data =
+            this->particle_dats_real[symx]->cell_dat.get_cell(cellx);
+        cell_data_real.push_back(cell_data);
+        if (nrow >= 0) {
+          NESOASSERT(nrow == cell_data->nrow, "nrow missmatch");
         }
+        nrow = cell_data->nrow;
       }
-      for (auto &cx : cell_data_int) {
-        std::cout << "| ";
-        for (int colx = 0; colx < cx->ncol; colx++) {
-          std::cout << fixed_width_format((*cx)[colx][rowx]) << " ";
+      for (auto &symx : print_spec.syms_int) {
+        auto cell_data =
+            this->particle_dats_int[symx]->cell_dat.get_cell(cellx);
+        cell_data_int.push_back(cell_data);
+        if (nrow >= 0) {
+          NESOASSERT(nrow == cell_data->nrow, "nrow missmatch");
         }
+        nrow = cell_data->nrow;
       }
 
+      std::cout << "------- " << cellx << " -------" << std::endl;
+      for (auto &symx : print_spec.syms_real) {
+        std::cout << "| " << symx.name << " ";
+      }
+      for (auto &symx : print_spec.syms_int) {
+        std::cout << "| " << symx.name << " ";
+      }
       std::cout << "|" << std::endl;
+
+      for (int rowx = 0; rowx < nrow; rowx++) {
+        for (auto &cx : cell_data_real) {
+          std::cout << "| ";
+          for (int colx = 0; colx < cx->ncol; colx++) {
+            std::cout << fixed_width_format((*cx)[colx][rowx]) << " ";
+          }
+        }
+        for (auto &cx : cell_data_int) {
+          std::cout << "| ";
+          for (int colx = 0; colx < cx->ncol; colx++) {
+            std::cout << fixed_width_format((*cx)[colx][rowx]) << " ";
+          }
+        }
+
+        std::cout << "|" << std::endl;
+      }
     }
   }
 
