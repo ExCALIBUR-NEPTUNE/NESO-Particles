@@ -4,6 +4,7 @@
 #include <CL/sycl.hpp>
 #include <algorithm>
 #include <cstdio>
+#include <functional>
 #include <memory>
 #include <stack>
 #include <string>
@@ -15,6 +16,11 @@
 #include "typedefs.hpp"
 
 namespace NESO::Particles {
+
+// Forward declaration of ParticleLoop such that these classes can define
+// ParticleLoop as a friend class.
+template <typename KERNEL, typename... ARGS> class ParticleLoop;
+template <typename T> class ParticleDatT;
 
 /**
  * Container for the data within a single cell stored on the host. Data is
@@ -74,6 +80,15 @@ public:
   inline std::vector<T> &operator[](int col) { return this->data[col]; }
 
   /**
+   *  Access data with more standard (row, column) indexing.
+   *
+   *  @param row Row to access.
+   *  @param col Column to access.
+   *  @returns reference to accessed element.
+   */
+  inline T &at(const int row, const int col) { return data[col][row]; }
+
+  /**
    *  Print the contents of the CellDataT instance.
    */
   inline void print() {
@@ -90,14 +105,53 @@ public:
 template <typename T> using CellData = std::shared_ptr<CellDataT<T>>;
 
 /**
+ *  Type the implementation methods return;
+ */
+template <typename T> struct CellDatConstDeviceType {
+  T *ptr;
+  int stride;
+  int nrow;
+};
+
+template <typename T> struct CellDatConstDeviceTypeConst {
+  T const *ptr;
+  int stride;
+  int nrow;
+};
+
+/**
  *  Container that allocates on the device a matrix of fixed size nrow X ncol
  *  for N cells. Data stored in column major format. i.e. Data order from
  *  slowest to fastest is: cell, column, row.
  */
 template <typename T> class CellDatConst {
+  template <typename KERNEL, typename... ARGS> friend class ParticleLoop;
+
 private:
   T *d_ptr;
   const int stride;
+
+protected:
+  /**
+   * Non-const pointer to underlying device data. Intended for friend access
+   * from ParticleLoop.
+   */
+  inline CellDatConstDeviceType<T> impl_get() {
+    static_assert(
+        std::is_trivially_copyable<CellDatConstDeviceType<T>>::value == true);
+    return {this->d_ptr, this->stride, this->nrow};
+  }
+
+  /**
+   * Const pointer to underlying device data. Intended for friend access
+   * from ParticleLoop.
+   */
+  inline CellDatConstDeviceTypeConst<T> impl_get_const() {
+    static_assert(
+        std::is_trivially_copyable<CellDatConstDeviceTypeConst<T>>::value ==
+        true);
+    return {this->d_ptr, this->stride, this->nrow};
+  }
 
 public:
   /// Disable (implicit) copies.
@@ -116,6 +170,16 @@ public:
   ~CellDatConst() { sycl::free(this->d_ptr, sycl_target->queue); };
 
   /**
+   * Fill all the entries with a given value.
+   *
+   * @param value Value to place in all entries.
+   */
+  inline void fill(const T value) {
+    this->sycl_target->queue.fill(this->d_ptr, value, ncells * nrow * ncol);
+    this->sycl_target->queue.wait();
+  }
+
+  /**
    * Create new CellDatConst on the specified compute target with a fixed cell
    * count, fixed number of rows per cell and fixed number of columns per cell.
    *
@@ -130,8 +194,7 @@ public:
         stride(nrow * ncol) {
     this->d_ptr =
         sycl::malloc_device<T>(ncells * nrow * ncol, sycl_target->queue);
-    this->sycl_target->queue.fill(this->d_ptr, ((T)0), ncells * nrow * ncol);
-    this->sycl_target->queue.wait();
+    this->fill(0);
   };
 
   /**
@@ -200,20 +263,62 @@ public:
   }
 };
 
+class ParticlePacker;
+
 /**
  * Store data on each cell where the number of columns required per cell is
  * constant but the number of rows is variable. Data is stored in a column
  * major manner with a new device pointer per column.
  */
 template <typename T> class CellDat {
+  // This allows the ParticleLoop to access the implementation methods.
+  template <typename KERNEL, typename... ARGS> friend class ParticleLoop;
+  template <typename U> friend class ParticleDatT;
+  friend class ParticlePacker;
+
 private:
   T ***d_ptr;
   std::vector<T **> h_ptr_cells;
   std::vector<T *> h_ptr_cols;
   int nrow_max = -1;
+  int nrow_min = -1;
 
   EventStack stack_events;
   std::stack<T *> stack_ptrs;
+
+protected:
+  std::function<void(const int)> write_callback;
+  inline void add_write_callback(std::function<void(const int)> fn) {
+    this->write_callback = fn;
+  }
+
+  /**
+   * Non-const pointer to underlying device data. Intended for friend access
+   * from ParticleLoop.
+   */
+  inline T ***impl_get() {
+    if (this->write_callback) {
+      this->write_callback(0);
+    }
+    return this->d_ptr;
+  }
+
+  /**
+   * Const pointer to underlying device data. Intended for friend access
+   * from ParticleLoop.
+   */
+  inline T *const *const *impl_get_const() { return this->d_ptr; }
+
+  /**
+   * Get the device pointer for a column in a cell.
+   *
+   * @param cell Cell index to get pointer for.
+   * @param col Column in cell to get pointer for.
+   * @returns Device pointer to data for the specified column.
+   */
+  T *col_device_ptr(const int cell, const int col) {
+    return this->h_ptr_cols[cell * this->ncol + col];
+  }
 
 public:
   /// Disable (implicit) copies.
@@ -354,6 +459,8 @@ public:
   inline int compute_nrow_max() {
     this->nrow_max =
         *std::max_element(std::begin(this->nrow), std::end(this->nrow));
+    this->nrow_min =
+        *std::min_element(std::begin(this->nrow), std::end(this->nrow));
     return this->nrow_max;
   }
 
@@ -367,6 +474,18 @@ public:
       this->compute_nrow_max();
     }
     return this->nrow_max;
+  }
+
+  /**
+   * Get the minimum number of rows across all cells.
+   *
+   * @returns The minimum number of rows across all cells.
+   */
+  inline int get_nrow_min() {
+    if (this->nrow_max < 0) {
+      this->compute_nrow_max();
+    }
+    return this->nrow_min;
   }
 
   /**
@@ -435,7 +554,9 @@ public:
    */
   inline void set_cell(const int cell, CellData<T> cell_data) {
     auto t0 = profile_timestamp();
-
+    if (this->write_callback) {
+      this->write_callback(0);
+    }
     NESOASSERT(cell_data->nrow >= this->nrow[cell],
                "CellData as insuffient row count.");
     NESOASSERT(cell_data->ncol >= this->ncol,
@@ -465,7 +586,9 @@ public:
   inline void set_cell_async(const int cell, CellDataT<T> &cell_data,
                              EventStack &event_stack) {
     auto t0 = profile_timestamp();
-
+    if (this->write_callback) {
+      this->write_callback(0);
+    }
     NESOASSERT(cell_data.nrow >= this->nrow[cell],
                "CellData as insuffient row count.");
     NESOASSERT(cell_data.ncol >= this->ncol,
@@ -491,18 +614,12 @@ public:
    *
    * @returns Device pointer that can be used to access the underlying data.
    */
-  T ***device_ptr() { return this->d_ptr; };
-
-  /**
-   * Get the device pointer for a column in a cell.
-   *
-   * @param cell Cell index to get pointer for.
-   * @param col Column in cell to get pointer for.
-   * @returns Device pointer to data for the specified column.
-   */
-  T *col_device_ptr(const int cell, const int col) {
-    return this->h_ptr_cols[cell * this->ncol + col];
-  }
+  T ***device_ptr() {
+    if (this->write_callback) {
+      this->write_callback(1);
+    }
+    return this->d_ptr;
+  };
 
   /**
    *  Helper function to print the contents of all cells or a specified range of

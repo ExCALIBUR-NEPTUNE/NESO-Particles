@@ -2,6 +2,7 @@
 #define _NESO_PARTICLES_PARTICLE_REMOVER
 
 #include "compute_target.hpp"
+#include "loop/particle_loop.hpp"
 #include "particle_dat.hpp"
 #include "particle_group.hpp"
 #include "typedefs.hpp"
@@ -53,11 +54,6 @@ public:
                "Passed ParticleGroup does not contain the sycl_target this "
                "ParticleRemover was created with.");
 
-    auto pl_iter_range = particle_dat->get_particle_loop_iter_range();
-    auto pl_stride = particle_dat->get_particle_loop_cell_stride();
-    auto pl_npart_cell = particle_dat->get_particle_loop_npart_cell();
-
-    auto k_compare_dat = particle_dat->cell_dat.device_ptr();
     auto k_key = key;
 
     // reset the leave count
@@ -65,25 +61,20 @@ public:
     this->dh_remove_count.host_to_device();
     auto k_leave_count = this->dh_remove_count.d_buffer.ptr;
 
-    this->sycl_target->queue
-        .submit([&](sycl::handler &cgh) {
-          cgh.parallel_for<>(
-              sycl::range<1>(pl_iter_range), [=](sycl::id<1> idx) {
-                NESO_PARTICLES_KERNEL_START
-                const INT cellx = NESO_PARTICLES_KERNEL_CELL;
-                const INT layerx = NESO_PARTICLES_KERNEL_LAYER;
-                const T compare_value = k_compare_dat[cellx][0][layerx];
-                // Is this particle is getting removed?
-                if (compare_value == k_key) {
-                  sycl::atomic_ref<int, sycl::memory_order::relaxed,
-                                   sycl::memory_scope::device>
-                      remove_count_atomic{k_leave_count[0]};
-                  remove_count_atomic.fetch_add(1);
-                }
-                NESO_PARTICLES_KERNEL_END
-              });
-        })
-        .wait_and_throw();
+    ParticleLoop(
+        "particle_remover_stage_0", particle_group,
+        [=](auto compare_dat) {
+          const T compare_value = compare_dat[0];
+          // Is this particle is getting removed?
+          if (compare_value == k_key) {
+            sycl::atomic_ref<int, sycl::memory_order::relaxed,
+                             sycl::memory_scope::device>
+                remove_count_atomic{k_leave_count[0]};
+            remove_count_atomic.fetch_add(1);
+          }
+        },
+        Access::read(particle_dat->sym))
+        .execute();
 
     // read from the device the number of particles to remove
     this->dh_remove_count.device_to_host();
@@ -99,27 +90,24 @@ public:
       auto k_remove_layers = this->d_remove_layers.ptr;
 
       // assemble the remove indices/layers
-      this->sycl_target->queue
-          .submit([&](sycl::handler &cgh) {
-            cgh.parallel_for<>(
-                sycl::range<1>(pl_iter_range), [=](sycl::id<1> idx) {
-                  NESO_PARTICLES_KERNEL_START
-                  const INT cellx = NESO_PARTICLES_KERNEL_CELL;
-                  const INT layerx = NESO_PARTICLES_KERNEL_LAYER;
-                  const T compare_value = k_compare_dat[cellx][0][layerx];
-                  // Is this particle is getting removed?
-                  if (compare_value == k_key) {
-                    sycl::atomic_ref<int, sycl::memory_order::relaxed,
-                                     sycl::memory_scope::device>
-                        remove_count_atomic{k_leave_count[0]};
-                    const int index = remove_count_atomic.fetch_add(1);
-                    k_remove_cells[index] = cellx;
-                    k_remove_layers[index] = layerx;
-                  }
-                  NESO_PARTICLES_KERNEL_END
-                });
-          })
-          .wait_and_throw();
+      ParticleLoop(
+          "particle_remover_stage_1", particle_group,
+          [=](auto loop_index, auto compare_dat) {
+            const INT cellx = loop_index.cell;
+            const INT layerx = loop_index.layer;
+            const T compare_value = compare_dat[0];
+            // Is this particle is getting removed?
+            if (compare_value == k_key) {
+              sycl::atomic_ref<int, sycl::memory_order::relaxed,
+                               sycl::memory_scope::device>
+                  remove_count_atomic{k_leave_count[0]};
+              const int index = remove_count_atomic.fetch_add(1);
+              k_remove_cells[index] = cellx;
+              k_remove_layers[index] = layerx;
+            }
+          },
+          Access::read(ParticleLoopIndex{}), Access::read(particle_dat->sym))
+          .execute();
 
       // remove the particles from the particle_group
       particle_group->remove_particles(remove_count, k_remove_cells,

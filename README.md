@@ -9,9 +9,9 @@ This is the particle component of NESO and is designed as a header only library.
 ## Dependencies
 
 * CMake 
-* SYCL 2020 (tested with hipsycl 0.9.2 or Intel DPCPP 2022.1.0).
+* SYCL 2020 (tested with hipsycl 0.9.4 or Intel DPCPP 2022.1.0).
 * MPI 3.0 (tested with MPICH 4.0 or IntelMPI 2021.6)
-* HDF5: (optional) If particle trajectories are required - will execute without.
+* HDF5 (parallel): (optional) If particle trajectories are required - will execute without.
 
 ## Installing
 

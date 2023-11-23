@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <mpi.h>
 #include <numeric>
 #include <vector>
 
@@ -20,16 +21,47 @@ static inline int reduce_mul(const int nel, std::vector<int> &values) {
   return v;
 }
 
+/**
+ * \def NESOASSERT(expr, msg)
+ * This is a helper macro to call the function neso_particles_assert. Users
+ * should call this helper macro NESOASSERT like
+ *
+ *   NESOASSERT(conditional, message);
+ *
+ * To check conditionals within their code.
+ */
 #define NESOASSERT(expr, msg)                                                  \
-  neso_particle_assert(#expr, expr, __FILE__, __LINE__, msg)
+  NESO::Particles::neso_particles_assert(#expr, expr, __FILE__, __LINE__, msg)
 
-inline void neso_particle_assert(const char *expr_str, bool expr,
-                                 const char *file, int line, const char *msg) {
+/**
+ * This is a helper function to assert conditions are satisfied and terminate
+ * execution if not. An error is output on stderr and MPI_Abort is called if
+ * MPI is initialised. Users should call the corresponding helper macro
+ * NESOASSERT like
+ *
+ *   NESOASSERT(conditional, message);
+ *
+ * To check conditionals within their code.
+ *
+ * @param expr_str A string identifying the conditional to check.
+ * @param expr Bool resulting from the evaluation of the expression.
+ * @param file Filename containing the call to neso_particles_assert.
+ * @param line Line number for the call to neso_particles assert.
+ * @param msg Message to print to stderr on evaluation of conditional to false.
+ */
+inline void neso_particles_assert(const char *expr_str, bool expr,
+                                  const char *file, int line, const char *msg) {
   if (!expr) {
     std::cerr << "NESO Particles Assertion error:\t" << msg << "\n"
               << "Expected value:\t" << expr_str << "\n"
               << "Source location:\t\t" << file << ", line " << line << "\n";
-    abort();
+    int flag = 0;
+    MPI_Initialized(&flag);
+    if (flag) {
+      MPI_Abort(MPI_COMM_WORLD, -1);
+    } else {
+      std::abort();
+    }
   }
 }
 
@@ -132,6 +164,43 @@ template <typename... T> inline void nprint(T... args) {
 
 //#define DEBUG_OOB_CHECK
 #define DEBUG_OOB_WIDTH 1000
+
+/**
+ * Get the MPI thread level required by NESO-Particles. MPI should be
+ * initialised by calling MPI_Init_thread with a required thread level greater
+ * than or equal to the value returned by this function.
+ *
+ * @returns MPI thread level.
+ */
+inline int get_required_mpi_thread_level() { return MPI_THREAD_FUNNELED; }
+
+/**
+ * Test that a provided MPI thread level is sufficient for NESO-Particles.
+ *
+ * @param level Provided thread level.
+ */
+inline void test_provided_thread_level(const int level) {
+  NESOASSERT(level >= get_required_mpi_thread_level(),
+             "Provided MPI thread level is insufficient for NESO-Particles.");
+}
+
+/**
+ * Helper function to initialise MPI and check that the provided thread level
+ * is sufficient. Calling this function is equivalent to calling
+ * MPI_Init_thread with the required thread level from
+ * get_required_mpi_thread_level and checking the provided thread level is
+ * equal to or greater than this required level.
+ *
+ * @param argc Pointer to the number of arguments.
+ * @param argv Argument vector.
+ */
+inline void initialise_mpi(int *argc, char ***argv) {
+  int provided_thread_level;
+  NESOASSERT(MPI_Init_thread(argc, argv, get_required_mpi_thread_level(),
+                             &provided_thread_level) == MPI_SUCCESS,
+             "ERROR: MPI_Init_thread != MPI_SUCCESS");
+  test_provided_thread_level(provided_thread_level);
+}
 
 } // namespace NESO::Particles
 
