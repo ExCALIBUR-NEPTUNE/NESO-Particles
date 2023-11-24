@@ -15,9 +15,6 @@ if(ENABLE_NESO_PARTICLES_TESTS)
     message(STATUS "Set CMAKE_BUILD_TYPE=RelWithDebInfo")
   endif()
 
-  # find MPI
-  find_package(MPI REQUIRED)
-
   # find NESO-Particles config
   list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_LIST_DIR}")
   find_package(NESO-PARTICLES REQUIRED)

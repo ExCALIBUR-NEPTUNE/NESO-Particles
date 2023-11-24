@@ -18,10 +18,15 @@ else()
   message(STATUS "Using NESO_PARTICLES_DEVICE_TYPE_CPU")
 endif()
 
-set(HDF5_PREFER_PARALLEL TRUE)
+# required for some versions of hdf5
 enable_language(C)
-find_package(HDF5 QUIET)
 
+# find/re-find MPI with MPI_C
+find_package(MPI REQUIRED)
+
+# now look for HDF5
+set(HDF5_PREFER_PARALLEL TRUE)
+find_package(HDF5 QUIET)
 if(HDF5_FOUND AND HDF5_IS_PARALLEL)
     message(STATUS "HDF5 found")
     add_definitions(-DNESO_PARTICLES_HDF5)
