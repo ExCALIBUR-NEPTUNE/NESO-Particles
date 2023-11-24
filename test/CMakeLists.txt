@@ -25,8 +25,6 @@ endif()
 set(EXECUTABLE testNESOParticles)
 set(TEST_MAIN ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp)
 
-find_package(MPI REQUIRED)
-
 # List test source files
 file(GLOB TEST_SRCS ${CMAKE_CURRENT_SOURCE_DIR}/test_*.cpp
      ${CMAKE_CURRENT_SOURCE_DIR}/*_test.cpp)
