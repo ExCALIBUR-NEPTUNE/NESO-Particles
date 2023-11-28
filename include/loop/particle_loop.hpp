@@ -188,8 +188,12 @@ template <typename T> struct Write {
 namespace NESO::Particles::Access::LocalArray {
 
 /**
- * Access:LocalArray::Read<T> and Access:LocalArray::Add<T> are the
- * kernel argument types for accessing LocalArray data in a kernel.
+ * Access:LocalArray::Read<T>, Access::LocalArray::Write<T> and
+ * Access:LocalArray::Add<T> are the kernel argument types for accessing
+ * LocalArray data in a kernel.
+ */
+/**
+ * ParticleLoop access type for LocalArray Read access.
  */
 template <typename T> struct Read {
   /// Pointer to underlying data for the array.
@@ -200,8 +204,7 @@ template <typename T> struct Read {
 };
 
 /**
- * Access:LocalArray::Read<T> and Access:LocalArray::Add<T> are the
- * kernel argument types for accessing LocalArray data in a kernel.
+ * ParticleLoop access type for LocalArray Add access.
  */
 template <typename T> struct Add {
   /// Pointer to underlying data for the array.
@@ -216,6 +219,17 @@ template <typename T> struct Add {
         element_atomic(ptr[component]);
     return element_atomic.fetch_add(value);
   }
+};
+
+/**
+ * ParticleLoop access type for LocalArray Write access.
+ */
+template <typename T> struct Write {
+  /// Pointer to underlying data for the array.
+  Write() = default;
+  T *ptr;
+  T at(const int component) { return ptr[component]; }
+  T &operator[](const int component) { return ptr[component]; }
 };
 
 } // namespace NESO::Particles::Access::LocalArray
@@ -361,6 +375,12 @@ template <typename T> struct LoopParameter<Access::Read<LocalArray<T>>> {
   using type = T const *;
 };
 /**
+ *  Loop parameter for write access of a LocalArray.
+ */
+template <typename T> struct LoopParameter<Access::Write<LocalArray<T>>> {
+  using type = T *;
+};
+/**
  *  Loop parameter for add access of a LocalArray.
  */
 template <typename T> struct LoopParameter<Access::Add<LocalArray<T>>> {
@@ -446,6 +466,12 @@ template <typename T> struct KernelParameter<Access::Write<ParticleDatT<T>>> {
  */
 template <typename T> struct KernelParameter<Access::Read<LocalArray<T>>> {
   using type = Access::LocalArray::Read<T>;
+};
+/**
+ *  KernelParameter type for write access to a LocalArray.
+ */
+template <typename T> struct KernelParameter<Access::Write<LocalArray<T>>> {
+  using type = Access::LocalArray::Write<T>;
 };
 /**
  *  KernelParameter type for add access to a LocalArray.
@@ -534,7 +560,7 @@ typedef std::shared_ptr<ParticleLoopBase> ParticleLoopSharedPtr;
  *  Data Structure  | Access Descriptors | Kernel Argument Type | Notes |
  *  --------------  | ------------------ | -------------------- | ----- |
  *  ParticleDat<T> | Read, Write | Access::ParticleDat::Read<T>, Access::ParticleDat::Write<T> | Loop is called with the Sym<T>, e.g Access::read(Sym<T>("A")) |
- *  LocalArray<T>  | Read, Add | Access::LocalArray::Read<T>, Access::LocalArray::Add<T> | Loop is called with the array, e.g LocalArray l0(...), Access::read(l0) |
+ *  LocalArray<T>  | Read, Write, Add | Access::LocalArray::Read<T>, Access::LocalArray::Write<T>, Access::LocalArray::Add<T> | Loop is called with the array, e.g LocalArray l0(...), Access::read(l0) |
  *  GlobalArray<T>  | Read, Add | Access::GlobalArray::Read<T>, Access::GlobalArray::Add<T> | Loop is called with the array, e.g GlobalArray g0(...), Access::read(g0). After loop completion values are reduced across the MPI communicator automatically. |
  *  CellDatConst<T>  | Read, Add | Access::CellDatConst::Read<T>, Access::CellDatConst::Add<T> | Loop is called with the array, e.g auto g0 = std::make_shared<CellDatConst<T>>(...), Access::read(g0). Access is supplied to the elements for each cell only. Passed object must be a shared pointer. |
  *
@@ -582,7 +608,16 @@ protected:
     lhs.ptr = rhs;
   }
   /**
-   *  Function to create the kernel argument for LocalArray read access.
+   *  Function to create the kernel argument for LocalArray write access.
+   */
+  template <typename T>
+  static inline void create_kernel_arg(const int cellx, const int layerx,
+                                       T *rhs,
+                                       Access::LocalArray::Write<T> &lhs) {
+    lhs.ptr = rhs;
+  }
+  /**
+   *  Function to create the kernel argument for LocalArray add access.
    */
   template <typename T>
   static inline void create_kernel_arg(const int cellx, const int layerx,
@@ -693,6 +728,15 @@ protected:
                                      sycl::handler &cgh,
                                      Access::Read<LocalArray<T> *> &a) {
     return a.obj->impl_get_const();
+  }
+  /**
+   * Method to compute access to a LocalArray (write)
+   */
+  template <typename T>
+  static inline auto create_loop_arg(ParticleGroup *particle_group,
+                                     sycl::handler &cgh,
+                                     Access::Write<LocalArray<T> *> &a) {
+    return a.obj->impl_get();
   }
   /**
    * Method to compute access to a LocalArray (add)

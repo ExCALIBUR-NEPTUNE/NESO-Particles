@@ -76,6 +76,9 @@ The local array can be accessed in particle loops with "read" and "add" access m
    * - Read
      - Access::LocalArray::Read<T>
      - Components accessed for each array element via .at or subscript which returns a const reference.
+   * - Write
+     - Access::LocalArray::Write<T>
+     - Components accessed for each array element via .at or subscript which returns a modifiable reference. It is the responsiblity of the user to avoid write conflicts and race conditions between loop iterations.
    * - Add
      - Access::LocalArray::Add<T>
      - fetch_add(index, value) atomically increments the element referenced by the index with the passed value. Returns the previous value stored at the index. Users may assume that the memory region accessed is the same for all invocations of the kernel. Hence adding 1 for each particle gives a total ordering for each participating calls.

@@ -232,6 +232,28 @@ TEST(ParticleLoop, local_array) {
   EXPECT_EQ(d1[1], local_count * 2);
   EXPECT_EQ(d1[2], local_count * 3);
 
+  // LocalArray write
+  const int num_write = A->get_npart_local();
+  std::vector<INT> h_law(num_write);
+  std::fill(h_law.begin(), h_law.end(), 0);
+  auto law = std::make_shared<LocalArray<INT>>(sycl_target, h_law);
+  auto law_index = std::make_shared<LocalArray<INT>>(sycl_target, 1);
+  law_index->fill(0);
+
+  auto law_loop = particle_loop(
+      A,
+      [=](auto la_index, auto la) {
+        const int index = la_index.fetch_add(0, 1);
+        la[index] = 1;
+      },
+      Access::add(law_index), Access::write(law));
+  law_loop->execute();
+
+  auto post_law = law->get();
+  for (int px = 0; px < num_write; px++) {
+    EXPECT_EQ(post_law.at(px), 1);
+  }
+
   A->free();
   sycl_target->free();
   mesh->free();
