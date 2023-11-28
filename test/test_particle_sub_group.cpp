@@ -94,6 +94,43 @@ public:
 
 } // namespace
 
+TEST(ParticleSubGroup, version_tracker) {
+
+  ParticleDatVersionT v0;
+  ParticleDatVersionT v1;
+  EXPECT_FALSE(v0 < v1);
+  ParticleDatVersionT r0(Sym<REAL>("A"));
+  ParticleDatVersionT r1(Sym<REAL>("A"));
+  ParticleDatVersionT r2(Sym<REAL>("B"));
+  ParticleDatVersionT i0(Sym<INT>("A"));
+  ParticleDatVersionT i1(Sym<INT>("A"));
+  ParticleDatVersionT i2(Sym<INT>("B"));
+  EXPECT_TRUE(v0 < r0);
+  EXPECT_TRUE(v0 < i0);
+  EXPECT_FALSE(r0 < i0);
+  EXPECT_FALSE(r0 < r1);
+  EXPECT_TRUE(r0 < r2);
+  EXPECT_FALSE(i0 < i1);
+  EXPECT_TRUE(i0 < i2);
+  EXPECT_FALSE(r0 < i0);
+  EXPECT_TRUE(i0 < r0);
+
+  ParticleDatVersionT v2;
+  v2 = Sym<INT>("C");
+  ASSERT_TRUE(v2.index == 0);
+  ASSERT_TRUE(v2.si.name == "C");
+  ParticleDatVersionT v3;
+  v3 = Sym<REAL>("C");
+  ASSERT_TRUE(v3.index == 1);
+  ASSERT_TRUE(v3.sr.name == "C");
+  v2 = v3;
+  ASSERT_TRUE(v2.index == 1);
+  ASSERT_TRUE(v2.sr.name == "C");
+  v3 = Sym<INT>("D");
+  ASSERT_TRUE(v3.index == 0);
+  ASSERT_TRUE(v3.si.name == "D");
+}
+
 TEST(ParticleSubGroup, selector) {
   auto A = particle_loop_common();
   auto domain = A->domain;
