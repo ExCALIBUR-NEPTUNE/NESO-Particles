@@ -680,3 +680,42 @@ TEST(ParticleLoop, particle_dat_iterset) {
   sycl_target->free();
   mesh->free();
 }
+
+TEST(ParticleLoop, sym_vector) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  const int cell_count = mesh->get_cell_count();
+  auto si = SymVector<INT>(A, {Sym<INT>("ID"), Sym<INT>("CELL_ID")});
+  std::vector<Sym<REAL>> srv = {Sym<REAL>("V"), Sym<REAL>("P2")};
+  auto sr = std::make_shared<SymVector<REAL>>(A, srv);
+
+  auto pl = particle_loop(
+      A,
+      [=](auto index, auto dats_real, auto dats_int) {
+        const INT cell = index.cell;
+        const INT layer = index.layer;
+        dats_real.at(1, cell, layer, 0) = dats_real.at(0, cell, layer, 0);
+        dats_real.at(1, index, 1) = dats_int.at(0, index, 0);
+      },
+      Access::read(ParticleLoopIndex{}), Access::write(sr), Access::read(si));
+
+  pl->execute();
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto v = A->get_dat(Sym<REAL>("V"))->cell_dat.get_cell(cellx);
+    auto p2 = A->get_dat(Sym<REAL>("P2"))->cell_dat.get_cell(cellx);
+    auto id = A->get_dat(Sym<INT>("ID"))->cell_dat.get_cell(cellx);
+    const int nrow = p2->nrow;
+
+    // for each particle in the cell
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      // for each dimension
+      ASSERT_EQ((*p2)[0][rowx], (*v)[0][rowx]);
+      ASSERT_TRUE(std::abs((REAL)(*p2)[1][rowx] - (REAL)(*id)[0][rowx]) <
+                  1.0e-12);
+    }
+  }
+
+  A->free();
+  mesh->free();
+}

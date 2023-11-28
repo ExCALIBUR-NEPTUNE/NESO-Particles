@@ -24,6 +24,7 @@ class ParticleGroup;
 // Forward declaration of ParticleLoop such that LocalArray can define
 // ParticleLoop as a friend class.
 template <typename KERNEL, typename... ARGS> class ParticleLoop;
+template <typename T> class SymVector;
 class MeshHierarchyGlobalMap;
 class CellMove;
 class LayerCompressor;
@@ -36,6 +37,7 @@ class ParticleUnpacker;
 template <typename T> class ParticleDatT {
   // This allows the ParticleLoop to access the implementation methods.
   template <typename KERNEL, typename... ARGS> friend class ParticleLoop;
+  friend class SymVector<T>;
   friend class ParticleGroup;
   friend class MeshHierarchyGlobalMap;
   friend class CellMove;

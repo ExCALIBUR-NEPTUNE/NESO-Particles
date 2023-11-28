@@ -134,4 +134,27 @@ When accessed from a particle loop both the read and add access descriptors expo
      - fetch_add(index, value) atomically increments the element referenced by the index with the passed value. Returns the previous value stored at the index. Users may assume that the memory region accessed is the same for all invocations of the kernel. Hence adding 1 for each particle gives a total ordering for each participating calls.
 
 
+SymVector
+~~~~~~~~~
+
+SymVector enables passing a set of ParticleDats to the ParticleGroup where the number of ParticleDats is only known at runtime.
+The indexing of the data structure in the kernel is via the positional index of the ParticleDat relative to the construction of the SymVector.
+
+.. literalinclude:: ../example_sources/example_particle_loop_sym_vector.hpp
+   :language: cpp
+   :caption: Particle loop example where a SymVector is accessed by the ParticleLoop. 
+
+.. list-table:: SymVector<T> Access
+   :header-rows: 1
+
+   * - Access Descriptors
+     - Kernel Types
+     - Notes
+   * - Read
+     - Access::SymVector::Read<T>
+     - Components accessed for each array element via .at or subscript which returns a const reference.
+   * - Write
+     - Access::SymVector::Write<T>
+     - Components accessed for each array element via .at or subscript which returns a reference.
+
 .. [SAUNDERS2018] A domain specific language for performance portable molecular dynamics algorithms. `CPC <https://doi.org/10.1016/j.cpc.2017.11.006>`_ , `arXiv <https://arxiv.org/abs/1704.03329>`_.

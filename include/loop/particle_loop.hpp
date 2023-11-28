@@ -183,6 +183,67 @@ template <typename T> struct Write {
 } // namespace NESO::Particles::Access::ParticleDat
 
 /**
+ * The type to pass to a ParticleLoop to read the ParticleLoop loop index in a
+ * kernel.
+ */
+struct ParticleLoopIndex {};
+
+/**
+ * Defines the access type for the cell, layer indexing.
+ */
+namespace NESO::Particles::Access::LoopIndex {
+/**
+ * ParticleLoop index containing the cell and layer.
+ */
+struct Read {
+  /// The cell containing the particle.
+  INT cell;
+  /// The layer of the particle.
+  INT layer;
+};
+
+} // namespace NESO::Particles::Access::LoopIndex
+
+/**
+ *  Defines the access implementations and types for ParticleDat objects.
+ */
+namespace NESO::Particles::Access::SymVector {
+
+/**
+ * Access:SymVector::Read<T> and Access:SymVector::Read<T> are the
+ * kernel argument types for accessing particle data in a kernel via a
+ * SymVector.
+ */
+template <typename T> struct Read {
+  /// Pointer to underlying data.
+  T *const *const **ptr;
+  T const &at(const int dat_index, const int cell, const int layer,
+              const int component) {
+    return ptr[dat_index][cell][component][layer];
+  }
+  T const &at(const int dat_index,
+              const Access::LoopIndex::Read &particle_index,
+              const int component) {
+    return ptr[dat_index][particle_index.cell][component][particle_index.layer];
+  }
+};
+
+template <typename T> struct Write {
+  /// Pointer to underlying data.
+  T ****ptr;
+  T &at(const int dat_index, const int cell, const int layer,
+        const int component) {
+    return ptr[dat_index][cell][component][layer];
+  }
+  T &at(const int dat_index, const Access::LoopIndex::Read &particle_index,
+        const int component) {
+    return ptr[dat_index][particle_index.cell][component][particle_index.layer];
+  }
+};
+
+} // namespace NESO::Particles::Access::SymVector
+
+/**
  *  Defines the access implementations and types for LocalArray objects.
  */
 namespace NESO::Particles::Access::LocalArray {
@@ -310,28 +371,6 @@ template <typename T> struct Add {
 
 } // namespace NESO::Particles::Access::CellDatConst
 
-/**
- * The type to pass to a ParticleLoop to read the ParticleLoop loop index in a
- * kernel.
- */
-struct ParticleLoopIndex {};
-
-/**
- * Defines the access type for the cell, layer indexing.
- */
-namespace NESO::Particles::Access::LoopIndex {
-/**
- * ParticleLoop index containing the cell and layer.
- */
-struct Read {
-  /// The cell containing the particle.
-  INT cell;
-  /// The layer of the particle.
-  INT layer;
-};
-
-} // namespace NESO::Particles::Access::LoopIndex
-
 namespace NESO::Particles {
 
 namespace {
@@ -367,6 +406,18 @@ template <typename T> struct LoopParameter<Access::Read<ParticleDatT<T>>> {
  */
 template <typename T> struct LoopParameter<Access::Write<ParticleDatT<T>>> {
   using type = T ***;
+};
+/**
+ *  Loop parameter for read access of a SymVector.
+ */
+template <typename T> struct LoopParameter<Access::Read<SymVector<T>>> {
+  using type = T *const *const **;
+};
+/**
+ *  Loop parameter for write access of a SymVector.
+ */
+template <typename T> struct LoopParameter<Access::Write<SymVector<T>>> {
+  using type = T ****;
 };
 /**
  *  Loop parameter for read access of a LocalArray.
@@ -460,6 +511,18 @@ template <typename T> struct KernelParameter<Access::Read<ParticleDatT<T>>> {
  */
 template <typename T> struct KernelParameter<Access::Write<ParticleDatT<T>>> {
   using type = Access::ParticleDat::Write<T>;
+};
+/**
+ *  KernelParameter type for read-only access to a SymVector.
+ */
+template <typename T> struct KernelParameter<Access::Read<SymVector<T>>> {
+  using type = Access::SymVector::Read<T>;
+};
+/**
+ *  KernelParameter type for write access to a SymVector.
+ */
+template <typename T> struct KernelParameter<Access::Write<SymVector<T>>> {
+  using type = Access::SymVector::Write<T>;
 };
 /**
  *  KernelParameter type for read access to a LocalArray.
@@ -599,6 +662,24 @@ protected:
     lhs.ptr = rhs[cellx];
   }
   /**
+   *  Function to create the kernel argument for SymVector read access.
+   */
+  template <typename T>
+  static inline void create_kernel_arg(const int cellx, const int layerx,
+                                       T *const *const **rhs,
+                                       Access::SymVector::Read<T> &lhs) {
+    lhs.ptr = rhs;
+  }
+  /**
+   *  Function to create the kernel argument for SymVector write access.
+   */
+  template <typename T>
+  static inline void create_kernel_arg(const int cellx, const int layerx,
+                                       T ****rhs,
+                                       Access::SymVector::Write<T> &lhs) {
+    lhs.ptr = rhs;
+  }
+  /**
    *  Function to create the kernel argument for LocalArray read access.
    */
   template <typename T>
@@ -718,6 +799,24 @@ protected:
   static inline auto create_loop_arg(ParticleGroup *particle_group,
                                      sycl::handler &cgh,
                                      Access::Write<ParticleDatT<T> *> &a) {
+    return a.obj->impl_get();
+  }
+  /**
+   * Method to compute access to a SymVector (read).
+   */
+  template <typename T>
+  static inline auto create_loop_arg(ParticleGroup *particle_group,
+                                     sycl::handler &cgh,
+                                     Access::Read<SymVector<T> *> &a) {
+    return a.obj->impl_get_const();
+  }
+  /**
+   * Method to compute access to a SymVector (write).
+   */
+  template <typename T>
+  static inline auto create_loop_arg(ParticleGroup *particle_group,
+                                     sycl::handler &cgh,
+                                     Access::Write<SymVector<T> *> &a) {
     return a.obj->impl_get();
   }
   /**

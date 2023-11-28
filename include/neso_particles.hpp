@@ -11,6 +11,7 @@
 #include "compute_target.hpp"
 #include "containers/global_array.hpp"
 #include "containers/local_array.hpp"
+#include "containers/sym_vector.hpp"
 #include "containers/tuple.hpp"
 #include "domain.hpp"
 #include "global_mapping.hpp"
