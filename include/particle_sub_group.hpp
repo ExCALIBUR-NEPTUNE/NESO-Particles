@@ -305,8 +305,13 @@ public:
    *  Launch the ParticleLoop and return. Must be called collectively over the
    *  MPI communicator of the ParticleGroup. Loop execution is complete when
    *  the corresponding call to wait returns.
+   *
+   *  @param cell Argument for api compatibility.
    */
-  inline void submit() override {
+  inline void submit(const std::optional<int> cell = std::nullopt) override {
+    NESOASSERT(cell == std::nullopt,
+               "Executing a ParticleLoop over a single cell of a "
+               "ParticleSubGroup is not supported.");
     NESOASSERT(
         !this->loop_running,
         "ParticleLoop::submit called - but the loop is already submitted.");

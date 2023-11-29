@@ -719,3 +719,34 @@ TEST(ParticleLoop, sym_vector) {
   A->free();
   mesh->free();
 }
+
+TEST(ParticleLoop, single_cell) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  const int cell_count = mesh->get_cell_count();
+  auto sycl_target = A->sycl_target;
+
+  auto pl = particle_loop(
+      A, [=](auto ID) { ID.at(0) = -1; }, Access::write(Sym<INT>("ID")));
+
+  pl->execute(cell_count - 1);
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto id = A->get_dat(Sym<INT>("ID"))->cell_dat.get_cell(cellx);
+    const int nrow = id->nrow;
+
+    // for each particle in the cell
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      if (cellx < (cell_count - 1)) {
+        ASSERT_TRUE((*id)[0][rowx] > -1);
+      } else {
+        ASSERT_EQ((*id)[0][rowx], -1);
+      }
+    }
+  }
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}

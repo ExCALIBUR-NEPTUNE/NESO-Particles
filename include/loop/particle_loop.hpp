@@ -11,6 +11,7 @@
 #include "../particle_spec.hpp"
 #include <CL/sycl.hpp>
 #include <cstdlib>
+#include <optional>
 #include <string>
 #include <tuple>
 #include <typeinfo>
@@ -56,36 +57,52 @@ struct ParticleLoopIterationSet {
    *  Create and return an iteration set which is formed as nbin
    *  sycl::nd_ranges.
    *
+   *  @param cell If set iteration set will only cover this cell.
    *  @param local_size Optional size of SYCL work groups.
    *  @returns Tuple containing: Number of bins, sycl::nd_ranges, cell index
    *  offsets.
    */
   inline std::tuple<int, std::vector<sycl::nd_range<2>> &,
                     std::vector<std::size_t> &>
-  get(const size_t local_size = 256) {
+  get(const std::optional<int> cell = std::nullopt,
+      const size_t local_size = 256) {
     this->iteration_set.clear();
-    this->iteration_set.reserve(nbin);
 
-    for (int binx = 0; binx < nbin; binx++) {
-      int start, end;
-      get_decomp_1d(nbin, ncell, binx, &start, &end);
-      const int bin_width = end - start;
-      this->cell_offsets[binx] = static_cast<std::size_t>(start);
-      int cell_maxi = 0;
-      for (int cellx = start; cellx < end; cellx++) {
-        cell_maxi = std::max(cell_maxi, h_npart_cell[cellx]);
+    if (cell == std::nullopt) {
+      for (int binx = 0; binx < nbin; binx++) {
+        int start, end;
+        get_decomp_1d(nbin, ncell, binx, &start, &end);
+        const int bin_width = end - start;
+        this->cell_offsets[binx] = static_cast<std::size_t>(start);
+        int cell_maxi = 0;
+        for (int cellx = start; cellx < end; cellx++) {
+          cell_maxi = std::max(cell_maxi, h_npart_cell[cellx]);
+        }
+        const auto div_mod = std::div(static_cast<long long>(cell_maxi),
+                                      static_cast<long long>(local_size));
+        const std::size_t outer_size =
+            static_cast<std::size_t>(div_mod.quot +
+                                     (div_mod.rem == 0 ? 0 : 1)) *
+            local_size;
+
+        this->iteration_set.emplace_back(
+            sycl::nd_range<2>(sycl::range<2>(bin_width, outer_size),
+                              sycl::range<2>(1, local_size)));
       }
+      return {this->nbin, this->iteration_set, this->cell_offsets};
+    } else {
+      const int cellx = cell.value();
+      const size_t cell_maxi = static_cast<size_t>(h_npart_cell[cellx]);
       const auto div_mod = std::div(static_cast<long long>(cell_maxi),
                                     static_cast<long long>(local_size));
       const std::size_t outer_size =
           static_cast<std::size_t>(div_mod.quot + (div_mod.rem == 0 ? 0 : 1)) *
           local_size;
-
-      this->iteration_set.emplace_back(
-          sycl::nd_range<2>(sycl::range<2>(bin_width, outer_size),
-                            sycl::range<2>(1, local_size)));
+      this->iteration_set.emplace_back(sycl::nd_range<2>(
+          sycl::range<2>(1, outer_size), sycl::range<2>(1, local_size)));
+      this->cell_offsets[0] = static_cast<std::size_t>(cellx);
+      return {1, this->iteration_set, this->cell_offsets};
     }
-    return {this->nbin, this->iteration_set, this->cell_offsets};
   }
 };
 
@@ -597,14 +614,14 @@ public:
    *  Execute the particle loop and block until completion. Must be called
    *  Collectively on the communicator.
    */
-  virtual inline void execute() = 0;
+  virtual inline void execute(const std::optional<int> cell = std::nullopt) = 0;
 
   /**
    *  Launch the ParticleLoop and return. Must be called collectively over the
    *  MPI communicator of the ParticleGroup. Loop execution is complete when
    *  the corresponding call to wait returns.
    */
-  virtual inline void submit() = 0;
+  virtual inline void submit(const std::optional<int> cell = std::nullopt) = 0;
 
   /**
    * Wait for loop execution to complete. On completion perform post-loop
@@ -1143,16 +1160,18 @@ public:
    *  Launch the ParticleLoop and return. Must be called collectively over the
    *  MPI communicator of the ParticleGroup. Loop execution is complete when
    *  the corresponding call to wait returns.
+   *
+   *  @param cell Optional cell index to only launch the ParticleLoop over.
    */
-  inline void submit() {
+  inline void submit(const std::optional<int> cell = std::nullopt) {
     NESOASSERT(
-        !this->loop_running,
+        (!this->loop_running) || (cell != std::nullopt),
         "ParticleLoop::submit called - but the loop is already submitted.");
     this->loop_running = true;
 
     auto t0 = profile_timestamp();
     auto k_npart_cell = this->d_npart_cell;
-    auto is = this->iteration_set->get();
+    auto is = this->iteration_set->get(cell);
     auto k_kernel = this->kernel;
 
     const int nbin = std::get<0>(is);
@@ -1202,10 +1221,12 @@ public:
    *  Execute the ParticleLoop and block until execution is complete. Must be
    *  called collectively on the MPI communicator associated with the
    *  SYCLTarget this loop is over.
+   *
+   *  @param cell Optional cell to launch the ParticleLoop over.
    */
-  inline void execute() {
+  inline void execute(const std::optional<int> cell = std::nullopt) {
     auto t0 = profile_timestamp();
-    this->submit();
+    this->submit(cell);
     this->wait();
     this->sycl_target->profile_map.inc(
         this->loop_type, this->name, 1,
