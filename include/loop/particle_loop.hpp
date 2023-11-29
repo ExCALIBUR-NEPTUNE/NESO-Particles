@@ -5,10 +5,12 @@
 #include "../compute_target.hpp"
 #include "../containers/global_array.hpp"
 #include "../containers/local_array.hpp"
+#include "../containers/sym_vector.hpp"
 #include "../containers/tuple.hpp"
 #include "../particle_dat.hpp"
-#include "../particle_group.hpp"
 #include "../particle_spec.hpp"
+#include "particle_loop_base.hpp"
+#include "pli_particle_dat.hpp"
 #include <CL/sycl.hpp>
 #include <cstdlib>
 #include <optional>
@@ -16,8 +18,6 @@
 #include <tuple>
 #include <typeinfo>
 #include <vector>
-
-using namespace NESO::Particles;
 
 namespace NESO::Particles::ParticleLoopImplementation {
 
@@ -108,486 +108,15 @@ struct ParticleLoopIterationSet {
 
 } // namespace NESO::Particles::ParticleLoopImplementation
 
-/**
- *  Types and functions relating to access descriptors for loops.
- */
-namespace NESO::Particles::Access {
-
-/**
- * Generic base type for an access descriptor around an object of type T.
- */
-template <typename T> struct AccessGeneric { T obj; };
-
-/**
- *  Read access descriptor.
- */
-template <typename T> struct Read : AccessGeneric<T> {};
-
-/**
- *  Write access descriptor.
- */
-template <typename T> struct Write : AccessGeneric<T> {};
-
-/**
- *  Atomic add access descriptor.
- */
-template <typename T> struct Add : AccessGeneric<T> {};
-
-/**
- *  Helper function that allows a loop to be constructed with a read-only
- *  parameter passed like:
- *
- *    Access::read(object)
- *
- * @param t Object to pass with read-only access.
- * @returns Access::Read object that wraps passed object.
- */
-template <typename T> inline Read<T> read(T t) { return Read<T>{t}; }
-
-/**
- *  Helper function that allows a loop to be constructed with a write
- *  parameter passed like:
- *
- *    Access::write(object)
- *
- * @param t Object to pass with write access.
- * @returns Access::Write object that wraps passed object.
- */
-template <typename T> inline Write<T> write(T t) { return Write<T>{t}; }
-
-/**
- *  Helper function that allows a loop to be constructed with a write
- *  parameter which is atomic addition passed like:
- *
- *    Access::add(object)
- *
- * @param t Object to pass with atomic add access.
- * @returns Access::Add object that wraps passed object.
- */
-template <typename T> inline Add<T> add(T t) { return Add<T>{t}; }
-
-} // namespace NESO::Particles::Access
-
-/**
- *  Defines the access implementations and types for ParticleDat objects.
- */
-namespace NESO::Particles::Access::ParticleDat {
-
-/**
- * Access:ParticleDat::Read<T> and Access:ParticleDat::Read<T> are the
- * kernel argument types for accessing particle data in a kernel.
- */
-template <typename T> struct Read {
-  /// Pointer to underlying data for a cell.
-  T const *const *ptr;
-  /// Stores which particle in the cell this instance refers to.
-  int layer;
-  T const &operator[](const int component) {
-    return ptr[component][this->layer];
-  }
-  T const &at(const int component) { return ptr[component][this->layer]; }
-};
-
-template <typename T> struct Write {
-  /// Pointer to underlying data for a cell.
-  T **ptr;
-  /// Stores which particle in the cell this instance refers to.
-  int layer;
-  T &operator[](const int component) { return ptr[component][this->layer]; }
-  T &at(const int component) { return ptr[component][this->layer]; }
-};
-
-} // namespace NESO::Particles::Access::ParticleDat
-
-/**
- * The type to pass to a ParticleLoop to read the ParticleLoop loop index in a
- * kernel.
- */
-struct ParticleLoopIndex {};
-
-/**
- * Defines the access type for the cell, layer indexing.
- */
-namespace NESO::Particles::Access::LoopIndex {
-/**
- * ParticleLoop index containing the cell and layer.
- */
-struct Read {
-  /// The cell containing the particle.
-  INT cell;
-  /// The layer of the particle.
-  INT layer;
-};
-
-} // namespace NESO::Particles::Access::LoopIndex
-
-/**
- *  Defines the access implementations and types for ParticleDat objects.
- */
-namespace NESO::Particles::Access::SymVector {
-
-/**
- * Access:SymVector::Read<T> and Access:SymVector::Read<T> are the
- * kernel argument types for accessing particle data in a kernel via a
- * SymVector.
- */
-template <typename T> struct Read {
-  /// Pointer to underlying data.
-  T *const *const **ptr;
-  T const &at(const int dat_index, const int cell, const int layer,
-              const int component) {
-    return ptr[dat_index][cell][component][layer];
-  }
-  T const &at(const int dat_index,
-              const Access::LoopIndex::Read &particle_index,
-              const int component) {
-    return ptr[dat_index][particle_index.cell][component][particle_index.layer];
-  }
-};
-
-template <typename T> struct Write {
-  /// Pointer to underlying data.
-  T ****ptr;
-  T &at(const int dat_index, const int cell, const int layer,
-        const int component) {
-    return ptr[dat_index][cell][component][layer];
-  }
-  T &at(const int dat_index, const Access::LoopIndex::Read &particle_index,
-        const int component) {
-    return ptr[dat_index][particle_index.cell][component][particle_index.layer];
-  }
-};
-
-} // namespace NESO::Particles::Access::SymVector
-
-/**
- *  Defines the access implementations and types for LocalArray objects.
- */
-namespace NESO::Particles::Access::LocalArray {
-
-/**
- * Access:LocalArray::Read<T>, Access::LocalArray::Write<T> and
- * Access:LocalArray::Add<T> are the kernel argument types for accessing
- * LocalArray data in a kernel.
- */
-/**
- * ParticleLoop access type for LocalArray Read access.
- */
-template <typename T> struct Read {
-  /// Pointer to underlying data for the array.
-  Read() = default;
-  T const *ptr;
-  const T at(const int component) { return ptr[component]; }
-  const T &operator[](const int component) { return ptr[component]; }
-};
-
-/**
- * ParticleLoop access type for LocalArray Add access.
- */
-template <typename T> struct Add {
-  /// Pointer to underlying data for the array.
-  Add() = default;
-  T *ptr;
-  /**
-   * The local array is local to the MPI rank where the partial sum is a
-   * meaningful value.
-   */
-  inline T fetch_add(const int component, const T value) {
-    sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>
-        element_atomic(ptr[component]);
-    return element_atomic.fetch_add(value);
-  }
-};
-
-/**
- * ParticleLoop access type for LocalArray Write access.
- */
-template <typename T> struct Write {
-  /// Pointer to underlying data for the array.
-  Write() = default;
-  T *ptr;
-  T at(const int component) { return ptr[component]; }
-  T &operator[](const int component) { return ptr[component]; }
-};
-
-} // namespace NESO::Particles::Access::LocalArray
-
-/**
- *  Defines the access implementations and types for GlobalArray objects.
- */
-namespace NESO::Particles::Access::GlobalArray {
-
-/**
- * Access:GlobalArray::Read<T> and Access:GlobalArray::Add<T> are the
- * kernel argument types for accessing GlobalArray data in a kernel.
- */
-template <typename T> struct Read {
-  /// Pointer to underlying data for the array.
-  Read() = default;
-  T const *ptr;
-  inline const T at(const int component) { return ptr[component]; }
-  inline const T &operator[](const int component) { return ptr[component]; }
-};
-
-/**
- * Access:GlobalArray::Read<T> and Access:GlobalArray::Add<T> are the
- * kernel argument types for accessing GlobalArray data in a kernel.
- */
-template <typename T> struct Add {
-  /// Pointer to underlying data for the array.
-  Add() = default;
-  T *ptr;
-  /**
-   * This does not return a value as the returned value would be a partial sum
-   * on this MPI rank.
-   */
-  inline void add(const int component, const T value) {
-    sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>
-        element_atomic(ptr[component]);
-    element_atomic.fetch_add(value);
-  }
-};
-
-} // namespace NESO::Particles::Access::GlobalArray
-
-/**
- *  Defines the access implementations and types for GlobalArray objects.
- */
-namespace NESO::Particles::Access::CellDatConst {
-
-/**
- * Access:CellDatConst::Read<T> and Access:CellDatConst::Add<T> are the
- * kernel argument types for accessing CellDatConst data in a kernel.
- */
-template <typename T> struct Read {
-  /// Pointer to underlying data for the array.
-  Read() = default;
-  T const *ptr;
-  int nrow;
-  inline const T at(const int row, const int col) {
-    return ptr[nrow * col + row];
-  }
-  inline const T &operator[](const int component) { return ptr[component]; }
-};
-
-/**
- * Access:CellDatConst::Read<T> and Access:CellDatConst::Add<T> are the
- * kernel argument types for accessing CellDatConst data in a kernel.
- */
-template <typename T> struct Add {
-  /// Pointer to underlying data for the array.
-  Add() = default;
-  T *ptr;
-  int nrow;
-  inline T fetch_add(const int row, const int col, const T value) {
-    sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>
-        element_atomic(ptr[nrow * col + row]);
-    return element_atomic.fetch_add(value);
-  }
-};
-
-} // namespace NESO::Particles::Access::CellDatConst
-
 namespace NESO::Particles {
 
-namespace {
-
-/**
- * The LoopParameter types define the type collected from a data structure
- * prior to calling the loop. The loop is responsible for computing the kernel
- * argument from the loop argument. e.g. in the ParticleDat case the
- * LoopParameter is the pointer type that points to the data for all cells,
- * layers and components.
- */
-template <typename T> struct LoopParameter { using type = void *; };
-/**
- *  Loop parameter for read access of a ParticleDat via Sym.
- */
-template <typename T> struct LoopParameter<Access::Read<Sym<T>>> {
-  using type = T *const *const *;
-};
-/**
- *  Loop parameter for write access of a ParticleDat via Sym.
- */
-template <typename T> struct LoopParameter<Access::Write<Sym<T>>> {
-  using type = T ***;
-};
-/**
- *  Loop parameter for read access of a ParticleDat.
- */
-template <typename T> struct LoopParameter<Access::Read<ParticleDatT<T>>> {
-  using type = T *const *const *;
-};
-/**
- *  Loop parameter for write access of a ParticleDat.
- */
-template <typename T> struct LoopParameter<Access::Write<ParticleDatT<T>>> {
-  using type = T ***;
-};
-/**
- *  Loop parameter for read access of a SymVector.
- */
-template <typename T> struct LoopParameter<Access::Read<SymVector<T>>> {
-  using type = T *const *const **;
-};
-/**
- *  Loop parameter for write access of a SymVector.
- */
-template <typename T> struct LoopParameter<Access::Write<SymVector<T>>> {
-  using type = T ****;
-};
-/**
- *  Loop parameter for read access of a LocalArray.
- */
-template <typename T> struct LoopParameter<Access::Read<LocalArray<T>>> {
-  using type = T const *;
-};
-/**
- *  Loop parameter for write access of a LocalArray.
- */
-template <typename T> struct LoopParameter<Access::Write<LocalArray<T>>> {
-  using type = T *;
-};
-/**
- *  Loop parameter for add access of a LocalArray.
- */
-template <typename T> struct LoopParameter<Access::Add<LocalArray<T>>> {
-  using type = T *;
-};
-/**
- *  Loop parameter for read access of a GlobalArray.
- */
-template <typename T> struct LoopParameter<Access::Read<GlobalArray<T>>> {
-  using type = T const *;
-};
-/**
- *  Loop parameter for add access of a GlobalArray.
- */
-template <typename T> struct LoopParameter<Access::Add<GlobalArray<T>>> {
-  using type = T *;
-};
-/**
- *  Loop parameter for read access of a ParticleLoopIndex.
- */
-template <> struct LoopParameter<Access::Read<ParticleLoopIndex>> {
-  using type = void *;
-};
-/**
- *  Loop parameter for read access of a CellDatConst.
- */
-template <typename T> struct LoopParameter<Access::Read<CellDatConst<T>>> {
-  using type = CellDatConstDeviceTypeConst<T>;
-};
-/**
- *  Loop parameter for add access of a CellDatConst.
- */
-template <typename T> struct LoopParameter<Access::Add<CellDatConst<T>>> {
-  using type = CellDatConstDeviceType<T>;
-};
+namespace ParticleLoopImplementation {
 /**
  * Catch all for args passed as shared ptrs
  */
 template <template <typename> typename T, typename U>
 struct LoopParameter<T<std::shared_ptr<U>>> {
   using type = typename LoopParameter<T<U>>::type;
-};
-
-/**
- *  This is a metafunction which is passed a input data type and returns the
- *  LoopParamter type that corresponds to the input type (by using the structs
- * defined above).
- */
-template <class T> using loop_parameter_t = typename LoopParameter<T>::type;
-
-/**
- * The KernelParameter types define the types passed to the kernel for each
- * data structure type for each access descriptor.
- */
-template <typename T> struct KernelParameter { using type = void; };
-
-/**
- *  KernelParameter type for read-only access to a ParticleDat - via Sym.
- */
-template <typename T> struct KernelParameter<Access::Read<Sym<T>>> {
-  using type = Access::ParticleDat::Read<T>;
-};
-/**
- *  KernelParameter type for write access to a ParticleDat - via Sym.
- */
-template <typename T> struct KernelParameter<Access::Write<Sym<T>>> {
-  using type = Access::ParticleDat::Write<T>;
-};
-/**
- *  KernelParameter type for read-only access to a ParticleDat.
- */
-template <typename T> struct KernelParameter<Access::Read<ParticleDatT<T>>> {
-  using type = Access::ParticleDat::Read<T>;
-};
-/**
- *  KernelParameter type for write access to a ParticleDat.
- */
-template <typename T> struct KernelParameter<Access::Write<ParticleDatT<T>>> {
-  using type = Access::ParticleDat::Write<T>;
-};
-/**
- *  KernelParameter type for read-only access to a SymVector.
- */
-template <typename T> struct KernelParameter<Access::Read<SymVector<T>>> {
-  using type = Access::SymVector::Read<T>;
-};
-/**
- *  KernelParameter type for write access to a SymVector.
- */
-template <typename T> struct KernelParameter<Access::Write<SymVector<T>>> {
-  using type = Access::SymVector::Write<T>;
-};
-/**
- *  KernelParameter type for read access to a LocalArray.
- */
-template <typename T> struct KernelParameter<Access::Read<LocalArray<T>>> {
-  using type = Access::LocalArray::Read<T>;
-};
-/**
- *  KernelParameter type for write access to a LocalArray.
- */
-template <typename T> struct KernelParameter<Access::Write<LocalArray<T>>> {
-  using type = Access::LocalArray::Write<T>;
-};
-/**
- *  KernelParameter type for add access to a LocalArray.
- */
-template <typename T> struct KernelParameter<Access::Add<LocalArray<T>>> {
-  using type = Access::LocalArray::Add<T>;
-};
-/**
- *  KernelParameter type for read access to a GlobalArray.
- */
-template <typename T> struct KernelParameter<Access::Read<GlobalArray<T>>> {
-  using type = Access::GlobalArray::Read<T>;
-};
-/**
- *  KernelParameter type for add access to a GlobalArray.
- */
-template <typename T> struct KernelParameter<Access::Add<GlobalArray<T>>> {
-  using type = Access::GlobalArray::Add<T>;
-};
-/**
- *  KernelParameter type for read access to a CellDatConst.
- */
-template <typename T> struct KernelParameter<Access::Read<CellDatConst<T>>> {
-  using type = Access::CellDatConst::Read<T>;
-};
-/**
- *  KernelParameter type for add access to a CellDatConst.
- */
-template <typename T> struct KernelParameter<Access::Add<CellDatConst<T>>> {
-  using type = Access::CellDatConst::Add<T>;
-};
-/**
- *  KernelParameter type for read-only access to a ParticleLoopIndex.
- */
-template <> struct KernelParameter<Access::Read<ParticleLoopIndex>> {
-  using type = Access::LoopIndex::Read;
 };
 /**
  * Catch all for args passed as shared ptrs
@@ -597,39 +126,27 @@ struct KernelParameter<T<std::shared_ptr<U>>> {
   using type = typename KernelParameter<T<U>>::type;
 };
 
+} // namespace ParticleLoopImplementation
+
+namespace {
+
+/**
+ *  This is a metafunction which is passed a input data type and returns the
+ *  LoopParamter type that corresponds to the input type (by using the structs
+ * defined above).
+ */
+template <class T>
+using loop_parameter_t =
+    typename ParticleLoopImplementation::LoopParameter<T>::type;
+
 /**
  *  Function to map access descriptor and data structure type to kernel type.
  */
-template <class T> using kernel_parameter_t = typename KernelParameter<T>::type;
+template <class T>
+using kernel_parameter_t =
+    typename ParticleLoopImplementation::KernelParameter<T>::type;
 
 } // namespace
-
-/**
- * Abstract base class for ParticleLoop such that the templated ParticleLoop
- * can be cast to a base type for storage.
- */
-class ParticleLoopBase {
-public:
-  /**
-   *  Execute the particle loop and block until completion. Must be called
-   *  Collectively on the communicator.
-   */
-  virtual inline void execute(const std::optional<int> cell = std::nullopt) = 0;
-
-  /**
-   *  Launch the ParticleLoop and return. Must be called collectively over the
-   *  MPI communicator of the ParticleGroup. Loop execution is complete when
-   *  the corresponding call to wait returns.
-   */
-  virtual inline void submit(const std::optional<int> cell = std::nullopt) = 0;
-
-  /**
-   * Wait for loop execution to complete. On completion perform post-loop
-   * actions. Must be called collectively on communicator.
-   */
-  virtual inline void wait() = 0;
-};
-typedef std::shared_ptr<ParticleLoopBase> ParticleLoopSharedPtr;
 
 // clang-format off
 /**
@@ -650,267 +167,6 @@ template <typename KERNEL, typename... ARGS>
 class ParticleLoop : public ParticleLoopBase {
 
 protected:
-  /*
-   * =================================================================
-   */
-
-  /**
-   * create_kernel_arg is overloaded for each valid pair of access descriptor
-   * and data structure which can be passesd to a loop.
-   */
-  /**
-   *  Function to create the kernel argument for ParticleDat read access.
-   */
-  template <typename T>
-  static inline void create_kernel_arg(const int cellx, const int layerx,
-                                       T *const *const *rhs,
-                                       Access::ParticleDat::Read<T> &lhs) {
-    lhs.layer = layerx;
-    lhs.ptr = rhs[cellx];
-  }
-  /**
-   *  Function to create the kernel argument for ParticleDat write access.
-   */
-  template <typename T>
-  static inline void create_kernel_arg(const int cellx, const int layerx,
-                                       T ***rhs,
-                                       Access::ParticleDat::Write<T> &lhs) {
-    lhs.layer = layerx;
-    lhs.ptr = rhs[cellx];
-  }
-  /**
-   *  Function to create the kernel argument for SymVector read access.
-   */
-  template <typename T>
-  static inline void create_kernel_arg(const int cellx, const int layerx,
-                                       T *const *const **rhs,
-                                       Access::SymVector::Read<T> &lhs) {
-    lhs.ptr = rhs;
-  }
-  /**
-   *  Function to create the kernel argument for SymVector write access.
-   */
-  template <typename T>
-  static inline void create_kernel_arg(const int cellx, const int layerx,
-                                       T ****rhs,
-                                       Access::SymVector::Write<T> &lhs) {
-    lhs.ptr = rhs;
-  }
-  /**
-   *  Function to create the kernel argument for LocalArray read access.
-   */
-  template <typename T>
-  static inline void create_kernel_arg(const int cellx, const int layerx,
-                                       T const *rhs,
-                                       Access::LocalArray::Read<T> &lhs) {
-    lhs.ptr = rhs;
-  }
-  /**
-   *  Function to create the kernel argument for LocalArray write access.
-   */
-  template <typename T>
-  static inline void create_kernel_arg(const int cellx, const int layerx,
-                                       T *rhs,
-                                       Access::LocalArray::Write<T> &lhs) {
-    lhs.ptr = rhs;
-  }
-  /**
-   *  Function to create the kernel argument for LocalArray add access.
-   */
-  template <typename T>
-  static inline void create_kernel_arg(const int cellx, const int layerx,
-                                       T *rhs,
-                                       Access::LocalArray::Add<T> &lhs) {
-    lhs.ptr = rhs;
-  }
-  /**
-   *  Function to create the kernel argument for GlobalArray read access.
-   */
-  template <typename T>
-  static inline void create_kernel_arg(const int cellx, const int layerx,
-                                       T const *rhs,
-                                       Access::GlobalArray::Read<T> &lhs) {
-    lhs.ptr = rhs;
-  }
-  /**
-   *  Function to create the kernel argument for GlobalArray add access.
-   */
-  template <typename T>
-  static inline void create_kernel_arg(const int cellx, const int layerx,
-                                       T *rhs,
-                                       Access::GlobalArray::Add<T> &lhs) {
-    lhs.ptr = rhs;
-  }
-  /**
-   *  Function to create the kernel argument for CellDatConst read access.
-   */
-  template <typename T>
-  static inline void create_kernel_arg(const int cellx, const int layerx,
-                                       CellDatConstDeviceTypeConst<T> &rhs,
-                                       Access::CellDatConst::Read<T> &lhs) {
-    T const *ptr = rhs.ptr + cellx * rhs.stride;
-    lhs.ptr = ptr;
-    lhs.nrow = rhs.nrow;
-  }
-  /**
-   *  Function to create the kernel argument for CellDatConst add access.
-   */
-  template <typename T>
-  static inline void create_kernel_arg(const int cellx, const int layerx,
-                                       CellDatConstDeviceType<T> &rhs,
-                                       Access::CellDatConst::Add<T> &lhs) {
-    T *ptr = rhs.ptr + cellx * rhs.stride;
-    lhs.ptr = ptr;
-    lhs.nrow = rhs.nrow;
-  }
-  /**
-   *  Function to create the kernel argument for ParticleLoopIndex read access.
-   */
-  static inline void create_kernel_arg(const int cellx, const int layerx,
-                                       void *, Access::LoopIndex::Read &lhs) {
-    lhs.cell = cellx;
-    lhs.layer = layerx;
-  }
-
-  /*
-   * -----------------------------------------------------------------
-   */
-
-  /**
-   *  create_loop_arg is defined for each container and valid access type
-   *  combination.
-   */
-  /**
-   * Method to compute access to a particle dat (read) - via Sym.
-   */
-  template <typename T>
-  static inline auto create_loop_arg(ParticleGroup *particle_group,
-                                     sycl::handler &cgh,
-                                     Access::Read<Sym<T> *> &a) {
-    auto sym = *a.obj;
-    return particle_group->get_dat(sym)->impl_get_const();
-  }
-  /**
-   * Method to compute access to a particle dat (write) - via Sym
-   */
-  template <typename T>
-  static inline auto create_loop_arg(ParticleGroup *particle_group,
-                                     sycl::handler &cgh,
-                                     Access::Write<Sym<T> *> &a) {
-    auto sym = *a.obj;
-    return particle_group->get_dat(sym)->impl_get();
-  }
-  /**
-   * Method to compute access to a particle dat (read).
-   */
-  template <typename T>
-  static inline auto create_loop_arg(ParticleGroup *particle_group,
-                                     sycl::handler &cgh,
-                                     Access::Read<ParticleDatT<T> *> &a) {
-    return a.obj->impl_get_const();
-  }
-  /**
-   * Method to compute access to a particle dat (write).
-   */
-  template <typename T>
-  static inline auto create_loop_arg(ParticleGroup *particle_group,
-                                     sycl::handler &cgh,
-                                     Access::Write<ParticleDatT<T> *> &a) {
-    return a.obj->impl_get();
-  }
-  /**
-   * Method to compute access to a SymVector (read).
-   */
-  template <typename T>
-  static inline auto create_loop_arg(ParticleGroup *particle_group,
-                                     sycl::handler &cgh,
-                                     Access::Read<SymVector<T> *> &a) {
-    return a.obj->impl_get_const();
-  }
-  /**
-   * Method to compute access to a SymVector (write).
-   */
-  template <typename T>
-  static inline auto create_loop_arg(ParticleGroup *particle_group,
-                                     sycl::handler &cgh,
-                                     Access::Write<SymVector<T> *> &a) {
-    return a.obj->impl_get();
-  }
-  /**
-   * Method to compute access to a LocalArray (read)
-   */
-  template <typename T>
-  static inline auto create_loop_arg(ParticleGroup *particle_group,
-                                     sycl::handler &cgh,
-                                     Access::Read<LocalArray<T> *> &a) {
-    return a.obj->impl_get_const();
-  }
-  /**
-   * Method to compute access to a LocalArray (write)
-   */
-  template <typename T>
-  static inline auto create_loop_arg(ParticleGroup *particle_group,
-                                     sycl::handler &cgh,
-                                     Access::Write<LocalArray<T> *> &a) {
-    return a.obj->impl_get();
-  }
-  /**
-   * Method to compute access to a LocalArray (add)
-   */
-  template <typename T>
-  static inline auto create_loop_arg(ParticleGroup *particle_group,
-                                     sycl::handler &cgh,
-                                     Access::Add<LocalArray<T> *> &a) {
-    return a.obj->impl_get();
-  }
-
-  /**
-   * Method to compute access to a GlobalArray (read)
-   */
-  template <typename T>
-  static inline auto create_loop_arg(ParticleGroup *particle_group,
-                                     sycl::handler &cgh,
-                                     Access::Read<GlobalArray<T> *> &a) {
-    return a.obj->impl_get_const();
-  }
-  /**
-   * Method to compute access to a GlobalArray (add)
-   */
-  template <typename T>
-  static inline auto create_loop_arg(ParticleGroup *particle_group,
-                                     sycl::handler &cgh,
-                                     Access::Add<GlobalArray<T> *> &a) {
-    return a.obj->impl_get();
-  }
-
-  /**
-   * Method to compute access to a CellDatConst (read)
-   */
-  template <typename T>
-  static inline auto create_loop_arg(ParticleGroup *particle_group,
-                                     sycl::handler &cgh,
-                                     Access::Read<CellDatConst<T> *> &a) {
-    return a.obj->impl_get_const();
-  }
-  /**
-   * Method to compute access to a CellDatConst (add)
-   */
-  template <typename T>
-  static inline auto create_loop_arg(ParticleGroup *particle_group,
-                                     sycl::handler &cgh,
-                                     Access::Add<CellDatConst<T> *> &a) {
-    return a.obj->impl_get();
-  }
-
-  /**
-   * Method to compute access to a ParticleLoopIndex (read)
-   */
-  static inline void *create_loop_arg(ParticleGroup *particle_group,
-                                      sycl::handler &cgh,
-                                      Access::Read<ParticleLoopIndex *> &a) {
-    return nullptr;
-  }
-
   /**
    * Method to compute access to a type wrapped in a shared_ptr.
    */
@@ -919,7 +175,7 @@ protected:
                                           sycl::handler &cgh,
                                           T<std::shared_ptr<U>> a) {
     T<U *> c = {a.obj.get()};
-    return create_loop_arg(particle_group, cgh, c);
+    return ParticleLoopImplementation::create_loop_arg(particle_group, cgh, c);
   }
   /**
    * Method to compute access to a type not wrapper in a shared_ptr
@@ -928,29 +184,12 @@ protected:
   static inline auto create_loop_arg_cast(ParticleGroup *particle_group,
                                           sycl::handler &cgh, T<U> a) {
     T<U *> c = {&a.obj};
-    return create_loop_arg(particle_group, cgh, c);
+    return ParticleLoopImplementation::create_loop_arg(particle_group, cgh, c);
   }
 
   /*
    * -----------------------------------------------------------------
    */
-
-  /**
-   * The functions to run for each argument to the kernel post loop completion.
-   */
-  /**
-   * Default post loop execution function.
-   */
-  template <typename T>
-  static inline void post_loop(ParticleGroup *particle_group, T &arg) {}
-  /**
-   * Post loop execution function for GlobalArray write.
-   */
-  template <typename T>
-  static inline void post_loop(ParticleGroup *particle_group,
-                               Access::Add<GlobalArray<T> *> &arg) {
-    arg.obj->impl_post_loop_add();
-  }
 
   /**
    * Method to compute access to a type wrapped in a shared_ptr.
@@ -959,7 +198,7 @@ protected:
   static inline auto post_loop_cast(ParticleGroup *particle_group,
                                     T<std::shared_ptr<U>> a) {
     T<U *> c = {a.obj.get()};
-    post_loop(particle_group, c);
+    ParticleLoopImplementation::post_loop(particle_group, c);
   }
   /**
    * Method to compute access to a type not wrapper in a shared_ptr
@@ -967,7 +206,7 @@ protected:
   template <template <typename> typename T, typename U>
   static inline auto post_loop_cast(ParticleGroup *particle_group, T<U> a) {
     T<U *> c = {&a.obj};
-    post_loop(particle_group, c);
+    ParticleLoopImplementation::post_loop(particle_group, c);
   }
 
   /*
@@ -1016,7 +255,8 @@ protected:
 
     if constexpr (INDEX < SIZE) {
       auto arg = Tuple::get<INDEX>(loop_args);
-      create_kernel_arg(cellx, layerx, arg, Tuple::get<INDEX>(kernel_args));
+      ParticleLoopImplementation::create_kernel_arg(
+          cellx, layerx, arg, Tuple::get<INDEX>(kernel_args));
       create_kernel_args_inner<INDEX + 1, SIZE>(cellx, layerx, loop_args,
                                                 kernel_args);
     }

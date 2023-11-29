@@ -10,6 +10,7 @@
 #include "access.hpp"
 #include "cell_dat.hpp"
 #include "compute_target.hpp"
+#include "loop/access_descriptors.hpp"
 #include "particle_set.hpp"
 #include "particle_spec.hpp"
 #include "typedefs.hpp"
@@ -31,6 +32,43 @@ class LayerCompressor;
 class ParticlePacker;
 class ParticleUnpacker;
 
+template <typename T> using ParticleDatImplGetT = T ***;
+template <typename T> using ParticleDatImplGetConstT = T *const *const *;
+class ParticleGroup;
+
+namespace ParticleLoopImplementation {
+
+/**
+ * Method to compute access to a particle dat (read) - via Sym.
+ */
+template <typename T>
+inline ParticleDatImplGetConstT<T>
+create_loop_arg(ParticleGroup *particle_group, sycl::handler &cgh,
+                Access::Read<Sym<T> *> &a);
+/**
+ * Method to compute access to a particle dat (write) - via Sym
+ */
+template <typename T>
+inline ParticleDatImplGetT<T> create_loop_arg(ParticleGroup *particle_group,
+                                              sycl::handler &cgh,
+                                              Access::Write<Sym<T> *> &a);
+/**
+ * Method to compute access to a particle dat (read).
+ */
+template <typename T>
+inline ParticleDatImplGetConstT<T>
+create_loop_arg(ParticleGroup *particle_group, sycl::handler &cgh,
+                Access::Read<ParticleDatT<T> *> &a);
+/**
+ * Method to compute access to a particle dat (write).
+ */
+template <typename T>
+inline ParticleDatImplGetT<T>
+create_loop_arg(ParticleGroup *particle_group, sycl::handler &cgh,
+                Access::Write<ParticleDatT<T> *> &a);
+
+} // namespace ParticleLoopImplementation
+
 /**
  *  Wrapper around a CellDat to store particle data on a per cell basis.
  */
@@ -44,6 +82,22 @@ template <typename T> class ParticleDatT {
   friend class LayerCompressor;
   friend class ParticlePacker;
   friend class ParticleUnpacker;
+  friend ParticleDatImplGetConstT<T>
+  ParticleLoopImplementation::create_loop_arg<T>(ParticleGroup *particle_group,
+                                                 sycl::handler &cgh,
+                                                 Access::Read<Sym<T> *> &a);
+  friend ParticleDatImplGetT<T>
+  ParticleLoopImplementation::create_loop_arg<T>(ParticleGroup *particle_group,
+                                                 sycl::handler &cgh,
+                                                 Access::Write<Sym<T> *> &a);
+
+  friend ParticleDatImplGetConstT<T>
+  ParticleLoopImplementation::create_loop_arg<T>(
+      ParticleGroup *particle_group, sycl::handler &cgh,
+      Access::Read<ParticleDatT<T> *> &a);
+  friend ParticleDatImplGetT<T> ParticleLoopImplementation::create_loop_arg<T>(
+      ParticleGroup *particle_group, sycl::handler &cgh,
+      Access::Write<ParticleDatT<T> *> &a);
 
 private:
 protected:
@@ -65,7 +119,7 @@ protected:
    * from ParticleLoop. These pointers must not be cached then used later
    * without recalling this function.
    */
-  inline T ***impl_get() {
+  inline ParticleDatImplGetT<T> impl_get() {
     // write_callback is called in the cell dat
     return this->cell_dat.impl_get();
   }
@@ -75,7 +129,7 @@ protected:
    * from ParticleLoop. These pointers must not be cached then used later
    * without recalling this function.
    */
-  inline T *const *const *impl_get_const() {
+  inline ParticleDatImplGetConstT<T> impl_get_const() {
     return this->cell_dat.impl_get_const();
   }
 

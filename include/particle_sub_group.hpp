@@ -9,8 +9,6 @@
 #include <tuple>
 #include <type_traits>
 
-using namespace NESO::Particles;
-
 namespace NESO::Particles {
 
 namespace ParticleSubGroupImplementation {
