@@ -137,8 +137,6 @@ class ParticleSubGroup {
   friend class ParticleLoopSubGroup;
 
 protected:
-  const int loop_type_int = 1;
-
   ParticleGroupSharedPtr particle_group;
   ParticleSubGroupImplementation::SubGroupSelector selector;
 
@@ -244,6 +242,14 @@ public:
     }
     return false;
   }
+
+  /**
+   * @return The number of particles currently in the ParticleSubGroup.
+   */
+  inline INT get_npart_local() {
+    this->create_if_required();
+    return this->npart_local;
+  }
 };
 
 typedef std::shared_ptr<ParticleSubGroup> ParticleSubGroupSharedPtr;
@@ -262,6 +268,8 @@ protected:
   using typename ParticleLoop<KERNEL, ARGS...>::kernel_parameter_type;
   using ParticleLoop<KERNEL, ARGS...>::create_loop_args;
   using ParticleLoop<KERNEL, ARGS...>::create_kernel_args;
+
+  virtual inline int get_loop_type_int() override { return 1; }
 
 public:
   /**

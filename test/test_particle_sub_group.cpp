@@ -282,3 +282,90 @@ TEST(ParticleSubGroup, creating) {
   sycl_target->free();
   mesh->free();
 }
+
+TEST(ParticleSubGroup, particle_loop_index) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  const int cell_count = mesh->get_cell_count();
+  auto sycl_target = A->sycl_target;
+
+  auto aa = std::make_shared<ParticleSubGroup>(
+      A, [=](auto ID) { return ID[0] % 2 == 0; }, Access::read(Sym<INT>("ID")));
+
+  auto pl_reset = particle_loop(
+      A, [=](auto MARKER) { MARKER[0] = -1; },
+      Access::write(Sym<INT>("MARKER")));
+  pl_reset->execute();
+
+  auto pl = particle_loop(
+      aa,
+      [=](auto MARKER, auto index) {
+        MARKER[0] = index.get_global_linear_index();
+      },
+      Access::write(Sym<INT>("MARKER")), Access::read(ParticleLoopIndex{}));
+  pl->execute();
+
+  INT index = 0;
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto marker = A->get_dat(Sym<INT>("MARKER"))->cell_dat.get_cell(cellx);
+    auto id = A->get_dat(Sym<INT>("ID"))->cell_dat.get_cell(cellx);
+    const int nrow = marker->nrow;
+    // for each particle in the cell
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      const INT mx = (*marker)[0][rowx];
+      const INT ix = (*id)[0][rowx];
+      if (ix % 2 == 0) {
+        ASSERT_EQ(mx, index);
+      } else {
+        ASSERT_EQ(mx, -1);
+      }
+      index++;
+    }
+  }
+
+  std::vector<INT> gav = {0};
+  auto ga = std::make_shared<LocalArray<INT>>(sycl_target, gav);
+  pl = particle_loop(
+      aa,
+      [=](auto MARKER, auto index, auto GA) {
+        MARKER[0] = index.get_loop_linear_index();
+        GA.fetch_add(0, 1);
+      },
+      Access::write(Sym<INT>("MARKER")), Access::read(ParticleLoopIndex{}),
+      Access::add(ga));
+
+  pl_reset->execute();
+  pl->execute();
+  gav = ga->get();
+  const int npart_la = gav.at(0);
+
+  std::set<INT> found_indices;
+  const INT npart = aa->get_npart_local();
+  index = 0;
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto marker = A->get_dat(Sym<INT>("MARKER"))->cell_dat.get_cell(cellx);
+    auto id = A->get_dat(Sym<INT>("ID"))->cell_dat.get_cell(cellx);
+    const int nrow = marker->nrow;
+    // for each particle in the cell
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      const INT mx = (*marker)[0][rowx];
+      const INT ix = (*id)[0][rowx];
+      if (ix % 2 == 0) {
+        ASSERT_TRUE(mx < npart);
+        ASSERT_TRUE(mx > -1);
+        found_indices.insert(mx);
+        index++;
+      } else {
+        ASSERT_EQ(mx, -1);
+      }
+    }
+  }
+  ASSERT_EQ(npart_la, npart);
+  ASSERT_EQ(index, npart);
+  ASSERT_EQ(found_indices.size(), npart);
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}

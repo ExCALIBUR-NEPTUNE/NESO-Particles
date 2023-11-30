@@ -168,7 +168,6 @@ template <typename KERNEL, typename... ARGS>
 class ParticleLoop : public ParticleLoopBase {
 
 protected:
-  const int loop_type_int = 0;
   /**
    * Method to compute access to a type wrapped in a shared_ptr.
    */
@@ -321,13 +320,15 @@ protected:
     check_is_sym_inner(arg.obj);
   }
 
+  virtual inline int get_loop_type_int() { return 0; }
+
   inline ParticleLoopImplementation::ParticleLoopGlobalInfo
   create_global_info() {
     ParticleLoopImplementation::ParticleLoopGlobalInfo global_info;
     global_info.particle_group = this->particle_group_ptr;
     global_info.d_npart_cell_es = this->d_npart_cell_es;
     global_info.starting_cell = 0;
-    global_info.loop_type_int = this->loop_type_int;
+    global_info.loop_type_int = this->get_loop_type_int();
     return global_info;
   }
 
