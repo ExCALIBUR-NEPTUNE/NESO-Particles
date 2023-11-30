@@ -43,28 +43,28 @@ namespace ParticleLoopImplementation {
  */
 template <typename T>
 inline ParticleDatImplGetConstT<T>
-create_loop_arg(ParticleGroup *particle_group, sycl::handler &cgh,
+create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
                 Access::Read<Sym<T> *> &a);
 /**
  * Method to compute access to a particle dat (write) - via Sym
  */
 template <typename T>
-inline ParticleDatImplGetT<T> create_loop_arg(ParticleGroup *particle_group,
-                                              sycl::handler &cgh,
-                                              Access::Write<Sym<T> *> &a);
+inline ParticleDatImplGetT<T>
+create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
+                Access::Write<Sym<T> *> &a);
 /**
  * Method to compute access to a particle dat (read).
  */
 template <typename T>
 inline ParticleDatImplGetConstT<T>
-create_loop_arg(ParticleGroup *particle_group, sycl::handler &cgh,
+create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
                 Access::Read<ParticleDatT<T> *> &a);
 /**
  * Method to compute access to a particle dat (write).
  */
 template <typename T>
 inline ParticleDatImplGetT<T>
-create_loop_arg(ParticleGroup *particle_group, sycl::handler &cgh,
+create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
                 Access::Write<ParticleDatT<T> *> &a);
 
 } // namespace ParticleLoopImplementation
@@ -83,21 +83,20 @@ template <typename T> class ParticleDatT {
   friend class ParticlePacker;
   friend class ParticleUnpacker;
   friend ParticleDatImplGetConstT<T>
-  ParticleLoopImplementation::create_loop_arg<T>(ParticleGroup *particle_group,
-                                                 sycl::handler &cgh,
-                                                 Access::Read<Sym<T> *> &a);
-  friend ParticleDatImplGetT<T>
-  ParticleLoopImplementation::create_loop_arg<T>(ParticleGroup *particle_group,
-                                                 sycl::handler &cgh,
-                                                 Access::Write<Sym<T> *> &a);
+  ParticleLoopImplementation::create_loop_arg<T>(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      sycl::handler &cgh, Access::Read<Sym<T> *> &a);
+  friend ParticleDatImplGetT<T> ParticleLoopImplementation::create_loop_arg<T>(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      sycl::handler &cgh, Access::Write<Sym<T> *> &a);
 
   friend ParticleDatImplGetConstT<T>
   ParticleLoopImplementation::create_loop_arg<T>(
-      ParticleGroup *particle_group, sycl::handler &cgh,
-      Access::Read<ParticleDatT<T> *> &a);
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      sycl::handler &cgh, Access::Read<ParticleDatT<T> *> &a);
   friend ParticleDatImplGetT<T> ParticleLoopImplementation::create_loop_arg<T>(
-      ParticleGroup *particle_group, sycl::handler &cgh,
-      Access::Write<ParticleDatT<T> *> &a);
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      sycl::handler &cgh, Access::Write<ParticleDatT<T> *> &a);
 
 private:
 protected:
@@ -132,6 +131,12 @@ protected:
   inline ParticleDatImplGetConstT<T> impl_get_const() {
     return this->cell_dat.impl_get_const();
   }
+
+  /// Pointer to the inclusive sum of cell occupancies computed by the
+  /// ParticleGroup
+  INT *d_npart_cell_es;
+  inline void set_d_npart_cell_es(INT *ptr) { this->d_npart_cell_es = ptr; }
+  inline INT *get_d_npart_cell_es() { return this->d_npart_cell_es; }
 
 public:
   /// Disable (implicit) copies.

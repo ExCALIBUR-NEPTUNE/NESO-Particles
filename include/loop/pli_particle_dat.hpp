@@ -90,27 +90,27 @@ template <typename T> struct KernelParameter<Access::Write<ParticleDatT<T>>> {
  */
 template <typename T>
 inline ParticleDatImplGetConstT<T>
-create_loop_arg(ParticleGroup *particle_group, sycl::handler &cgh,
+create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
                 Access::Read<Sym<T> *> &a) {
   auto sym = *a.obj;
-  return particle_group->get_dat(sym)->impl_get_const();
+  return global_info->particle_group->get_dat(sym)->impl_get_const();
 }
 /**
  * Method to compute access to a particle dat (write) - via Sym
  */
 template <typename T>
-inline ParticleDatImplGetT<T> create_loop_arg(ParticleGroup *particle_group,
-                                              sycl::handler &cgh,
-                                              Access::Write<Sym<T> *> &a) {
+inline ParticleDatImplGetT<T>
+create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
+                Access::Write<Sym<T> *> &a) {
   auto sym = *a.obj;
-  return particle_group->get_dat(sym)->impl_get();
+  return global_info->particle_group->get_dat(sym)->impl_get();
 }
 /**
  * Method to compute access to a particle dat (read).
  */
 template <typename T>
 inline ParticleDatImplGetConstT<T>
-create_loop_arg(ParticleGroup *particle_group, sycl::handler &cgh,
+create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
                 Access::Read<ParticleDatT<T> *> &a) {
   return a.obj->impl_get_const();
 }
@@ -119,7 +119,7 @@ create_loop_arg(ParticleGroup *particle_group, sycl::handler &cgh,
  */
 template <typename T>
 inline ParticleDatImplGetT<T>
-create_loop_arg(ParticleGroup *particle_group, sycl::handler &cgh,
+create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
                 Access::Write<ParticleDatT<T> *> &a) {
   return a.obj->impl_get();
 }
@@ -128,8 +128,8 @@ create_loop_arg(ParticleGroup *particle_group, sycl::handler &cgh,
  *  Function to create the kernel argument for ParticleDat read access.
  */
 template <typename T>
-inline void create_kernel_arg(const int cellx, const int layerx,
-                              T *const *const *rhs,
+inline void create_kernel_arg(const size_t index, const int cellx,
+                              const int layerx, T *const *const *rhs,
                               Access::ParticleDat::Read<T> &lhs) {
   lhs.layer = layerx;
   lhs.ptr = rhs[cellx];
@@ -138,7 +138,8 @@ inline void create_kernel_arg(const int cellx, const int layerx,
  *  Function to create the kernel argument for ParticleDat write access.
  */
 template <typename T>
-inline void create_kernel_arg(const int cellx, const int layerx, T ***rhs,
+inline void create_kernel_arg(const size_t index, const int cellx,
+                              const int layerx, T ***rhs,
                               Access::ParticleDat::Write<T> &lhs) {
   lhs.layer = layerx;
   lhs.ptr = rhs[cellx];

@@ -27,13 +27,25 @@ template <typename T> struct LoopParameter { using type = void *; };
 template <typename T> struct KernelParameter { using type = void; };
 
 /**
+ * The description of the iteration set to pass to the objects used in the
+ * loop.
+ */
+struct ParticleLoopGlobalInfo {
+  ParticleGroup *particle_group;
+  INT *d_npart_cell_es;
+  // The starting cell is only set for calls to create_loop_args.
+  int starting_cell;
+  int loop_type_int;
+};
+
+/**
  * The functions to run for each argument to the kernel post loop completion.
  */
 /**
  * Default post loop execution function.
  */
 template <typename T>
-inline void post_loop(ParticleGroup *particle_group, T &arg) {}
+inline void post_loop(ParticleLoopGlobalInfo *global_info, T &arg) {}
 
 } // namespace ParticleLoopImplementation
 
@@ -64,61 +76,6 @@ public:
 };
 
 typedef std::shared_ptr<ParticleLoopBase> ParticleLoopSharedPtr;
-
-/**
- * The type to pass to a ParticleLoop to read the ParticleLoop loop index in a
- * kernel.
- */
-struct ParticleLoopIndex {};
-
-/**
- * Defines the access type for the cell, layer indexing.
- */
-namespace Access::LoopIndex {
-/**
- * ParticleLoop index containing the cell and layer.
- */
-struct Read {
-  /// The cell containing the particle.
-  INT cell;
-  /// The layer of the particle.
-  INT layer;
-};
-
-} // namespace Access::LoopIndex
-
-namespace ParticleLoopImplementation {
-
-/**
- *  KernelParameter type for read-only access to a ParticleLoopIndex.
- */
-template <> struct KernelParameter<Access::Read<ParticleLoopIndex>> {
-  using type = Access::LoopIndex::Read;
-};
-/**
- *  Loop parameter for read access of a ParticleLoopIndex.
- */
-template <> struct LoopParameter<Access::Read<ParticleLoopIndex>> {
-  using type = void *;
-};
-/**
- * Method to compute access to a ParticleLoopIndex (read)
- */
-static inline void *create_loop_arg(ParticleGroup *particle_group,
-                                    sycl::handler &cgh,
-                                    Access::Read<ParticleLoopIndex *> &a) {
-  return nullptr;
-}
-/**
- *  Function to create the kernel argument for ParticleLoopIndex read access.
- */
-inline void create_kernel_arg(const int cellx, const int layerx, void *,
-                              Access::LoopIndex::Read &lhs) {
-  lhs.cell = cellx;
-  lhs.layer = layerx;
-}
-
-} // namespace ParticleLoopImplementation
 
 } // namespace NESO::Particles
 #endif

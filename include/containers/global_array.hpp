@@ -92,7 +92,8 @@ template <typename T> struct KernelParameter<Access::Add<GlobalArray<T>>> {
  *  Function to create the kernel argument for GlobalArray read access.
  */
 template <typename T>
-inline void create_kernel_arg(const int cellx, const int layerx, T const *rhs,
+inline void create_kernel_arg(const size_t index, const int cellx,
+                              const int layerx, T const *rhs,
                               Access::GlobalArray::Read<T> &lhs) {
   lhs.ptr = rhs;
 }
@@ -100,7 +101,8 @@ inline void create_kernel_arg(const int cellx, const int layerx, T const *rhs,
  *  Function to create the kernel argument for GlobalArray add access.
  */
 template <typename T>
-inline void create_kernel_arg(const int cellx, const int layerx, T *rhs,
+inline void create_kernel_arg(const size_t index, const int cellx,
+                              const int layerx, T *rhs,
                               Access::GlobalArray::Add<T> &lhs) {
   lhs.ptr = rhs;
 }
@@ -109,7 +111,7 @@ inline void create_kernel_arg(const int cellx, const int layerx, T *rhs,
  * Post loop execution function for GlobalArray write.
  */
 template <typename T>
-inline void post_loop(ParticleGroup *particle_group,
+inline void post_loop(ParticleLoopGlobalInfo *global_info,
                       Access::Add<GlobalArray<T> *> &arg) {
   arg.obj->impl_post_loop_add();
 }
@@ -119,7 +121,7 @@ inline void post_loop(ParticleGroup *particle_group,
  */
 template <typename T>
 inline GlobalArrayImplGetConstT<T>
-create_loop_arg(ParticleGroup *particle_group, sycl::handler &cgh,
+create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
                 Access::Read<GlobalArray<T> *> &a) {
   return a.obj->impl_get_const();
 }
@@ -128,7 +130,7 @@ create_loop_arg(ParticleGroup *particle_group, sycl::handler &cgh,
  */
 template <typename T>
 inline GlobalArrayImplGetT<T>
-create_loop_arg(ParticleGroup *particle_group, sycl::handler &cgh,
+create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
                 Access::Add<GlobalArray<T> *> &a) {
   return a.obj->impl_get();
 }
@@ -143,16 +145,16 @@ create_loop_arg(ParticleGroup *particle_group, sycl::handler &cgh,
 template <typename T> class GlobalArray {
   // This allows the ParticleLoop to access the implementation methods.
   template <typename KERNEL, typename... ARGS> friend class ParticleLoop;
-  friend void
-  ParticleLoopImplementation::post_loop<T>(ParticleGroup *particle_group,
-                                           Access::Add<GlobalArray<T> *> &arg);
+  friend void ParticleLoopImplementation::post_loop<T>(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      Access::Add<GlobalArray<T> *> &arg);
   friend GlobalArrayImplGetConstT<T>
   ParticleLoopImplementation::create_loop_arg<T>(
-      ParticleGroup *particle_group, sycl::handler &cgh,
-      Access::Read<GlobalArray<T> *> &a);
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      sycl::handler &cgh, Access::Read<GlobalArray<T> *> &a);
   friend GlobalArrayImplGetT<T> ParticleLoopImplementation::create_loop_arg<T>(
-      ParticleGroup *particle_group, sycl::handler &cgh,
-      Access::Add<GlobalArray<T> *> &a);
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      sycl::handler &cgh, Access::Add<GlobalArray<T> *> &a);
 
 protected:
   std::shared_ptr<BufferDeviceHost<T>> buffer;

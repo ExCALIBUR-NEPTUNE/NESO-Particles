@@ -10,6 +10,7 @@
 #include "../particle_dat.hpp"
 #include "../particle_spec.hpp"
 #include "particle_loop_base.hpp"
+#include "particle_loop_index.hpp"
 #include "pli_particle_dat.hpp"
 #include <CL/sycl.hpp>
 #include <cstdlib>
@@ -167,24 +168,26 @@ template <typename KERNEL, typename... ARGS>
 class ParticleLoop : public ParticleLoopBase {
 
 protected:
+  const int loop_type_int = 0;
   /**
    * Method to compute access to a type wrapped in a shared_ptr.
    */
   template <template <typename> typename T, typename U>
-  static inline auto create_loop_arg_cast(ParticleGroup *particle_group,
-                                          sycl::handler &cgh,
-                                          T<std::shared_ptr<U>> a) {
+  static inline auto create_loop_arg_cast(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      sycl::handler &cgh, T<std::shared_ptr<U>> a) {
     T<U *> c = {a.obj.get()};
-    return ParticleLoopImplementation::create_loop_arg(particle_group, cgh, c);
+    return ParticleLoopImplementation::create_loop_arg(global_info, cgh, c);
   }
   /**
    * Method to compute access to a type not wrapper in a shared_ptr
    */
   template <template <typename> typename T, typename U>
-  static inline auto create_loop_arg_cast(ParticleGroup *particle_group,
-                                          sycl::handler &cgh, T<U> a) {
+  static inline auto create_loop_arg_cast(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      sycl::handler &cgh, T<U> a) {
     T<U *> c = {&a.obj};
-    return ParticleLoopImplementation::create_loop_arg(particle_group, cgh, c);
+    return ParticleLoopImplementation::create_loop_arg(global_info, cgh, c);
   }
 
   /*
@@ -195,18 +198,20 @@ protected:
    * Method to compute access to a type wrapped in a shared_ptr.
    */
   template <template <typename> typename T, typename U>
-  static inline auto post_loop_cast(ParticleGroup *particle_group,
-                                    T<std::shared_ptr<U>> a) {
+  static inline auto post_loop_cast(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      T<std::shared_ptr<U>> a) {
     T<U *> c = {a.obj.get()};
-    ParticleLoopImplementation::post_loop(particle_group, c);
+    ParticleLoopImplementation::post_loop(global_info, c);
   }
   /**
    * Method to compute access to a type not wrapper in a shared_ptr
    */
   template <template <typename> typename T, typename U>
-  static inline auto post_loop_cast(ParticleGroup *particle_group, T<U> a) {
+  static inline auto post_loop_cast(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info, T<U> a) {
     T<U *> c = {&a.obj};
-    ParticleLoopImplementation::post_loop(particle_group, c);
+    ParticleLoopImplementation::post_loop(global_info, c);
   }
 
   /*
@@ -232,44 +237,46 @@ protected:
 
   /// Recursively assemble the outer loop arguments.
   template <size_t INDEX, size_t SIZE, typename PARAM>
-  inline void create_loop_args_inner(ParticleGroup *pg, sycl::handler &cgh,
-                                     PARAM &loop_args) {
+  inline void create_loop_args_inner(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      sycl::handler &cgh, PARAM &loop_args) {
     if constexpr (INDEX < SIZE) {
       Tuple::get<INDEX>(loop_args) =
-          create_loop_arg_cast(pg, cgh, std::get<INDEX>(this->args));
-      create_loop_args_inner<INDEX + 1, SIZE>(pg, cgh, loop_args);
+          create_loop_arg_cast(global_info, cgh, std::get<INDEX>(this->args));
+      create_loop_args_inner<INDEX + 1, SIZE>(global_info, cgh, loop_args);
     }
   }
-  inline void create_loop_args(sycl::handler &cgh,
-                               loop_parameter_type &loop_args) {
-    auto pg = this->particle_group_ptr;
-    create_loop_args_inner<0, sizeof...(ARGS)>(pg, cgh, loop_args);
+  inline void create_loop_args(
+      sycl::handler &cgh, loop_parameter_type &loop_args,
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info) {
+    create_loop_args_inner<0, sizeof...(ARGS)>(global_info, cgh, loop_args);
   }
 
   /// recusively assemble the kernel arguments from the loop arguments
   template <size_t INDEX, size_t SIZE>
   static inline constexpr void
-  create_kernel_args_inner(const int cellx, const int layerx,
+  create_kernel_args_inner(const size_t index, const int cellx,
+                           const int layerx,
                            const loop_parameter_type &loop_args,
                            kernel_parameter_type &kernel_args) {
 
     if constexpr (INDEX < SIZE) {
       auto arg = Tuple::get<INDEX>(loop_args);
       ParticleLoopImplementation::create_kernel_arg(
-          cellx, layerx, arg, Tuple::get<INDEX>(kernel_args));
-      create_kernel_args_inner<INDEX + 1, SIZE>(cellx, layerx, loop_args,
+          index, cellx, layerx, arg, Tuple::get<INDEX>(kernel_args));
+      create_kernel_args_inner<INDEX + 1, SIZE>(index, cellx, layerx, loop_args,
                                                 kernel_args);
     }
   }
 
   /// called before kernel execution to assemble the kernel arguments.
   static inline constexpr void
-  create_kernel_args(const int cellx, const int layerx,
+  create_kernel_args(const size_t index, const int cellx, const int layerx,
                      const loop_parameter_type &loop_args,
                      kernel_parameter_type &kernel_args) {
 
-    create_kernel_args_inner<0, sizeof...(ARGS)>(cellx, layerx, loop_args,
-                                                 kernel_args);
+    create_kernel_args_inner<0, sizeof...(ARGS)>(index, cellx, layerx,
+                                                 loop_args, kernel_args);
   }
 
   ParticleGroupSharedPtr particle_group_shrptr;
@@ -287,12 +294,14 @@ protected:
   EventStack event_stack;
   bool loop_running = {false};
   int *d_npart_cell;
+  INT *d_npart_cell_es;
 
   template <typename T>
   inline void init_from_particle_dat(ParticleDatSharedPtr<T> particle_dat) {
     const int ncell = particle_dat->ncell;
     auto h_npart_cell = particle_dat->h_npart_cell;
     this->d_npart_cell = particle_dat->d_npart_cell;
+    this->d_npart_cell_es = particle_dat->get_d_npart_cell_es();
     this->iteration_set =
         std::make_unique<ParticleLoopImplementation::ParticleLoopIterationSet>(
             1, ncell, h_npart_cell);
@@ -310,6 +319,16 @@ protected:
   template <template <typename> typename T, typename U>
   inline void check_is_sym_outer(T<U> arg) {
     check_is_sym_inner(arg.obj);
+  }
+
+  inline ParticleLoopImplementation::ParticleLoopGlobalInfo
+  create_global_info() {
+    ParticleLoopImplementation::ParticleLoopGlobalInfo global_info;
+    global_info.particle_group = this->particle_group_ptr;
+    global_info.d_npart_cell_es = this->d_npart_cell_es;
+    global_info.starting_cell = 0;
+    global_info.loop_type_int = this->loop_type_int;
+    return global_info;
   }
 
 public:
@@ -410,6 +429,10 @@ public:
     this->loop_running = true;
 
     auto t0 = profile_timestamp();
+
+    auto global_info = this->create_global_info();
+    global_info.starting_cell = (cell == std::nullopt) ? 0 : cell.value();
+
     auto k_npart_cell = this->d_npart_cell;
     auto is = this->iteration_set->get(cell);
     auto k_kernel = this->kernel;
@@ -424,15 +447,17 @@ public:
       this->event_stack.push(
           this->sycl_target->queue.submit([&](sycl::handler &cgh) {
             loop_parameter_type loop_args;
-            create_loop_args(cgh, loop_args);
+            create_loop_args(cgh, loop_args, &global_info);
             cgh.parallel_for<>(ndr, [=](sycl::nd_item<2> idx) {
+              const std::size_t index = idx.get_global_linear_id();
               const size_t cellxs = idx.get_global_id(0) + cell_offset;
               const size_t layerxs = idx.get_global_id(1);
               const int cellx = static_cast<int>(cellxs);
               const int layerx = static_cast<int>(layerxs);
               if (layerx < k_npart_cell[cellx]) {
                 kernel_parameter_type kernel_args;
-                create_kernel_args(cellx, layerx, loop_args, kernel_args);
+                create_kernel_args(index, cellx, layerx, loop_args,
+                                   kernel_args);
                 Tuple::apply(k_kernel, kernel_args);
               }
             });
@@ -449,9 +474,9 @@ public:
                "ParticleLoop::wait called - but the loop is not submitted.");
     // wait for the loop execution to complete
     this->event_stack.wait();
-    auto cast_wrapper = [=](auto t) {
-      post_loop_cast(this->particle_group_ptr, t);
-    };
+    ParticleLoopImplementation::ParticleLoopGlobalInfo global_info =
+        this->create_global_info();
+    auto cast_wrapper = [&](auto t) { post_loop_cast(&global_info, t); };
     auto post_loop_caller = [&](auto... as) { (cast_wrapper(as), ...); };
     std::apply(post_loop_caller, this->args);
     this->loop_running = false;

@@ -137,6 +137,8 @@ class ParticleSubGroup {
   friend class ParticleLoopSubGroup;
 
 protected:
+  const int loop_type_int = 1;
+
   ParticleGroupSharedPtr particle_group;
   ParticleSubGroupImplementation::SubGroupSelector selector;
 
@@ -314,6 +316,7 @@ public:
         !this->loop_running,
         "ParticleLoop::submit called - but the loop is already submitted.");
     this->loop_running = true;
+    auto global_info = this->create_global_info();
 
     auto t0 = profile_timestamp();
     auto is = this->iteration_set->get();
@@ -338,14 +341,14 @@ public:
     this->event_stack.push(
         this->sycl_target->queue.submit([&](sycl::handler &cgh) {
           loop_parameter_type loop_args;
-          create_loop_args(cgh, loop_args);
+          create_loop_args(cgh, loop_args, global_info);
           cgh.parallel_for<>(iteration_set, [=](sycl::nd_item<1> idx) {
             const std::size_t index = idx.get_global_linear_id();
             if (index < npart_local) {
               const int cellx = static_cast<int>(d_cells[index]);
               const int layerx = static_cast<int>(d_layers[index]);
               kernel_parameter_type kernel_args;
-              create_kernel_args(cellx, layerx, loop_args, kernel_args);
+              create_kernel_args(index, cellx, layerx, loop_args, kernel_args);
               Tuple::apply(k_kernel, kernel_args);
             }
           });

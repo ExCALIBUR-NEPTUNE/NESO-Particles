@@ -3,6 +3,7 @@
 #include "../compute_target.hpp"
 #include "../loop/access_descriptors.hpp"
 #include "../loop/particle_loop_base.hpp"
+#include "../loop/particle_loop_index.hpp"
 #include "../particle_group.hpp"
 #include "../particle_spec.hpp"
 #include <initializer_list>
@@ -87,7 +88,7 @@ template <typename T> struct KernelParameter<Access::Write<SymVector<T>>> {
  */
 template <typename T>
 inline SymVectorImplGetConstT<T>
-create_loop_arg(ParticleGroup *particle_group, sycl::handler &cgh,
+create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
                 Access::Read<SymVector<T> *> &a) {
   return a.obj->impl_get_const();
 }
@@ -95,7 +96,7 @@ create_loop_arg(ParticleGroup *particle_group, sycl::handler &cgh,
  * Method to compute access to a SymVector (write).
  */
 template <typename T>
-inline SymVectorImplGetT<T> create_loop_arg(ParticleGroup *particle_group,
+inline SymVectorImplGetT<T> create_loop_arg(ParticleLoopGlobalInfo *global_info,
                                             sycl::handler &cgh,
                                             Access::Write<SymVector<T> *> &a) {
   return a.obj->impl_get();
@@ -105,8 +106,8 @@ inline SymVectorImplGetT<T> create_loop_arg(ParticleGroup *particle_group,
  *  Function to create the kernel argument for SymVector read access.
  */
 template <typename T>
-inline void create_kernel_arg(const int cellx, const int layerx,
-                              T *const *const **rhs,
+inline void create_kernel_arg(const size_t index, const int cellx,
+                              const int layerx, T *const *const **rhs,
                               Access::SymVector::Read<T> &lhs) {
   lhs.ptr = rhs;
 }
@@ -114,7 +115,8 @@ inline void create_kernel_arg(const int cellx, const int layerx,
  *  Function to create the kernel argument for SymVector write access.
  */
 template <typename T>
-inline void create_kernel_arg(const int cellx, const int layerx, T ****rhs,
+inline void create_kernel_arg(const size_t index, const int cellx,
+                              const int layerx, T ****rhs,
                               Access::SymVector::Write<T> &lhs) {
   lhs.ptr = rhs;
 }
@@ -130,11 +132,11 @@ template <typename T> class SymVector {
   template <typename KERNEL, typename... ARGS> friend class ParticleLoop;
   friend SymVectorImplGetConstT<T>
   ParticleLoopImplementation::create_loop_arg<T>(
-      ParticleGroup *particle_group, sycl::handler &cgh,
-      Access::Read<SymVector<T> *> &a);
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      sycl::handler &cgh, Access::Read<SymVector<T> *> &a);
   friend SymVectorImplGetT<T> ParticleLoopImplementation::create_loop_arg<T>(
-      ParticleGroup *particle_group, sycl::handler &cgh,
-      Access::Write<SymVector<T> *> &a);
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      sycl::handler &cgh, Access::Write<SymVector<T> *> &a);
 
 protected:
   std::vector<ParticleDatSharedPtr<T>> dats;

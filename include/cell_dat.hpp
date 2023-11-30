@@ -194,7 +194,8 @@ template <typename T> struct KernelParameter<Access::Add<CellDatConst<T>>> {
  *  Function to create the kernel argument for CellDatConst read access.
  */
 template <typename T>
-inline void create_kernel_arg(const int cellx, const int layerx,
+inline void create_kernel_arg(const size_t index, const int cellx,
+                              const int layerx,
                               CellDatConstDeviceTypeConst<T> &rhs,
                               Access::CellDatConst::Read<T> &lhs) {
   T const *ptr = rhs.ptr + cellx * rhs.stride;
@@ -205,8 +206,8 @@ inline void create_kernel_arg(const int cellx, const int layerx,
  *  Function to create the kernel argument for CellDatConst add access.
  */
 template <typename T>
-inline void create_kernel_arg(const int cellx, const int layerx,
-                              CellDatConstDeviceType<T> &rhs,
+inline void create_kernel_arg(const size_t index, const int cellx,
+                              const int layerx, CellDatConstDeviceType<T> &rhs,
                               Access::CellDatConst::Add<T> &lhs) {
   T *ptr = rhs.ptr + cellx * rhs.stride;
   lhs.ptr = ptr;
@@ -218,7 +219,7 @@ inline void create_kernel_arg(const int cellx, const int layerx,
  */
 template <typename T>
 inline CellDatConstDeviceTypeConst<T>
-create_loop_arg(ParticleGroup *particle_group, sycl::handler &cgh,
+create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
                 Access::Read<CellDatConst<T> *> &a) {
   return a.obj->impl_get_const();
 }
@@ -227,7 +228,7 @@ create_loop_arg(ParticleGroup *particle_group, sycl::handler &cgh,
  */
 template <typename T>
 inline CellDatConstDeviceType<T>
-create_loop_arg(ParticleGroup *particle_group, sycl::handler &cgh,
+create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
                 Access::Add<CellDatConst<T> *> &a) {
   return a.obj->impl_get();
 }
@@ -243,12 +244,12 @@ template <typename T> class CellDatConst {
   template <typename KERNEL, typename... ARGS> friend class ParticleLoop;
   friend CellDatConstDeviceTypeConst<T>
   ParticleLoopImplementation::create_loop_arg<T>(
-      ParticleGroup *particle_group, sycl::handler &cgh,
-      Access::Read<CellDatConst<T> *> &a);
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      sycl::handler &cgh, Access::Read<CellDatConst<T> *> &a);
   friend CellDatConstDeviceType<T>
   ParticleLoopImplementation::create_loop_arg<T>(
-      ParticleGroup *particle_group, sycl::handler &cgh,
-      Access::Add<CellDatConst<T> *> &a);
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      sycl::handler &cgh, Access::Add<CellDatConst<T> *> &a);
 
 private:
   T *d_ptr;

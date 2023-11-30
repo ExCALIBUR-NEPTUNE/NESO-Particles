@@ -12,7 +12,6 @@ namespace NESO::Particles {
 // Forward declaration of ParticleLoop such that LocalArray can define
 // ParticleLoop as a friend class.
 template <typename KERNEL, typename... ARGS> class ParticleLoop;
-class ParticleGroup;
 template <typename T> class LocalArray;
 
 template <typename T> using LocalArrayImplGetT = T *;
@@ -113,7 +112,8 @@ template <typename T> struct KernelParameter<Access::Add<LocalArray<T>>> {
  *  Function to create the kernel argument for LocalArray read access.
  */
 template <typename T>
-inline void create_kernel_arg(const int cellx, const int layerx, T const *rhs,
+inline void create_kernel_arg(const size_t index, const int cellx,
+                              const int layerx, T const *rhs,
                               Access::LocalArray::Read<T> &lhs) {
   lhs.ptr = rhs;
 }
@@ -121,7 +121,8 @@ inline void create_kernel_arg(const int cellx, const int layerx, T const *rhs,
  *  Function to create the kernel argument for LocalArray write access.
  */
 template <typename T>
-inline void create_kernel_arg(const int cellx, const int layerx, T *rhs,
+inline void create_kernel_arg(const size_t index, const int cellx,
+                              const int layerx, T *rhs,
                               Access::LocalArray::Write<T> &lhs) {
   lhs.ptr = rhs;
 }
@@ -129,7 +130,8 @@ inline void create_kernel_arg(const int cellx, const int layerx, T *rhs,
  *  Function to create the kernel argument for LocalArray add access.
  */
 template <typename T>
-inline void create_kernel_arg(const int cellx, const int layerx, T *rhs,
+inline void create_kernel_arg(const size_t index, const int cellx,
+                              const int layerx, T *rhs,
                               Access::LocalArray::Add<T> &lhs) {
   lhs.ptr = rhs;
 }
@@ -139,7 +141,7 @@ inline void create_kernel_arg(const int cellx, const int layerx, T *rhs,
  */
 template <typename T>
 inline LocalArrayImplGetConstT<T>
-create_loop_arg(ParticleGroup *particle_group, sycl::handler &cgh,
+create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
                 Access::Read<LocalArray<T> *> &a) {
   return a.obj->impl_get_const();
 }
@@ -148,7 +150,7 @@ create_loop_arg(ParticleGroup *particle_group, sycl::handler &cgh,
  */
 template <typename T>
 inline LocalArrayImplGetT<T>
-create_loop_arg(ParticleGroup *particle_group, sycl::handler &cgh,
+create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
                 Access::Write<LocalArray<T> *> &a) {
   return a.obj->impl_get();
 }
@@ -156,9 +158,9 @@ create_loop_arg(ParticleGroup *particle_group, sycl::handler &cgh,
  * Method to compute access to a LocalArray (add)
  */
 template <typename T>
-inline LocalArrayImplGetT<T> create_loop_arg(ParticleGroup *particle_group,
-                                             sycl::handler &cgh,
-                                             Access::Add<LocalArray<T> *> &a) {
+inline LocalArrayImplGetT<T>
+create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
+                Access::Add<LocalArray<T> *> &a) {
   return a.obj->impl_get();
 }
 
@@ -172,14 +174,14 @@ template <typename T> class LocalArray {
   template <typename KERNEL, typename... ARGS> friend class ParticleLoop;
   friend LocalArrayImplGetConstT<T>
   ParticleLoopImplementation::create_loop_arg<T>(
-      ParticleGroup *particle_group, sycl::handler &cgh,
-      Access::Read<LocalArray<T> *> &a);
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      sycl::handler &cgh, Access::Read<LocalArray<T> *> &a);
   friend LocalArrayImplGetT<T> ParticleLoopImplementation::create_loop_arg<T>(
-      ParticleGroup *particle_group, sycl::handler &cgh,
-      Access::Write<LocalArray<T> *> &a);
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      sycl::handler &cgh, Access::Write<LocalArray<T> *> &a);
   friend LocalArrayImplGetT<T> ParticleLoopImplementation::create_loop_arg<T>(
-      ParticleGroup *particle_group, sycl::handler &cgh,
-      Access::Add<LocalArray<T> *> &a);
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      sycl::handler &cgh, Access::Add<LocalArray<T> *> &a);
 
 protected:
   std::shared_ptr<BufferDevice<T>> buffer;

@@ -97,12 +97,17 @@ private:
     push_particle_spec(ParticleProp(particle_dat->sym, particle_dat->ncomp,
                                     particle_dat->positions));
     particle_dat->set_npart_cells_host(this->h_npart_cell.ptr);
+    particle_dat->set_d_npart_cell_es(this->dh_npart_cell_es->d_buffer.ptr);
     particle_dat->npart_host_to_device();
     this->add_invalidate_callback(particle_dat);
     // This store is initialised with 1 and the to test keys should be
     // initialised with 0.
     this->particle_dat_versions[particle_dat->sym] = {1, false};
   }
+
+  /// BufferDeviceHost holding the exclusive sum of the number of particles in
+  /// each cell.
+  std::shared_ptr<BufferDeviceHost<INT>> dh_npart_cell_es;
 
 protected:
   /**
@@ -158,7 +163,6 @@ public:
   std::shared_ptr<Sym<INT>> mpi_rank_sym;
   /// ParticleDat storing particle MPI ranks.
   ParticleDatSharedPtr<INT> mpi_rank_dat;
-
   /// ParticleSpec of all the ParticleDats of this ParticleGroup.
   ParticleSpec particle_spec;
 
@@ -192,11 +196,11 @@ public:
             domain->mesh->get_local_communication_neighbours().size(),
             domain->mesh->get_local_communication_neighbours().data()),
         cell_move_ctx(sycl_target, this->ncell, layer_compressor,
-                      particle_dats_real, particle_dats_int)
-
-  {
+                      particle_dats_real, particle_dats_int) {
 
     this->h_npart_cell.realloc_no_copy(this->ncell);
+    this->dh_npart_cell_es =
+        std::make_shared<BufferDeviceHost<INT>>(sycl_target, this->ncell);
 
     for (int cellx = 0; cellx < this->ncell; cellx++) {
       this->h_npart_cell.ptr[cellx] = 0;
@@ -443,6 +447,14 @@ public:
     for (int cellx = 0; cellx < this->ncell; cellx++) {
       this->h_npart_cell.ptr[cellx] = this->position_dat->h_npart_cell[cellx];
     }
+    auto h_ptr_s = this->h_npart_cell.ptr;
+    auto h_ptr = this->dh_npart_cell_es->h_buffer.ptr;
+    INT total = 0;
+    for (int cellx = 0; cellx < this->ncell; cellx++) {
+      h_ptr[cellx] = total;
+      total += h_ptr_s[cellx];
+    }
+    this->dh_npart_cell_es->host_to_device();
   }
 
   /**
