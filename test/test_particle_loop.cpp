@@ -750,3 +750,86 @@ TEST(ParticleLoop, single_cell) {
   sycl_target->free();
   mesh->free();
 }
+
+TEST(ParticleLoop, loop_index_linear) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  const int cell_count = mesh->get_cell_count();
+  auto sycl_target = A->sycl_target;
+
+  auto pl = particle_loop(
+      A,
+      [=](auto ID, auto index) { ID.at(0) = index.get_global_linear_index(); },
+      Access::write(Sym<INT>("ID")), Access::read(ParticleLoopIndex{}));
+
+  pl->execute();
+  INT index = 0;
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto id = A->get_dat(Sym<INT>("ID"))->cell_dat.get_cell(cellx);
+    const int nrow = id->nrow;
+    // for each particle in the cell
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      ASSERT_EQ((*id)[0][rowx], index);
+      index++;
+    }
+  }
+
+  auto pl_reset = particle_loop(
+      A, [=](auto ID) { ID.at(0) = -1; }, Access::write(Sym<INT>("ID")));
+  pl_reset->execute();
+
+  pl->execute(cell_count - 1);
+  index = 0;
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto id = A->get_dat(Sym<INT>("ID"))->cell_dat.get_cell(cellx);
+    const int nrow = id->nrow;
+    // for each particle in the cell
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      if (cellx == (cell_count - 1)) {
+        ASSERT_EQ((*id)[0][rowx], index);
+      } else {
+        ASSERT_EQ((*id)[0][rowx], -1);
+      }
+      index++;
+    }
+  }
+
+  pl = particle_loop(
+      A, [=](auto ID, auto index) { ID.at(0) = index.get_loop_linear_index(); },
+      Access::write(Sym<INT>("ID")), Access::read(ParticleLoopIndex{}));
+
+  pl->execute();
+  index = 0;
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto id = A->get_dat(Sym<INT>("ID"))->cell_dat.get_cell(cellx);
+    const int nrow = id->nrow;
+    // for each particle in the cell
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      ASSERT_EQ((*id)[0][rowx], index);
+      index++;
+    }
+  }
+
+  pl_reset->execute();
+  pl->execute(cell_count - 1);
+  index = 0;
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto id = A->get_dat(Sym<INT>("ID"))->cell_dat.get_cell(cellx);
+    const int nrow = id->nrow;
+    // for each particle in the cell
+    index = 0;
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      if (cellx == (cell_count - 1)) {
+        ASSERT_EQ((*id)[0][rowx], index);
+      } else {
+        ASSERT_EQ((*id)[0][rowx], -1);
+      }
+      index++;
+    }
+  }
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}

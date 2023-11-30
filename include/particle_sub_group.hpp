@@ -341,7 +341,7 @@ public:
     this->event_stack.push(
         this->sycl_target->queue.submit([&](sycl::handler &cgh) {
           loop_parameter_type loop_args;
-          create_loop_args(cgh, loop_args, global_info);
+          create_loop_args(cgh, loop_args, &global_info);
           cgh.parallel_for<>(iteration_set, [=](sycl::nd_item<1> idx) {
             const std::size_t index = idx.get_global_linear_id();
             if (index < npart_local) {
