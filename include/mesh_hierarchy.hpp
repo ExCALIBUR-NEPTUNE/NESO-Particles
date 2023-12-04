@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <memory>
 #include <mpi.h>
 #include <stack>
 #include <utility>
@@ -400,6 +401,283 @@ public:
       ranks[qx] = rank;
     }
   };
+};
+
+/**
+ *  A struct to aid binning points into MeshHierarchy cells. This type is
+ *  device copyable such that points can be easilly binned into cells on the
+ *  device.
+ */
+struct MeshHierarchyDeviceMapper {
+  /// Number of spatial dimensions.
+  INT ndim;
+  /// ndim sized array holding the mesh origin.
+  REAL *origin;
+  /// ndim sized array holding the number of coarse cells in each direction.
+  INT *dims;
+  /// The inverse of the coarse cell width.
+  REAL inverse_cell_width_coarse;
+  /// The inverse of the fine cell width.
+  REAL inverse_cell_width_fine;
+  /// The coarse cell width.
+  REAL cell_width_coarse;
+  /// The fine cell width.
+  REAL cell_width_fine;
+  /// The number of fine cells in each dimension per dimension.
+  INT ncells_dim_fine;
+  /// The total number of fine cells per coarse cell.
+  INT ncells_fine;
+
+  /**
+   * For an input point find the MeshHierarchy cell that contains the point in
+   * tuple form. Output tuple should be: 1D: (coarse_x, fine_x) 2D: (coarse_x,
+   * coarse_y, fine_x, fine_y) 3D: (coarse_x, coarse_y, coarse_z, fine_x,
+   * fine_y, fine_z)
+   *
+   * @param[in] position Input position.
+   * @param[out] cell Ouput, index represented as a tuple.
+   */
+  inline void map_to_tuple(const REAL *position, INT *cell) const {
+    for (int dimx = 0; dimx < ndim; dimx++) {
+      // position relative to the mesh origin
+      const REAL pos = position[dimx] - origin[dimx];
+      const REAL tol = 1.0e-10;
+
+      // coarse grid index
+      INT cell_coarse = ((REAL)pos * inverse_cell_width_coarse);
+      // bounds check the cell at the upper extent
+      if (cell_coarse >= dims[dimx]) {
+        // if the particle is within a given tolerance assume the
+        // out of bounds is a floating point issue.
+        if ((ABS(pos - dims[dimx] * cell_width_coarse) / ABS(pos)) <= tol) {
+          cell_coarse = dims[dimx] - 1;
+          cell[dimx] = cell_coarse;
+        } else {
+          cell_coarse = 0;
+          cell[dimx] = -2;
+        }
+      } else {
+        cell[dimx] = cell_coarse;
+      }
+
+      // use the coarse cell index to offset the origin and compute
+      // the fine cell index
+      const REAL pos_fine = pos - cell_coarse * cell_width_coarse;
+      INT cell_fine = ((REAL)pos_fine * inverse_cell_width_fine);
+
+      if (cell_fine >= ncells_dim_fine) {
+        if ((ABS(pos_fine - ncells_dim_fine * cell_width_fine) /
+             ABS(pos_fine)) <= tol) {
+          cell_fine = ncells_dim_fine - 1;
+          cell[dimx + ndim] = cell_fine;
+        } else {
+          cell[dimx + ndim] = -2;
+        }
+      } else {
+        cell[dimx + ndim] = cell_fine;
+      }
+    }
+  }
+
+  /**
+   * For an input MeshHierarchy tuple output the tuple which would index into a
+   * standard Cartesian mesh of the same structure.
+   * Input tuple should be:
+   * 1D: (coarse_x, fine_x)
+   * 2D: (coarse_x, coarse_y, fine_x, fine_y)
+   * 3D: (coarse_x, coarse_y, coarse_z, fine_x, fine_y, fine_z)
+   *
+   * @param[in] mh_tuple Input tuple in global MeshHierarchy form.
+   * @param[out] cart_tuple N dimensional tuple which indexes into the Cartesian
+   * mesh view of the MeshHierarchy.
+   */
+  inline void map_tuple_to_cart_tuple(const INT *mh_tuple,
+                                      INT *cart_tuple) const {
+    for (int dimx = 0; dimx < ndim; dimx++) {
+      cart_tuple[dimx] = mh_tuple[ndim + dimx] + mh_tuple[dimx];
+    }
+  }
+
+  /**
+   * Map position into the cartesian grid. Do not attempt to trucate the
+   * position into the mesh.
+   *
+   * @param[in] position Input position to map into the Cartesian view of the
+   * MeshHierarchy.
+   * @param[in, out] cell N dimensional tuple that maps into the Cartesian view
+   * of the MeshHierarchy.
+   */
+  inline void map_to_cart_tuple_no_trunc(const REAL *position,
+                                         INT *cell) const {
+    for (int dimx = 0; dimx < ndim; dimx++) {
+      const REAL origin_dim = origin[dimx];
+      const REAL pos = position[dimx];
+      if (pos < origin_dim) {
+        const REAL offset = origin_dim - pos;
+        const REAL real_cell = offset * inverse_cell_width_fine;
+        const INT int_cell = static_cast<INT>(real_cell) + 1;
+        const INT relative_cell = -int_cell;
+        cell[dimx] = relative_cell;
+      } else {
+        const REAL real_cell = (pos - origin_dim) * inverse_cell_width_fine;
+        // rounds towards 0
+        const INT int_cell = static_cast<INT>(real_cell);
+        cell[dimx] = int_cell;
+      }
+    }
+  }
+
+  /**
+   * Convert a Cartesian tuple index into a MeshHierarchy global tuple index.
+   *
+   * @param[in] cart_tuple Cartesian tuple to convert.
+   * @param[in, out] mh_tuple MeshHierarchy global tuple representation of input
+   * tuple.
+   */
+  inline void cart_tuple_to_tuple(const INT *cart_tuple, INT *mh_tuple) const {
+    for (int dimx = 0; dimx < ndim; dimx++) {
+      const INT cell_coarse = cart_tuple[dimx] / ncells_dim_fine;
+      const INT cell_fine = cart_tuple[dimx] % ncells_dim_fine;
+      mh_tuple[dimx] = cell_coarse;
+      mh_tuple[ndim + dimx] = cell_fine;
+    }
+  }
+
+  /**
+   * Convert a global index represented by a tuple into a linear index.
+   * tuple should be:
+   * 1D: (coarse_x, fine_x)
+   * 2D: (coarse_x, coarse_y, fine_x, fine_y)
+   * 3D: (coarse_x, coarse_y, coarse_z, fine_x, fine_y, fine_z)
+   *
+   * @param index_tuple Index represented as a tuple.
+   * @returns Linear index.
+   */
+  inline INT tuple_to_linear_global(INT *index_tuple) const {
+    INT index_coarse = tuple_to_linear_coarse(index_tuple);
+    INT index_fine = tuple_to_linear_fine(&index_tuple[ndim]);
+    INT index = index_coarse * ncells_fine + index_fine;
+    return index;
+  };
+
+  /**
+   * Convert a coarse mesh index represented by a tuple into a linear index.
+   * tuple should be:
+   * 1D: (coarse_x)
+   * 2D: (coarse_x, coarse_y)
+   * 3D: (coarse_x, coarse_y, coarse_z)
+   *
+   * @param index_tuple Index represented as a tuple.
+   * @returns Linear index.
+   */
+  inline INT tuple_to_linear_coarse(INT *index_tuple) const {
+    INT index = index_tuple[ndim - 1];
+    for (int dimx = ndim - 2; dimx >= 0; dimx--) {
+      index *= dims[dimx];
+      index += index_tuple[dimx];
+    }
+    return index;
+  };
+
+  /**
+   * Convert a fine mesh index represented by a tuple into a linear index.
+   * tuple should be:
+   * 1D: (fine_x)
+   * 2D: (fine_x, fine_y)
+   * 3D: (fine_x, fine_y, fine_z)
+   *
+   * @param index_tuple Index represented as a tuple.
+   * @returns Linear index.
+   */
+  inline INT tuple_to_linear_fine(INT *index_tuple) const {
+    INT index = index_tuple[ndim - 1];
+    for (int dimx = ndim - 2; dimx >= 0; dimx--) {
+      index *= ncells_dim_fine;
+      index += index_tuple[dimx];
+    }
+    return index;
+  }
+};
+
+/**
+ * A class to provide methods to bin points into MeshHierarchy cells and
+ * transform between representations of MeshHierarchy indexing.
+ */
+class MeshHierarchyMapper {
+private:
+  std::shared_ptr<BufferDeviceHost<REAL>> dh_origin;
+  std::shared_ptr<BufferDeviceHost<INT>> dh_dims;
+  std::shared_ptr<MeshHierarchy> mesh_hierarchy;
+
+  inline MeshHierarchyDeviceMapper get_generic_mapper() {
+
+    MeshHierarchyDeviceMapper mapper;
+    mapper.ndim = this->mesh_hierarchy->ndim;
+    mapper.inverse_cell_width_coarse =
+        this->mesh_hierarchy->inverse_cell_width_coarse;
+    mapper.inverse_cell_width_fine =
+        this->mesh_hierarchy->inverse_cell_width_fine;
+    mapper.cell_width_coarse = this->mesh_hierarchy->cell_width_coarse;
+    mapper.cell_width_fine = this->mesh_hierarchy->cell_width_fine;
+    mapper.ncells_dim_fine = this->mesh_hierarchy->ncells_dim_fine;
+    mapper.ncells_fine = this->mesh_hierarchy->ncells_fine;
+    return mapper;
+  }
+
+public:
+  /**
+   * Create new instance of helper mapper class.
+   *
+   * @param[in] sycl_target The compute device to provide device copyable mapper
+   * structs for.
+   * @param[in] mesh_hierarchy The MeshHierarchy for which to create a mapper
+   * class for.
+   */
+  MeshHierarchyMapper(SYCLTargetSharedPtr sycl_target,
+                      std::shared_ptr<MeshHierarchy> mesh_hierarchy)
+      : mesh_hierarchy(mesh_hierarchy) {
+
+    static_assert(
+        std::is_trivially_copyable_v<MeshHierarchyDeviceMapper> == true,
+        "MeshHierarchyDeviceMapper is not trivially copyable to device");
+
+    const int ndim = mesh_hierarchy->ndim;
+    std::vector<INT> dims_tmp(ndim);
+    std::vector<REAL> origin_tmp(ndim);
+    for (int dimx = 0; dimx < ndim; dimx++) {
+      dims_tmp[dimx] = mesh_hierarchy->dims[dimx];
+      origin_tmp[dimx] = mesh_hierarchy->origin[dimx];
+    }
+    this->dh_origin =
+        std::make_shared<BufferDeviceHost<REAL>>(sycl_target, origin_tmp);
+    this->dh_dims =
+        std::make_shared<BufferDeviceHost<INT>>(sycl_target, dims_tmp);
+  }
+
+  /**
+   * Get a device copyable struct with device callable methods for interfacing
+   * with a MeshHierarchy.
+   *
+   * @returns New mapper struct.
+   */
+  inline MeshHierarchyDeviceMapper get_device_mapper() {
+    MeshHierarchyDeviceMapper mapper = this->get_generic_mapper();
+    mapper.origin = this->dh_origin->d_buffer.ptr;
+    mapper.dims = this->dh_dims->d_buffer.ptr;
+    return mapper;
+  }
+
+  /**
+   * Get a host struct with methods to interface with a MeshHierarchy instance.
+   *
+   * @returns New mapper struct.
+   */
+  inline MeshHierarchyDeviceMapper get_host_mapper() {
+    MeshHierarchyDeviceMapper mapper = this->get_generic_mapper();
+    mapper.origin = this->dh_origin->h_buffer.ptr;
+    mapper.dims = this->dh_dims->h_buffer.ptr;
+    return mapper;
+  }
 };
 
 } // namespace NESO::Particles

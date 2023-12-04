@@ -209,7 +209,8 @@ TEST(ParticleSubGroup, creating) {
   auto sycl_target = A->sycl_target;
 
   auto aa = std::make_shared<ParticleSubGroup>(
-      A, [=](auto ID) { return ID[0] == 42; }, Access::read(Sym<INT>("ID")));
+      A, [=](auto ID) { return (ID[0] % 2) == 0; },
+      Access::read(Sym<INT>("ID")));
 
   EXPECT_TRUE(aa->create_if_required());
   EXPECT_FALSE(aa->create_if_required());
@@ -231,9 +232,27 @@ TEST(ParticleSubGroup, creating) {
   EXPECT_FALSE(aa->create_if_required());
 
   auto remover = std::make_shared<ParticleRemover>(A->sycl_target);
+  const int npart0 = A->get_npart_local();
   remover->remove(A, A->get_dat(Sym<INT>("ID")), 1);
-  EXPECT_TRUE(aa->create_if_required());
+  const int npart1 = A->get_npart_local();
+
+  if (npart0 != npart1) {
+    EXPECT_TRUE(aa->create_if_required());
+  }
   EXPECT_FALSE(aa->create_if_required());
+
+  auto la = std::make_shared<LocalArray<INT>>(sycl_target, 1);
+  particle_loop(
+      aa, [=](auto LA) { LA.fetch_add(0, 1); }, Access::add(la))
+      ->execute();
+  auto lav = la->get();
+  const int npart_local = lav.at(0);
+  int npart_min;
+  MPICHK(MPI_Allreduce(&npart_local, &npart_min, 1, MPI_INT, MPI_MIN,
+                       MPI_COMM_WORLD));
+  if (npart_min == 0) {
+    return;
+  }
 
   auto p0 = particle_loop(
       A, [](auto ID, auto V) { V[0] += 0.0001; }, Access::read(Sym<INT>("ID")),
@@ -252,13 +271,13 @@ TEST(ParticleSubGroup, creating) {
   EXPECT_FALSE(aa->create_if_required());
 
   auto p2 = particle_loop(
-      A, [](auto ID) { ID[0] += 1; }, Access::write(Sym<INT>("ID")));
+      A, [](auto ID) { ID[0] += 2; }, Access::write(Sym<INT>("ID")));
   p2->execute();
   EXPECT_TRUE(aa->create_if_required());
   EXPECT_FALSE(aa->create_if_required());
 
   auto p3 = particle_loop(
-      aa, [](auto ID) { ID[0] += 1; }, Access::write(Sym<INT>("ID")));
+      aa, [](auto ID) { ID[0] += 2; }, Access::write(Sym<INT>("ID")));
   p3->execute();
   EXPECT_TRUE(aa->create_if_required());
   EXPECT_FALSE(aa->create_if_required());

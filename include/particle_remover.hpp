@@ -49,7 +49,6 @@ public:
   template <typename T, typename U>
   inline void remove(ParticleGroupSharedPtr particle_group,
                      ParticleDatSharedPtr<T> particle_dat, const U key) {
-
     NESOASSERT(this->sycl_target == particle_group->sycl_target,
                "Passed ParticleGroup does not contain the sycl_target this "
                "ParticleRemover was created with.");
