@@ -143,7 +143,7 @@ protected:
   std::shared_ptr<BufferDeviceHost<INT>> dh_cells;
   std::shared_ptr<BufferDeviceHost<INT>> dh_layers;
   int npart_local;
-  std::map<std::variant<Sym<INT>, Sym<REAL>>, int64_t> particle_dat_versions;
+  ParticleGroup::ParticleDatVersionTracker particle_dat_versions;
 
   template <template <typename> typename T, typename U>
   inline void check_sym_type(T<U> arg) {

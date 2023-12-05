@@ -7,7 +7,6 @@
 #include <memory>
 #include <mpi.h>
 #include <string>
-#include <variant>
 
 #include "access.hpp"
 #include "cell_dat.hpp"
@@ -31,11 +30,61 @@ namespace NESO::Particles {
 class ParticleSubGroup;
 
 /**
+ * Type to replace std::variant<Sym<INT>, Sym<REAL>> as the version tracking
+ * key as this has been causing segfaults.
+ */
+struct ParticleDatVersionT {
+  Sym<INT> si;
+  Sym<REAL> sr;
+  int index;
+
+  ParticleDatVersionT(Sym<INT> s) {
+    this->si = s;
+    this->index = 0;
+  }
+  ParticleDatVersionT(Sym<REAL> s) {
+    this->sr = s;
+    this->index = 1;
+  }
+  ParticleDatVersionT() { this->index = -1; }
+  ParticleDatVersionT &operator=(const ParticleDatVersionT &) = default;
+  ParticleDatVersionT &operator=(const Sym<INT> &s) {
+    this->si = s;
+    this->index = 0;
+    return *this;
+  };
+  ParticleDatVersionT &operator=(const Sym<REAL> &s) {
+    this->sr = s;
+    this->index = 1;
+    return *this;
+  };
+  bool operator<(const ParticleDatVersionT &v) const {
+    if (v.index == this->index) {
+      if (this->index == -1) {
+        return false;
+      } else if (this->index == 0) {
+        return this->si < v.si;
+      } else {
+        return this->sr < v.sr;
+      }
+    } else {
+      return this->index < v.index;
+    }
+  }
+};
+
+/**
  *  Fundamentally a ParticleGroup is a collection of ParticleDats, domain and a
  *  compute device.
  */
 class ParticleGroup {
   friend class ParticleSubGroup;
+
+protected:
+  // This type should be replaceable with typedef std::variant<Sym<INT>,
+  // Sym<REAL>> ParticleDatVersion; But we see issues with nvc++.
+  typedef ParticleDatVersionT ParticleDatVersion;
+  typedef std::map<ParticleDatVersion, int64_t> ParticleDatVersionTracker;
 
 private:
   int ncell;
@@ -62,10 +111,9 @@ private:
   // members for moving particles between local cells
   CellMove cell_move_ctx;
 
-  std::map<std::variant<Sym<INT>, Sym<REAL>>, std::tuple<int64_t, bool>>
-      particle_dat_versions;
+  std::map<ParticleDatVersion, std::tuple<int64_t, bool>> particle_dat_versions;
 
-  inline void invalidate_callback_inner(std::variant<Sym<INT>, Sym<REAL>> sym,
+  inline void invalidate_callback_inner(ParticleDatVersion sym,
                                         const int mode) {
     std::get<0>(this->particle_dat_versions.at(sym))++;
     std::get<1>(this->particle_dat_versions.at(sym)) = (bool)mode;
@@ -102,7 +150,11 @@ private:
     this->add_invalidate_callback(particle_dat);
     // This store is initialised with 1 and the to test keys should be
     // initialised with 0.
-    this->particle_dat_versions[particle_dat->sym] = {1, false};
+    ParticleDatVersion key{particle_dat->sym};
+    std::tuple<int64_t, bool> value = {1, false};
+    NESOASSERT(this->particle_dat_versions.count(key) == 0,
+               "ParticleDat already in version tracker.");
+    this->particle_dat_versions[key] = value;
   }
 
   /// BufferDeviceHost holding the exclusive sum of the number of particles in
@@ -113,8 +165,7 @@ protected:
   /**
    * Returns true if the passed version is behind and was updated.
    */
-  inline bool check_validation(
-      std::map<std::variant<Sym<INT>, Sym<REAL>>, int64_t> &to_check) {
+  inline bool check_validation(ParticleDatVersionTracker &to_check) {
     bool updated = false;
     for (auto &item : to_check) {
       const auto &key = item.first;

@@ -91,7 +91,7 @@ inline void MeshHierarchyGlobalMap::execute() {
       mesh_hierarchy->inverse_cell_width_fine;
   const REAL k_cell_width_coarse = mesh_hierarchy->cell_width_coarse;
   const REAL k_cell_width_fine = mesh_hierarchy->cell_width_fine;
-  const REAL k_ncells_dim_fine = mesh_hierarchy->ncells_dim_fine;
+  const INT k_ncells_dim_fine = mesh_hierarchy->ncells_dim_fine;
 
   for (int dimx = 0; dimx < k_ndim; dimx++) {
     this->h_origin.ptr[dimx] = mesh_hierarchy->origin[dimx];
