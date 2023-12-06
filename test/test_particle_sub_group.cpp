@@ -420,3 +420,38 @@ TEST(ParticleSubGroup, particle_loop_index) {
   sycl_target->free();
   mesh->free();
 }
+
+TEST(ParticleSubGroup, whole_group) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  auto sycl_target = A->sycl_target;
+  const int cell_count = mesh->get_cell_count();
+
+  auto pl_set = particle_loop(
+      A, [](auto m) { m.at(0) = 2; }, Access::write(Sym<INT>("MARKER")));
+  pl_set->execute();
+
+  auto aa = std::make_shared<ParticleSubGroup>(A);
+  ASSERT_TRUE(aa->is_entire_particle_group());
+
+  auto pl_set_aa = particle_loop(
+      A, [](auto m) { m.at(0) -= 1; }, Access::write(Sym<INT>("MARKER")));
+  pl_set_aa->execute();
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto marker = A->get_dat(Sym<INT>("MARKER"))->cell_dat.get_cell(cellx);
+    const int nrow = marker->nrow;
+    // for each particle in the cell
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      const INT mx = (*marker)[0][rowx];
+      ASSERT_EQ(mx, 1);
+    }
+  }
+
+  ASSERT_EQ(A->get_npart_local(), aa->get_npart_local());
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}

@@ -130,6 +130,9 @@ template <typename KERNEL, typename... ARGS> class ParticleLoopSubGroup;
  * the particles in a ParticleGroup. For example a sub group could be
  * constructed with all particles of even id. A ParticleSubGroup is a valid
  * iteration set for a ParticleLoop.
+ *
+ * A ParticleSubGroup with no selector lambda refers to the entire parent
+ * ParticleGroup.
  */
 class ParticleSubGroup {
   // This allows the ParticleLoop to access the implementation methods.
@@ -144,6 +147,7 @@ protected:
   std::shared_ptr<BufferDeviceHost<INT>> dh_layers;
   int npart_local;
   ParticleGroup::ParticleDatVersionTracker particle_dat_versions;
+  bool is_whole_particle_group;
 
   template <template <typename> typename T, typename U>
   inline void check_sym_type(T<U> arg) {
@@ -163,14 +167,15 @@ protected:
   }
 
   ParticleSubGroup(ParticleSubGroupImplementation::SubGroupSelector selector)
-      : particle_group(selector.particle_group), selector(selector) {}
+      : particle_group(selector.particle_group), selector(selector),
+        is_whole_particle_group(false) {}
 
   /**
    * Get the cells and layers of the particles in the sub group
    */
   inline int get_cells_layers(std::vector<INT> &cells,
                               std::vector<INT> &layers) {
-    this->create();
+    this->create_if_required();
     cells.resize(npart_local);
     layers.resize(npart_local);
     for (int px = 0; px < npart_local; px++) {
@@ -181,6 +186,9 @@ protected:
   }
 
   inline void create_inner() {
+    NESOASSERT(!this->is_whole_particle_group,
+               "Explicitly creating the ParticleSubGroup when the sub-group is "
+               "the entire ParticleGroup should never be required.");
     auto buffers = this->selector.get();
     this->npart_local = std::get<0>(buffers);
     this->dh_cells = std::get<1>(buffers);
@@ -226,6 +234,26 @@ public:
   }
 
   /**
+   * Create a ParticleSubGroup which is simply a reference/view into an entire
+   * ParticleGroup. This constructor creates a sub-group which is equivalent to
+   *
+   *    auto A_all = std::make_shared<ParticleSubGroup>(
+   *      A, [=]() {
+   *        return true;
+   *      }
+   *    );
+   *
+   * but can make additional optimisations.
+   *
+   * @param particle_group Parent ParticleGroup from which to form
+   * ParticleSubGroup.
+   */
+  ParticleSubGroup(ParticleGroupSharedPtr particle_group)
+      : ParticleSubGroup(particle_group, []() { return true; }) {
+    this->is_whole_particle_group = true;
+  }
+
+  /**
    * Explicitly re-create the sub group.
    */
   inline void create() { this->create_and_update_cache(); }
@@ -236,10 +264,15 @@ public:
    * @returns True if an update occured otherwise false.
    */
   inline bool create_if_required() {
+    if (this->is_whole_particle_group) {
+      return false;
+    }
+
     if (this->particle_group->check_validation(this->particle_dat_versions)) {
       this->create_inner();
       return true;
     }
+
     return false;
   }
 
@@ -247,8 +280,27 @@ public:
    * @return The number of particles currently in the ParticleSubGroup.
    */
   inline INT get_npart_local() {
-    this->create_if_required();
-    return this->npart_local;
+    if (this->is_whole_particle_group) {
+      return this->particle_group->get_npart_local();
+    } else {
+      this->create_if_required();
+      return this->npart_local;
+    }
+  }
+
+  /**
+   * @returns The original ParticleGroup this ParticleSubGroup references.
+   */
+  inline ParticleGroupSharedPtr get_particle_group() {
+    return this->particle_group;
+  }
+
+  /**
+   * @returns True if this ParticleSubGroup references the entirety of the
+   * parent ParticleGroup.
+   */
+  inline bool is_entire_particle_group() {
+    return this->is_whole_particle_group;
   }
 };
 
@@ -376,11 +428,15 @@ template <typename KERNEL, typename... ARGS>
 [[nodiscard]] inline ParticleLoopSharedPtr
 particle_loop(ParticleSubGroupSharedPtr particle_group, KERNEL kernel,
               ARGS... args) {
-  auto p = std::make_shared<ParticleLoopSubGroup<KERNEL, ARGS...>>(
-      particle_group, kernel, args...);
-  auto b = std::dynamic_pointer_cast<ParticleLoopBase>(p);
-  NESOASSERT(b != nullptr, "ParticleLoop pointer cast failed.");
-  return b;
+  if (particle_group->is_entire_particle_group()) {
+    return particle_loop(particle_group->get_particle_group(), kernel, args...);
+  } else {
+    auto p = std::make_shared<ParticleLoopSubGroup<KERNEL, ARGS...>>(
+        particle_group, kernel, args...);
+    auto b = std::dynamic_pointer_cast<ParticleLoopBase>(p);
+    NESOASSERT(b != nullptr, "ParticleLoop pointer cast failed.");
+    return b;
+  }
 }
 
 /**
@@ -398,11 +454,16 @@ template <typename KERNEL, typename... ARGS>
 [[nodiscard]] inline ParticleLoopSharedPtr
 particle_loop(const std::string name, ParticleSubGroupSharedPtr particle_group,
               KERNEL kernel, ARGS... args) {
-  auto p = std::make_shared<ParticleLoopSubGroup<KERNEL, ARGS...>>(
-      name, particle_group, kernel, args...);
-  auto b = std::dynamic_pointer_cast<ParticleLoopBase>(p);
-  NESOASSERT(b != nullptr, "ParticleLoop pointer cast failed.");
-  return b;
+  if (particle_group->is_entire_particle_group()) {
+    return particle_loop(name, particle_group->get_particle_group(), kernel,
+                         args...);
+  } else {
+    auto p = std::make_shared<ParticleLoopSubGroup<KERNEL, ARGS...>>(
+        name, particle_group, kernel, args...);
+    auto b = std::dynamic_pointer_cast<ParticleLoopBase>(p);
+    NESOASSERT(b != nullptr, "ParticleLoop pointer cast failed.");
+    return b;
+  }
 }
 
 } // namespace NESO::Particles
