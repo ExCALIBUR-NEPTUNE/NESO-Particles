@@ -61,8 +61,6 @@ TEST(ParticleGroup, cell_move) {
 
     const auto px_cell = dist_cell(rng_cell);
     initial_distribution[Sym<INT>("CELL_ID")][px][0] = px_cell;
-    const auto px_cell_new = dist_cell(rng_cell);
-
     initial_distribution[Sym<INT>("ID")][px][0] = px;
 
     const auto px_rank = dist_rank(rng_rank);

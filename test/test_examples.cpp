@@ -21,8 +21,6 @@ ParticleGroupSharedPtr particle_loop_common(const int N = 1093) {
   auto mesh = std::make_shared<CartesianHMesh>(MPI_COMM_WORLD, ndim, dims,
                                                cell_extent, subdivision_order);
 
-  const int cell_count = mesh->get_cell_count();
-
   auto sycl_target =
       std::make_shared<SYCLTarget>(GPU_SELECTOR, mesh->get_comm());
 
@@ -42,7 +40,6 @@ ParticleGroupSharedPtr particle_loop_common(const int N = 1093) {
                                   domain->mesh->get_cell_count()));
 
   const int rank = sycl_target->comm_pair.rank_parent;
-  const int size = sycl_target->comm_pair.size_parent;
   const INT id_offset = rank * N;
 
   std::mt19937 rng_pos(52234234 + rank);

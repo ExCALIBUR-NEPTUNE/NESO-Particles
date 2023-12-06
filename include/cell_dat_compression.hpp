@@ -150,7 +150,7 @@ public:
                 sycl::atomic_ref<int, sycl::memory_order::relaxed,
                                  sycl::memory_scope::device>
                     element_atomic(device_npart_cell_ptr[cell]);
-                auto count = element_atomic.fetch_add(-1);
+                element_atomic.fetch_add(-1);
 
                 //// indicate this particle is removed by setting
                 /// the / cell index to -1
