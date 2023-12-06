@@ -436,7 +436,7 @@ TEST(ParticleSubGroup, whole_group) {
   ASSERT_TRUE(aa->is_entire_particle_group());
 
   auto pl_set_aa = particle_loop(
-      A, [](auto m) { m.at(0) -= 1; }, Access::write(Sym<INT>("MARKER")));
+      aa, [](auto m) { m.at(0) -= 1; }, Access::write(Sym<INT>("MARKER")));
   pl_set_aa->execute();
 
   for (int cellx = 0; cellx < cell_count; cellx++) {
