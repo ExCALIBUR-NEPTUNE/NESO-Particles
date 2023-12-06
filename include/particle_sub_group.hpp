@@ -313,14 +313,12 @@ public:
     this->loop_running = true;
 
     auto t0 = profile_timestamp();
-    auto is = this->iteration_set->get();
     auto k_kernel = this->kernel;
 
     this->particle_sub_group->create_if_required();
     const INT *d_cells = this->particle_sub_group->dh_cells->d_buffer.ptr;
     const INT *d_layers = this->particle_sub_group->dh_layers->d_buffer.ptr;
 
-    const int nbin = std::get<0>(is);
     this->sycl_target->profile_map.inc(
         "ParticleLoop", "Init", 1, profile_elapsed(t0, profile_timestamp()));
 

@@ -149,8 +149,6 @@ TEST(ParticleGroup, stencil_move_multiple) {
   const REAL tol = 1.0e-10;
   const int cell_count = domain->mesh->get_cell_count();
   auto velocity_index = std::uniform_int_distribution<int>(0, 1);
-  auto cell_index =
-      std::uniform_int_distribution<int>(0, MAX(dims[0], dims[1]));
 
   ParticleSet initial_distribution(N, A.get_particle_spec());
 
@@ -259,11 +257,6 @@ TEST(ParticleGroup, stencil_move_multiple) {
 
           // check that the particle position is actually owned by this MPI
           // rank
-
-          auto mpi_rank_0 = (*MPI_RANK)[0][px];
-          auto mpi_rank_1 = (*MPI_RANK)[1][px];
-
-          const INT id = (*ID)[0][px];
           const int particle_cell =
               ((REAL)(P_to_test * mesh->inverse_cell_width_fine));
 

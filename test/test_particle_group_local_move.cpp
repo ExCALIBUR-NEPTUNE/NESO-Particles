@@ -180,11 +180,6 @@ TEST(ParticleGroup, local_move_multiple) {
 
           // check that the particle position is actually owned by this MPI
           // rank
-
-          auto mpi_rank_0 = (*MPI_RANK)[0][px];
-          auto mpi_rank_1 = (*MPI_RANK)[1][px];
-
-          const INT id = (*ID)[0][px];
           const int particle_cell =
               ((REAL)(P_to_test * mesh->inverse_cell_width_fine));
 

@@ -255,7 +255,6 @@ TEST(ParticleGroup, compression_removal_all) {
   const auto cell1 = A[Sym<INT>("ID")]->cell_dat.get_cell(1);
 
   const INT rm_id_0 = (*cell1)[0][0];
-  const INT rm_id_1 = (*cell1)[0][npart_cell_1 - 1];
 
   ASSERT_EQ(cells.size(), 2);
   A.remove_particles(cells.size(), cells, layers);
