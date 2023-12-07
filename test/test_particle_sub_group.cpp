@@ -352,7 +352,7 @@ TEST(ParticleSubGroup, particle_loop_index) {
   auto pl = particle_loop(
       aa,
       [=](auto MARKER, auto index) {
-        MARKER[0] = index.get_global_linear_index();
+        MARKER[0] = index.get_local_linear_index();
       },
       Access::write(Sym<INT>("MARKER")), Access::read(ParticleLoopIndex{}));
   pl->execute();

@@ -110,15 +110,15 @@ On completion of the loop the local entries of each global array are globally co
      - add(index, value) atomically increments the element referenced by the index with the passed value. On loop execution completion values are all-reduced across all MPI ranks.
 
 
-CellDatConst
-~~~~~~~~~~~~
+CellDatConst and CellDat
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 The CellDatConst data structure stores a constant sized matrix per mesh cell.
 When accessed from a particle loop both the read and add access descriptors expose the matrix which corresponds to the cell in which the particle resides.
 
 .. literalinclude:: ../example_sources/example_particle_loop_cell_dat_const.hpp
    :language: cpp
-   :caption: Particle loop example where a CellDatConst is accessed by the ParticleLoop. 
+   :caption: Particle loop example where a CellDatConst is accessed by the ParticleLoop. CellDat is accessed in a ParticleLoop in an identical manner.
 
 .. list-table:: CellDatConst<T> Access
    :header-rows: 1
@@ -128,11 +128,26 @@ When accessed from a particle loop both the read and add access descriptors expo
      - Notes
    * - Read
      - Access::CellDatConst::Read<T>
-     - Components accessed for each array element via .at or subscript which returns a const reference.
+     - Components accessed for each array element via .at(row, col) or subscript (linearised index) which returns a const reference.
    * - Add
      - Access::CellDatConst::Add<T>
-     - fetch_add(index, value) atomically increments the element referenced by the index with the passed value. Returns the previous value stored at the index. Users may assume that the memory region accessed is the same for all invocations of the kernel. Hence adding 1 for each particle gives a total ordering for each participating calls.
+     - fetch_add(row, col, value) atomically increments the element referenced by the index with the passed value. Returns the previous value stored at the index. Users may assume that the memory region accessed is the same for all invocations of the kernel. Hence adding 1 for each particle gives a total ordering for each participating calls.
 
+.. list-table:: CellDat<T> Access
+   :header-rows: 1
+
+   * - Access Descriptors
+     - Kernel Types
+     - Notes
+   * - Read
+     - Access::CellDat::Read<T>
+     - Components accessed for each array element via .at(row, col) which returns a const reference.
+   * - Add
+     - Access::CellDat::Add<T>
+     - fetch_add(row, col, value) atomically increments the element referenced by the index with the passed value. Returns the previous value stored at the index. Users may assume that the memory region accessed is the same for all invocations of the kernel. Hence adding 1 for each particle gives a total ordering for each participating calls.
+   * - Write
+     - Access::CellDat::Write<T>
+     - Write using a modifiable reference provided by .at(row, col). It is the users responsibility that no write conflicts or race conditions occur.
 
 SymVector
 ~~~~~~~~~
@@ -156,5 +171,26 @@ The indexing of the data structure in the kernel is via the positional index of 
    * - Write
      - Access::SymVector::Write<T>
      - Components accessed for each array element via .at or subscript which returns a reference.
+
+ParticleLoopIndex
+~~~~~~~~~~~~~~~~~
+
+Some data structures are indexed by the cell and layer of the particle. 
+The ParticleLoopIndex is a data structure that can be read in a ParticleLoop to provide this information.
+This data structure is read-only.
+
+.. literalinclude:: ../example_sources/example_particle_loop_index.hpp
+   :language: cpp
+   :caption: Particle loop example where a ParticleLoopIndex is accessed by the ParticleLoop. 
+
+.. list-table:: ParticleLoopIndex Access
+   :header-rows: 1
+
+   * - Access Descriptors
+     - Kernel Types
+     - Notes
+   * - Read
+     - Access::ParticleLoopIndex::Read
+     - Indices accessed via .cell, .layer, .get_local_linear_index and .get_loop_linear_index.
 
 .. [SAUNDERS2018] A domain specific language for performance portable molecular dynamics algorithms. `CPC <https://doi.org/10.1016/j.cpc.2017.11.006>`_ , `arXiv <https://arxiv.org/abs/1704.03329>`_.

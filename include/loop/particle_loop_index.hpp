@@ -24,19 +24,22 @@ struct Read {
   INT cell;
   /// The layer of the particle.
   INT layer;
-  /// The type of the ParticleLoop.
+  /// The type of the ParticleLoop (intended for internal use).
   int loop_type_int;
-  /// pointer to the exclusive sum of particle counts in each cell.
+  /// pointer to the exclusive sum of particle counts in each cell (intended for
+  /// internal use).
   INT const *npart_cell_es;
-  /// Loop iteration index
+  /// Loop iteration index (intended for internal use - see
+  /// get_loop_linear_index)
   size_t index;
-  /// Starting cell for ParticleLoop called cell wise.
+  /// Starting cell for ParticleLoop called cell wise (intended for internal
+  /// use).
   int starting_cell;
   /**
-   * @returns The global linear index of the particle on this MPI rank in the
+   * @returns The local linear index of the particle on this MPI rank in the
    * ParticleGroup
    */
-  inline INT get_global_linear_index() {
+  inline INT get_local_linear_index() {
     return this->npart_cell_es[this->cell] + this->layer;
   }
   /**

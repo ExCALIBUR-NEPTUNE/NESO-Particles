@@ -754,7 +754,7 @@ TEST(ParticleLoop, loop_index_linear) {
 
   auto pl = particle_loop(
       A,
-      [=](auto ID, auto index) { ID.at(0) = index.get_global_linear_index(); },
+      [=](auto ID, auto index) { ID.at(0) = index.get_local_linear_index(); },
       Access::write(Sym<INT>("ID")), Access::read(ParticleLoopIndex{}));
 
   pl->execute();
