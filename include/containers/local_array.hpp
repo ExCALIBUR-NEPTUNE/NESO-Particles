@@ -112,8 +112,7 @@ template <typename T> struct KernelParameter<Access::Add<LocalArray<T>>> {
  *  Function to create the kernel argument for LocalArray read access.
  */
 template <typename T>
-inline void create_kernel_arg(const size_t index, const int cellx,
-                              const int layerx, T const *rhs,
+inline void create_kernel_arg(ParticleLoopIteration &IX, T const *rhs,
                               Access::LocalArray::Read<T> &lhs) {
   lhs.ptr = rhs;
 }
@@ -121,8 +120,7 @@ inline void create_kernel_arg(const size_t index, const int cellx,
  *  Function to create the kernel argument for LocalArray write access.
  */
 template <typename T>
-inline void create_kernel_arg(const size_t index, const int cellx,
-                              const int layerx, T *rhs,
+inline void create_kernel_arg(ParticleLoopIteration &IX, T *rhs,
                               Access::LocalArray::Write<T> &lhs) {
   lhs.ptr = rhs;
 }
@@ -130,8 +128,7 @@ inline void create_kernel_arg(const size_t index, const int cellx,
  *  Function to create the kernel argument for LocalArray add access.
  */
 template <typename T>
-inline void create_kernel_arg(const size_t index, const int cellx,
-                              const int layerx, T *rhs,
+inline void create_kernel_arg(ParticleLoopIteration &IX, T *rhs,
                               Access::LocalArray::Add<T> &lhs) {
   lhs.ptr = rhs;
 }
@@ -315,6 +312,17 @@ public:
     std::vector<T> data(this->size);
     this->get(data);
     return data;
+  }
+
+  /**
+   * Reallocate the buffer to hold the requested number of elements. Current
+   * contents is not copied to the new buffer.
+   *
+   * @param size Number of elements this buffer should  hold.
+   */
+  inline void realloc_no_copy(const size_t size) {
+    this->size = size;
+    this->buffer->realloc_no_copy(size);
   }
 };
 

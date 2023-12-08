@@ -165,7 +165,7 @@ TEST(ParticleSubGroup, particle_loop) {
   auto sycl_target = A->sycl_target;
 
   auto aa = std::make_shared<ParticleSubGroup>(
-      A, [=](auto ID) { return ID[0] == 42; }, Access::read(Sym<INT>("ID")));
+      A, [=](auto ID) { return ID[0] == 2; }, Access::read(Sym<INT>("ID")));
 
   GlobalArray<int> counter(sycl_target, 1, 0);
 

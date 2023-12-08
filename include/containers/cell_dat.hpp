@@ -75,25 +75,22 @@ template <typename T> struct KernelParameter<Access::Add<CellDat<T>>> {
   using type = Access::CellDat::Add<T>;
 };
 template <typename T>
-inline void create_kernel_arg(const size_t index, const int cellx,
-                              const int layerx, T *const *const *&rhs,
+inline void create_kernel_arg(ParticleLoopIteration &IX, T *const *const *&rhs,
                               Access::CellDat::Read<T> &lhs) {
   lhs.ptr = rhs;
-  lhs.cell = cellx;
+  lhs.cell = IX.cellx;
 }
 template <typename T>
-inline void create_kernel_arg(const size_t index, const int cellx,
-                              const int layerx, T ***&rhs,
+inline void create_kernel_arg(ParticleLoopIteration &IX, T ***&rhs,
                               Access::CellDat::Write<T> &lhs) {
   lhs.ptr = rhs;
-  lhs.cell = cellx;
+  lhs.cell = IX.cellx;
 }
 template <typename T>
-inline void create_kernel_arg(const size_t index, const int cellx,
-                              const int layerx, T ***&rhs,
+inline void create_kernel_arg(ParticleLoopIteration &IX, T ***&rhs,
                               Access::CellDat::Add<T> &lhs) {
   lhs.ptr = rhs;
-  lhs.cell = cellx;
+  lhs.cell = IX.cellx;
 }
 template <typename T>
 inline T *const *const *create_loop_arg(ParticleLoopGlobalInfo *global_info,

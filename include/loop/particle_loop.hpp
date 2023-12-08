@@ -253,29 +253,26 @@ protected:
 
   /// recusively assemble the kernel arguments from the loop arguments
   template <size_t INDEX, size_t SIZE>
-  static inline constexpr void
-  create_kernel_args_inner(const size_t index, const int cellx,
-                           const int layerx,
-                           const loop_parameter_type &loop_args,
-                           kernel_parameter_type &kernel_args) {
+  static inline constexpr void create_kernel_args_inner(
+      ParticleLoopImplementation::ParticleLoopIteration &IX,
+      const loop_parameter_type &loop_args,
+      kernel_parameter_type &kernel_args) {
 
     if constexpr (INDEX < SIZE) {
       auto arg = Tuple::get<INDEX>(loop_args);
       ParticleLoopImplementation::create_kernel_arg(
-          index, cellx, layerx, arg, Tuple::get<INDEX>(kernel_args));
-      create_kernel_args_inner<INDEX + 1, SIZE>(index, cellx, layerx, loop_args,
-                                                kernel_args);
+          IX, arg, Tuple::get<INDEX>(kernel_args));
+      create_kernel_args_inner<INDEX + 1, SIZE>(IX, loop_args, kernel_args);
     }
   }
 
   /// called before kernel execution to assemble the kernel arguments.
   static inline constexpr void
-  create_kernel_args(const size_t index, const int cellx, const int layerx,
+  create_kernel_args(ParticleLoopImplementation::ParticleLoopIteration &IX,
                      const loop_parameter_type &loop_args,
                      kernel_parameter_type &kernel_args) {
 
-    create_kernel_args_inner<0, sizeof...(ARGS)>(index, cellx, layerx,
-                                                 loop_args, kernel_args);
+    create_kernel_args_inner<0, sizeof...(ARGS)>(IX, loop_args, kernel_args);
   }
 
   ParticleGroupSharedPtr particle_group_shrptr;
@@ -292,15 +289,24 @@ protected:
   std::string name;
   EventStack event_stack;
   bool loop_running = {false};
+  // The actual number of particles in the cell
   int *d_npart_cell;
+  // The number of particles in the cell from the loop bounds point of view.
+  int *d_npart_cell_lb;
+  // Exclusive sum of the actual number of particles in the cell.
   INT *d_npart_cell_es;
+  // Exclusive sum of the number of particles in the cell from the loop bounds
+  // point of view.
+  INT *d_npart_cell_es_lb;
 
   template <typename T>
   inline void init_from_particle_dat(ParticleDatSharedPtr<T> particle_dat) {
     const int ncell = particle_dat->ncell;
     auto h_npart_cell = particle_dat->h_npart_cell;
     this->d_npart_cell = particle_dat->d_npart_cell;
+    this->d_npart_cell_lb = this->d_npart_cell;
     this->d_npart_cell_es = particle_dat->get_d_npart_cell_es();
+    this->d_npart_cell_es_lb = this->d_npart_cell_es;
     this->iteration_set =
         std::make_unique<ParticleLoopImplementation::ParticleLoopIterationSet>(
             1, ncell, h_npart_cell);
@@ -327,6 +333,7 @@ protected:
     ParticleLoopImplementation::ParticleLoopGlobalInfo global_info;
     global_info.particle_group = this->particle_group_ptr;
     global_info.d_npart_cell_es = this->d_npart_cell_es;
+    global_info.d_npart_cell_es_lb = this->d_npart_cell_es_lb;
     global_info.starting_cell = 0;
     global_info.loop_type_int = this->get_loop_type_int();
     return global_info;
@@ -434,7 +441,7 @@ public:
     auto global_info = this->create_global_info();
     global_info.starting_cell = (cell == std::nullopt) ? 0 : cell.value();
 
-    auto k_npart_cell = this->d_npart_cell;
+    auto k_npart_cell_lb = this->d_npart_cell_lb;
     auto is = this->iteration_set->get(cell);
     auto k_kernel = this->kernel;
 
@@ -455,10 +462,14 @@ public:
               const size_t layerxs = idx.get_global_id(1);
               const int cellx = static_cast<int>(cellxs);
               const int layerx = static_cast<int>(layerxs);
-              if (layerx < k_npart_cell[cellx]) {
+              ParticleLoopImplementation::ParticleLoopIteration IX;
+              if (layerx < k_npart_cell_lb[cellx]) {
+                IX.index = index;
+                IX.cellx = cellx;
+                IX.layerx = layerx;
+                IX.loop_layerx = layerx;
                 kernel_parameter_type kernel_args;
-                create_kernel_args(index, cellx, layerx, loop_args,
-                                   kernel_args);
+                create_kernel_args(IX, loop_args, kernel_args);
                 Tuple::apply(k_kernel, kernel_args);
               }
             });

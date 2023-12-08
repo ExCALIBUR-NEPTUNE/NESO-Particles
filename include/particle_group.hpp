@@ -26,8 +26,10 @@
 
 using namespace cl;
 namespace NESO::Particles {
-
 class ParticleSubGroup;
+namespace ParticleSubGroupImplementation {
+class SubGroupSelector;
+}
 
 /**
  * Type to replace std::variant<Sym<INT>, Sym<REAL>> as the version tracking
@@ -78,6 +80,7 @@ struct ParticleDatVersionT {
  *  compute device.
  */
 class ParticleGroup {
+  friend class ParticleSubGroupImplementation::SubGroupSelector;
   friend class ParticleSubGroup;
 
 protected:
@@ -162,6 +165,11 @@ private:
   std::shared_ptr<BufferDeviceHost<INT>> dh_npart_cell_es;
 
 protected:
+  /// The sub group creation requires get_npart_local temporary space and we
+  /// create this space here on the parent subgroup such that it is shared
+  /// across all subgroups to avoid exessive memory usage/realloc
+  std::shared_ptr<BufferDevice<int>> d_sub_group_layers;
+
   /**
    * Returns true if the passed version is behind and was updated.
    */
@@ -281,6 +289,8 @@ public:
     // call the callback on the local mapper to complete the setup of that
     // object
     this->domain->local_mapper->particle_group_callback(*this);
+    this->d_sub_group_layers =
+        std::make_shared<BufferDevice<int>>(sycl_target, 1);
   }
   ~ParticleGroup() {}
 

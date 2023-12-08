@@ -93,11 +93,10 @@ template <typename T> struct KernelParameter<Access::Add<CellDatConst<T>>> {
  *  Function to create the kernel argument for CellDatConst read access.
  */
 template <typename T>
-inline void create_kernel_arg(const size_t index, const int cellx,
-                              const int layerx,
+inline void create_kernel_arg(ParticleLoopIteration &IX,
                               CellDatConstDeviceTypeConst<T> &rhs,
                               Access::CellDatConst::Read<T> &lhs) {
-  T const *ptr = rhs.ptr + cellx * rhs.stride;
+  T const *ptr = rhs.ptr + IX.cellx * rhs.stride;
   lhs.ptr = ptr;
   lhs.nrow = rhs.nrow;
 }
@@ -105,10 +104,10 @@ inline void create_kernel_arg(const size_t index, const int cellx,
  *  Function to create the kernel argument for CellDatConst add access.
  */
 template <typename T>
-inline void create_kernel_arg(const size_t index, const int cellx,
-                              const int layerx, CellDatConstDeviceType<T> &rhs,
+inline void create_kernel_arg(ParticleLoopIteration &IX,
+                              CellDatConstDeviceType<T> &rhs,
                               Access::CellDatConst::Add<T> &lhs) {
-  T *ptr = rhs.ptr + cellx * rhs.stride;
+  T *ptr = rhs.ptr + IX.cellx * rhs.stride;
   lhs.ptr = ptr;
   lhs.nrow = rhs.nrow;
 }

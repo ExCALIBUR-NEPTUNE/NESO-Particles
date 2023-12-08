@@ -24,11 +24,16 @@ struct Read {
   INT cell;
   /// The layer of the particle.
   INT layer;
+  /// The looping layer of the particle.
+  INT loop_layer;
   /// The type of the ParticleLoop (intended for internal use).
   int loop_type_int;
   /// pointer to the exclusive sum of particle counts in each cell (intended for
   /// internal use).
   INT const *npart_cell_es;
+  /// pointer to the exclusive sum of particle counts in each cell for loop
+  /// bounds (intended for internal use).
+  INT const *npart_cell_es_lb;
   /// Loop iteration index (intended for internal use - see
   /// get_loop_linear_index)
   size_t index;
@@ -46,12 +51,10 @@ struct Read {
    * @returns The linear index of the particle within the current ParticleLoop.
    */
   inline INT get_loop_linear_index() {
-    const INT linear_particle_group =
-        (this->npart_cell_es[this->cell] + this->layer) -
-        this->npart_cell_es[this->starting_cell];
-    const INT linear_particle_sub_group = static_cast<INT>(index);
-    return (loop_type_int == 0) ? linear_particle_group
-                                : linear_particle_sub_group;
+    const INT linear_index =
+        (this->npart_cell_es_lb[this->cell] + this->loop_layer) -
+        this->npart_cell_es_lb[this->starting_cell];
+    return linear_index;
   }
 };
 
@@ -73,6 +76,7 @@ struct ParticleLoopIndexKernelT {
   int starting_cell;
   int loop_type_int;
   INT const *npart_cell_es;
+  INT const *npart_cell_es_lb;
 };
 
 /**
@@ -93,20 +97,23 @@ create_loop_arg(ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
   tmp.starting_cell = global_info->starting_cell;
   tmp.loop_type_int = global_info->loop_type_int;
   tmp.npart_cell_es = global_info->d_npart_cell_es;
+  tmp.npart_cell_es_lb = global_info->d_npart_cell_es_lb;
   return tmp;
 }
 /**
  *  Function to create the kernel argument for ParticleLoopIndex read access.
  */
-inline void create_kernel_arg(const size_t index, const int cellx,
-                              const int layerx, ParticleLoopIndexKernelT &rhs,
+inline void create_kernel_arg(ParticleLoopIteration &IX,
+                              ParticleLoopIndexKernelT &rhs,
                               Access::LoopIndex::Read &lhs) {
-  lhs.cell = cellx;
-  lhs.layer = layerx;
-  lhs.index = index;
+  lhs.cell = IX.cellx;
+  lhs.layer = IX.layerx;
+  lhs.loop_layer = IX.loop_layerx;
+  lhs.index = IX.index;
   lhs.starting_cell = rhs.starting_cell;
   lhs.loop_type_int = rhs.loop_type_int;
   lhs.npart_cell_es = rhs.npart_cell_es;
+  lhs.npart_cell_es_lb = rhs.npart_cell_es_lb;
 }
 
 } // namespace ParticleLoopImplementation

@@ -128,21 +128,19 @@ create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
  *  Function to create the kernel argument for ParticleDat read access.
  */
 template <typename T>
-inline void create_kernel_arg(const size_t index, const int cellx,
-                              const int layerx, T *const *const *rhs,
+inline void create_kernel_arg(ParticleLoopIteration &IX, T *const *const *rhs,
                               Access::ParticleDat::Read<T> &lhs) {
-  lhs.layer = layerx;
-  lhs.ptr = rhs[cellx];
+  lhs.layer = IX.layerx;
+  lhs.ptr = rhs[IX.cellx];
 }
 /**
  *  Function to create the kernel argument for ParticleDat write access.
  */
 template <typename T>
-inline void create_kernel_arg(const size_t index, const int cellx,
-                              const int layerx, T ***rhs,
+inline void create_kernel_arg(ParticleLoopIteration &IX, T ***rhs,
                               Access::ParticleDat::Write<T> &lhs) {
-  lhs.layer = layerx;
-  lhs.ptr = rhs[cellx];
+  lhs.layer = IX.layerx;
+  lhs.ptr = rhs[IX.cellx];
 }
 
 } // namespace NESO::Particles::ParticleLoopImplementation

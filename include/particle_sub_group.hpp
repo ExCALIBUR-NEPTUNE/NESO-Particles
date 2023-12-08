@@ -5,12 +5,13 @@
 #include "particle_group.hpp"
 #include "typedefs.hpp"
 #include <map>
+#include <numeric>
 #include <random>
 #include <tuple>
 #include <type_traits>
 
 namespace NESO::Particles {
-
+class ParticleSubGroup;
 namespace ParticleSubGroupImplementation {
 
 /**
@@ -19,13 +20,27 @@ namespace ParticleSubGroupImplementation {
  * layers.
  */
 class SubGroupSelector {
+  friend class NESO::Particles::ParticleSubGroup;
+
 protected:
-  LocalArray<int> index;
-  LocalArray<INT *> ptrs;
-  ParticleLoopSharedPtr loop;
+  std::shared_ptr<CellDat<INT>> map_cell_to_particles;
+  std::shared_ptr<BufferDeviceHost<int>> dh_npart_cell;
+  LocalArray<int *> map_ptrs;
+  std::shared_ptr<BufferDevice<INT>> d_npart_cell_es;
+  ParticleLoopSharedPtr loop_0;
+  ParticleLoopSharedPtr loop_1;
 
 public:
   ParticleGroupSharedPtr particle_group;
+
+  struct SelectionT {
+    int npart_local;
+    int ncell;
+    int *h_npart_cell;
+    int *d_npart_cell;
+    INT *d_npart_cell_es;
+    INT ***d_map_cells_to_particles;
+  };
 
   /**
    * Create a selector based on a kernel and arguments. The selector kernel
@@ -47,25 +62,46 @@ public:
       : particle_group(particle_group) {
 
     auto sycl_target = particle_group->sycl_target;
-    this->index = LocalArray<int>(sycl_target, 1);
-    this->ptrs = LocalArray<INT *>(sycl_target, 2);
+    const int cell_count = particle_group->domain->mesh->get_cell_count();
+    this->map_cell_to_particles =
+        std::make_shared<CellDat<INT>>(sycl_target, cell_count, 1);
+    this->dh_npart_cell =
+        std::make_shared<BufferDeviceHost<int>>(sycl_target, cell_count);
+    this->map_ptrs = LocalArray<int *>(sycl_target, 2);
+    this->d_npart_cell_es =
+        std::make_shared<BufferDevice<INT>>(sycl_target, cell_count);
 
-    this->loop = particle_loop(
-        "sub_group_selector", particle_group,
-        [=](auto loop_index, auto k_index, auto k_ptrs, auto... user_args) {
+    this->loop_0 = particle_loop(
+        "sub_group_selector_0", particle_group,
+        [=](auto loop_index, auto k_map_ptrs, auto... user_args) {
           const bool required = kernel(user_args...);
+          const INT particle_linear_index = loop_index.get_local_linear_index();
           if (required) {
-            // increment the counter by 1 to get the index to store this
-            // particle in
-            const INT store_index = k_index.fetch_add(0, 1);
-            INT *cells = k_ptrs[0];
-            INT *layers = k_ptrs[1];
-            cells[store_index] = loop_index.cell;
-            layers[store_index] = loop_index.layer;
+            sycl::atomic_ref<int, sycl::memory_order::relaxed,
+                             sycl::memory_scope::device>
+                element_atomic(k_map_ptrs.at(1)[loop_index.cell]);
+            const int layer = element_atomic.fetch_add(1);
+            k_map_ptrs.at(0)[particle_linear_index] = layer;
+          } else {
+            k_map_ptrs.at(0)[particle_linear_index] = -1;
           }
         },
-        Access::read(ParticleLoopIndex{}), Access::add(this->index),
-        Access::read(this->ptrs), args...);
+        Access::read(ParticleLoopIndex{}), Access::read(this->map_ptrs),
+        args...);
+
+    this->loop_1 = particle_loop(
+        "sub_group_selector_1", particle_group,
+        [=](auto loop_index, auto k_map_cell_to_particles, auto k_map_ptrs) {
+          const INT particle_linear_index = loop_index.get_local_linear_index();
+          const int layer = k_map_ptrs.at(0)[particle_linear_index];
+          const bool required = layer > -1;
+          if (required) {
+            k_map_cell_to_particles.at(layer, 0) = loop_index.layer;
+          }
+        },
+        Access::read(ParticleLoopIndex{}),
+        Access::write(this->map_cell_to_particles),
+        Access::read(this->map_ptrs));
   }
 
   /**
@@ -74,49 +110,51 @@ public:
    *
    * @returns List of cells and layers of particles in the sub group.
    */
-  inline std::tuple<int, std::shared_ptr<BufferDeviceHost<INT>>,
-                    std::shared_ptr<BufferDeviceHost<INT>>>
-  get() {
-
-    const int npart_local = particle_group->get_npart_local();
+  inline SelectionT get() {
+    const int cell_count = this->particle_group->domain->mesh->get_cell_count();
     auto sycl_target = this->particle_group->sycl_target;
+    auto pg_map_layers = particle_group->d_sub_group_layers;
+    pg_map_layers->realloc_no_copy(particle_group->get_npart_local());
+    int *d_npart_cell_ptr = this->dh_npart_cell->d_buffer.ptr;
+    sycl_target->queue.fill<int>(d_npart_cell_ptr, 0, cell_count);
+    std::vector<int *> tmp = {pg_map_layers->ptr, d_npart_cell_ptr};
+    this->map_ptrs.set(tmp);
 
-    // TODO - cache these semi globally somewhere?
-    auto ptr_cells =
-        std::make_shared<BufferDevice<INT>>(sycl_target, npart_local);
-    auto ptr_layers =
-        std::make_shared<BufferDevice<INT>>(sycl_target, npart_local);
+    this->loop_0->execute();
+    this->dh_npart_cell->device_to_host();
+    int *h_npart_cell_ptr = this->dh_npart_cell->h_buffer.ptr;
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      const INT nrow_required = h_npart_cell_ptr[cellx];
+      if (this->map_cell_to_particles->nrow.at(cellx) < nrow_required) {
+        this->map_cell_to_particles->set_nrow(cellx, nrow_required);
+      }
+    }
+    this->map_cell_to_particles->wait_set_nrow();
 
-    std::vector<INT *> new_ptrs(2);
-    new_ptrs[0] = ptr_cells->ptr;
-    new_ptrs[1] = ptr_layers->ptr;
-    this->ptrs.set(new_ptrs);
+    this->loop_1->submit();
 
-    this->index.fill(0);
-    this->loop->execute();
+    std::vector<INT> h_npart_cell_es(cell_count);
+    INT total = 0;
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      h_npart_cell_es[cellx] = total;
+      total += h_npart_cell_ptr[cellx];
+    }
+    INT *d_npart_cell_es_ptr = this->d_npart_cell_es->ptr;
+    sycl_target->queue
+        .memcpy(d_npart_cell_es_ptr, h_npart_cell_es.data(),
+                cell_count * sizeof(INT))
+        .wait();
 
-    const int num_particles = this->index.get().at(0);
-    auto cells_layers = this->ptrs.get();
-    const INT *d_cells = cells_layers.at(0);
-    const INT *d_layers = cells_layers.at(1);
+    this->loop_1->wait();
 
-    auto dh_cells =
-        std::make_shared<BufferDeviceHost<INT>>(sycl_target, num_particles);
-    auto dh_layers =
-        std::make_shared<BufferDeviceHost<INT>>(sycl_target, num_particles);
-
-    auto k_cells = dh_cells->d_buffer.ptr;
-    auto k_layers = dh_layers->d_buffer.ptr;
-
-    const std::size_t size = num_particles * sizeof(INT);
-    auto e0 = sycl_target->queue.memcpy(k_cells, d_cells, size);
-    auto e1 = sycl_target->queue.memcpy(k_layers, d_layers, size);
-    e0.wait_and_throw();
-    e1.wait_and_throw();
-    dh_cells->device_to_host();
-    dh_layers->device_to_host();
-
-    return {num_particles, dh_cells, dh_layers};
+    SelectionT s;
+    s.npart_local = total;
+    s.ncell = cell_count;
+    s.h_npart_cell = h_npart_cell_ptr;
+    s.d_npart_cell = d_npart_cell_ptr;
+    s.d_npart_cell_es = d_npart_cell_es_ptr;
+    s.d_map_cells_to_particles = this->map_cell_to_particles->device_ptr();
+    return s;
   }
 };
 
@@ -142,9 +180,8 @@ class ParticleSubGroup {
 protected:
   ParticleGroupSharedPtr particle_group;
   ParticleSubGroupImplementation::SubGroupSelector selector;
+  ParticleSubGroupImplementation::SubGroupSelector::SelectionT selection;
 
-  std::shared_ptr<BufferDeviceHost<INT>> dh_cells;
-  std::shared_ptr<BufferDeviceHost<INT>> dh_layers;
   int npart_local;
   ParticleGroup::ParticleDatVersionTracker particle_dat_versions;
   bool is_whole_particle_group;
@@ -171,16 +208,25 @@ protected:
         is_whole_particle_group(false) {}
 
   /**
-   * Get the cells and layers of the particles in the sub group
+   * Get the cells and layers of the particles in the sub group (slow)
    */
   inline int get_cells_layers(std::vector<INT> &cells,
                               std::vector<INT> &layers) {
     this->create_if_required();
-    cells.resize(npart_local);
-    layers.resize(npart_local);
-    for (int px = 0; px < npart_local; px++) {
-      cells[px] = this->dh_cells->h_buffer.ptr[px];
-      layers[px] = this->dh_layers->h_buffer.ptr[px];
+    cells.resize(this->npart_local);
+    layers.resize(this->npart_local);
+    const int cell_count = this->particle_group->domain->mesh->get_cell_count();
+
+    INT index = 0;
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      auto cell_data = this->selector.map_cell_to_particles->get_cell(cellx);
+      const int nrow = cell_data->nrow;
+      for (int rowx = 0; rowx < nrow; rowx++) {
+        cells[index] = cellx;
+        const int layerx = cell_data->at(rowx, 0);
+        layers[index] = layerx;
+        index++;
+      }
     }
     return npart_local;
   }
@@ -189,10 +235,9 @@ protected:
     NESOASSERT(!this->is_whole_particle_group,
                "Explicitly creating the ParticleSubGroup when the sub-group is "
                "the entire ParticleGroup should never be required.");
-    auto buffers = this->selector.get();
-    this->npart_local = std::get<0>(buffers);
-    this->dh_cells = std::get<1>(buffers);
-    this->dh_layers = std::get<2>(buffers);
+
+    this->selection = this->selector.get();
+    this->npart_local = this->selection.npart_local;
   }
 
   inline void create_and_update_cache() {
@@ -323,6 +368,15 @@ protected:
 
   virtual inline int get_loop_type_int() override { return 1; }
 
+  inline void setup_subgroup_is(
+      ParticleSubGroupImplementation::SubGroupSelector::SelectionT &selection) {
+    this->d_npart_cell_lb = selection.d_npart_cell;
+    this->d_npart_cell_es_lb = selection.d_npart_cell_es;
+    this->iteration_set =
+        std::make_unique<ParticleLoopImplementation::ParticleLoopIterationSet>(
+            1, selection.ncell, selection.h_npart_cell);
+  }
+
 public:
   /**
    *  Create a ParticleLoop that executes a kernel for all particles in the
@@ -369,48 +423,64 @@ public:
    *  @param cell Argument for api compatibility.
    */
   inline void submit(const std::optional<int> cell = std::nullopt) override {
-    NESOASSERT(cell == std::nullopt,
-               "Executing a ParticleLoop over a single cell of a "
-               "ParticleSubGroup is not supported.");
+
+    auto t0 = profile_timestamp();
     NESOASSERT(
         !this->loop_running,
         "ParticleLoop::submit called - but the loop is already submitted.");
     this->loop_running = true;
-    auto global_info = this->create_global_info();
-
-    auto t0 = profile_timestamp();
-    auto k_kernel = this->kernel;
 
     this->particle_sub_group->create_if_required();
-    const INT *d_cells = this->particle_sub_group->dh_cells->d_buffer.ptr;
-    const INT *d_layers = this->particle_sub_group->dh_layers->d_buffer.ptr;
-
-    this->sycl_target->profile_map.inc(
-        "ParticleLoop", "Init", 1, profile_elapsed(t0, profile_timestamp()));
-
     const std::size_t npart_local =
         static_cast<std::size_t>(this->particle_sub_group->npart_local);
     if (npart_local == 0) {
       return;
     }
+    auto &selection = this->particle_sub_group->selection;
+    this->setup_subgroup_is(selection);
 
-    sycl::nd_range<1> iteration_set = get_nd_range_1d(npart_local, 256);
+    auto global_info = this->create_global_info();
+    global_info.starting_cell = (cell == std::nullopt) ? 0 : cell.value();
 
-    this->event_stack.push(
-        this->sycl_target->queue.submit([&](sycl::handler &cgh) {
-          loop_parameter_type loop_args;
-          create_loop_args(cgh, loop_args, &global_info);
-          cgh.parallel_for<>(iteration_set, [=](sycl::nd_item<1> idx) {
-            const std::size_t index = idx.get_global_linear_id();
-            if (index < npart_local) {
-              const int cellx = static_cast<int>(d_cells[index]);
-              const int layerx = static_cast<int>(d_layers[index]);
-              kernel_parameter_type kernel_args;
-              create_kernel_args(index, cellx, layerx, loop_args, kernel_args);
-              Tuple::apply(k_kernel, kernel_args);
-            }
-          });
-        }));
+    auto k_kernel = this->kernel;
+    auto k_npart_cell_lb = this->d_npart_cell_lb;
+    auto k_map_cells_to_particles = selection.d_map_cells_to_particles;
+
+    auto is = this->iteration_set->get(cell);
+    const int nbin = std::get<0>(is);
+
+    this->sycl_target->profile_map.inc(
+        "ParticleLoopSubGroup", "Init", 1,
+        profile_elapsed(t0, profile_timestamp()));
+
+    for (int binx = 0; binx < nbin; binx++) {
+      sycl::nd_range<2> ndr = std::get<1>(is).at(binx);
+      const size_t cell_offset = std::get<2>(is).at(binx);
+      this->event_stack.push(
+          this->sycl_target->queue.submit([&](sycl::handler &cgh) {
+            loop_parameter_type loop_args;
+            create_loop_args(cgh, loop_args, &global_info);
+            cgh.parallel_for<>(ndr, [=](sycl::nd_item<2> idx) {
+              const std::size_t index = idx.get_global_linear_id();
+              const size_t cellxs = idx.get_global_id(0) + cell_offset;
+              const size_t layerxs = idx.get_global_id(1);
+              const int cellx = static_cast<int>(cellxs);
+              const int loop_layerx = static_cast<int>(layerxs);
+              ParticleLoopImplementation::ParticleLoopIteration IX;
+              if (loop_layerx < k_npart_cell_lb[cellx]) {
+                const int layerx = static_cast<int>(
+                    k_map_cells_to_particles[cellxs][0][layerxs]);
+                kernel_parameter_type kernel_args;
+                IX.index = index;
+                IX.cellx = cellx;
+                IX.layerx = layerx;
+                IX.loop_layerx = loop_layerx;
+                create_kernel_args(IX, loop_args, kernel_args);
+                Tuple::apply(k_kernel, kernel_args);
+              }
+            });
+          }));
+    }
   }
 };
 

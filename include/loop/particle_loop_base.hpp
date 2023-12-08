@@ -33,9 +33,26 @@ template <typename T> struct KernelParameter { using type = void; };
 struct ParticleLoopGlobalInfo {
   ParticleGroup *particle_group;
   INT *d_npart_cell_es;
+  INT *d_npart_cell_es_lb;
   // The starting cell is only set for calls to create_loop_args.
   int starting_cell;
   int loop_type_int;
+};
+
+/**
+ * The description of the iteration index to pas to objects used in the loop.
+ */
+struct ParticleLoopIteration {
+  /// The overarching outer loop index.
+  size_t index;
+  /// The cell the particle resides in.
+  int cellx;
+  /// The layer (row) the particle resides in.
+  int layerx;
+  /// The layer of the particle in the particle loop iteration set. e.g. not
+  /// all looping types visit all the particles in a cell. layerx_loop is a
+  /// linear contiguous index for the particles which are visited in each cell.
+  int loop_layerx;
 };
 
 /**
