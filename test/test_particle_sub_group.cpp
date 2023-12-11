@@ -308,6 +308,11 @@ TEST(ParticleSubGroup, creating) {
   EXPECT_TRUE(aa->create_if_required());
   EXPECT_FALSE(aa->create_if_required());
 
+  std::vector<Sym<INT>> sym_vector_id = {Sym<INT>("ID")};
+  aa = std::make_shared<ParticleSubGroup>(
+      A, [=](auto ID) { return ID.at(0, 0) % 2 == 0; },
+      Access::read(sym_vector(A, sym_vector_id)));
+
   auto p3 = particle_loop(
       aa, [](auto ID) { ID[0] += 2; }, Access::write(Sym<INT>("ID")));
   p3->execute();

@@ -195,6 +195,16 @@ protected:
     // add this sym to the version checker signature
     this->particle_dat_versions[arg] = 0;
   }
+
+  template <typename T> inline void check_sym_type(SymVectorSharedPtr<T> sv) {
+    auto dats = sv->get_particle_dats();
+    for (auto &dx : dats) {
+      this->check_sym_type(dx->sym);
+    }
+  }
+
+  inline void check_sym_type([[maybe_unused]] ParticleLoopIndex &) {}
+
   template <template <typename> typename T, typename U>
   inline void check_read_access(T<U> arg) {
     static_assert(std::is_same<T<U>, Access::Read<U>>::value == true,

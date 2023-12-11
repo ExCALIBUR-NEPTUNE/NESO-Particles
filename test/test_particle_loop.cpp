@@ -690,7 +690,7 @@ TEST(ParticleLoop, sym_vector) {
         const INT cell = index.cell;
         const INT layer = index.layer;
         dats_real.at(1, cell, layer, 0) = dats_real.at(0, cell, layer, 0);
-        dats_real.at(1, index, 1) = dats_int.at(0, index, 0);
+        dats_real.at(1, index, 1) = dats_int.at(0, 0);
       },
       Access::read(ParticleLoopIndex{}), Access::write(sr), Access::read(si));
 

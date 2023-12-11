@@ -10,17 +10,13 @@ inline void sym_vector_example(
   auto loop = particle_loop(
     "sym_vector_example",
     particle_group,
-    [=](auto particle_index, auto dats_vector){
+    [=](auto dats_vector){
       for(int dimx=0 ; dimx<ndim ; dimx++){
         // P has index 0 in dats_vector as it is first in the sym_vector.
         // V has index 1 in dats_vector as it is second.
-        dats_vector.at(0, particle_index, dimx) += 
-          dt * dats_vector.at(1, particle_index, dimx);
+        dats_vector.at(0, dimx) += dt * dats_vector.at(1, dimx);
       }     
     },
-    // The loop index data structure simplifies indexing into the SymVector 
-    // in the kernel.
-    Access::read(ParticleLoopIndex{}),
     // We state that all ParticleDats in the SymVector are write access.
     Access::write(
       // Helper function to create a SymVector.

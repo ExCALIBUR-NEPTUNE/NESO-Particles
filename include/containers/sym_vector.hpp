@@ -29,29 +29,39 @@ namespace Access::SymVector {
  * SymVector.
  */
 template <typename T> struct Read {
+  int cell;
+  int layer;
   /// Pointer to underlying data.
   T *const *const **ptr;
   T const &at(const int dat_index, const int cell, const int layer,
-              const int component) {
+              const int component) const {
     return ptr[dat_index][cell][component][layer];
   }
   T const &at(const int dat_index,
               const Access::LoopIndex::Read &particle_index,
-              const int component) {
+              const int component) const {
     return ptr[dat_index][particle_index.cell][component][particle_index.layer];
+  }
+  T const &at(const int dat_index, const int component) const {
+    return ptr[dat_index][this->cell][component][this->layer];
   }
 };
 
 template <typename T> struct Write {
+  int cell;
+  int layer;
   /// Pointer to underlying data.
   T ****ptr;
   T &at(const int dat_index, const int cell, const int layer,
-        const int component) {
+        const int component) const {
     return ptr[dat_index][cell][component][layer];
   }
   T &at(const int dat_index, const Access::LoopIndex::Read &particle_index,
-        const int component) {
+        const int component) const {
     return ptr[dat_index][particle_index.cell][component][particle_index.layer];
+  }
+  T &at(const int dat_index, const int component) const {
+    return ptr[dat_index][this->cell][component][this->layer];
   }
 };
 
@@ -109,6 +119,8 @@ template <typename T>
 inline void create_kernel_arg(ParticleLoopIteration &iterationx,
                               T *const *const **rhs,
                               Access::SymVector::Read<T> &lhs) {
+  lhs.cell = iterationx.cellx;
+  lhs.layer = iterationx.loop_layerx;
   lhs.ptr = rhs;
 }
 /**
@@ -117,6 +129,8 @@ inline void create_kernel_arg(ParticleLoopIteration &iterationx,
 template <typename T>
 inline void create_kernel_arg(ParticleLoopIteration &iterationx, T ****rhs,
                               Access::SymVector::Write<T> &lhs) {
+  lhs.cell = iterationx.cellx;
+  lhs.layer = iterationx.loop_layerx;
   lhs.ptr = rhs;
 }
 
@@ -138,6 +152,7 @@ template <typename T> class SymVector {
       sycl::handler &cgh, Access::Write<SymVector<T> *> &a);
 
 protected:
+  /// The ParticleDats referenced by the SymVector.
   std::vector<ParticleDatSharedPtr<T>> dats;
   std::shared_ptr<BufferDeviceHost<T ***>> dh_root_ptrs;
   std::shared_ptr<BufferDeviceHost<T *const *const *>> dh_root_const_ptrs;
@@ -209,6 +224,13 @@ public:
     }
     this->create(particle_group->sycl_target);
   }
+
+  /**
+   * @returns The ParticleDats that form the SymVector.
+   */
+  inline std::vector<ParticleDatSharedPtr<T>> const &get_particle_dats() {
+    return this->dats;
+  }
 };
 
 /**
@@ -234,6 +256,8 @@ std::shared_ptr<SymVector<T>> sym_vector(ParticleGroupSharedPtr particle_group,
                                          std::initializer_list<Sym<T>> syms) {
   return std::make_shared<SymVector<T>>(particle_group, syms);
 }
+
+template <typename T> using SymVectorSharedPtr = std::shared_ptr<SymVector<T>>;
 
 } // namespace NESO::Particles
 #endif
