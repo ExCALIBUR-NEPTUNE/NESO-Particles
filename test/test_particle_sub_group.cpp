@@ -416,6 +416,35 @@ TEST(ParticleSubGroup, particle_loop_index) {
   ASSERT_EQ(index, npart);
   ASSERT_EQ(found_indices.size(), npart);
 
+  auto loop_indexing = particle_loop(
+      aa,
+      [](auto index, auto MARKER) {
+        MARKER.at(0) = index.get_loop_linear_index();
+      },
+      Access::read(ParticleLoopIndex{}), Access::write(Sym<INT>("MARKER")));
+
+  for (int cx = 0; cx < cell_count; cx++) {
+    loop_indexing->execute(cx);
+  }
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto marker = A->get_dat(Sym<INT>("MARKER"))->cell_dat.get_cell(cellx);
+    auto id = A->get_dat(Sym<INT>("ID"))->cell_dat.get_cell(cellx);
+    const int nrow = marker->nrow;
+    // for each particle in the cell
+    index = 0;
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      const INT mx = (*marker)[0][rowx];
+      const INT ix = (*id)[0][rowx];
+      if (ix % 2 == 0) {
+        ASSERT_EQ(mx, index);
+        index++;
+      } else {
+        ASSERT_EQ(mx, -1);
+      }
+    }
+  }
+
   A->free();
   sycl_target->free();
   mesh->free();

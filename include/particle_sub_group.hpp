@@ -370,11 +370,12 @@ protected:
 
   inline void setup_subgroup_is(
       ParticleSubGroupImplementation::SubGroupSelector::SelectionT &selection) {
+    this->h_npart_cell_lb = selection.h_npart_cell;
     this->d_npart_cell_lb = selection.d_npart_cell;
     this->d_npart_cell_es_lb = selection.d_npart_cell_es;
     this->iteration_set =
         std::make_unique<ParticleLoopImplementation::ParticleLoopIterationSet>(
-            1, selection.ncell, selection.h_npart_cell);
+            1, selection.ncell, this->h_npart_cell_lb);
   }
 
 public:
@@ -423,19 +424,23 @@ public:
    *  @param cell Argument for api compatibility.
    */
   inline void submit(const std::optional<int> cell = std::nullopt) override {
-
     auto t0 = profile_timestamp();
+
     NESOASSERT(
-        !this->loop_running,
+        (!this->loop_running) || (cell != std::nullopt),
         "ParticleLoop::submit called - but the loop is already submitted.");
+
+    // If the loop is called cell wise asynchronously then the call over cell i
+    // could trigger a rebuild on cell i+1
+    if (!this->loop_running) {
+      this->particle_sub_group->create_if_required();
+    }
     this->loop_running = true;
 
-    this->particle_sub_group->create_if_required();
-    const std::size_t npart_local =
-        static_cast<std::size_t>(this->particle_sub_group->npart_local);
-    if (npart_local == 0) {
+    if (this->iteration_set_is_empty(cell)) {
       return;
     }
+
     auto &selection = this->particle_sub_group->selection;
     this->setup_subgroup_is(selection);
 

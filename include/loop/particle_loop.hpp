@@ -291,6 +291,7 @@ protected:
   bool loop_running = {false};
   // The actual number of particles in the cell
   int *d_npart_cell;
+  int *h_npart_cell_lb;
   // The number of particles in the cell from the loop bounds point of view.
   int *d_npart_cell_lb;
   // Exclusive sum of the actual number of particles in the cell.
@@ -298,18 +299,19 @@ protected:
   // Exclusive sum of the number of particles in the cell from the loop bounds
   // point of view.
   INT *d_npart_cell_es_lb;
+  int ncell;
 
   template <typename T>
   inline void init_from_particle_dat(ParticleDatSharedPtr<T> particle_dat) {
-    const int ncell = particle_dat->ncell;
-    auto h_npart_cell = particle_dat->h_npart_cell;
+    this->ncell = particle_dat->ncell;
+    this->h_npart_cell_lb = particle_dat->h_npart_cell;
     this->d_npart_cell = particle_dat->d_npart_cell;
     this->d_npart_cell_lb = this->d_npart_cell;
     this->d_npart_cell_es = particle_dat->get_d_npart_cell_es();
     this->d_npart_cell_es_lb = this->d_npart_cell_es;
     this->iteration_set =
         std::make_unique<ParticleLoopImplementation::ParticleLoopIterationSet>(
-            1, ncell, h_npart_cell);
+            1, ncell, this->h_npart_cell_lb);
   }
 
   template <template <typename> typename T, typename U>
@@ -337,6 +339,20 @@ protected:
     global_info.starting_cell = 0;
     global_info.loop_type_int = this->get_loop_type_int();
     return global_info;
+  }
+
+  inline bool iteration_set_is_empty(const std::optional<int> cell) {
+    if (cell != std::nullopt) {
+      const int cellx = cell.value();
+      NESOASSERT(
+          (cell > -1) && (cell < this->ncell),
+          "ParticleLoop execute or submit called on cell that does not exist.");
+      return this->h_npart_cell_lb[cellx] == 0;
+    } else if (this->particle_group_ptr != nullptr) {
+      return this->particle_group_ptr->get_npart_local() == 0;
+    } else {
+      return false;
+    }
   }
 
 public:
@@ -431,10 +447,14 @@ public:
    *  @param cell Optional cell index to only launch the ParticleLoop over.
    */
   inline void submit(const std::optional<int> cell = std::nullopt) {
+
     NESOASSERT(
         (!this->loop_running) || (cell != std::nullopt),
         "ParticleLoop::submit called - but the loop is already submitted.");
     this->loop_running = true;
+    if (this->iteration_set_is_empty(cell)) {
+      return;
+    }
 
     auto t0 = profile_timestamp();
 
