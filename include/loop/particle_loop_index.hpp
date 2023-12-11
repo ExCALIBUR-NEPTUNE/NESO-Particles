@@ -103,13 +103,13 @@ create_loop_arg(ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
 /**
  *  Function to create the kernel argument for ParticleLoopIndex read access.
  */
-inline void create_kernel_arg(ParticleLoopIteration &IX,
+inline void create_kernel_arg(ParticleLoopIteration &iterationx,
                               ParticleLoopIndexKernelT &rhs,
                               Access::LoopIndex::Read &lhs) {
-  lhs.cell = IX.cellx;
-  lhs.layer = IX.layerx;
-  lhs.loop_layer = IX.loop_layerx;
-  lhs.index = IX.index;
+  lhs.cell = iterationx.cellx;
+  lhs.layer = iterationx.layerx;
+  lhs.loop_layer = iterationx.loop_layerx;
+  lhs.index = iterationx.index;
   lhs.starting_cell = rhs.starting_cell;
   lhs.loop_type_int = rhs.loop_type_int;
   lhs.npart_cell_es = rhs.npart_cell_es;

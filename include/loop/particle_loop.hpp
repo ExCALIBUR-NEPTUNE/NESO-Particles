@@ -254,25 +254,27 @@ protected:
   /// recusively assemble the kernel arguments from the loop arguments
   template <size_t INDEX, size_t SIZE>
   static inline constexpr void create_kernel_args_inner(
-      ParticleLoopImplementation::ParticleLoopIteration &IX,
+      ParticleLoopImplementation::ParticleLoopIteration &iterationx,
       const loop_parameter_type &loop_args,
       kernel_parameter_type &kernel_args) {
 
     if constexpr (INDEX < SIZE) {
       auto arg = Tuple::get<INDEX>(loop_args);
       ParticleLoopImplementation::create_kernel_arg(
-          IX, arg, Tuple::get<INDEX>(kernel_args));
-      create_kernel_args_inner<INDEX + 1, SIZE>(IX, loop_args, kernel_args);
+          iterationx, arg, Tuple::get<INDEX>(kernel_args));
+      create_kernel_args_inner<INDEX + 1, SIZE>(iterationx, loop_args,
+                                                kernel_args);
     }
   }
 
   /// called before kernel execution to assemble the kernel arguments.
-  static inline constexpr void
-  create_kernel_args(ParticleLoopImplementation::ParticleLoopIteration &IX,
-                     const loop_parameter_type &loop_args,
-                     kernel_parameter_type &kernel_args) {
+  static inline constexpr void create_kernel_args(
+      ParticleLoopImplementation::ParticleLoopIteration &iterationx,
+      const loop_parameter_type &loop_args,
+      kernel_parameter_type &kernel_args) {
 
-    create_kernel_args_inner<0, sizeof...(ARGS)>(IX, loop_args, kernel_args);
+    create_kernel_args_inner<0, sizeof...(ARGS)>(iterationx, loop_args,
+                                                 kernel_args);
   }
 
   ParticleGroupSharedPtr particle_group_shrptr;
@@ -482,14 +484,14 @@ public:
               const size_t layerxs = idx.get_global_id(1);
               const int cellx = static_cast<int>(cellxs);
               const int layerx = static_cast<int>(layerxs);
-              ParticleLoopImplementation::ParticleLoopIteration IX;
+              ParticleLoopImplementation::ParticleLoopIteration iterationx;
               if (layerx < k_npart_cell_lb[cellx]) {
-                IX.index = index;
-                IX.cellx = cellx;
-                IX.layerx = layerx;
-                IX.loop_layerx = layerx;
+                iterationx.index = index;
+                iterationx.cellx = cellx;
+                iterationx.layerx = layerx;
+                iterationx.loop_layerx = layerx;
                 kernel_parameter_type kernel_args;
-                create_kernel_args(IX, loop_args, kernel_args);
+                create_kernel_args(iterationx, loop_args, kernel_args);
                 Tuple::apply(k_kernel, kernel_args);
               }
             });

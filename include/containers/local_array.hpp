@@ -112,7 +112,7 @@ template <typename T> struct KernelParameter<Access::Add<LocalArray<T>>> {
  *  Function to create the kernel argument for LocalArray read access.
  */
 template <typename T>
-inline void create_kernel_arg(ParticleLoopIteration &IX, T const *rhs,
+inline void create_kernel_arg(ParticleLoopIteration &iterationx, T const *rhs,
                               Access::LocalArray::Read<T> &lhs) {
   lhs.ptr = rhs;
 }
@@ -120,7 +120,7 @@ inline void create_kernel_arg(ParticleLoopIteration &IX, T const *rhs,
  *  Function to create the kernel argument for LocalArray write access.
  */
 template <typename T>
-inline void create_kernel_arg(ParticleLoopIteration &IX, T *rhs,
+inline void create_kernel_arg(ParticleLoopIteration &iterationx, T *rhs,
                               Access::LocalArray::Write<T> &lhs) {
   lhs.ptr = rhs;
 }
@@ -128,7 +128,7 @@ inline void create_kernel_arg(ParticleLoopIteration &IX, T *rhs,
  *  Function to create the kernel argument for LocalArray add access.
  */
 template <typename T>
-inline void create_kernel_arg(ParticleLoopIteration &IX, T *rhs,
+inline void create_kernel_arg(ParticleLoopIteration &iterationx, T *rhs,
                               Access::LocalArray::Add<T> &lhs) {
   lhs.ptr = rhs;
 }

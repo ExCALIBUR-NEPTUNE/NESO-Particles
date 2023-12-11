@@ -106,7 +106,8 @@ inline SymVectorImplGetT<T> create_loop_arg(ParticleLoopGlobalInfo *global_info,
  *  Function to create the kernel argument for SymVector read access.
  */
 template <typename T>
-inline void create_kernel_arg(ParticleLoopIteration &IX, T *const *const **rhs,
+inline void create_kernel_arg(ParticleLoopIteration &iterationx,
+                              T *const *const **rhs,
                               Access::SymVector::Read<T> &lhs) {
   lhs.ptr = rhs;
 }
@@ -114,7 +115,7 @@ inline void create_kernel_arg(ParticleLoopIteration &IX, T *const *const **rhs,
  *  Function to create the kernel argument for SymVector write access.
  */
 template <typename T>
-inline void create_kernel_arg(ParticleLoopIteration &IX, T ****rhs,
+inline void create_kernel_arg(ParticleLoopIteration &iterationx, T ****rhs,
                               Access::SymVector::Write<T> &lhs) {
   lhs.ptr = rhs;
 }

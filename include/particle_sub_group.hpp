@@ -471,16 +471,16 @@ public:
               const size_t layerxs = idx.get_global_id(1);
               const int cellx = static_cast<int>(cellxs);
               const int loop_layerx = static_cast<int>(layerxs);
-              ParticleLoopImplementation::ParticleLoopIteration IX;
+              ParticleLoopImplementation::ParticleLoopIteration iterationx;
               if (loop_layerx < k_npart_cell_lb[cellx]) {
                 const int layerx = static_cast<int>(
                     k_map_cells_to_particles[cellxs][0][layerxs]);
                 kernel_parameter_type kernel_args;
-                IX.index = index;
-                IX.cellx = cellx;
-                IX.layerx = layerx;
-                IX.loop_layerx = loop_layerx;
-                create_kernel_args(IX, loop_args, kernel_args);
+                iterationx.index = index;
+                iterationx.cellx = cellx;
+                iterationx.layerx = layerx;
+                iterationx.loop_layerx = loop_layerx;
+                create_kernel_args(iterationx, loop_args, kernel_args);
                 Tuple::apply(k_kernel, kernel_args);
               }
             });

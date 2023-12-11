@@ -92,7 +92,7 @@ template <typename T> struct KernelParameter<Access::Add<GlobalArray<T>>> {
  *  Function to create the kernel argument for GlobalArray read access.
  */
 template <typename T>
-inline void create_kernel_arg(ParticleLoopIteration &IX, T const *rhs,
+inline void create_kernel_arg(ParticleLoopIteration &iterationx, T const *rhs,
                               Access::GlobalArray::Read<T> &lhs) {
   lhs.ptr = rhs;
 }
@@ -100,7 +100,7 @@ inline void create_kernel_arg(ParticleLoopIteration &IX, T const *rhs,
  *  Function to create the kernel argument for GlobalArray add access.
  */
 template <typename T>
-inline void create_kernel_arg(ParticleLoopIteration &IX, T *rhs,
+inline void create_kernel_arg(ParticleLoopIteration &iterationx, T *rhs,
                               Access::GlobalArray::Add<T> &lhs) {
   lhs.ptr = rhs;
 }
