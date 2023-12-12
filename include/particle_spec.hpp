@@ -37,6 +37,7 @@ public:
    * @param sym Other Sym to compare against.
    */
   bool operator<(const Sym &sym) const { return this->name < sym.name; }
+  bool operator==(const Sym &sym) const { return this->name == sym.name; }
 };
 
 /**

@@ -3,8 +3,8 @@
 
 #include "../compute_target.hpp"
 #include "../loop/access_descriptors.hpp"
+#include "../loop/particle_loop_base.hpp"
 #include "../particle_spec.hpp"
-#include "local_array.hpp"
 #include <map>
 #include <memory>
 #include <numeric>
@@ -51,17 +51,13 @@ struct Read {
   int const *offsets_real;
   int const *offsets_int;
   int num_products;
-  template <typename T>
-  const T at(const int product, const int property, const int component) const;
-  template <>
-  const REAL at<REAL>(const int product, const int property,
-                      const int component) const {
+  const REAL at_real(const int product, const int property,
+                     const int component) const {
     return ptr_real[(offsets_real[property] + component) * num_products +
                     product];
   }
-  template <>
-  const INT at<INT>(const int product, const int property,
-                    const int component) const {
+  const INT at_int(const int product, const int property,
+                   const int component) const {
     return ptr_int[(offsets_int[property] + component) * num_products +
                    product];
   }
@@ -77,12 +73,8 @@ struct Add {
   int const *offsets_real;
   int const *offsets_int;
   int num_products;
-  template <typename T>
-  inline T fetch_add(const int product, const int property, const int component,
-                     const T value) const;
-  template <>
-  inline REAL fetch_add<REAL>(const int product, const int property,
-                              const int component, const REAL value) const {
+  inline REAL fetch_add_real(const int product, const int property,
+                             const int component, const REAL value) const {
     sycl::atomic_ref<REAL, sycl::memory_order::relaxed,
                      sycl::memory_scope::device>
         element_atomic(
@@ -90,9 +82,8 @@ struct Add {
                      product]);
     return element_atomic.fetch_add(value);
   }
-  template <>
-  inline INT fetch_add<INT>(const int product, const int property,
-                            const int component, const INT value) const {
+  inline INT fetch_add_int(const int product, const int property,
+                           const int component, const INT value) const {
     sycl::atomic_ref<INT, sycl::memory_order::relaxed,
                      sycl::memory_scope::device>
         element_atomic(
@@ -113,17 +104,13 @@ struct Write {
   int const *offsets_real;
   int const *offsets_int;
   int num_products;
-  template <typename T>
-  T &at(const int product, const int property, const int component) const;
-  template <>
-  REAL &at<REAL>(const int product, const int property,
-                 const int component) const {
+  REAL &at_real(const int product, const int property,
+                const int component) const {
     return ptr_real[(offsets_real[property] + component) * num_products +
                     product];
   }
-  template <>
-  INT &at<INT>(const int product, const int property,
-               const int component) const {
+  INT &at_int(const int product, const int property,
+              const int component) const {
     return ptr_int[(offsets_int[property] + component) * num_products +
                    product];
   }
@@ -269,6 +256,10 @@ struct ProductMatrixSpec {
       this->components_int.at(px) = particle_spec.properties_int.at(px).ncomp;
       this->syms_int.at(px) = particle_spec.properties_int.at(px).sym;
     }
+    this->num_components_real = std::accumulate(this->components_real.begin(),
+                                                this->components_real.end(), 0);
+    this->num_components_int = std::accumulate(this->components_int.begin(),
+                                               this->components_int.end(), 0);
   }
 
   /**
@@ -302,7 +293,7 @@ struct ProductMatrixSpec {
  * @param particle_spec Specification for product particle properties.
  */
 inline std::shared_ptr<ProductMatrixSpec>
-product_matrix_spec(ParticleSpec &particle_spec) {
+product_matrix_spec(ParticleSpec particle_spec) {
   return std::make_shared<ProductMatrixSpec>(particle_spec);
 }
 
@@ -394,7 +385,7 @@ public:
     EventStack es;
 
     // reset the values to either 0 or the set default value
-    for (int sx = 0; sx < spec->num_components_real; sx++) {
+    for (int sx = 0; sx < spec->num_properties_real; sx++) {
       for (int cx = 0; cx < spec->components_real[sx]; cx++) {
         const std::pair<Sym<REAL>, int> key = {spec->syms_real.at(sx), cx};
         const REAL value = spec->default_values_real.count(key) > 0
@@ -407,7 +398,7 @@ public:
             this->sycl_target->queue.fill(column_start, value, num_products));
       }
     }
-    for (int sx = 0; sx < spec->num_components_int; sx++) {
+    for (int sx = 0; sx < spec->num_properties_int; sx++) {
       for (int cx = 0; cx < spec->components_int[sx]; cx++) {
         const std::pair<Sym<INT>, int> key = {spec->syms_int.at(sx), cx};
         const INT value = spec->default_values_int.count(key) > 0
@@ -424,6 +415,17 @@ public:
     es.wait();
   }
 };
+
+/**
+ * Helper function to create a ProductMatrix shared pointer.
+ *
+ * TODO
+ */
+inline std::shared_ptr<ProductMatrix>
+product_matrix(SYCLTargetSharedPtr sycl_target,
+               std::shared_ptr<ProductMatrixSpec> spec) {
+  return std::make_shared<ProductMatrix>(sycl_target, spec);
+}
 
 namespace ParticleLoopImplementation {
 /**
