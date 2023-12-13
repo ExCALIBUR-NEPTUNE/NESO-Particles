@@ -94,6 +94,18 @@ public:
    *  @param args ParticleSpec is called with a set of ParticleProp arguments.
    */
   template <typename... T> ParticleSpec(T... args) { this->push(args...); };
+
+  /**
+   * Create a particle specification from a vector of REAL properties and a
+   * vector of INT properties.
+   *
+   *  @param properties_real REAL particle properties.
+   *  @param properties_int INT particle properties.
+   */
+  ParticleSpec(std::vector<ParticleProp<REAL>> &properties_real,
+               std::vector<ParticleProp<INT>> &properties_int)
+      : properties_real(properties_real), properties_int(properties_int) {}
+
   /**
    *  Push a ParticleProp<REAL> property onto the specification.
    *

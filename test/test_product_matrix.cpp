@@ -316,10 +316,14 @@ TEST(ProductMatrix, add_particles_local_1) {
   const int cell_count = mesh->get_cell_count();
   auto sycl_target = A->sycl_target;
 
-  auto product_spec = product_matrix_spec(ParticleSpec(
-      ParticleProp(Sym<REAL>("P2"), ndim), ParticleProp(Sym<INT>("MARKER"), 2),
-      ParticleProp(Sym<INT>("PARENT"), 2),
-      ParticleProp(Sym<INT>("CELL_ID"), 1)));
+  std::vector<ParticleProp<REAL>> properties_real = {
+      ParticleProp(Sym<REAL>("P2"), ndim)};
+  std::vector<ParticleProp<INT>> properties_int = {
+      ParticleProp(Sym<INT>("MARKER"), 2), ParticleProp(Sym<INT>("PARENT"), 2),
+      ParticleProp(Sym<INT>("CELL_ID"), 1)};
+
+  auto product_spec =
+      product_matrix_spec(ParticleSpec(properties_real, properties_int));
 
   product_spec->set_default_value(Sym<INT>("MARKER"), 1, 43);
 
