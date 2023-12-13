@@ -513,6 +513,7 @@ TEST(ParticleSubGroup, remove_particles) {
             A->get_npart_local());
   A->remove_particles(aa);
   ASSERT_EQ(bb->get_npart_local(), A->get_npart_local());
+  ASSERT_EQ(aa->get_npart_local(), 0);
 
   for (int cellx = 0; cellx < cell_count; cellx++) {
     auto id = A->get_dat(Sym<INT>("ID"))->cell_dat.get_cell(cellx);

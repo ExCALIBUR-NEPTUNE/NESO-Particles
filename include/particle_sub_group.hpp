@@ -572,7 +572,7 @@ inline void ParticleSubGroup::get_cells_layers(INT *d_cells, INT *d_layers) {
   auto lambda_loop = [&](auto iteration_set) {
     particle_loop(
         iteration_set,
-        [&](auto index) {
+        [=](auto index) {
           const INT px = index.get_loop_linear_index();
           d_cells[px] = index.cell;
           d_layers[px] = index.layer;
