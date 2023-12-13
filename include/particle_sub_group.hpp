@@ -344,6 +344,18 @@ public:
   }
 
   /**
+   * @return The number of particles in a cell of the ParticleSubGroup.
+   */
+  inline INT get_npart_cell(const int cell) {
+    if (this->is_whole_particle_group) {
+      return this->particle_group->get_npart_cell(cell);
+    } else {
+      this->create_if_required();
+      return this->selection.h_npart_cell[cell];
+    }
+  }
+
+  /**
    * @returns The original ParticleGroup this ParticleSubGroup references.
    */
   inline ParticleGroupSharedPtr get_particle_group() {

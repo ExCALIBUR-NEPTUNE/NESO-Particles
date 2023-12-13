@@ -609,6 +609,20 @@ public:
 };
 
 /**
+ * Copy the contents of a buffer, e.g. BufferDevice, BufferHost, into another
+ * buffer.
+ *
+ * @param dst Destination buffer.
+ * @param src Source buffer.
+ */
+template <template <typename> typename D, template <typename> typename S,
+          typename T>
+[[nodiscard]] inline sycl::event buffer_memcpy(D<T> &dst, S<T> &src) {
+  NESOASSERT(dst.size == src.size, "Buffers have different sizes.");
+  return dst.sycl_target->queue.memcpy(dst.ptr, src.ptr, dst.size * sizeof(T));
+}
+
+/**
  * Helper class to hold a collection of sycl::event instances which can be
  * waited on.
  */

@@ -13,6 +13,7 @@
 #include "cell_dat_compression.hpp"
 #include "cell_dat_move.hpp"
 #include "compute_target.hpp"
+#include "containers/product_matrix.hpp"
 #include "domain.hpp"
 #include "global_mapping.hpp"
 #include "global_move.hpp"
@@ -92,14 +93,56 @@ protected:
 private:
   int ncell;
   BufferHost<INT> h_npart_cell;
+  BufferDevice<INT> d_npart_cell;
 
   BufferDevice<INT> d_remove_cells;
   BufferDevice<INT> d_remove_layers;
 
-  template <typename T> inline void realloc_dat(ParticleDatSharedPtr<T> &dat) {
+  template <typename T>
+  inline void realloc_dat_start(ParticleDatSharedPtr<T> &dat) {
     dat->realloc(this->h_npart_cell);
+  };
+  template <typename T>
+  inline void realloc_dat_wait(ParticleDatSharedPtr<T> &dat) {
     dat->wait_realloc();
   };
+  template <typename T> inline void realloc_dat(ParticleDatSharedPtr<T> &dat) {
+    this->realloc_dat_start(dat);
+    this->realloc_dat_wait(dat);
+  };
+
+  inline void realloc_all_dats() {
+    for (auto &dat : this->particle_dats_real) {
+      realloc_dat_start(dat.second);
+    }
+    for (auto &dat : this->particle_dats_int) {
+      realloc_dat_start(dat.second);
+    }
+    for (auto &dat : this->particle_dats_real) {
+      realloc_dat_wait(dat.second);
+    }
+    for (auto &dat : this->particle_dats_int) {
+      realloc_dat_wait(dat.second);
+    }
+  }
+
+  inline void check_dats_and_group_agree() {
+    for (auto &dat : particle_dats_real) {
+      for (int cellx = 0; cellx < this->ncell; cellx++) {
+        NESOASSERT(dat.second->h_npart_cell[cellx] ==
+                       this->h_npart_cell.ptr[cellx],
+                   "Bad cell count");
+      }
+    }
+    for (auto &dat : particle_dats_int) {
+      for (int cellx = 0; cellx < this->ncell; cellx++) {
+        NESOASSERT(dat.second->h_npart_cell[cellx] ==
+                       this->h_npart_cell.ptr[cellx],
+                   "Bad cell count");
+      }
+    }
+  }
+
   template <typename T> inline void push_particle_spec(ParticleProp<T> prop) {
     this->particle_spec.push(prop);
   };
@@ -245,6 +288,7 @@ public:
       : domain(domain), sycl_target(sycl_target),
         ncell(domain->mesh->get_cell_count()), d_remove_cells(sycl_target, 1),
         d_remove_layers(sycl_target, 1), h_npart_cell(sycl_target, 1),
+        d_npart_cell(sycl_target, 1),
         layer_compressor(sycl_target, ncell, particle_dats_real,
                          particle_dats_int),
         global_move_ctx(sycl_target, layer_compressor, particle_dats_real,
@@ -258,6 +302,8 @@ public:
                       particle_dats_real, particle_dats_int) {
 
     this->h_npart_cell.realloc_no_copy(this->ncell);
+    this->d_npart_cell.realloc_no_copy(this->ncell);
+
     this->dh_npart_cell_es =
         std::make_shared<BufferDeviceHost<INT>>(sycl_target, this->ncell);
 
@@ -334,6 +380,16 @@ public:
    *  @param particle_data New particles to add.
    */
   inline void add_particles_local(ParticleSet &particle_data);
+
+  /**
+   *  Add particles only to this MPI rank. It is assumed that the added
+   *  particles are in the domain region owned by this MPI rank. If not, see
+   *  `ParticleGroup::add_particles`.
+   *
+   *  @param product_matrix New particles to add.
+   */
+  inline void
+  add_particles_local(std::shared_ptr<ProductMatrix> product_matrix);
 
   /**
    *  Get the total number of particles on this MPI rank.
@@ -611,38 +667,24 @@ inline void ParticleGroup::add_particles_local(ParticleSet &particle_data) {
     layers[px] = this->h_npart_cell.ptr[cellindex]++;
   }
 
+  EventStack es;
+
   for (auto &dat : this->particle_dats_real) {
     realloc_dat(dat.second);
     dat.second->append_particle_data(npart_new,
                                      particle_data.contains(dat.first), cellids,
-                                     layers, particle_data.get(dat.first));
+                                     layers, particle_data.get(dat.first), es);
   }
 
   for (auto &dat : this->particle_dats_int) {
     realloc_dat(dat.second);
     dat.second->append_particle_data(npart_new,
                                      particle_data.contains(dat.first), cellids,
-                                     layers, particle_data.get(dat.first));
+                                     layers, particle_data.get(dat.first), es);
   }
 
-  // The append is async
-  this->sycl_target->queue.wait();
-  for (auto &dat : particle_dats_real) {
-    dat.second->npart_host_to_device();
-    for (int cellx = 0; cellx < this->ncell; cellx++) {
-      NESOASSERT(dat.second->h_npart_cell[cellx] ==
-                     this->h_npart_cell.ptr[cellx],
-                 "Bad cell count");
-    }
-  }
-  for (auto &dat : particle_dats_int) {
-    dat.second->npart_host_to_device();
-    for (int cellx = 0; cellx < this->ncell; cellx++) {
-      NESOASSERT(dat.second->h_npart_cell[cellx] ==
-                     this->h_npart_cell.ptr[cellx],
-                 "Bad cell count");
-    }
-  }
+  es.wait();
+  this->check_dats_and_group_agree();
 }
 
 template <typename T>
@@ -801,6 +843,123 @@ inline void ParticleGroup::hybrid_move() {
 
   this->local_move_ctx.move();
   this->set_npart_cell_from_dat();
+}
+
+inline void ParticleGroup::add_particles_local(
+    std::shared_ptr<ProductMatrix> product_matrix) {
+
+  const int num_products = product_matrix->num_products;
+  // reuse this space
+  this->d_remove_cells.realloc_no_copy(num_products);
+  this->d_remove_layers.realloc_no_copy(num_products);
+  INT *cells_ptr = this->d_remove_cells.ptr;
+  INT *layers_ptr = this->d_remove_layers.ptr;
+  auto d_pm = product_matrix->impl_get_const();
+
+  // Either the cells are set in the product matrix or we need to default
+  // initialise them to 0.
+  const auto cell_id_sym = this->cell_id_dat->sym;
+  const int cell_id_index = product_matrix->spec->get_sym_index(cell_id_sym);
+  if (cell_id_index == -1) {
+    this->sycl_target->queue.fill(cells_ptr, (INT)0, num_products)
+        .wait_and_throw();
+  } else {
+    INT const *source_cells_ptr = d_pm.ptr_int + num_products * cell_id_index;
+    this->sycl_target->queue
+        .memcpy(cells_ptr, source_cells_ptr, sizeof(INT) * num_products)
+        .wait_and_throw();
+  }
+
+  // Get the new cell occupancies at the destination layers of the particles to
+  // insert
+  buffer_memcpy(this->d_npart_cell, this->h_npart_cell).wait_and_throw();
+  INT *k_npart_cell = this->d_npart_cell.ptr;
+  this->sycl_target->queue
+      .submit([&](sycl::handler &cgh) {
+        cgh.parallel_for<>(sycl::range<1>(static_cast<size_t>(num_products)),
+                           [=](sycl::id<1> idx) {
+                             const INT cell = cells_ptr[idx];
+                             sycl::atomic_ref<INT, sycl::memory_order::relaxed,
+                                              sycl::memory_scope::device>
+                                 element_atomic(k_npart_cell[cell]);
+                             const INT layer = element_atomic.fetch_add((INT)1);
+                             layers_ptr[idx] = layer;
+                           });
+      })
+      .wait_and_throw();
+  buffer_memcpy(this->h_npart_cell, this->d_npart_cell).wait_and_throw();
+
+  // Allocate space in all the dats for the new particles
+  this->realloc_all_dats();
+
+  // copy the particle data into the particle dats
+  // for each particle property either there is data in the product matrix or
+  // it should be initalised to 0
+
+  EventStack es;
+  // lambda which zeros the property
+  auto lambda_zero = [&](auto dat) {
+    auto dat_ptr = dat->impl_get();
+    const int k_ncomp = dat->ncomp;
+    es.push(this->sycl_target->queue.submit([&](sycl::handler &cgh) {
+      cgh.parallel_for<>(sycl::range<1>(static_cast<size_t>(num_products)),
+                         [=](sycl::id<1> idx) {
+                           const INT cell = cells_ptr[idx];
+                           const INT layer = layers_ptr[idx];
+                           for (int nx = 0; nx < k_ncomp; nx++) {
+                             dat_ptr[cell][nx][layer] = 0;
+                           }
+                         });
+    }));
+  };
+  // lambda which copies the property
+  auto lambda_copy = [&](auto dat, const auto index, const auto d_offsets,
+                         const auto d_src) {
+    auto dat_ptr = dat->impl_get();
+    const int k_ncomp = dat->ncomp;
+    const int k_nproducts = num_products;
+    es.push(this->sycl_target->queue.submit([&](sycl::handler &cgh) {
+      cgh.parallel_for<>(
+          sycl::range<1>(static_cast<size_t>(num_products)),
+          [=](sycl::id<1> idx) {
+            const INT cell = cells_ptr[idx];
+            const INT layer = layers_ptr[idx];
+            for (int nx = 0; nx < k_ncomp; nx++) {
+              dat_ptr[cell][nx][layer] =
+                  d_src[(d_offsets[index] + nx) * k_nproducts + idx];
+            }
+          });
+    }));
+  };
+
+  // dispatch to the copy lambda or zero lambda depending on if the data exists
+  auto lambda_dispatch = [&](auto dat, const auto d_offsets, const auto d_src) {
+    const int index = product_matrix->spec->get_sym_index(dat->sym);
+    if (index == -1) {
+      lambda_zero(dat);
+    } else {
+      lambda_copy(dat, index, d_offsets, d_src);
+    }
+  };
+
+  // launch the copies into the ParticleDats
+  for (auto &dat : this->particle_dats_real) {
+    lambda_dispatch(dat.second, d_pm.offsets_real, d_pm.ptr_real);
+  }
+  for (auto &dat : this->particle_dats_int) {
+    lambda_dispatch(dat.second, d_pm.offsets_int, d_pm.ptr_int);
+  }
+  // launch the copies of the npart cells into the ParticleDats
+  for (auto &dat : this->particle_dats_real) {
+    es.push(dat.second->async_set_npart_cells(this->h_npart_cell));
+  }
+  for (auto &dat : this->particle_dats_int) {
+    es.push(dat.second->async_set_npart_cells(this->h_npart_cell));
+  }
+
+  // wait for the copy kernels
+  es.wait();
+  this->check_dats_and_group_agree();
 }
 
 typedef std::shared_ptr<ParticleGroup> ParticleGroupSharedPtr;

@@ -251,12 +251,13 @@ public:
    *  @param cells Cell indices of the new particles.
    *  @param layers Layer (row) indices of the new particles.
    *  @param data Particle data to copy into the ParticleDat.
+   *  @param es EventStack to push events onto.
    */
   inline void append_particle_data(const int npart_new,
                                    const bool new_data_exists,
                                    std::vector<INT> &cells,
                                    std::vector<INT> &layers,
-                                   std::vector<T> &data);
+                                   std::vector<T> &data, EventStack &es);
   /**
    *  Realloc the underlying CellDat such that the indicated new number of
    *  particles can be stored.
@@ -591,11 +592,9 @@ template <typename T> inline void ParticleDatT<T>::trim_cell_dat_rows() {
  *
  */
 template <typename T>
-inline void ParticleDatT<T>::append_particle_data(const int npart_new,
-                                                  const bool new_data_exists,
-                                                  std::vector<INT> &cells,
-                                                  std::vector<INT> &layers,
-                                                  std::vector<T> &data) {
+inline void ParticleDatT<T>::append_particle_data(
+    const int npart_new, const bool new_data_exists, std::vector<INT> &cells,
+    std::vector<INT> &layers, std::vector<T> &data, EventStack &es) {
   this->write_callback_wrapper(0);
 
   NESOASSERT(npart_new <= cells.size(), "incorrect number of cells");
@@ -613,7 +612,7 @@ inline void ParticleDatT<T>::append_particle_data(const int npart_new,
   if (new_data_exists) {
     sycl::buffer<T, 1> b_data(data.data(),
                               sycl::range<1>{size_npart_new * this->ncomp});
-    this->sycl_target->queue.submit([&](sycl::handler &cgh) {
+    es.push(this->sycl_target->queue.submit([&](sycl::handler &cgh) {
       // The cell counts on this dat
       auto a_cells = b_cells.get_access<sycl::access::mode::read>(cgh);
       auto a_layers = b_layers.get_access<sycl::access::mode::read>(cgh);
@@ -627,9 +626,9 @@ inline void ParticleDatT<T>::append_particle_data(const int npart_new,
           d_cell_dat_ptr[cellx][cx][layerx] = a_data[cx * npart_new + idx];
         }
       });
-    });
+    }));
   } else {
-    this->sycl_target->queue.submit([&](sycl::handler &cgh) {
+    es.push(this->sycl_target->queue.submit([&](sycl::handler &cgh) {
       // The cell counts on this dat
       auto a_cells = b_cells.get_access<sycl::access::mode::read>(cgh);
       auto a_layers = b_layers.get_access<sycl::access::mode::read>(cgh);
@@ -642,13 +641,14 @@ inline void ParticleDatT<T>::append_particle_data(const int npart_new,
           d_cell_dat_ptr[cellx][cx][layerx] = ((T)0);
         }
       });
-    });
+    }));
   }
 
   for (int px = 0; px < npart_new; px++) {
     auto cellx = cells[px];
     this->h_npart_cell[cellx]++;
   }
+  es.push(this->async_npart_host_to_device());
 }
 
 } // namespace NESO::Particles

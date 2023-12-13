@@ -51,13 +51,13 @@ struct Read {
   int const *offsets_real;
   int const *offsets_int;
   int num_products;
-  const REAL at_real(const int product, const int property,
-                     const int component) const {
+  const REAL &at_real(const int product, const int property,
+                      const int component) const {
     return ptr_real[(offsets_real[property] + component) * num_products +
                     product];
   }
-  const INT at_int(const int product, const int property,
-                   const int component) const {
+  const INT &at_int(const int product, const int property,
+                    const int component) const {
     return ptr_int[(offsets_int[property] + component) * num_products +
                    product];
   }
@@ -74,7 +74,7 @@ struct Add {
   int const *offsets_int;
   int num_products;
   inline REAL fetch_add_real(const int product, const int property,
-                             const int component, const REAL value) const {
+                             const int component, const REAL value) {
     sycl::atomic_ref<REAL, sycl::memory_order::relaxed,
                      sycl::memory_scope::device>
         element_atomic(
@@ -83,7 +83,7 @@ struct Add {
     return element_atomic.fetch_add(value);
   }
   inline INT fetch_add_int(const int product, const int property,
-                           const int component, const INT value) const {
+                           const int component, const INT value) {
     sycl::atomic_ref<INT, sycl::memory_order::relaxed,
                      sycl::memory_scope::device>
         element_atomic(
@@ -104,13 +104,11 @@ struct Write {
   int const *offsets_real;
   int const *offsets_int;
   int num_products;
-  REAL &at_real(const int product, const int property,
-                const int component) const {
+  REAL &at_real(const int product, const int property, const int component) {
     return ptr_real[(offsets_real[property] + component) * num_products +
                     product];
   }
-  INT &at_int(const int product, const int property,
-              const int component) const {
+  INT &at_int(const int product, const int property, const int component) {
     return ptr_int[(offsets_int[property] + component) * num_products +
                    product];
   }
@@ -226,6 +224,10 @@ struct ProductMatrixSpec {
   std::map<std::pair<Sym<REAL>, int>, REAL> default_values_real;
   /// Default values applied on call to reset for INT.
   std::map<std::pair<Sym<INT>, int>, INT> default_values_int;
+  /// Map from sym to integer index.
+  std::map<Sym<REAL>, int> map_sym_index_real;
+  /// Map from sym to integer index.
+  std::map<Sym<INT>, int> map_sym_index_int;
 
   /// The ParticleSpec the instance was created from.
   ParticleSpec particle_spec;
@@ -250,11 +252,15 @@ struct ProductMatrixSpec {
 
     for (int px = 0; px < num_properties_real; px++) {
       this->components_real.at(px) = particle_spec.properties_real.at(px).ncomp;
-      this->syms_real.at(px) = particle_spec.properties_real.at(px).sym;
+      const auto sym = particle_spec.properties_real.at(px).sym;
+      this->syms_real.at(px) = sym;
+      this->map_sym_index_real[sym] = px;
     }
     for (int px = 0; px < num_properties_int; px++) {
       this->components_int.at(px) = particle_spec.properties_int.at(px).ncomp;
-      this->syms_int.at(px) = particle_spec.properties_int.at(px).sym;
+      const auto sym = particle_spec.properties_int.at(px).sym;
+      this->syms_int.at(px) = sym;
+      this->map_sym_index_int[sym] = px;
     }
     this->num_components_real = std::accumulate(this->components_real.begin(),
                                                 this->components_real.end(), 0);
@@ -285,6 +291,32 @@ struct ProductMatrixSpec {
                                 const REAL value) {
     this->default_values_real[{sym, component}] = value;
   }
+
+  /**
+   * @returns the integer index that corresponds to a Sym in the specification.
+   * Returns -1 if the Sym is not found.
+   */
+  inline int get_sym_index(const Sym<REAL> sym) const {
+    auto it = this->map_sym_index_real.find(sym);
+    if (it == this->map_sym_index_real.end()) {
+      return -1;
+    } else {
+      return it->second;
+    }
+  }
+
+  /**
+   * @returns the integer index that corresponds to a Sym in the specification.
+   * Returns -1 if the Sym is not found.
+   */
+  inline int get_sym_index(const Sym<INT> sym) const {
+    auto it = this->map_sym_index_int.find(sym);
+    if (it == this->map_sym_index_int.end()) {
+      return -1;
+    } else {
+      return it->second;
+    }
+  }
 };
 
 /**
@@ -298,7 +330,7 @@ product_matrix_spec(ParticleSpec particle_spec) {
 }
 
 class ProductMatrix {
-
+  friend class ParticleGroup;
   friend inline ProductMatrixGetConst
   ParticleLoopImplementation::create_loop_arg(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
