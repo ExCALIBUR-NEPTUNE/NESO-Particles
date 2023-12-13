@@ -12,6 +12,7 @@
 
 namespace NESO::Particles {
 class ParticleSubGroup;
+class ParticleGroup;
 namespace ParticleSubGroupImplementation {
 
 /**
@@ -176,6 +177,7 @@ class ParticleSubGroup {
   // This allows the ParticleLoop to access the implementation methods.
   template <typename KERNEL, typename... ARGS>
   friend class ParticleLoopSubGroup;
+  friend class ParticleGroup;
 
 protected:
   ParticleGroupSharedPtr particle_group;
@@ -240,6 +242,8 @@ protected:
     }
     return npart_local;
   }
+
+  inline void get_cells_layers(INT *d_cells, INT *d_layers);
 
   inline void create_inner() {
     NESOASSERT(!this->is_whole_particle_group,
@@ -560,6 +564,27 @@ particle_loop(const std::string name, ParticleSubGroupSharedPtr particle_group,
     auto b = std::dynamic_pointer_cast<ParticleLoopBase>(p);
     NESOASSERT(b != nullptr, "ParticleLoop pointer cast failed.");
     return b;
+  }
+}
+
+inline void ParticleSubGroup::get_cells_layers(INT *d_cells, INT *d_layers) {
+
+  auto lambda_loop = [&](auto iteration_set) {
+    particle_loop(
+        iteration_set,
+        [&](auto index) {
+          const INT px = index.get_loop_linear_index();
+          d_cells[px] = index.cell;
+          d_layers[px] = index.layer;
+        },
+        Access::read(ParticleLoopIndex{}))
+        ->execute();
+  };
+
+  if (this->is_entire_particle_group()) {
+    lambda_loop(this->particle_group);
+  } else {
+    lambda_loop(std::shared_ptr<ParticleSubGroup>(this, [](auto x) {}));
   }
 }
 

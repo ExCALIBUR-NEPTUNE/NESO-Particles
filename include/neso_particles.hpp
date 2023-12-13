@@ -39,4 +39,5 @@
 #include "cell_dat_move_impl.hpp"
 #include "departing_particle_identification_impl.hpp"
 #include "global_mapping_impl.hpp"
+#include "particle_group_impl.hpp"
 #endif

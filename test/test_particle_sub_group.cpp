@@ -485,6 +485,44 @@ TEST(ParticleSubGroup, whole_group) {
 
   ASSERT_EQ(A->get_npart_local(), aa->get_npart_local());
 
+  A->remove_particles(aa);
+  ASSERT_EQ(A->get_npart_local(), 0);
+  for (int cx = 0; cx < cell_count; cx++) {
+    ASSERT_EQ(A->get_npart_cell(cx), 0);
+    ASSERT_EQ(aa->get_npart_cell(cx), 0);
+  }
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}
+
+TEST(ParticleSubGroup, remove_particles) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  auto sycl_target = A->sycl_target;
+  const int cell_count = mesh->get_cell_count();
+
+  auto bb = std::make_shared<ParticleSubGroup>(
+      A, [=](auto ID) { return ID[0] % 2 == 1; }, Access::read(Sym<INT>("ID")));
+  auto aa = std::make_shared<ParticleSubGroup>(
+      A, [=](auto ID) { return ID[0] % 2 == 0; }, Access::read(Sym<INT>("ID")));
+
+  ASSERT_EQ(bb->get_npart_local() + aa->get_npart_local(),
+            A->get_npart_local());
+  A->remove_particles(aa);
+  ASSERT_EQ(bb->get_npart_local(), A->get_npart_local());
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto id = A->get_dat(Sym<INT>("ID"))->cell_dat.get_cell(cellx);
+    const int nrow = id->nrow;
+    // for each particle in the cell
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      ASSERT_TRUE(id->at(rowx, 0) % 2 == 1);
+    }
+  }
+
   A->free();
   sycl_target->free();
   mesh->free();
