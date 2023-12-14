@@ -5,7 +5,7 @@
 
 using namespace NESO::Particles;
 
-TEST(Buffer, Host) {
+TEST(Buffer, host) {
   auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
   const int N = 15;
   std::vector<int> correct(N);
@@ -31,7 +31,7 @@ TEST(Buffer, Host) {
   }
 }
 
-TEST(Buffer, Device) {
+TEST(Buffer, device) {
   auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
   const int N = 15;
   std::vector<int> correct(N);
@@ -88,7 +88,7 @@ TEST(Buffer, Device) {
   }
 }
 
-TEST(Buffer, DeviceHost) {
+TEST(Buffer, device_host) {
   auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
   const int N = 15;
   std::vector<int> correct(N);

@@ -5,7 +5,7 @@
 using namespace NESO::Particles;
 
 // test that int atomics are functional
-TEST(ErrorPropagate, Atomics) {
+TEST(ErrorPropagate, atomics) {
 
   const int ndim = 2;
   std::vector<int> dims(ndim);
@@ -51,7 +51,7 @@ TEST(ErrorPropagate, Atomics) {
   mesh->free();
 }
 
-TEST(ErrorPropagate, Flag) {
+TEST(ErrorPropagate, flag) {
   auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
   // create an object to track that an error should be thrown
   ErrorPropagate ep(sycl_target);
