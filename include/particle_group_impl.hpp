@@ -132,6 +132,11 @@ inline void ParticleGroup::remove_particles(const int npart,
 
 inline void ParticleGroup::remove_particles(
     std::shared_ptr<ParticleSubGroup> particle_sub_group) {
+
+  NESOASSERT(particle_sub_group->particle_group.get() == this,
+             "remove_particles called with a ParticleSubGroup which is not a "
+             "sub group of the ParticleGroup");
+
   if (particle_sub_group->is_entire_particle_group()) {
     this->clear();
   } else {
