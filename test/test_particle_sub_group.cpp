@@ -438,16 +438,22 @@ TEST(ParticleSubGroup, particle_loop_index) {
     const int nrow = marker->nrow;
     // for each particle in the cell
     index = 0;
+    found_indices.clear();
+
     for (int rowx = 0; rowx < nrow; rowx++) {
       const INT mx = (*marker)[0][rowx];
       const INT ix = (*id)[0][rowx];
       if (ix % 2 == 0) {
-        ASSERT_EQ(mx, index);
+        ASSERT_TRUE(mx < nrow);
+        ASSERT_TRUE(mx > -1);
+        found_indices.insert(mx);
         index++;
       } else {
         ASSERT_EQ(mx, -1);
       }
     }
+    ASSERT_EQ(found_indices.size(), index);
+    ASSERT_EQ(found_indices.size(), aa->get_npart_cell(cellx));
   }
 
   A->free();
