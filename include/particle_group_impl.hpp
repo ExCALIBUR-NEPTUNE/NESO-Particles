@@ -351,6 +351,12 @@ inline void ParticleGroup::add_particles_local(
   // lambda which copies the property
   auto lambda_copy = [&](auto dat, const auto index, const auto d_offsets,
                          const auto d_src) {
+    const int ncomp_local = dat->ncomp;
+    const int ncomp_matrix = product_matrix->spec->get_num_components(dat->sym);
+    NESOASSERT(ncomp_local == ncomp_matrix,
+               "Missmatch in the number of components in the product matrix "
+               "and the number of components on the particle group for a sym.");
+
     auto dat_ptr = dat->impl_get();
     const int k_ncomp = dat->ncomp;
     const int k_nproducts = num_products;

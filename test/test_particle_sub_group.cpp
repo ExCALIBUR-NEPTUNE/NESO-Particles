@@ -603,3 +603,35 @@ TEST(ParticleSubGroup, clear) {
   sycl_target->free();
   mesh->free();
 }
+
+TEST(ParticleSubGroup, add_product_matrix) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  auto sycl_target = A->sycl_target;
+
+  auto bb = std::make_shared<ParticleSubGroup>(
+      A, [=](auto ID) { return ID[0] % 2 == 1; }, Access::read(Sym<INT>("ID")));
+  auto aa = std::make_shared<ParticleSubGroup>(
+      A, [=](auto ID) { return ID[0] % 2 == 0; }, Access::read(Sym<INT>("ID")));
+  auto ee = std::make_shared<ParticleSubGroup>(
+      A, [=](auto ID) { return false; }, Access::read(Sym<INT>("ID")));
+
+  const int npart_b_A = A->get_npart_local();
+  const int npart_b_aa = aa->get_npart_local();
+  const int npart_b_bb = bb->get_npart_local();
+
+  auto product_spec = product_matrix_spec(ParticleProp(Sym<INT>("MARKER"), 1));
+  auto pm = product_matrix(sycl_target, product_spec);
+  pm->reset(1);
+  A->add_particles_local(pm);
+
+  ASSERT_EQ(A->get_npart_local(), npart_b_A + 1);
+  ASSERT_EQ(bb->get_npart_local(), npart_b_bb);
+  ASSERT_EQ(aa->get_npart_local(), npart_b_aa + 1);
+  ASSERT_EQ(ee->get_npart_local(), 0);
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}

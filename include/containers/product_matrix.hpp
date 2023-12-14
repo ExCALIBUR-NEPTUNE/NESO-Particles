@@ -317,6 +317,30 @@ struct ProductMatrixSpec {
       return it->second;
     }
   }
+
+  /**
+   * @returns the number of components this spec stores for a Sym.
+   */
+  inline int get_num_components(const Sym<REAL> sym) {
+    const int index = this->get_sym_index(sym);
+    if (index < 0) {
+      return 0;
+    } else {
+      return this->components_real.at(index);
+    }
+  }
+
+  /**
+   * @returns the number of components this spec stores for a Sym.
+   */
+  inline int get_num_components(const Sym<INT> sym) {
+    const int index = this->get_sym_index(sym);
+    if (index < 0) {
+      return 0;
+    } else {
+      return this->components_int.at(index);
+    }
+  }
 };
 
 /**
