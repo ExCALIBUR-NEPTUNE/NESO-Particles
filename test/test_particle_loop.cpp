@@ -843,6 +843,7 @@ TEST(ParticleLoop, cell_dat) {
   for (int cellx = 0; cellx < cell_count; cellx++) {
     c0->set_nrow(cellx, N);
   }
+  c0->wait_set_nrow();
 
   std::mt19937 rng(522234 + rank);
   std::uniform_real_distribution<double> uniform_rng(0.0, 1.0);
@@ -903,6 +904,7 @@ TEST(ParticleLoop, cell_dat) {
   for (int cellx = 0; cellx < cell_count; cellx++) {
     g1->set_nrow(cellx, 2);
   }
+  g1->wait_set_nrow();
 
   for (int cx = 0; cx < cell_count; cx++) {
     auto cell_data = g1->get_cell(cx);
@@ -952,6 +954,7 @@ TEST(ParticleLoop, cell_dat) {
   for (int cellx = 0; cellx < cell_count; cellx++) {
     c1->set_nrow(cellx, A->get_npart_cell(cellx));
   }
+  c1->wait_set_nrow();
 
   auto pl_write = particle_loop(
       A, [=](auto index, auto cd) { cd.at(index.layer, 0) = index.layer; },
