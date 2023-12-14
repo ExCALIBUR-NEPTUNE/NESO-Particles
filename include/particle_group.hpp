@@ -389,7 +389,10 @@ public:
   /**
    *  Add particles only to this MPI rank. It is assumed that the added
    *  particles are in the domain region owned by this MPI rank. If not, see
-   *  `ParticleGroup::add_particles`.
+   *  `ParticleGroup::add_particles`. Particle properties which exist on the
+   *  ParticleGroup and not in the ProductMatrix will be zero initialised.
+   *  Particle properties which exist on the ProductMatrix and not in the
+   *  ParticleGroup will be ignored.
    *
    *  @param product_matrix New particles to add.
    */

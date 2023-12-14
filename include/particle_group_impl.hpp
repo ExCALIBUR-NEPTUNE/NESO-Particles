@@ -32,10 +32,14 @@ ParticleGroup::add_particle_dat(ParticleDatSharedPtr<INT> particle_dat) {
   add_particle_dat_common(particle_dat);
 }
 
-inline void ParticleGroup::add_particles(){};
+inline void ParticleGroup::add_particles() {
+  NESOASSERT(false, "Not implemented yet - use add_particles_local and hybrid "
+                    "move or parallel advection initialisation.");
+};
 template <typename U>
-inline void ParticleGroup::add_particles(U particle_data){
-
+inline void ParticleGroup::add_particles(U particle_data) {
+  NESOASSERT(false, "Not implemented yet - use add_particles_local and hybrid "
+                    "move or parallel advection initialisation.");
 };
 
 /*
