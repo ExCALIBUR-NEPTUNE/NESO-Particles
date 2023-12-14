@@ -353,6 +353,7 @@ public:
    */
   template <typename U>
   inline sycl::event set_npart_cells_device(const U *d_npart_cell_in) {
+    this->write_callback_wrapper(0);
     const size_t ncell = static_cast<size_t>(this->ncell);
     int *k_npart_cell = this->d_npart_cell;
     sycl::event event =
@@ -372,6 +373,7 @@ public:
    */
   template <typename U>
   inline void set_npart_cells_host(const U *h_npart_cell_in) {
+    this->write_callback_wrapper(0);
     for (int cellx = 0; cellx < this->ncell; cellx++) {
       this->h_npart_cell[cellx] = h_npart_cell_in[cellx];
     }
@@ -384,6 +386,7 @@ public:
    *  @param npart New particle count for cell.
    */
   inline void set_npart_cell(const INT cell, const int npart) {
+    this->write_callback_wrapper(0);
     this->h_npart_cell[cell] = npart;
     this->sycl_target->queue
         .memcpy(this->d_npart_cell + cell, this->h_npart_cell + cell,
@@ -398,6 +401,7 @@ public:
    *  @param npart std::vector of new particle counts per cell.
    */
   inline void set_npart_cells(std::vector<INT> &npart) {
+    this->write_callback_wrapper(0);
     NESOASSERT(npart.size() >= this->ncell, "bad vector size");
     for (int cellx = 0; cellx < this->ncell; cellx++) {
       this->h_npart_cell[cellx] = npart[cellx];
@@ -414,6 +418,7 @@ public:
    */
   template <typename U>
   inline void set_npart_cells(const BufferHost<U> &h_npart_cell_in) {
+    this->write_callback_wrapper(0);
     NESOASSERT(h_npart_cell_in.size >= this->ncell, "bad BufferHost size");
     for (int cellx = 0; cellx < this->ncell; cellx++) {
       this->h_npart_cell[cellx] = h_npart_cell_in.ptr[cellx];
@@ -432,6 +437,7 @@ public:
   template <typename U>
   inline sycl::event
   async_set_npart_cells(const BufferHost<U> &h_npart_cell_in) {
+    this->write_callback_wrapper(0);
     NESOASSERT(h_npart_cell_in.size >= this->ncell, "bad BufferHost size");
     for (int cellx = 0; cellx < this->ncell; cellx++) {
       this->h_npart_cell[cellx] = h_npart_cell_in.ptr[cellx];

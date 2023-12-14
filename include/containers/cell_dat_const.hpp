@@ -197,8 +197,8 @@ public:
    * @param value Value to place in all entries.
    */
   inline void fill(const T value) {
-    this->sycl_target->queue.fill(this->d_ptr, value, ncells * nrow * ncol);
-    this->sycl_target->queue.wait();
+    this->sycl_target->queue.fill(this->d_ptr, value, ncells * nrow * ncol)
+        .wait_and_throw();
   }
 
   /**

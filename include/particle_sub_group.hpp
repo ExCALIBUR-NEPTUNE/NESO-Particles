@@ -117,7 +117,8 @@ public:
     auto pg_map_layers = particle_group->d_sub_group_layers;
     pg_map_layers->realloc_no_copy(particle_group->get_npart_local());
     int *d_npart_cell_ptr = this->dh_npart_cell->d_buffer.ptr;
-    sycl_target->queue.fill<int>(d_npart_cell_ptr, 0, cell_count);
+    sycl_target->queue.fill<int>(d_npart_cell_ptr, 0, cell_count)
+        .wait_and_throw();
     std::vector<int *> tmp = {pg_map_layers->ptr, d_npart_cell_ptr};
     this->map_ptrs.set(tmp);
 
@@ -155,6 +156,7 @@ public:
     s.d_npart_cell = d_npart_cell_ptr;
     s.d_npart_cell_es = d_npart_cell_es_ptr;
     s.d_map_cells_to_particles = this->map_cell_to_particles->device_ptr();
+
     return s;
   }
 };
