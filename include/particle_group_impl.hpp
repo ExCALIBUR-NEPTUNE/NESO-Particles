@@ -314,25 +314,10 @@ inline void ParticleGroup::add_particles_local(
         .memcpy(cells_ptr, source_cells_ptr, sizeof(INT) * num_products)
         .wait_and_throw();
   }
-
   // Get the new cell occupancies at the destination layers of the particles to
   // insert
-  buffer_memcpy(this->d_npart_cell, this->h_npart_cell).wait_and_throw();
-  INT *k_npart_cell = this->d_npart_cell.ptr;
-  this->sycl_target->queue
-      .submit([&](sycl::handler &cgh) {
-        cgh.parallel_for<>(sycl::range<1>(static_cast<size_t>(num_products)),
-                           [=](sycl::id<1> idx) {
-                             const INT cell = cells_ptr[idx];
-                             sycl::atomic_ref<INT, sycl::memory_order::relaxed,
-                                              sycl::memory_scope::device>
-                                 element_atomic(k_npart_cell[cell]);
-                             const INT layer = element_atomic.fetch_add((INT)1);
-                             layers_ptr[idx] = layer;
-                           });
-      })
-      .wait_and_throw();
-  buffer_memcpy(this->h_npart_cell, this->d_npart_cell).wait_and_throw();
+  // get dst layers also sets h_npart_cell, d_npart_cell
+  this->get_new_layers(num_products, cells_ptr, layers_ptr);
 
   // Allocate space in all the dats for the new particles
   this->realloc_all_dats();
@@ -342,21 +327,7 @@ inline void ParticleGroup::add_particles_local(
   // it should be initalised to 0
 
   EventStack es;
-  // lambda which zeros the property
-  auto lambda_zero = [&](auto dat) {
-    auto dat_ptr = dat->impl_get();
-    const int k_ncomp = dat->ncomp;
-    es.push(this->sycl_target->queue.submit([&](sycl::handler &cgh) {
-      cgh.parallel_for<>(sycl::range<1>(static_cast<size_t>(num_products)),
-                         [=](sycl::id<1> idx) {
-                           const INT cell = cells_ptr[idx];
-                           const INT layer = layers_ptr[idx];
-                           for (int nx = 0; nx < k_ncomp; nx++) {
-                             dat_ptr[cell][nx][layer] = 0;
-                           }
-                         });
-    }));
-  };
+
   // lambda which copies the property
   auto lambda_copy = [&](auto dat, const auto index, const auto d_offsets,
                          const auto d_src) {
@@ -387,7 +358,7 @@ inline void ParticleGroup::add_particles_local(
   auto lambda_dispatch = [&](auto dat, const auto d_offsets, const auto d_src) {
     const int index = product_matrix->spec->get_sym_index(dat->sym);
     if (index == -1) {
-      lambda_zero(dat);
+      zero_dat_properties(dat, num_products, cells_ptr, layers_ptr, es);
     } else {
       lambda_copy(dat, index, d_offsets, d_src);
     }
@@ -460,6 +431,82 @@ inline void ParticleGroup::add_particles_local(
     es.push(dat.second->async_set_npart_cells(this->h_npart_cell));
   }
   es.wait();
+}
+
+inline void ParticleGroup::add_particles_local(
+    std::shared_ptr<ParticleSubGroup> particle_sub_group) {
+
+  if (particle_sub_group->is_entire_particle_group()) {
+    this->add_particles_local(particle_sub_group->particle_group);
+  } else {
+    const INT npart = particle_sub_group->get_npart_local();
+    this->d_remove_cells.realloc_no_copy(npart);
+    this->d_remove_layers.realloc_no_copy(2 * npart);
+    auto k_cells = this->d_remove_cells.ptr;
+    auto k_layers_src = this->d_remove_layers.ptr;
+    auto k_layers_dst = k_layers_src + npart;
+    particle_sub_group->get_cells_layers(k_cells, k_layers_src);
+    // get dst layers also sets h_npart_cell, d_npart_cell
+    this->get_new_layers(npart, k_cells, k_layers_dst);
+    // Allocate space in all the dats for the new particles
+    this->realloc_all_dats();
+
+    EventStack es;
+
+    // lambda which copies the property
+    auto lambda_copy = [&](auto dat, const auto dat_src) {
+      const int ncomp_dst = dat->ncomp;
+      const int ncomp_src = dat_src->ncomp;
+      NESOASSERT(
+          ncomp_dst == ncomp_src,
+          "Missmatch in the number of components in the local ParticleGroup"
+          "and the number of components on the ParticleGroup for the "
+          "ParticleSubGroup.");
+
+      auto dst_ptr = dat->impl_get();
+      auto src_ptr = dat_src->impl_get_const();
+      const int k_ncomp = dat->ncomp;
+      const int k_npart = npart;
+      es.push(this->sycl_target->queue.submit([&](sycl::handler &cgh) {
+        cgh.parallel_for<>(
+            sycl::range<1>(static_cast<size_t>(k_npart)), [=](sycl::id<1> idx) {
+              const INT cell = k_cells[idx];
+              const INT src_layer = k_layers_src[idx];
+              const INT dst_layer = k_layers_dst[idx];
+              for (int nx = 0; nx < k_ncomp; nx++) {
+                dst_ptr[cell][nx][dst_layer] = src_ptr[cell][nx][src_layer];
+              }
+            });
+      }));
+    };
+
+    auto lambda_dispatch = [&](auto dat) {
+      auto sym = dat->sym;
+      if (particle_sub_group->particle_group->contains_dat(sym)) {
+        lambda_copy(dat, particle_sub_group->particle_group->get_dat(sym));
+      } else {
+        zero_dat_properties(dat, npart, k_cells, k_layers_dst, es);
+      }
+    };
+
+    // launch the copies into the ParticleDats
+    for (auto &dat : this->particle_dats_real) {
+      lambda_dispatch(dat.second);
+    }
+    for (auto &dat : this->particle_dats_int) {
+      lambda_dispatch(dat.second);
+    }
+    // launch the copies of the npart cells into the ParticleDats
+    for (auto &dat : this->particle_dats_real) {
+      es.push(dat.second->async_set_npart_cells(this->h_npart_cell));
+    }
+    for (auto &dat : this->particle_dats_int) {
+      es.push(dat.second->async_set_npart_cells(this->h_npart_cell));
+    }
+
+    es.wait();
+    this->check_dats_and_group_agree();
+  }
 }
 
 typedef std::shared_ptr<ParticleGroup> ParticleGroupSharedPtr;

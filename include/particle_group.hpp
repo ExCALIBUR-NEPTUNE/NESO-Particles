@@ -157,6 +157,45 @@ private:
     }
   }
 
+  inline void get_new_layers(const int npart, const INT *RESTRICT cells_ptr,
+                             INT *RESTRICT layers_ptr) {
+    buffer_memcpy(this->d_npart_cell, this->h_npart_cell).wait_and_throw();
+    INT *k_npart_cell = this->d_npart_cell.ptr;
+    this->sycl_target->queue
+        .submit([&](sycl::handler &cgh) {
+          cgh.parallel_for<>(
+              sycl::range<1>(static_cast<size_t>(npart)), [=](sycl::id<1> idx) {
+                const INT cell = cells_ptr[idx];
+                sycl::atomic_ref<INT, sycl::memory_order::relaxed,
+                                 sycl::memory_scope::device>
+                    element_atomic(k_npart_cell[cell]);
+                const INT layer = element_atomic.fetch_add((INT)1);
+                layers_ptr[idx] = layer;
+              });
+        })
+        .wait_and_throw();
+    buffer_memcpy(this->h_npart_cell, this->d_npart_cell).wait_and_throw();
+  }
+
+  template <typename T>
+  inline void zero_dat_properties(std::shared_ptr<T> dat, const int npart,
+                                  const INT *RESTRICT cells_ptr,
+                                  const INT *RESTRICT layers_ptr,
+                                  EventStack &es) {
+    auto dat_ptr = dat->impl_get();
+    const int k_ncomp = dat->ncomp;
+    es.push(this->sycl_target->queue.submit([&](sycl::handler &cgh) {
+      cgh.parallel_for<>(sycl::range<1>(static_cast<size_t>(npart)),
+                         [=](sycl::id<1> idx) {
+                           const INT cell = cells_ptr[idx];
+                           const INT layer = layers_ptr[idx];
+                           for (int nx = 0; nx < k_ncomp; nx++) {
+                             dat_ptr[cell][nx][layer] = 0;
+                           }
+                         });
+    }));
+  }
+
   template <typename T> inline void push_particle_spec(ParticleProp<T> prop) {
     this->particle_spec.push(prop);
   };
@@ -323,8 +362,10 @@ public:
 
     for (int cellx = 0; cellx < this->ncell; cellx++) {
       this->h_npart_cell.ptr[cellx] = 0;
+      this->dh_npart_cell_es->h_buffer.ptr[cellx] = 0;
     }
     buffer_memcpy(this->d_npart_cell, this->h_npart_cell).wait();
+    this->dh_npart_cell_es->host_to_device();
 
     for (auto &property : particle_spec.properties_real) {
       add_particle_dat(ParticleDat(sycl_target, property, this->ncell));
@@ -424,6 +465,22 @@ public:
    */
   inline void
   add_particles_local(std::shared_ptr<ParticleGroup> particle_group);
+
+  /**
+   * Add particles to this ParticleGroup from another ParticleGroup. Properties
+   * which exist in the destination ParticleGroup and not the source
+   * ParticleGroup are zero initialised. Properties which exist in both
+   * ParticleGroups are copied. Properties which only exist in the source
+   * ParticleGroup are ignored.
+   *
+   * Particle properties will be copied cell-wise from the source to
+   * destination ParticleGroups. This cell-wise copy requires that the source
+   * and destination domains share the same number of cells on each MPI rank.
+   *
+   *  @param particle_sub_group New particles to add.
+   */
+  inline void
+  add_particles_local(std::shared_ptr<ParticleSubGroup> particle_sub_group);
 
   /**
    *  Get the total number of particles on this MPI rank.

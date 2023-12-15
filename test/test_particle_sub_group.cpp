@@ -635,7 +635,7 @@ TEST(ParticleSubGroup, add_product_matrix) {
   mesh->free();
 }
 
-TEST(ParticleSubGroup, add_particle_local_particle_group) {
+TEST(ParticleSubGroup, add_particles_local_particle_group) {
   auto A = particle_loop_common(10);
   auto domain = A->domain;
   auto mesh = domain->mesh;
@@ -657,6 +657,121 @@ TEST(ParticleSubGroup, add_particle_local_particle_group) {
   A->add_particles_local(B);
   EXPECT_TRUE(aa->create_if_required());
   EXPECT_FALSE(aa->create_if_required());
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}
+
+TEST(ParticleSubGroup, add_particles_local_particle_sub_group) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  auto sycl_target = A->sycl_target;
+  const int cell_count = mesh->get_cell_count();
+
+  auto odd = std::make_shared<ParticleSubGroup>(
+      A, [=](auto ID) { return ID[0] % 2 == 1; }, Access::read(Sym<INT>("ID")));
+  auto even = std::make_shared<ParticleSubGroup>(
+      A, [=](auto ID) { return ID[0] % 2 == 0; }, Access::read(Sym<INT>("ID")));
+
+  auto B = std::make_shared<ParticleGroup>(domain, A->get_particle_spec(),
+                                           sycl_target);
+
+  auto bb = std::make_shared<ParticleSubGroup>(
+      B, [=](auto ID) { return ID[0] % 2 == 0; }, Access::read(Sym<INT>("ID")));
+
+  B->add_particle_dat(
+      ParticleDat(sycl_target, ParticleProp(Sym<INT>("FOO"), 3), cell_count));
+
+  const int npart_local = A->get_npart_local();
+  const int npart_local_even = even->get_npart_local();
+  const int npart_local_odd = odd->get_npart_local();
+  ASSERT_EQ(npart_local, npart_local_even + npart_local_odd);
+
+  std::vector<int> npart_cell(cell_count);
+  std::vector<int> npart_cell_even(cell_count);
+  std::vector<int> npart_cell_odd(cell_count);
+
+  std::map<int, std::set<INT>> cell_to_ids;
+  std::set<INT> ids;
+
+  for (int cx = 0; cx < cell_count; cx++) {
+    npart_cell.at(cx) = A->get_npart_cell(cx);
+    npart_cell_even.at(cx) = even->get_npart_cell(cx);
+    npart_cell_odd.at(cx) = odd->get_npart_cell(cx);
+
+    const int npart_A = A->get_npart_cell(cx);
+    auto A_ID = A->get_cell(Sym<INT>("ID"), cx);
+    for (int rowx = 0; rowx < npart_A; rowx++) {
+      const INT id = A_ID->at(rowx, 0);
+      cell_to_ids[cx].insert(id);
+      ids.insert(id);
+    }
+    ASSERT_EQ(cell_to_ids[cx].size(), npart_cell.at(cx));
+  }
+  ASSERT_EQ(ids.size(), npart_local);
+
+  B->add_particles_local(even);
+  EXPECT_TRUE(bb->create_if_required());
+  EXPECT_FALSE(bb->create_if_required());
+
+  for (int cx = 0; cx < cell_count; cx++) {
+    const int npart = B->get_npart_cell(cx);
+    ASSERT_EQ(npart, npart_cell_even.at(cx));
+    auto B_ID = B->get_cell(Sym<INT>("ID"), cx);
+    for (int rowx = 0; rowx < npart; rowx++) {
+      ASSERT_TRUE(B_ID->at(rowx, 0) % 2 == 0);
+    }
+  }
+
+  A->remove_particles(even);
+  EXPECT_TRUE(even->create_if_required());
+  EXPECT_FALSE(even->create_if_required());
+  ASSERT_EQ(even->get_npart_local(), 0);
+  ASSERT_EQ(npart_local_odd, A->get_npart_local());
+  ASSERT_EQ(npart_local_even, B->get_npart_local());
+
+  std::set<INT> ids_to_test;
+  for (int cx = 0; cx < cell_count; cx++) {
+    const int npart_A = A->get_npart_cell(cx);
+    const int npart_B = B->get_npart_cell(cx);
+
+    ASSERT_EQ(npart_A, npart_cell_odd.at(cx));
+    ASSERT_EQ(npart_B, npart_cell_even.at(cx));
+
+    auto B_ID = B->get_cell(Sym<INT>("ID"), cx);
+    auto A_ID = A->get_cell(Sym<INT>("ID"), cx);
+    std::set<INT> cell_ids;
+
+    for (int rowx = 0; rowx < npart_A; rowx++) {
+      const INT id = A_ID->at(rowx, 0);
+      ASSERT_TRUE(-1 < id);
+      ASSERT_TRUE(id % 2 == 1);
+      cell_ids.insert(id);
+      ids_to_test.insert(id);
+    }
+    for (int rowx = 0; rowx < npart_B; rowx++) {
+      const INT id = B_ID->at(rowx, 0);
+      ASSERT_TRUE(-1 < id);
+      ASSERT_TRUE(id % 2 == 0);
+      cell_ids.insert(id);
+      ids_to_test.insert(id);
+    }
+    ASSERT_TRUE(cell_ids == cell_to_ids[cx]);
+  }
+  ASSERT_EQ(ids_to_test.size(), ids.size());
+  ASSERT_TRUE(ids_to_test == ids);
+
+  for (int cx = 0; cx < cell_count; cx++) {
+    const int npart = B->get_npart_cell(cx);
+    auto FOO = B->get_cell(Sym<INT>("FOO"), cx);
+    for (int rx = 0; rx < npart; rx++) {
+      for (int dx = 0; dx < 3; dx++) {
+        ASSERT_EQ(FOO->at(rx, dx), 0);
+      }
+    }
+  }
 
   A->free();
   sycl_target->free();
