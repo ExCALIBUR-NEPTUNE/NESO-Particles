@@ -10,7 +10,7 @@ namespace {
 
 const int ndim = 2;
 
-ParticleGroupSharedPtr particle_loop_common() {
+ParticleGroupSharedPtr particle_loop_common(const int N = 1093) {
   std::vector<int> dims(ndim);
   dims[0] = 4;
   dims[1] = 8;
@@ -39,7 +39,6 @@ ParticleGroupSharedPtr particle_loop_common() {
                                   ParticleProp(Sym<REAL>("FOO"), 3),
                                   domain->mesh->get_cell_count()));
 
-  const int N = 1093; // prime
   const int rank = sycl_target->comm_pair.rank_parent;
   const INT id_offset = rank * N;
 
@@ -630,6 +629,34 @@ TEST(ParticleSubGroup, add_product_matrix) {
   ASSERT_EQ(bb->get_npart_local(), npart_b_bb);
   ASSERT_EQ(aa->get_npart_local(), npart_b_aa + 1);
   ASSERT_EQ(ee->get_npart_local(), 0);
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}
+
+TEST(ParticleSubGroup, add_particle_local_particle_group) {
+  auto A = particle_loop_common(10);
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  auto sycl_target = A->sycl_target;
+
+  auto aa = std::make_shared<ParticleSubGroup>(
+      A, [=](auto ID) { return ID[0] % 2 == 0; }, Access::read(Sym<INT>("ID")));
+
+  auto B = std::make_shared<ParticleGroup>(domain, A->get_particle_spec(),
+                                           sycl_target);
+  auto product_spec = product_matrix_spec(ParticleProp(Sym<INT>("MARKER"), 1));
+  auto pm = product_matrix(sycl_target, product_spec);
+  pm->reset(1);
+  B->add_particles_local(pm);
+
+  EXPECT_TRUE(aa->create_if_required());
+  EXPECT_FALSE(aa->create_if_required());
+
+  A->add_particles_local(B);
+  EXPECT_TRUE(aa->create_if_required());
+  EXPECT_FALSE(aa->create_if_required());
 
   A->free();
   sycl_target->free();

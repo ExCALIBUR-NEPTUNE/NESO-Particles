@@ -173,7 +173,7 @@ protected:
    * @param col Column in cell to get pointer for.
    * @returns Device pointer to data for the specified column.
    */
-  T *col_device_ptr(const int cell, const int col) {
+  inline T *col_device_ptr(const int cell, const int col) {
     return this->h_ptr_cols[cell * this->ncol + col];
   }
 

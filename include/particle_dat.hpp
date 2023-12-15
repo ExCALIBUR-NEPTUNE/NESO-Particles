@@ -138,6 +138,12 @@ protected:
   inline void set_d_npart_cell_es(INT *ptr) { this->d_npart_cell_es = ptr; }
   inline INT *get_d_npart_cell_es() { return this->d_npart_cell_es; }
 
+  inline void
+  append_particle_data(std::shared_ptr<ParticleDatT<T>> particle_dat,
+                       const std::vector<INT> &h_npart_cell_existing,
+                       const std::vector<INT> &h_npart_cell_to_add,
+                       EventStack &es);
+
 public:
   /// Disable (implicit) copies.
   ParticleDatT(const ParticleDatT &st) = delete;
@@ -258,6 +264,7 @@ public:
                                    std::vector<INT> &cells,
                                    std::vector<INT> &layers,
                                    std::vector<T> &data, EventStack &es);
+
   /**
    *  Realloc the underlying CellDat such that the indicated new number of
    *  particles can be stored.
@@ -593,9 +600,9 @@ template <typename T> inline void ParticleDatT<T>::trim_cell_dat_rows() {
 }
 
 /*
- *  Append particle data to the ParticleDat. wait() must be called on the queue
- *  before use of the data. npart_host_to_device should be called on completion.
- *
+ *  Append particle data to the ParticleDat. wait() must be called on the
+ * event_stack before use of the data. Assumes the dat has already been
+ * reallocated.
  */
 template <typename T>
 inline void ParticleDatT<T>::append_particle_data(
@@ -655,6 +662,46 @@ inline void ParticleDatT<T>::append_particle_data(
     this->h_npart_cell[cellx]++;
   }
   es.push(this->async_npart_host_to_device());
+}
+/*
+ *  Append particle data to the ParticleDat. wait() must be called on the
+ * event_stack before use of the data. Assumes the dat has already been
+ * reallocated.
+ */
+template <typename T>
+inline void ParticleDatT<T>::append_particle_data(
+    ParticleDatSharedPtr<T> particle_dat,
+    const std::vector<INT> &h_npart_cell_existing,
+    const std::vector<INT> &h_npart_cell_to_add, EventStack &es) {
+
+  if (particle_dat != nullptr) {
+    NESOASSERT(
+        this->ncell == particle_dat->ncell,
+        "Source and destination ParticleDats have different cell counts");
+    NESOASSERT(this->ncomp == particle_dat->ncomp,
+               "Source and destination ParticleDats have different number of "
+               "components");
+  }
+
+  this->write_callback_wrapper(0);
+  for (int cellx = 0; cellx < this->ncell; cellx++) {
+    const INT layer_start = h_npart_cell_existing.at(cellx);
+    const INT layer_to_add = h_npart_cell_to_add.at(cellx);
+    if (layer_to_add > 0) {
+      for (int colx = 0; colx < this->ncomp; colx++) {
+        auto d_ptr_dst = this->cell_dat.col_device_ptr(cellx, colx);
+        if (particle_dat == nullptr) {
+          es.push(this->sycl_target->queue.fill(
+              d_ptr_dst + layer_start, static_cast<T>(0), layer_to_add));
+        } else {
+          const auto d_ptr_src =
+              particle_dat->cell_dat.col_device_ptr(cellx, colx);
+          es.push(this->sycl_target->queue.memcpy(
+              d_ptr_dst + layer_start, d_ptr_src, layer_to_add * sizeof(T)));
+        }
+      }
+    }
+  }
 }
 
 } // namespace NESO::Particles

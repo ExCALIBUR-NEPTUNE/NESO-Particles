@@ -55,13 +55,18 @@ inline void neso_particles_assert(const char *expr_str, bool expr,
     std::cerr << "NESO Particles Assertion error:\t" << msg << "\n"
               << "Expected value:\t" << expr_str << "\n"
               << "Source location:\t\t" << file << ", line " << line << "\n";
+#ifdef NESO_PARTICLES_NO_MPI_ABORT
+    std::abort();
+#else
     int flag = 0;
     MPI_Initialized(&flag);
     if (flag) {
+      std::abort();
       MPI_Abort(MPI_COMM_WORLD, -1);
     } else {
       std::abort();
     }
+#endif
   }
 }
 

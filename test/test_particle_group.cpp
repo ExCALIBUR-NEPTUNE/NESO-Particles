@@ -482,3 +482,122 @@ TEST(ParticleGroup, clear) {
   A.free();
   mesh->free();
 }
+
+TEST(ParticleGroup, add_particle_local_particle_group) {
+
+  const int ndim = 2;
+  std::vector<int> dims(ndim);
+  dims[0] = 4;
+  dims[1] = 8;
+
+  const double cell_extent = 1.0;
+  const int subdivision_order = 2;
+  auto mesh = std::make_shared<CartesianHMesh>(MPI_COMM_WORLD, ndim, dims,
+                                               cell_extent, subdivision_order);
+
+  auto sycl_target =
+      std::make_shared<SYCLTarget>(GPU_SELECTOR, mesh->get_comm());
+
+  auto domain = std::make_shared<Domain>(mesh);
+
+  ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
+                             ParticleProp(Sym<REAL>("V"), 3),
+                             ParticleProp(Sym<INT>("CELL_ID"), 1, true),
+                             ParticleProp(Sym<INT>("ID"), 1)};
+
+  const int cell_count = domain->mesh->get_cell_count();
+  auto A = std::make_shared<ParticleGroup>(domain, particle_spec, sycl_target);
+  A->add_particle_dat(
+      ParticleDat(sycl_target, ParticleProp(Sym<REAL>("FOO"), 3), cell_count));
+
+  std::mt19937 rng_pos(52234234);
+  std::mt19937 rng_vel(52234231);
+
+  const int N = cell_count * 2 + 7;
+
+  auto positions =
+      uniform_within_extents(N, ndim, mesh->global_extents, rng_pos);
+  auto velocities =
+      NESO::Particles::normal_distribution(N, 3, 0.0, 1.0, rng_vel);
+
+  ParticleSet initial_distribution(N, particle_spec);
+
+  for (int px = 0; px < N; px++) {
+    for (int dimx = 0; dimx < ndim; dimx++) {
+      initial_distribution[Sym<REAL>("P")][px][dimx] = positions[dimx][px];
+    }
+    for (int dimx = 0; dimx < 3; dimx++) {
+      initial_distribution[Sym<REAL>("V")][px][dimx] = velocities[dimx][px];
+    }
+    initial_distribution[Sym<INT>("CELL_ID")][px][0] = px % (cell_count - 1);
+    initial_distribution[Sym<INT>("ID")][px][0] = px;
+  }
+
+  A->add_particles_local(initial_distribution);
+
+  std::map<int, int> a_map;
+  for (int cx = 0; cx < cell_count; cx++) {
+    auto ID = A->get_cell(Sym<INT>("ID"), cx);
+    const int nrow = ID->nrow;
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      a_map[ID->at(rowx, 0)] = rowx;
+    }
+  }
+
+  auto B = std::make_shared<ParticleGroup>(domain, particle_spec, sycl_target);
+  A->add_particle_dat(
+      ParticleDat(sycl_target, ParticleProp(Sym<REAL>("BAR"), 3), cell_count));
+  auto C = std::make_shared<ParticleGroup>(domain, particle_spec, sycl_target);
+  std::vector<int> A_npart_cell(cell_count);
+
+  ASSERT_EQ(A->get_npart_cell(cell_count - 1), 0);
+  for (int cx = 0; cx < cell_count; cx++) {
+    ASSERT_EQ(B->get_npart_cell(cx), 0);
+    ASSERT_EQ(C->get_npart_cell(cx), 0);
+    A_npart_cell.at(cx) = A->get_npart_cell(cx);
+  }
+  C->add_particles_local(B);
+  for (int cx = 0; cx < cell_count; cx++) {
+    ASSERT_EQ(C->get_npart_cell(cx), 0);
+  }
+
+  for (int px = 0; px < N; px++) {
+    initial_distribution[Sym<INT>("ID")][px][0] += N;
+  }
+  B->add_particles_local(initial_distribution);
+
+  A->add_particles_local(B);
+  C->add_particles_local(B);
+
+  ASSERT_EQ(A->get_npart_cell(cell_count - 1), 0);
+  for (int cx = 0; cx < cell_count; cx++) {
+    ASSERT_EQ(A->get_npart_cell(cx), A_npart_cell.at(cx) * 2);
+    ASSERT_EQ(B->get_npart_cell(cx), A_npart_cell.at(cx));
+    ASSERT_EQ(C->get_npart_cell(cx), A_npart_cell.at(cx));
+  }
+
+  for (int cx = 0; cx < cell_count; cx++) {
+    auto AFOO = A->get_cell(Sym<REAL>("FOO"), cx);
+    auto AP = A->get_cell(Sym<REAL>("P"), cx);
+    auto AV = A->get_cell(Sym<REAL>("V"), cx);
+    auto AID = A->get_cell(Sym<INT>("ID"), cx);
+    const int nrow = AFOO->nrow;
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      ASSERT_EQ(AFOO->at(rowx, 0), 0.0);
+      const INT pID = AID->at(rowx, 0) - N;
+      // is added particle?
+      if (pID > -1) {
+        auto rowp = a_map.at(pID);
+        for (int dx = 0; dx < ndim; dx++) {
+          ASSERT_EQ(AP->at(rowx, dx), AP->at(rowp, dx));
+        }
+        for (int dx = 0; dx < 3; dx++) {
+          ASSERT_EQ(AV->at(rowx, dx), AV->at(rowp, dx));
+        }
+      }
+    }
+  }
+
+  A->free();
+  mesh->free();
+}

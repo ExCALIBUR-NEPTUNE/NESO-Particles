@@ -9,27 +9,27 @@ namespace NESO::Particles {
 
 inline void
 ParticleGroup::add_particle_dat(ParticleDatSharedPtr<REAL> particle_dat) {
-  NESOASSERT(this->particle_dats_real.count(particle_dat->sym) == 0,
-             "ParticleDat Sym already exists in ParticleGroup.");
-  this->particle_dats_real[particle_dat->sym] = particle_dat;
-  // Does this dat hold particle positions?
-  if (particle_dat->positions) {
-    this->position_dat = particle_dat;
-    this->position_sym = std::make_shared<Sym<REAL>>(particle_dat->sym.name);
+  if (!this->existing_compatible_dat(particle_dat)) {
+    this->particle_dats_real[particle_dat->sym] = particle_dat;
+    // Does this dat hold particle positions?
+    if (particle_dat->positions) {
+      this->position_dat = particle_dat;
+      this->position_sym = std::make_shared<Sym<REAL>>(particle_dat->sym.name);
+    }
+    add_particle_dat_common(particle_dat);
   }
-  add_particle_dat_common(particle_dat);
 }
 inline void
 ParticleGroup::add_particle_dat(ParticleDatSharedPtr<INT> particle_dat) {
-  NESOASSERT(this->particle_dats_int.count(particle_dat->sym) == 0,
-             "ParticleDat Sym already exists in ParticleGroup.");
-  this->particle_dats_int[particle_dat->sym] = particle_dat;
-  // Does this dat hold particle cell ids?
-  if (particle_dat->positions) {
-    this->cell_id_dat = particle_dat;
-    this->cell_id_sym = std::make_shared<Sym<INT>>(particle_dat->sym.name);
+  if (!this->existing_compatible_dat(particle_dat)) {
+    this->particle_dats_int[particle_dat->sym] = particle_dat;
+    // Does this dat hold particle cell ids?
+    if (particle_dat->positions) {
+      this->cell_id_dat = particle_dat;
+      this->cell_id_sym = std::make_shared<Sym<INT>>(particle_dat->sym.name);
+    }
+    add_particle_dat_common(particle_dat);
   }
-  add_particle_dat_common(particle_dat);
 }
 
 inline void ParticleGroup::add_particles() {
@@ -411,6 +411,55 @@ inline void ParticleGroup::add_particles_local(
   // wait for the copy kernels
   es.wait();
   this->check_dats_and_group_agree();
+}
+
+inline void ParticleGroup::add_particles_local(
+    std::shared_ptr<ParticleGroup> particle_group) {
+
+  // Get the new cell occupancies
+  const int cell_count = this->domain->mesh->get_cell_count();
+  std::vector<INT> h_npart_cell_existing(cell_count);
+  std::vector<INT> h_npart_cell_to_add(cell_count);
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    h_npart_cell_existing.at(cellx) = this->h_npart_cell.ptr[cellx];
+    const INT to_add = particle_group->h_npart_cell.ptr[cellx];
+    this->h_npart_cell.ptr[cellx] += to_add;
+    h_npart_cell_to_add.at(cellx) = to_add;
+  }
+  buffer_memcpy(this->d_npart_cell, this->h_npart_cell).wait_and_throw();
+
+  // Allocate space in all the dats for the new particles
+  this->realloc_all_dats();
+  EventStack es;
+
+  auto lambda_dispatch = [&](auto dat_dst) {
+    // get a shared ptr of the right type
+    auto dat_src = dat_dst;
+    dat_src = nullptr;
+    auto sym = dat_dst->sym;
+    if (particle_group->contains_dat(sym)) {
+      dat_src = particle_group->get_dat(sym);
+    }
+    dat_dst->append_particle_data(dat_src, h_npart_cell_existing,
+                                  h_npart_cell_to_add, es);
+  };
+
+  // launch the copies of the npart cells into the ParticleDats
+  for (auto &dat : this->particle_dats_real) {
+    lambda_dispatch(dat.second);
+  }
+  for (auto &dat : this->particle_dats_int) {
+    lambda_dispatch(dat.second);
+  }
+
+  // launch the copies of the npart cells into the ParticleDats
+  for (auto &dat : this->particle_dats_real) {
+    es.push(dat.second->async_set_npart_cells(this->h_npart_cell));
+  }
+  for (auto &dat : this->particle_dats_int) {
+    es.push(dat.second->async_set_npart_cells(this->h_npart_cell));
+  }
+  es.wait();
 }
 
 typedef std::shared_ptr<ParticleGroup> ParticleGroupSharedPtr;

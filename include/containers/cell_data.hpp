@@ -21,11 +21,13 @@ private:
   std::string format(INT value) {
     char buffer[128];
     const int err = snprintf(buffer, 128, "%ld", value);
+    NESOASSERT(err >= 0 && err < 128, "Bad snprintf return code.");
     return std::string(buffer);
   }
   std::string format(REAL value) {
     char buffer[128];
     const int err = snprintf(buffer, 128, "%f", value);
+    NESOASSERT(err >= 0 && err < 128, "Bad snprintf return code.");
     return std::string(buffer);
   }
   std::string format(char value) { return std::string(1, value); }

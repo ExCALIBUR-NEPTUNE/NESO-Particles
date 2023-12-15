@@ -143,6 +143,20 @@ private:
     }
   }
 
+  template <typename T>
+  inline bool existing_compatible_dat(ParticleDatSharedPtr<T> particle_dat) {
+    auto sym = particle_dat->sym;
+    if (this->contains_dat(sym)) {
+      auto existing_dat = this->get_dat(sym);
+      NESOASSERT(
+          existing_dat->ncomp == particle_dat->ncomp,
+          "Existing ParticleDat and ParticleDat to add are incompaptible");
+      return true;
+    } else {
+      return false;
+    }
+  }
+
   template <typename T> inline void push_particle_spec(ParticleProp<T> prop) {
     this->particle_spec.push(prop);
   };
@@ -310,6 +324,7 @@ public:
     for (int cellx = 0; cellx < this->ncell; cellx++) {
       this->h_npart_cell.ptr[cellx] = 0;
     }
+    buffer_memcpy(this->d_npart_cell, this->h_npart_cell).wait();
 
     for (auto &property : particle_spec.properties_real) {
       add_particle_dat(ParticleDat(sycl_target, property, this->ncell));
@@ -382,11 +397,6 @@ public:
   inline void add_particles_local(ParticleSet &particle_data);
 
   /**
-   * Clear all particles from the ParticleGroup on the calling MPI rank.
-   */
-  inline void clear();
-
-  /**
    *  Add particles only to this MPI rank. It is assumed that the added
    *  particles are in the domain region owned by this MPI rank. If not, see
    *  `ParticleGroup::add_particles`. Particle properties which exist on the
@@ -398,6 +408,22 @@ public:
    */
   inline void
   add_particles_local(std::shared_ptr<ProductMatrix> product_matrix);
+
+  /**
+   * Add particles to this ParticleGroup from another ParticleGroup. Properties
+   * which exist in the destination ParticleGroup and not the source
+   * ParticleGroup are zero initialised. Properties which exist in both
+   * ParticleGroups are copied. Properties which only exist in the source
+   * ParticleGroup are ignored.
+   *
+   * Particle properties will be copied cell-wise from the source to
+   * destination ParticleGroups. This cell-wise copy requires that the source
+   * and destination domains share the same number of cells on each MPI rank.
+   *
+   *  @param particle_group New particles to add.
+   */
+  inline void
+  add_particles_local(std::shared_ptr<ParticleGroup> particle_group);
 
   /**
    *  Get the total number of particles on this MPI rank.
@@ -487,6 +513,11 @@ public:
   inline CellData<INT> get_cell(Sym<INT> sym, const int cell) {
     return particle_dats_int[sym]->cell_dat.get_cell(cell);
   }
+
+  /**
+   * Clear all particles from the ParticleGroup on the calling MPI rank.
+   */
+  inline void clear();
 
   /**
    *  Remove particles from the ParticleGroup.
