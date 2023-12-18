@@ -82,6 +82,11 @@ public:
                        ARGS... args)
       : ParticleSubGroup(particle_group, kernel, args...) {}
 
+  template <typename KERNEL, typename... ARGS>
+  TestParticleSubGroup(ParticleSubGroupSharedPtr particle_group, KERNEL kernel,
+                       ARGS... args)
+      : ParticleSubGroup(particle_group, kernel, args...) {}
+
   inline int test_get_cells_layers(std::vector<INT> &cells,
                                    std::vector<INT> &layers) {
     return get_cells_layers(cells, layers);
@@ -646,6 +651,7 @@ TEST(ParticleSubGroup, add_particles_local_particle_group) {
 
   auto B = std::make_shared<ParticleGroup>(domain, A->get_particle_spec(),
                                            sycl_target);
+
   auto product_spec = product_matrix_spec(ParticleProp(Sym<INT>("MARKER"), 1));
   auto pm = product_matrix(sycl_target, product_spec);
   pm->reset(1);
@@ -655,9 +661,9 @@ TEST(ParticleSubGroup, add_particles_local_particle_group) {
   EXPECT_FALSE(aa->create_if_required());
 
   A->add_particles_local(B);
+
   EXPECT_TRUE(aa->create_if_required());
   EXPECT_FALSE(aa->create_if_required());
-
   A->free();
   sycl_target->free();
   mesh->free();
@@ -772,6 +778,86 @@ TEST(ParticleSubGroup, add_particles_local_particle_sub_group) {
       }
     }
   }
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}
+
+TEST(ParticleSubGroup, sub_sub_group) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  auto sycl_target = A->sycl_target;
+  const int cell_count = mesh->get_cell_count();
+
+  auto mod2 = std::make_shared<TestParticleSubGroup>(
+      A, [=](auto ID) { return ID.at(0) % 2 == 0; },
+      Access::read(Sym<INT>("ID")));
+
+  auto mod4 = std::make_shared<TestParticleSubGroup>(
+      std::dynamic_pointer_cast<ParticleSubGroup>(mod2),
+      [=](auto ID) { return ((ID[0] % 4) == 0); },
+      Access::read(Sym<INT>("ID")));
+
+  ASSERT_EQ(mod2->get_particle_group(), mod4->get_particle_group());
+
+  std::vector<INT> cells;
+  std::vector<INT> layers;
+  auto num_particles = mod2->test_get_cells_layers(cells, layers);
+  std::set<std::pair<INT, INT>> correct, to_test;
+  for (int px = 0; px < num_particles; px++) {
+    const int cellx = cells.at(px);
+    const int layerx = layers.at(px);
+    auto id = A->get_cell(Sym<INT>("ID"), cellx)->at(layerx, 0);
+    ASSERT_TRUE(id % 2 == 0);
+    if (id % 4 == 0) {
+      correct.insert({cellx, layerx});
+    }
+  }
+
+  num_particles = mod4->test_get_cells_layers(cells, layers);
+  for (int px = 0; px < num_particles; px++) {
+    const int cellx = cells.at(px);
+    const int layerx = layers.at(px);
+    auto id = A->get_cell(Sym<INT>("ID"), cellx)->at(layerx, 0);
+    ASSERT_TRUE(id % 4 == 0);
+    to_test.insert({cellx, layerx});
+  }
+  ASSERT_EQ(to_test, correct);
+
+  to_test.clear();
+  auto AA = particle_sub_group(A);
+  auto mod42 = std::make_shared<TestParticleSubGroup>(
+      AA, [=](auto ID) { return ((ID[0] % 4) == 0); },
+      Access::read(Sym<INT>("ID")));
+
+  num_particles = mod42->test_get_cells_layers(cells, layers);
+  for (int px = 0; px < num_particles; px++) {
+    const int cellx = cells.at(px);
+    const int layerx = layers.at(px);
+    auto id = A->get_cell(Sym<INT>("ID"), cellx)->at(layerx, 0);
+    ASSERT_TRUE(id % 4 == 0);
+    to_test.insert({cellx, layerx});
+  }
+  ASSERT_EQ(to_test, correct);
+
+  auto m0 = particle_sub_group(
+      A, [=](auto M) { return true; }, Access::read(Sym<INT>("MARKER")));
+
+  auto e0 = particle_sub_group(
+      m0, [=](auto ID) { return ID.at(0) % 2 == 0; },
+      Access::read(Sym<INT>("ID")));
+
+  EXPECT_TRUE(e0->create_if_required());
+  EXPECT_FALSE(e0->create_if_required());
+
+  particle_loop(
+      A, [=](auto M) { M.at(0) += 1; }, Access::write(Sym<INT>("MARKER")))
+      ->execute();
+
+  EXPECT_TRUE(e0->create_if_required());
+  EXPECT_FALSE(e0->create_if_required());
 
   A->free();
   sycl_target->free();

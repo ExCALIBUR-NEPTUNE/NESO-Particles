@@ -31,6 +31,13 @@ protected:
   ParticleLoopSharedPtr loop_0;
   ParticleLoopSharedPtr loop_1;
 
+  inline ParticleGroupSharedPtr
+  get_particle_group(std::shared_ptr<ParticleSubGroup> parent);
+  inline ParticleGroupSharedPtr
+  get_particle_group(std::shared_ptr<ParticleGroup> parent) {
+    return parent;
+  }
+
 public:
   ParticleGroupSharedPtr particle_group;
 
@@ -50,17 +57,16 @@ public:
    * arguments for the selector kernel must be read access Syms, i.e.
    * Access::read(Sym<T>("name")).
    *
-   * @param particle_group Parent ParticleGroup from which to form
+   * @param parent Parent ParticleGroup or ParticleSubGroup from which to form
    * ParticleSubGroup.
    * @param kernel Lambda function (like a ParticleLoop kernel) that returns
    * true for the particles which should be in the ParticleSubGroup.
    * @param args Arguments in the form of access descriptors wrapping objects
    * to pass to the kernel.
    */
-  template <typename KERNEL, typename... ARGS>
-  SubGroupSelector(ParticleGroupSharedPtr particle_group, KERNEL kernel,
-                   ARGS... args)
-      : particle_group(particle_group) {
+  template <typename PARENT, typename KERNEL, typename... ARGS>
+  SubGroupSelector(std::shared_ptr<PARENT> parent, KERNEL kernel, ARGS... args)
+      : particle_group(get_particle_group(parent)) {
 
     auto sycl_target = particle_group->sycl_target;
     const int cell_count = particle_group->domain->mesh->get_cell_count();
@@ -73,7 +79,7 @@ public:
         std::make_shared<BufferDevice<INT>>(sycl_target, cell_count);
 
     this->loop_0 = particle_loop(
-        "sub_group_selector_0", particle_group,
+        "sub_group_selector_0", parent,
         [=](auto loop_index, auto k_map_ptrs, auto... user_args) {
           const bool required = kernel(user_args...);
           const INT particle_linear_index = loop_index.get_local_linear_index();
@@ -91,7 +97,7 @@ public:
         args...);
 
     this->loop_1 = particle_loop(
-        "sub_group_selector_1", particle_group,
+        "sub_group_selector_1", parent,
         [=](auto loop_index, auto k_map_cell_to_particles, auto k_map_ptrs) {
           const INT particle_linear_index = loop_index.get_local_linear_index();
           const int layer = k_map_ptrs.at(0)[particle_linear_index];
@@ -112,10 +118,12 @@ public:
    * @returns List of cells and layers of particles in the sub group.
    */
   inline SelectionT get() {
+
     const int cell_count = this->particle_group->domain->mesh->get_cell_count();
     auto sycl_target = this->particle_group->sycl_target;
     auto pg_map_layers = particle_group->d_sub_group_layers;
-    pg_map_layers->realloc_no_copy(particle_group->get_npart_local());
+    const auto npart_local = this->particle_group->get_npart_local();
+    pg_map_layers->realloc_no_copy(npart_local);
     int *d_npart_cell_ptr = this->dh_npart_cell->d_buffer.ptr;
     sycl_target->queue.fill<int>(d_npart_cell_ptr, 0, cell_count)
         .wait_and_throw();
@@ -123,6 +131,7 @@ public:
     this->map_ptrs.set(tmp);
 
     this->loop_0->execute();
+
     this->dh_npart_cell->device_to_host();
     int *h_npart_cell_ptr = this->dh_npart_cell->h_buffer.ptr;
     for (int cellx = 0; cellx < cell_count; cellx++) {
@@ -261,6 +270,14 @@ protected:
     this->particle_group->check_validation(this->particle_dat_versions);
   }
 
+  inline void add_parent_dependencies(ParticleGroupSharedPtr parent) {}
+  inline void
+  add_parent_dependencies(std::shared_ptr<ParticleSubGroup> parent) {
+    for (const auto dep : parent->particle_dat_versions) {
+      this->particle_dat_versions[dep.first] = 0;
+    }
+  }
+
 public:
   /**
    * Create a ParticleSubGroup based on a kernel and arguments. The selector
@@ -279,19 +296,19 @@ public:
    *      },
    *      Access::read(Sym<INT>("ID")));
    *
-   * @param particle_group Parent ParticleGroup from which to form
+   * @param parent Parent ParticleGroup or ParticleSubGroup from which to form
    * ParticleSubGroup.
    * @param kernel Lambda function (like a ParticleLoop kernel) that returns
    * true for the particles which should be in the ParticleSubGroup.
    * @param args Arguments in the form of access descriptors wrapping objects
    * to pass to the kernel.
    */
-  template <typename KERNEL, typename... ARGS>
-  ParticleSubGroup(ParticleGroupSharedPtr particle_group, KERNEL kernel,
-                   ARGS... args)
+  template <typename PARENT, typename KERNEL, typename... ARGS>
+  ParticleSubGroup(std::shared_ptr<PARENT> parent, KERNEL kernel, ARGS... args)
       : ParticleSubGroup(ParticleSubGroupImplementation::SubGroupSelector(
-            particle_group, kernel, args...)) {
+            parent, kernel, args...)) {
     (check_read_access(args), ...);
+    this->add_parent_dependencies(parent);
   }
 
   /**
@@ -306,7 +323,7 @@ public:
    *
    * but can make additional optimisations.
    *
-   * @param particle_group Parent ParticleGroup from which to form
+   * @param parent Parent ParticleGroup or ParticleSubGroup from which to form
    * ParticleSubGroup.
    */
   ParticleSubGroup(ParticleGroupSharedPtr particle_group)
@@ -377,7 +394,68 @@ public:
   }
 };
 
+namespace ParticleSubGroupImplementation {
+
+inline ParticleGroupSharedPtr
+SubGroupSelector::get_particle_group(std::shared_ptr<ParticleSubGroup> parent) {
+  return parent->get_particle_group();
+}
+
+} // namespace ParticleSubGroupImplementation
+
 typedef std::shared_ptr<ParticleSubGroup> ParticleSubGroupSharedPtr;
+
+/**
+ * Create a ParticleSubGroup based on a kernel and arguments. The selector
+ * kernel must be a lambda which returns true for particles which are in the
+ * sub group and false for particles which are not in the sub group. The
+ * arguments for the selector kernel must be read access Syms, i.e.
+ * Access::read(Sym<T>("name")).
+ *
+ * For example if A is a ParticleGroup with an INT ParticleProp "ID" that
+ * holds particle ids then the following line creates a ParticleSubGroup from
+ * the particles with even ids.
+ *
+ *    auto A_even = std::make_shared<ParticleSubGroup>(
+ *      A, [=](auto ID) {
+ *        return ((ID[0] % 2) == 0);
+ *      },
+ *      Access::read(Sym<INT>("ID")));
+ *
+ * @param parent Parent ParticleGroup or ParticleSubGroup from which to form
+ * ParticleSubGroup.
+ * @param kernel Lambda function (like a ParticleLoop kernel) that returns
+ * true for the particles which should be in the ParticleSubGroup.
+ * @param args Arguments in the form of access descriptors wrapping objects
+ * to pass to the kernel.
+ */
+template <typename PARENT, typename KERNEL, typename... ARGS>
+inline ParticleSubGroupSharedPtr
+particle_sub_group(std::shared_ptr<PARENT> parent, KERNEL kernel,
+                   ARGS... args) {
+  return std::make_shared<ParticleSubGroup>(parent, kernel, args...);
+}
+
+/**
+ * Create a ParticleSubGroup which is simply a reference/view into an entire
+ * ParticleGroup. This constructor creates a sub-group which is equivalent to
+ *
+ *    auto A_all = std::make_shared<ParticleSubGroup>(
+ *      A, [=]() {
+ *        return true;
+ *      }
+ *    );
+ *
+ * but can make additional optimisations.
+ *
+ * @param parent Parent ParticleGroup or ParticleSubGroup from which to form
+ * ParticleSubGroup.
+ */
+template <typename PARENT>
+inline ParticleSubGroupSharedPtr
+particle_sub_group(std::shared_ptr<PARENT> parent) {
+  return std::make_shared<ParticleSubGroup>(parent);
+}
 
 /**
  * Derived ParticleLoop type which implements the particle loop over iteration

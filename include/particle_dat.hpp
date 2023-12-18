@@ -608,6 +608,11 @@ template <typename T>
 inline void ParticleDatT<T>::append_particle_data(
     const int npart_new, const bool new_data_exists, std::vector<INT> &cells,
     std::vector<INT> &layers, std::vector<T> &data, EventStack &es) {
+
+  if (npart_new == 0) {
+    return;
+  }
+
   this->write_callback_wrapper(0);
 
   NESOASSERT(npart_new <= cells.size(), "incorrect number of cells");
@@ -688,14 +693,17 @@ inline void ParticleDatT<T>::append_particle_data(
     const INT layer_start = h_npart_cell_existing.at(cellx);
     const INT layer_to_add = h_npart_cell_to_add.at(cellx);
     if (layer_to_add > 0) {
+
       for (int colx = 0; colx < this->ncomp; colx++) {
         auto d_ptr_dst = this->cell_dat.col_device_ptr(cellx, colx);
+        NESOASSERT(d_ptr_dst != nullptr, "Bad dst ptr.");
         if (particle_dat == nullptr) {
           es.push(this->sycl_target->queue.fill(
               d_ptr_dst + layer_start, static_cast<T>(0), layer_to_add));
         } else {
           const auto d_ptr_src =
               particle_dat->cell_dat.col_device_ptr(cellx, colx);
+          NESOASSERT(d_ptr_src != nullptr, "Bad src ptr.");
           es.push(this->sycl_target->queue.memcpy(
               d_ptr_dst + layer_start, d_ptr_src, layer_to_add * sizeof(T)));
         }

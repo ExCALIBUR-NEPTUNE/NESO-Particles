@@ -273,7 +273,6 @@ public:
           T *col_ptr_new =
               (T *)this->sycl_target->malloc_device(nrow_required * sizeof(T));
           NESOASSERT(col_ptr_new != nullptr, "bad pointer from malloc_device");
-
           if (nrow_alloced > 0) {
             this->stack_events.push(this->sycl_target->queue.memcpy(
                 col_ptr_new, col_ptr_old, nrow_existing * sizeof(T)));

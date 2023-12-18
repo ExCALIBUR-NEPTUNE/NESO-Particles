@@ -70,6 +70,8 @@ inline void ParticleGroup::add_particles_local(ParticleSet &particle_data) {
 
     layers[px] = this->h_npart_cell.ptr[cellindex]++;
   }
+  buffer_memcpy(this->d_npart_cell, this->h_npart_cell).wait_and_throw();
+  this->recompute_npart_cell_es();
 
   EventStack es;
 
@@ -278,6 +280,7 @@ inline void ParticleGroup::clear() {
     this->h_npart_cell.ptr[cx] = 0;
   }
   buffer_memcpy(this->d_npart_cell, this->h_npart_cell).wait_and_throw();
+  this->recompute_npart_cell_es();
   this->realloc_all_dats();
   EventStack es;
   for (auto &dat : this->particle_dats_real) {
@@ -318,6 +321,7 @@ inline void ParticleGroup::add_particles_local(
   // insert
   // get dst layers also sets h_npart_cell, d_npart_cell
   this->get_new_layers(num_products, cells_ptr, layers_ptr);
+  this->recompute_npart_cell_es();
 
   // Allocate space in all the dats for the new particles
   this->realloc_all_dats();
@@ -398,6 +402,7 @@ inline void ParticleGroup::add_particles_local(
     h_npart_cell_to_add.at(cellx) = to_add;
   }
   buffer_memcpy(this->d_npart_cell, this->h_npart_cell).wait_and_throw();
+  this->recompute_npart_cell_es();
 
   // Allocate space in all the dats for the new particles
   this->realloc_all_dats();
@@ -448,6 +453,7 @@ inline void ParticleGroup::add_particles_local(
     particle_sub_group->get_cells_layers(k_cells, k_layers_src);
     // get dst layers also sets h_npart_cell, d_npart_cell
     this->get_new_layers(npart, k_cells, k_layers_dst);
+    this->recompute_npart_cell_es();
     // Allocate space in all the dats for the new particles
     this->realloc_all_dats();
 

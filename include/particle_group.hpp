@@ -291,6 +291,17 @@ protected:
     return updated;
   }
 
+  inline void recompute_npart_cell_es() {
+    auto h_ptr_s = this->h_npart_cell.ptr;
+    auto h_ptr = this->dh_npart_cell_es->h_buffer.ptr;
+    INT total = 0;
+    for (int cellx = 0; cellx < this->ncell; cellx++) {
+      h_ptr[cellx] = total;
+      total += h_ptr_s[cellx];
+    }
+    this->dh_npart_cell_es->host_to_device();
+  }
+
 public:
   /// Disable (implicit) copies.
   ParticleGroup(const ParticleGroup &st) = delete;
@@ -669,14 +680,7 @@ public:
     for (int cellx = 0; cellx < this->ncell; cellx++) {
       this->h_npart_cell.ptr[cellx] = this->position_dat->h_npart_cell[cellx];
     }
-    auto h_ptr_s = this->h_npart_cell.ptr;
-    auto h_ptr = this->dh_npart_cell_es->h_buffer.ptr;
-    INT total = 0;
-    for (int cellx = 0; cellx < this->ncell; cellx++) {
-      h_ptr[cellx] = total;
-      total += h_ptr_s[cellx];
-    }
-    this->dh_npart_cell_es->host_to_device();
+    this->recompute_npart_cell_es();
   }
 
   /**
