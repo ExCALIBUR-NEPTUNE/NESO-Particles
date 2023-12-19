@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 #include <neso_particles.hpp>
 #include <numeric>
+#include <random>
 #include <vector>
 
 namespace NESO::Particles {

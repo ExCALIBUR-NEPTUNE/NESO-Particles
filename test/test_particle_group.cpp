@@ -1,5 +1,4 @@
 #include "include/test_neso_particles.hpp"
-#include <random>
 
 TEST(ParticleGroup, creation) {
 
