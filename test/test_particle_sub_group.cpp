@@ -1,16 +1,10 @@
-#include <CL/sycl.hpp>
-#include <gtest/gtest.h>
-#include <neso_particles.hpp>
-#include <random>
-#include <type_traits>
-
-using namespace NESO::Particles;
+#include "include/test_neso_particles.hpp"
 
 namespace {
 
 const int ndim = 2;
 
-ParticleGroupSharedPtr particle_loop_common(const int N = 1093) {
+auto particle_loop_common(const int N = 1093) {
   std::vector<int> dims(ndim);
   dims[0] = 4;
   dims[1] = 8;
@@ -34,7 +28,7 @@ ParticleGroupSharedPtr particle_loop_common(const int N = 1093) {
                              ParticleProp(Sym<INT>("ID"), 1),
                              ParticleProp(Sym<INT>("MARKER"), 1)};
 
-  auto A = std::make_shared<ParticleGroup>(domain, particle_spec, sycl_target);
+  auto A = make_test_obj<ParticleGroup>(domain, particle_spec, sycl_target);
   A->add_particle_dat(ParticleDat(sycl_target,
                                   ParticleProp(Sym<REAL>("FOO"), 3),
                                   domain->mesh->get_cell_count()));
@@ -521,7 +515,11 @@ TEST(ParticleSubGroup, remove_particles) {
 
   ASSERT_EQ(bb->get_npart_local() + aa->get_npart_local(),
             A->get_npart_local());
+
+  A->reset_version_tracker();
   A->remove_particles(aa);
+  A->test_version_different();
+  A->test_internal_state();
 
   EXPECT_TRUE(aa->create_if_required());
   EXPECT_FALSE(aa->create_if_required());
@@ -543,7 +541,11 @@ TEST(ParticleSubGroup, remove_particles) {
   }
 
   auto AA = std::make_shared<ParticleSubGroup>(A);
+
+  A->reset_version_tracker();
   A->remove_particles(AA);
+  A->test_version_different();
+  A->test_init();
 
   EXPECT_TRUE(aa->create_if_required());
   EXPECT_FALSE(aa->create_if_required());
@@ -582,7 +584,10 @@ TEST(ParticleSubGroup, clear) {
       A, [=](auto ID) { return false; }, Access::read(Sym<INT>("ID")));
 
   auto AA = std::make_shared<ParticleSubGroup>(A);
+  A->reset_version_tracker();
   A->clear();
+  A->test_version_different();
+  A->test_init();
 
   EXPECT_TRUE(aa->create_if_required());
   EXPECT_FALSE(aa->create_if_required());
@@ -628,7 +633,11 @@ TEST(ParticleSubGroup, add_product_matrix) {
   auto product_spec = product_matrix_spec(ParticleProp(Sym<INT>("MARKER"), 1));
   auto pm = product_matrix(sycl_target, product_spec);
   pm->reset(1);
+
+  A->reset_version_tracker();
   A->add_particles_local(pm);
+  A->test_version_different();
+  A->test_internal_state();
 
   ASSERT_EQ(A->get_npart_local(), npart_b_A + 1);
   ASSERT_EQ(bb->get_npart_local(), npart_b_bb);
@@ -649,21 +658,30 @@ TEST(ParticleSubGroup, add_particles_local_particle_group) {
   auto aa = std::make_shared<ParticleSubGroup>(
       A, [=](auto ID) { return ID[0] % 2 == 0; }, Access::read(Sym<INT>("ID")));
 
-  auto B = std::make_shared<ParticleGroup>(domain, A->get_particle_spec(),
-                                           sycl_target);
+  auto B =
+      make_test_obj<ParticleGroup>(domain, A->get_particle_spec(), sycl_target);
 
   auto product_spec = product_matrix_spec(ParticleProp(Sym<INT>("MARKER"), 1));
   auto pm = product_matrix(sycl_target, product_spec);
   pm->reset(1);
+
+  B->reset_version_tracker();
   B->add_particles_local(pm);
+  B->test_version_different();
+  B->test_internal_state();
 
   EXPECT_TRUE(aa->create_if_required());
   EXPECT_FALSE(aa->create_if_required());
 
+  A->reset_version_tracker();
   A->add_particles_local(B);
+  A->test_version_different();
+  A->test_internal_state();
 
   EXPECT_TRUE(aa->create_if_required());
   EXPECT_FALSE(aa->create_if_required());
+
+  B->free();
   A->free();
   sycl_target->free();
   mesh->free();
@@ -681,8 +699,8 @@ TEST(ParticleSubGroup, add_particles_local_particle_sub_group) {
   auto even = std::make_shared<ParticleSubGroup>(
       A, [=](auto ID) { return ID[0] % 2 == 0; }, Access::read(Sym<INT>("ID")));
 
-  auto B = std::make_shared<ParticleGroup>(domain, A->get_particle_spec(),
-                                           sycl_target);
+  auto B =
+      make_test_obj<ParticleGroup>(domain, A->get_particle_spec(), sycl_target);
 
   auto bb = std::make_shared<ParticleSubGroup>(
       B, [=](auto ID) { return ID[0] % 2 == 0; }, Access::read(Sym<INT>("ID")));
@@ -718,7 +736,11 @@ TEST(ParticleSubGroup, add_particles_local_particle_sub_group) {
   }
   ASSERT_EQ(ids.size(), npart_local);
 
+  B->reset_version_tracker();
   B->add_particles_local(even);
+  B->test_version_different();
+  B->test_internal_state();
+
   EXPECT_TRUE(bb->create_if_required());
   EXPECT_FALSE(bb->create_if_required());
 
@@ -731,7 +753,11 @@ TEST(ParticleSubGroup, add_particles_local_particle_sub_group) {
     }
   }
 
+  A->reset_version_tracker();
   A->remove_particles(even);
+  A->test_version_different();
+  A->test_internal_state();
+
   EXPECT_TRUE(even->create_if_required());
   EXPECT_FALSE(even->create_if_required());
   ASSERT_EQ(even->get_npart_local(), 0);
@@ -789,7 +815,6 @@ TEST(ParticleSubGroup, sub_sub_group) {
   auto domain = A->domain;
   auto mesh = domain->mesh;
   auto sycl_target = A->sycl_target;
-  const int cell_count = mesh->get_cell_count();
 
   auto mod2 = std::make_shared<TestParticleSubGroup>(
       A, [=](auto ID) { return ID.at(0) % 2 == 0; },

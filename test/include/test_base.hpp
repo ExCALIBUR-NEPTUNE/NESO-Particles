@@ -7,6 +7,7 @@
 #include <neso_particles.hpp>
 #include <numeric>
 #include <random>
+#include <type_traits>
 #include <vector>
 
 namespace NESO::Particles {

@@ -1,11 +1,4 @@
-#include <CL/sycl.hpp>
-#include <cmath>
-#include <gtest/gtest.h>
-#include <neso_particles.hpp>
-#include <random>
-#include <vector>
-
-using namespace NESO::Particles;
+#include "include/test_neso_particles.hpp"
 
 class ParticleGroupHybridMove : public testing::TestWithParam<int> {};
 
@@ -38,10 +31,7 @@ TEST_P(ParticleGroupHybridMove, multiple) {
                              ParticleProp(Sym<INT>("CELL_ID"), 1, true),
                              ParticleProp(Sym<INT>("ID"), 1)};
 
-  ParticleGroup A(domain, particle_spec, sycl_target);
-
-  A.add_particle_dat(ParticleDat(sycl_target, ParticleProp(Sym<REAL>("FOO"), 3),
-                                 domain->mesh->get_cell_count()));
+  auto A = make_test_obj<ParticleGroup>(domain, particle_spec, sycl_target);
 
   std::mt19937 rng_pos(52234234);
   std::mt19937 rng_vel(52234231);
@@ -61,7 +51,7 @@ TEST_P(ParticleGroupHybridMove, multiple) {
   std::uniform_int_distribution<int> uniform_dist(
       0, sycl_target->comm_pair.size_parent - 1);
 
-  ParticleSet initial_distribution(N, A.get_particle_spec());
+  ParticleSet initial_distribution(N, A->get_particle_spec());
 
   for (int px = 0; px < N; px++) {
     for (int dimx = 0; dimx < ndim; dimx++) {
@@ -78,44 +68,29 @@ TEST_P(ParticleGroupHybridMove, multiple) {
   }
 
   if (sycl_target->comm_pair.rank_parent == 0) {
-    A.add_particles_local(initial_distribution);
+    A->add_particles_local(initial_distribution);
   }
 
-  CartesianPeriodic pbc(sycl_target, mesh, A.position_dat);
-  CartesianCellBin ccb(sycl_target, mesh, A.position_dat, A.cell_id_dat);
+  CartesianPeriodic pbc(sycl_target, mesh, A->position_dat);
+  CartesianCellBin ccb(sycl_target, mesh, A->position_dat, A->cell_id_dat);
 
-  reset_mpi_ranks(A[Sym<INT>("NESO_MPI_RANK")]);
+  reset_mpi_ranks(A->mpi_rank_dat);
 
-  auto lambda_advect = [&] {
-    auto k_P = A[Sym<REAL>("P")]->cell_dat.device_ptr();
-    auto k_V = A[Sym<REAL>("V")]->cell_dat.device_ptr();
-    const auto k_ndim = ndim;
-    const auto k_dt = dt;
-
-    const auto pl_iter_range = A.mpi_rank_dat->get_particle_loop_iter_range();
-    const auto pl_stride = A.mpi_rank_dat->get_particle_loop_cell_stride();
-    const auto pl_npart_cell = A.mpi_rank_dat->get_particle_loop_npart_cell();
-
-    sycl_target->queue
-        .submit([&](sycl::handler &cgh) {
-          cgh.parallel_for<>(
-              sycl::range<1>(pl_iter_range), [=](sycl::id<1> idx) {
-                NESO_PARTICLES_KERNEL_START
-                const INT cellx = NESO_PARTICLES_KERNEL_CELL;
-                const INT layerx = NESO_PARTICLES_KERNEL_LAYER;
-                for (int dimx = 0; dimx < k_ndim; dimx++) {
-                  k_P[cellx][dimx][layerx] += k_V[cellx][dimx][layerx] * k_dt;
-                }
-                NESO_PARTICLES_KERNEL_END
-              });
-        })
-        .wait_and_throw();
-  };
+  const auto k_ndim = ndim;
+  const auto k_dt = dt;
+  auto advect_loop = particle_loop(
+      A,
+      [=](auto k_V, auto k_P) {
+        for (int dimx = 0; dimx < k_ndim; dimx++) {
+          k_P.at(dimx) += k_V.at(dimx) * k_dt;
+        }
+      },
+      Access::read(Sym<REAL>("V")), Access::write(Sym<REAL>("P")));
 
   REAL T = 0.0;
 
   auto lambda_test = [&] {
-    int npart_found = A.mpi_rank_dat->get_npart_local();
+    int npart_found = A->mpi_rank_dat->get_npart_local();
     int global_npart_found = 0;
     MPICHK(MPI_Allreduce(&npart_found, &global_npart_found, 1, MPI_INT, MPI_SUM,
                          sycl_target->comm_pair.comm_parent));
@@ -123,12 +98,12 @@ TEST_P(ParticleGroupHybridMove, multiple) {
 
     // for all cells
     for (int cellx = 0; cellx < cell_count; cellx++) {
-      auto P = A[Sym<REAL>("P")]->cell_dat.get_cell(cellx);
-      auto P_ORIG = A[Sym<REAL>("P_ORIG")]->cell_dat.get_cell(cellx);
-      auto V = A[Sym<REAL>("V")]->cell_dat.get_cell(cellx);
-      auto C = A[Sym<INT>("CELL_ID")]->cell_dat.get_cell(cellx);
-      auto MPI_RANK = A[Sym<INT>("NESO_MPI_RANK")]->cell_dat.get_cell(cellx);
-      auto ID = A[Sym<INT>("ID")]->cell_dat.get_cell(cellx);
+      auto P = A->get_cell(Sym<REAL>("P"), cellx);
+      auto P_ORIG = A->get_cell(Sym<REAL>("P_ORIG"), cellx);
+      auto V = A->get_cell(Sym<REAL>("V"), cellx);
+      auto C = A->get_cell(Sym<INT>("CELL_ID"), cellx);
+      auto MPI_RANK = A->get_cell(Sym<INT>("NESO_MPI_RANK"), cellx);
+      auto ID = A->get_cell(Sym<INT>("ID"), cellx);
 
       const int nrow = P->nrow;
 
@@ -187,13 +162,20 @@ TEST_P(ParticleGroupHybridMove, multiple) {
   for (int testx = 0; testx < Ntest; testx++) {
     pbc.execute();
 
-    A.hybrid_move();
+    if (testx % 20 == 0) {
+      A->reset_version_tracker();
+    }
+    A->hybrid_move();
+    if (testx % 20 == 0) {
+      A->test_version_different();
+      A->test_internal_state();
+    }
 
     ccb.execute();
-    A.cell_move();
+    A->cell_move();
 
     lambda_test();
-    lambda_advect();
+    advect_loop->execute();
 
     T += dt;
   }

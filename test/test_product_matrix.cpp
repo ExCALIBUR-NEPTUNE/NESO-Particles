@@ -1,16 +1,10 @@
-#include <CL/sycl.hpp>
-#include <gtest/gtest.h>
-#include <neso_particles.hpp>
-#include <random>
-#include <type_traits>
-
-using namespace NESO::Particles;
+#include "include/test_neso_particles.hpp"
 
 namespace {
 
 const int ndim = 2;
 
-ParticleGroupSharedPtr particle_loop_common(const int N = 1093) {
+auto particle_loop_common(const int N = 1093) {
   std::vector<int> dims(ndim);
   dims[0] = 4;
   dims[1] = 8;
@@ -35,7 +29,7 @@ ParticleGroupSharedPtr particle_loop_common(const int N = 1093) {
                              ParticleProp(Sym<INT>("PARENT"), 2),
                              ParticleProp(Sym<INT>("ID"), 1)};
 
-  auto A = std::make_shared<ParticleGroup>(domain, particle_spec, sycl_target);
+  auto A = make_test_obj<ParticleGroup>(domain, particle_spec, sycl_target);
   A->add_particle_dat(ParticleDat(sycl_target,
                                   ParticleProp(Sym<REAL>("FOO"), 3),
                                   domain->mesh->get_cell_count()));
@@ -273,7 +267,10 @@ TEST(ProductMatrix, add_particles_local_0) {
     npart_cell.at(cx) = A->get_npart_cell(cx);
   }
 
+  A->reset_version_tracker();
   A->add_particles_local(std::dynamic_pointer_cast<ProductMatrix>(pm));
+  A->test_version_different();
+  A->test_internal_state();
 
   // we did not set the cells -> the new particles should all be in cell 0
   ASSERT_EQ(A->get_npart_local(), 2 * npart_local_before);
@@ -385,7 +382,10 @@ TEST(ProductMatrix, add_particles_local_1) {
     npart_cell.at(cx) = A->get_npart_cell(cx);
   }
 
+  A->reset_version_tracker();
   A->add_particles_local(std::dynamic_pointer_cast<ProductMatrix>(pm));
+  A->test_version_different();
+  A->test_internal_state();
 
   ASSERT_EQ(A->get_npart_local(), 2 * npart_local_before);
   for (int cx = 0; cx < cell_count; cx++) {
