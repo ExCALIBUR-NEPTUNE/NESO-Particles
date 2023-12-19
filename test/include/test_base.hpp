@@ -1,7 +1,6 @@
 #ifndef _NESO_PARTICLES_TEST_BASE_H_
 #define _NESO_PARTICLES_TEST_BASE_H_
 
-#include <CL/sycl.hpp>
 #include <cmath>
 #include <gtest/gtest.h>
 #include <memory>

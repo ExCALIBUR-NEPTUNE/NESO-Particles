@@ -168,7 +168,7 @@ inline void ParticleGroup::global_move() {
  * collectively on the communicator.
  */
 inline void ParticleGroup::local_move() {
-  this->local_move_ctx.move();
+  this->local_move_ctx->move();
   this->set_npart_cell_from_dat();
 }
 
@@ -267,7 +267,7 @@ inline void ParticleGroup::hybrid_move() {
 
   this->domain->local_mapper->map(*this, 0);
 
-  this->local_move_ctx.move();
+  this->local_move_ctx->move();
   this->set_npart_cell_from_dat();
 }
 

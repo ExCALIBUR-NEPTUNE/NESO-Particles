@@ -205,7 +205,7 @@ protected:
   // method to map particle positions to global cells
   std::shared_ptr<MeshHierarchyGlobalMap> mesh_hierarchy_global_map;
   // neighbour communication context
-  LocalMove local_move_ctx;
+  std::unique_ptr<LocalMove> local_move_ctx;
   // members for moving particles between local cells
   CellMove cell_move_ctx;
 
@@ -355,11 +355,6 @@ public:
                          particle_dats_int),
         global_move_ctx(sycl_target, layer_compressor, particle_dats_real,
                         particle_dats_int),
-        local_move_ctx(
-            sycl_target, layer_compressor, particle_dats_real,
-            particle_dats_int,
-            domain->mesh->get_local_communication_neighbours().size(),
-            domain->mesh->get_local_communication_neighbours().data()),
         cell_move_ctx(sycl_target, this->ncell, layer_compressor,
                       particle_dats_real, particle_dats_int) {
 
@@ -388,7 +383,12 @@ public:
         ParticleDat(sycl_target, ParticleProp(*mpi_rank_sym, 2), ncell);
     add_particle_dat(mpi_rank_dat);
     this->global_move_ctx.set_mpi_rank_dat(mpi_rank_dat);
-    this->local_move_ctx.set_mpi_rank_dat(mpi_rank_dat);
+
+    this->local_move_ctx = std::make_unique<LocalMove>(
+        sycl_target, layer_compressor, particle_dats_real, particle_dats_int,
+        domain->mesh->get_local_communication_neighbours().size(),
+        domain->mesh->get_local_communication_neighbours().data());
+    this->local_move_ctx->set_mpi_rank_dat(mpi_rank_dat);
 
     this->layer_compressor.set_cell_id_dat(this->cell_id_dat);
     this->cell_move_ctx.set_cell_id_dat(this->cell_id_dat);

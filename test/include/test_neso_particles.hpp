@@ -3,7 +3,6 @@
 
 #include "test_base.hpp"
 #include "test_particle_group.hpp"
-#include <memory>
 
 namespace NESO::Particles {
 
