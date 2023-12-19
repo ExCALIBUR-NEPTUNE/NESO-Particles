@@ -11,6 +11,7 @@
 #include "cell_dat.hpp"
 #include "cell_dat_compression.hpp"
 #include "compute_target.hpp"
+#include "error_propagate.hpp"
 #include "particle_dat.hpp"
 #include "particle_set.hpp"
 #include "particle_spec.hpp"

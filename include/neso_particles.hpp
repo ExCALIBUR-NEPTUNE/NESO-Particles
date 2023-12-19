@@ -16,6 +16,7 @@
 #include "containers/sym_vector.hpp"
 #include "containers/tuple.hpp"
 #include "domain.hpp"
+#include "error_propagate.hpp"
 #include "global_mapping.hpp"
 #include "local_mapping.hpp"
 #include "local_move.hpp"

@@ -1,9 +1,5 @@
-#include <CL/sycl.hpp>
-#include <gtest/gtest.h>
-#include <neso_particles.hpp>
+#include "include/test_neso_particles.hpp"
 #include <random>
-
-using namespace NESO::Particles;
 
 TEST(ParticleGroup, creation) {
 
@@ -27,9 +23,14 @@ TEST(ParticleGroup, creation) {
                              ParticleProp(Sym<INT>("CELL_ID"), 1, true),
                              ParticleProp(Sym<INT>("ID"), 1)};
 
-  ParticleGroup A(domain, particle_spec, sycl_target);
-  A.add_particle_dat(ParticleDat(sycl_target, ParticleProp(Sym<REAL>("FOO"), 3),
-                                 domain->mesh->get_cell_count()));
+  auto A = make_test_obj<ParticleGroup>(domain, particle_spec, sycl_target);
+  A->test_init();
+  A->test_internal_state();
+
+  A->add_particle_dat(ParticleDat(sycl_target,
+                                  ParticleProp(Sym<REAL>("FOO"), 3),
+                                  domain->mesh->get_cell_count()));
+  A->test_internal_state();
 
   std::mt19937 rng_pos(52234234);
   std::mt19937 rng_vel(52234231);
@@ -54,14 +55,17 @@ TEST(ParticleGroup, creation) {
     initial_distribution[Sym<INT>("ID")][px][0] = px;
   }
 
-  A.add_particles_local(initial_distribution);
+  A->reset_version_tracker();
+  A->add_particles_local(initial_distribution);
+  A->test_version_different();
+  A->test_internal_state();
 
   for (int cellx = 0; cellx < mesh->get_cell_count(); cellx++) {
-    auto P = A.get_cell(Sym<REAL>("P"), cellx);
-    auto V = A.get_cell(Sym<REAL>("V"), cellx);
-    auto FOO = A.get_cell(Sym<REAL>("FOO"), cellx);
-    auto ID = A.get_cell(Sym<INT>("ID"), cellx);
-    auto CELL_ID = A.get_cell(Sym<INT>("CELL_ID"), cellx);
+    auto P = A->get_cell(Sym<REAL>("P"), cellx);
+    auto V = A->get_cell(Sym<REAL>("V"), cellx);
+    auto FOO = A->get_cell(Sym<REAL>("FOO"), cellx);
+    auto ID = A->get_cell(Sym<INT>("ID"), cellx);
+    auto CELL_ID = A->get_cell(Sym<INT>("CELL_ID"), cellx);
 
     for (int rowx = 0; rowx < P->nrow; rowx++) {
       int row = -1;
@@ -117,10 +121,10 @@ TEST(ParticleGroup, compression_removal_all) {
                              ParticleProp(Sym<INT>("CELL_ID"), 1, true),
                              ParticleProp(Sym<INT>("ID"), 1)};
 
-  ParticleGroup A(domain, particle_spec, sycl_target);
-
-  A.add_particle_dat(ParticleDat(sycl_target, ParticleProp(Sym<REAL>("FOO"), 3),
-                                 domain->mesh->get_cell_count()));
+  auto A = make_test_obj<ParticleGroup>(domain, particle_spec, sycl_target);
+  A->add_particle_dat(ParticleDat(sycl_target,
+                                  ParticleProp(Sym<REAL>("FOO"), 3),
+                                  domain->mesh->get_cell_count()));
 
   std::mt19937 rng_pos(52234234);
   std::mt19937 rng_vel(52234231);
@@ -158,12 +162,14 @@ TEST(ParticleGroup, compression_removal_all) {
     initial_distribution[Sym<INT>("CELL_ID")][px][0] = cellid;
   }
 
-  A.add_particles_local(initial_distribution);
+  A->add_particles_local(initial_distribution);
+  A->test_internal_state();
 
   std::vector<int> orig_occupancies(cell_count);
   for (int cx = 0; cx < cell_count; cx++) {
-    orig_occupancies[cx] = A.get_npart_cell(cx);
-    ASSERT_EQ(orig_occupancies[cx], A[Sym<REAL>("P")]->h_npart_cell[cx]);
+    orig_occupancies[cx] = A->get_npart_cell(cx);
+    ASSERT_EQ(orig_occupancies[cx],
+              A->get_dat(Sym<REAL>("P"))->h_npart_cell[cx]);
   }
 
   std::vector<INT> cells;
@@ -172,44 +178,47 @@ TEST(ParticleGroup, compression_removal_all) {
   layers.reserve(N);
 
   // in cell 0 remove all the particles
-  const auto npart_cell_0 = A[Sym<INT>("ID")]->h_npart_cell[0];
+  const auto npart_cell_0 = A->get_dat(Sym<INT>("ID"))->h_npart_cell[0];
   for (int layerx = 0; layerx < npart_cell_0; layerx++) {
     cells.push_back(0);
     layers.push_back(layerx);
   }
 
-  A.remove_particles(cells.size(), cells, layers);
+  A->reset_version_tracker();
+  A->remove_particles(cells.size(), cells, layers);
+  A->test_version_different();
+  A->test_internal_state();
 
   // cell 0 should have no particles
-  ASSERT_EQ(A.get_npart_cell(0), 0);
+  ASSERT_EQ(A->get_npart_cell(0), 0);
 
   int tmp = -1;
   sycl_target->queue
-      .memcpy(&tmp, &A[Sym<REAL>("P")]->d_npart_cell[0], sizeof(int))
+      .memcpy(&tmp, A->get_dat(Sym<REAL>("P"))->d_npart_cell, sizeof(int))
       .wait();
   ASSERT_EQ(tmp, 0);
 
-  ASSERT_EQ(A[Sym<REAL>("P")]->h_npart_cell[0], 0);
-  ASSERT_EQ(A[Sym<REAL>("V")]->h_npart_cell[0], 0);
-  ASSERT_EQ(A[Sym<INT>("CELL_ID")]->h_npart_cell[0], 0);
-  ASSERT_EQ(A[Sym<INT>("ID")]->h_npart_cell[0], 0);
-  ASSERT_EQ(A[Sym<REAL>("FOO")]->h_npart_cell[0], 0);
+  ASSERT_EQ(A->get_dat(Sym<REAL>("P"))->h_npart_cell[0], 0);
+  ASSERT_EQ(A->get_dat(Sym<REAL>("V"))->h_npart_cell[0], 0);
+  ASSERT_EQ(A->get_dat(Sym<INT>("CELL_ID"))->h_npart_cell[0], 0);
+  ASSERT_EQ(A->get_dat(Sym<INT>("ID"))->h_npart_cell[0], 0);
+  ASSERT_EQ(A->get_dat(Sym<REAL>("FOO"))->h_npart_cell[0], 0);
   // cells 1, ..., cell_count - 1 should be unchanged
   for (int cx = 1; cx < cell_count; cx++) {
     const int cx_count = orig_occupancies[cx];
-    ASSERT_EQ(A.get_npart_cell(cx), cx_count);
-    ASSERT_EQ(A[Sym<REAL>("P")]->h_npart_cell[cx], cx_count);
-    ASSERT_EQ(A[Sym<REAL>("V")]->h_npart_cell[cx], cx_count);
-    ASSERT_EQ(A[Sym<INT>("CELL_ID")]->h_npart_cell[cx], cx_count);
-    ASSERT_EQ(A[Sym<INT>("ID")]->h_npart_cell[cx], cx_count);
-    ASSERT_EQ(A[Sym<REAL>("FOO")]->h_npart_cell[cx], cx_count);
+    ASSERT_EQ(A->get_npart_cell(cx), cx_count);
+    ASSERT_EQ(A->get_dat(Sym<REAL>("P"))->h_npart_cell[cx], cx_count);
+    ASSERT_EQ(A->get_dat(Sym<REAL>("V"))->h_npart_cell[cx], cx_count);
+    ASSERT_EQ(A->get_dat(Sym<INT>("CELL_ID"))->h_npart_cell[cx], cx_count);
+    ASSERT_EQ(A->get_dat(Sym<INT>("ID"))->h_npart_cell[cx], cx_count);
+    ASSERT_EQ(A->get_dat(Sym<REAL>("FOO"))->h_npart_cell[cx], cx_count);
   }
   for (int cellx = 1; cellx < cell_count; cellx++) {
-    auto P = A.get_cell(Sym<REAL>("P"), cellx);
-    auto V = A.get_cell(Sym<REAL>("V"), cellx);
-    auto FOO = A.get_cell(Sym<REAL>("FOO"), cellx);
-    auto ID = A.get_cell(Sym<INT>("ID"), cellx);
-    auto CELL_ID = A.get_cell(Sym<INT>("CELL_ID"), cellx);
+    auto P = A->get_cell(Sym<REAL>("P"), cellx);
+    auto V = A->get_cell(Sym<REAL>("V"), cellx);
+    auto FOO = A->get_cell(Sym<REAL>("FOO"), cellx);
+    auto ID = A->get_cell(Sym<INT>("ID"), cellx);
+    auto CELL_ID = A->get_cell(Sym<INT>("CELL_ID"), cellx);
 
     for (int rowx = 0; rowx < P->nrow; rowx++) {
       int row = -1;
@@ -245,43 +254,47 @@ TEST(ParticleGroup, compression_removal_all) {
   cells.reserve(N);
   layers.reserve(N);
 
-  const auto npart_cell_1 = A[Sym<INT>("ID")]->h_npart_cell[1];
+  const auto npart_cell_1 = A->get_dat(Sym<INT>("ID"))->h_npart_cell[1];
 
   cells.push_back(1);
   layers.push_back(0);
   cells.push_back(1);
   layers.push_back(npart_cell_1 - 1);
 
-  const auto cell1 = A[Sym<INT>("ID")]->cell_dat.get_cell(1);
+  const auto cell1 = A->get_cell(Sym<INT>("ID"), 1);
 
   const INT rm_id_0 = (*cell1)[0][0];
 
   ASSERT_EQ(cells.size(), 2);
-  A.remove_particles(cells.size(), cells, layers);
+
+  A->reset_version_tracker();
+  A->remove_particles(cells.size(), cells, layers);
+  A->test_version_different();
+  A->test_internal_state();
 
   // cell 1 should have npart_cell_1 - 2 particles
-  ASSERT_EQ(A.get_npart_cell(1), npart_cell_1 - 2);
-  ASSERT_EQ(A[Sym<REAL>("P")]->h_npart_cell[1], npart_cell_1 - 2);
-  ASSERT_EQ(A[Sym<REAL>("V")]->h_npart_cell[1], npart_cell_1 - 2);
-  ASSERT_EQ(A[Sym<INT>("CELL_ID")]->h_npart_cell[1], npart_cell_1 - 2);
-  ASSERT_EQ(A[Sym<INT>("ID")]->h_npart_cell[1], npart_cell_1 - 2);
-  ASSERT_EQ(A[Sym<REAL>("FOO")]->h_npart_cell[1], npart_cell_1 - 2);
+  ASSERT_EQ(A->get_npart_cell(1), npart_cell_1 - 2);
+  ASSERT_EQ(A->get_dat(Sym<REAL>("P"))->h_npart_cell[1], npart_cell_1 - 2);
+  ASSERT_EQ(A->get_dat(Sym<REAL>("V"))->h_npart_cell[1], npart_cell_1 - 2);
+  ASSERT_EQ(A->get_dat(Sym<INT>("CELL_ID"))->h_npart_cell[1], npart_cell_1 - 2);
+  ASSERT_EQ(A->get_dat(Sym<INT>("ID"))->h_npart_cell[1], npart_cell_1 - 2);
+  ASSERT_EQ(A->get_dat(Sym<REAL>("FOO"))->h_npart_cell[1], npart_cell_1 - 2);
   // cells 2, ..., cell_count - 1 should be unchanged
   for (int cx = 2; cx < cell_count; cx++) {
     const int cx_count = orig_occupancies[cx];
-    ASSERT_EQ(A.get_npart_cell(cx), cx_count);
-    ASSERT_EQ(A[Sym<REAL>("P")]->h_npart_cell[cx], cx_count);
-    ASSERT_EQ(A[Sym<REAL>("V")]->h_npart_cell[cx], cx_count);
-    ASSERT_EQ(A[Sym<INT>("CELL_ID")]->h_npart_cell[cx], cx_count);
-    ASSERT_EQ(A[Sym<INT>("ID")]->h_npart_cell[cx], cx_count);
-    ASSERT_EQ(A[Sym<REAL>("FOO")]->h_npart_cell[cx], cx_count);
+    ASSERT_EQ(A->get_npart_cell(cx), cx_count);
+    ASSERT_EQ(A->get_dat(Sym<REAL>("P"))->h_npart_cell[cx], cx_count);
+    ASSERT_EQ(A->get_dat(Sym<REAL>("V"))->h_npart_cell[cx], cx_count);
+    ASSERT_EQ(A->get_dat(Sym<INT>("CELL_ID"))->h_npart_cell[cx], cx_count);
+    ASSERT_EQ(A->get_dat(Sym<INT>("ID"))->h_npart_cell[cx], cx_count);
+    ASSERT_EQ(A->get_dat(Sym<REAL>("FOO"))->h_npart_cell[cx], cx_count);
   }
   for (int cellx = 1; cellx < cell_count; cellx++) {
-    auto P = A.get_cell(Sym<REAL>("P"), cellx);
-    auto V = A.get_cell(Sym<REAL>("V"), cellx);
-    auto FOO = A.get_cell(Sym<REAL>("FOO"), cellx);
-    auto ID = A.get_cell(Sym<INT>("ID"), cellx);
-    auto CELL_ID = A.get_cell(Sym<INT>("CELL_ID"), cellx);
+    auto P = A->get_cell(Sym<REAL>("P"), cellx);
+    auto V = A->get_cell(Sym<REAL>("V"), cellx);
+    auto FOO = A->get_cell(Sym<REAL>("FOO"), cellx);
+    auto ID = A->get_cell(Sym<INT>("ID"), cellx);
+    auto CELL_ID = A->get_cell(Sym<INT>("CELL_ID"), cellx);
 
     for (int rowx = 0; rowx < P->nrow; rowx++) {
       const INT pid = (*ID)[0][rowx];
@@ -318,7 +331,7 @@ TEST(ParticleGroup, compression_removal_all) {
     }
   }
   // cell 1 should be missing the first and last elements
-
+  A->free();
   mesh->free();
 }
 
@@ -343,10 +356,10 @@ TEST(ParticleGroup, add_particle_dat) {
                              ParticleProp(Sym<INT>("CELL_ID"), 1, true),
                              ParticleProp(Sym<INT>("ID"), 1)};
 
-  ParticleGroup A(domain, particle_spec, sycl_target);
-
-  A.add_particle_dat(ParticleDat(sycl_target, ParticleProp(Sym<REAL>("FOO"), 3),
-                                 domain->mesh->get_cell_count()));
+  auto A = make_test_obj<ParticleGroup>(domain, particle_spec, sycl_target);
+  A->add_particle_dat(ParticleDat(sycl_target,
+                                  ParticleProp(Sym<REAL>("FOO"), 3),
+                                  domain->mesh->get_cell_count()));
 
   std::mt19937 rng_pos(52234234);
   std::mt19937 rng_vel(52234231);
@@ -371,15 +384,17 @@ TEST(ParticleGroup, add_particle_dat) {
     initial_distribution[Sym<INT>("ID")][px][0] = px;
   }
 
-  A.add_particles_local(initial_distribution);
+  A->add_particles_local(initial_distribution);
 
+  A->test_internal_state();
   // dats added after add_particles_* must have space allocated
-  A.add_particle_dat(ParticleDat(sycl_target, ParticleProp(Sym<INT>("BAR"), 1),
-                                 domain->mesh->get_cell_count()));
+  A->add_particle_dat(ParticleDat(sycl_target, ParticleProp(Sym<INT>("BAR"), 1),
+                                  domain->mesh->get_cell_count()));
+  A->test_internal_state();
 
   for (int cellx = 0; cellx < mesh->get_cell_count(); cellx++) {
-    ASSERT_EQ(A[Sym<REAL>("P")]->cell_dat.nrow_alloc[cellx],
-              A[Sym<INT>("BAR")]->cell_dat.nrow_alloc[cellx]);
+    ASSERT_EQ(A->get_dat(Sym<REAL>("P"))->cell_dat.nrow_alloc[cellx],
+              A->get_dat(Sym<INT>("BAR"))->cell_dat.nrow_alloc[cellx]);
   }
 
   mesh->free();
@@ -443,9 +458,10 @@ TEST(ParticleGroup, clear) {
                              ParticleProp(Sym<INT>("CELL_ID"), 1, true),
                              ParticleProp(Sym<INT>("ID"), 1)};
 
-  ParticleGroup A(domain, particle_spec, sycl_target);
-  A.add_particle_dat(ParticleDat(sycl_target, ParticleProp(Sym<REAL>("FOO"), 3),
-                                 domain->mesh->get_cell_count()));
+  auto A = make_test_obj<ParticleGroup>(domain, particle_spec, sycl_target);
+  A->add_particle_dat(ParticleDat(sycl_target,
+                                  ParticleProp(Sym<REAL>("FOO"), 3),
+                                  domain->mesh->get_cell_count()));
 
   std::mt19937 rng_pos(52234234);
   std::mt19937 rng_vel(52234231);
@@ -470,16 +486,14 @@ TEST(ParticleGroup, clear) {
     initial_distribution[Sym<INT>("ID")][px][0] = px;
   }
 
-  A.add_particles_local(initial_distribution);
+  A->add_particles_local(initial_distribution);
 
-  A.clear();
-  ASSERT_EQ(A.get_npart_local(), 0);
-  const int cell_count = mesh->get_cell_count();
-  for (int cx = 0; cx < cell_count; cx++) {
-    ASSERT_EQ(A.get_npart_cell(cx), 0);
-  }
+  A->reset_version_tracker();
+  A->clear();
+  A->test_version_different();
+  A->test_init();
 
-  A.free();
+  A->free();
   mesh->free();
 }
 
@@ -506,7 +520,8 @@ TEST(ParticleGroup, add_particle_local_particle_group) {
                              ParticleProp(Sym<INT>("ID"), 1)};
 
   const int cell_count = domain->mesh->get_cell_count();
-  auto A = std::make_shared<ParticleGroup>(domain, particle_spec, sycl_target);
+  auto A = make_test_obj<ParticleGroup>(domain, particle_spec, sycl_target);
+
   A->add_particle_dat(
       ParticleDat(sycl_target, ParticleProp(Sym<REAL>("FOO"), 3), cell_count));
 
@@ -544,10 +559,12 @@ TEST(ParticleGroup, add_particle_local_particle_group) {
     }
   }
 
-  auto B = std::make_shared<ParticleGroup>(domain, particle_spec, sycl_target);
+  auto B = make_test_obj<ParticleGroup>(domain, particle_spec, sycl_target);
+
   A->add_particle_dat(
       ParticleDat(sycl_target, ParticleProp(Sym<REAL>("BAR"), 3), cell_count));
-  auto C = std::make_shared<ParticleGroup>(domain, particle_spec, sycl_target);
+  auto C = make_test_obj<ParticleGroup>(domain, particle_spec, sycl_target);
+
   std::vector<int> A_npart_cell(cell_count);
 
   ASSERT_EQ(A->get_npart_cell(cell_count - 1), 0);
@@ -566,8 +583,17 @@ TEST(ParticleGroup, add_particle_local_particle_group) {
   }
   B->add_particles_local(initial_distribution);
 
+  A->test_internal_state();
+  A->reset_version_tracker();
   A->add_particles_local(B);
+  A->test_version_different();
+  A->test_internal_state();
+
+  C->test_internal_state();
+  C->reset_version_tracker();
   C->add_particles_local(B);
+  C->test_version_different();
+  C->test_internal_state();
 
   ASSERT_EQ(A->get_npart_cell(cell_count - 1), 0);
   for (int cx = 0; cx < cell_count; cx++) {

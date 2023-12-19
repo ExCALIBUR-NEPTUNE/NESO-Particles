@@ -90,7 +90,6 @@ protected:
   typedef ParticleDatVersionT ParticleDatVersion;
   typedef std::map<ParticleDatVersion, int64_t> ParticleDatVersionTracker;
 
-private:
   int ncell;
   BufferHost<INT> h_npart_cell;
   BufferDevice<INT> d_npart_cell;
@@ -260,7 +259,6 @@ private:
   /// each cell.
   std::shared_ptr<BufferDeviceHost<INT>> dh_npart_cell_es;
 
-protected:
   /// The sub group creation requires get_npart_local temporary space and we
   /// create this space here on the parent subgroup such that it is shared
   /// across all subgroups to avoid exessive memory usage/realloc
@@ -680,6 +678,7 @@ public:
     for (int cellx = 0; cellx < this->ncell; cellx++) {
       this->h_npart_cell.ptr[cellx] = this->position_dat->h_npart_cell[cellx];
     }
+    buffer_memcpy(this->d_npart_cell, this->h_npart_cell).wait_and_throw();
     this->recompute_npart_cell_es();
   }
 

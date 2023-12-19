@@ -415,6 +415,7 @@ public:
     std::vector<int> h_offsets_real(spec->components_real.size());
     std::exclusive_scan(spec->components_real.begin(),
                         spec->components_real.end(), h_offsets_real.begin(), 0);
+
     this->dh_offsets_real =
         std::make_shared<BufferDeviceHost<int>>(sycl_target, h_offsets_real);
     this->dh_offsets_real->host_to_device();
@@ -423,6 +424,7 @@ public:
     std::vector<int> h_offsets_int(spec->components_int.size());
     std::exclusive_scan(spec->components_int.begin(),
                         spec->components_int.end(), h_offsets_int.begin(), 0);
+
     this->dh_offsets_int =
         std::make_shared<BufferDeviceHost<int>>(sycl_target, h_offsets_int);
     this->dh_offsets_int->host_to_device();
