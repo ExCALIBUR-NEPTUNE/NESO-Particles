@@ -51,11 +51,31 @@ struct Read {
   int const *offsets_real;
   int const *offsets_int;
   int num_products;
+  /**
+   * Access a REAL product property.
+   *
+   * @param product The index of the product to access, i.e. the row in the
+   * product matrix.
+   * @param property The particle property to access using the ordering REAL
+   * ParticleProp instances were passed to the ProductMatrixSpec
+   * @param component The component of the property to access.
+   * @returns Constant reference to product value.
+   */
   const REAL &at_real(const int product, const int property,
                       const int component) const {
     return ptr_real[(offsets_real[property] + component) * num_products +
                     product];
   }
+  /**
+   * Access a INT product property.
+   *
+   * @param product The index of the product to access, i.e. the row in the
+   * product matrix.
+   * @param property The particle property to access using the ordering INT
+   * ParticleProp instances were passed to the ProductMatrixSpec
+   * @param component The component of the property to access.
+   * @returns Constant reference to product value.
+   */
   const INT &at_int(const int product, const int property,
                     const int component) const {
     return ptr_int[(offsets_int[property] + component) * num_products +
@@ -73,6 +93,18 @@ struct Add {
   int const *offsets_real;
   int const *offsets_int;
   int num_products;
+
+  /**
+   * Atomically increment a REAL product property.
+   *
+   * @param product The index of the product to access, i.e. the row in the
+   * product matrix.
+   * @param property The particle property to access using the ordering REAL
+   * ParticleProp instances were passed to the ProductMatrixSpec
+   * @param component The component of the property to access.
+   * @param value Value to increment property value by.
+   * @returns Value prior to increment.
+   */
   inline REAL fetch_add_real(const int product, const int property,
                              const int component, const REAL value) {
     sycl::atomic_ref<REAL, sycl::memory_order::relaxed,
@@ -82,6 +114,18 @@ struct Add {
                      product]);
     return element_atomic.fetch_add(value);
   }
+
+  /**
+   * Atomically increment a INT product property.
+   *
+   * @param product The index of the product to access, i.e. the row in the
+   * product matrix.
+   * @param property The particle property to access using the ordering INT
+   * ParticleProp instances were passed to the ProductMatrixSpec
+   * @param component The component of the property to access.
+   * @param value Value to increment property value by.
+   * @returns Value prior to increment.
+   */
   inline INT fetch_add_int(const int product, const int property,
                            const int component, const INT value) {
     sycl::atomic_ref<INT, sycl::memory_order::relaxed,
@@ -104,10 +148,32 @@ struct Write {
   int const *offsets_real;
   int const *offsets_int;
   int num_products;
+
+  /**
+   * Write access to REAL particle property.
+   *
+   * @param product The index of the product to access, i.e. the row in the
+   * product matrix.
+   * @param property The particle property to access using the ordering REAL
+   * ParticleProp instances were passed to the ProductMatrixSpec
+   * @param component The component of the property to access.
+   * @returns Modifiable reference to property value.
+   */
   REAL &at_real(const int product, const int property, const int component) {
     return ptr_real[(offsets_real[property] + component) * num_products +
                     product];
   }
+
+  /**
+   * Write access to INT particle property.
+   *
+   * @param product The index of the product to access, i.e. the row in the
+   * product matrix.
+   * @param property The particle property to access using the ordering INT
+   * ParticleProp instances were passed to the ProductMatrixSpec
+   * @param component The component of the property to access.
+   * @returns Modifiable reference to property value.
+   */
   INT &at_int(const int product, const int property, const int component) {
     return ptr_int[(offsets_int[property] + component) * num_products +
                    product];
@@ -353,6 +419,14 @@ product_matrix_spec(ParticleSpec particle_spec) {
   return std::make_shared<ProductMatrixSpec>(particle_spec);
 }
 
+/**
+ * Type to store N products which can be passed to a ParticleLoop.
+ * Fundamentally this class allocates two matrices, one for REAL valued
+ * properties and one for INT value properties. These matrices are allocated
+ * column major. Each output particle populates a row in these two matrices.
+ * The column ordering is based on the ordering of properties and there
+ * components in the input particle specification.
+ */
 class ProductMatrix {
   friend class ParticleGroup;
   friend inline ProductMatrixGetConst
@@ -388,6 +462,7 @@ public:
   SYCLTargetSharedPtr sycl_target;
   /// The number of products stored.
   int num_products;
+  /// The specification of the products.
   std::shared_ptr<ProductMatrixSpec> spec;
 
   ProductMatrix() = default;
@@ -398,7 +473,13 @@ public:
   ProductMatrix &operator=(const ProductMatrix &) = default;
 
   /**
-   * TODO
+   * Create a new product matrix on the SYCLTarget. The reset method should be
+   * called with the desired number of output particles before a loop is
+   * executed which requires space for those output particles.
+   *
+   * @param sycl_target Device on which particle loops will be executed using
+   * the product matrix.
+   * @param spec A specification for the output particle properties.
    */
   ProductMatrix(SYCLTargetSharedPtr sycl_target,
                 std::shared_ptr<ProductMatrixSpec> spec)
@@ -431,7 +512,10 @@ public:
   }
 
   /**
-   * TODO
+   * Allocate space for a number of particle properties and fill the matrix
+   * with the default values.
+   *
+   * @param reset Number of output particles to set in matrix.
    */
   inline void reset(const int num_products) {
     const auto spec = this->spec.get();
@@ -475,9 +559,11 @@ public:
 };
 
 /**
- * Helper function to create a ProductMatrix shared pointer.
+ * Helper function to create ProductMatrix shared pointer.
  *
- * TODO
+ * @param sycl_target Device on which particle loops will be executed using
+ * the product matrix.
+ * @param spec A specification for the output particle properties.
  */
 inline std::shared_ptr<ProductMatrix>
 product_matrix(SYCLTargetSharedPtr sycl_target,
