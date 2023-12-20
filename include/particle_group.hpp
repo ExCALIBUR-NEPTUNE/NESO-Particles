@@ -27,6 +27,7 @@
 
 using namespace cl;
 namespace NESO::Particles {
+class DescendantProducts;
 class ParticleSubGroup;
 namespace ParticleSubGroupImplementation {
 class SubGroupSelector;
@@ -160,16 +161,21 @@ protected:
                              INT *RESTRICT layers_ptr) {
     buffer_memcpy(this->d_npart_cell, this->h_npart_cell).wait_and_throw();
     INT *k_npart_cell = this->d_npart_cell.ptr;
+    const INT k_ncell = this->ncell;
     this->sycl_target->queue
         .submit([&](sycl::handler &cgh) {
           cgh.parallel_for<>(
               sycl::range<1>(static_cast<size_t>(npart)), [=](sycl::id<1> idx) {
                 const INT cell = cells_ptr[idx];
-                sycl::atomic_ref<INT, sycl::memory_order::relaxed,
-                                 sycl::memory_scope::device>
-                    element_atomic(k_npart_cell[cell]);
-                const INT layer = element_atomic.fetch_add((INT)1);
-                layers_ptr[idx] = layer;
+                if ((-1 < cell) && (cell < k_ncell)) {
+                  sycl::atomic_ref<INT, sycl::memory_order::relaxed,
+                                   sycl::memory_scope::device>
+                      element_atomic(k_npart_cell[cell]);
+                  const INT layer = element_atomic.fetch_add((INT)1);
+                  layers_ptr[idx] = layer;
+                } else {
+                  layers_ptr[idx] = -1;
+                }
               });
         })
         .wait_and_throw();
@@ -188,8 +194,10 @@ protected:
                          [=](sycl::id<1> idx) {
                            const INT cell = cells_ptr[idx];
                            const INT layer = layers_ptr[idx];
-                           for (int nx = 0; nx < k_ncomp; nx++) {
-                             dat_ptr[cell][nx][layer] = 0;
+                           if (layer > -1) {
+                             for (int nx = 0; nx < k_ncomp; nx++) {
+                               dat_ptr[cell][nx][layer] = 0;
+                             }
                            }
                          });
     }));
@@ -446,6 +454,11 @@ public:
    */
   inline void add_particles_local(ParticleSet &particle_data);
 
+protected:
+  inline void add_particles_local(std::shared_ptr<ProductMatrix> product_matrix,
+                                  const INT *d_cells, const INT *d_layers);
+
+public:
   /**
    *  Add particles only to this MPI rank. It is assumed that the added
    *  particles are in the domain region owned by this MPI rank. If not, see
@@ -458,6 +471,13 @@ public:
    */
   inline void
   add_particles_local(std::shared_ptr<ProductMatrix> product_matrix);
+
+  /**
+   *  TODO
+   *  @param descendant_products New particles to add.
+   */
+  inline void
+  add_particles_local(std::shared_ptr<DescendantProducts> descendant_products);
 
   /**
    * Add particles to this ParticleGroup from another ParticleGroup. Properties

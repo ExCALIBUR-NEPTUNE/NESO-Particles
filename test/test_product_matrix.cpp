@@ -498,3 +498,116 @@ TEST(DescendantProducts, parents) {
   sycl_target->free();
   mesh->free();
 }
+
+TEST(DescendantProducts, add_particles_local) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  const int cell_count = mesh->get_cell_count();
+  auto sycl_target = A->sycl_target;
+
+  auto product_spec = product_matrix_spec(ParticleSpec(
+      ParticleProp(Sym<REAL>("P2"), ndim), ParticleProp(Sym<INT>("MARKER"), 2),
+      ParticleProp(Sym<INT>("PARENT"), 2)));
+
+  const int num_products_per_particle = 3;
+  auto dp = std::make_shared<DescendantProductsTest>(sycl_target, product_spec,
+                                                     num_products_per_particle);
+  ASSERT_EQ(num_products_per_particle, dp->num_products_per_parent);
+  ASSERT_EQ(0, dp->num_particles);
+
+  dp->reset(10);
+  const auto npart0 = A->get_npart_local();
+
+  A->reset_version_tracker();
+  A->add_particles_local(std::dynamic_pointer_cast<DescendantProducts>(dp));
+  A->test_version_different();
+  A->test_internal_state();
+  ASSERT_EQ(npart0, A->get_npart_local());
+
+  const int k_ndim = ndim;
+  auto loop = particle_loop(
+      A,
+      [=](auto index, auto DP, auto P) {
+        for (int px = 0; px < num_products_per_particle - 1; px++) {
+          DP.set_parent(index, px);
+          DP.at_int(index, px, 0, 0) = px;
+          DP.at_int(index, px, 1, 0) = index.cell;
+          DP.at_int(index, px, 1, 1) = index.layer;
+          for (int dx = 0; dx < k_ndim; dx++) {
+            DP.at_real(index, px, 0, dx) = P.at(dx) * ((REAL)px);
+          }
+        }
+      },
+      Access::read(ParticleLoopIndex{}),
+      Access::write(std::dynamic_pointer_cast<DescendantProducts>(dp)),
+      Access::read(Sym<REAL>("P")));
+
+  particle_loop(
+      A,
+      [](auto ID, auto PARENT, auto MARKER) {
+        PARENT.at(0) = -1;
+        PARENT.at(1) = -1;
+        MARKER.at(0) = ID.at(0);
+      },
+      Access::read(Sym<INT>("ID")), Access::write(Sym<INT>("PARENT")),
+      Access::write(Sym<INT>("MARKER")))
+      ->execute();
+
+  std::map<int, std::map<int, int>> map_ids;
+  std::map<int, std::map<int, std::vector<REAL>>> map_positions;
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto id = A->get_cell(Sym<INT>("ID"), cellx);
+    auto positions = A->get_cell(Sym<REAL>("P"), cellx);
+    auto nrow = id->nrow;
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      map_ids[cellx][rowx] = id->at(rowx, 0);
+      std::vector<REAL> pos(ndim);
+      for (int dx = 0; dx < ndim; dx++) {
+        pos.at(dx) = positions->at(rowx, dx);
+      }
+      map_positions[cellx][rowx] = pos;
+    }
+  }
+
+  dp->reset(A->get_npart_local());
+  loop->execute();
+  A->reset_version_tracker();
+  A->add_particles_local(std::dynamic_pointer_cast<DescendantProducts>(dp));
+  A->test_version_different();
+  A->test_internal_state();
+  ASSERT_EQ(A->get_npart_local(),
+            npart0 + (num_products_per_particle - 1) * npart0);
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto id = A->get_cell(Sym<INT>("ID"), cellx);
+    auto parent = A->get_cell(Sym<INT>("PARENT"), cellx);
+    auto p2 = A->get_cell(Sym<REAL>("P2"), cellx);
+    auto marker = A->get_cell(Sym<INT>("MARKER"), cellx);
+    auto nrow = id->nrow;
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      const auto p_cell = parent->at(rowx, 0);
+      const auto p_layer = parent->at(rowx, 1);
+      // Is child particle
+      if (p_cell > -1) {
+        auto p_id = map_ids.at(p_cell).at(p_layer);
+        // ids were copied from the parent as we did not specify them in the
+        // DescendantProducts
+        ASSERT_EQ(p_id, id->at(rowx, 0));
+        const REAL product = marker->at(rowx, 0);
+        auto parent_pos = map_positions.at(p_cell).at(p_layer);
+        for (int dx = 0; dx < ndim; dx++) {
+          ASSERT_NEAR(parent_pos.at(dx) * product, p2->at(rowx, dx), 1.0e-14);
+        }
+
+      } else {
+        ASSERT_EQ(p_layer, -1);
+      }
+    }
+  }
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}

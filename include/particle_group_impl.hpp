@@ -1,6 +1,7 @@
 #ifndef _NESO_PARTICLES_PARTICLE_GROUP_IMPL_H_
 #define _NESO_PARTICLES_PARTICLE_GROUP_IMPL_H_
 
+#include "containers/descendant_products.hpp"
 #include "global_mapping.hpp"
 #include "particle_group.hpp"
 #include "particle_sub_group.hpp"
@@ -295,6 +296,25 @@ inline void ParticleGroup::clear() {
 
 inline void ParticleGroup::add_particles_local(
     std::shared_ptr<ProductMatrix> product_matrix) {
+  this->add_particles_local(product_matrix, nullptr, nullptr);
+}
+
+inline void ParticleGroup::add_particles_local(
+    std::shared_ptr<DescendantProducts> descendant_products) {
+  this->add_particles_local(
+      std::dynamic_pointer_cast<ProductMatrix>(descendant_products),
+      descendant_products->d_parent_cells->ptr,
+      descendant_products->d_parent_layers->ptr);
+}
+
+inline void ParticleGroup::add_particles_local(
+    std::shared_ptr<ProductMatrix> product_matrix, const INT *d_cells,
+    const INT *d_layers) {
+
+  NESOASSERT(((d_layers == nullptr) && (d_cells == nullptr)) ||
+                 ((d_layers != nullptr) && (d_cells != nullptr)),
+             "d_cells and d_layers must either both be nullptr or both be not "
+             "nullptr.");
 
   const int num_products = product_matrix->num_products;
   // reuse this space
@@ -308,15 +328,25 @@ inline void ParticleGroup::add_particles_local(
   // initialise them to 0.
   const auto cell_id_sym = this->cell_id_dat->sym;
   const int cell_id_index = product_matrix->spec->get_sym_index(cell_id_sym);
+
+  // If cells not explicitly defined in the ProductMatrix.
   if (cell_id_index == -1) {
-    this->sycl_target->queue.fill(cells_ptr, (INT)0, num_products)
-        .wait_and_throw();
-  } else {
+    if (d_cells == nullptr) { // If no parent cells use cell 0.
+      this->sycl_target->queue.fill(cells_ptr, (INT)0, num_products)
+          .wait_and_throw();
+    } else { // Copy parent cells.
+      this->sycl_target->queue
+          .memcpy(cells_ptr, d_cells, sizeof(INT) * num_products)
+          .wait_and_throw();
+    }
+  } else { // Use cells explicitly defined in the product matrix
     INT const *source_cells_ptr = d_pm.ptr_int + num_products * cell_id_index;
     this->sycl_target->queue
         .memcpy(cells_ptr, source_cells_ptr, sizeof(INT) * num_products)
         .wait_and_throw();
   }
+
+  // If any of the cells are -1 we trim those particles by setting layers to -1.
   // Get the new cell occupancies at the destination layers of the particles to
   // insert
   // get dst layers also sets h_npart_cell, d_npart_cell
@@ -329,7 +359,6 @@ inline void ParticleGroup::add_particles_local(
   // copy the particle data into the particle dats
   // for each particle property either there is data in the product matrix or
   // it should be initalised to 0
-
   EventStack es;
 
   // lambda which copies the property
@@ -350,20 +379,50 @@ inline void ParticleGroup::add_particles_local(
           [=](sycl::id<1> idx) {
             const INT cell = cells_ptr[idx];
             const INT layer = layers_ptr[idx];
-            for (int nx = 0; nx < k_ncomp; nx++) {
-              dat_ptr[cell][nx][layer] =
-                  d_src[(d_offsets[index] + nx) * k_nproducts + idx];
+            // layer == -1 implies the entry is invalid somehow
+            if (layer > -1) {
+              for (int nx = 0; nx < k_ncomp; nx++) {
+                dat_ptr[cell][nx][layer] =
+                    d_src[(d_offsets[index] + nx) * k_nproducts + idx];
+              }
             }
           });
+    }));
+  };
+
+  // lambda to copy property from parent particle
+  auto lambda_parent_copy = [&](auto dat) {
+    auto dat_ptr = dat->impl_get();
+    const int k_ncomp = dat->ncomp;
+    es.push(this->sycl_target->queue.submit([&](sycl::handler &cgh) {
+      cgh.parallel_for<>(sycl::range<1>(static_cast<size_t>(num_products)),
+                         [=](sycl::id<1> idx) {
+                           const INT cell = cells_ptr[idx];
+                           const INT layer = layers_ptr[idx];
+                           const INT cell_src = d_cells[idx];
+                           const INT layer_src = d_layers[idx];
+                           // layer == -1 implies the entry is invalid somehow
+                           if (layer > -1) {
+                             for (int nx = 0; nx < k_ncomp; nx++) {
+                               dat_ptr[cell][nx][layer] =
+                                   dat_ptr[cell_src][nx][layer_src];
+                             }
+                           }
+                         });
     }));
   };
 
   // dispatch to the copy lambda or zero lambda depending on if the data exists
   auto lambda_dispatch = [&](auto dat, const auto d_offsets, const auto d_src) {
     const int index = product_matrix->spec->get_sym_index(dat->sym);
+    // if the property is not in the ProductMatrix
     if (index == -1) {
-      zero_dat_properties(dat, num_products, cells_ptr, layers_ptr, es);
-    } else {
+      if (d_cells == nullptr) { // Zero properties if no parents defined
+        zero_dat_properties(dat, num_products, cells_ptr, layers_ptr, es);
+      } else { // Else copy the property from the parent
+        lambda_parent_copy(dat);
+      }
+    } else { // Copy from the ProductMatrix
       lambda_copy(dat, index, d_offsets, d_src);
     }
   };
