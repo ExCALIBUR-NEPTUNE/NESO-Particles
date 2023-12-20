@@ -421,3 +421,80 @@ TEST(ProductMatrix, add_particles_local_1) {
   sycl_target->free();
   mesh->free();
 }
+
+struct DescendantProductsTest : public DescendantProducts {
+
+  DescendantProductsTest(SYCLTargetSharedPtr sycl_target,
+                         std::shared_ptr<ProductMatrixSpec> spec,
+                         const int num_products_per_parent)
+      : DescendantProducts(sycl_target, spec, num_products_per_parent) {}
+
+  inline std::vector<INT> get_cells() { return this->d_parent_cells->get(); }
+  inline std::vector<INT> get_layers() { return this->d_parent_layers->get(); }
+};
+
+TEST(DescendantProducts, parents) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  const int cell_count = mesh->get_cell_count();
+  auto sycl_target = A->sycl_target;
+
+  auto product_spec = product_matrix_spec(ParticleSpec(
+      ParticleProp(Sym<REAL>("P2"), ndim), ParticleProp(Sym<INT>("MARKER"), 2),
+      ParticleProp(Sym<INT>("PARENT"), 2)));
+
+  const int num_products_per_particle = 3;
+  auto dp = std::make_shared<DescendantProductsTest>(sycl_target, product_spec,
+                                                     num_products_per_particle);
+  ASSERT_EQ(num_products_per_particle, dp->num_products_per_parent);
+  ASSERT_EQ(0, dp->num_particles);
+
+  auto loop = particle_loop(
+      A,
+      [=](auto index, auto DP, auto MARKER) {
+        MARKER.at(0) = index.get_sub_linear_index();
+        for (int px = 0; px < num_products_per_particle; px++) {
+          DP.set_parent(index, px);
+        }
+      },
+      Access::read(ParticleLoopIndex{}),
+      Access::write(std::dynamic_pointer_cast<DescendantProducts>(dp)),
+      Access::write(Sym<INT>("MARKER")));
+
+  const int npart_local = A->get_npart_local();
+  dp->reset(npart_local);
+  ASSERT_EQ(npart_local, dp->num_particles);
+
+  std::vector<INT> cells = dp->get_cells();
+  std::vector<INT> layers = dp->get_layers();
+
+  const INT num_products = num_products_per_particle * npart_local;
+  ASSERT_TRUE(cells.size() >= num_products);
+  ASSERT_TRUE(layers.size() >= num_products);
+  for (INT px = 0; px < num_products; px++) {
+    ASSERT_EQ(cells.at(px), -1);
+    ASSERT_EQ(layers.at(px), -1);
+  }
+
+  loop->execute();
+
+  std::set<INT> correct, to_test;
+  for (INT px = 0; px < npart_local; px++) {
+    correct.insert(px);
+  }
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto marker = A->get_cell(Sym<INT>("MARKER"), cellx);
+    const int nrow = marker->nrow;
+    // for each particle in the cell
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      to_test.insert(marker->at(rowx, 0));
+    }
+  }
+  ASSERT_EQ(correct, to_test);
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}

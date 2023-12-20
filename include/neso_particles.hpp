@@ -10,6 +10,7 @@
 #include "cell_dat.hpp"
 #include "compute_target.hpp"
 #include "containers/blocked_binary_tree.hpp"
+#include "containers/descendant_products.hpp"
 #include "containers/global_array.hpp"
 #include "containers/local_array.hpp"
 #include "containers/product_matrix.hpp"

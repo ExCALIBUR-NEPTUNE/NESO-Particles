@@ -454,6 +454,51 @@ TEST(ParticleSubGroup, particle_loop_index) {
     ASSERT_EQ(found_indices.size(), aa->get_npart_cell(cellx));
   }
 
+  auto loop_sub_indexing = particle_loop(
+      aa,
+      [](auto index, auto MARKER) {
+        MARKER.at(0) = index.get_sub_linear_index();
+      },
+      Access::read(ParticleLoopIndex{}), Access::write(Sym<INT>("MARKER")));
+  for (int cx = 0; cx < cell_count; cx++) {
+    loop_sub_indexing->execute(cx);
+  }
+
+  std::set<INT> sub_indices, sub_correct;
+  const int npart_local = aa->get_npart_local();
+  for (int ix = 0; ix < npart_local; ix++) {
+    sub_correct.insert(ix);
+  }
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto marker = A->get_cell(Sym<INT>("MARKER"), cellx);
+    auto id = A->get_cell(Sym<INT>("ID"), cellx);
+    const int nrow = marker->nrow;
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      if (id->at(rowx, 0) % 2 == 0) {
+        const INT mx = marker->at(rowx, 0);
+        sub_indices.insert(mx);
+      }
+    }
+  }
+  ASSERT_EQ(sub_correct, sub_indices);
+
+  loop_sub_indexing->execute();
+
+  sub_indices.clear();
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto marker = A->get_cell(Sym<INT>("MARKER"), cellx);
+    auto id = A->get_cell(Sym<INT>("ID"), cellx);
+    const int nrow = marker->nrow;
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      if (id->at(rowx, 0) % 2 == 0) {
+        const INT mx = marker->at(rowx, 0);
+        sub_indices.insert(mx);
+      }
+    }
+  }
+  ASSERT_EQ(sub_correct, sub_indices);
+
   A->free();
   sycl_target->free();
   mesh->free();

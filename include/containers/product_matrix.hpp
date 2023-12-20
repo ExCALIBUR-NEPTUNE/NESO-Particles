@@ -517,7 +517,7 @@ public:
    *
    * @param reset Number of output particles to set in matrix.
    */
-  inline void reset(const int num_products) {
+  virtual inline void reset(const int num_products) {
     const auto spec = this->spec.get();
     NESOASSERT(spec != nullptr, "ProductMatrix is not initialised.");
     this->num_products = num_products;

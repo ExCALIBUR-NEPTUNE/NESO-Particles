@@ -44,17 +44,25 @@ struct Read {
    * @returns The local linear index of the particle on this MPI rank in the
    * ParticleGroup
    */
-  inline INT get_local_linear_index() {
+  inline INT get_local_linear_index() const {
     return this->npart_cell_es[this->cell] + this->layer;
   }
   /**
    * @returns The linear index of the particle within the current ParticleLoop.
    */
-  inline INT get_loop_linear_index() {
+  inline INT get_loop_linear_index() const {
     const INT linear_index =
         (this->npart_cell_es_lb[this->cell] + this->loop_layer) -
         this->npart_cell_es_lb[this->starting_cell];
     return linear_index;
+  }
+  /**
+   * @returns The local linear index of the particle in the ParticleSubGroup.
+   * This call is identical to get_local_linear_index when the iteration set is
+   * a ParticleGroup.
+   */
+  inline INT get_sub_linear_index() const {
+    return this->npart_cell_es_lb[this->cell] + this->loop_layer;
   }
 };
 
