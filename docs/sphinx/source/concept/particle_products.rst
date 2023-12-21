@@ -43,6 +43,8 @@ Interlacing of INT and REAL properties in the specification is ignored, the prop
 Example
 =======
 
-
+.. literalinclude:: ../example_sources/example_particle_descendant_products.hpp
+   :language: cpp
+   :caption: Example creating particles in a ParticleLoop and adding the new particle to a ParticleGroup. 
 
 
