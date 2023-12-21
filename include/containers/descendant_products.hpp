@@ -131,7 +131,8 @@ create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
 } // namespace ParticleLoopImplementation
 
 /**
- * TODO
+ * Class to create M products from each parent particle. Products may inherit
+ * property values from the parent.
  */
 class DescendantProducts : public ProductMatrix {
   friend class ParticleGroup;
@@ -164,7 +165,14 @@ public:
   int num_particles;
 
   /**
-   * TODO
+   * Create an instance from a ProductMatrixSpec that defines which particle
+   * properties should be available for writing in the particle loop kernel.
+   *
+   * @param sycl_target Compute device on which products will be made.
+   * @param spec Specification of properties which require specialisation in
+   * the creating kernel.
+   * @param num_products_per_parent The maximum number of products required per
+   * parent particle.
    */
   DescendantProducts(SYCLTargetSharedPtr sycl_target,
                      std::shared_ptr<ProductMatrixSpec> spec,
@@ -176,7 +184,10 @@ public:
   }
 
   /**
-   * TODO
+   * Resize the container to hold space for the products of a number of parent
+   * particles.
+   *
+   * @param num_particles Number of parent particles space is required for.
    */
   virtual inline void reset(const int num_particles) override {
     this->num_particles = num_particles;
