@@ -1,13 +1,16 @@
 cmake_minimum_required(VERSION 3.24)
 
 project(
-  NESO-Particles
+  NesoParticles
   VERSION 0.0.1
   LANGUAGES CXX C)
 
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/restrict-keyword.cmake)
+include(GNUInstallDirs)
 
-option(ENABLE_NESO_PARTICLES_TESTS "Build unit tests for this project." ON)
+option(ENABLE_NESO_PARTICLES_TESTS 
+    "Build unit tests for this project." ON)
+option(NESO_PARTICLES_ENABLE_HDF5 "Add HDF5 to targets" ON)
 
 #Create interface/Header onlu library
 add_library(NesoParticles INTERFACE)
@@ -17,7 +20,9 @@ add_library(${PROJECT_NAME}::NesoParticles ALIAS NesoParticles)
 
 #Set standard
 set_property(TARGET NesoParticles PROPERTY CXX_STANDARD 17)
-#Makes it easy to install + addds the files to the INCLUDE property of the lib
+
+#Makes it easy to install + adds the files to the INCLUDE property of the lib
+#i.e. don't need target_include_dir.. also no GLOBS
 target_sources(NesoParticles
     PUBLIC
     FILE_SET public_headers
@@ -66,6 +71,8 @@ target_sources(NesoParticles
     )
 
 
+#Don't like this .... TODO: FIXME:
+#Should be a runtime thing?
 if(NESO_PARTICLES_DEVICE_TYPE STREQUAL GPU)
     target_compile_definitions(NesoParticles INTERFACE NESO_PARTICLES_DEVICE_TYPE_GPU)
     add_definitions(-DNESO_PARTICLES_DEVICE_TYPE_GPU)
@@ -76,66 +83,26 @@ else()
 endif()
 
 
-
-#find a sensible SYCL (assuming adaptivecpp or intelsycl 
-#(need a newer intel oneapi suite so can use the the intesycl package that
-#behaves the same way as hip|openSycl|AdaptiveCPP re. add_sycl_to_target)
-if (NOT DEFINED NESO_PARTICLES_SYCL)
-    set(NESO_PARTICLES_SYCL "ACPP" CACHE STRING "INTEL|ACPP")
-else()
-    set(NESO_PARTICLES_SYCL ${NESO_PARTICLES_SYCL} CACHE STRING "INTEL|ACPP")
-endif()
-
-if (${NESO_PARTICLES_SYCL_VENDOR} MATCHES "INTEL")
-    find_package(IntelSYCL REQUIRED)
-    #    add_compile_options("$<$<CONFIG:Release>:-O3;-xHost;-ffast-math;-g>")
-    #Intel compiler can complains about comapring to NAN in ffast-math 
-    #add_compile_options(-Wno-tautological-constant-compare)
-else()
-    #add_compile_options("$<$<CONFIG:Release>:-O3;-march=native;-ffast-math;-g>")
-    if(NESO_PARTICLES_DEVICE_TYPE STREQUAL GPU)
-        set(ACPP_TARGETS "omp;cuda:sm_80")
-    else()
-        set(ACPP_TARGETS "omp")
-    endif()
-    find_package(AdaptiveCPP CONFIG REQUIRED)
-
-    if(NOT ACPP_DEBUG_LEVEL)
-        if(CMAKE_BUILD_TYPE MATCHES "Debug")
-            set(ACPP_DEBUG_LEVEL 3 CACHE STRING
-                "Choose the debug level, options are: 
-                0 (no debug), 
-                1 (print errors), 
-                2 (also print warnings), 
-                3 (also print general information)"
-                FORCE)
-        else()
-            set(ACPP_DEBUG_LEVEL 0 CACHE STRING
-                "Choose the debug level, options are: 
-                0 (no debug), 
-                1 (print errors), 
-                2 (also print warning s), 
-                3 (also print general information)"
-                FORCE)
-        endif()
-    endif()
-endif()
-
 #Get MPI 
 find_package(MPI REQUIRED)
 target_link_libraries(NesoParticles INTERFACE MPI::MPI_CXX)
-#Get HDF5
-set(HDF5_PREFER_PARALLEL TRUE)
-find_package(HDF5 QUIET)
-if(HDF5_FOUND AND HDF5_IS_PARALLEL)
-    message(STATUS "HDF5 found")
-    target_link_libraries(NesoParticles INTERFACE HDF5::HDF5)
-    target_compile_definitions(NesoParticles INTERFACE NESO_PARTICLES_HDF5)
-else()
-    message(STATUS "HDF5 NOT found")
-endif()
-message(STATUS "HDF5_IS_PARALLEL " ${HDF5_IS_PARALLEL})
 
+#Get HDF5 if its around
+set(NESO_PARTICLES_USING_HDF5 FALSE)
+if (NESO_PARTICLES_ENABLE_HDF5) 
+    set(HDF5_PREFER_PARALLEL TRUE)
+    find_package(HDF5 REQUIRED)
+    if(HDF5_FOUND AND HDF5_IS_PARALLEL)
+        message(STATUS "Parallel HDF5 found")
+        target_link_libraries(NesoParticles INTERFACE HDF5::HDF5 NesoParticles)
+        target_compile_definitions(NesoParticles INTERFACE NESO_PARTICLES_HDF5)
+        set(NESO_PARTICLES_USING_HDF5 TRUE)
+    else()
+        message( "HDF5 NOT found")
+    endif()
+endif()
+
+#Include the tests
 if(ENABLE_NESO_PARTICLES_TESTS)
   # set build type
   if(NOT CMAKE_BUILD_TYPE)
@@ -146,27 +113,33 @@ if(ENABLE_NESO_PARTICLES_TESTS)
   add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/test)
 endif()
 
-#install the (header lib) and export the dependancies
+#install the headers
+install(TARGETS NesoParticles
+    EXPORT ${PROJECT_NAME}_Targets
+    FILE_SET public_headers
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(EXPORT ${PROJECT_NAME}_Targets
+    FILE ${PROJECT_NAME}Targets.cmake
+    NAMESPACE
+    ${PROJECT_NAME}::
+    DESTINATION
+    ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME})
+#create the config.cmake
 include(CMakePackageConfigHelpers)
+configure_package_config_file(${CMAKE_CURRENT_SOURCE_DIR}/cmake/Config.cmake.in
+    "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake"
+    INSTALL_DESTINATION  ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME})
 write_basic_package_version_file(
     ${PROJECT_NAME}ConfigVersion.cmake
     VERSION ${PACKAGE_VERSION}
     COMPATIBILITY AnyNewerVersion)
-#
+#install the config scripts
 install(FILES 
     ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake
-    DESTINATION lib/cmake)
-#
-install(EXPORT ${PROJECT_NAME}_Targets
-    FILE ${PROJECT_NAME}Config.cmake
-    NAMESPACE
-    ${PROJECT_NAME}::
-    DESTINATION
-    lib/cmake)
-export(TARGETS NesoParticles FILE ${PROJECT_NAME}Config.cmake)
+    ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake
+    DESTINATION  ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME})
+export(EXPORT ${PROJECT_NAME}_Targets
+    FILE "${CMAKE_CURRENT_BINARY_DIR}/cmake/${PROJECT_NAME}Targets.cmake"
+    NAMESPACE ${PROJECT_NAME}::)
 
-install(TARGETS NesoParticles 
-    EXPORT ${PROJECT_NAME}_Targets
-    FILE_SET public_headers
-    DESTINATION include)
 

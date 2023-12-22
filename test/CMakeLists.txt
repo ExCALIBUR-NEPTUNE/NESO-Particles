@@ -19,6 +19,54 @@ if(NOT GTest_FOUND)
   FetchContent_MakeAvailable(googletest)
 endif()
 
+#Find SYCL
+if (COMMAND add_sycl_to_target) 
+    message("add_sycl_to_target macro exists")
+else()
+    message("add_sycl_to_target macro NOT FOUND looking for SYCL package...")
+#find a sensible SYCL (assuming adaptivecpp or intelsycl 
+#(need a newer intel oneapi suite so can use the the intesycl package that
+#behaves the same way as hip|openSycl|AdaptiveCPP re. add_sycl_to_target)
+if (NOT DEFINED NESO_PARTICLES_SYCL)
+    set(NESO_PARTICLES_SYCL "ACPP" CACHE STRING "INTEL|ACPP")
+else()
+    set(NESO_PARTICLES_SYCL ${NESO_PARTICLES_SYCL} CACHE STRING "INTEL|ACPP")
+endif()
+
+if (${NESO_PARTICLES_SYCL_VENDOR} MATCHES "INTEL")
+    find_package(IntelSYCL REQUIRED)
+    #    add_compile_options("$<$<CONFIG:Release>:-O3;-xHost;-ffast-math;-g>")
+    #Intel compiler can complains about comapring to NAN in ffast-math 
+    #add_compile_options(-Wno-tautological-constant-compare)
+else()
+    #add_compile_options("$<$<CONFIG:Release>:-O3;-march=native;-ffast-math;-g>")
+    if(NESO_PARTICLES_DEVICE_TYPE STREQUAL GPU)
+        set(ACPP_TARGETS "omp;cuda:sm_80")
+    else()
+        set(ACPP_TARGETS "omp")
+    endif()
+    find_package(AdaptiveCPP CONFIG REQUIRED)
+    if(NOT ACPP_DEBUG_LEVEL)
+        if(CMAKE_BUILD_TYPE MATCHES "Debug")
+            set(ACPP_DEBUG_LEVEL 3 CACHE STRING
+                "Choose the debug level, options are: 
+                0 (no debug), 
+                1 (print errors), 
+                2 (also print warnings), 
+                3 (also print general information)"
+                FORCE)
+        else()
+            set(ACPP_DEBUG_LEVEL 0 CACHE STRING
+                "Choose the debug level, options are: 
+                0 (no debug), 
+                1 (print errors), 
+                2 (also print warning s), 
+                3 (also print general information)"
+                FORCE)
+        endif()
+    endif()
+endif()
+endif()
 #GLOB is an abomination
 set(TEST_SRCS 
     test_boundary_pbc.cpp
