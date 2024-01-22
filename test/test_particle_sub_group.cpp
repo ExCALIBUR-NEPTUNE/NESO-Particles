@@ -332,6 +332,12 @@ TEST(ParticleSubGroup, creating) {
   EXPECT_TRUE(aa->create_if_required());
   EXPECT_TRUE(aa->create_if_required());
 
+  EXPECT_EQ(aa->static_status(), false);
+  EXPECT_EQ(aa->static_status(false), false);
+  EXPECT_EQ(aa->static_status(true), true);
+  EXPECT_EQ(aa->static_status(), true);
+  EXPECT_TRUE(!aa->create_if_required());
+
   A->free();
   sycl_target->free();
   mesh->free();

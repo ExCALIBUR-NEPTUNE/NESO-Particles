@@ -191,6 +191,7 @@ class ParticleSubGroup {
   friend class ParticleGroup;
 
 protected:
+  bool is_static;
   ParticleGroupSharedPtr particle_group;
   ParticleSubGroupImplementation::SubGroupSelector selector;
   ParticleSubGroupImplementation::SubGroupSelector::SelectionT selection;
@@ -228,7 +229,7 @@ protected:
 
   ParticleSubGroup(ParticleSubGroupImplementation::SubGroupSelector selector)
       : particle_group(selector.particle_group), selector(selector),
-        is_whole_particle_group(false) {}
+        is_whole_particle_group(false), is_static(false) {}
 
   /**
    * Get the cells and layers of the particles in the sub group (slow)
@@ -332,6 +333,27 @@ public:
   }
 
   /**
+   * Get and optionally set the static status of the ParticleSubGroup.
+   *
+   * @param status Optional new static status.
+   * @returns Static status.
+   */
+  inline bool static_status(const std::optional<bool> status = std::nullopt) {
+    if (status != std::nullopt) {
+      // If the two static values are the same then nothing has to change.
+      const bool new_is_static = status.value();
+      if (!(this->is_static == new_is_static)) {
+        if (new_is_static) {
+          // Create the sub group before we disable creating the sub group.
+          this->create_if_required();
+        }
+        this->is_static = new_is_static;
+      }
+    }
+    return this->is_static;
+  }
+
+  /**
    * Explicitly re-create the sub group.
    */
   inline void create() { this->create_and_update_cache(); }
@@ -342,7 +364,7 @@ public:
    * @returns True if an update occured otherwise false.
    */
   inline bool create_if_required() {
-    if (this->is_whole_particle_group) {
+    if (this->is_whole_particle_group || this->is_static) {
       return false;
     }
 
