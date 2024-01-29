@@ -1,3 +1,4 @@
+#No need should be inherited from neso-particles
 #set(CMAKE_CXX_STANDARD 17)
 
 #add_definitions(-DGPU_SELECTOR=0)
@@ -5,69 +6,53 @@
 find_package(GTest QUIET)
 
 if(NOT GTest_FOUND)
-  include(FetchContent)
-  FetchContent_Declare(
-    googletest
-    URL https://github.com/google/googletest/archive/054a986a8513149e8374fc669a5fe40117ca6b41.zip
-    DOWNLOAD_EXTRACT_TIMESTAMP FALSE
-  )
-  # For Windows: Prevent overriding the parent project's compiler/linker
-  # settings
-  set(gtest_force_shared_crt
-      ON
-      CACHE BOOL "" FORCE)
-  FetchContent_MakeAvailable(googletest)
+    include(FetchContent)
+    FetchContent_Declare(
+        googletest
+        URL https://github.com/google/googletest/archive/054a986a8513149e8374fc669a5fe40117ca6b41.zip
+        DOWNLOAD_EXTRACT_TIMESTAMP FALSE
+        )
+    # For Windows: Prevent overriding the parent project's compiler/linker
+    # settings
+    set(gtest_force_shared_crt
+        ON
+        CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(googletest)
 endif()
+
 
 #Find SYCL
 if (COMMAND add_sycl_to_target) 
+    #Not perfect method but if in a submodule dont want to use a different
+    #sycl
     message("add_sycl_to_target macro exists")
 else()
     message("add_sycl_to_target macro NOT FOUND looking for SYCL package...")
-#find a sensible SYCL (assuming adaptivecpp or intelsycl 
-#(need a newer intel oneapi suite so can use the the intesycl package that
-#behaves the same way as hip|openSycl|AdaptiveCPP re. add_sycl_to_target)
-if (NOT DEFINED NESO_PARTICLES_SYCL)
-    set(NESO_PARTICLES_SYCL "ACPP" CACHE STRING "INTEL|ACPP")
-else()
-    set(NESO_PARTICLES_SYCL ${NESO_PARTICLES_SYCL} CACHE STRING "INTEL|ACPP")
+    find_package(hipSYCL 0.9.2 QUIET)
+    if(NOT hipSYCL_FOUND)
+        find_package(IntelDPCPP QUIET)
+        if(NOT IntelDPCPP_FOUND)
+            message(
+                WARNING
+                "Proceeding on the assumption that the CXX compiler is a SYCL2020 compiler."
+                )
+        endif()
+    else()
+        message(STATUS "hipsycl found")
+        set(HIPSYCL_TARGETS "omp")
+    endif(NOT hipSYCL_FOUND)
+
+    # hipsycl, trisycl and computecpp all define an "add_sycl_to_target" for the
+    # compilation of a target
+    if(NOT COMMAND add_sycl_to_target)
+        # Note from hipsycl: "Do not call target_sources after add_sycl_to_target or
+        # dependency tracking on compiler flags will break in subtle ways"
+        function(add_sycl_to_target)
+
+        endfunction()
+    endif()
 endif()
 
-if (${NESO_PARTICLES_SYCL_VENDOR} MATCHES "INTEL")
-    find_package(IntelSYCL REQUIRED)
-    #    add_compile_options("$<$<CONFIG:Release>:-O3;-xHost;-ffast-math;-g>")
-    #Intel compiler can complains about comapring to NAN in ffast-math 
-    #add_compile_options(-Wno-tautological-constant-compare)
-else()
-    #add_compile_options("$<$<CONFIG:Release>:-O3;-march=native;-ffast-math;-g>")
-    if(NESO_PARTICLES_DEVICE_TYPE STREQUAL GPU)
-        set(ACPP_TARGETS "omp;cuda:sm_80")
-    else()
-        set(ACPP_TARGETS "omp")
-    endif()
-    find_package(AdaptiveCPP CONFIG REQUIRED)
-    if(NOT ACPP_DEBUG_LEVEL)
-        if(CMAKE_BUILD_TYPE MATCHES "Debug")
-            set(ACPP_DEBUG_LEVEL 3 CACHE STRING
-                "Choose the debug level, options are: 
-                0 (no debug), 
-                1 (print errors), 
-                2 (also print warnings), 
-                3 (also print general information)"
-                FORCE)
-        else()
-            set(ACPP_DEBUG_LEVEL 0 CACHE STRING
-                "Choose the debug level, options are: 
-                0 (no debug), 
-                1 (print errors), 
-                2 (also print warning s), 
-                3 (also print general information)"
-                FORCE)
-        endif()
-    endif()
-endif()
-endif()
-#GLOB is an abomination
 set(TEST_SRCS 
     test_boundary_pbc.cpp
     test_buffers.cpp
@@ -101,17 +86,17 @@ set(TEST_MAIN ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp)
 # Build the tests individually
 include(GoogleTest)
 foreach(TEST ${TEST_SRCS})
-  get_filename_component(TEST_NAME ${TEST} NAME_WLE)
-  message(STATUS "Found test - ${TEST_NAME}")
-  set(TEST_LIST ${TEST_LIST} ${TEST})
+    get_filename_component(TEST_NAME ${TEST} NAME_WLE)
+    message(STATUS "Found test - ${TEST_NAME}")
+    set(TEST_LIST ${TEST_LIST} ${TEST})
 
-  set(TEST_SOURCES ${TEST_MAIN} ${TEST})
- add_executable(${TEST_NAME} ${TEST_SOURCES})
-  target_link_libraries(${TEST_NAME} PRIVATE NesoParticles GTest::gtest)
-  target_compile_definitions(${TEST_NAME} PRIVATE GPU_SELECTOR=0)
+    set(TEST_SOURCES ${TEST_MAIN} ${TEST})
+    add_executable(${TEST_NAME} ${TEST_SOURCES})
+    target_link_libraries(${TEST_NAME} PRIVATE NesoParticles GTest::gtest)
+    target_compile_definitions(${TEST_NAME} PRIVATE GPU_SELECTOR=0)
 
-  add_sycl_to_target(TARGET ${TEST_NAME} SOURCES ${TEST_SOURCES})
-  gtest_add_tests(TARGET ${TEST_NAME})
+    add_sycl_to_target(TARGET ${TEST_NAME} SOURCES ${TEST_SOURCES})
+    gtest_add_tests(TARGET ${TEST_NAME})
 endforeach()
 
 # Build a global test suite
