@@ -480,6 +480,63 @@ particle_sub_group(std::shared_ptr<PARENT> parent) {
 }
 
 /**
+ * Create a static ParticleSubGroup based on a kernel and arguments. The
+ * selector kernel must be a lambda which returns true for particles which are
+ * in the sub group and false for particles which are not in the sub group. The
+ * arguments for the selector kernel must be read access Syms, i.e.
+ * Access::read(Sym<T>("name")).
+ *
+ * For example if A is a ParticleGroup with an INT ParticleProp "ID" that
+ * holds particle ids then the following line creates a ParticleSubGroup from
+ * the particles with even ids.
+ *
+ *    auto A_even = std::make_shared<ParticleSubGroup>(
+ *      A, [=](auto ID) {
+ *        return ((ID[0] % 2) == 0);
+ *      },
+ *      Access::read(Sym<INT>("ID")));
+ *
+ * @param parent Parent ParticleGroup or ParticleSubGroup from which to form
+ * ParticleSubGroup.
+ * @param kernel Lambda function (like a ParticleLoop kernel) that returns
+ * true for the particles which should be in the ParticleSubGroup.
+ * @param args Arguments in the form of access descriptors wrapping objects
+ * to pass to the kernel.
+ */
+template <typename PARENT, typename KERNEL, typename... ARGS>
+inline ParticleSubGroupSharedPtr
+static_particle_sub_group(std::shared_ptr<PARENT> parent, KERNEL kernel,
+                          ARGS... args) {
+  auto a = std::make_shared<ParticleSubGroup>(parent, kernel, args...);
+  a->static_status(true);
+  return a;
+}
+
+/**
+ * Create a static ParticleSubGroup which is simply a reference/view into an
+ * entire ParticleGroup. This constructor creates a sub-group which is
+ * equivalent to
+ *
+ *    auto A_all = std::make_shared<ParticleSubGroup>(
+ *      A, [=]() {
+ *        return true;
+ *      }
+ *    );
+ *
+ * but can make additional optimisations.
+ *
+ * @param parent Parent ParticleGroup or ParticleSubGroup from which to form
+ * ParticleSubGroup.
+ */
+template <typename PARENT>
+inline ParticleSubGroupSharedPtr
+static_particle_sub_group(std::shared_ptr<PARENT> parent) {
+  auto a = std::make_shared<ParticleSubGroup>(parent);
+  a->static_status(true);
+  return a;
+}
+
+/**
  * Derived ParticleLoop type which implements the particle loop over iteration
  * sets defined by ParticleSubGroups.
  */
