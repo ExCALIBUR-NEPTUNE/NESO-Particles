@@ -246,6 +246,13 @@ protected:
   }
 
   template <typename T>
+  inline void remove_particle_dat_common(ParticleDatSharedPtr<T> particle_dat) {
+    this->particle_dat_versions.erase(particle_dat->sym);
+    this->particle_spec.remove(ParticleProp(
+        particle_dat->sym, particle_dat->ncomp, particle_dat->positions));
+  }
+
+  template <typename T>
   inline void add_particle_dat_common(ParticleDatSharedPtr<T> particle_dat) {
     realloc_dat(particle_dat);
     push_particle_spec(ParticleProp(particle_dat->sym, particle_dat->ncomp,
@@ -719,8 +726,8 @@ public:
   inline void remove_particle_dat(Sym<REAL> sym) {
     NESOASSERT(this->particle_dats_real.count(sym) == 1,
                "ParticleDat not found.");
+    this->remove_particle_dat_common(this->particle_dats_real.at(sym));
     this->particle_dats_real.erase(sym);
-    this->particle_dat_versions.erase(sym);
   }
   /**
    *  Remove a ParticleDat from the ParticleGroup
@@ -730,8 +737,8 @@ public:
   inline void remove_particle_dat(Sym<INT> sym) {
     NESOASSERT(this->particle_dats_int.count(sym) == 1,
                "ParticleDat not found.");
+    this->remove_particle_dat_common(this->particle_dats_int.at(sym));
     this->particle_dats_int.erase(sym);
-    this->particle_dat_versions.erase(sym);
   }
 };
 

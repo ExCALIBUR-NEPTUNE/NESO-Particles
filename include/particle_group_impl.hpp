@@ -316,6 +316,10 @@ inline void ParticleGroup::add_particles_local(
              "d_cells and d_layers must either both be nullptr or both be not "
              "nullptr.");
 
+  NESOASSERT(this->particle_spec.contains(product_matrix->spec->particle_spec),
+             "A particle property was passed to add_particles_local which does "
+             "not exist in the ParticleGroup.");
+
   const int num_products = product_matrix->num_products;
   // reuse this space
   this->d_remove_cells.realloc_no_copy(num_products);

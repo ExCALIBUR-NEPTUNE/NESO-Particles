@@ -5,6 +5,26 @@
 
 using namespace NESO::Particles;
 
+TEST(ParticleSpec, test_particle_spec) {
+  ParticleSpec a{ParticleProp(Sym<REAL>("P"), 2, true),
+                 ParticleProp(Sym<REAL>("V"), 3),
+                 ParticleProp(Sym<INT>("CELL_ID"), 1, true),
+                 ParticleProp(Sym<INT>("ID"), 1)};
+
+  ParticleSpec b{ParticleProp(Sym<REAL>("P"), 2, true),
+                 ParticleProp(Sym<INT>("CELL_ID"), 1, true),
+                 ParticleProp(Sym<INT>("ID"), 1)};
+
+  ParticleSpec c{ParticleProp(Sym<REAL>("P"), 2, true),
+                 ParticleProp(Sym<INT>("CELL_ID"), 1, true),
+                 ParticleProp(Sym<INT>("id"), 1)};
+
+  ASSERT_TRUE(a.contains(ParticleProp(Sym<REAL>("P"), 2, true)));
+  ASSERT_TRUE(a.contains(a));
+  ASSERT_TRUE(a.contains(b));
+  ASSERT_FALSE(a.contains(c));
+}
+
 TEST(ParticleSet, test_particle_set) {
 
   ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), 2, true),
