@@ -53,6 +53,9 @@ The "LocalArray" data structure is an array type which is local to the MPI rank 
 The local array type can be considered similar to the std::vector type.
 The "GlobalArray" type is an array type where a copy of the array is stored on each MPI rank and access to the array is collective over the MPI communicator on which the global array is defined.
 The "CellDatConst" type is a matrix type defined with fixed size (the "Const" part of the name) and data type for each cell in a mesh. 
+A matrix with a fixed number of rows and a variable number of columns per cell can be created per cell with the "CellDat" data structure.
+Due to the SYCL language restrictions the number of kernel arguments must be fixed at compilation time, the "SymVector" data structure applies indirection to allow a "vector" of particle properties to be passed at runtime.
+The "ParticleLoopIndex" provides access to indexing information for the particle within the particle loop kernel.
 
 These additional data structures must be passed to a particle loop with an access mode which is commutative.
 In practice only commutative access modes are defined for these data structures and attempting to pass them to a particle loop with an inappropriate access descriptor will result in a compile time error.
