@@ -607,6 +607,55 @@ TEST(DescendantProducts, add_particles_local) {
     }
   }
 
+  // Test adding particles from A into B
+  ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
+                             ParticleProp(Sym<REAL>("V"), 3),
+                             ParticleProp(Sym<REAL>("P2"), ndim),
+                             ParticleProp(Sym<INT>("CELL_ID"), 1, true),
+                             ParticleProp(Sym<INT>("MARKER"), 2),
+                             ParticleProp(Sym<INT>("NEW"), 1),
+                             ParticleProp(Sym<INT>("PARENT"), 2),
+                             ParticleProp(Sym<INT>("ID"), 1)};
+  auto B = make_test_obj<ParticleGroup>(domain, particle_spec, sycl_target);
+
+  B->reset_version_tracker();
+  B->add_particles_local(dp, A);
+  B->test_version_different();
+  B->test_internal_state();
+
+  ASSERT_EQ(B->get_npart_local(), (num_products_per_particle - 1) * npart0);
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto Bparent = B->get_cell(Sym<INT>("PARENT"), cellx);
+    auto Bid = B->get_cell(Sym<INT>("ID"), cellx);
+    auto Aid = A->get_cell(Sym<INT>("ID"), cellx);
+    auto Bmarker = B->get_cell(Sym<INT>("MARKER"), cellx);
+    auto Bnew = B->get_cell(Sym<INT>("NEW"), cellx);
+
+    auto Bp2 = B->get_cell(Sym<REAL>("P2"), cellx);
+    auto BP = B->get_cell(Sym<REAL>("P"), cellx);
+    auto AP = A->get_cell(Sym<REAL>("P"), cellx);
+
+    auto nrow = Bid->nrow;
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      const auto p_cell = Bparent->at(rowx, 0);
+      const auto p_layer = Bparent->at(rowx, 1);
+      ASSERT_EQ(p_cell, cellx);
+      ASSERT_EQ(Aid->at(p_layer, 0), Bid->at(rowx, 0));
+
+      auto parent_pos = map_positions.at(p_cell).at(p_layer);
+      const REAL product = Bmarker->at(rowx, 0);
+      for (int dx = 0; dx < ndim; dx++) {
+        ASSERT_NEAR(parent_pos.at(dx) * product, Bp2->at(rowx, dx), 1.0e-14);
+      }
+      ASSERT_EQ(Bnew->at(rowx, 0), 0.0);
+
+      ASSERT_EQ(AP->at(p_layer, 0), BP->at(rowx, 0));
+      ASSERT_EQ(AP->at(p_layer, 1), BP->at(rowx, 1));
+    }
+  }
+
+  B->free();
   A->free();
   sycl_target->free();
   mesh->free();

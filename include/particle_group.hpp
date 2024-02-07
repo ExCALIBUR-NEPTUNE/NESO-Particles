@@ -463,7 +463,8 @@ public:
 
 protected:
   inline void add_particles_local(std::shared_ptr<ProductMatrix> product_matrix,
-                                  const INT *d_cells, const INT *d_layers);
+                                  const INT *d_cells, const INT *d_layers,
+                                  ParticleGroup *source_particle_group);
 
 public:
   /**
@@ -483,8 +484,9 @@ public:
    *  TODO
    *  @param descendant_products New particles to add.
    */
-  inline void
-  add_particles_local(std::shared_ptr<DescendantProducts> descendant_products);
+  inline void add_particles_local(
+      std::shared_ptr<DescendantProducts> descendant_products,
+      std::shared_ptr<ParticleGroup> source_particle_group = nullptr);
 
   /**
    * Add particles to this ParticleGroup from another ParticleGroup. Properties

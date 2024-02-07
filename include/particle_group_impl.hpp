@@ -296,20 +296,25 @@ inline void ParticleGroup::clear() {
 
 inline void ParticleGroup::add_particles_local(
     std::shared_ptr<ProductMatrix> product_matrix) {
-  this->add_particles_local(product_matrix, nullptr, nullptr);
+  this->add_particles_local(product_matrix, nullptr, nullptr, nullptr);
 }
 
 inline void ParticleGroup::add_particles_local(
-    std::shared_ptr<DescendantProducts> descendant_products) {
+    std::shared_ptr<DescendantProducts> descendant_products,
+    std::shared_ptr<ParticleGroup> source_particle_group) {
+
+  ParticleGroup *source_particle_group_ptr =
+      source_particle_group != nullptr ? source_particle_group.get() : nullptr;
+
   this->add_particles_local(
       std::dynamic_pointer_cast<ProductMatrix>(descendant_products),
       descendant_products->d_parent_cells->ptr,
-      descendant_products->d_parent_layers->ptr);
+      descendant_products->d_parent_layers->ptr, source_particle_group_ptr);
 }
 
 inline void ParticleGroup::add_particles_local(
     std::shared_ptr<ProductMatrix> product_matrix, const INT *d_cells,
-    const INT *d_layers) {
+    const INT *d_layers, ParticleGroup *source_particle_group) {
 
   NESOASSERT(((d_layers == nullptr) && (d_cells == nullptr)) ||
                  ((d_layers != nullptr) && (d_cells != nullptr)),
@@ -395,8 +400,9 @@ inline void ParticleGroup::add_particles_local(
   };
 
   // lambda to copy property from parent particle
-  auto lambda_parent_copy = [&](auto dat) {
+  auto lambda_parent_copy = [&](auto dat, auto dat_src) {
     auto dat_ptr = dat->impl_get();
+    const auto dat_src_ptr = dat_src->impl_get_const();
     const int k_ncomp = dat->ncomp;
     es.push(this->sycl_target->queue.submit([&](sycl::handler &cgh) {
       cgh.parallel_for<>(sycl::range<1>(static_cast<size_t>(num_products)),
@@ -409,7 +415,7 @@ inline void ParticleGroup::add_particles_local(
                            if (layer > -1) {
                              for (int nx = 0; nx < k_ncomp; nx++) {
                                dat_ptr[cell][nx][layer] =
-                                   dat_ptr[cell_src][nx][layer_src];
+                                   dat_src_ptr[cell_src][nx][layer_src];
                              }
                            }
                          });
@@ -424,7 +430,18 @@ inline void ParticleGroup::add_particles_local(
       if (d_cells == nullptr) { // Zero properties if no parents defined
         zero_dat_properties(dat, num_products, cells_ptr, layers_ptr, es);
       } else { // Else copy the property from the parent
-        lambda_parent_copy(dat);
+        // Is there a separate parent
+        if (source_particle_group != nullptr) {
+          // Does this dat exist in the separate parent
+          if (source_particle_group->contains_dat(dat->sym)) {
+            auto dat_src = source_particle_group->get_dat(dat->sym);
+            lambda_parent_copy(dat, dat_src);
+          } else {
+            zero_dat_properties(dat, num_products, cells_ptr, layers_ptr, es);
+          }
+        } else {
+          lambda_parent_copy(dat, dat);
+        }
       }
     } else { // Copy from the ProductMatrix
       lambda_copy(dat, index, d_offsets, d_src);
