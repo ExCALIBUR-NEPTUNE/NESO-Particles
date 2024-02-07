@@ -51,7 +51,7 @@ struct Write {
    */
   REAL &at_real(const LoopIndex::Read &particle_index, const int product,
                 const int property, const int component) {
-    const int sub_index = particle_index.get_sub_linear_index();
+    const int sub_index = particle_index.get_loop_linear_index();
     const int matrix_row = sub_index + product * num_particles;
     return ptr_real[(offsets_real[property] + component) * num_products +
                     matrix_row];
@@ -70,7 +70,7 @@ struct Write {
    */
   INT &at_int(const LoopIndex::Read &particle_index, const int product,
               const int property, const int component) {
-    const int sub_index = particle_index.get_sub_linear_index();
+    const int sub_index = particle_index.get_loop_linear_index();
     const int matrix_row = sub_index + product * num_particles;
     return ptr_int[(offsets_int[property] + component) * num_products +
                    matrix_row];
@@ -84,7 +84,7 @@ struct Write {
    */
   inline void set_parent(const LoopIndex::Read &particle_index,
                          const int product) {
-    const int sub_index = particle_index.get_sub_linear_index();
+    const int sub_index = particle_index.get_loop_linear_index();
     const int matrix_row = sub_index + product * num_particles;
     this->d_parent_cells[matrix_row] = particle_index.cell;
     this->d_parent_layers[matrix_row] = particle_index.layer;
