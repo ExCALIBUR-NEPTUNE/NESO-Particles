@@ -481,8 +481,29 @@ public:
   add_particles_local(std::shared_ptr<ProductMatrix> product_matrix);
 
   /**
-   *  TODO
+   *  Add new particles to this ParticleGroup via a DescendantProducts
+   *  instance. If no alternative source ParticleGroup is provided then
+   *  properties are either defined in the DescendantProducts, from which they
+   *  are copied, or if the property is not defined in the DescendantProducts
+   *  then the property values are copied from the parent particle.
+   *
+   *  When a source ParticleGroup is provided: Properties which are defined in
+   *  the DescendantProducts are copied from the DescendantProducts. If a
+   *  property is defined in the source ParticleGroup and not in this
+   *  ParticleGroup then it is ignored. If a property is defined in this
+   *  ParticleGroup and not in the source ParticleGroup then the values are
+   *  zero initialised. Properties not defined in the DescendantProducts which
+   *  exist as particle properties in both the source ParticleGroup and this
+   *  ParticleGroup are copied from the parent particles. When the source
+   *  ParticleGroup is specified the parent indices in DescendantProducts
+   *  always refer to particles in the parent ParticleGroup.
+   *
    *  @param descendant_products New particles to add.
+   *  @param source_particleGroup Alternative ParticleGroup to use as the set
+   *  of parent particles. The descendant_products parent indices must have
+   *  been created with this ParticleGroup. By default no alternative
+   *  ParticleGroup is specified and the parents are assumed to be in the
+   *  ParticleGroup on which add_particles_local was called.
    */
   inline void add_particles_local(
       std::shared_ptr<DescendantProducts> descendant_products,
