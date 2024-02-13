@@ -2,6 +2,8 @@
 get_filename_component(NESO_PARTICLES_ROOT "${CMAKE_CURRENT_LIST_DIR}/../"
                        ABSOLUTE)
 
+include(${CMAKE_CURRENT_LIST_DIR}/restrict-keyword.cmake)
+
 # set the variable for projects to use to find header files
 set(NESO_PARTICLES_INCLUDE_PATH ${NESO_PARTICLES_ROOT}/include)
 

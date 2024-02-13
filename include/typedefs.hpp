@@ -9,8 +9,6 @@
 #include <numeric>
 #include <vector>
 
-#define RESTRICT __restrict
-
 namespace NESO::Particles {
 
 static inline int reduce_mul(const int nel, std::vector<int> &values) {
