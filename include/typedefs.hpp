@@ -70,6 +70,47 @@ inline void neso_particles_assert(const char *expr_str, bool expr,
   }
 }
 
+/**
+ * \def NESOWARN(expr, msg)
+ * This is a helper macro to call the function neso_particles_warn. Users
+ * should call this helper macro NESOWARN like
+ *
+ *   NESOWARN(conditional, message);
+ *
+ * To check conditionals within their code.
+ */
+#ifdef NESO_PARTICLES_WARN
+#define NESOWARN(expr, msg)                                                    \
+  NESO::Particles::neso_particles_warn(#expr, expr, __FILE__, __LINE__, msg)
+#else
+#define NESOWARN(expr, msg)                                                    \
+  {}
+#endif
+
+/**
+ * This is a helper function to assert conditions are satisfied and print to
+ * stderr if not. A warning is output on stderr. Users should call the
+ * corresponding helper macro NESOWARN like
+ *
+ *   NESOWARN(conditional, message);
+ *
+ * To check conditionals within their code.
+ *
+ * @param expr_str A string identifying the conditional to check.
+ * @param expr Bool resulting from the evaluation of the expression.
+ * @param file Filename containing the call to neso_particles_assert.
+ * @param line Line number for the call to neso_particles assert.
+ * @param msg Message to print to stderr on evaluation of conditional to false.
+ */
+inline void neso_particles_warn(const char *expr_str, bool expr,
+                                const char *file, int line, const char *msg) {
+  if (!expr) {
+    std::cerr << "NESO Particles warning:\t" << msg << "\n"
+              << "Expected value:\t" << expr_str << "\n"
+              << "Source location:\t\t" << file << ", line " << line << "\n";
+  }
+}
+
 typedef double REAL;
 typedef int64_t INT;
 

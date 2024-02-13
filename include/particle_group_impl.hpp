@@ -437,6 +437,8 @@ inline void ParticleGroup::add_particles_local(
             auto dat_src = source_particle_group->get_dat(dat->sym);
             lambda_parent_copy(dat, dat_src);
           } else {
+            NESOWARN(false, "Child ParticleGroup has a particle property which "
+                            "does not exist on the parent ParticleGroup.");
             zero_dat_properties(dat, num_products, cells_ptr, layers_ptr, es);
           }
         } else {
