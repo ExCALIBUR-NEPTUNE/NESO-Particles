@@ -59,6 +59,38 @@ template <typename T> struct Add {
   }
 };
 
+/**
+ * Access:CellDatConst::Read<T> and Access:CellDatConst::Min<T> are the
+ * kernel argument types for accessing CellDatConst data in a kernel.
+ */
+template <typename T> struct Min {
+  /// Pointer to underlying data for the array.
+  Min() = default;
+  T *ptr;
+  int nrow;
+  inline T fetch_min(const int row, const int col, const T value) {
+    sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>
+        element_atomic(ptr[nrow * col + row]);
+    return element_atomic.fetch_min(value);
+  }
+};
+
+/**
+ * Access:CellDatConst::Read<T> and Access:CellDatConst::Max<T> are the
+ * kernel argument types for accessing CellDatConst data in a kernel.
+ */
+template <typename T> struct Max {
+  /// Pointer to underlying data for the array.
+  Max() = default;
+  T *ptr;
+  int nrow;
+  inline T fetch_max(const int row, const int col, const T value) {
+    sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>
+        element_atomic(ptr[nrow * col + row]);
+    return element_atomic.fetch_max(value);
+  }
+};
+
 } // namespace Access::CellDatConst
 
 namespace ParticleLoopImplementation {
@@ -75,6 +107,18 @@ template <typename T> struct LoopParameter<Access::Read<CellDatConst<T>>> {
 template <typename T> struct LoopParameter<Access::Add<CellDatConst<T>>> {
   using type = CellDatConstDeviceType<T>;
 };
+/**
+ *  Loop parameter for min access of a CellDatConst.
+ */
+template <typename T> struct LoopParameter<Access::Min<CellDatConst<T>>> {
+  using type = CellDatConstDeviceType<T>;
+};
+/**
+ *  Loop parameter for max access of a CellDatConst.
+ */
+template <typename T> struct LoopParameter<Access::Max<CellDatConst<T>>> {
+  using type = CellDatConstDeviceType<T>;
+};
 
 /**
  *  KernelParameter type for read access to a CellDatConst.
@@ -87,6 +131,18 @@ template <typename T> struct KernelParameter<Access::Read<CellDatConst<T>>> {
  */
 template <typename T> struct KernelParameter<Access::Add<CellDatConst<T>>> {
   using type = Access::CellDatConst::Add<T>;
+};
+/**
+ *  KernelParameter type for min access to a CellDatConst.
+ */
+template <typename T> struct KernelParameter<Access::Min<CellDatConst<T>>> {
+  using type = Access::CellDatConst::Min<T>;
+};
+/**
+ *  KernelParameter type for max access to a CellDatConst.
+ */
+template <typename T> struct KernelParameter<Access::Max<CellDatConst<T>>> {
+  using type = Access::CellDatConst::Max<T>;
 };
 
 /**
@@ -111,6 +167,28 @@ inline void create_kernel_arg(ParticleLoopIteration &iterationx,
   lhs.ptr = ptr;
   lhs.nrow = rhs.nrow;
 }
+/**
+ *  Function to create the kernel argument for CellDatConst min access.
+ */
+template <typename T>
+inline void create_kernel_arg(ParticleLoopIteration &iterationx,
+                              CellDatConstDeviceType<T> &rhs,
+                              Access::CellDatConst::Min<T> &lhs) {
+  T *ptr = rhs.ptr + iterationx.cellx * rhs.stride;
+  lhs.ptr = ptr;
+  lhs.nrow = rhs.nrow;
+}
+/**
+ *  Function to create the kernel argument for CellDatConst max access.
+ */
+template <typename T>
+inline void create_kernel_arg(ParticleLoopIteration &iterationx,
+                              CellDatConstDeviceType<T> &rhs,
+                              Access::CellDatConst::Max<T> &lhs) {
+  T *ptr = rhs.ptr + iterationx.cellx * rhs.stride;
+  lhs.ptr = ptr;
+  lhs.nrow = rhs.nrow;
+}
 
 /**
  * Method to compute access to a CellDatConst (read)
@@ -128,6 +206,24 @@ template <typename T>
 inline CellDatConstDeviceType<T>
 create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
                 Access::Add<CellDatConst<T> *> &a) {
+  return a.obj->impl_get();
+}
+/**
+ * Method to compute access to a CellDatConst (min)
+ */
+template <typename T>
+inline CellDatConstDeviceType<T>
+create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
+                Access::Min<CellDatConst<T> *> &a) {
+  return a.obj->impl_get();
+}
+/**
+ * Method to compute access to a CellDatConst (max)
+ */
+template <typename T>
+inline CellDatConstDeviceType<T>
+create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
+                Access::Max<CellDatConst<T> *> &a) {
   return a.obj->impl_get();
 }
 
@@ -148,6 +244,14 @@ template <typename T> class CellDatConst {
   ParticleLoopImplementation::create_loop_arg<T>(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
       sycl::handler &cgh, Access::Add<CellDatConst<T> *> &a);
+  friend CellDatConstDeviceType<T>
+  ParticleLoopImplementation::create_loop_arg<T>(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      sycl::handler &cgh, Access::Min<CellDatConst<T> *> &a);
+  friend CellDatConstDeviceType<T>
+  ParticleLoopImplementation::create_loop_arg<T>(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      sycl::handler &cgh, Access::Max<CellDatConst<T> *> &a);
 
 private:
   T *d_ptr;

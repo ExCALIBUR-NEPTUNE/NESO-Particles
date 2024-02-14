@@ -26,6 +26,16 @@ template <typename T> struct Write : AccessGeneric<T> {};
 template <typename T> struct Add : AccessGeneric<T> {};
 
 /**
+ *  Atomic min access descriptor.
+ */
+template <typename T> struct Min : AccessGeneric<T> {};
+
+/**
+ *  Atomic max access descriptor.
+ */
+template <typename T> struct Max : AccessGeneric<T> {};
+
+/**
  *  Helper function that allows a loop to be constructed with a read-only
  *  parameter passed like:
  *
@@ -57,6 +67,28 @@ template <typename T> inline Write<T> write(T t) { return Write<T>{t}; }
  * @returns Access::Add object that wraps passed object.
  */
 template <typename T> inline Add<T> add(T t) { return Add<T>{t}; }
+
+/**
+ *  Helper function that allows a loop to be constructed with a write
+ *  parameter which is atomic minimum passed like:
+ *
+ *    Access::min(object)
+ *
+ * @param t Object to pass with atomic min access.
+ * @returns Access::Min object that wraps passed object.
+ */
+template <typename T> inline Min<T> min(T t) { return Min<T>{t}; }
+
+/**
+ *  Helper function that allows a loop to be constructed with a write
+ *  parameter which is atomic maximum passed like:
+ *
+ *    Access::max(object)
+ *
+ * @param t Object to pass with atomic max access.
+ * @returns Access::Max object that wraps passed object.
+ */
+template <typename T> inline Max<T> max(T t) { return Max<T>{t}; }
 
 } // namespace NESO::Particles::Access
 

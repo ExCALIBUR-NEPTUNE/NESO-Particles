@@ -514,6 +514,42 @@ TEST(ParticleLoop, global_array_ptr) {
   mesh->free();
 }
 
+namespace {
+
+template <typename T>
+inline void inner_cell_dat_min_max(SYCLTargetSharedPtr sycl_target,
+                                   ParticleGroupSharedPtr particle_group,
+                                   const int cell_count) {
+
+  auto cdc_min =
+      std::make_shared<CellDatConst<T>>(sycl_target, cell_count, 1, 1);
+  auto cdc_max =
+      std::make_shared<CellDatConst<T>>(sycl_target, cell_count, 1, 1);
+  cdc_min->fill((T)100);
+  cdc_max->fill((T)-1);
+  particle_loop(
+      particle_group,
+      [=](auto INDEX, auto CDC_MIN, auto CDC_MAX) {
+        CDC_MIN.fetch_min(0, 0, (T)INDEX.layer);
+        CDC_MAX.fetch_max(0, 0, (T)INDEX.layer);
+      },
+      Access::read(ParticleLoopIndex{}), Access::min(cdc_min),
+      Access::max(cdc_max))
+      ->execute();
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    const INT npart_cell = particle_group->get_npart_cell(cellx);
+    if (npart_cell) {
+      auto data_min = cdc_min->get_cell(cellx);
+      auto data_max = cdc_max->get_cell(cellx);
+      EXPECT_EQ(data_min->at(0, 0), (T)0);
+      EXPECT_EQ(data_max->at(0, 0), (T)(npart_cell - 1));
+    }
+  }
+}
+
+} // namespace
+
 TEST(ParticleLoop, cell_dat_const) {
   const int N_per_rank = 1093;
   auto A = particle_loop_common(N_per_rank);
@@ -628,6 +664,11 @@ TEST(ParticleLoop, cell_dat_const) {
     EXPECT_EQ(cell_data->at(1, 0), correct_add.at(cx * 4 + 2));
     EXPECT_EQ(cell_data->at(1, 1), correct_add.at(cx * 4 + 3));
   }
+
+  inner_cell_dat_min_max<int>(sycl_target, A, cell_count);
+  inner_cell_dat_min_max<REAL>(sycl_target, A, cell_count);
+  // Issues with atomic_max/atomic_min with adaptivecpp cuda-nvcxx
+  // inner_cell_dat_min_max<INT>(sycl_target, A, cell_count);
 
   A->free();
   sycl_target->free();

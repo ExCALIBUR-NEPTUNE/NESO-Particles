@@ -151,21 +151,11 @@ using kernel_parameter_t =
 
 } // namespace
 
-// clang-format off
 /**
  *  ParticleLoop loop type. The particle loop applies the given kernel to all
  *  particles in a ParticleGroup. The kernel must be independent of the
  *  execution order (i.e. parallel and unsequenced in C++ terminology).
- *
- *  Data Structure  | Access Descriptors | Kernel Argument Type | Notes |
- *  --------------  | ------------------ | -------------------- | ----- |
- *  ParticleDat<T> | Read, Write | Access::ParticleDat::Read<T>, Access::ParticleDat::Write<T> | Loop is called with the Sym<T>, e.g Access::read(Sym<T>("A")) |
- *  LocalArray<T>  | Read, Write, Add | Access::LocalArray::Read<T>, Access::LocalArray::Write<T>, Access::LocalArray::Add<T> | Loop is called with the array, e.g LocalArray l0(...), Access::read(l0) |
- *  GlobalArray<T>  | Read, Add | Access::GlobalArray::Read<T>, Access::GlobalArray::Add<T> | Loop is called with the array, e.g GlobalArray g0(...), Access::read(g0). After loop completion values are reduced across the MPI communicator automatically. |
- *  CellDatConst<T>  | Read, Add | Access::CellDatConst::Read<T>, Access::CellDatConst::Add<T> | Loop is called with the array, e.g auto g0 = std::make_shared<CellDatConst<T>>(...), Access::read(g0). Access is supplied to the elements for each cell only. Passed object must be a shared pointer. |
- *
  */
-// clang-format on
 template <typename KERNEL, typename... ARGS>
 class ParticleLoop : public ParticleLoopBase {
 

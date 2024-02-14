@@ -135,6 +135,12 @@ When accessed from a particle loop both the read and add access descriptors expo
    * - Add
      - Access::CellDatConst::Add<T>
      - fetch_add(row, col, value) atomically increments the element referenced by the index with the passed value. Returns the previous value stored at the index. Users may assume that the memory region accessed is the same for all invocations of the kernel. Hence adding 1 for each particle gives a total ordering for each participating calls.
+   * - Min
+     - Access::CellDatConst::Min<T>
+     - fetch_min(row, col, value) atomically computes the minimum of element referenced by the index and the passed value. Returns the previous value stored at the index.
+   * - Max
+     - Access::CellDatConst::Max<T>
+     - fetch_max(row, col, value) atomically computes the maximum of element referenced by the index and the passed value. Returns the previous value stored at the index.
 
 .. list-table:: CellDat<T> Access
    :header-rows: 1
