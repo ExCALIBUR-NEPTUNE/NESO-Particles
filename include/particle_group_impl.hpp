@@ -94,6 +94,11 @@ inline void ParticleGroup::add_particles_local(ParticleSet &particle_data) {
   this->check_dats_and_group_agree();
 }
 
+inline void
+ParticleGroup::add_particles_local(ParticleSetSharedPtr particle_data) {
+  add_particles_local(*particle_data);
+}
+
 template <typename T>
 inline void ParticleGroup::remove_particles(const int npart, T *usm_cells,
                                             T *usm_layers) {

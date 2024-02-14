@@ -144,6 +144,13 @@ protected:
                        const std::vector<INT> &h_npart_cell_to_add,
                        EventStack &es);
 
+  /**
+   *  Const pointer to the start of a column in a cell. Not to be cached.
+   */
+  inline T const *col_device_const_ptr(const int cell, const int col) {
+    return this->cell_dat.col_device_ptr(cell, col);
+  }
+
 public:
   /// Disable (implicit) copies.
   ParticleDatT(const ParticleDatT &st) = delete;

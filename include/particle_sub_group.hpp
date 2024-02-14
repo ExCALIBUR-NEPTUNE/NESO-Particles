@@ -414,6 +414,47 @@ public:
   inline bool is_entire_particle_group() {
     return this->is_whole_particle_group;
   }
+
+  /**
+   * Create a ParticleSet containing the data from particles held in the
+   * ParticleGroup. e.g. to Extract the first two particles from the second
+   * cell:
+   *
+   * cells  = [1, 1]
+   * layers = [0, 1]
+   *
+   * @param cells Vector of cell indices of particles to extract.
+   * @param cells Vector of layer indices of particles to extract.
+   * @returns ParticleSet of particle data.
+   */
+  inline ParticleSetSharedPtr get_particles(std::vector<INT> &cells,
+                                            std::vector<INT> &layers) {
+    if (this->is_whole_particle_group) {
+      return this->particle_group->get_particles(cells, layers);
+    } else {
+      this->create_if_required();
+      NESOASSERT(cells.size() == layers.size(),
+                 "Cells and layers vectors have different sizes.");
+      const int num_particles = cells.size();
+      std::vector<INT> inner_layers;
+      inner_layers.reserve(num_particles);
+      const INT num_cells =
+          this->particle_group->domain->mesh->get_cell_count();
+      for (int px = 0; px < num_particles; px++) {
+        const INT cellx = cells.at(px);
+        NESOASSERT((cellx > -1) && (cellx < num_cells),
+                   "Cell index not in range.");
+        const INT layerx = layers.at(px);
+        NESOASSERT((layerx > -1) && (layerx < this->get_npart_cell(cellx)),
+                   "Layer index not in range.");
+
+        const INT parent_layer =
+            this->selector.map_cell_to_particles->get_value(cellx, layerx, 0);
+        inner_layers.push_back(parent_layer);
+      }
+      return this->particle_group->get_particles(cells, inner_layers);
+    }
+  }
 };
 
 namespace ParticleSubGroupImplementation {

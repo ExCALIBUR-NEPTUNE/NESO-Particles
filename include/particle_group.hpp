@@ -461,6 +461,15 @@ public:
    */
   inline void add_particles_local(ParticleSet &particle_data);
 
+  /**
+   *  Add particles only to this MPI rank. It is assumed that the added
+   *  particles are in the domain region owned by this MPI rank. If not, see
+   *  `ParticleGroup::add_particles`.
+   *
+   *  @param particle_data New particles to add.
+   */
+  inline void add_particles_local(ParticleSetSharedPtr particle_data);
+
 protected:
   inline void add_particles_local(std::shared_ptr<ProductMatrix> product_matrix,
                                   const INT *d_cells, const INT *d_layers,
@@ -762,6 +771,58 @@ public:
                "ParticleDat not found.");
     this->remove_particle_dat_common(this->particle_dats_int.at(sym));
     this->particle_dats_int.erase(sym);
+  }
+
+  /**
+   * Create a ParticleSet containing the data from particles held in the
+   * ParticleGroup. e.g. to Extract the first two particles from the second
+   * cell:
+   *
+   * cells  = [1, 1]
+   * layers = [0, 1]
+   *
+   * @param cells Vector of cell indices of particles to extract.
+   * @param cells Vector of layer indices of particles to extract.
+   * @returns ParticleSet of particle data.
+   */
+  inline ParticleSetSharedPtr get_particles(std::vector<INT> &cells,
+                                            std::vector<INT> &layers) {
+    NESOASSERT(cells.size() == layers.size(),
+               "Cells and layers vectors have different sizes.");
+    const int num_particles = cells.size();
+    auto ps = std::make_shared<ParticleSet>(num_particles, this->particle_spec);
+    const INT num_cells = this->domain->mesh->get_cell_count();
+
+    EventStack es;
+
+    auto lambda_copy = [&](const std::size_t num_bytes_per_element, auto dat,
+                           const INT particle_index, const INT cell,
+                           const INT layer) {
+      const int ncomp = dat->ncomp;
+      for (int nx = 0; nx < ncomp; nx++) {
+        auto dest_ptr = ps->get_ptr(dat->sym, particle_index, nx);
+        const auto source_ptr = dat->col_device_const_ptr(cell, nx) + layer;
+        es.push(this->sycl_target->queue.memcpy(dest_ptr, source_ptr,
+                                                num_bytes_per_element));
+      }
+    };
+
+    for (int px = 0; px < num_particles; px++) {
+      const INT cell = cells.at(px);
+      const INT layer = layers.at(px);
+      NESOASSERT((cell > -1) && (cell < num_cells), "Cell index not in range.");
+      NESOASSERT((layer > -1) && (layer < this->get_npart_cell(cell)),
+                 "Layer index not in range.");
+      for (auto &dat : this->particle_dats_real) {
+        lambda_copy(sizeof(REAL), dat.second, px, cell, layer);
+      }
+      for (auto &dat : this->particle_dats_int) {
+        lambda_copy(sizeof(INT), dat.second, px, cell, layer);
+      }
+    }
+
+    es.wait();
+    return ps;
   }
 };
 

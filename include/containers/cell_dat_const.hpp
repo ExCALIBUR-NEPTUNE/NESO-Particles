@@ -387,6 +387,40 @@ public:
       se.wait();
     }
   }
+
+  /**
+   * Get a value from a cell, row and column.
+   *
+   * @param cell Cell index.
+   * @param row Row index.
+   * @param col Column index.
+   * @returns Value at location.
+   */
+  inline T get_value(const int cell, const int row, const int col) {
+    T value;
+    this->sycl_target->queue
+        .memcpy(&value,
+                &this->d_ptr[cell * this->stride + col * this->nrow + row],
+                sizeof(T))
+        .wait_and_throw();
+    return value;
+  }
+
+  /**
+   * Set a value directly using cell, row, column and value.
+   *
+   * @param cell Cell index.
+   * @param row Row index.
+   * @param col Column index.
+   * @param value Value to set at location.
+   */
+  inline void set_value(const int cell, const int row, const int col,
+                        const T value) {
+    this->sycl_target->queue
+        .memcpy(&this->d_ptr[cell * this->stride + col * this->nrow + row],
+                &value, sizeof(T))
+        .wait_and_throw();
+  }
 };
 
 } // namespace NESO::Particles

@@ -372,6 +372,39 @@ public:
   }
 
   /**
+   * Get a value from a cell, row and column.
+   *
+   * @param cell Cell index.
+   * @param row Row index.
+   * @param col Column index.
+   * @returns Value at location.
+   */
+  inline T get_value(const int cell, const int row, const int col) {
+    T value;
+    this->sycl_target->queue
+        .memcpy(&value, this->h_ptr_cols[cell * this->ncol + col] + row,
+                sizeof(T))
+        .wait_and_throw();
+    return value;
+  }
+
+  /**
+   * Set a value directly using cell, row, column and value.
+   *
+   * @param cell Cell index.
+   * @param row Row index.
+   * @param col Column index.
+   * @param value Value to set at location.
+   */
+  inline void set_value(const int cell, const int row, const int col,
+                        const T value) {
+    this->sycl_target->queue
+        .memcpy(this->h_ptr_cols[cell * this->ncol + col] + row, &value,
+                sizeof(T))
+        .wait_and_throw();
+  }
+
+  /**
    * Get the contents of a provided cell on the host as a CellData instance.
    *
    * @param cell Cell to get data from.
