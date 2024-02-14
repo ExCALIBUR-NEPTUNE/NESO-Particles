@@ -417,7 +417,7 @@ public:
 
   /**
    * Create a ParticleSet containing the data from particles held in the
-   * ParticleGroup. e.g. to Extract the first two particles from the second
+   * ParticleSubGroup. e.g. to Extract the first two particles from the second
    * cell:
    *
    * cells  = [1, 1]
