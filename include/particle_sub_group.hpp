@@ -359,11 +359,38 @@ public:
   inline void create() { this->create_and_update_cache(); }
 
   /**
+   * Test if a ParticleSubGroup has been invalidated by an operation which
+   * irreparably invalidates the internal data structures. This method will
+   * always return true for a non-static ParticleSubGroup as non-static
+   * ParticleSubGroups are automatically rebuilt as needed.
+   *
+   * If the ParticleSubGroup is static and this method returns false then the
+   * ParticleSubGroup should not be used for any further operations. Note that
+   * the implementation calls this method internally to attempt to avoid
+   * miss-use of a ParticleSubGroup and hence the user is not expected to
+   * routinely call this method.
+   *
+   * @returns False if a static ParticleSubGroup has been invalidated by an
+   * external operation which invalidated the ParticleSubGroup (e.g. moving
+   * particles between cells or MPI ranks, adding or removing particles).
+   * Otherwise returns True.
+   */
+  inline bool is_valid() {
+    if (this->is_static) {
+      return !this->particle_group->check_validation(
+          this->particle_dat_versions, false);
+    }
+    return true;
+  }
+
+  /**
    * Re-create the sub group if required.
    *
    * @returns True if an update occured otherwise false.
    */
   inline bool create_if_required() {
+    NESOASSERT(this->is_valid(), "This ParticleSubGroup has been invalidated.");
+
     if (this->is_whole_particle_group || this->is_static) {
       return false;
     }

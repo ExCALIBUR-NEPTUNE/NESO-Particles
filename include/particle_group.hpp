@@ -280,9 +280,11 @@ protected:
   std::shared_ptr<BufferDevice<int>> d_sub_group_layers;
 
   /**
-   * Returns true if the passed version is behind and was updated.
+   * Returns true if the passed version is behind and can be updated. By
+   * default updates the passed version.
    */
-  inline bool check_validation(ParticleDatVersionTracker &to_check) {
+  inline bool check_validation(ParticleDatVersionTracker &to_check,
+                               const bool update_to_check = true) {
     bool updated = false;
     for (auto &item : to_check) {
       const auto &key = item.first;
@@ -294,7 +296,9 @@ protected:
       // updated is required on the object that holds to check.
       if (local_value != to_check_value) {
         updated = true;
-        to_check.at(key) = local_value;
+        if (update_to_check) {
+          to_check.at(key) = local_value;
+        }
       }
       // If this bool has been set then an update is always required.
       if (local_bool) {

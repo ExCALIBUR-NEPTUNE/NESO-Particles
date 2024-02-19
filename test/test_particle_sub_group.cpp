@@ -336,7 +336,51 @@ TEST(ParticleSubGroup, creating) {
   EXPECT_EQ(aa->static_status(false), false);
   EXPECT_EQ(aa->static_status(true), true);
   EXPECT_EQ(aa->static_status(), true);
-  EXPECT_TRUE(!aa->create_if_required());
+  EXPECT_TRUE(!aa->is_valid());
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}
+
+TEST(ParticleSubGroup, static_valid) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  auto sycl_target = A->sycl_target;
+
+  auto lambda_make_aa = [&]() {
+    return static_particle_sub_group(
+        A, [=](auto ID) { return ID.at(0) % 2 == 0; },
+        Access::read(Sym<INT>("ID")));
+  };
+
+  auto aa = lambda_make_aa();
+  EXPECT_TRUE(aa->is_valid());
+
+  particle_loop(
+      aa, [=](auto ID) { ID.at(0) += 2; }, Access::write(Sym<INT>("ID")))
+      ->execute();
+  EXPECT_TRUE(!aa->is_valid());
+
+  aa = lambda_make_aa();
+  A->cell_move();
+  EXPECT_TRUE(!aa->is_valid());
+
+  aa = lambda_make_aa();
+  A->hybrid_move();
+  EXPECT_TRUE(!aa->is_valid());
+
+  aa = lambda_make_aa();
+  A->add_particles_local(aa);
+  EXPECT_TRUE(!aa->is_valid());
+
+  auto bb = static_particle_sub_group(
+      A, [=](auto ID) { return ID.at(0) % 4 == 0; },
+      Access::read(Sym<INT>("ID")));
+  aa = lambda_make_aa();
+  A->remove_particles(bb);
+  EXPECT_TRUE(!aa->is_valid());
 
   A->free();
   sycl_target->free();
