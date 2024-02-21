@@ -274,7 +274,11 @@ public:
         },
         Access::read(position_dat), Access::write(mpi_rank_dat));
 
-    pl.execute();
+    if (map_cell == -1) {
+      pl.execute();
+    } else {
+      pl.execute(map_cell);
+    }
   };
 
   /**
