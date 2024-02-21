@@ -241,6 +241,18 @@ public:
   };
 
   /**
+   * Pass a number of nrows for each cell where the user promises the new
+   * number of rows are equal to or less than the current number of rows.
+   */
+  template <typename U> inline void reduce_nrow(const U *h_nrow_required) {
+    this->nrow_max = -1;
+    const int ncells = this->ncells;
+    for (int cx = 0; cx < ncells; cx++) {
+      this->nrow[cx] = h_nrow_required[cx];
+    }
+  }
+
+  /**
    * Set the number of rows required in a provided cell. This will realloc if
    * needed and copy the existing data into the new space. May not shrink the
    * array if the requested size is smaller than the existing size.

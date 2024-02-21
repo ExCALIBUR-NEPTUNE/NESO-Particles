@@ -223,6 +223,12 @@ public:
    */
   template <typename T>
   inline void remove_particles(const int npart, T *usm_cells, T *usm_layers) {
+
+    // If there are no particles to remove then there is nothing to do.
+    if (npart < 1) {
+      return;
+    }
+
     auto t0 = profile_timestamp();
     this->compute_remove_compress_indicies(npart, usm_cells, usm_layers);
 
