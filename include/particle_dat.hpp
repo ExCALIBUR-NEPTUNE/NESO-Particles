@@ -10,6 +10,7 @@
 #include "access.hpp"
 #include "cell_dat.hpp"
 #include "compute_target.hpp"
+#include "loop/access_descriptors.hpp"
 #include "particle_set.hpp"
 #include "particle_spec.hpp"
 #include "typedefs.hpp"
@@ -24,11 +25,49 @@ class ParticleGroup;
 // Forward declaration of ParticleLoop such that LocalArray can define
 // ParticleLoop as a friend class.
 template <typename KERNEL, typename... ARGS> class ParticleLoop;
+template <typename T> class SymVector;
 class MeshHierarchyGlobalMap;
 class CellMove;
 class LayerCompressor;
 class ParticlePacker;
 class ParticleUnpacker;
+
+template <typename T> using ParticleDatImplGetT = T ***;
+template <typename T> using ParticleDatImplGetConstT = T *const *const *;
+class ParticleGroup;
+
+namespace ParticleLoopImplementation {
+
+/**
+ * Method to compute access to a particle dat (read) - via Sym.
+ */
+template <typename T>
+inline ParticleDatImplGetConstT<T>
+create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
+                Access::Read<Sym<T> *> &a);
+/**
+ * Method to compute access to a particle dat (write) - via Sym
+ */
+template <typename T>
+inline ParticleDatImplGetT<T>
+create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
+                Access::Write<Sym<T> *> &a);
+/**
+ * Method to compute access to a particle dat (read).
+ */
+template <typename T>
+inline ParticleDatImplGetConstT<T>
+create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
+                Access::Read<ParticleDatT<T> *> &a);
+/**
+ * Method to compute access to a particle dat (write).
+ */
+template <typename T>
+inline ParticleDatImplGetT<T>
+create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
+                Access::Write<ParticleDatT<T> *> &a);
+
+} // namespace ParticleLoopImplementation
 
 /**
  *  Wrapper around a CellDat to store particle data on a per cell basis.
@@ -36,12 +75,28 @@ class ParticleUnpacker;
 template <typename T> class ParticleDatT {
   // This allows the ParticleLoop to access the implementation methods.
   template <typename KERNEL, typename... ARGS> friend class ParticleLoop;
+  friend class SymVector<T>;
   friend class ParticleGroup;
   friend class MeshHierarchyGlobalMap;
   friend class CellMove;
   friend class LayerCompressor;
   friend class ParticlePacker;
   friend class ParticleUnpacker;
+  friend ParticleDatImplGetConstT<T>
+  ParticleLoopImplementation::create_loop_arg<T>(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      sycl::handler &cgh, Access::Read<Sym<T> *> &a);
+  friend ParticleDatImplGetT<T> ParticleLoopImplementation::create_loop_arg<T>(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      sycl::handler &cgh, Access::Write<Sym<T> *> &a);
+
+  friend ParticleDatImplGetConstT<T>
+  ParticleLoopImplementation::create_loop_arg<T>(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      sycl::handler &cgh, Access::Read<ParticleDatT<T> *> &a);
+  friend ParticleDatImplGetT<T> ParticleLoopImplementation::create_loop_arg<T>(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      sycl::handler &cgh, Access::Write<ParticleDatT<T> *> &a);
 
 private:
 protected:
@@ -63,7 +118,7 @@ protected:
    * from ParticleLoop. These pointers must not be cached then used later
    * without recalling this function.
    */
-  inline T ***impl_get() {
+  inline ParticleDatImplGetT<T> impl_get() {
     // write_callback is called in the cell dat
     return this->cell_dat.impl_get();
   }
@@ -73,8 +128,27 @@ protected:
    * from ParticleLoop. These pointers must not be cached then used later
    * without recalling this function.
    */
-  inline T *const *const *impl_get_const() {
+  inline ParticleDatImplGetConstT<T> impl_get_const() {
     return this->cell_dat.impl_get_const();
+  }
+
+  /// Pointer to the inclusive sum of cell occupancies computed by the
+  /// ParticleGroup
+  INT *d_npart_cell_es;
+  inline void set_d_npart_cell_es(INT *ptr) { this->d_npart_cell_es = ptr; }
+  inline INT *get_d_npart_cell_es() { return this->d_npart_cell_es; }
+
+  inline void
+  append_particle_data(std::shared_ptr<ParticleDatT<T>> particle_dat,
+                       const std::vector<INT> &h_npart_cell_existing,
+                       const std::vector<INT> &h_npart_cell_to_add,
+                       EventStack &es);
+
+  /**
+   *  Const pointer to the start of a column in a cell. Not to be cached.
+   */
+  inline T const *col_device_const_ptr(const int cell, const int col) {
+    return this->cell_dat.col_device_ptr(cell, col);
   }
 
 public:
@@ -190,12 +264,14 @@ public:
    *  @param cells Cell indices of the new particles.
    *  @param layers Layer (row) indices of the new particles.
    *  @param data Particle data to copy into the ParticleDat.
+   *  @param es EventStack to push events onto.
    */
   inline void append_particle_data(const int npart_new,
                                    const bool new_data_exists,
                                    std::vector<INT> &cells,
                                    std::vector<INT> &layers,
-                                   std::vector<T> &data);
+                                   std::vector<T> &data, EventStack &es);
+
   /**
    *  Realloc the underlying CellDat such that the indicated new number of
    *  particles can be stored.
@@ -291,6 +367,7 @@ public:
    */
   template <typename U>
   inline sycl::event set_npart_cells_device(const U *d_npart_cell_in) {
+    this->write_callback_wrapper(0);
     const size_t ncell = static_cast<size_t>(this->ncell);
     int *k_npart_cell = this->d_npart_cell;
     sycl::event event =
@@ -310,6 +387,7 @@ public:
    */
   template <typename U>
   inline void set_npart_cells_host(const U *h_npart_cell_in) {
+    this->write_callback_wrapper(0);
     for (int cellx = 0; cellx < this->ncell; cellx++) {
       this->h_npart_cell[cellx] = h_npart_cell_in[cellx];
     }
@@ -322,6 +400,7 @@ public:
    *  @param npart New particle count for cell.
    */
   inline void set_npart_cell(const INT cell, const int npart) {
+    this->write_callback_wrapper(0);
     this->h_npart_cell[cell] = npart;
     this->sycl_target->queue
         .memcpy(this->d_npart_cell + cell, this->h_npart_cell + cell,
@@ -336,6 +415,7 @@ public:
    *  @param npart std::vector of new particle counts per cell.
    */
   inline void set_npart_cells(std::vector<INT> &npart) {
+    this->write_callback_wrapper(0);
     NESOASSERT(npart.size() >= this->ncell, "bad vector size");
     for (int cellx = 0; cellx < this->ncell; cellx++) {
       this->h_npart_cell[cellx] = npart[cellx];
@@ -352,6 +432,7 @@ public:
    */
   template <typename U>
   inline void set_npart_cells(const BufferHost<U> &h_npart_cell_in) {
+    this->write_callback_wrapper(0);
     NESOASSERT(h_npart_cell_in.size >= this->ncell, "bad BufferHost size");
     for (int cellx = 0; cellx < this->ncell; cellx++) {
       this->h_npart_cell[cellx] = h_npart_cell_in.ptr[cellx];
@@ -370,6 +451,7 @@ public:
   template <typename U>
   inline sycl::event
   async_set_npart_cells(const BufferHost<U> &h_npart_cell_in) {
+    this->write_callback_wrapper(0);
     NESOASSERT(h_npart_cell_in.size >= this->ncell, "bad BufferHost size");
     for (int cellx = 0; cellx < this->ncell; cellx++) {
       this->h_npart_cell[cellx] = h_npart_cell_in.ptr[cellx];
@@ -525,16 +607,19 @@ template <typename T> inline void ParticleDatT<T>::trim_cell_dat_rows() {
 }
 
 /*
- *  Append particle data to the ParticleDat. wait() must be called on the queue
- *  before use of the data. npart_host_to_device should be called on completion.
- *
+ *  Append particle data to the ParticleDat. wait() must be called on the
+ * event_stack before use of the data. Assumes the dat has already been
+ * reallocated.
  */
 template <typename T>
-inline void ParticleDatT<T>::append_particle_data(const int npart_new,
-                                                  const bool new_data_exists,
-                                                  std::vector<INT> &cells,
-                                                  std::vector<INT> &layers,
-                                                  std::vector<T> &data) {
+inline void ParticleDatT<T>::append_particle_data(
+    const int npart_new, const bool new_data_exists, std::vector<INT> &cells,
+    std::vector<INT> &layers, std::vector<T> &data, EventStack &es) {
+
+  if (npart_new == 0) {
+    return;
+  }
+
   this->write_callback_wrapper(0);
 
   NESOASSERT(npart_new <= cells.size(), "incorrect number of cells");
@@ -552,7 +637,7 @@ inline void ParticleDatT<T>::append_particle_data(const int npart_new,
   if (new_data_exists) {
     sycl::buffer<T, 1> b_data(data.data(),
                               sycl::range<1>{size_npart_new * this->ncomp});
-    this->sycl_target->queue.submit([&](sycl::handler &cgh) {
+    es.push(this->sycl_target->queue.submit([&](sycl::handler &cgh) {
       // The cell counts on this dat
       auto a_cells = b_cells.get_access<sycl::access::mode::read>(cgh);
       auto a_layers = b_layers.get_access<sycl::access::mode::read>(cgh);
@@ -566,9 +651,9 @@ inline void ParticleDatT<T>::append_particle_data(const int npart_new,
           d_cell_dat_ptr[cellx][cx][layerx] = a_data[cx * npart_new + idx];
         }
       });
-    });
+    }));
   } else {
-    this->sycl_target->queue.submit([&](sycl::handler &cgh) {
+    es.push(this->sycl_target->queue.submit([&](sycl::handler &cgh) {
       // The cell counts on this dat
       auto a_cells = b_cells.get_access<sycl::access::mode::read>(cgh);
       auto a_layers = b_layers.get_access<sycl::access::mode::read>(cgh);
@@ -581,12 +666,56 @@ inline void ParticleDatT<T>::append_particle_data(const int npart_new,
           d_cell_dat_ptr[cellx][cx][layerx] = ((T)0);
         }
       });
-    });
+    }));
   }
 
   for (int px = 0; px < npart_new; px++) {
     auto cellx = cells[px];
     this->h_npart_cell[cellx]++;
+  }
+  es.push(this->async_npart_host_to_device());
+}
+/*
+ *  Append particle data to the ParticleDat. wait() must be called on the
+ * event_stack before use of the data. Assumes the dat has already been
+ * reallocated.
+ */
+template <typename T>
+inline void ParticleDatT<T>::append_particle_data(
+    ParticleDatSharedPtr<T> particle_dat,
+    const std::vector<INT> &h_npart_cell_existing,
+    const std::vector<INT> &h_npart_cell_to_add, EventStack &es) {
+
+  if (particle_dat != nullptr) {
+    NESOASSERT(
+        this->ncell == particle_dat->ncell,
+        "Source and destination ParticleDats have different cell counts");
+    NESOASSERT(this->ncomp == particle_dat->ncomp,
+               "Source and destination ParticleDats have different number of "
+               "components");
+  }
+
+  this->write_callback_wrapper(0);
+  for (int cellx = 0; cellx < this->ncell; cellx++) {
+    const INT layer_start = h_npart_cell_existing.at(cellx);
+    const INT layer_to_add = h_npart_cell_to_add.at(cellx);
+    if (layer_to_add > 0) {
+
+      for (int colx = 0; colx < this->ncomp; colx++) {
+        auto d_ptr_dst = this->cell_dat.col_device_ptr(cellx, colx);
+        NESOASSERT(d_ptr_dst != nullptr, "Bad dst ptr.");
+        if (particle_dat == nullptr) {
+          es.push(this->sycl_target->queue.fill(
+              d_ptr_dst + layer_start, static_cast<T>(0), layer_to_add));
+        } else {
+          const auto d_ptr_src =
+              particle_dat->cell_dat.col_device_ptr(cellx, colx);
+          NESOASSERT(d_ptr_src != nullptr, "Bad src ptr.");
+          es.push(this->sycl_target->queue.memcpy(
+              d_ptr_dst + layer_start, d_ptr_src, layer_to_add * sizeof(T)));
+        }
+      }
+    }
   }
 }
 

@@ -6,7 +6,7 @@ inline void particle_sub_group_creation(
 ) {
   
   // Create new sub group
-  auto particle_sub_group = std::make_shared<ParticleSubGroup>(
+  auto sub_group = particle_sub_group(
     // The source ParticleGroup
     particle_group,
 
@@ -21,6 +21,15 @@ inline void particle_sub_group_creation(
 
     // The remaining arguments are the ParticleLoop compliant arguments for the
     // kernel with selects particles.
+    Access::read(Sym<INT>("ID"))
+  );
+
+  // Create an additional sub group from an existing sub group.
+  auto sub_group1 = particle_sub_group(
+    sub_group,
+    [=](auto ID) {
+      return (ID[0] % 4 == 0);
+    }, 
     Access::read(Sym<INT>("ID"))
   );
 

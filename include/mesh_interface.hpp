@@ -203,8 +203,8 @@ public:
     // mpi decompose
     // mpi_dims has monotonically decreasing order
     int rank, size;
-    MPICHK(MPI_Comm_size(comm, &size));
-    MPICHK(MPI_Comm_rank(comm, &rank));
+    MPICHK(MPI_Comm_size(this->comm, &size));
+    MPICHK(MPI_Comm_rank(this->comm, &rank));
     MPICHK(MPI_Dims_create(size, ndim, mpi_dims));
 
     for (int dimx = 0; dimx < ndim; dimx++) {
@@ -222,8 +222,8 @@ public:
 
     // create MPI cart comm with a decomposition that roughly makes sense for
     // the shape of the domain
-    MPICHK(MPI_Cart_create(comm, ndim, mpi_dims_reordered.data(), periods, 1,
-                           &comm_cart));
+    MPICHK(MPI_Cart_create(this->comm, ndim, mpi_dims_reordered.data(), periods,
+                           1, &comm_cart));
     this->allocated = true;
 
     // get the information about the cart comm that was actually created

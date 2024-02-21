@@ -7,7 +7,7 @@
 
 using namespace NESO::Particles;
 
-TEST(ParticleIO, H5Part) {
+TEST(ParticleIO, h5_part) {
 
 #ifdef NESO_PARTICLES_HDF5
   const int ndim = 2;

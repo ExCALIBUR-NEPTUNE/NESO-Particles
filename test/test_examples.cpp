@@ -21,8 +21,6 @@ ParticleGroupSharedPtr particle_loop_common(const int N = 1093) {
   auto mesh = std::make_shared<CartesianHMesh>(MPI_COMM_WORLD, ndim, dims,
                                                cell_extent, subdivision_order);
 
-  const int cell_count = mesh->get_cell_count();
-
   auto sycl_target =
       std::make_shared<SYCLTarget>(GPU_SELECTOR, mesh->get_comm());
 
@@ -31,6 +29,7 @@ ParticleGroupSharedPtr particle_loop_common(const int N = 1093) {
 
   ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
                              ParticleProp(Sym<REAL>("V"), 3),
+                             ParticleProp(Sym<REAL>("Q"), 1),
                              ParticleProp(Sym<REAL>("P2"), ndim),
                              ParticleProp(Sym<INT>("CELL_ID"), 1, true),
                              ParticleProp(Sym<INT>("LOOP_INDEX"), 2),
@@ -42,7 +41,6 @@ ParticleGroupSharedPtr particle_loop_common(const int N = 1093) {
                                   domain->mesh->get_cell_count()));
 
   const int rank = sycl_target->comm_pair.rank_parent;
-  const int size = sycl_target->comm_pair.size_parent;
   const INT id_offset = rank * N;
 
   std::mt19937 rng_pos(52234234 + rank);
@@ -64,6 +62,7 @@ ParticleGroupSharedPtr particle_loop_common(const int N = 1093) {
     }
     initial_distribution[Sym<INT>("CELL_ID")][px][0] = 0;
     initial_distribution[Sym<INT>("ID")][px][0] = px + id_offset;
+    initial_distribution[Sym<REAL>("Q")][px][0] = 1.0;
   }
 
   A->add_particles_local(initial_distribution);
@@ -80,19 +79,19 @@ ParticleGroupSharedPtr particle_loop_common(const int N = 1093) {
 
 } // namespace
 
+#include "example_sources/example_particle_descendant_products.hpp"
 #include "example_sources/example_particle_loop_0.hpp"
 #include "example_sources/example_particle_loop_0_nc.hpp"
 #include "example_sources/example_particle_loop_cell_dat_const.hpp"
 #include "example_sources/example_particle_loop_global_array.hpp"
+#include "example_sources/example_particle_loop_index.hpp"
 #include "example_sources/example_particle_loop_local_array.hpp"
+#include "example_sources/example_particle_loop_sym_vector.hpp"
 #include "example_sources/example_particle_sub_group_creation.hpp"
 #include "example_sources/example_particle_sub_group_loop.hpp"
 
 TEST(Examples, particle_loop_base) {
   auto A = particle_loop_common();
-  auto domain = A->domain;
-  auto mesh = domain->mesh;
-  auto sycl_target = A->sycl_target;
 
   advection_example(A);
   advection_example_no_comments(A);
@@ -101,8 +100,16 @@ TEST(Examples, particle_loop_base) {
   cell_dat_const_example(A);
   particle_sub_group_creation(A);
   particle_sub_group_loop(A);
+  sym_vector_example(A);
+  advection_example_loop_index(A);
+
+  auto B = particle_loop_common(5);
+  descendant_products_example(B);
 
   A->free();
-  sycl_target->free();
-  mesh->free();
+  A->sycl_target->free();
+  A->domain->mesh->free();
+  B->free();
+  B->sycl_target->free();
+  B->domain->mesh->free();
 }

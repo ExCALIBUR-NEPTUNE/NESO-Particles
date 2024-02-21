@@ -13,6 +13,7 @@
 #include "cell_dat_compression.hpp"
 #include "cell_dat_move.hpp"
 #include "compute_target.hpp"
+#include "containers/product_matrix.hpp"
 #include "domain.hpp"
 #include "global_mapping.hpp"
 #include "global_move.hpp"
@@ -26,8 +27,11 @@
 
 using namespace cl;
 namespace NESO::Particles {
-
+class DescendantProducts;
 class ParticleSubGroup;
+namespace ParticleSubGroupImplementation {
+class SubGroupSelector;
+}
 
 /**
  * Type to replace std::variant<Sym<INT>, Sym<REAL>> as the version tracking
@@ -78,6 +82,7 @@ struct ParticleDatVersionT {
  *  compute device.
  */
 class ParticleGroup {
+  friend class ParticleSubGroupImplementation::SubGroupSelector;
   friend class ParticleSubGroup;
 
 protected:
@@ -86,17 +91,118 @@ protected:
   typedef ParticleDatVersionT ParticleDatVersion;
   typedef std::map<ParticleDatVersion, int64_t> ParticleDatVersionTracker;
 
-private:
   int ncell;
   BufferHost<INT> h_npart_cell;
+  BufferDevice<INT> d_npart_cell;
 
   BufferDevice<INT> d_remove_cells;
   BufferDevice<INT> d_remove_layers;
 
-  template <typename T> inline void realloc_dat(ParticleDatSharedPtr<T> &dat) {
+  template <typename T>
+  inline void realloc_dat_start(ParticleDatSharedPtr<T> &dat) {
     dat->realloc(this->h_npart_cell);
+  };
+  template <typename T>
+  inline void realloc_dat_wait(ParticleDatSharedPtr<T> &dat) {
     dat->wait_realloc();
   };
+  template <typename T> inline void realloc_dat(ParticleDatSharedPtr<T> &dat) {
+    this->realloc_dat_start(dat);
+    this->realloc_dat_wait(dat);
+  };
+
+  inline void realloc_all_dats() {
+    for (auto &dat : this->particle_dats_real) {
+      realloc_dat_start(dat.second);
+    }
+    for (auto &dat : this->particle_dats_int) {
+      realloc_dat_start(dat.second);
+    }
+    for (auto &dat : this->particle_dats_real) {
+      realloc_dat_wait(dat.second);
+    }
+    for (auto &dat : this->particle_dats_int) {
+      realloc_dat_wait(dat.second);
+    }
+  }
+
+  inline void check_dats_and_group_agree() {
+    for (auto &dat : particle_dats_real) {
+      for (int cellx = 0; cellx < this->ncell; cellx++) {
+        NESOASSERT(dat.second->h_npart_cell[cellx] ==
+                       this->h_npart_cell.ptr[cellx],
+                   "Bad cell count");
+      }
+    }
+    for (auto &dat : particle_dats_int) {
+      for (int cellx = 0; cellx < this->ncell; cellx++) {
+        NESOASSERT(dat.second->h_npart_cell[cellx] ==
+                       this->h_npart_cell.ptr[cellx],
+                   "Bad cell count");
+      }
+    }
+  }
+
+  template <typename T>
+  inline bool existing_compatible_dat(ParticleDatSharedPtr<T> particle_dat) {
+    auto sym = particle_dat->sym;
+    if (this->contains_dat(sym)) {
+      auto existing_dat = this->get_dat(sym);
+      NESOASSERT(
+          existing_dat->ncomp == particle_dat->ncomp,
+          "Existing ParticleDat and ParticleDat to add are incompaptible");
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  inline void get_new_layers(const int npart, const INT *RESTRICT cells_ptr,
+                             INT *RESTRICT layers_ptr) {
+    buffer_memcpy(this->d_npart_cell, this->h_npart_cell).wait_and_throw();
+    INT *k_npart_cell = this->d_npart_cell.ptr;
+    const INT k_ncell = this->ncell;
+    this->sycl_target->queue
+        .submit([&](sycl::handler &cgh) {
+          cgh.parallel_for<>(
+              sycl::range<1>(static_cast<size_t>(npart)), [=](sycl::id<1> idx) {
+                const INT cell = cells_ptr[idx];
+                if ((-1 < cell) && (cell < k_ncell)) {
+                  sycl::atomic_ref<INT, sycl::memory_order::relaxed,
+                                   sycl::memory_scope::device>
+                      element_atomic(k_npart_cell[cell]);
+                  const INT layer = element_atomic.fetch_add((INT)1);
+                  layers_ptr[idx] = layer;
+                } else {
+                  layers_ptr[idx] = -1;
+                }
+              });
+        })
+        .wait_and_throw();
+    buffer_memcpy(this->h_npart_cell, this->d_npart_cell).wait_and_throw();
+  }
+
+  template <typename T>
+  inline void zero_dat_properties(std::shared_ptr<T> dat, const int npart,
+                                  const INT *RESTRICT cells_ptr,
+                                  const INT *RESTRICT layers_ptr,
+                                  EventStack &es) {
+    auto dat_ptr = dat->impl_get();
+    const int k_ncomp = dat->ncomp;
+    es.push(this->sycl_target->queue.submit([&](sycl::handler &cgh) {
+      cgh.parallel_for<>(sycl::range<1>(static_cast<size_t>(npart)),
+                         [=](sycl::id<1> idx) {
+                           const INT cell = cells_ptr[idx];
+                           const INT layer = layers_ptr[idx];
+                           if (layer > -1) {
+                             for (int nx = 0; nx < k_ncomp; nx++) {
+                               dat_ptr[cell][nx][layer] = 0;
+                             }
+                           }
+                         });
+    }));
+  }
+
   template <typename T> inline void push_particle_spec(ParticleProp<T> prop) {
     this->particle_spec.push(prop);
   };
@@ -107,7 +213,7 @@ private:
   // method to map particle positions to global cells
   std::shared_ptr<MeshHierarchyGlobalMap> mesh_hierarchy_global_map;
   // neighbour communication context
-  LocalMove local_move_ctx;
+  std::unique_ptr<LocalMove> local_move_ctx;
   // members for moving particles between local cells
   CellMove cell_move_ctx;
 
@@ -140,11 +246,19 @@ private:
   }
 
   template <typename T>
+  inline void remove_particle_dat_common(ParticleDatSharedPtr<T> particle_dat) {
+    this->particle_dat_versions.erase(particle_dat->sym);
+    this->particle_spec.remove(ParticleProp(
+        particle_dat->sym, particle_dat->ncomp, particle_dat->positions));
+  }
+
+  template <typename T>
   inline void add_particle_dat_common(ParticleDatSharedPtr<T> particle_dat) {
     realloc_dat(particle_dat);
     push_particle_spec(ParticleProp(particle_dat->sym, particle_dat->ncomp,
                                     particle_dat->positions));
     particle_dat->set_npart_cells_host(this->h_npart_cell.ptr);
+    particle_dat->set_d_npart_cell_es(this->dh_npart_cell_es->d_buffer.ptr);
     particle_dat->npart_host_to_device();
     this->add_invalidate_callback(particle_dat);
     // This store is initialised with 1 and the to test keys should be
@@ -156,11 +270,21 @@ private:
     this->particle_dat_versions[key] = value;
   }
 
-protected:
+  /// BufferDeviceHost holding the exclusive sum of the number of particles in
+  /// each cell.
+  std::shared_ptr<BufferDeviceHost<INT>> dh_npart_cell_es;
+
+  /// The sub group creation requires get_npart_local temporary space and we
+  /// create this space here on the parent subgroup such that it is shared
+  /// across all subgroups to avoid exessive memory usage/realloc
+  std::shared_ptr<BufferDevice<int>> d_sub_group_layers;
+
   /**
-   * Returns true if the passed version is behind and was updated.
+   * Returns true if the passed version is behind and can be updated. By
+   * default updates the passed version.
    */
-  inline bool check_validation(ParticleDatVersionTracker &to_check) {
+  inline bool check_validation(ParticleDatVersionTracker &to_check,
+                               const bool update_to_check = true) {
     bool updated = false;
     for (auto &item : to_check) {
       const auto &key = item.first;
@@ -172,7 +296,9 @@ protected:
       // updated is required on the object that holds to check.
       if (local_value != to_check_value) {
         updated = true;
-        to_check.at(key) = local_value;
+        if (update_to_check) {
+          to_check.at(key) = local_value;
+        }
       }
       // If this bool has been set then an update is always required.
       if (local_bool) {
@@ -180,6 +306,17 @@ protected:
       }
     }
     return updated;
+  }
+
+  inline void recompute_npart_cell_es() {
+    auto h_ptr_s = this->h_npart_cell.ptr;
+    auto h_ptr = this->dh_npart_cell_es->h_buffer.ptr;
+    INT total = 0;
+    for (int cellx = 0; cellx < this->ncell; cellx++) {
+      h_ptr[cellx] = total;
+      total += h_ptr_s[cellx];
+    }
+    this->dh_npart_cell_es->host_to_device();
   }
 
 public:
@@ -209,7 +346,6 @@ public:
   std::shared_ptr<Sym<INT>> mpi_rank_sym;
   /// ParticleDat storing particle MPI ranks.
   ParticleDatSharedPtr<INT> mpi_rank_dat;
-
   /// ParticleSpec of all the ParticleDats of this ParticleGroup.
   ParticleSpec particle_spec;
 
@@ -233,25 +369,26 @@ public:
       : domain(domain), sycl_target(sycl_target),
         ncell(domain->mesh->get_cell_count()), d_remove_cells(sycl_target, 1),
         d_remove_layers(sycl_target, 1), h_npart_cell(sycl_target, 1),
+        d_npart_cell(sycl_target, 1),
         layer_compressor(sycl_target, ncell, particle_dats_real,
                          particle_dats_int),
         global_move_ctx(sycl_target, layer_compressor, particle_dats_real,
                         particle_dats_int),
-        local_move_ctx(
-            sycl_target, layer_compressor, particle_dats_real,
-            particle_dats_int,
-            domain->mesh->get_local_communication_neighbours().size(),
-            domain->mesh->get_local_communication_neighbours().data()),
         cell_move_ctx(sycl_target, this->ncell, layer_compressor,
-                      particle_dats_real, particle_dats_int)
-
-  {
+                      particle_dats_real, particle_dats_int) {
 
     this->h_npart_cell.realloc_no_copy(this->ncell);
+    this->d_npart_cell.realloc_no_copy(this->ncell);
+
+    this->dh_npart_cell_es =
+        std::make_shared<BufferDeviceHost<INT>>(sycl_target, this->ncell);
 
     for (int cellx = 0; cellx < this->ncell; cellx++) {
       this->h_npart_cell.ptr[cellx] = 0;
+      this->dh_npart_cell_es->h_buffer.ptr[cellx] = 0;
     }
+    buffer_memcpy(this->d_npart_cell, this->h_npart_cell).wait();
+    this->dh_npart_cell_es->host_to_device();
 
     for (auto &property : particle_spec.properties_real) {
       add_particle_dat(ParticleDat(sycl_target, property, this->ncell));
@@ -265,7 +402,12 @@ public:
         ParticleDat(sycl_target, ParticleProp(*mpi_rank_sym, 2), ncell);
     add_particle_dat(mpi_rank_dat);
     this->global_move_ctx.set_mpi_rank_dat(mpi_rank_dat);
-    this->local_move_ctx.set_mpi_rank_dat(mpi_rank_dat);
+
+    this->local_move_ctx = std::make_unique<LocalMove>(
+        sycl_target, layer_compressor, particle_dats_real, particle_dats_int,
+        domain->mesh->get_local_communication_neighbours().size(),
+        domain->mesh->get_local_communication_neighbours().data());
+    this->local_move_ctx->set_mpi_rank_dat(mpi_rank_dat);
 
     this->layer_compressor.set_cell_id_dat(this->cell_id_dat);
     this->cell_move_ctx.set_cell_id_dat(this->cell_id_dat);
@@ -277,6 +419,8 @@ public:
     // call the callback on the local mapper to complete the setup of that
     // object
     this->domain->local_mapper->particle_group_callback(*this);
+    this->d_sub_group_layers =
+        std::make_shared<BufferDevice<int>>(sycl_target, 1);
   }
   ~ParticleGroup() {}
 
@@ -320,6 +464,95 @@ public:
    *  @param particle_data New particles to add.
    */
   inline void add_particles_local(ParticleSet &particle_data);
+
+  /**
+   *  Add particles only to this MPI rank. It is assumed that the added
+   *  particles are in the domain region owned by this MPI rank. If not, see
+   *  `ParticleGroup::add_particles`.
+   *
+   *  @param particle_data New particles to add.
+   */
+  inline void add_particles_local(ParticleSetSharedPtr particle_data);
+
+protected:
+  inline void add_particles_local(std::shared_ptr<ProductMatrix> product_matrix,
+                                  const INT *d_cells, const INT *d_layers,
+                                  ParticleGroup *source_particle_group);
+
+public:
+  /**
+   *  Add particles only to this MPI rank. It is assumed that the added
+   *  particles are in the domain region owned by this MPI rank. If not, see
+   *  `ParticleGroup::add_particles`. Particle properties which exist on the
+   *  ParticleGroup and not in the ProductMatrix will be zero initialised.
+   *  Particle properties which exist on the ProductMatrix and not in the
+   *  ParticleGroup will be ignored.
+   *
+   *  @param product_matrix New particles to add.
+   */
+  inline void
+  add_particles_local(std::shared_ptr<ProductMatrix> product_matrix);
+
+  /**
+   *  Add new particles to this ParticleGroup via a DescendantProducts
+   *  instance. If no alternative source ParticleGroup is provided then
+   *  properties are either defined in the DescendantProducts, from which they
+   *  are copied, or if the property is not defined in the DescendantProducts
+   *  then the property values are copied from the parent particle.
+   *
+   *  When a source ParticleGroup is provided: Properties which are defined in
+   *  the DescendantProducts are copied from the DescendantProducts. If a
+   *  property is defined in the source ParticleGroup and not in this
+   *  ParticleGroup then it is ignored. If a property is defined in this
+   *  ParticleGroup and not in the source ParticleGroup then the values are
+   *  zero initialised. Properties not defined in the DescendantProducts which
+   *  exist as particle properties in both the source ParticleGroup and this
+   *  ParticleGroup are copied from the parent particles. When the source
+   *  ParticleGroup is specified the parent indices in DescendantProducts
+   *  always refer to particles in the parent ParticleGroup.
+   *
+   *  @param descendant_products New particles to add.
+   *  @param source_particleGroup Alternative ParticleGroup to use as the set
+   *  of parent particles. The descendant_products parent indices must have
+   *  been created with this ParticleGroup. By default no alternative
+   *  ParticleGroup is specified and the parents are assumed to be in the
+   *  ParticleGroup on which add_particles_local was called.
+   */
+  inline void add_particles_local(
+      std::shared_ptr<DescendantProducts> descendant_products,
+      std::shared_ptr<ParticleGroup> source_particle_group = nullptr);
+
+  /**
+   * Add particles to this ParticleGroup from another ParticleGroup. Properties
+   * which exist in the destination ParticleGroup and not the source
+   * ParticleGroup are zero initialised. Properties which exist in both
+   * ParticleGroups are copied. Properties which only exist in the source
+   * ParticleGroup are ignored.
+   *
+   * Particle properties will be copied cell-wise from the source to
+   * destination ParticleGroups. This cell-wise copy requires that the source
+   * and destination domains share the same number of cells on each MPI rank.
+   *
+   *  @param particle_group New particles to add.
+   */
+  inline void
+  add_particles_local(std::shared_ptr<ParticleGroup> particle_group);
+
+  /**
+   * Add particles to this ParticleGroup from another ParticleGroup. Properties
+   * which exist in the destination ParticleGroup and not the source
+   * ParticleGroup are zero initialised. Properties which exist in both
+   * ParticleGroups are copied. Properties which only exist in the source
+   * ParticleGroup are ignored.
+   *
+   * Particle properties will be copied cell-wise from the source to
+   * destination ParticleGroups. This cell-wise copy requires that the source
+   * and destination domains share the same number of cells on each MPI rank.
+   *
+   *  @param particle_sub_group New particles to add.
+   */
+  inline void
+  add_particles_local(std::shared_ptr<ParticleSubGroup> particle_sub_group);
 
   /**
    *  Get the total number of particles on this MPI rank.
@@ -411,6 +644,11 @@ public:
   }
 
   /**
+   * Clear all particles from the ParticleGroup on the calling MPI rank.
+   */
+  inline void clear();
+
+  /**
    *  Remove particles from the ParticleGroup.
    *
    *  @param npart Number of particles to remove.
@@ -428,6 +666,15 @@ public:
    */
   template <typename T>
   inline void remove_particles(const int npart, T *usm_cells, T *usm_layers);
+
+  /**
+   *  Remove all the particles particles from the ParticleGroup which are
+   *  members of a ParticleSubGroup.
+   *
+   *  @param particle_sub_group.
+   */
+  inline void
+  remove_particles(std::shared_ptr<ParticleSubGroup> particle_sub_group);
 
   /**
    * Get the number of particles in a cell.
@@ -494,6 +741,8 @@ public:
     for (int cellx = 0; cellx < this->ncell; cellx++) {
       this->h_npart_cell.ptr[cellx] = this->position_dat->h_npart_cell[cellx];
     }
+    buffer_memcpy(this->d_npart_cell, this->h_npart_cell).wait_and_throw();
+    this->recompute_npart_cell_es();
   }
 
   /**
@@ -513,8 +762,8 @@ public:
   inline void remove_particle_dat(Sym<REAL> sym) {
     NESOASSERT(this->particle_dats_real.count(sym) == 1,
                "ParticleDat not found.");
+    this->remove_particle_dat_common(this->particle_dats_real.at(sym));
     this->particle_dats_real.erase(sym);
-    this->particle_dat_versions.erase(sym);
   }
   /**
    *  Remove a ParticleDat from the ParticleGroup
@@ -524,260 +773,62 @@ public:
   inline void remove_particle_dat(Sym<INT> sym) {
     NESOASSERT(this->particle_dats_int.count(sym) == 1,
                "ParticleDat not found.");
+    this->remove_particle_dat_common(this->particle_dats_int.at(sym));
     this->particle_dats_int.erase(sym);
-    this->particle_dat_versions.erase(sym);
-  }
-};
-
-inline void
-ParticleGroup::add_particle_dat(ParticleDatSharedPtr<REAL> particle_dat) {
-  NESOASSERT(this->particle_dats_real.count(particle_dat->sym) == 0,
-             "ParticleDat Sym already exists in ParticleGroup.");
-  this->particle_dats_real[particle_dat->sym] = particle_dat;
-  // Does this dat hold particle positions?
-  if (particle_dat->positions) {
-    this->position_dat = particle_dat;
-    this->position_sym = std::make_shared<Sym<REAL>>(particle_dat->sym.name);
-  }
-  add_particle_dat_common(particle_dat);
-}
-inline void
-ParticleGroup::add_particle_dat(ParticleDatSharedPtr<INT> particle_dat) {
-  NESOASSERT(this->particle_dats_int.count(particle_dat->sym) == 0,
-             "ParticleDat Sym already exists in ParticleGroup.");
-  this->particle_dats_int[particle_dat->sym] = particle_dat;
-  // Does this dat hold particle cell ids?
-  if (particle_dat->positions) {
-    this->cell_id_dat = particle_dat;
-    this->cell_id_sym = std::make_shared<Sym<INT>>(particle_dat->sym.name);
-  }
-  add_particle_dat_common(particle_dat);
-}
-
-inline void ParticleGroup::add_particles(){};
-template <typename U>
-inline void ParticleGroup::add_particles(U particle_data){
-
-};
-
-/*
- * Number of bytes required to store the data for one particle.
- */
-inline size_t ParticleGroup::particle_size() {
-  size_t s = 0;
-  for (auto &dat : this->particle_dats_real) {
-    s += dat.second->cell_dat.row_size();
-  }
-  for (auto &dat : this->particle_dats_int) {
-    s += dat.second->cell_dat.row_size();
-  }
-  return s;
-};
-
-inline void ParticleGroup::add_particles_local(ParticleSet &particle_data) {
-  // loop over the cells of the new particles and allocate more space in the
-  // dats
-
-  const int npart_new = particle_data.npart;
-  auto cellids = particle_data.get(*this->cell_id_sym);
-  std::vector<INT> layers(npart_new);
-  for (int px = 0; px < npart_new; px++) {
-    auto cellindex = cellids[px];
-    NESOASSERT((cellindex >= 0) && (cellindex < this->ncell),
-               "Bad particle cellid)");
-
-    layers[px] = this->h_npart_cell.ptr[cellindex]++;
   }
 
-  for (auto &dat : this->particle_dats_real) {
-    realloc_dat(dat.second);
-    dat.second->append_particle_data(npart_new,
-                                     particle_data.contains(dat.first), cellids,
-                                     layers, particle_data.get(dat.first));
-  }
+  /**
+   * Create a ParticleSet containing the data from particles held in the
+   * ParticleGroup. e.g. to Extract the first two particles from the second
+   * cell:
+   *
+   * cells  = [1, 1]
+   * layers = [0, 1]
+   *
+   * @param cells Vector of cell indices of particles to extract.
+   * @param cells Vector of layer indices of particles to extract.
+   * @returns ParticleSet of particle data.
+   */
+  inline ParticleSetSharedPtr get_particles(std::vector<INT> &cells,
+                                            std::vector<INT> &layers) {
+    NESOASSERT(cells.size() == layers.size(),
+               "Cells and layers vectors have different sizes.");
+    const int num_particles = cells.size();
+    auto ps = std::make_shared<ParticleSet>(num_particles, this->particle_spec);
+    const INT num_cells = this->domain->mesh->get_cell_count();
 
-  for (auto &dat : this->particle_dats_int) {
-    realloc_dat(dat.second);
-    dat.second->append_particle_data(npart_new,
-                                     particle_data.contains(dat.first), cellids,
-                                     layers, particle_data.get(dat.first));
-  }
+    EventStack es;
 
-  // The append is async
-  this->sycl_target->queue.wait();
-  for (auto &dat : particle_dats_real) {
-    dat.second->npart_host_to_device();
-    for (int cellx = 0; cellx < this->ncell; cellx++) {
-      NESOASSERT(dat.second->h_npart_cell[cellx] ==
-                     this->h_npart_cell.ptr[cellx],
-                 "Bad cell count");
-    }
-  }
-  for (auto &dat : particle_dats_int) {
-    dat.second->npart_host_to_device();
-    for (int cellx = 0; cellx < this->ncell; cellx++) {
-      NESOASSERT(dat.second->h_npart_cell[cellx] ==
-                     this->h_npart_cell.ptr[cellx],
-                 "Bad cell count");
-    }
-  }
-}
-
-template <typename T>
-inline void ParticleGroup::remove_particles(const int npart, T *usm_cells,
-                                            T *usm_layers) {
-  this->layer_compressor.remove_particles(npart, usm_cells, usm_layers);
-  this->set_npart_cell_from_dat();
-}
-
-inline void ParticleGroup::remove_particles(const int npart,
-                                            const std::vector<INT> &cells,
-                                            const std::vector<INT> &layers) {
-
-  this->d_remove_cells.realloc_no_copy(npart);
-  this->d_remove_layers.realloc_no_copy(npart);
-
-  auto k_cells = this->d_remove_cells.ptr;
-  auto k_layers = this->d_remove_layers.ptr;
-
-  NESOASSERT(cells.size() >= npart, "Bad cells length compared to npart");
-  NESOASSERT(layers.size() >= npart, "Bad layers length compared to npart");
-
-  auto b_cells = sycl::buffer<INT>(cells.data(), sycl::range<1>(npart));
-  auto b_layers = sycl::buffer<INT>(layers.data(), sycl::range<1>(npart));
-
-  this->sycl_target->queue
-      .submit([&](sycl::handler &cgh) {
-        auto a_cells = b_cells.get_access<sycl::access::mode::read>(cgh);
-        auto a_layers = b_layers.get_access<sycl::access::mode::read>(cgh);
-        cgh.parallel_for<>(sycl::range<1>(static_cast<size_t>(npart)),
-                           [=](sycl::id<1> idx) {
-                             k_cells[idx] = static_cast<INT>(a_cells[idx]);
-                             k_layers[idx] = static_cast<INT>(a_layers[idx]);
-                           });
-      })
-      .wait_and_throw();
-
-  this->remove_particles(npart, this->d_remove_cells.ptr,
-                         this->d_remove_layers.ptr);
-}
-
-/*
- * Perform global move operation to send particles to the MPI ranks stored in
- * the first component of the NESO_MPI_RANK ParticleDat. Must be called
- * collectively on the communicator.
- */
-inline void ParticleGroup::global_move() {
-  this->global_move_ctx.move();
-  this->set_npart_cell_from_dat();
-}
-
-/*
- * Perform local move operation to send particles to the MPI ranks stored in
- * the second component of the NESO_MPI_RANK ParticleDat. Must be called
- * collectively on the communicator.
- */
-inline void ParticleGroup::local_move() {
-  this->local_move_ctx.move();
-  this->set_npart_cell_from_dat();
-}
-
-inline std::string fixed_width_format(INT value) {
-  char buffer[128];
-  const int err = snprintf(buffer, 128, "%ld", value);
-  return std::string(buffer);
-}
-inline std::string fixed_width_format(REAL value) {
-  char buffer[128];
-  const int err = snprintf(buffer, 128, "%f", value);
-  return std::string(buffer);
-}
-
-template <typename... T> inline void ParticleGroup::print(T... args) {
-
-  SymStore print_spec(args...);
-
-  std::cout << "==============================================================="
-               "================="
-            << std::endl;
-  for (int cellx = 0; cellx < this->domain->mesh->get_cell_count(); cellx++) {
-    if (this->h_npart_cell.ptr[cellx] > 0) {
-
-      std::vector<CellData<REAL>> cell_data_real;
-      std::vector<CellData<INT>> cell_data_int;
-
-      int nrow = -1;
-      for (auto &symx : print_spec.syms_real) {
-        auto cell_data =
-            this->particle_dats_real[symx]->cell_dat.get_cell(cellx);
-        cell_data_real.push_back(cell_data);
-        if (nrow >= 0) {
-          NESOASSERT(nrow == cell_data->nrow, "nrow missmatch");
-        }
-        nrow = cell_data->nrow;
+    auto lambda_copy = [&](const std::size_t num_bytes_per_element, auto dat,
+                           const INT particle_index, const INT cell,
+                           const INT layer) {
+      const int ncomp = dat->ncomp;
+      for (int nx = 0; nx < ncomp; nx++) {
+        auto dest_ptr = ps->get_ptr(dat->sym, particle_index, nx);
+        const auto source_ptr = dat->col_device_const_ptr(cell, nx) + layer;
+        es.push(this->sycl_target->queue.memcpy(dest_ptr, source_ptr,
+                                                num_bytes_per_element));
       }
-      for (auto &symx : print_spec.syms_int) {
-        auto cell_data =
-            this->particle_dats_int[symx]->cell_dat.get_cell(cellx);
-        cell_data_int.push_back(cell_data);
-        if (nrow >= 0) {
-          NESOASSERT(nrow == cell_data->nrow, "nrow missmatch");
-        }
-        nrow = cell_data->nrow;
-      }
+    };
 
-      std::cout << "------- " << cellx << " -------" << std::endl;
-      for (auto &symx : print_spec.syms_real) {
-        std::cout << "| " << symx.name << " ";
+    for (int px = 0; px < num_particles; px++) {
+      const INT cell = cells.at(px);
+      const INT layer = layers.at(px);
+      NESOASSERT((cell > -1) && (cell < num_cells), "Cell index not in range.");
+      NESOASSERT((layer > -1) && (layer < this->get_npart_cell(cell)),
+                 "Layer index not in range.");
+      for (auto &dat : this->particle_dats_real) {
+        lambda_copy(sizeof(REAL), dat.second, px, cell, layer);
       }
-      for (auto &symx : print_spec.syms_int) {
-        std::cout << "| " << symx.name << " ";
-      }
-      std::cout << "|" << std::endl;
-
-      for (int rowx = 0; rowx < nrow; rowx++) {
-        for (auto &cx : cell_data_real) {
-          std::cout << "| ";
-          for (int colx = 0; colx < cx->ncol; colx++) {
-            std::cout << fixed_width_format((*cx)[colx][rowx]) << " ";
-          }
-        }
-        for (auto &cx : cell_data_int) {
-          std::cout << "| ";
-          for (int colx = 0; colx < cx->ncol; colx++) {
-            std::cout << fixed_width_format((*cx)[colx][rowx]) << " ";
-          }
-        }
-
-        std::cout << "|" << std::endl;
+      for (auto &dat : this->particle_dats_int) {
+        lambda_copy(sizeof(INT), dat.second, px, cell, layer);
       }
     }
+
+    es.wait();
+    return ps;
   }
-
-  std::cout << "==============================================================="
-               "================="
-            << std::endl;
-}
-
-/*
- * Perform global move operation. Uses particle positions to determine
- * global/neighbour MPI ranks and uses the global then local move methods (in
- * that order). Must be called collectively on the communicator.
- */
-inline void ParticleGroup::hybrid_move() {
-
-  reset_mpi_ranks(this->mpi_rank_dat);
-  this->domain->local_mapper->map(*this);
-  this->mesh_hierarchy_global_map->execute();
-
-  this->global_move_ctx.move();
-  this->set_npart_cell_from_dat();
-
-  this->domain->local_mapper->map(*this, 0);
-
-  this->local_move_ctx.move();
-  this->set_npart_cell_from_dat();
-}
+};
 
 typedef std::shared_ptr<ParticleGroup> ParticleGroupSharedPtr;
 
