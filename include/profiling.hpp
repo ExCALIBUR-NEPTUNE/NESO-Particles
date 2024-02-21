@@ -59,6 +59,7 @@ struct ProfileRegion {
   std::chrono::high_resolution_clock::time_point time_end;
   std::string key1;
   std::string key2;
+  int level;
 
   /**
    * Create new ProfileRegion.
@@ -66,8 +67,9 @@ struct ProfileRegion {
    * @param key1 First key for ProfileRegion.
    * @param key2 Second key for ProfileRegion.
    */
-  ProfileRegion(const std::string key1, const std::string key2)
-      : time_start(profile_timestamp()), key1(key1), key2(key2) {}
+  ProfileRegion(const std::string key1, const std::string key2,
+                const int level = 0)
+      : time_start(profile_timestamp()), key1(key1), key2(key2), level(level) {}
 
   /**
    * End the ProfileRegion.
@@ -215,7 +217,9 @@ public:
       const auto e1 = rx.key2;
       const auto e2 = profile_elapsed(this->time_start, rx.time_start);
       const auto e3 = profile_elapsed(this->time_start, rx.time_end);
-      fh << "[\"" << e0 << "\",\"" << e1 << "\"," << e2 << "," << e3 << "]";
+      const auto e4 = rx.level;
+      fh << "[\"" << e0 << "\",\"" << e1 << "\"," << e2 << "," << e3 << ","
+         << e4 << "]";
       ri++;
       fh << ((ri < num_regions) ? ",\n" : "\n");
     }

@@ -346,7 +346,8 @@ private:
     e2.wait();
     e3.wait();
 
-    r.end(); this->sycl_target->profile_map.add_region(r);
+    r.end();
+    this->sycl_target->profile_map.add_region(r);
   }
 
 public:
@@ -462,7 +463,8 @@ public:
       dat.second->wait_realloc();
     }
 
-    r.end(); this->sycl_target->profile_map.add_region(r);
+    r.end();
+    this->sycl_target->profile_map.add_region(r);
 
     const int k_npart_recv = this->npart_recv;
 
@@ -531,7 +533,8 @@ public:
               });
         })
         .wait_and_throw();
-    r.end(); this->sycl_target->profile_map.add_region(r);
+    r.end();
+    this->sycl_target->profile_map.add_region(r);
   }
 };
 

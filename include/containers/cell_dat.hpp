@@ -267,11 +267,16 @@ public:
 
     if (nrow_required != nrow_existing) {
       if (nrow_required > nrow_alloced) {
+        const INT new_nrow_alloced_t =
+            (cell == 0) ? 1.2 * nrow_required : 1.1 * nrow_required;
+        const INT new_nrow_alloced =
+            std::max(nrow_required, new_nrow_alloced_t);
+
         for (int colx = 0; colx < this->ncol; colx++) {
           T *col_ptr_old = this->h_ptr_cols[cell * this->ncol + colx];
           this->stack_ptrs.push(col_ptr_old);
-          T *col_ptr_new =
-              (T *)this->sycl_target->malloc_device(nrow_required * sizeof(T));
+          T *col_ptr_new = (T *)this->sycl_target->malloc_device(
+              new_nrow_alloced * sizeof(T));
           NESOASSERT(col_ptr_new != nullptr, "bad pointer from malloc_device");
           if (nrow_alloced > 0) {
             this->stack_events.push(this->sycl_target->queue.memcpy(
@@ -279,7 +284,7 @@ public:
           }
           this->h_ptr_cols[cell * this->ncol + colx] = col_ptr_new;
         }
-        this->nrow_alloc[cell] = nrow_required;
+        this->nrow_alloc[cell] = new_nrow_alloced;
         this->stack_events.push(sycl_target->queue.memcpy(
             this->h_ptr_cells[cell], &this->h_ptr_cols[cell * this->ncol],
             this->ncol * sizeof(T *)));
