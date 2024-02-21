@@ -267,7 +267,7 @@ inline void ParticleGroup::hybrid_move() {
   this->domain->local_mapper->map(*this);
   this->mesh_hierarchy_global_map->execute();
 
-  ProfileRegion r_global("main", "global_move");
+  ProfileRegion r_global("hybrid_move", "global_move");
   this->global_move_ctx.move();
   this->set_npart_cell_from_dat();
   r_global.end();
@@ -275,7 +275,7 @@ inline void ParticleGroup::hybrid_move() {
 
   this->domain->local_mapper->map(*this, 0);
 
-  ProfileRegion r_local("main", "local_move");
+  ProfileRegion r_local("hybrid_move", "local_move");
   this->local_move_ctx->move();
   r_local.end();
   sycl_target->profile_map.add_region(r_local);
