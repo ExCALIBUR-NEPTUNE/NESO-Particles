@@ -89,7 +89,7 @@ public:
     // MPI RMA to inform remote ranks they will recv particles through the
     // global move
     this->global_move_exchange.npart_exchange_init();
-    sycl_target->profile_map.inc("GlobalMove", "move_stage_m3", 1,
+    sycl_target->profile_map.inc("GlobalMove", "move_stage_a", 1,
                                  profile_elapsed(t0, profile_timestamp()));
     // find particles leaving through the global interface
     this->departing_identify.identify(0);
@@ -104,7 +104,7 @@ public:
     auto k_send_ranks = this->departing_identify.dh_send_ranks.d_buffer.ptr;
     auto k_send_counts_all_ranks =
         this->departing_identify.dh_send_counts_all_ranks.d_buffer.ptr;
-    sycl_target->profile_map.inc("GlobalMove", "move_stage_m2", 1,
+    sycl_target->profile_map.inc("GlobalMove", "move_stage_b", 1,
                                  profile_elapsed(t0, profile_timestamp()));
     this->sycl_target->queue
         .submit([&](sycl::handler &cgh) {
@@ -118,7 +118,7 @@ public:
         .wait_and_throw();
     this->dh_send_rank_npart.device_to_host();
 
-    sycl_target->profile_map.inc("GlobalMove", "move_stage_m1", 1,
+    sycl_target->profile_map.inc("GlobalMove", "move_stage_c", 1,
                                  profile_elapsed(t0, profile_timestamp()));
     // We now have:
     // 1) n particles to send
@@ -134,6 +134,9 @@ public:
 
     // pack particles whilst communicating global move information
     this->particle_packer.reset();
+    sycl_target->profile_map.inc("GlobalMove", "move_stage_d", 1,
+                                 profile_elapsed(t0, profile_timestamp()));
+
     auto global_pack_event = this->particle_packer.pack(
         num_remote_send_ranks, this->dh_send_rank_npart.h_buffer,
         this->departing_identify.dh_send_rank_map, num_particles_leaving,
@@ -142,17 +145,20 @@ public:
         this->departing_identify.d_pack_layers_dst, this->particle_dats_real,
         this->particle_dats_int);
 
-    auto t0_npart_exchange = profile_timestamp();
+    sycl_target->profile_map.inc("GlobalMove", "move_stage_e", 1,
+                                 profile_elapsed(t0, profile_timestamp()));
+
     // start exchanging global send counts
     this->global_move_exchange.npart_exchange_sendrecv(
         num_remote_send_ranks, dh_send_ranks,
         this->dh_send_rank_npart.h_buffer);
-    this->global_move_exchange.npart_exchange_finalise();
-    sycl_target->profile_map.inc(
-        "GlobalMove", "npart_exchange_sendrecv", 1,
-        profile_elapsed(t0_npart_exchange, profile_timestamp()));
 
-    sycl_target->profile_map.inc("GlobalMove", "move_stage_0", 1,
+    sycl_target->profile_map.inc("GlobalMove", "move_stage_f", 1,
+                                 profile_elapsed(t0, profile_timestamp()));
+
+    this->global_move_exchange.npart_exchange_finalise();
+
+    sycl_target->profile_map.inc("GlobalMove", "move_stage_g", 1,
                                  profile_elapsed(t0, profile_timestamp()));
 
     // allocate space to recv packed particles
@@ -160,12 +166,14 @@ public:
                             this->global_move_exchange.h_recv_rank_npart,
                             this->particle_dats_real, this->particle_dats_int);
 
+    sycl_target->profile_map.inc("GlobalMove", "move_stage_h", 1,
+                                 profile_elapsed(t0, profile_timestamp()));
     // TODO can actually start the recv here
 
     // wait for the local particles to be packed.
     global_pack_event.wait_and_throw();
 
-    sycl_target->profile_map.inc("GlobalMove", "move_stage_1", 1,
+    sycl_target->profile_map.inc("GlobalMove", "move_stage_i", 1,
                                  profile_elapsed(t0, profile_timestamp()));
 
     // send and recv packed particles from particle_packer.cell_dat to
@@ -173,7 +181,7 @@ public:
     this->global_move_exchange.exchange_init(this->particle_packer,
                                              this->particle_unpacker);
 
-    sycl_target->profile_map.inc("GlobalMove", "move_stage_2", 1,
+    sycl_target->profile_map.inc("GlobalMove", "move_stage_j", 1,
                                  profile_elapsed(t0, profile_timestamp()));
 
     // remove the sent particles whilst the communication occurs
@@ -181,7 +189,7 @@ public:
         num_particles_leaving, this->departing_identify.d_pack_cells.ptr,
         this->departing_identify.d_pack_layers_src.ptr);
 
-    sycl_target->profile_map.inc("GlobalMove", "move_stage_3", 1,
+    sycl_target->profile_map.inc("GlobalMove", "move_stage_k", 1,
                                  profile_elapsed(t0, profile_timestamp()));
 
     // wait for particle data to be send/recv'd
@@ -191,6 +199,8 @@ public:
     this->particle_unpacker.unpack(particle_dats_real, particle_dats_int);
     sycl_target->profile_map.inc("GlobalMove", "move", 1,
                                  profile_elapsed(t0, profile_timestamp()));
+    sycl_target->profile_map.inc("GlobalMove", "send_count",
+                                 (INT)num_particles_leaving, 0.0);
   }
 };
 

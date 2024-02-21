@@ -128,7 +128,6 @@ private:
   int mpi_dims[3] = {0, 0, 0};
   std::shared_ptr<MeshHierarchy> mesh_hierarchy;
   bool allocated = false;
-
   std::vector<int> neighbour_ranks;
 
 public:
@@ -167,6 +166,9 @@ public:
   const int ncells_coarse;
   /// Number of coarse cells per fine cell.
   const int ncells_fine;
+  /// Is this mesh running in a mode where it exposes one NP cell per MPI rank.
+  bool single_cell_mode;
+
   /**
    * Construct a mesh over a given MPI communicator with a specified shape.
    *
@@ -190,7 +192,8 @@ public:
         inverse_cell_width_fine(((double)std::pow(2, subdivision_order)) /
                                 extent),
         ncells_coarse(reduce_mul(ndim, dims)),
-        ncells_fine(std::pow(std::pow(2, subdivision_order), ndim)) {
+        ncells_fine(std::pow(std::pow(2, subdivision_order), ndim)),
+        single_cell_mode(false) {
 
     // basic error checking of inputs
     NESOASSERT(dims.size() >= ndim, "vector of dims too small");
@@ -203,8 +206,8 @@ public:
     // mpi decompose
     // mpi_dims has monotonically decreasing order
     int rank, size;
-    MPICHK(MPI_Comm_size(this->comm, &size));
-    MPICHK(MPI_Comm_rank(this->comm, &rank));
+    MPICHK(MPI_Comm_size(comm, &size));
+    MPICHK(MPI_Comm_rank(comm, &rank));
     MPICHK(MPI_Dims_create(size, ndim, mpi_dims));
 
     for (int dimx = 0; dimx < ndim; dimx++) {
@@ -222,8 +225,8 @@ public:
 
     // create MPI cart comm with a decomposition that roughly makes sense for
     // the shape of the domain
-    MPICHK(MPI_Cart_create(this->comm, ndim, mpi_dims_reordered.data(), periods,
-                           1, &comm_cart));
+    MPICHK(MPI_Cart_create(comm, ndim, mpi_dims_reordered.data(), periods, 1,
+                           &comm_cart));
     this->allocated = true;
 
     // get the information about the cart comm that was actually created
@@ -342,7 +345,23 @@ public:
   };
   inline int get_ncells_coarse() { return this->ncells_coarse; };
   inline int get_ncells_fine() { return this->ncells_fine; };
-  inline int get_cell_count() { return this->cell_count; };
+
+  /**
+   * @returns The number of "cell" NESO-Particles should consider.
+   */
+  inline int get_cell_count() {
+    if (this->single_cell_mode) {
+      return 1;
+    } else {
+      return this->cell_count;
+    }
+  };
+
+  /**
+   * @returns The number of Cartesian cells owned by this MPI rank.
+   */
+  inline int get_cart_cell_count() { return this->cell_count; };
+
   inline std::shared_ptr<MeshHierarchy> get_mesh_hierarchy() {
     return this->mesh_hierarchy;
   };
