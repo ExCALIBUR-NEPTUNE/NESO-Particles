@@ -301,6 +301,7 @@ protected:
   // point of view.
   INT *d_npart_cell_es_lb;
   int ncell;
+  size_t local_size;
 
   template <typename T>
   inline void init_from_particle_dat(ParticleDatSharedPtr<T> particle_dat) {
@@ -314,6 +315,10 @@ protected:
     int nbin = 16;
     if (const char *env_nbin = std::getenv("NESO_PARTICLES_LOOP_NBIN")) {
       nbin = std::stoi(env_nbin);
+    }
+    this->local_size = 1024;
+    if (const char *env_ls = std::getenv("NESO_PARTICLES_LOOP_LOCAL_SIZE")) {
+      this->local_size = std::stoi(env_ls);
     }
 
     this->iteration_set =
@@ -469,7 +474,7 @@ public:
     global_info.starting_cell = (cell == std::nullopt) ? 0 : cell.value();
 
     auto k_npart_cell_lb = this->d_npart_cell_lb;
-    auto is = this->iteration_set->get(cell);
+    auto is = this->iteration_set->get(cell, this->local_size);
     auto k_kernel = this->kernel;
 
     const int nbin = std::get<0>(is);
