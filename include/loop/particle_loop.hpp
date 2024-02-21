@@ -68,7 +68,7 @@ struct ParticleLoopIterationSet {
   inline std::tuple<int, std::vector<sycl::nd_range<2>> &,
                     std::vector<std::size_t> &>
   get(const std::optional<int> cell = std::nullopt,
-      const size_t local_size = 256) {
+      const size_t local_size = 1024) {
     this->iteration_set.clear();
 
     if (cell == std::nullopt) {
@@ -78,21 +78,28 @@ struct ParticleLoopIterationSet {
         const int bin_width = end - start;
         this->cell_offsets[binx] = static_cast<std::size_t>(start);
         int cell_maxi = 0;
+        int cell_avg = 0;
         for (int cellx = start; cellx < end; cellx++) {
-          cell_maxi = std::max(cell_maxi, h_npart_cell[cellx]);
+          const int cell_occ = h_npart_cell[cellx];
+          cell_maxi = std::max(cell_maxi, cell_occ);
+          cell_avg += cell_occ;
         }
+        cell_avg = (((REAL)cell_avg) / ((REAL)(end - start)));
+        const size_t cell_local_size =
+            get_min_power_of_two((size_t)cell_avg, local_size);
         const auto div_mod = std::div(static_cast<long long>(cell_maxi),
-                                      static_cast<long long>(local_size));
+                                      static_cast<long long>(cell_local_size));
         const std::size_t outer_size =
             static_cast<std::size_t>(div_mod.quot +
                                      (div_mod.rem == 0 ? 0 : 1)) *
-            local_size;
+            cell_local_size;
 
         this->iteration_set.emplace_back(
             sycl::nd_range<2>(sycl::range<2>(bin_width, outer_size),
-                              sycl::range<2>(1, local_size)));
+                              sycl::range<2>(1, cell_local_size)));
       }
-      return {this->nbin, this->iteration_set, this->cell_offsets};
+
+      return {nbin, this->iteration_set, this->cell_offsets};
     } else {
       const int cellx = cell.value();
       const size_t cell_maxi = static_cast<size_t>(h_npart_cell[cellx]);
@@ -303,9 +310,15 @@ protected:
     this->d_npart_cell_lb = this->d_npart_cell;
     this->d_npart_cell_es = particle_dat->get_d_npart_cell_es();
     this->d_npart_cell_es_lb = this->d_npart_cell_es;
+
+    int nbin = 16;
+    if (const char *env_nbin = std::getenv("NESO_PARTICLES_LOOP_NBIN")) {
+      nbin = std::stoi(env_nbin);
+    }
+
     this->iteration_set =
         std::make_unique<ParticleLoopImplementation::ParticleLoopIterationSet>(
-            1, ncell, this->h_npart_cell_lb);
+            nbin, ncell, this->h_npart_cell_lb);
   }
 
   template <template <typename> typename T, typename U>
