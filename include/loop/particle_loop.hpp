@@ -103,13 +103,16 @@ struct ParticleLoopIterationSet {
     } else {
       const int cellx = cell.value();
       const size_t cell_maxi = static_cast<size_t>(h_npart_cell[cellx]);
+      const size_t cell_local_size =
+          get_min_power_of_two((size_t)cell_maxi, local_size);
+
       const auto div_mod = std::div(static_cast<long long>(cell_maxi),
-                                    static_cast<long long>(local_size));
+                                    static_cast<long long>(cell_local_size));
       const std::size_t outer_size =
           static_cast<std::size_t>(div_mod.quot + (div_mod.rem == 0 ? 0 : 1)) *
-          local_size;
+          cell_local_size;
       this->iteration_set.emplace_back(sycl::nd_range<2>(
-          sycl::range<2>(1, outer_size), sycl::range<2>(1, local_size)));
+          sycl::range<2>(1, outer_size), sycl::range<2>(1, cell_local_size)));
       this->cell_offsets[0] = static_cast<std::size_t>(cellx);
       return {1, this->iteration_set, this->cell_offsets};
     }
