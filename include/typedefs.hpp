@@ -150,7 +150,7 @@ inline T get_min_power_of_two(const T N_work_items, const size_t max_size) {
       static_cast<int>(std::log2(static_cast<double>(N_work_items)));
   const int base_two_power_p1 = base_two_power + 1;
   const int two_power_p1 = int(1) << base_two_power_p1;
-  return (T)std::min(std::max((INT)two_power_p1, (INT)1), (INT)max_size);
+  return (T)std::min(std::max((INT)two_power_p1, (INT)4), (INT)max_size);
 }
 
 template <typename U> inline void nprint_recurse(int flag, U next) {

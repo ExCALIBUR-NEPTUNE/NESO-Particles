@@ -68,7 +68,7 @@ struct ParticleLoopIterationSet {
   inline std::tuple<int, std::vector<sycl::nd_range<2>> &,
                     std::vector<std::size_t> &>
   get(const std::optional<int> cell = std::nullopt,
-      const size_t local_size = 1024) {
+      const size_t local_size = 256) {
     this->iteration_set.clear();
 
     if (cell == std::nullopt) {
@@ -93,13 +93,15 @@ struct ParticleLoopIterationSet {
             static_cast<std::size_t>(div_mod.quot +
                                      (div_mod.rem == 0 ? 0 : 1)) *
             cell_local_size;
-
-        this->iteration_set.emplace_back(
-            sycl::nd_range<2>(sycl::range<2>(bin_width, outer_size),
-                              sycl::range<2>(1, cell_local_size)));
+        
+        if (cell_maxi > 0){
+          this->iteration_set.emplace_back(
+              sycl::nd_range<2>(sycl::range<2>(bin_width, outer_size),
+                                sycl::range<2>(1, cell_local_size)));
+        }
       }
 
-      return {nbin, this->iteration_set, this->cell_offsets};
+      return {this->iteration_set.size(), this->iteration_set, this->cell_offsets};
     } else {
       const int cellx = cell.value();
       const size_t cell_maxi = static_cast<size_t>(h_npart_cell[cellx]);
@@ -319,7 +321,7 @@ protected:
     if (const char *env_nbin = std::getenv("NESO_PARTICLES_LOOP_NBIN")) {
       nbin = std::stoi(env_nbin);
     }
-    this->local_size = 1024;
+    this->local_size = 256;
     if (const char *env_ls = std::getenv("NESO_PARTICLES_LOOP_LOCAL_SIZE")) {
       this->local_size = std::stoi(env_ls);
     }
@@ -492,14 +494,14 @@ public:
             loop_parameter_type loop_args;
             create_loop_args(cgh, loop_args, &global_info);
             cgh.parallel_for<>(ndr, [=](sycl::nd_item<2> idx) {
-              const std::size_t index = idx.get_global_linear_id();
+              // const std::size_t index = idx.get_global_linear_id();
               const size_t cellxs = idx.get_global_id(0) + cell_offset;
               const size_t layerxs = idx.get_global_id(1);
               const int cellx = static_cast<int>(cellxs);
               const int layerx = static_cast<int>(layerxs);
               ParticleLoopImplementation::ParticleLoopIteration iterationx;
               if (layerx < k_npart_cell_lb[cellx]) {
-                iterationx.index = index;
+                //iterationx.index = index;
                 iterationx.cellx = cellx;
                 iterationx.layerx = layerx;
                 iterationx.loop_layerx = layerx;
