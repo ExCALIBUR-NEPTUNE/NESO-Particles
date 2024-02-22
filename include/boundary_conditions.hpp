@@ -70,7 +70,7 @@ public:
             const REAL pos = P[dimx];
             // offset the position in the current dimension to be
             // positive by adding a value times the extent
-            const int n_extent_offset_int = abs((int) pos);
+            const int n_extent_offset_int = abs((int)pos);
             const REAL tmp_extent = k_extents[dimx];
             const REAL n_extent_offset_real = n_extent_offset_int + 2;
             const REAL pos_fmod =

@@ -719,7 +719,7 @@ public:
             loop_parameter_type loop_args;
             create_loop_args(cgh, loop_args, &global_info);
             cgh.parallel_for<>(ndr, [=](sycl::nd_item<2> idx) {
-              //const std::size_t index = idx.get_global_linear_id();
+              // const std::size_t index = idx.get_global_linear_id();
               const size_t cellxs = idx.get_global_id(0) + cell_offset;
               const size_t layerxs = idx.get_global_id(1);
               const int cellx = static_cast<int>(cellxs);
@@ -729,7 +729,7 @@ public:
                 const int layerx = static_cast<int>(
                     k_map_cells_to_particles[cellxs][0][layerxs]);
                 kernel_parameter_type kernel_args;
-                //iterationx.index = index;
+                // iterationx.index = index;
                 iterationx.cellx = cellx;
                 iterationx.layerx = layerx;
                 iterationx.loop_layerx = loop_layerx;

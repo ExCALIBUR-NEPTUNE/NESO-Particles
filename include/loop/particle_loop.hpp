@@ -53,7 +53,7 @@ struct ParticleLoopIterationSet {
   ParticleLoopIterationSet(const int nbin, const int ncell, int *h_npart_cell)
       : nbin(std::min(ncell, nbin)), ncell(ncell), h_npart_cell(h_npart_cell) {
     this->iteration_set.reserve(nbin);
-    this->cell_offsets.resize(nbin);
+    this->cell_offsets.reserve(nbin);
   }
 
   /**
@@ -69,14 +69,15 @@ struct ParticleLoopIterationSet {
                     std::vector<std::size_t> &>
   get(const std::optional<int> cell = std::nullopt,
       const size_t local_size = 256) {
+
     this->iteration_set.clear();
+    this->cell_offsets.clear();
 
     if (cell == std::nullopt) {
       for (int binx = 0; binx < nbin; binx++) {
         int start, end;
         get_decomp_1d(nbin, ncell, binx, &start, &end);
         const int bin_width = end - start;
-        this->cell_offsets[binx] = static_cast<std::size_t>(start);
         int cell_maxi = 0;
         int cell_avg = 0;
         for (int cellx = start; cellx < end; cellx++) {
@@ -93,15 +94,17 @@ struct ParticleLoopIterationSet {
             static_cast<std::size_t>(div_mod.quot +
                                      (div_mod.rem == 0 ? 0 : 1)) *
             cell_local_size;
-        
-        if (cell_maxi > 0){
+
+        if (cell_maxi > 0) {
           this->iteration_set.emplace_back(
               sycl::nd_range<2>(sycl::range<2>(bin_width, outer_size),
                                 sycl::range<2>(1, cell_local_size)));
+          this->cell_offsets.push_back(static_cast<std::size_t>(start));
         }
       }
 
-      return {this->iteration_set.size(), this->iteration_set, this->cell_offsets};
+      return {this->iteration_set.size(), this->iteration_set,
+              this->cell_offsets};
     } else {
       const int cellx = cell.value();
       const size_t cell_maxi = static_cast<size_t>(h_npart_cell[cellx]);
@@ -115,7 +118,7 @@ struct ParticleLoopIterationSet {
           cell_local_size;
       this->iteration_set.emplace_back(sycl::nd_range<2>(
           sycl::range<2>(1, outer_size), sycl::range<2>(1, cell_local_size)));
-      this->cell_offsets[0] = static_cast<std::size_t>(cellx);
+      this->cell_offsets.push_back(static_cast<std::size_t>(cellx));
       return {1, this->iteration_set, this->cell_offsets};
     }
   }
@@ -487,6 +490,7 @@ public:
         "ParticleLoop", "Init", 1, profile_elapsed(t0, profile_timestamp()));
 
     for (int binx = 0; binx < nbin; binx++) {
+
       sycl::nd_range<2> ndr = std::get<1>(is).at(binx);
       const size_t cell_offset = std::get<2>(is).at(binx);
       this->event_stack.push(
@@ -501,7 +505,7 @@ public:
               const int layerx = static_cast<int>(layerxs);
               ParticleLoopImplementation::ParticleLoopIteration iterationx;
               if (layerx < k_npart_cell_lb[cellx]) {
-                //iterationx.index = index;
+                // iterationx.index = index;
                 iterationx.cellx = cellx;
                 iterationx.layerx = layerx;
                 iterationx.loop_layerx = layerx;
