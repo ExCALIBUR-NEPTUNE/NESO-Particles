@@ -61,7 +61,7 @@ public:
 
     const int k_ndim = this->mesh->ndim;
     NESOASSERT(((k_ndim > 0) && (k_ndim < 4)), "Bad number of dimensions");
-    const auto k_extents = this->d_extents.ptr;
+    const REAL * RESTRICT k_extents = this->d_extents.ptr;
 
     this->pbc_loop = particle_loop(
         "CartesianPeriodicPBC", position_dat,
@@ -70,11 +70,11 @@ public:
             const REAL pos = P[dimx];
             // offset the position in the current dimension to be
             // positive by adding a value times the extent
-            const REAL n_extent_offset_real = ABS(pos);
+            const int n_extent_offset_int = abs(pos);
             const REAL tmp_extent = k_extents[dimx];
-            const INT n_extent_offset_int = n_extent_offset_real + 2.0;
+            const REAL n_extent_offset_real = n_extent_offset_int + 2;
             const REAL pos_fmod =
-                fmod(pos + n_extent_offset_int * tmp_extent, tmp_extent);
+                fmod(pos + n_extent_offset_real * tmp_extent, tmp_extent);
             P[dimx] = pos_fmod;
           }
         },
