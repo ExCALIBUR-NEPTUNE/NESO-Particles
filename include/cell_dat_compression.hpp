@@ -223,6 +223,7 @@ public:
    */
   template <typename T>
   inline void remove_particles(const int npart, T *usm_cells, T *usm_layers) {
+    auto r = ProfileRegion("LayerCompressor", "remove_particles");
 
     // If there are no particles to remove then there is nothing to do.
     if (npart < 1) {
@@ -299,6 +300,9 @@ public:
 
     sycl_target->profile_map.inc("LayerCompressor", "remove_particles", 1,
                                  profile_elapsed(t0, profile_timestamp()));
+
+    r.end();
+    this->sycl_target->profile_map.add_region(r);
   }
 };
 

@@ -12,6 +12,7 @@ namespace NESO::Particles {
  * the particles.
  */
 inline void CellMove::move() {
+  auto r = ProfileRegion("CellMove", "prepare");
   auto t0 = profile_timestamp();
   // reset the particle counters on each cell
   auto mpi_rank_dat = particle_dats_int[Sym<INT>("NESO_MPI_RANK")];
@@ -45,6 +46,10 @@ inline void CellMove::move() {
 
   // detect out of bounds particles
   auto k_ep_indices = this->ep_bad_cell_indices.device_ptr();
+
+  r.end();
+  this->sycl_target->profile_map.add_region(r);
+  r = ProfileRegion("CellMove", "cell_move_identify");
 
   // loop over particles and identify the particles to be move between
   // cells.
@@ -83,6 +88,10 @@ inline void CellMove::move() {
       },
       Access::read(ParticleLoopIndex{}), Access::read(this->cell_id_dat))
       .execute();
+
+  r.end();
+  this->sycl_target->profile_map.add_region(r);
+  r = ProfileRegion("CellMove", "realloc");
 
   this->ep_bad_cell_indices.check_and_throw(
       "Particle held bad cell id (not in [0,..,N_cell - 1]).");
@@ -132,6 +141,10 @@ inline void CellMove::move() {
       .wait();
   const int move_count = h_move_count.ptr[0];
 
+  r.end();
+  this->sycl_target->profile_map.add_region(r);
+  r = ProfileRegion("CellMove", "move");
+
   // get the pointers into the ParticleDats
   this->get_particle_dat_info();
 
@@ -176,10 +189,15 @@ inline void CellMove::move() {
         });
       })
       .wait_and_throw();
+
+  r.end();
+  this->sycl_target->profile_map.add_region(r);
+
   sycl_target->profile_map.inc("CellMove", "cell_move", 1,
                                profile_elapsed(t1, profile_timestamp()));
 
   auto t2 = profile_timestamp();
+
   // compress the data by removing the old rows
   this->layer_compressor.remove_particles(move_count, this->d_cells_old.ptr,
                                           this->d_layers_old.ptr);
