@@ -61,6 +61,7 @@ struct ProfileRegion {
   std::string key2;
   int level;
 
+#ifdef NESO_PARTICLES_PROFILING_REGION
   /**
    * Create new ProfileRegion.
    *
@@ -71,10 +72,27 @@ struct ProfileRegion {
                 const int level = 0)
       : time_start(profile_timestamp()), key1(key1), key2(key2), level(level) {}
 
+#else
+
+  /**
+   * Create new ProfileRegion.
+   *
+   * @param key1 First key for ProfileRegion.
+   * @param key2 Second key for ProfileRegion.
+   */
+  ProfileRegion([[maybe_unused]] const std::string key1,
+                [[maybe_unused]] const std::string key2,
+                [[maybe_unused]] const int level = 0) {}
+#endif
+
   /**
    * End the ProfileRegion.
    */
-  inline void end() { this->time_end = profile_timestamp(); }
+  inline void end() {
+#ifdef NESO_PARTICLES_PROFILING_REGION
+    this->time_end = profile_timestamp();
+#endif
+  }
 };
 
 /**
@@ -172,8 +190,10 @@ public:
    *
    * @param profile_region ProfileRegion to add.
    */
-  inline void add_region(ProfileRegion &profile_region) {
+  inline void add_region([[maybe_unused]] ProfileRegion &profile_region) {
+#ifdef NESO_PARTICLES_PROFILING_REGION
     this->regions.push_back(profile_region);
+#endif
   }
 
   /**

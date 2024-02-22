@@ -364,6 +364,8 @@ public:
 
     sycl_target->profile_map.inc("LocalMove", "Move", 1,
                                  profile_elapsed(t0, profile_timestamp()));
+    sycl_target->profile_map.inc("LocalMove", "send_count",
+                                 num_particles_leaving, 0.0);
   };
 };
 
