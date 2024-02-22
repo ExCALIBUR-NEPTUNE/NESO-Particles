@@ -149,6 +149,50 @@ protected:
     this->write_callback = fn;
   }
 
+  inline void set_nrow_inner(const INT cell, const INT nrow_required) {
+    const INT nrow_alloced = this->nrow_alloc[cell];
+    const INT nrow_existing = this->nrow[cell];
+
+    if (nrow_required == nrow_existing) {
+      return;
+    } else if (nrow_required < nrow_existing) {
+      this->nrow[cell] = nrow_required;
+      this->nrow_max = -1;
+      return;
+    } else {
+      if (nrow_required > nrow_alloced) {
+        const INT new_nrow_alloced_t =
+            (cell == 0) ? 1.2 * nrow_required : 1.1 * nrow_required;
+        const INT new_nrow_alloced =
+            std::max(nrow_required, new_nrow_alloced_t);
+        const int ncol = this->ncol;
+
+        T *cell_ptr_old = this->h_ptr_cols[cell * ncol];
+        this->stack_ptrs.push(cell_ptr_old);
+        T *cell_ptr_new = (T *)this->sycl_target->malloc_device(
+            new_nrow_alloced * ncol * sizeof(T));
+
+        for (int colx = 0; colx < ncol; colx++) {
+          T *col_ptr_old = cell_ptr_old + colx * nrow_alloced;
+          T *col_ptr_new = cell_ptr_new + colx * new_nrow_alloced;
+
+          if (nrow_alloced > 0) {
+            this->stack_events.push(this->sycl_target->queue.memcpy(
+                col_ptr_new, col_ptr_old, nrow_existing * sizeof(T)));
+          }
+          this->h_ptr_cols[cell * ncol + colx] = col_ptr_new;
+        }
+
+        this->nrow_alloc[cell] = new_nrow_alloced;
+        this->stack_events.push(sycl_target->queue.memcpy(
+            this->h_ptr_cells[cell], &this->h_ptr_cols[cell * this->ncol],
+            this->ncol * sizeof(T *)));
+      }
+      this->nrow[cell] = nrow_required;
+      this->nrow_max = -1;
+    }
+  }
+
   /**
    * Non-const pointer to underlying device data. Intended for friend access
    * from ParticleLoop.
@@ -197,9 +241,10 @@ public:
     for (int cellx = 0; cellx < ncells; cellx++) {
       this->sycl_target->free(this->h_ptr_cells[cellx]);
     }
-    for (int colx = 0; colx < ncells * this->ncol; colx++) {
-      if (this->h_ptr_cols[colx] != NULL) {
-        this->sycl_target->free(this->h_ptr_cols[colx]);
+    // for (int colx = 0; colx < ncells * this->ncol; colx++) {
+    for (int cellx = 0; cellx < ncells; cellx++) {
+      if (this->h_ptr_cols[cellx * this->ncol] != NULL) {
+        this->sycl_target->free(this->h_ptr_cols[cellx * this->ncol]);
       }
     }
     this->sycl_target->free(this->d_ptr);
@@ -259,53 +304,14 @@ public:
    * wait_set_nrow should be called before using the dat.
    */
   inline void set_nrow(const INT cell, const INT nrow_required) {
-
     auto t0 = profile_timestamp();
-
     NESOASSERT(cell >= 0, "Cell index is negative");
     NESOASSERT(cell < this->ncells, "Cell index is >= ncells");
     NESOASSERT(nrow_required >= 0, "Requested number of rows is negative");
+    set_nrow_inner(cell, nrow_required);
 
-    if (nrow_required < this->nrow[cell]) {
-      this->nrow[cell] = nrow_required;
-      this->nrow_max = -1;
-      sycl_target->profile_map.inc("CellDat", "set_nrow", 1,
-                                   profile_elapsed(t0, profile_timestamp()));
-      return;
-    }
-
-    const INT nrow_alloced = this->nrow_alloc[cell];
-    const INT nrow_existing = this->nrow[cell];
-
-    if (nrow_required != nrow_existing) {
-      if (nrow_required > nrow_alloced) {
-        const INT new_nrow_alloced_t =
-            (cell == 0) ? 1.2 * nrow_required : 1.1 * nrow_required;
-        const INT new_nrow_alloced =
-            std::max(nrow_required, new_nrow_alloced_t);
-
-        for (int colx = 0; colx < this->ncol; colx++) {
-          T *col_ptr_old = this->h_ptr_cols[cell * this->ncol + colx];
-          this->stack_ptrs.push(col_ptr_old);
-          T *col_ptr_new = (T *)this->sycl_target->malloc_device(
-              new_nrow_alloced * sizeof(T));
-          NESOASSERT(col_ptr_new != nullptr, "bad pointer from malloc_device");
-          if (nrow_alloced > 0) {
-            this->stack_events.push(this->sycl_target->queue.memcpy(
-                col_ptr_new, col_ptr_old, nrow_existing * sizeof(T)));
-          }
-          this->h_ptr_cols[cell * this->ncol + colx] = col_ptr_new;
-        }
-        this->nrow_alloc[cell] = new_nrow_alloced;
-        this->stack_events.push(sycl_target->queue.memcpy(
-            this->h_ptr_cells[cell], &this->h_ptr_cols[cell * this->ncol],
-            this->ncol * sizeof(T *)));
-      }
-      this->nrow[cell] = nrow_required;
-      this->nrow_max = -1;
-    }
     sycl_target->profile_map.inc("CellDat", "set_nrow", 1,
-                                 profile_elapsed(t0, profile_timestamp()));
+                                 -profile_elapsed(t0, profile_timestamp()));
   }
 
   /**

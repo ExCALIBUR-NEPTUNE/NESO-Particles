@@ -104,6 +104,7 @@ inline void CellMove::move() {
         .wait();
   }
 
+  auto t0_realloc = profile_timestamp();
   for (auto &dat : particle_dats_real) {
     dat.second->realloc(this->h_npart_cell);
   }
@@ -118,6 +119,10 @@ inline void CellMove::move() {
   for (auto &dat : particle_dats_int) {
     dat.second->wait_realloc();
   }
+  sycl_target->profile_map.inc(
+      "CellMove", "realloc", 1,
+      profile_elapsed(t0_realloc, profile_timestamp()));
+
   this->sycl_target->queue
       .submit([&](sycl::handler &cgh) {
         cgh.parallel_for<class dummy>(

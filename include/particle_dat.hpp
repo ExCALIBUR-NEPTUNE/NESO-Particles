@@ -585,7 +585,7 @@ template <typename U>
 inline void ParticleDatT<T>::realloc(BufferHost<U> &npart_cell_new) {
   NESOASSERT(npart_cell_new.size >= this->ncell, "Insufficent new cell counts");
   for (int cellx = 0; cellx < this->ncell; cellx++) {
-    this->cell_dat.set_nrow(cellx, npart_cell_new.ptr[cellx]);
+    this->cell_dat.set_nrow_inner(cellx, npart_cell_new.ptr[cellx]);
   }
 }
 template <typename T>
