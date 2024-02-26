@@ -114,12 +114,44 @@ protected:
     return lines;
   }
 
+  inline std::vector<std::vector<std::tuple<INT, INT, INT>>>
+  get_cell(std::tuple<INT, INT, INT> base) {
+    std::vector<std::vector<std::tuple<INT, INT, INT>>> cells;
+
+    const int ndim = this->mesh_hierarchy->ndim;
+    const INT bx = std::get<0>(base);
+    const INT by = std::get<1>(base);
+    const INT bz = std::get<2>(base);
+
+    // case for ndim == 1
+    if (ndim == 1) {
+      cells.push_back({{bx, by, bz}, {bx + 1, by, bz}});
+    } else if (ndim == 2) {
+      cells.push_back({{bx, by, bz},
+                       {bx + 1, by, bz},
+                       {bx + 1, by + 1, bz},
+                       {bx, by + 1, bz}});
+    } else if (ndim == 3) {
+      // ordering probably wrong
+      cells.push_back({{bx, by, bz},
+                       {bx + 1, by, bz},
+                       {bx + 1, by + 1, bz},
+                       {bx, by + 1, bz},
+                       {bx, by, bz + 1},
+                       {bx + 1, by, bz + 1},
+                       {bx + 1, by + 1, bz + 1},
+                       {bx, by + 1, bz + 1}});
+    }
+    return cells;
+  }
+
   inline void write_inner(std::string filename, const bool fine) {
     this->next_vert_index = 0;
     this->verts_to_index.clear();
     this->index_to_verts.clear();
     const int ndim = this->mesh_hierarchy->ndim;
     std::vector<std::pair<INT, INT>> edges;
+    std::vector<std::vector<std::tuple<INT, INT, INT>>> geoms;
 
     auto lambda_push_edges = [&](auto lines) {
       for (auto linex : lines) {
@@ -132,12 +164,16 @@ protected:
     if (fine) {
       for (const INT linear_index : this->cells) {
         auto base_corner = to_standard_tuple(linear_index);
+        auto tx = this->get_cell(base_corner);
+        geoms.insert(geoms.end(), tx.begin(), tx.end());
         auto lines = this->get_lines(base_corner);
         lambda_push_edges(lines);
       }
     } else {
       auto coarse_cells = this->get_coarse_tuples();
       for (auto cx : coarse_cells) {
+        auto tx = this->get_cell(cx);
+        geoms.insert(geoms.end(), tx.begin(), tx.end());
         auto lines = this->get_lines(cx);
         lambda_push_edges(lines);
       }
@@ -170,23 +206,45 @@ protected:
     }
     vtk_file << "\n";
 
-    std::vector<INT> edge_ints;
+    std::vector<INT> cell_ints;
+    std::vector<int> cell_type_ints;
     for (auto &edge : edges) {
-      edge_ints.push_back(2);
-      edge_ints.push_back(edge.first);
-      edge_ints.push_back(edge.second);
+      cell_ints.push_back(2);
+      cell_ints.push_back(edge.first);
+      cell_ints.push_back(edge.second);
+      cell_type_ints.push_back(3);
     }
 
-    const int num_edges = edges.size();
-    vtk_file << "CELLS " << num_edges << " " << edge_ints.size() << "\n";
-    for (const int ix : edge_ints) {
+    if (ndim == 2) {
+      for (auto &geom : geoms) {
+        cell_ints.push_back(geom.size());
+        for (auto &vx : geom) {
+          const int index = verts_to_index[vx];
+          cell_ints.push_back(index);
+        }
+        cell_type_ints.push_back(9);
+      }
+    }
+
+    const int num_objs = cell_type_ints.size();
+    vtk_file << "CELLS " << num_objs << " " << cell_ints.size() << "\n";
+    for (const int ix : cell_ints) {
       vtk_file << ix << " ";
     }
     vtk_file << "\n";
     vtk_file << "\n";
-    vtk_file << "CELL_TYPES " << num_edges << "\n";
-    for (int ix = 0; ix < num_edges; ix++) {
-      vtk_file << 3 << " ";
+    vtk_file << "CELL_TYPES " << num_objs << "\n";
+    for (int ix = 0; ix < num_objs; ix++) {
+      vtk_file << cell_type_ints.at(ix) << " ";
+    }
+
+    vtk_file << "\n";
+    vtk_file << "CELL_DATA " << num_objs << "\n";
+    vtk_file << "SCALARS rank float 1\n";
+    vtk_file << "LOOKUP_TABLE CellColors\n";
+    const int rank = this->mesh_hierarchy->comm_pair.rank_parent;
+    for (int gx = 0; gx < num_objs; gx++) {
+      vtk_file << rank << " ";
     }
 
     vtk_file.close();
