@@ -107,6 +107,8 @@ public:
   inline void compute_remove_compress_indicies(const int npart, T *usm_cells,
                                                T *usm_layers) {
     auto t0 = profile_timestamp();
+    auto r =
+        ProfileRegion("LayerCompressor", "compute_remove_compress_indicies_a");
 
     d_compress_cells_old.realloc_no_copy(npart);
     d_compress_layers_old.realloc_no_copy(npart);
@@ -158,6 +160,10 @@ public:
               });
         })
         .wait();
+
+    r.end();
+    this->sycl_target->profile_map.add_region(r);
+    r = ProfileRegion("LayerCompressor", "compute_remove_compress_indicies_b");
 
     this->sycl_target->queue
         .submit([&](sycl::handler &cgh) {
@@ -212,6 +218,8 @@ public:
     sycl_target->profile_map.inc("LayerCompressor",
                                  "compute_remove_compress_indicies", 1,
                                  profile_elapsed(t0, profile_timestamp()));
+    r.end();
+    this->sycl_target->profile_map.add_region(r);
   }
 
   /**
@@ -223,7 +231,6 @@ public:
    */
   template <typename T>
   inline void remove_particles(const int npart, T *usm_cells, T *usm_layers) {
-    auto r = ProfileRegion("LayerCompressor", "remove_particles");
 
     // If there are no particles to remove then there is nothing to do.
     if (npart < 1) {
@@ -232,6 +239,8 @@ public:
 
     auto t0 = profile_timestamp();
     this->compute_remove_compress_indicies(npart, usm_cells, usm_layers);
+
+    auto r = ProfileRegion("LayerCompressor", "data_movement");
 
     auto compress_cells_old_ptr = this->d_compress_cells_old.ptr;
     auto compress_layers_old_ptr = this->d_compress_layers_old.ptr;
@@ -264,8 +273,12 @@ public:
     // the move and set_npart calls are async
     this->event_stack.wait();
 
+    r.end();
+    this->sycl_target->profile_map.add_region(r);
     sycl_target->profile_map.inc("LayerCompressor", "data_movement", 1,
                                  profile_elapsed(t1, profile_timestamp()));
+
+    r = ProfileRegion("LayerCompressor", "dat_bookkeeping");
 
     auto t2 = profile_timestamp();
     for (auto &dat : particle_dats_real) {
