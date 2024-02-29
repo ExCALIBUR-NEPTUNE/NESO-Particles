@@ -175,9 +175,9 @@ template <typename... T> inline void nprint(T... args) {
 //#define NESO_PARTICLES_KERNEL_START                                            \
 //  const int neso_npart = pl_npart_cell[idx];                                   \
 //  for (int neso_layer = 0; neso_layer < neso_npart; neso_layer++) {
-//#define NESO_PARTICLES_KERNEL_END }
-//#define NESO_PARTICLES_KERNEL_CELL idx
-//#define NESO_PARTICLES_KERNEL_LAYER neso_layer
+// #define NESO_PARTICLES_KERNEL_END }
+// #define NESO_PARTICLES_KERNEL_CELL idx
+// #define NESO_PARTICLES_KERNEL_LAYER neso_layer
 
 #define NESO_PARTICLES_KERNEL_START                                            \
   const int neso_cell = (((INT)idx) / pl_stride);                              \
@@ -206,7 +206,7 @@ template <typename... T> inline void nprint(T... args) {
 
 #endif
 
-//#define DEBUG_OOB_CHECK
+// #define DEBUG_OOB_CHECK
 #define DEBUG_OOB_WIDTH 1000
 
 /**
