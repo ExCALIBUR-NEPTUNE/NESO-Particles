@@ -99,7 +99,9 @@ namespace NESO::Particles::Access {
 /**
  * Generic base type for an access descriptor around an object of type T.
  */
-template <typename T> struct AccessGeneric { T obj; };
+template <typename T> struct AccessGeneric {
+  T obj;
+};
 
 /**
  *  Read access descriptor.
@@ -329,7 +331,9 @@ namespace {
  * LoopParameter is the pointer type that points to the data for all cells,
  * layers and components.
  */
-template <typename T> struct LoopParameter { using type = void *; };
+template <typename T> struct LoopParameter {
+  using type = void *;
+};
 /**
  *  Loop parameter for read access of a ParticleDat via Sym.
  */
@@ -415,7 +419,9 @@ template <class T> using loop_parameter_t = typename LoopParameter<T>::type;
  * The KernelParameter types define the types passed to the kernel for each
  * data structure type for each access descriptor.
  */
-template <typename T> struct KernelParameter { using type = void; };
+template <typename T> struct KernelParameter {
+  using type = void;
+};
 
 /**
  *  KernelParameter type for read-only access to a ParticleDat - via Sym.
