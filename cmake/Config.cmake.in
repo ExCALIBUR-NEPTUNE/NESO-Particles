@@ -4,7 +4,7 @@ include(CMakeFindDependencyMacro)
 find_dependency(MPI)
 if (NOT COMMAND add_sycl_to_target) 
     message( WARNING  
-        "Can't find add_sycl_to_target macro SYCL is required for NesoParticles
+        "Can't find add_sycl_to_target macro SYCL is required for NESO-Particles
         call find_package(<IntelSYCL|AdaptiveCPP|HipSYCL etc etc>) before
         including this module")
 endif()

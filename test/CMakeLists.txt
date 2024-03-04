@@ -27,29 +27,18 @@ if (COMMAND add_sycl_to_target)
     #sycl
     message("add_sycl_to_target macro exists")
 else()
+    include(${CMAKE_SOURCE_DIR}/cmake/SYCL.cmake)
     message("add_sycl_to_target macro NOT FOUND looking for SYCL package...")
-    find_package(hipSYCL 0.9.2 QUIET)
-    if(NOT hipSYCL_FOUND)
-        find_package(IntelDPCPP QUIET)
-        if(NOT IntelDPCPP_FOUND)
-            message(
-                WARNING
-                "Proceeding on the assumption that the CXX compiler is a SYCL2020 compiler."
-                )
+    find_sycl()
+    if(SYCL_FOUND)
+        message(STATUS "Using SYCL implementation ${SYCL_IMPLEMENTATION}")
+        if(NOT SYCL_INTEL)
+            set(HIPSYCL_TARGETS "omp")
+            set(ACPP_TARGETS "omp")
+            set(SYCL_FLAG NESO_HIPSYCL)
+        else()
+            set(SYCL_FLAG NESO_DPCPP)
         endif()
-    else()
-        message(STATUS "hipsycl found")
-        set(HIPSYCL_TARGETS "omp")
-    endif(NOT hipSYCL_FOUND)
-
-    # hipsycl, trisycl and computecpp all define an "add_sycl_to_target" for the
-    # compilation of a target
-    if(NOT COMMAND add_sycl_to_target)
-        # Note from hipsycl: "Do not call target_sources after add_sycl_to_target or
-        # dependency tracking on compiler flags will break in subtle ways"
-        function(add_sycl_to_target)
-
-        endfunction()
     endif()
 endif()
 
@@ -92,7 +81,7 @@ foreach(TEST ${TEST_SRCS})
 
     set(TEST_SOURCES ${TEST_MAIN} ${TEST})
     add_executable(${TEST_NAME} ${TEST_SOURCES})
-    target_link_libraries(${TEST_NAME} PRIVATE NesoParticles GTest::gtest)
+    target_link_libraries(${TEST_NAME} PRIVATE NESO-Particles GTest::gtest)
     target_compile_definitions(${TEST_NAME} PRIVATE GPU_SELECTOR=0)
 
     add_sycl_to_target(TARGET ${TEST_NAME} SOURCES ${TEST_SOURCES})
@@ -102,7 +91,7 @@ endforeach()
 # Build a global test suite
 add_executable(${EXECUTABLE} ${TEST_MAIN} ${TEST_LIST})
 
-target_link_libraries(${EXECUTABLE} PRIVATE NesoParticles GTest::gtest)
+target_link_libraries(${EXECUTABLE} PRIVATE NESO-Particles GTest::gtest)
 target_compile_definitions(${EXECUTABLE} PRIVATE GPU_SELECTOR=0)
 
 

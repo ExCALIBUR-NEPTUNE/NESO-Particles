@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 
 project(
-  NesoParticles
+  NESO-Particles
   VERSION 0.0.1
   LANGUAGES CXX C)
 
@@ -13,17 +13,17 @@ option(ENABLE_NESO_PARTICLES_TESTS
 option(NESO_PARTICLES_ENABLE_HDF5 "Add HDF5 to targets" ON)
 
 #Create interface/Header onlu library
-add_library(NesoParticles INTERFACE)
+add_library(NESO-Particles INTERFACE)
 #Alias the name to the namespaces name.
 #Can use in subdirectory or via Confiig files with namespace
-add_library(${PROJECT_NAME}::NesoParticles ALIAS NesoParticles)
+add_library(${PROJECT_NAME}::NESO-Particles ALIAS NESO-Particles)
 
 #Set standard
-set_property(TARGET NesoParticles PROPERTY CXX_STANDARD 17)
+set_property(TARGET NESO-Particles PROPERTY CXX_STANDARD 17)
 
 #Makes it easy to install + adds the files to the INCLUDE property of the lib
 #i.e. don't need target_include_dir.. also no GLOBS
-target_sources(NesoParticles
+target_sources(NESO-Particles
     PUBLIC
     FILE_SET public_headers
     TYPE HEADERS
@@ -74,18 +74,18 @@ target_sources(NesoParticles
 #Don't like this .... TODO: FIXME:
 #Should be a runtime thing?
 if(NESO_PARTICLES_DEVICE_TYPE STREQUAL GPU)
-    target_compile_definitions(NesoParticles INTERFACE NESO_PARTICLES_DEVICE_TYPE_GPU)
+    target_compile_definitions(NESO-Particles INTERFACE NESO_PARTICLES_DEVICE_TYPE_GPU)
     add_definitions(-DNESO_PARTICLES_DEVICE_TYPE_GPU)
     message(STATUS "Using NESO_PARTICLES_DEVICE_TYPE_GPU")
 else()
-    target_compile_definitions(NesoParticles INTERFACE NESO_PARTICLES_DEVICE_TYPE_CPU)
+    target_compile_definitions(NESO-Particles INTERFACE NESO_PARTICLES_DEVICE_TYPE_CPU)
     message(STATUS "Using NESO_PARTICLES_DEVICE_TYPE_CPU")
 endif()
 
 
 #Get MPI 
 find_package(MPI REQUIRED)
-target_link_libraries(NesoParticles INTERFACE MPI::MPI_CXX)
+target_link_libraries(NESO-Particles INTERFACE MPI::MPI_CXX)
 
 #Get HDF5 if its around
 set(NESO_PARTICLES_USING_HDF5 FALSE)
@@ -94,8 +94,8 @@ if (NESO_PARTICLES_ENABLE_HDF5)
     find_package(HDF5 REQUIRED)
     if(HDF5_FOUND AND HDF5_IS_PARALLEL)
         message(STATUS "Parallel HDF5 found")
-        target_link_libraries(NesoParticles INTERFACE HDF5::HDF5 NesoParticles)
-        target_compile_definitions(NesoParticles INTERFACE NESO_PARTICLES_HDF5)
+        target_link_libraries(NESO-Particles INTERFACE HDF5::HDF5 NESO-Particles)
+        target_compile_definitions(NESO-Particles INTERFACE NESO_PARTICLES_HDF5)
         set(NESO_PARTICLES_USING_HDF5 TRUE)
     else()
         message( "HDF5 NOT found")
@@ -114,7 +114,7 @@ if(ENABLE_NESO_PARTICLES_TESTS)
 endif()
 
 #install the headers
-install(TARGETS NesoParticles
+install(TARGETS NESO-Particles
     EXPORT ${PROJECT_NAME}_Targets
     FILE_SET public_headers
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
