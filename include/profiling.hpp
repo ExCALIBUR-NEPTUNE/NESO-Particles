@@ -210,6 +210,7 @@ public:
    * Write events and regions to JSON file.
    */
   inline void write_events_json(std::string basename, const int rank) {
+#ifdef NESO_PARTICLES_PROFILING_REGION
     basename += "." + std::to_string(rank) + ".json";
     std::ofstream fh;
     fh.open(basename);
@@ -247,6 +248,7 @@ public:
     fh << "]\n";
     fh << "}\n";
     fh.close();
+#endif
   }
 };
 
