@@ -29,28 +29,41 @@ target_sources(NESO-Particles
     TYPE HEADERS
     BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/include
     FILES
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/cell_dat.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/include/access.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/include/boundary_conditions.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/include/cartesian_mesh.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/include/cell_binning.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/cell_dat_compression.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/include/cell_dat.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/cell_dat_compression.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/include/cell_dat_move.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/include/cell_dat_move_impl.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/include/communication.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/include/compute_target.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/containers
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/containers/blocked_binary_tree.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/containers/cell_dat.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/containers/cell_dat_const.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/containers/cell_data.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/containers/descendant_products.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/containers/global_array.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/containers/local_array.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/containers/product_matrix.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/containers/sym_vector.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/containers/tuple.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/include/departing_particle_identification.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/include/departing_particle_identification_impl.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/include/domain.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/error_propagate.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/include/global_mapping.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/include/global_mapping_impl.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/global_move_exchange.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/include/global_move.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/global_move_exchange.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/include/local_mapping.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/include/local_move.hpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/loop
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/loop/access_descriptors.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/loop/particle_loop.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/loop/particle_loop_base.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/loop/particle_loop_index.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/loop/pli_particle_dat.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/include/mesh_hierarchy.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/include/mesh_interface.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/include/mesh_interface_local_decomp.hpp
@@ -59,6 +72,7 @@ target_sources(NESO-Particles
     ${CMAKE_CURRENT_SOURCE_DIR}/include/parallel_initialisation.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/include/particle_dat.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/include/particle_group.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/particle_group_impl.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/include/particle_io.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/include/particle_remover.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/include/particle_set.hpp
@@ -135,6 +149,7 @@ write_basic_package_version_file(
     COMPATIBILITY AnyNewerVersion)
 #install the config scripts
 install(FILES 
+    ${CMAKE_SOURCE_DIR}/cmake/restrict-keyword.cmake
     ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake
     ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake
     DESTINATION  ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME})

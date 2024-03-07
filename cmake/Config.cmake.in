@@ -1,6 +1,7 @@
 @PACKAGE_INIT@
 include("${CMAKE_CURRENT_LIST_DIR}/@PROJECT_NAME@Targets.cmake")
 include(CMakeFindDependencyMacro)
+include("${CMAKE_CURRENT_LIST_DIR}/restrict-keyword.cmake")
 find_dependency(MPI)
 if (NOT COMMAND add_sycl_to_target) 
     message( WARNING  
