@@ -8,7 +8,7 @@ option(NESO_PARTICLES_ENABLE_HDF5 "Add HDF5 to targets" ON)
 add_library(NESO-Particles INTERFACE)
 #Alias the name to the namespaces name.
 #Can use in subdirectory or via Confiig files with namespace
-add_library(${PROJECT_NAME}::NESO-Particles ALIAS NESO-Particles)
+add_library(NESO-Particles::NESO-Particles ALIAS NESO-Particles)
 
 #Set standard
 set_property(TARGET NESO-Particles PROPERTY CXX_STANDARD 17)

@@ -44,7 +44,7 @@ write_basic_package_version_file(
     COMPATIBILITY AnyNewerVersion)
 #install the config scripts
 install(FILES 
-    ${CMAKE_SOURCE_DIR}/cmake/neso-particles-config.cmake
+    #${CMAKE_SOURCE_DIR}/cmake/neso-particles-config.cmake
     ${CMAKE_SOURCE_DIR}/cmake/restrict-keyword.cmake
     ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake
     ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake
