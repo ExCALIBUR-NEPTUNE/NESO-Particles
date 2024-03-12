@@ -107,4 +107,8 @@ if (NESO_PARTICLES_ENABLE_HDF5)
     endif()
 endif()
 
+# Find SYCL
+include(${CMAKE_CURRENT_LIST_DIR}/SYCL.cmake)
+find_sycl_if_required()
+
 message(STATUS "NESO PARTICLES INTERFACE END")

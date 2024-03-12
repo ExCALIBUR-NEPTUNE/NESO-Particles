@@ -57,3 +57,15 @@ macro(find_sycl)
             "Proceeding on the assumption that the CXX compiler is a SYCL2020 compiler")
     endif()
 endmacro()
+
+macro(find_sycl_if_required)
+    if (COMMAND add_sycl_to_target) 
+        #Not perfect method but if in a submodule dont want to use a different
+        #sycl
+        message(STATUS "add_sycl_to_target macro exists")
+    else()
+        message(STATUS "add_sycl_to_target macro NOT FOUND looking for SYCL implementation...")
+        find_sycl()
+    endif()
+endmacro()
+
