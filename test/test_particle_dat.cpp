@@ -51,10 +51,10 @@ TEST(ParticleDat, test_particle_dat_append_1) {
   for (int cellx = 0; cellx < cell_count; cellx++) {
     ASSERT_TRUE(A->cell_dat.nrow[cellx] >= counts[cellx]);
   }
-
-  A->append_particle_data(N, false, cells0, layers0, data0);
+  EventStack es;
+  A->append_particle_data(N, false, cells0, layers0, data0, es);
   // the append is async
-  sycl_target->queue.wait();
+  es.wait();
 
   for (int cellx = 0; cellx < cell_count; cellx++) {
     ASSERT_TRUE(A->h_npart_cell[cellx] == counts[cellx]);
@@ -79,9 +79,9 @@ TEST(ParticleDat, test_particle_dat_append_1) {
     ASSERT_TRUE(A->cell_dat.nrow[cellx] >= counts[cellx]);
   }
 
-  A->append_particle_data(N, true, cells0, layers0, data0);
+  A->append_particle_data(N, true, cells0, layers0, data0, es);
   // the append is async
-  sycl_target->queue.wait();
+  es.wait();
 
   for (int cellx = 0; cellx < cell_count; cellx++) {
 

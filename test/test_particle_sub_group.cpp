@@ -1,16 +1,10 @@
-#include <CL/sycl.hpp>
-#include <gtest/gtest.h>
-#include <neso_particles.hpp>
-#include <random>
-#include <type_traits>
-
-using namespace NESO::Particles;
+#include "include/test_neso_particles.hpp"
 
 namespace {
 
 const int ndim = 2;
 
-ParticleGroupSharedPtr particle_loop_common() {
+auto particle_loop_common(const int N = 1093) {
   std::vector<int> dims(ndim);
   dims[0] = 4;
   dims[1] = 8;
@@ -20,8 +14,6 @@ ParticleGroupSharedPtr particle_loop_common() {
 
   auto mesh = std::make_shared<CartesianHMesh>(MPI_COMM_WORLD, ndim, dims,
                                                cell_extent, subdivision_order);
-
-  const int cell_count = mesh->get_cell_count();
 
   auto sycl_target =
       std::make_shared<SYCLTarget>(GPU_SELECTOR, mesh->get_comm());
@@ -36,14 +28,12 @@ ParticleGroupSharedPtr particle_loop_common() {
                              ParticleProp(Sym<INT>("ID"), 1),
                              ParticleProp(Sym<INT>("MARKER"), 1)};
 
-  auto A = std::make_shared<ParticleGroup>(domain, particle_spec, sycl_target);
+  auto A = make_test_obj<ParticleGroup>(domain, particle_spec, sycl_target);
   A->add_particle_dat(ParticleDat(sycl_target,
                                   ParticleProp(Sym<REAL>("FOO"), 3),
                                   domain->mesh->get_cell_count()));
 
-  const int N = 1093; // prime
   const int rank = sycl_target->comm_pair.rank_parent;
-  const int size = sycl_target->comm_pair.size_parent;
   const INT id_offset = rank * N;
 
   std::mt19937 rng_pos(52234234 + rank);
@@ -83,6 +73,11 @@ class TestParticleSubGroup : public ParticleSubGroup {
 public:
   template <typename KERNEL, typename... ARGS>
   TestParticleSubGroup(ParticleGroupSharedPtr particle_group, KERNEL kernel,
+                       ARGS... args)
+      : ParticleSubGroup(particle_group, kernel, args...) {}
+
+  template <typename KERNEL, typename... ARGS>
+  TestParticleSubGroup(ParticleSubGroupSharedPtr particle_group, KERNEL kernel,
                        ARGS... args)
       : ParticleSubGroup(particle_group, kernel, args...) {}
 
@@ -135,7 +130,6 @@ TEST(ParticleSubGroup, selector) {
   auto A = particle_loop_common();
   auto domain = A->domain;
   auto mesh = domain->mesh;
-  const int cell_count = mesh->get_cell_count();
   auto sycl_target = A->sycl_target;
 
   TestParticleSubGroup aa(
@@ -169,7 +163,7 @@ TEST(ParticleSubGroup, particle_loop) {
   auto sycl_target = A->sycl_target;
 
   auto aa = std::make_shared<ParticleSubGroup>(
-      A, [=](auto ID) { return ID[0] == 42; }, Access::read(Sym<INT>("ID")));
+      A, [=](auto ID) { return ID[0] == 2; }, Access::read(Sym<INT>("ID")));
 
   GlobalArray<int> counter(sycl_target, 1, 0);
 
@@ -242,7 +236,6 @@ TEST(ParticleSubGroup, creating) {
   auto A = particle_loop_common();
   auto domain = A->domain;
   auto mesh = domain->mesh;
-  const int cell_count = mesh->get_cell_count();
   auto sycl_target = A->sycl_target;
 
   auto aa = std::make_shared<ParticleSubGroup>(
@@ -313,6 +306,11 @@ TEST(ParticleSubGroup, creating) {
   EXPECT_TRUE(aa->create_if_required());
   EXPECT_FALSE(aa->create_if_required());
 
+  std::vector<Sym<INT>> sym_vector_id = {Sym<INT>("ID")};
+  aa = std::make_shared<ParticleSubGroup>(
+      A, [=](auto ID) { return ID.at(0, 0) % 2 == 0; },
+      Access::read(sym_vector(A, sym_vector_id)));
+
   auto p3 = particle_loop(
       aa, [](auto ID) { ID[0] += 2; }, Access::write(Sym<INT>("ID")));
   p3->execute();
@@ -334,7 +332,749 @@ TEST(ParticleSubGroup, creating) {
   EXPECT_TRUE(aa->create_if_required());
   EXPECT_TRUE(aa->create_if_required());
 
+  EXPECT_EQ(aa->static_status(), false);
+  EXPECT_EQ(aa->static_status(false), false);
+  EXPECT_EQ(aa->static_status(true), true);
+  EXPECT_EQ(aa->static_status(), true);
+  EXPECT_TRUE(!aa->is_valid());
+
   A->free();
   sycl_target->free();
+  mesh->free();
+}
+
+TEST(ParticleSubGroup, static_valid) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  auto sycl_target = A->sycl_target;
+
+  auto lambda_make_aa = [&]() {
+    return static_particle_sub_group(
+        A, [=](auto ID) { return ID.at(0) % 2 == 0; },
+        Access::read(Sym<INT>("ID")));
+  };
+
+  auto aa = lambda_make_aa();
+  EXPECT_TRUE(aa->is_valid());
+
+  particle_loop(
+      aa, [=](auto ID) { ID.at(0) += 2; }, Access::write(Sym<INT>("ID")))
+      ->execute();
+  EXPECT_TRUE(!aa->is_valid());
+
+  aa = lambda_make_aa();
+  A->cell_move();
+  EXPECT_TRUE(!aa->is_valid());
+
+  aa = lambda_make_aa();
+  A->hybrid_move();
+  EXPECT_TRUE(!aa->is_valid());
+
+  aa = lambda_make_aa();
+  A->add_particles_local(aa);
+  EXPECT_TRUE(!aa->is_valid());
+
+  auto bb = static_particle_sub_group(
+      A, [=](auto ID) { return ID.at(0) % 4 == 0; },
+      Access::read(Sym<INT>("ID")));
+  aa = lambda_make_aa();
+  A->remove_particles(bb);
+  EXPECT_TRUE(!aa->is_valid());
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}
+
+TEST(ParticleSubGroup, particle_loop_index) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  const int cell_count = mesh->get_cell_count();
+  auto sycl_target = A->sycl_target;
+
+  auto aa = std::make_shared<ParticleSubGroup>(
+      A, [=](auto ID) { return ID[0] % 2 == 0; }, Access::read(Sym<INT>("ID")));
+
+  auto pl_reset = particle_loop(
+      A, [=](auto MARKER) { MARKER[0] = -1; },
+      Access::write(Sym<INT>("MARKER")));
+  pl_reset->execute();
+
+  auto pl = particle_loop(
+      aa,
+      [=](auto MARKER, auto index) {
+        MARKER[0] = index.get_local_linear_index();
+      },
+      Access::write(Sym<INT>("MARKER")), Access::read(ParticleLoopIndex{}));
+  pl->execute();
+
+  INT index = 0;
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto marker = A->get_dat(Sym<INT>("MARKER"))->cell_dat.get_cell(cellx);
+    auto id = A->get_dat(Sym<INT>("ID"))->cell_dat.get_cell(cellx);
+    const int nrow = marker->nrow;
+    // for each particle in the cell
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      const INT mx = (*marker)[0][rowx];
+      const INT ix = (*id)[0][rowx];
+      if (ix % 2 == 0) {
+        ASSERT_EQ(mx, index);
+      } else {
+        ASSERT_EQ(mx, -1);
+      }
+      index++;
+    }
+  }
+
+  std::vector<INT> gav = {0};
+  auto ga = std::make_shared<LocalArray<INT>>(sycl_target, gav);
+  pl = particle_loop(
+      aa,
+      [=](auto MARKER, auto index, auto GA) {
+        MARKER[0] = index.get_loop_linear_index();
+        GA.fetch_add(0, 1);
+      },
+      Access::write(Sym<INT>("MARKER")), Access::read(ParticleLoopIndex{}),
+      Access::add(ga));
+
+  pl_reset->execute();
+  pl->execute();
+  gav = ga->get();
+  const int npart_la = gav.at(0);
+
+  std::set<INT> found_indices;
+  const INT npart = aa->get_npart_local();
+  index = 0;
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto marker = A->get_dat(Sym<INT>("MARKER"))->cell_dat.get_cell(cellx);
+    auto id = A->get_dat(Sym<INT>("ID"))->cell_dat.get_cell(cellx);
+    const int nrow = marker->nrow;
+    // for each particle in the cell
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      const INT mx = (*marker)[0][rowx];
+      const INT ix = (*id)[0][rowx];
+      if (ix % 2 == 0) {
+        ASSERT_TRUE(mx < npart);
+        ASSERT_TRUE(mx > -1);
+        found_indices.insert(mx);
+        index++;
+      } else {
+        ASSERT_EQ(mx, -1);
+      }
+    }
+  }
+  ASSERT_EQ(npart_la, npart);
+  ASSERT_EQ(index, npart);
+  ASSERT_EQ(found_indices.size(), npart);
+
+  auto loop_indexing = particle_loop(
+      aa,
+      [](auto index, auto MARKER) {
+        MARKER.at(0) = index.get_loop_linear_index();
+      },
+      Access::read(ParticleLoopIndex{}), Access::write(Sym<INT>("MARKER")));
+
+  for (int cx = 0; cx < cell_count; cx++) {
+    loop_indexing->execute(cx);
+  }
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto marker = A->get_dat(Sym<INT>("MARKER"))->cell_dat.get_cell(cellx);
+    auto id = A->get_dat(Sym<INT>("ID"))->cell_dat.get_cell(cellx);
+    const int nrow = marker->nrow;
+    // for each particle in the cell
+    index = 0;
+    found_indices.clear();
+
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      const INT mx = (*marker)[0][rowx];
+      const INT ix = (*id)[0][rowx];
+      if (ix % 2 == 0) {
+        ASSERT_TRUE(mx < nrow);
+        ASSERT_TRUE(mx > -1);
+        found_indices.insert(mx);
+        index++;
+      } else {
+        ASSERT_EQ(mx, -1);
+      }
+    }
+    ASSERT_EQ(found_indices.size(), index);
+    ASSERT_EQ(found_indices.size(), aa->get_npart_cell(cellx));
+  }
+
+  auto loop_sub_indexing = particle_loop(
+      aa,
+      [](auto index, auto MARKER) {
+        MARKER.at(0) = index.get_sub_linear_index();
+      },
+      Access::read(ParticleLoopIndex{}), Access::write(Sym<INT>("MARKER")));
+  for (int cx = 0; cx < cell_count; cx++) {
+    loop_sub_indexing->execute(cx);
+  }
+
+  std::set<INT> sub_indices, sub_correct;
+  const int npart_local = aa->get_npart_local();
+  for (int ix = 0; ix < npart_local; ix++) {
+    sub_correct.insert(ix);
+  }
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto marker = A->get_cell(Sym<INT>("MARKER"), cellx);
+    auto id = A->get_cell(Sym<INT>("ID"), cellx);
+    const int nrow = marker->nrow;
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      if (id->at(rowx, 0) % 2 == 0) {
+        const INT mx = marker->at(rowx, 0);
+        sub_indices.insert(mx);
+      }
+    }
+  }
+  ASSERT_EQ(sub_correct, sub_indices);
+
+  loop_sub_indexing->execute();
+
+  sub_indices.clear();
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto marker = A->get_cell(Sym<INT>("MARKER"), cellx);
+    auto id = A->get_cell(Sym<INT>("ID"), cellx);
+    const int nrow = marker->nrow;
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      if (id->at(rowx, 0) % 2 == 0) {
+        const INT mx = marker->at(rowx, 0);
+        sub_indices.insert(mx);
+      }
+    }
+  }
+  ASSERT_EQ(sub_correct, sub_indices);
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}
+
+TEST(ParticleSubGroup, whole_group) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  auto sycl_target = A->sycl_target;
+  const int cell_count = mesh->get_cell_count();
+
+  auto pl_set = particle_loop(
+      A, [](auto m) { m.at(0) = 2; }, Access::write(Sym<INT>("MARKER")));
+  pl_set->execute();
+
+  auto aa = std::make_shared<ParticleSubGroup>(A);
+  ASSERT_TRUE(aa->is_entire_particle_group());
+
+  auto pl_set_aa = particle_loop(
+      aa, [](auto m) { m.at(0) -= 1; }, Access::write(Sym<INT>("MARKER")));
+  pl_set_aa->execute();
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto marker = A->get_dat(Sym<INT>("MARKER"))->cell_dat.get_cell(cellx);
+    const int nrow = marker->nrow;
+    // for each particle in the cell
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      const INT mx = (*marker)[0][rowx];
+      ASSERT_EQ(mx, 1);
+    }
+  }
+
+  ASSERT_EQ(A->get_npart_local(), aa->get_npart_local());
+
+  A->remove_particles(aa);
+  ASSERT_EQ(A->get_npart_local(), 0);
+  for (int cx = 0; cx < cell_count; cx++) {
+    ASSERT_EQ(A->get_npart_cell(cx), 0);
+    ASSERT_EQ(aa->get_npart_cell(cx), 0);
+  }
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}
+
+TEST(ParticleSubGroup, remove_particles) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  auto sycl_target = A->sycl_target;
+  const int cell_count = mesh->get_cell_count();
+
+  auto bb = std::make_shared<ParticleSubGroup>(
+      A, [=](auto ID) { return ID[0] % 2 == 1; }, Access::read(Sym<INT>("ID")));
+  auto aa = std::make_shared<ParticleSubGroup>(
+      A, [=](auto ID) { return ID[0] % 2 == 0; }, Access::read(Sym<INT>("ID")));
+
+  ASSERT_EQ(bb->get_npart_local() + aa->get_npart_local(),
+            A->get_npart_local());
+
+  A->reset_version_tracker();
+  A->remove_particles(aa);
+  A->test_version_different();
+  A->test_internal_state();
+
+  EXPECT_TRUE(aa->create_if_required());
+  EXPECT_FALSE(aa->create_if_required());
+  EXPECT_TRUE(bb->create_if_required());
+  EXPECT_FALSE(bb->create_if_required());
+
+  ASSERT_EQ(bb->get_npart_local(), A->get_npart_local());
+  ASSERT_EQ(aa->get_npart_local(), 0);
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto id = A->get_dat(Sym<INT>("ID"))->cell_dat.get_cell(cellx);
+    const int nrow = id->nrow;
+    // for each particle in the cell
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      ASSERT_TRUE(id->at(rowx, 0) % 2 == 1);
+    }
+    ASSERT_EQ(bb->get_npart_cell(cellx), A->get_npart_cell(cellx));
+    ASSERT_EQ(aa->get_npart_cell(cellx), 0);
+  }
+
+  auto AA = std::make_shared<ParticleSubGroup>(A);
+
+  A->reset_version_tracker();
+  A->remove_particles(AA);
+  A->test_version_different();
+  A->test_init();
+
+  EXPECT_TRUE(aa->create_if_required());
+  EXPECT_FALSE(aa->create_if_required());
+  EXPECT_TRUE(bb->create_if_required());
+  EXPECT_FALSE(bb->create_if_required());
+
+  ASSERT_EQ(A->get_npart_local(), 0);
+  ASSERT_EQ(AA->get_npart_local(), 0);
+  ASSERT_EQ(bb->get_npart_local(), 0);
+  ASSERT_EQ(aa->get_npart_local(), 0);
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    ASSERT_EQ(A->get_npart_cell(cellx), 0);
+    ASSERT_EQ(AA->get_npart_cell(cellx), 0);
+    ASSERT_EQ(bb->get_npart_cell(cellx), 0);
+    ASSERT_EQ(aa->get_npart_cell(cellx), 0);
+  }
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}
+
+TEST(ParticleSubGroup, clear) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  auto sycl_target = A->sycl_target;
+  const int cell_count = mesh->get_cell_count();
+
+  auto bb = std::make_shared<ParticleSubGroup>(
+      A, [=](auto ID) { return ID[0] % 2 == 1; }, Access::read(Sym<INT>("ID")));
+  auto aa = std::make_shared<ParticleSubGroup>(
+      A, [=](auto ID) { return ID[0] % 2 == 0; }, Access::read(Sym<INT>("ID")));
+  auto ee = std::make_shared<ParticleSubGroup>(
+      A, [=](auto ID) { return false; }, Access::read(Sym<INT>("ID")));
+
+  auto AA = std::make_shared<ParticleSubGroup>(A);
+  A->reset_version_tracker();
+  A->clear();
+  A->test_version_different();
+  A->test_init();
+
+  EXPECT_TRUE(aa->create_if_required());
+  EXPECT_FALSE(aa->create_if_required());
+  EXPECT_TRUE(bb->create_if_required());
+  EXPECT_FALSE(bb->create_if_required());
+
+  ASSERT_EQ(A->get_npart_local(), 0);
+  ASSERT_EQ(AA->get_npart_local(), 0);
+  ASSERT_EQ(bb->get_npart_local(), 0);
+  ASSERT_EQ(aa->get_npart_local(), 0);
+  ASSERT_EQ(ee->get_npart_local(), 0);
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    ASSERT_EQ(A->get_npart_cell(cellx), 0);
+    ASSERT_EQ(AA->get_npart_cell(cellx), 0);
+    ASSERT_EQ(bb->get_npart_cell(cellx), 0);
+    ASSERT_EQ(aa->get_npart_cell(cellx), 0);
+    ASSERT_EQ(ee->get_npart_cell(cellx), 0);
+  }
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}
+
+TEST(ParticleSubGroup, add_product_matrix) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  auto sycl_target = A->sycl_target;
+
+  auto bb = std::make_shared<ParticleSubGroup>(
+      A, [=](auto ID) { return ID[0] % 2 == 1; }, Access::read(Sym<INT>("ID")));
+  auto aa = std::make_shared<ParticleSubGroup>(
+      A, [=](auto ID) { return ID[0] % 2 == 0; }, Access::read(Sym<INT>("ID")));
+  auto ee = std::make_shared<ParticleSubGroup>(
+      A, [=](auto ID) { return false; }, Access::read(Sym<INT>("ID")));
+
+  const int npart_b_A = A->get_npart_local();
+  const int npart_b_aa = aa->get_npart_local();
+  const int npart_b_bb = bb->get_npart_local();
+
+  auto product_spec = product_matrix_spec(ParticleProp(Sym<INT>("MARKER"), 1));
+  auto pm = product_matrix(sycl_target, product_spec);
+  pm->reset(1);
+
+  A->reset_version_tracker();
+  A->add_particles_local(pm);
+  A->test_version_different();
+  A->test_internal_state();
+
+  ASSERT_EQ(A->get_npart_local(), npart_b_A + 1);
+  ASSERT_EQ(bb->get_npart_local(), npart_b_bb);
+  ASSERT_EQ(aa->get_npart_local(), npart_b_aa + 1);
+  ASSERT_EQ(ee->get_npart_local(), 0);
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}
+
+TEST(ParticleSubGroup, add_particles_local_particle_group) {
+  auto A = particle_loop_common(10);
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  auto sycl_target = A->sycl_target;
+
+  auto aa = std::make_shared<ParticleSubGroup>(
+      A, [=](auto ID) { return ID[0] % 2 == 0; }, Access::read(Sym<INT>("ID")));
+
+  auto B =
+      make_test_obj<ParticleGroup>(domain, A->get_particle_spec(), sycl_target);
+
+  auto product_spec = product_matrix_spec(ParticleProp(Sym<INT>("MARKER"), 1));
+  auto pm = product_matrix(sycl_target, product_spec);
+  pm->reset(1);
+
+  B->reset_version_tracker();
+  B->add_particles_local(pm);
+  B->test_version_different();
+  B->test_internal_state();
+
+  EXPECT_TRUE(aa->create_if_required());
+  EXPECT_FALSE(aa->create_if_required());
+
+  A->reset_version_tracker();
+  A->add_particles_local(B);
+  A->test_version_different();
+  A->test_internal_state();
+
+  EXPECT_TRUE(aa->create_if_required());
+  EXPECT_FALSE(aa->create_if_required());
+
+  B->free();
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}
+
+TEST(ParticleSubGroup, add_particles_local_particle_sub_group) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  auto sycl_target = A->sycl_target;
+  const int cell_count = mesh->get_cell_count();
+
+  auto odd = std::make_shared<ParticleSubGroup>(
+      A, [=](auto ID) { return ID[0] % 2 == 1; }, Access::read(Sym<INT>("ID")));
+  auto even = std::make_shared<ParticleSubGroup>(
+      A, [=](auto ID) { return ID[0] % 2 == 0; }, Access::read(Sym<INT>("ID")));
+
+  auto B =
+      make_test_obj<ParticleGroup>(domain, A->get_particle_spec(), sycl_target);
+
+  auto bb = std::make_shared<ParticleSubGroup>(
+      B, [=](auto ID) { return ID[0] % 2 == 0; }, Access::read(Sym<INT>("ID")));
+
+  B->add_particle_dat(
+      ParticleDat(sycl_target, ParticleProp(Sym<INT>("FOO"), 3), cell_count));
+
+  const int npart_local = A->get_npart_local();
+  const int npart_local_even = even->get_npart_local();
+  const int npart_local_odd = odd->get_npart_local();
+  ASSERT_EQ(npart_local, npart_local_even + npart_local_odd);
+
+  std::vector<int> npart_cell(cell_count);
+  std::vector<int> npart_cell_even(cell_count);
+  std::vector<int> npart_cell_odd(cell_count);
+
+  std::map<int, std::set<INT>> cell_to_ids;
+  std::set<INT> ids;
+
+  for (int cx = 0; cx < cell_count; cx++) {
+    npart_cell.at(cx) = A->get_npart_cell(cx);
+    npart_cell_even.at(cx) = even->get_npart_cell(cx);
+    npart_cell_odd.at(cx) = odd->get_npart_cell(cx);
+
+    const int npart_A = A->get_npart_cell(cx);
+    auto A_ID = A->get_cell(Sym<INT>("ID"), cx);
+    for (int rowx = 0; rowx < npart_A; rowx++) {
+      const INT id = A_ID->at(rowx, 0);
+      cell_to_ids[cx].insert(id);
+      ids.insert(id);
+    }
+    ASSERT_EQ(cell_to_ids[cx].size(), npart_cell.at(cx));
+  }
+  ASSERT_EQ(ids.size(), npart_local);
+
+  B->reset_version_tracker();
+  B->add_particles_local(even);
+  B->test_version_different();
+  B->test_internal_state();
+
+  EXPECT_TRUE(bb->create_if_required());
+  EXPECT_FALSE(bb->create_if_required());
+
+  for (int cx = 0; cx < cell_count; cx++) {
+    const int npart = B->get_npart_cell(cx);
+    ASSERT_EQ(npart, npart_cell_even.at(cx));
+    auto B_ID = B->get_cell(Sym<INT>("ID"), cx);
+    for (int rowx = 0; rowx < npart; rowx++) {
+      ASSERT_TRUE(B_ID->at(rowx, 0) % 2 == 0);
+    }
+  }
+
+  A->reset_version_tracker();
+  A->remove_particles(even);
+  A->test_version_different();
+  A->test_internal_state();
+
+  EXPECT_TRUE(even->create_if_required());
+  EXPECT_FALSE(even->create_if_required());
+  ASSERT_EQ(even->get_npart_local(), 0);
+  ASSERT_EQ(npart_local_odd, A->get_npart_local());
+  ASSERT_EQ(npart_local_even, B->get_npart_local());
+
+  std::set<INT> ids_to_test;
+  for (int cx = 0; cx < cell_count; cx++) {
+    const int npart_A = A->get_npart_cell(cx);
+    const int npart_B = B->get_npart_cell(cx);
+
+    ASSERT_EQ(npart_A, npart_cell_odd.at(cx));
+    ASSERT_EQ(npart_B, npart_cell_even.at(cx));
+
+    auto B_ID = B->get_cell(Sym<INT>("ID"), cx);
+    auto A_ID = A->get_cell(Sym<INT>("ID"), cx);
+    std::set<INT> cell_ids;
+
+    for (int rowx = 0; rowx < npart_A; rowx++) {
+      const INT id = A_ID->at(rowx, 0);
+      ASSERT_TRUE(-1 < id);
+      ASSERT_TRUE(id % 2 == 1);
+      cell_ids.insert(id);
+      ids_to_test.insert(id);
+    }
+    for (int rowx = 0; rowx < npart_B; rowx++) {
+      const INT id = B_ID->at(rowx, 0);
+      ASSERT_TRUE(-1 < id);
+      ASSERT_TRUE(id % 2 == 0);
+      cell_ids.insert(id);
+      ids_to_test.insert(id);
+    }
+    ASSERT_TRUE(cell_ids == cell_to_ids[cx]);
+  }
+  ASSERT_EQ(ids_to_test.size(), ids.size());
+  ASSERT_TRUE(ids_to_test == ids);
+
+  for (int cx = 0; cx < cell_count; cx++) {
+    const int npart = B->get_npart_cell(cx);
+    auto FOO = B->get_cell(Sym<INT>("FOO"), cx);
+    for (int rx = 0; rx < npart; rx++) {
+      for (int dx = 0; dx < 3; dx++) {
+        ASSERT_EQ(FOO->at(rx, dx), 0);
+      }
+    }
+  }
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}
+
+TEST(ParticleSubGroup, sub_sub_group) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  auto sycl_target = A->sycl_target;
+
+  auto mod2 = std::make_shared<TestParticleSubGroup>(
+      A, [=](auto ID) { return ID.at(0) % 2 == 0; },
+      Access::read(Sym<INT>("ID")));
+
+  auto mod4 = std::make_shared<TestParticleSubGroup>(
+      std::dynamic_pointer_cast<ParticleSubGroup>(mod2),
+      [=](auto ID) { return ((ID[0] % 4) == 0); },
+      Access::read(Sym<INT>("ID")));
+
+  ASSERT_EQ(mod2->get_particle_group(), mod4->get_particle_group());
+
+  std::vector<INT> cells;
+  std::vector<INT> layers;
+  auto num_particles = mod2->test_get_cells_layers(cells, layers);
+  std::set<std::pair<INT, INT>> correct, to_test;
+  for (int px = 0; px < num_particles; px++) {
+    const int cellx = cells.at(px);
+    const int layerx = layers.at(px);
+    auto id = A->get_cell(Sym<INT>("ID"), cellx)->at(layerx, 0);
+    ASSERT_TRUE(id % 2 == 0);
+    if (id % 4 == 0) {
+      correct.insert({cellx, layerx});
+    }
+  }
+
+  num_particles = mod4->test_get_cells_layers(cells, layers);
+  for (int px = 0; px < num_particles; px++) {
+    const int cellx = cells.at(px);
+    const int layerx = layers.at(px);
+    auto id = A->get_cell(Sym<INT>("ID"), cellx)->at(layerx, 0);
+    ASSERT_TRUE(id % 4 == 0);
+    to_test.insert({cellx, layerx});
+  }
+  ASSERT_EQ(to_test, correct);
+
+  to_test.clear();
+  auto AA = particle_sub_group(A);
+  auto mod42 = std::make_shared<TestParticleSubGroup>(
+      AA, [=](auto ID) { return ((ID[0] % 4) == 0); },
+      Access::read(Sym<INT>("ID")));
+
+  num_particles = mod42->test_get_cells_layers(cells, layers);
+  for (int px = 0; px < num_particles; px++) {
+    const int cellx = cells.at(px);
+    const int layerx = layers.at(px);
+    auto id = A->get_cell(Sym<INT>("ID"), cellx)->at(layerx, 0);
+    ASSERT_TRUE(id % 4 == 0);
+    to_test.insert({cellx, layerx});
+  }
+  ASSERT_EQ(to_test, correct);
+
+  auto m0 = particle_sub_group(
+      A, [=](auto M) { return true; }, Access::read(Sym<INT>("MARKER")));
+
+  auto e0 = particle_sub_group(
+      m0, [=](auto ID) { return ID.at(0) % 2 == 0; },
+      Access::read(Sym<INT>("ID")));
+
+  EXPECT_TRUE(e0->create_if_required());
+  EXPECT_FALSE(e0->create_if_required());
+
+  particle_loop(
+      A, [=](auto M) { M.at(0) += 1; }, Access::write(Sym<INT>("MARKER")))
+      ->execute();
+
+  EXPECT_TRUE(e0->create_if_required());
+  EXPECT_FALSE(e0->create_if_required());
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}
+
+TEST(ParticleSubGroup, get_particles) {
+
+  const int ndim = 2;
+  std::vector<int> dims(ndim);
+  dims[0] = 4;
+  dims[1] = 8;
+
+  const double cell_extent = 1.0;
+  const int subdivision_order = 2;
+  auto mesh = std::make_shared<CartesianHMesh>(MPI_COMM_WORLD, ndim, dims,
+                                               cell_extent, subdivision_order);
+
+  auto sycl_target =
+      std::make_shared<SYCLTarget>(GPU_SELECTOR, mesh->get_comm());
+
+  auto domain = std::make_shared<Domain>(mesh);
+
+  ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
+                             ParticleProp(Sym<REAL>("V"), 3),
+                             ParticleProp(Sym<INT>("CELL_ID"), 1, true),
+                             ParticleProp(Sym<INT>("ID"), 1)};
+
+  const int cell_count = domain->mesh->get_cell_count();
+  auto A = make_test_obj<ParticleGroup>(domain, particle_spec, sycl_target);
+
+  A->add_particle_dat(
+      ParticleDat(sycl_target, ParticleProp(Sym<REAL>("FOO"), 3), cell_count));
+
+  std::mt19937 rng_pos(52234234);
+  std::mt19937 rng_vel(52234231);
+
+  const int N = cell_count * 2 + 7;
+
+  auto positions =
+      uniform_within_extents(N, ndim, mesh->global_extents, rng_pos);
+  auto velocities =
+      NESO::Particles::normal_distribution(N, 3, 0.0, 1.0, rng_vel);
+
+  ParticleSet initial_distribution(N, particle_spec);
+
+  for (int px = 0; px < N; px++) {
+    for (int dimx = 0; dimx < ndim; dimx++) {
+      initial_distribution[Sym<REAL>("P")][px][dimx] = positions[dimx][px];
+    }
+    for (int dimx = 0; dimx < 3; dimx++) {
+      initial_distribution[Sym<REAL>("V")][px][dimx] = velocities[dimx][px];
+    }
+    initial_distribution[Sym<INT>("CELL_ID")][px][0] = px % (cell_count - 1);
+    initial_distribution[Sym<INT>("ID")][px][0] = px;
+  }
+
+  A->add_particles_local(initial_distribution);
+  auto aa = particle_sub_group(
+      A, [=](auto ID) { return ID.at(0) % 2 == 0; },
+      Access::read(Sym<INT>("ID")));
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    const int npart_cell = aa->get_npart_cell(cellx);
+    std::vector<INT> cells;
+    std::vector<INT> layers;
+    cells.reserve(npart_cell);
+    layers.reserve(npart_cell);
+    for (int layerx = 0; layerx < npart_cell; layerx++) {
+      cells.push_back(cellx);
+      layers.push_back(layerx);
+    }
+    auto particles = aa->get_particles(cells, layers);
+    ASSERT_EQ(particles->npart, npart_cell);
+
+    for (int layerx = 0; layerx < npart_cell; layerx++) {
+      const INT px = particles->at(Sym<INT>("ID"), layerx, 0);
+      EXPECT_EQ(px % (cell_count - 1), cellx);
+      EXPECT_TRUE(px % 2 == 0);
+      EXPECT_EQ(initial_distribution.at(Sym<REAL>("P"), px, 0),
+                particles->at(Sym<REAL>("P"), layerx, 0));
+      EXPECT_EQ(initial_distribution.at(Sym<REAL>("P"), px, 1),
+                particles->at(Sym<REAL>("P"), layerx, 1));
+      EXPECT_EQ(initial_distribution.at(Sym<REAL>("V"), px, 0),
+                particles->at(Sym<REAL>("V"), layerx, 0));
+      EXPECT_EQ(initial_distribution.at(Sym<REAL>("V"), px, 1),
+                particles->at(Sym<REAL>("V"), layerx, 1));
+      EXPECT_EQ(initial_distribution.at(Sym<REAL>("V"), px, 2),
+                particles->at(Sym<REAL>("V"), layerx, 2));
+
+      EXPECT_EQ(particles->at(Sym<INT>("CELL_ID"), layerx, 0), cellx);
+      EXPECT_EQ(particles->at(Sym<REAL>("FOO"), layerx, 0), 0.0);
+      EXPECT_EQ(particles->at(Sym<REAL>("FOO"), layerx, 1), 0.0);
+      EXPECT_EQ(particles->at(Sym<REAL>("FOO"), layerx, 2), 0.0);
+    }
+  }
+
+  A->free();
   mesh->free();
 }

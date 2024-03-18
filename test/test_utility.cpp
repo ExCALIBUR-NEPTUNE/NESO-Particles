@@ -3,7 +3,7 @@
 #include <neso_particles.hpp>
 using namespace NESO::Particles;
 
-TEST(Utility, UniformWithinExtents) {
+TEST(Utility, uniform_within_extents) {
 
   {
     std::mt19937 rng = std::mt19937(std::random_device{}());
@@ -43,7 +43,7 @@ TEST(Utility, UniformWithinExtents) {
   }
 }
 
-TEST(Utility, NormalDistribution) {
+TEST(Utility, normal_distribution) {
 
   {
     std::mt19937 rng = std::mt19937(std::random_device{}());

@@ -208,7 +208,7 @@ inline void MeshHierarchyGlobalMap::execute() {
  *
  *  @param mpi_rank_dat ParticleDat containing MPI ranks to reset.
  */
-inline void reset_mpi_ranks(ParticleDatSharedPtr<INT> &mpi_rank_dat) {
+inline void reset_mpi_ranks(ParticleDatSharedPtr<INT> mpi_rank_dat) {
   ParticleLoop(
       "reset_mpi_ranks", mpi_rank_dat,
       [=](auto mpi_rank_dat) {

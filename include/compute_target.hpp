@@ -288,23 +288,152 @@ public:
 
 typedef std::shared_ptr<SYCLTarget> SYCLTargetSharedPtr;
 
+template <typename T> class BufferBase {
+protected:
+  virtual inline T *malloc_wrapper(const std::size_t num_bytes) = 0;
+  virtual inline void free_wrapper(T *ptr) = 0;
+
+  inline void generic_init() {
+    NESOASSERT(this->ptr == nullptr, "Buffer is already allocated.");
+    if (this->size > 0) {
+      this->ptr = this->malloc_wrapper(this->size * sizeof(T));
+      NESOASSERT(this->ptr != nullptr, "generic_init set nullptr.");
+    }
+  }
+  inline void generic_free() {
+    if (this->ptr != nullptr) {
+      this->free_wrapper(this->ptr);
+    }
+    this->ptr = nullptr;
+  }
+
+  BufferBase(SYCLTargetSharedPtr sycl_target, std::size_t size)
+      : sycl_target(sycl_target), size(size), ptr(nullptr) {}
+
+  inline void assert_allocated() {
+    NESOASSERT(this->ptr != nullptr,
+               "Allocated buffer required but pointer is nullptr.");
+  }
+
+public:
+  /// Compute device used by the instance.
+  SYCLTargetSharedPtr sycl_target;
+  /// SYCL USM pointer to data.
+  T *ptr;
+  /// Number of elements allocated.
+  std::size_t size;
+
+  /**
+   * Get the size of the allocation in bytes.
+   *
+   * @returns size of buffer in bytes.
+   */
+  inline std::size_t size_bytes() { return this->size * sizeof(T); }
+
+  /**
+   * Reallocate the buffer to hold at least the requested number of elements.
+   * May or may not reduce the buffer size if called with a size less than the
+   * current allocation. Current contents is not copied to the new buffer.
+   *
+   * @param size Minimum number of elements this buffer should be able to hold.
+   */
+  inline int realloc_no_copy(const std::size_t size) {
+    if (size > this->size) {
+      this->assert_allocated();
+      this->free_wrapper(this->ptr);
+      this->ptr = this->malloc_wrapper(size * sizeof(T));
+      this->size = size;
+    }
+    return this->size;
+  }
+
+  /**
+   * Asynchronously set the values in the buffer to those in a std::vector.
+   *
+   * @param data Input vector to copy values from.
+   * @returns Event to wait on before using new values in the buffer.
+   */
+  inline sycl::event set_async(const std::vector<T> &data) {
+    NESOASSERT(data.size() == this->size, "Input data is incorrectly sized.");
+    const std::size_t size_bytes = sizeof(T) * this->size;
+    if (size_bytes) {
+      NESOASSERT(this->ptr != nullptr, "Internal pointer is not allocated.");
+      this->assert_allocated();
+      auto copy_event =
+          sycl_target->queue.memcpy(this->ptr, data.data(), size_bytes);
+      return copy_event;
+    } else {
+      return sycl::event();
+    }
+  }
+
+  /**
+   * Set the values in the buffer to those in a std::vector. Blocks until
+   * the copy is complete.
+   *
+   * @param data Input vector to copy values from.
+   */
+  inline void set(const std::vector<T> &data) {
+    this->set_async(data).wait_and_throw();
+  }
+
+  /**
+   * Asynchronously get the values in the buffer into a std::vector.
+   *
+   * @param[in, out] data Input vector to copy values from buffer into.
+   * @returns Event to wait on before using new values in the std::vector.
+   */
+  inline sycl::event get_async(std::vector<T> &data) {
+    NESOASSERT(data.size() == this->size, "Input data is incorrectly sized.");
+    const std::size_t size_bytes = sizeof(T) * this->size;
+    if (size_bytes) {
+      auto copy_event =
+          sycl_target->queue.memcpy(data.data(), this->ptr, size_bytes);
+      return copy_event;
+    } else {
+      return sycl::event();
+    }
+  }
+
+  /**
+   * Get the values in the buffer into a std::vector. Blocks until copy is
+   * complete.
+   *
+   * @param[in, out] data Input vector to copy values from buffer into.
+   */
+  inline void get(std::vector<T> &data) {
+    this->get_async(data).wait_and_throw();
+  }
+
+  /**
+   * Get the values in the buffer into a std::vector.
+   *
+   * @returns std::vector of values in the buffer.
+   */
+  inline std::vector<T> get() {
+    std::vector<T> data(this->size);
+    this->get(data);
+    return data;
+  }
+};
+
 /**
  * Container around USM device allocated memory that can be resized.
  */
-template <typename T> class BufferDevice {
-private:
+template <typename T> class BufferDevice : public BufferBase<T> {
+protected:
+  virtual inline T *malloc_wrapper(const std::size_t num_bytes) override {
+    return static_cast<T *>(this->sycl_target->malloc_device(num_bytes));
+  }
+  virtual inline void free_wrapper(T *ptr) override {
+    this->sycl_target->free(ptr);
+  }
+
 public:
   /// Disable (implicit) copies.
   BufferDevice(const BufferDevice &st) = delete;
   /// Disable (implicit) copies.
   BufferDevice &operator=(BufferDevice const &a) = delete;
-
-  /// Compute device used by the instance.
-  SYCLTargetSharedPtr sycl_target;
-  /// SYCL USM device pointer, only accessible on device.
-  T *ptr;
-  /// Number of elements allocated.
-  size_t size;
 
   /**
    * Create a new BufferDevice of a given number of elements.
@@ -313,9 +442,8 @@ public:
    * @param size Number of elements.
    */
   BufferDevice(SYCLTargetSharedPtr &sycl_target, size_t size)
-      : sycl_target(sycl_target) {
-    this->size = size;
-    this->ptr = (T *)this->sycl_target->malloc_device(size * sizeof(T));
+      : BufferBase<T>(sycl_target, size) {
+    this->generic_init();
   }
 
   /**
@@ -327,58 +455,30 @@ public:
    */
   BufferDevice(SYCLTargetSharedPtr sycl_target, const std::vector<T> &vec)
       : BufferDevice(sycl_target, vec.size()) {
-    if (this->size > 0) {
-      this->sycl_target->queue.memcpy(this->ptr, vec.data(), this->size_bytes())
-          .wait();
-    }
+    this->set(vec);
   }
 
-  /**
-   * Get the size of the allocation in bytes.
-   *
-   * @returns size of buffer in bytes.
-   */
-  inline size_t size_bytes() { return this->size * sizeof(T); }
-
-  /**
-   * Reallocate the buffer to hold at least the requested number of elements.
-   * May or may not reduce the buffer size if called with a size less than the
-   * current allocation. Current contents is not copied to the new buffer.
-   *
-   * @param size Minimum number of elements this buffer should be able to hold.
-   */
-  inline int realloc_no_copy(const size_t size) {
-    if (size > this->size) {
-      this->sycl_target->free(this->ptr);
-      this->ptr = (T *)this->sycl_target->malloc_device(size * sizeof(T));
-      this->size = size;
-    }
-    return this->size;
-  }
-  ~BufferDevice() {
-    if (this->ptr != NULL) {
-      this->sycl_target->free(this->ptr);
-    }
-  }
+  ~BufferDevice() { this->generic_free(); }
 };
 
 /**
  * Container around USM shared allocated memory that can be resized.
  */
-template <typename T> class BufferShared {
-private:
+template <typename T> class BufferShared : public BufferBase<T> {
+protected:
+  virtual inline T *malloc_wrapper(const std::size_t num_bytes) override {
+    return static_cast<T *>(
+        sycl::malloc_shared(num_bytes, this->sycl_target->queue));
+  }
+  virtual inline void free_wrapper(T *ptr) override {
+    sycl::free(this->ptr, this->sycl_target->queue);
+  }
+
 public:
   /// Disable (implicit) copies.
   BufferShared(const BufferShared &st) = delete;
   /// Disable (implicit) copies.
   BufferShared &operator=(BufferShared const &a) = delete;
-
-  /// Compute device used by the instance.
-  SYCLTargetSharedPtr sycl_target;
-  /// SYCL USM shared pointer, accessible on host and device.
-  T *ptr;
-  /// Number of elements allocated.
-  size_t size;
 
   /**
    * Create a new DeviceShared of a given number of elements.
@@ -387,57 +487,42 @@ public:
    * @param size Number of elements.
    */
   BufferShared(SYCLTargetSharedPtr sycl_target, size_t size)
-      : sycl_target(sycl_target) {
-    this->size = size;
-    this->ptr = (T *)sycl::malloc_shared(size * sizeof(T), sycl_target->queue);
-  }
-  /**
-   * Get the size of the allocation in bytes.
-   *
-   * @returns size of buffer in bytes.
-   */
-  inline size_t size_bytes() { return this->size * sizeof(T); }
-  /**
-   * Reallocate the buffer to hold at least the requested number of elements.
-   * May or may not reduce the buffer size if called with a size less than the
-   * current allocation. Current contents is not copied to the new buffer.
-   *
-   * @param size Minimum number of elements this buffer should be able to hold.
-   */
-  inline int realloc_no_copy(const size_t size) {
-    if (size > this->size) {
-      sycl::free(this->ptr, this->sycl_target->queue);
-      this->ptr =
-          (T *)sycl::malloc_shared(size * sizeof(T), sycl_target->queue);
-      this->size = size;
-    }
-    return this->size;
+      : BufferBase<T>(sycl_target, size) {
+    this->generic_init();
   }
 
-  ~BufferShared() {
-    if (this->ptr != NULL) {
-      sycl::free(this->ptr, sycl_target->queue);
-    }
+  /**
+   * Create a new BufferShared from a std::vector. Note, this does not operate
+   * like a sycl::buffer and is a copy of the source vector.
+   *
+   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
+   * @param vec Input vector to copy data from.
+   */
+  BufferShared(SYCLTargetSharedPtr sycl_target, const std::vector<T> &vec)
+      : BufferShared(sycl_target, vec.size()) {
+    this->set(vec);
   }
+
+  ~BufferShared() { this->generic_free(); }
 };
 
 /**
  * Container around USM host allocated memory that can be resized.
  */
-template <typename T> class BufferHost {
-private:
+template <typename T> class BufferHost : public BufferBase<T> {
+protected:
+  virtual inline T *malloc_wrapper(const std::size_t num_bytes) override {
+    return static_cast<T *>(this->sycl_target->malloc_host(num_bytes));
+  }
+  virtual inline void free_wrapper(T *ptr) override {
+    this->sycl_target->free(ptr);
+  }
+
 public:
   /// Disable (implicit) copies.
   BufferHost(const BufferHost &st) = delete;
   /// Disable (implicit) copies.
   BufferHost &operator=(BufferHost const &a) = delete;
-
-  /// Compute device used by the instance.
-  SYCLTargetSharedPtr sycl_target;
-  /// SYCL USM shared pointer, accessible on host and device.
-  T *ptr;
-  /// Number of elements allocated.
-  size_t size;
 
   /**
    * Create a new BufferHost of a given number of elements.
@@ -446,9 +531,8 @@ public:
    * @param size Number of elements.
    */
   BufferHost(SYCLTargetSharedPtr sycl_target, size_t size)
-      : sycl_target(sycl_target) {
-    this->size = size;
-    this->ptr = (T *)sycl_target->malloc_host(size * sizeof(T));
+      : BufferBase<T>(sycl_target, size) {
+    this->generic_init();
   }
 
   /**
@@ -460,39 +544,10 @@ public:
    */
   BufferHost(SYCLTargetSharedPtr sycl_target, const std::vector<T> &vec)
       : BufferHost(sycl_target, vec.size()) {
-    if (this->size > 0) {
-      this->sycl_target->queue.memcpy(this->ptr, vec.data(), this->size_bytes())
-          .wait();
-    }
+    this->set(vec);
   }
 
-  /**
-   * Get the size of the allocation in bytes.
-   *
-   * @returns size of buffer in bytes.
-   */
-  inline size_t size_bytes() { return this->size * sizeof(T); }
-
-  /**
-   * Reallocate the buffer to hold at least the requested number of elements.
-   * May or may not reduce the buffer size if called with a size less than the
-   * current allocation. Current contents is not copied to the new buffer.
-   *
-   * @param size Minimum number of elements this buffer should be able to hold.
-   */
-  inline int realloc_no_copy(const size_t size) {
-    if (size > this->size) {
-      sycl_target->free(this->ptr);
-      this->ptr = (T *)sycl_target->malloc_host(size * sizeof(T));
-      this->size = size;
-    }
-    return this->size;
-  }
-  ~BufferHost() {
-    if (this->ptr != NULL) {
-      sycl_target->free(this->ptr);
-    }
-  }
+  ~BufferHost() { this->generic_free(); }
 };
 
 /**
@@ -609,6 +664,20 @@ public:
 };
 
 /**
+ * Copy the contents of a buffer, e.g. BufferDevice, BufferHost, into another
+ * buffer.
+ *
+ * @param dst Destination buffer.
+ * @param src Source buffer.
+ */
+template <template <typename> typename D, template <typename> typename S,
+          typename T>
+[[nodiscard]] inline sycl::event buffer_memcpy(D<T> &dst, S<T> &src) {
+  NESOASSERT(dst.size == src.size, "Buffers have different sizes.");
+  return dst.sycl_target->queue.memcpy(dst.ptr, src.ptr, dst.size * sizeof(T));
+}
+
+/**
  * Helper class to hold a collection of sycl::event instances which can be
  * waited on.
  */
@@ -639,81 +708,6 @@ public:
     }
   };
 };
-
-/**
- *  Helper class to propagate errors thrown from inside a SYCL kernel
- */
-class ErrorPropagate {
-private:
-  SYCLTargetSharedPtr sycl_target;
-  BufferDeviceHost<int> dh_flag;
-
-public:
-  /// Disable (implicit) copies.
-  ErrorPropagate(const ErrorPropagate &st) = delete;
-  /// Disable (implicit) copies.
-  ErrorPropagate &operator=(ErrorPropagate const &a) = delete;
-
-  ~ErrorPropagate(){};
-
-  /**
-   * Create a new instance to track assertions thrown in SYCL kernels.
-   *
-   * @param sycl_target SYCLTargetSharedPtr used for the kernel.
-   */
-  ErrorPropagate(SYCLTargetSharedPtr sycl_target)
-      : sycl_target(sycl_target), dh_flag(sycl_target, 1) {
-    this->reset();
-  }
-
-  /**
-   *  Reset the internal state. Useful if the instance is used to indicate
-   *  events occurred in a parallel loop that are non fatal.
-   */
-  inline void reset() {
-    this->dh_flag.h_buffer.ptr[0] = 0;
-    this->dh_flag.host_to_device();
-  }
-
-  /**
-   * Get the int device pointer for use in a SYCL kernel. This pointer should
-   * be incremented atomically with some positive integer to indicate an error
-   * occured in the kernel.
-   */
-  inline int *device_ptr() { return this->dh_flag.d_buffer.ptr; }
-
-  /**
-   * Check the stored integer. If the integer is non-zero throw an error with
-   * the passed message.
-   *
-   * @param error_msg Message to throw if stored integer is non-zero.
-   */
-  inline void check_and_throw(const char *error_msg) {
-    NESOASSERT(this->get_flag() == 0, error_msg);
-  }
-
-  /**
-   *  Get the current value of the flag on the host.
-   *
-   *  @returns flag.
-   */
-  inline int get_flag() {
-    this->dh_flag.device_to_host();
-    return this->dh_flag.h_buffer.ptr[0];
-  }
-};
-
-/*
- *  Helper preprocessor macro to atomically increment the pointer in an
- *  ErrorPropagate class.
- */
-#define NESO_KERNEL_ASSERT(expr, ep_ptr)                                       \
-  if (!(expr)) {                                                               \
-    sycl::atomic_ref<int, sycl::memory_order::relaxed,                         \
-                     sycl::memory_scope::device>                               \
-        neso_error_atomic(ep_ptr[0]);                                          \
-    neso_error_atomic.fetch_add(1);                                            \
-  }
 
 /**
  * Get an 1D nd_range for a given iteration set global size and local size.

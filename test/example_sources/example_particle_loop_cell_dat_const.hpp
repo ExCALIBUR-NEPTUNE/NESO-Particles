@@ -10,8 +10,8 @@ inline void cell_dat_const_example(
   auto g1 = std::make_shared<CellDatConst<int>>(
       particle_group->sycl_target, cell_count, 3, 1);
   
-  // For each cell get the current matrix (uninitialised as we just created the
-  // data structure) and zero the values then write back to the data structure.
+  // For each cell get the current matrix and zero the values then write back
+  // to the data structure.
   for (int cx = 0; cx < cell_count; cx++) {
     auto cell_data = g1->get_cell(cx);
     cell_data->at(0, 0) = 0.0;
@@ -19,6 +19,10 @@ inline void cell_dat_const_example(
     cell_data->at(2, 0) = 0.0;
     g1->set_cell(cx, cell_data);
   }
+
+  // Alternatively all entries in all cells of the CellDatConst may be filled
+  // with a value.
+  g1->fill(0.0);
   
   auto loop = particle_loop(
     "cell_dat_const_example",

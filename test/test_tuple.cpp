@@ -4,7 +4,7 @@
 
 using namespace NESO::Particles;
 
-TEST(Tuple, Tuple) {
+TEST(Tuple, tuple) {
   using Tuple0 = Tuple::Tuple<int, int64_t, double>;
   static_assert(std::is_trivially_copyable<Tuple0>::value == true);
   static_assert(std::is_same<Tuple::GetIndexType<0, int, int64_t, double>::type,
@@ -33,7 +33,7 @@ TEST(Tuple, Tuple) {
   EXPECT_EQ(Tuple::get<2>(t), 3.141);
 }
 
-TEST(Tuple, Apply) {
+TEST(Tuple, apply) {
   using Tuple0 = Tuple::Tuple<int, int64_t, double>;
   Tuple0 t;
   Tuple::get<0>(t) = -42;

@@ -7,7 +7,7 @@
 
 using namespace NESO::Particles;
 
-TEST(BlockedBinaryTree, Indexing) {
+TEST(BlockedBinaryTree, indexing) {
   INT to_test;
 
   // test node key indexing
@@ -98,9 +98,9 @@ template <INT WIDTH> static inline void tree_wrapper() {
   }
 }
 
-TEST(BlockedBinaryTree, BinaryTree) {
+TEST(BlockedBinaryTree, binary_tree) {
   // width = 1 is a binary tree
   tree_wrapper<1>();
 }
 
-TEST(BlockedBinaryTree, EightBlockTree) { tree_wrapper<8>(); }
+TEST(BlockedBinaryTree, eight_block_tree) { tree_wrapper<8>(); }
