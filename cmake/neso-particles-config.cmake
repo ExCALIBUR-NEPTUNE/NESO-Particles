@@ -40,3 +40,24 @@ else()
 endif()
 message(STATUS "HDF5_IS_PARALLEL " ${HDF5_IS_PARALLEL})
 
+# now look for PETSc
+find_package(PkgConfig)
+if (PKG_CONFIG_FOUND)
+    pkg_check_modules(PETSC PETSc)
+endif()
+
+if(PETSC_FOUND)
+    message(STATUS "PETSc found")
+    add_definitions(-DNESO_PARTICLES_PETSC)
+    add_definitions(${PETSC_DEFINITIONS} ${PETSC_CFLAGS})
+    # TODO this next line
+    set(NESO_PARTICLES_LIBRARIES ${NESO_PARTICLES_LIBRARIES} ${PETSC_LDFLAGS})
+    set(NESO_PARTICLES_INCLUDE_PATH ${NESO_PARTICLES_INCLUDE_PATH} ${PETSC_INCLUDE_DIRS})
+    message(STATUS ${PETSC_LDFLAGS})
+    message(STATUS ${PETSC_INCLUDE_DIRS})
+    message(STATUS ${PETSC_LIBRARY_DIRS})
+else()
+    message(STATUS "PETSc NOT found")
+endif()
+
+
