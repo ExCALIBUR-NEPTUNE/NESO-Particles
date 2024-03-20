@@ -26,7 +26,7 @@ public:
   MPI_Comm comm;
   /// Underlying MeshHierarchy instance.
   std::shared_ptr<MeshHierarchy> mesh_hierarchy;
-  /// Number of cells, i.e. Number of Nektar++ elements on this rank.
+  /// Number of cells.
   int cell_count;
   /// Global origin of domain.
   std::array<double, 3> global_origin;
@@ -91,7 +91,7 @@ public:
   };
   /**
    * Get the total number of cells in the mesh on this MPI rank, i.e. the
-   * number of Nektar++ elements on this MPI rank.
+   * number of mesh elements on this MPI rank.
    *
    * @returns Total number of mesh cells on this MPI rank.
    */
