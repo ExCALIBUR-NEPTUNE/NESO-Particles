@@ -13,7 +13,8 @@ Dependencies
 Using with CMake 
 ================
 
-We provide a CMake interface for projects to access as follows:
+We provide a CMake interface for projects to access NESO-Particles as a package or as a submodule.
+To use NESO-Particles in package form projects should involve CMake implementation like:
 ::
 
     find_package(NESO-Particles REQUIRED)
@@ -21,6 +22,16 @@ We provide a CMake interface for projects to access as follows:
     target_link_libraries(${EXECUTABLE} PUBLIC NESO-Particles::NESO-Particles)
     ...
     add_sycl_to_target(TARGET ${EXECUTABLE} SOURCES ${EXECUTABLE_SOURCE})
+
+ 
+To use NESO-Particles from a submodule within your project replace the ``find_package`` call as follows:
+::
+    
+    # Enable/disable options for NESO-Particles, e.g. HDF5
+    #option(NESO_PARTICLES_ENABLE_HDF5 OFF)
+    add_subdirectory(neso-particles)
+
+where ``neso-particles`` is the directory within your project that contains NESO-Particles.
 
 Note that we use the existence of the `add_sycl_to_target` function when `find_package(NESO-Particles REQUIRED)` is called to determine if a SYCL implementation has been found already.
 If a SYCL implementation is not already configured NESO-Particles will attempt to find one.
