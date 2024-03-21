@@ -27,6 +27,7 @@ If a SYCL implementation is not already configured NESO-Particles will attempt t
 This detection is relevant at build time, i.e. when the implementation using NESO-Particles is configured.
 These downstream implementations should pass CMake variables or compilers at configure time like:
 ::
+
     # Intel DPCPP
     cmake -DCMAKE_CXX_COMPILER=dpcpp .
     # Hipsycl cpu via omp
@@ -42,10 +43,28 @@ Installing
 To build NESO-Particles with tests:
 ::
     
+    git clone https://github.com/ExCALIBUR-NEPTUNE/NESO-Particles.git
+    cd NESO-Particles
+    mkdir build
+    cd  build
     # Choose a SYCL implementation to build tests with
     cmake -DHIPSYCL_TARGETS=omp.library-only -DCMAKE_INSTALL_PREFIX=<install location> .
     make
     make install
+
+The tests can then be run with:
+::
+
+    # Intel DPCPP
+    SYCL_DEVICE_FILTER=host mpirun -n <nproc> bin/testNESOParticles
+
+    # hipsycl omp
+    OMP_NUM_THREADS=<nthreads> mpirun -n <nproc> bin/testNESOParticles
+
+Note that typically the OpenMP default is to run a number of threads equal to the number of logical CPU cores (this is implementation defined). 
+Hence with OpenMP SYCL implementations the number of threads should, almost always, be set when using MPI.
+If the number of threads is not set then each MPI rank will launch a thread per CPU core resulting in over-subscription of cores and slowdown.
+Intel SYCL implementations currently choose the number of workers (threads) based on the process affinity of each MPI rank which can be configured through environment variables and runtime options passed to the MPI launcher.
 
 
 Known Issues and Workarounds
@@ -54,8 +73,20 @@ Known Issues and Workarounds
 Ubuntu 22.04 MPICH
 ------------------
 
+The build of MPICH found in the Ubuntu 22.04 APT repositories includes additional compiler flags, e.g. ``-flto=auto``, relating to link time optimisation which break compilation workflows that involve compilers different to the system GCC.
+The symptoms of this issue are errors at compile time due to the unknown flags, e.g.
+::
 
+    nvc++-Error-Unknown switch: -flto=auto
+    nvc++-Error-Unknown switch: -ffat-lto-objects
 
+Or issues at link time due to the intermediate objects having types incompatible with the linker, e.g.
+::
+    
+    CMakeFiles/test_buffers.dir/main.cpp.o: file not recognized: file format not recognized
 
+Two possible solutions are as follows
 
+1. Build a separate installation of MPICH (ideally with the same compiler as used by the SYCL implementation).
+2. Clear the offending variables from the CMake cache by first running CMake as normal then rerunning CMake as ``cmake -DMPI_CXX_COMPILE_OPTIONS="" -DMPI_CXX_COMPILE_OPTIONS="" ..``.
 
