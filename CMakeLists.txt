@@ -8,10 +8,10 @@ project(
 include(GNUInstallDirs)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/neso-particles-config.cmake)
 
-option(ENABLE_NESO_PARTICLES_TESTS "Build unit tests for this project." ON)
+option(NESO_PARTICLES_ENABLE_TESTS "Build unit tests for this project." ON)
 
 # Include the tests
-if(ENABLE_NESO_PARTICLES_TESTS)
+if(NESO_PARTICLES_ENABLE_TESTS)
   # set build type
   if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "RelWithDebInfo")
