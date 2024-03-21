@@ -75,5 +75,5 @@ target_compile_definitions(${EXECUTABLE} PRIVATE GPU_SELECTOR=0)
 add_sycl_to_target(TARGET ${EXECUTABLE} SOURCES ${TEST_MAIN} ${TEST_LIST})
 gtest_add_tests(TARGET ${EXECUTABLE} SOURCES ${TEST_MAIN})
 
-# install the combined test binary install(TARGETS ${EXECUTABLE} DESTINATION
-# bin)
+# install the combined test binary 
+install(TARGETS ${EXECUTABLE} DESTINATION bin)
