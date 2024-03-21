@@ -1,7 +1,7 @@
 include(${CMAKE_CURRENT_LIST_DIR}/restrict-keyword.cmake)
 
 option(NESO_PARTICLES_ENABLE_HDF5 "Add HDF5 to targets." ON)
-option(NESO_PARTICLES_ENABLE_SYCL_FIND "Enabling seach for a SYCL implementation if add_sycl_to_target is not found." ON)
+option(NESO_PARTICLES_ENABLE_SYCL_FIND "Enabling search for a SYCL implementation if add_sycl_to_target is not found." ON)
 
 #Create interface/Header only library
 add_library(NESO-Particles INTERFACE)
