@@ -54,7 +54,7 @@ TEST(Tuple, apply) {
       t);
 
   EXPECT_EQ(to_test, 53);
-  EXPECT_EQ(get<0>(t), aa);
-  EXPECT_EQ(get<1>(t), bb);
-  EXPECT_EQ(get<2>(t), cc);
+  EXPECT_EQ(Tuple::get<0>(t), aa);
+  EXPECT_EQ(Tuple::get<1>(t), bb);
+  EXPECT_EQ(Tuple::get<2>(t), cc);
 }

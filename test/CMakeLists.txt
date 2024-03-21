@@ -1,10 +1,6 @@
-cmake_minimum_required(VERSION 3.14)
-project(NESO-Particles VERSION 0.0.1)
+# No need should be inherited from neso-particles set(CMAKE_CXX_STANDARD 17)
 
-# GoogleTest requires at least C++11 DataParallel C++ requires at least C++17
-set(CMAKE_CXX_STANDARD 17)
-
-add_definitions(-DGPU_SELECTOR=0)
+# add_definitions(-DGPU_SELECTOR=0)
 
 find_package(GTest QUIET)
 
@@ -13,7 +9,8 @@ if(NOT GTest_FOUND)
   FetchContent_Declare(
     googletest
     URL https://github.com/google/googletest/archive/054a986a8513149e8374fc669a5fe40117ca6b41.zip
-  )
+        DOWNLOAD_EXTRACT_TIMESTAMP
+        FALSE)
   # For Windows: Prevent overriding the parent project's compiler/linker
   # settings
   set(gtest_force_shared_crt
@@ -22,22 +19,36 @@ if(NOT GTest_FOUND)
   FetchContent_MakeAvailable(googletest)
 endif()
 
+set(TEST_SRCS
+    test_boundary_pbc.cpp
+    test_buffers.cpp
+    test_cell_dat.cpp
+    test_error_propagate.cpp
+    test_examples.cpp
+    test_global_array.cpp
+    test_int_key_value_map.cpp
+    test_local_array.cpp
+    test_local_decomp_mesh.cpp
+    test_mesh_hierarchy.cpp
+    test_parallel_initialisation.cpp
+    test_particle_dat.cpp
+    test_particle_group_cell_move.cpp
+    test_particle_group.cpp
+    test_particle_group_global_move.cpp
+    test_particle_group_hybrid_move.cpp
+    test_particle_group_local_move.cpp
+    test_particle_group_stencil_move.cpp
+    test_particle_h5part.cpp
+    test_particle_loop.cpp
+    test_particle_remover.cpp
+    test_particle_set.cpp
+    test_particle_sub_group.cpp
+    test_sycl_target.cpp
+    test_tuple.cpp
+    test_utility.cpp)
+
 set(EXECUTABLE testNESOParticles)
 set(TEST_MAIN ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp)
-
-# List test source files
-file(GLOB TEST_SRCS ${CMAKE_CURRENT_SOURCE_DIR}/test_*.cpp
-     ${CMAKE_CURRENT_SOURCE_DIR}/*_test.cpp)
-
-# options common to both fftw/mkl
-set(LINK_LIBRARIES_COMMON
-    ${MPI_CXX_LINK_FLAGS} ${MPI_CXX_LIBRARIES} ${NESO_PARTICLES_LIBRARIES}
-    ${NESO_PARTICLES_LINK_FLAGS} GTest::gtest)
-
-set(INCLUDE_DIRECTORIES_COMMON
-    ${CMAKE_SOURCE_DIR}/include ${MPI_CXX_INCLUDE_PATH}
-    ${NESO_PARTICLES_INCLUDE_PATH})
-
 # Build the tests individually
 include(GoogleTest)
 foreach(TEST ${TEST_SRCS})
@@ -47,9 +58,8 @@ foreach(TEST ${TEST_SRCS})
 
   set(TEST_SOURCES ${TEST_MAIN} ${TEST})
   add_executable(${TEST_NAME} ${TEST_SOURCES})
-
-  target_link_libraries(${TEST_NAME} PRIVATE ${LINK_LIBRARIES_COMMON})
-  target_include_directories(${TEST_NAME} PRIVATE ${INCLUDE_DIRECTORIES_COMMON})
+  target_link_libraries(${TEST_NAME} PRIVATE NESO-Particles GTest::gtest)
+  target_compile_definitions(${TEST_NAME} PRIVATE GPU_SELECTOR=0)
 
   add_sycl_to_target(TARGET ${TEST_NAME} SOURCES ${TEST_SOURCES})
   gtest_add_tests(TARGET ${TEST_NAME})
@@ -58,8 +68,8 @@ endforeach()
 # Build a global test suite
 add_executable(${EXECUTABLE} ${TEST_MAIN} ${TEST_LIST})
 
-target_include_directories(${EXECUTABLE} PRIVATE ${INCLUDE_DIRECTORIES_COMMON})
-target_link_libraries(${EXECUTABLE} PRIVATE ${LINK_LIBRARIES_COMMON})
+target_link_libraries(${EXECUTABLE} PRIVATE NESO-Particles GTest::gtest)
+target_compile_definitions(${EXECUTABLE} PRIVATE GPU_SELECTOR=0)
 
 # define the test executable as a sycl target
 add_sycl_to_target(TARGET ${EXECUTABLE} SOURCES ${TEST_MAIN} ${TEST_LIST})

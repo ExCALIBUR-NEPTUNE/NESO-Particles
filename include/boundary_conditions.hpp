@@ -12,7 +12,6 @@
 #include <memory>
 
 using namespace cl;
-using namespace std;
 
 namespace NESO::Particles {
 
