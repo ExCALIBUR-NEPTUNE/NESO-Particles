@@ -7,6 +7,7 @@
 
 using namespace NESO::Particles;
 
+// TODO parameterise
 TEST(PETSC, init) {
 
   int argc;
