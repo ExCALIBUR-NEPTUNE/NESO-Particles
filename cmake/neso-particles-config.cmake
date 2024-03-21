@@ -1,8 +1,7 @@
-message(STATUS "NESO PARTICLES INTERFACE START")
-message(STATUS ${CMAKE_CURRENT_SOURCE_DIR})
 include(${CMAKE_CURRENT_LIST_DIR}/restrict-keyword.cmake)
 
-option(NESO_PARTICLES_ENABLE_HDF5 "Add HDF5 to targets" ON)
+option(NESO_PARTICLES_ENABLE_HDF5 "Add HDF5 to targets." ON)
+option(NESO_PARTICLES_ENABLE_SYCL_FIND "Enabling seach for a SYCL implementation if add_sycl_to_target is not found." ON)
 
 #Create interface/Header onlu library
 add_library(NESO-Particles INTERFACE)
@@ -109,6 +108,6 @@ endif()
 
 # Find SYCL
 include(${CMAKE_CURRENT_LIST_DIR}/SYCL.cmake)
-find_sycl_if_required()
-
-message(STATUS "NESO PARTICLES INTERFACE END")
+if(NESO_PARTICLES_ENABLE_SYCL_FIND)
+    find_sycl_if_required()
+endif()

@@ -8,7 +8,7 @@ Dependencies
 * CMake 3.24+.
 * SYCL 2020: Tested with hipsycl 0.9.4 or Intel DPCPP 2022.1.0) with USM support.
 * MPI 3.0: Tested with MPICH 4.0 or IntelMPI 2021.6. See known issues for Ubuntu 22.03 mpich.
-* HDF5 (parallel): (optional) If particle trajectories are required - will execute without.
+* HDF5 (parallel): (optional see CMake variable ``NESO_PARTICLES_ENABLE_HDF5``) If particle trajectories are required - will execute without.
 
 Using with CMake 
 ================
@@ -66,6 +66,10 @@ Hence with OpenMP SYCL implementations the number of threads should, almost alwa
 If the number of threads is not set then each MPI rank will launch a thread per CPU core resulting in over-subscription of cores and slowdown.
 Intel SYCL implementations currently choose the number of workers (threads) based on the process affinity of each MPI rank which can be configured through environment variables and runtime options passed to the MPI launcher.
 
+Notes:
+
+#. Searching for and building against HDF5 can be disabled by passing ``-DNESO_PARTICLES_ENABLE_HDF5=OFF`` to CMake.
+#. If an installation is required without tests built or SYCL configured then CMake can be called with ``-DNESO_PARTICLES_ENABLE_TESTS=OFF -DNESO_PARTICLES_ENABLE_SYCL_FIND=OFF``. **Tests should always be ran before any notion of trust is formed of outputs**.
 
 Known Issues and Workarounds
 ============================
@@ -87,6 +91,6 @@ Or issues at link time due to the intermediate objects having types incompatible
 
 Two possible solutions are as follows
 
-1. Build a separate installation of MPICH (ideally with the same compiler as used by the SYCL implementation).
-2. Clear the offending variables from the CMake cache by first running CMake as normal then rerunning CMake as ``cmake -DMPI_CXX_COMPILE_OPTIONS="" -DMPI_CXX_COMPILE_OPTIONS="" ..``.
+#. Build a separate installation of MPICH (ideally with the same compiler as used by the SYCL implementation).
+#. Clear the offending variables from the CMake cache by first running CMake as normal then rerunning CMake as ``cmake -DMPI_CXX_COMPILE_OPTIONS="" -DMPI_CXX_COMPILE_OPTIONS="" ..``.
 
