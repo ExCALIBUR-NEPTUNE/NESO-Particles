@@ -80,7 +80,7 @@ Intel SYCL implementations currently choose the number of workers (threads) base
 Notes:
 
 #. Searching for and building against HDF5 can be disabled by passing ``-DNESO_PARTICLES_ENABLE_HDF5=OFF`` to CMake.
-#. If an installation is required without tests built or SYCL configured then CMake can be called with ``-DNESO_PARTICLES_ENABLE_TESTS=OFF -DNESO_PARTICLES_ENABLE_SYCL_FIND=OFF``. **Tests should always be ran before any notion of trust is formed of outputs**.
+#. If an installation is required without tests built or SYCL configured then CMake can be called with ``-DNESO_PARTICLES_ENABLE_TESTS=OFF -DNESO_PARTICLES_ENABLE_FIND_SYCL=OFF``. **Tests should always be ran before any notion of trust is formed of outputs**.
 
 Known Issues and Workarounds
 ============================
