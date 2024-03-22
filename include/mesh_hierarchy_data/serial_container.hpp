@@ -100,6 +100,9 @@ public:
    * TODO
    */
   inline void append(SerialContainer<T> &other) {
+    nprint(this->buffer.size());
+    nprint(other.buffer.size());
+    this->buffer.reserve(this->buffer.size() + other.buffer.size());
     this->buffer.insert(this->buffer.end(), other.buffer.begin(),
                         other.buffer.end());
   }

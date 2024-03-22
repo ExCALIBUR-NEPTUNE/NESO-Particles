@@ -41,6 +41,36 @@ struct IntSerialise : public SerialInterface {
   }
 };
 
+struct IntTuple : public SerialInterface {
+  int rank_source;
+  int rank_destination;
+  int a;
+  virtual inline std::size_t get_num_bytes() const override {
+    return 3 * sizeof(int);
+  }
+  virtual inline void
+  serialise([[maybe_unused]] std::byte *buffer,
+            [[maybe_unused]] const std::size_t num_bytes) const override {
+    ASSERT_EQ(num_bytes, 3 * sizeof(int));
+    std::memcpy(buffer, &this->rank_source, sizeof(int));
+    buffer += sizeof(int);
+    std::memcpy(buffer, &this->rank_destination, sizeof(int));
+    buffer += sizeof(int);
+    std::memcpy(buffer, &this->a, sizeof(int));
+  }
+  virtual inline void
+  deserialise([[maybe_unused]] const std::byte *buffer,
+              [[maybe_unused]] const std::size_t num_bytes) override {
+    ASSERT_EQ(num_bytes, 3 * sizeof(int));
+    std::memcpy(&this->rank_source, buffer, sizeof(int));
+    buffer += sizeof(int);
+    std::memcpy(&this->rank_destination, buffer, sizeof(int));
+    buffer += sizeof(int);
+    std::memcpy(&this->a, buffer, sizeof(int));
+  }
+};
+
+
 } // namespace
 
 TEST(SerialContainer, size_zero) {
@@ -108,3 +138,56 @@ TEST(SerialContainer, append) {
     ASSERT_EQ(c.at(ix + N).a, ix + 100);
   }
 }
+
+TEST(MeshHierarchyData, init) {
+  
+  int size, rank;
+  MPICHK(MPI_Comm_size(MPI_COMM_WORLD, &size));
+  MPICHK(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
+
+  const int ndim = 2;
+  const int mesh_size = size;
+  std::vector<int> dims = {mesh_size, mesh_size};
+  std::vector<double> origin = {0.0, 0.0};
+  const double extent = 1.0;
+  const int subdivision_order = 0;
+  auto mesh_hierarchy = std::make_shared<MeshHierarchy>(
+    MPI_COMM_WORLD,
+    ndim,
+    dims,
+    origin,
+    extent,
+    subdivision_order
+  );
+
+  mesh_hierarchy->claim_initialise();
+  mesh_hierarchy->claim_cell(rank, 1);
+  mesh_hierarchy->claim_finalise();
+
+  const int owner = mesh_hierarchy->get_owner(rank);
+  ASSERT_EQ(owner, rank);
+
+  const int N = 1;
+  std::map<INT, std::vector<IntTuple>> sources;
+
+  for(int rx=0 ; rx<size ; rx++){
+    sources[rx] = std::vector<IntTuple>(N);
+    for(int ix=0 ; ix<N ; ix++){
+      sources.at(rx).at(ix).rank_source = rank;
+      sources.at(rx).at(ix).rank_destination = rx;
+      sources.at(rx).at(ix).a = ix+1;
+    }
+  }
+
+  MeshHierarchyContainer mhc(mesh_hierarchy, sources);
+
+
+  mesh_hierarchy->free();
+}
+
+
+
+
+
+
+
