@@ -22,29 +22,40 @@ struct MHCellBuffer : public SerialInterface {
   MHCellBuffer(INT cell, std::vector<std::byte> &buffer) : cell(cell), buffer(buffer) {};
 
   virtual inline std::size_t get_num_bytes() const override {
-    return sizeof(INT) + this->buffer.size();
+    return sizeof(INT) + sizeof(std::size_t) + this->buffer.size();
   }
   virtual inline void
   serialise([[maybe_unused]] std::byte *buffer,
             [[maybe_unused]] const std::size_t num_bytes) const override {
+    const std::byte * check_end = buffer + num_bytes;
     std::memcpy(buffer, &this->cell, sizeof(INT));
     buffer += sizeof(INT);
     const std::size_t buffer_size = this->buffer.size();
+    nprint("pushing buffer_size:", buffer_size);
     std::memcpy(buffer, &buffer_size, sizeof(std::size_t));
     buffer += sizeof(size_t);
     std::memcpy(buffer, this->buffer.data(), buffer_size);
+    NESOASSERT(
+    buffer + buffer_size == check_end,
+    "Packing under/overflow occured.");
   }
   virtual inline void
   deserialise([[maybe_unused]] const std::byte *buffer,
               [[maybe_unused]] const std::size_t num_bytes) override {
+    const std::byte * check_end = buffer + num_bytes;
     std::memcpy(&this->cell, buffer, sizeof(INT));
     buffer += sizeof(INT);
-    std::size_t buffer_size = -1;
+    std::size_t buffer_size = std::numeric_limits<std::size_t>::max();
     std::memcpy(&buffer_size, buffer, sizeof(std::size_t));
     buffer += sizeof(std::size_t);
-    NESOASSERT(buffer_size > -1, "Unexpected buffer size.");
+    NESOASSERT(buffer_size < std::numeric_limits<std::size_t>::max(),
+      "Unexpected buffer size.");
     this->buffer.resize(buffer_size);
+    nprint("poping  buffer_size:", buffer_size);
     std::memcpy(this->buffer.data(), buffer, buffer_size);
+    NESOASSERT(
+    buffer + buffer_size == check_end,
+    "Packing under/overflow occured.");
   }
 };
 
@@ -86,7 +97,9 @@ public:
       SerialContainer<T> cell_contents(item.second);
       MHCellBuffer mhcbt(cell, cell_contents.buffer);
 
-      std::vector<MHCellBuffer> tmp_cell = {mhcbt, };
+      std::vector<MHCellBuffer> tmp_cell;
+      tmp_cell.emplace_back(cell, cell_contents.buffer);
+      nprint("T:", tmp_cell.at(0).buffer.size(), tmp_cell.at(0).buffer.data(), tmp_cell.at(0).buffer.data() + tmp_cell.at(0).buffer.size());
       SerialContainer<MHCellBuffer> tmp_packed_cell(tmp_cell);
       // append the data on the store for the owning rank
       map_rank_buffers[rank].append(tmp_packed_cell);
@@ -130,17 +143,20 @@ public:
       const std::size_t num_bytes = static_cast<std::size_t>(send_counts.at(rankx));
       map_incoming_buffers[rank] = SerialContainer<MHCellBuffer>(num_bytes);
       send_ptrs.push_back(map_incoming_buffers.at(rank).buffer.data());
+      nprint(rankx, rank, map_incoming_buffers.at(rank).buffer.size());
     }
+    
+    nprint("----------------------");
 
     // exchange serialised data
-    //this->ece.exchange_send_recv_data(
-    //  recv_ranks,
-    //  recv_counts,
-    //  recv_ptrs,
-    //  send_ranks,
-    //  send_counts,
-    //  send_ptrs
-    //);
+    this->ece.exchange_send_recv_data(
+      recv_ranks,
+      recv_counts,
+      recv_ptrs,
+      send_ranks,
+      send_counts,
+      send_ptrs
+    );
     
     std::vector<MHCellBuffer> tmp;
     // unpack the rank wise data into cell wise data
@@ -152,6 +168,7 @@ public:
         auto &inner_buffer = tx.buffer;
         SerialContainer<T> tmp_serial(inner_buffer.size());
         std::memcpy(tmp_serial.buffer.data(), inner_buffer.data(), inner_buffer.size());
+        nprint(inner_buffer.size());
         map_cell_buffers[cell].append(tmp_serial);
       }
     }
