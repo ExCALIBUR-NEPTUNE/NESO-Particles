@@ -27,6 +27,9 @@ public:
                                 const std::size_t num_bytes) const = 0;
 
   /**
+   * Deserialise, i.e. reconstruct, an instance of the class from the byte
+   * buffer.
+   *
    * @param buffer Pointer to space that the calling function guarantees to be
    * at least get_num_bytes in size from which this object should be recreated.
    * @param num_bytes Size of allocated buffer passed (get_num_bytes).

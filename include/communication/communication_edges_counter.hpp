@@ -96,17 +96,16 @@ public:
     MPICHK(
         MPI_Waitall(num_recv_ranks, recv_requests.data(), MPI_STATUSES_IGNORE));
   }
-  
+
   /**
    * TODO
    */
   inline void exchange_send_recv_data(std::vector<int> &recv_ranks,
-                                       std::vector<std::int64_t> &recv_counts,
-                                       std::vector<void *> &recv_data,
-                                       std::vector<int> &send_ranks,
-                                       std::vector<std::int64_t> &send_counts,
-                                       std::vector<void *> &send_data
-                                       ) {
+                                      std::vector<std::int64_t> &recv_counts,
+                                      std::vector<void *> &recv_data,
+                                      std::vector<int> &send_ranks,
+                                      std::vector<std::int64_t> &send_counts,
+                                      std::vector<void *> &send_data) {
     const int num_recv_ranks = recv_ranks.size();
     const int num_send_ranks = send_ranks.size();
     std::vector<MPI_Request> send_requests(num_send_ranks);
@@ -114,20 +113,20 @@ public:
     for (int rankx = 0; rankx < num_send_ranks; rankx++) {
       const int num_bytes = static_cast<int>(send_counts.at(rankx));
       const int rank = send_ranks.at(rankx);
-      MPICHK(MPI_Irecv(&send_data[rankx], num_bytes, MPI_BYTE, rank, 126,
+      MPICHK(MPI_Irecv(send_data[rankx], num_bytes, MPI_BYTE, rank, 126,
                        this->comm, &send_requests[rankx]));
     }
     for (int rankx = 0; rankx < num_recv_ranks; rankx++) {
       const int num_bytes = static_cast<int>(recv_counts.at(rankx));
       const int rank = recv_ranks.at(rankx);
-      MPICHK(MPI_Isend(&recv_data[rankx], num_bytes, MPI_BYTE, rank, 126,
+      MPICHK(MPI_Isend(recv_data[rankx], num_bytes, MPI_BYTE, rank, 126,
                        this->comm, &recv_requests[rankx]));
     }
     MPICHK(
         MPI_Waitall(num_recv_ranks, recv_requests.data(), MPI_STATUSES_IGNORE));
     MPICHK(
         MPI_Waitall(num_send_ranks, send_requests.data(), MPI_STATUSES_IGNORE));
-   }
+  }
 
   /**
    * TODO
