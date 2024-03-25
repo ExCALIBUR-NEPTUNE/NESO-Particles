@@ -67,7 +67,8 @@ public:
   inline void exchange_send_recv_counts(std::vector<int> &recv_ranks,
                                         std::vector<std::int64_t> &recv_data,
                                         std::vector<int> &send_ranks,
-                                        std::vector<std::int64_t> &send_data) {
+                                        std::vector<std::int64_t> &send_data,
+                                        const bool ordered = false) {
     const int num_recv_ranks = recv_ranks.size();
     const int num_send_ranks = send_ranks.size();
 
@@ -75,8 +76,9 @@ public:
     std::vector<MPI_Request> recv_requests(num_recv_ranks);
 
     for (int rankx = 0; rankx < num_send_ranks; rankx++) {
-      MPICHK(MPI_Irecv(&send_data[rankx], 1, MPI_INT64_T, MPI_ANY_SOURCE, 127,
-                       this->comm, &send_requests[rankx]));
+      const int rank = ordered ? send_ranks.at(rankx) : MPI_ANY_SOURCE;
+      MPICHK(MPI_Irecv(&send_data[rankx], 1, MPI_INT64_T, rank, 127, this->comm,
+                       &send_requests[rankx]));
     }
 
     for (int rankx = 0; rankx < num_recv_ranks; rankx++) {
@@ -90,7 +92,11 @@ public:
 
     for (int rankx = 0; rankx < num_send_ranks; rankx++) {
       const int rank = send_status.at(rankx).MPI_SOURCE;
-      send_ranks.at(rankx) = rank;
+      if (ordered) {
+        NESOASSERT(send_ranks.at(rankx) == rank, "Unexpected rank missmatch.");
+      } else {
+        send_ranks.at(rankx) = rank;
+      }
     }
 
     MPICHK(

@@ -261,3 +261,126 @@ TEST(MeshHierarchyData, init_combine) {
   mhc.free();
   mesh_hierarchy->free();
 }
+
+TEST(MeshHierarchyData, gather_seperate) {
+
+  int size, rank;
+  MPICHK(MPI_Comm_size(MPI_COMM_WORLD, &size));
+  MPICHK(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
+
+  const int ndim = 2;
+  const int mesh_size = size;
+  std::vector<int> dims = {mesh_size, mesh_size};
+  std::vector<double> origin = {0.0, 0.0};
+  const double extent = 1.0;
+  const int subdivision_order = 0;
+  auto mesh_hierarchy = std::make_shared<MeshHierarchy>(
+      MPI_COMM_WORLD, ndim, dims, origin, extent, subdivision_order);
+
+  mesh_hierarchy->claim_initialise();
+  for (int rx = rank * size; rx < (rank + 1) * size; rx++) {
+    mesh_hierarchy->claim_cell(rx, 1);
+  }
+  mesh_hierarchy->claim_finalise();
+
+  for (int rx = rank * size; rx < (rank + 1) * size; rx++) {
+    const int owner = mesh_hierarchy->get_owner(rx);
+    ASSERT_EQ(owner, rank);
+  }
+
+  const int N = 16;
+  std::map<INT, std::vector<IntTuple>> sources;
+
+  for (int rx = 0; rx < size; rx++) {
+    const INT index = rx * size + rank;
+    sources[index] = std::vector<IntTuple>(N);
+    for (int ix = 0; ix < N; ix++) {
+      sources.at(index).at(ix).rank_source = rank;
+      sources.at(index).at(ix).rank_destination = rx;
+      sources.at(index).at(ix).a = ix + 1;
+    }
+  }
+
+  MeshHierarchyContainer mhc(mesh_hierarchy, sources);
+  std::vector<INT> cells = {0};
+  mhc.gather(cells);
+  std::vector<IntTuple> tmp;
+  mhc.get(0, tmp);
+  ASSERT_EQ(tmp.size(), N);
+  for (int tx = 0; tx < N; tx++) {
+    ASSERT_EQ(tmp.at(tx).rank_destination, 0);
+    ASSERT_EQ(tmp.at(tx).rank_source, 0);
+    ASSERT_EQ(tmp.at(tx).a, tx + 1);
+  }
+
+  mhc.free();
+  mesh_hierarchy->free();
+}
+
+TEST(MeshHierarchyData, gather_combine) {
+
+  int size, rank;
+  MPICHK(MPI_Comm_size(MPI_COMM_WORLD, &size));
+  MPICHK(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
+
+  const int ndim = 2;
+  const int mesh_size = size;
+  std::vector<int> dims = {mesh_size, mesh_size};
+  std::vector<double> origin = {0.0, 0.0};
+  const double extent = 1.0;
+  const int subdivision_order = 0;
+  auto mesh_hierarchy = std::make_shared<MeshHierarchy>(
+      MPI_COMM_WORLD, ndim, dims, origin, extent, subdivision_order);
+
+  mesh_hierarchy->claim_initialise();
+  for (int rx = rank * size; rx < (rank + 1) * size; rx++) {
+    mesh_hierarchy->claim_cell(rx, 1);
+  }
+  mesh_hierarchy->claim_finalise();
+
+  for (int rx = rank * size; rx < (rank + 1) * size; rx++) {
+    const int owner = mesh_hierarchy->get_owner(rx);
+    ASSERT_EQ(owner, rank);
+  }
+
+  const int N = 16;
+  std::map<INT, std::vector<IntTuple>> sources;
+
+  const INT index = 0;
+  sources[index] = std::vector<IntTuple>(N);
+  for (int ix = 0; ix < N; ix++) {
+    sources.at(index).at(ix).rank_source = rank;
+    sources.at(index).at(ix).rank_destination = 0;
+    sources.at(index).at(ix).a = ix + 1;
+  }
+
+  MeshHierarchyContainer mhc(mesh_hierarchy, sources);
+  std::vector<INT> cells = {0};
+  mhc.gather(cells);
+
+  // This rank should have received data from all ranks in setup.
+  std::set<int> found_source_ranks;
+  std::map<int, std::set<int>> found_source_ints;
+
+  std::vector<IntTuple> tmp;
+  mhc.get(0, tmp);
+  ASSERT_EQ(tmp.size(), N * size);
+  for (auto &tx : tmp) {
+    ASSERT_EQ(tx.rank_destination, 0);
+    found_source_ranks.insert(tx.rank_source);
+    found_source_ints[tx.rank_source].insert(tx.a);
+  }
+
+  ASSERT_EQ(found_source_ranks.size(), size);
+
+  for (int rx = 0; rx < size; rx++) {
+    ASSERT_TRUE(found_source_ints.count(rx));
+    ASSERT_EQ(found_source_ints.at(rx).size(), N);
+    for (int ix = 0; ix < N; ix++) {
+      ASSERT_EQ(found_source_ints.at(rx).count(ix + 1), 1);
+    }
+  }
+
+  mhc.free();
+  mesh_hierarchy->free();
+}
