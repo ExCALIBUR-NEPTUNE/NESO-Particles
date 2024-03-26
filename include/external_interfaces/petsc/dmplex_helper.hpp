@@ -3,6 +3,7 @@
 
 #include "../common/bounding_box.hpp"
 #include "petsc_common.hpp"
+#include "dmplex_cell_serialise.hpp"
 #include <limits>
 #include <memory>
 #include <vector>
@@ -27,6 +28,63 @@ inline void generic_distribute(DM *dm, MPI_Comm comm = MPI_COMM_WORLD) {
   }
 }
 
+/**
+ * Setup the coordinate section for a DMPlex. See
+ * DMPlexBuildCoordinatesFromCellList.
+ *
+ * @param dm DMPlex to setup coordinate section for.
+ * @param vertex_start Coordinate index for first coordinate.
+ * @param vertex_end Coordinate index +1 for last coordinate.
+ */
+inline void setup_coordinate_section(
+  DM &dm,
+  const PetscInt vertex_start,
+  const PetscInt vertex_end
+){
+  PetscInt ndim;
+  PETSCCHK(DMGetCoordinateDim(dm, &ndim));
+  PetscSection coord_section;
+  PETSCCHK(DMGetCoordinateSection(dm, &coord_section));
+  PETSCCHK(PetscSectionSetNumFields(coord_section, 1));
+  PETSCCHK(PetscSectionSetFieldComponents(coord_section, 0, ndim));
+  PETSCCHK(PetscSectionSetChart(coord_section, vertex_start, vertex_end));
+  for (PetscInt v = vertex_start; v < vertex_end; ++v) {
+    PETSCCHK(PetscSectionSetDof(coord_section, v, ndim));
+    PETSCCHK(PetscSectionSetFieldDof(coord_section, v, 0, ndim));
+  }
+  PETSCCHK(PetscSectionSetUp(coord_section));
+}
+
+/**
+ * Setup a PETSc vector in which coordinates can be get/set for local mesh. See
+ * DMPlexBuildCoordinatesFromCellList.
+ * 
+ * @param[in] dm DMPlex to access coordinates for.
+ * @param[in, out] coordinates Vector to setup to use with coordinates.
+ * VecDestroy should be called on this vector.
+ */
+inline void setup_local_coordinate_vector(
+  DM &dm,
+  Vec &coordinates
+){
+  PetscSection coord_section;
+  PETSCCHK(DMGetCoordinateSection(dm, &coord_section));
+
+  // create the actual coordinates vector
+  PetscInt coord_size;
+  PetscInt ndim;
+  PETSCCHK(DMGetCoordinateDim(dm, &ndim));
+  PETSCCHK(PetscSectionGetStorageSize(coord_section, &coord_size));
+  PETSCCHK(VecCreate(PETSC_COMM_SELF, &coordinates));
+  PETSCCHK(PetscObjectSetName((PetscObject)coordinates, "coordinates"));
+  PETSCCHK(VecSetSizes(coordinates, coord_size, PETSC_DETERMINE));
+  PETSCCHK(VecSetBlockSize(coordinates, ndim));
+  PETSCCHK(VecSetType(coordinates, VECSTANDARD));
+}
+
+/**
+ * TODO
+ */
 class DMPlexHelper {
 protected:
   PetscInt cell_start;
@@ -42,6 +100,18 @@ public:
   DM dm;
   PetscInt ndim;
   IS global_cell_numbers;
+  IS global_vertex_numbers;
+  IS global_point_numbers;
+
+  /**
+   * TODO
+   */
+  inline DMPlexCellSerialise get_copyable_cell(const PetscInt cell){
+
+
+
+
+  }
 
   /**
    * TODO
@@ -55,6 +125,25 @@ public:
     PETSCCHK(DMPlexGetHeightStratum(this->dm, 0, &this->cell_start,
                                     &this->cell_end));
     PETSCCHK(DMPlexGetCellNumbering(this->dm, &this->global_cell_numbers));
+    PETSCCHK(DMPlexGetVertexNumbering(this->dm, &this->global_vertex_numbers));
+    PETSCCHK(DMPlexCreatePointNumbering(this->dm, &this->global_point_numbers));
+  }
+  
+  /**
+   * Get the global index of a point from the local point index.
+   *
+   * @param point Local point index.
+   * @returns Global point index.
+   */
+  inline PetscInt get_point_global_index(const PetscInt point) {
+    PetscInt global_point;
+    const PetscInt *ptr;
+    PETSCCHK(ISGetIndices(this->global_point_numbers, &ptr));
+    global_point = ptr[point];
+    PETSCCHK(ISRestoreIndices(this->global_point_numbers, &ptr));
+    NESOASSERT(global_point > -1,
+               "Point index was negative indicating a remote point.");
+    return global_point;
   }
 
   /**
@@ -75,6 +164,25 @@ public:
                "Cell index was negative indicating a remote cell.");
 
     return global_cell;
+  }
+
+  /**
+   * Get the global index of a vertex from the local vertex index.
+   *
+   * @param vertex Local vertex index.
+   * @returns Global vertex index.
+   */
+  inline PetscInt get_vertex_global_index(const PetscInt vertex) {
+
+    PetscInt global_vertex;
+    const PetscInt *ptr;
+    PETSCCHK(ISGetIndices(this->global_vertex_numbers, &ptr));
+    global_vertex = ptr[vertex];
+    PETSCCHK(ISRestoreIndices(this->global_vertex_numbers, &ptr));
+    NESOASSERT(global_vertex > -1,
+               "Vertex index was negative indicating a remote vertex.");
+
+    return global_vertex;
   }
 
   /**

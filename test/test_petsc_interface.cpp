@@ -157,24 +157,36 @@ TEST(PETSC, create_dm) {
   // create coordinates section for dm
   const PetscInt ndim = 2;
   PETSCCHK(DMSetCoordinateDim(dm, ndim));
+  const PetscInt vertex_start = 5;
+  const PetscInt vertex_end = vertex_start + 4;
+  
+  /*
   PetscSection coord_section;
   PETSCCHK(DMGetCoordinateSection(dm, &coord_section));
   PETSCCHK(PetscSectionSetNumFields(coord_section, 1));
   PETSCCHK(PetscSectionSetFieldComponents(coord_section, 0, ndim));
 
-  const PetscInt vertex_start = 5;
-  const PetscInt vertex_end = vertex_start + 4;
   PETSCCHK(PetscSectionSetChart(coord_section, vertex_start, vertex_end));
   for (PetscInt v = vertex_start; v < vertex_end; ++v) {
     PETSCCHK(PetscSectionSetDof(coord_section, v, ndim));
     PETSCCHK(PetscSectionSetFieldDof(coord_section, v, 0, ndim));
   }
   PETSCCHK(PetscSectionSetUp(coord_section));
+  */
+
+  PetscInterface::setup_coordinate_section(dm, vertex_start, vertex_end);
+
+  Vec coordinates;
+  PetscScalar *coords;
+  PetscInterface::setup_local_coordinate_vector(dm, coordinates);
+
+
+  /*
+  PetscSection coord_section;
+  PETSCCHK(DMGetCoordinateSection(dm, &coord_section));
 
   // create the actual coordinates vector
-  Vec coordinates;
   PetscInt coord_size;
-  PetscScalar *coords;
 
   PETSCCHK(PetscSectionGetStorageSize(coord_section, &coord_size));
   PETSCCHK(VecCreate(PETSC_COMM_SELF, &coordinates));
@@ -182,6 +194,9 @@ TEST(PETSC, create_dm) {
   PETSCCHK(VecSetSizes(coordinates, coord_size, PETSC_DETERMINE));
   PETSCCHK(VecSetBlockSize(coordinates, ndim));
   PETSCCHK(VecSetType(coordinates, VECSTANDARD));
+  */
+
+
   PETSCCHK(VecGetArray(coordinates, &coords));
 
   coords[0] = 0.0;
@@ -201,10 +216,20 @@ TEST(PETSC, create_dm) {
   PETSCCHK(VecDestroy(&coordinates));
 
   // end of mesh creation
+  
+
+  PetscInt ndim_test;
+  PETSCCHK(DMGetCoordinateDim(dm, &ndim_test));
+  ASSERT_EQ(ndim_test, 2);
 
   DMPolytopeType celltype;
   PETSCCHK(DMPlexGetCellType(dm, 0, &celltype));
   ASSERT_EQ(celltype, DM_POLYTOPE_QUADRILATERAL);
+
+  PetscInt coord_size;
+  PetscSection coord_section;
+  PETSCCHK(DMGetCoordinateSection(dm, &coord_section));
+  PETSCCHK(PetscSectionGetStorageSize(coord_section, &coord_size));
   ASSERT_EQ(coord_size, 8);
 
   Vec v;
