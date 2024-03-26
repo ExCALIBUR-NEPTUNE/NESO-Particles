@@ -3,6 +3,9 @@
 
 #include "../../communication.hpp"
 #include "../../typedefs.hpp"
+#include "petscdm.h"
+#include "petscdmlabel.h"
+#include "petscds.h"
 #include <petscdmplex.h>
 #include <petscerror.h>
 #include <petscsf.h>

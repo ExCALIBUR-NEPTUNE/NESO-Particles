@@ -100,6 +100,8 @@ protected:
     mesh_hierarchy->claim_finalise();
   }
 
+  inline void create_halos(ExternalCommon::MHGeomMap &mh_element_map) {}
+
 public:
   MPI_Comm comm;
   std::shared_ptr<DMPlexHelper> dmh;
@@ -112,9 +114,7 @@ public:
    * TODO
    */
   DMPlexInterface(DM dm, const int subdivision_order_offset = 0,
-                  MPI_Comm comm = MPI_COMM_WORLD
-
-                  )
+                  MPI_Comm comm = MPI_COMM_WORLD)
       : comm(comm), subdivision_order_offset(subdivision_order_offset) {
 
     this->dmh = std::make_shared<DMPlexHelper>(comm, dm);
@@ -130,6 +130,7 @@ public:
     this->create_mesh_hierarchy();
     ExternalCommon::MHGeomMap mh_element_map;
     this->claim_mesh_hierarchy_cells(mh_element_map);
+    this->create_halos(mh_element_map);
   }
 
   virtual inline void free() override { this->mesh_hierarchy->free(); }

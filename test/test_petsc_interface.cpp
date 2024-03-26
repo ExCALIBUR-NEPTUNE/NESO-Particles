@@ -69,7 +69,174 @@ TEST(PETSC, init) {
     ASSERT_EQ(owner, rank);
   }
 
+  Vec v;
+  PETSCCHK(VecCreate(MPI_COMM_SELF, &v));
+  PETSCCHK(VecSetSizes(v, 4, 4));
+  PETSCCHK(VecSetBlockSize(v, 2));
+  PETSCCHK(VecSetFromOptions(v));
+
+  PetscScalar *v_ptr;
+  PETSCCHK(VecGetArrayWrite(v, &v_ptr));
+  v_ptr[0] = 0.59;
+  v_ptr[1] = 0.59;
+  v_ptr[2] = 0.99;
+  v_ptr[3] = 0.99;
+  PETSCCHK(VecRestoreArrayWrite(v, &v_ptr));
+  PETSCCHK(VecView(v, PETSC_VIEWER_STDOUT_SELF));
+
+  PetscSF cell_sf = nullptr;
+  // PETSCCHK(PetscSFCreate(MPI_COMM_SELF, &cell_sf));
+  PETSCCHK(DMLocatePoints(dm, v, DM_POINTLOCATION_NONE, &cell_sf));
+
+  PETSCCHK(PetscSFView(cell_sf, PETSC_VIEWER_STDOUT_SELF));
+  const PetscSFNode *cells;
+  PetscInt n_found;
+  const PetscInt *found;
+
+  PETSCCHK(PetscSFGetGraph(cell_sf, NULL, &n_found, &found, &cells));
+  nprint("nfound:", n_found);
+  nprint("found:", found);
+  for (int nx = 0; nx < 2; nx++) {
+    nprint("nx:", nx, "cell:", cells[nx].rank, cells[nx].index);
+  }
+
+  PETSCCHK(VecView(v, PETSC_VIEWER_STDOUT_SELF));
+
+  // PETSCCHK(PetscSFDestroy(&cell_sf));
+  PETSCCHK(VecDestroy(&v));
+
   mesh->free();
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
+
+TEST(PETSC, create_dm) {
+
+  int argc;
+  char **argv;
+  PETSCCHK(PetscInitialize(&argc, &argv, nullptr, nullptr));
+
+  // start of mesh creation
+
+  DM dm;
+
+  /*
+   * 8--3--7
+   * |     |
+   * 4  0  2
+   * |     |
+   * 5--1--6
+   */
+
+  PETSCCHK(DMCreate(MPI_COMM_WORLD, &dm));
+  PETSCCHK(DMSetType(dm, DMPLEX));
+  PETSCCHK(DMSetDimension(dm, 2));
+  PETSCCHK(DMPlexSetChart(dm, 0, 9));
+
+  PETSCCHK(DMPlexSetConeSize(dm, 0, 4));
+  PETSCCHK(DMPlexSetConeSize(dm, 1, 2));
+  PETSCCHK(DMPlexSetConeSize(dm, 2, 2));
+  PETSCCHK(DMPlexSetConeSize(dm, 3, 2));
+  PETSCCHK(DMPlexSetConeSize(dm, 4, 2));
+  PETSCCHK(DMSetUp(dm));
+
+  std::vector<PetscInt> pts;
+  pts = {1, 2, 3, 4};
+  PETSCCHK(DMPlexSetCone(dm, 0, pts.data()));
+  pts = {5, 6};
+  PETSCCHK(DMPlexSetCone(dm, 1, pts.data()));
+  pts = {6, 7};
+  PETSCCHK(DMPlexSetCone(dm, 2, pts.data()));
+  pts = {7, 8};
+  PETSCCHK(DMPlexSetCone(dm, 3, pts.data()));
+  pts = {8, 5};
+  PETSCCHK(DMPlexSetCone(dm, 4, pts.data()));
+  PETSCCHK(DMPlexSymmetrize(dm));
+  PETSCCHK(DMPlexStratify(dm));
+
+  // create coordinates section for dm
+  const PetscInt ndim = 2;
+  PETSCCHK(DMSetCoordinateDim(dm, ndim));
+  PetscSection coord_section;
+  PETSCCHK(DMGetCoordinateSection(dm, &coord_section));
+  PETSCCHK(PetscSectionSetNumFields(coord_section, 1));
+  PETSCCHK(PetscSectionSetFieldComponents(coord_section, 0, ndim));
+
+  const PetscInt vertex_start = 5;
+  const PetscInt vertex_end = vertex_start + 4;
+  PETSCCHK(PetscSectionSetChart(coord_section, vertex_start, vertex_end));
+  for (PetscInt v = vertex_start; v < vertex_end; ++v) {
+    PETSCCHK(PetscSectionSetDof(coord_section, v, ndim));
+    PETSCCHK(PetscSectionSetFieldDof(coord_section, v, 0, ndim));
+  }
+  PETSCCHK(PetscSectionSetUp(coord_section));
+
+  // create the actual coordinates vector
+  Vec coordinates;
+  PetscInt coord_size;
+  PetscScalar *coords;
+
+  PETSCCHK(PetscSectionGetStorageSize(coord_section, &coord_size));
+  PETSCCHK(VecCreate(PETSC_COMM_SELF, &coordinates));
+  PETSCCHK(PetscObjectSetName((PetscObject)coordinates, "coordinates"));
+  PETSCCHK(VecSetSizes(coordinates, coord_size, PETSC_DETERMINE));
+  PETSCCHK(VecSetBlockSize(coordinates, ndim));
+  PETSCCHK(VecSetType(coordinates, VECSTANDARD));
+  PETSCCHK(VecGetArray(coordinates, &coords));
+
+  coords[0] = 0.0;
+  coords[1] = 0.0;
+
+  coords[2] = 1.0;
+  coords[3] = 0.0;
+
+  coords[4] = 1.0;
+  coords[5] = 1.0;
+
+  coords[6] = 0.0;
+  coords[7] = 1.0;
+
+  PETSCCHK(VecRestoreArray(coordinates, &coords));
+  PETSCCHK(DMSetCoordinatesLocal(dm, coordinates));
+  PETSCCHK(VecDestroy(&coordinates));
+
+  // end of mesh creation
+
+  DMPolytopeType celltype;
+  PETSCCHK(DMPlexGetCellType(dm, 0, &celltype));
+  ASSERT_EQ(celltype, DM_POLYTOPE_QUADRILATERAL);
+  ASSERT_EQ(coord_size, 8);
+
+  Vec v;
+  PETSCCHK(VecCreate(MPI_COMM_SELF, &v));
+  PETSCCHK(VecSetSizes(v, 4, 4));
+  PETSCCHK(VecSetBlockSize(v, 2));
+  PETSCCHK(VecSetFromOptions(v));
+
+  PetscScalar *v_ptr;
+  PETSCCHK(VecGetArrayWrite(v, &v_ptr));
+  v_ptr[0] = 0.59;
+  v_ptr[1] = 0.59;
+  v_ptr[2] = 1.99;
+  v_ptr[3] = 2.99;
+  PETSCCHK(VecRestoreArrayWrite(v, &v_ptr));
+  PETSCCHK(VecView(v, PETSC_VIEWER_STDOUT_SELF));
+
+  PetscSF cell_sf = nullptr;
+  // PETSCCHK(PetscSFCreate(MPI_COMM_SELF, &cell_sf));
+  PETSCCHK(DMLocatePoints(dm, v, DM_POINTLOCATION_NONE, &cell_sf));
+
+  PETSCCHK(PetscSFView(cell_sf, PETSC_VIEWER_STDOUT_SELF));
+  const PetscSFNode *cells;
+  PetscInt n_found;
+  const PetscInt *found;
+
+  PETSCCHK(PetscSFGetGraph(cell_sf, NULL, &n_found, &found, &cells));
+  ASSERT_EQ(n_found, 1);
+  ASSERT_EQ(cells[0].index, 0);
+  ASSERT_TRUE(cells[1].index < 0);
+
+  PETSCCHK(VecDestroy(&v));
   PETSCCHK(DMDestroy(&dm));
   PETSCCHK(PetscFinalize());
 }
