@@ -2,8 +2,8 @@
 #define _NESO_PARTICLES_DMPLEX_HELPER_HPP_
 
 #include "../common/bounding_box.hpp"
-#include "petsc_common.hpp"
 #include "dmplex_cell_serialise.hpp"
+#include "petsc_common.hpp"
 #include <limits>
 #include <memory>
 #include <vector>
@@ -36,11 +36,8 @@ inline void generic_distribute(DM *dm, MPI_Comm comm = MPI_COMM_WORLD) {
  * @param vertex_start Coordinate index for first coordinate.
  * @param vertex_end Coordinate index +1 for last coordinate.
  */
-inline void setup_coordinate_section(
-  DM &dm,
-  const PetscInt vertex_start,
-  const PetscInt vertex_end
-){
+inline void setup_coordinate_section(DM &dm, const PetscInt vertex_start,
+                                     const PetscInt vertex_end) {
   PetscInt ndim;
   PETSCCHK(DMGetCoordinateDim(dm, &ndim));
   PetscSection coord_section;
@@ -58,15 +55,12 @@ inline void setup_coordinate_section(
 /**
  * Setup a PETSc vector in which coordinates can be get/set for local mesh. See
  * DMPlexBuildCoordinatesFromCellList.
- * 
+ *
  * @param[in] dm DMPlex to access coordinates for.
  * @param[in, out] coordinates Vector to setup to use with coordinates.
  * VecDestroy should be called on this vector.
  */
-inline void setup_local_coordinate_vector(
-  DM &dm,
-  Vec &coordinates
-){
+inline void setup_local_coordinate_vector(DM &dm, Vec &coordinates) {
   PetscSection coord_section;
   PETSCCHK(DMGetCoordinateSection(dm, &coord_section));
 
@@ -106,12 +100,7 @@ public:
   /**
    * TODO
    */
-  inline DMPlexCellSerialise get_copyable_cell(const PetscInt cell){
-
-
-
-
-  }
+  inline DMPlexCellSerialise get_copyable_cell(const PetscInt cell) {}
 
   /**
    * TODO
@@ -128,7 +117,7 @@ public:
     PETSCCHK(DMPlexGetVertexNumbering(this->dm, &this->global_vertex_numbers));
     PETSCCHK(DMPlexCreatePointNumbering(this->dm, &this->global_point_numbers));
   }
-  
+
   /**
    * Get the global index of a point from the local point index.
    *

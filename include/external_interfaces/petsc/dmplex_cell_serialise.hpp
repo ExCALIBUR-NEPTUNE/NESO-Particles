@@ -3,6 +3,12 @@
 
 #include "../../mesh_hierarchy_data/serial_interface.hpp"
 #include "petsc_common.hpp"
+#include <cstring>
+#include <functional>
+#include <list>
+#include <map>
+#include <set>
+#include <string>
 #include <vector>
 
 namespace NESO::Particles::PetscInterface {
@@ -10,9 +16,196 @@ namespace NESO::Particles::PetscInterface {
 /**
  * TODO
  */
+struct CellSTDRepresentation {
+  std::map<PetscInt, std::vector<PetscInt>> point_specs;
+  std::map<PetscInt, std::vector<PetscScalar>> vertices;
+
+  inline void print() {
+    nprint("specification:");
+    for (auto hx : point_specs) {
+      nprint(std::to_string(hx.first) + ":");
+      for (auto px : hx.second) {
+        nprint("  ", px);
+      }
+    }
+    nprint("vertices:");
+    for (auto vx : vertices) {
+      nprint(std::to_string(vx.first) + ":");
+      std::cout << "  ";
+      for (auto cx : vx.second) {
+        std::cout << cx << " ";
+      }
+      std::cout << std::endl;
+    }
+  }
+
+  inline void serialise(std::vector<std::byte> &buffer) {
+    buffer.clear();
+    std::vector<PetscInt> buffer_int;
+    std::vector<PetscScalar> buffer_scalar;
+
+    // push the point specifications
+    buffer_int.push_back(this->point_specs.size());
+    for (auto point_spec : this->point_specs) {
+      buffer_int.push_back(point_spec.first);
+      buffer_int.push_back(point_spec.second.size());
+      for (auto spec : point_spec.second) {
+        buffer_int.push_back(spec);
+      }
+    }
+
+    // push the vertex coordinates
+    buffer_int.push_back(this->vertices.size());
+    for (auto px : this->vertices) {
+      buffer_int.push_back(px.first);
+      buffer_int.push_back(px.second.size());
+      for (auto cx : px.second) {
+        buffer_scalar.push_back(cx);
+      }
+    }
+
+    // copy int and scalar data into the buffer
+    const std::size_t num_bytes_meta = 2 * sizeof(std::size_t);
+    const std::size_t num_bytes_int = buffer_int.size() * sizeof(PetscInt);
+    const std::size_t num_bytes_scalar =
+        buffer_scalar.size() * sizeof(PetscScalar);
+    buffer.resize(num_bytes_meta + num_bytes_int + num_bytes_scalar);
+
+    std::memcpy(buffer.data(), &num_bytes_int, sizeof(std::size_t));
+    std::memcpy(buffer.data() + sizeof(std::size_t), &num_bytes_scalar,
+                sizeof(std::size_t));
+    std::memcpy(buffer.data() + num_bytes_meta, buffer_int.data(),
+                num_bytes_int);
+    std::memcpy(buffer.data() + num_bytes_meta + num_bytes_int,
+                buffer_scalar.data(), num_bytes_scalar);
+  }
+
+  inline void deserialise(std::vector<std::byte> &buffer) {
+    const std::size_t num_bytes_meta = 2 * sizeof(std::size_t);
+    NESOASSERT(buffer.size() >= num_bytes_meta,
+               "Buffer is too small to hold meta data.");
+    std::size_t num_bytes_int;
+    std::size_t num_bytes_scalar;
+    std::memcpy(&num_bytes_int, buffer.data(), sizeof(std::size_t));
+    std::memcpy(&num_bytes_scalar, buffer.data() + sizeof(std::size_t),
+                sizeof(std::size_t));
+
+    const std::size_t num_int = num_bytes_int / sizeof(PetscInt);
+    const std::size_t num_scalar = num_bytes_scalar / sizeof(PetscScalar);
+
+    // This copy is probably avoidable with pointer type casts
+    std::vector<PetscInt> buffer_int(num_int);
+    std::vector<PetscScalar> buffer_scalar(num_scalar);
+
+    std::memcpy(buffer_int.data(), buffer.data() + num_bytes_meta,
+                num_bytes_int);
+    std::memcpy(buffer_scalar.data(),
+                buffer.data() + num_bytes_meta + num_bytes_int,
+                num_bytes_scalar);
+
+    size_t index = 0;
+    const PetscInt num_points = buffer_int.at(index++);
+    for (int px = 0; px < num_points; px++) {
+      const PetscInt point = buffer_int.at(index++);
+      const PetscInt cone_size = buffer_int.at(index++);
+      std::vector<PetscInt> cone_elements;
+      cone_elements.reserve(cone_size);
+      for (int cx = 0; cx < cone_size; cx++) {
+        const PetscInt child_index = buffer_int.at(index++);
+        cone_elements.push_back(child_index);
+      }
+      this->point_specs[point] = cone_elements;
+    }
+
+    size_t index_scalar = 0;
+    const PetscInt num_vertices = buffer_int.at(index++);
+    for (int vx = 0; vx < num_vertices; vx++) {
+      const PetscInt point = buffer_int.at(index++);
+      const PetscInt num_coords = buffer_int.at(index++);
+      this->vertices[point].reserve(num_coords);
+      for (int cx = 0; cx < num_coords; cx++) {
+        this->vertices.at(point).push_back(buffer_scalar.at(index_scalar++));
+      }
+    }
+
+    NESOASSERT(index == num_int, "Error unpacking ints.");
+    NESOASSERT(index_scalar == num_scalar, "Error unpacking scalars.");
+  }
+};
+
+/**
+ * TODO
+ */
+inline void traverse_cell_specification(
+    DM &dm, PetscInt index,
+    std::map<PetscInt, std::set<PetscInt>> &map_per_height) {
+  PetscInt cone_size, height;
+  PETSCCHK(DMPlexGetPointHeight(dm, index, &height));
+  map_per_height[height].insert(index);
+
+  PETSCCHK(DMPlexGetConeSize(dm, index, &cone_size));
+  const PetscInt *cone;
+  PETSCCHK(DMPlexGetCone(dm, index, &cone));
+
+  for (int cx = 0; cx < cone_size; cx++) {
+    const PetscInt child_index = cone[cx];
+    traverse_cell_specification(dm, child_index, map_per_height);
+  }
+}
+
+/**
+ * TODO
+ */
+inline CellSTDRepresentation
+get_cell_specification(DM &dm, PetscInt index,
+                       std::function<PetscInt(PetscInt)> &rename_function) {
+  PetscInt depth, height;
+  // Cells have height 0
+  PETSCCHK(DMPlexGetPointHeight(dm, index, &height));
+  PETSCCHK(DMPlexGetDepth(dm, &depth));
+
+  std::map<PetscInt, std::set<PetscInt>> map_per_height;
+  traverse_cell_specification(dm, index, map_per_height);
+
+  CellSTDRepresentation spec;
+
+  for (auto hx : map_per_height) {
+    for (auto ix : hx.second) {
+      const PetscInt point_rename = rename_function(ix);
+      PetscInt cone_size;
+      PETSCCHK(DMPlexGetConeSize(dm, ix, &cone_size));
+      const PetscInt *cone;
+      PETSCCHK(DMPlexGetCone(dm, ix, &cone));
+      spec.point_specs[point_rename].reserve(cone_size);
+      for (PetscInt px = 0; px < cone_size; px++) {
+        spec.point_specs[point_rename].push_back(rename_function(cone[px]));
+      }
+    }
+  }
+
+  for (auto vx : map_per_height[depth]) {
+    PetscBool is_dg;
+    PetscInt nc;
+    const PetscScalar *array;
+    PetscScalar *coords;
+    PETSCCHK(DMPlexGetCellCoordinates(dm, vx, &is_dg, &nc, &array, &coords));
+    const PetscInt global_index = rename_function(vx);
+    spec.vertices[global_index].reserve(nc);
+    for (int cx = 0; cx < nc; cx++) {
+      spec.vertices[global_index].push_back(coords[cx]);
+    }
+    PETSCCHK(
+        DMPlexRestoreCellCoordinates(dm, vx, &is_dg, &nc, &array, &coords));
+  }
+
+  return spec;
+}
+
+/**
+ * TODO
+ */
 class DMPlexCellSerialise : public MeshHierarchyData::SerialInterface {
 public:
-
   PetscInt cell_local_id;
   PetscInt cell_global_id;
   PetscInt owning_rank;
@@ -21,23 +214,15 @@ public:
   std::vector<PetscInt> global_vertex_ids;
   std::vector<PetscScalar> vertex_coords;
 
-  virtual inline std::size_t get_num_bytes() const override {
-
-  }
+  virtual inline std::size_t get_num_bytes() const override {}
 
   virtual inline void serialise(std::byte *buffer,
-                                const std::size_t num_bytes) const override {
-
-  }
+                                const std::size_t num_bytes) const override {}
 
   virtual inline void deserialise(const std::byte *buffer,
-                                  const std::size_t num_bytes) override {
-
-  }
-
-
+                                  const std::size_t num_bytes) override {}
 };
 
-}
+} // namespace NESO::Particles::PetscInterface
 
 #endif

@@ -10,9 +10,7 @@ using namespace NESO::Particles;
 // TODO parameterise
 TEST(PETSC, init) {
 
-  int argc;
-  char **argv;
-  PETSCCHK(PetscInitialize(&argc, &argv, nullptr, nullptr));
+  PETSCCHK(PetscInitializeNoArguments());
   // TODO
   std::string gmsh_filename = "/home/js0259/git-ukaea/NESO-Particles-paper/"
                               "resources/mesh_ring/mesh_ring.msh";
@@ -112,9 +110,7 @@ TEST(PETSC, init) {
 
 TEST(PETSC, create_dm) {
 
-  int argc;
-  char **argv;
-  PETSCCHK(PetscInitialize(&argc, &argv, nullptr, nullptr));
+  PETSCCHK(PetscInitializeNoArguments());
 
   // start of mesh creation
 
@@ -159,7 +155,7 @@ TEST(PETSC, create_dm) {
   PETSCCHK(DMSetCoordinateDim(dm, ndim));
   const PetscInt vertex_start = 5;
   const PetscInt vertex_end = vertex_start + 4;
-  
+
   /*
   PetscSection coord_section;
   PETSCCHK(DMGetCoordinateSection(dm, &coord_section));
@@ -180,7 +176,6 @@ TEST(PETSC, create_dm) {
   PetscScalar *coords;
   PetscInterface::setup_local_coordinate_vector(dm, coordinates);
 
-
   /*
   PetscSection coord_section;
   PETSCCHK(DMGetCoordinateSection(dm, &coord_section));
@@ -195,7 +190,6 @@ TEST(PETSC, create_dm) {
   PETSCCHK(VecSetBlockSize(coordinates, ndim));
   PETSCCHK(VecSetType(coordinates, VECSTANDARD));
   */
-
 
   PETSCCHK(VecGetArray(coordinates, &coords));
 
@@ -216,7 +210,6 @@ TEST(PETSC, create_dm) {
   PETSCCHK(VecDestroy(&coordinates));
 
   // end of mesh creation
-  
 
   PetscInt ndim_test;
   PETSCCHK(DMGetCoordinateDim(dm, &ndim_test));
@@ -262,6 +255,101 @@ TEST(PETSC, create_dm) {
   ASSERT_TRUE(cells[1].index < 0);
 
   PETSCCHK(VecDestroy(&v));
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
+
+namespace {
+
+inline DM get_simple_square() {
+  DM dm;
+
+  /*
+   * 8--3--7
+   * |     |
+   * 4  0  2
+   * |     |
+   * 5--1--6
+   */
+
+  PETSCCHK(DMCreate(MPI_COMM_WORLD, &dm));
+  PETSCCHK(DMSetType(dm, DMPLEX));
+  PETSCCHK(DMSetDimension(dm, 2));
+  PETSCCHK(DMPlexSetChart(dm, 0, 9));
+
+  PETSCCHK(DMPlexSetConeSize(dm, 0, 4));
+  PETSCCHK(DMPlexSetConeSize(dm, 1, 2));
+  PETSCCHK(DMPlexSetConeSize(dm, 2, 2));
+  PETSCCHK(DMPlexSetConeSize(dm, 3, 2));
+  PETSCCHK(DMPlexSetConeSize(dm, 4, 2));
+  PETSCCHK(DMSetUp(dm));
+
+  std::vector<PetscInt> pts;
+  pts = {1, 2, 3, 4};
+  PETSCCHK(DMPlexSetCone(dm, 0, pts.data()));
+  pts = {5, 6};
+  PETSCCHK(DMPlexSetCone(dm, 1, pts.data()));
+  pts = {6, 7};
+  PETSCCHK(DMPlexSetCone(dm, 2, pts.data()));
+  pts = {7, 8};
+  PETSCCHK(DMPlexSetCone(dm, 3, pts.data()));
+  pts = {8, 5};
+  PETSCCHK(DMPlexSetCone(dm, 4, pts.data()));
+  PETSCCHK(DMPlexSymmetrize(dm));
+  PETSCCHK(DMPlexStratify(dm));
+
+  // create coordinates section for dm
+  const PetscInt ndim = 2;
+  PETSCCHK(DMSetCoordinateDim(dm, ndim));
+  const PetscInt vertex_start = 5;
+  const PetscInt vertex_end = vertex_start + 4;
+
+  PetscInterface::setup_coordinate_section(dm, vertex_start, vertex_end);
+
+  Vec coordinates;
+  PetscScalar *coords;
+  PetscInterface::setup_local_coordinate_vector(dm, coordinates);
+  PETSCCHK(VecGetArray(coordinates, &coords));
+
+  coords[0] = 0.0;
+  coords[1] = 0.0;
+
+  coords[2] = 1.0;
+  coords[3] = 0.0;
+
+  coords[4] = 1.0;
+  coords[5] = 1.0;
+
+  coords[6] = 0.0;
+  coords[7] = 1.0;
+
+  PETSCCHK(VecRestoreArray(coordinates, &coords));
+  PETSCCHK(DMSetCoordinatesLocal(dm, coordinates));
+  PETSCCHK(VecDestroy(&coordinates));
+  return dm;
+}
+
+} // namespace
+
+TEST(PETSC, dm_cell_linearise) {
+
+  PETSCCHK(PetscInitializeNoArguments());
+  DM dm = get_simple_square();
+
+  std::function<PetscInt(PetscInt)> rename_function = [&](PetscInt x) {
+    return x;
+  };
+
+  auto spec = PetscInterface::get_cell_specification(dm, 0, rename_function);
+
+  std::vector<std::byte> spec_buffer;
+  spec.serialise(spec_buffer);
+  PetscInterface::CellSTDRepresentation spec_copy;
+  spec_copy.deserialise(spec_buffer);
+
+  ASSERT_EQ(spec.vertices, spec_copy.vertices);
+  ASSERT_EQ(spec.point_specs, spec_copy.point_specs);
+
   PETSCCHK(DMDestroy(&dm));
   PETSCCHK(PetscFinalize());
 }
