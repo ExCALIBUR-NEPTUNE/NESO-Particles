@@ -1,6 +1,7 @@
 #ifndef _NESO_PARTICLES_DMPLEX_INTERFACE_HPP_
 #define _NESO_PARTICLES_DMPLEX_INTERFACE_HPP_
 
+#include "../../mesh_hierarchy_data/mesh_hierarchy_data.hpp"
 #include "../../mesh_interface.hpp"
 #include "../common/local_claim.hpp"
 #include "dmplex_helper.hpp"
@@ -18,6 +19,11 @@ protected:
   int cell_count;
   std::shared_ptr<MeshHierarchy> mesh_hierarchy;
   std::vector<int> neighbour_ranks;
+  /// Vector of MeshHierarchy cells which are owned by this rank.
+  std::vector<INT> owned_mh_cells;
+  /// Vector of MeshHierarchy cells which were claimed but are not owned by this
+  /// rank.
+  std::vector<INT> unowned_mh_cells;
 
   inline void create_mesh_hierarchy() {
     PetscReal global_min[3], global_max[3];
@@ -77,6 +83,37 @@ protected:
         this->subdivision_order);
   }
 
+  /**
+   *  Find the cells which were claimed by this rank but are acutally owned by
+   *  a remote rank
+   */
+  inline void get_unowned_cells(ExternalCommon::LocalClaim &local_claim) {
+    std::stack<INT> owned_cell_stack;
+    std::stack<INT> unowned_cell_stack;
+
+    int rank;
+    MPICHK(MPI_Comm_rank(this->comm, &rank));
+
+    for (auto &cellx : local_claim.claim_cells) {
+      const int owning_rank = this->mesh_hierarchy->get_owner(cellx);
+      if (owning_rank == rank) {
+        owned_cell_stack.push(cellx);
+      } else {
+        unowned_cell_stack.push(cellx);
+      }
+    }
+    this->owned_mh_cells.reserve(owned_cell_stack.size());
+    while (!owned_cell_stack.empty()) {
+      this->owned_mh_cells.push_back(owned_cell_stack.top());
+      owned_cell_stack.pop();
+    }
+    this->unowned_mh_cells.reserve(unowned_cell_stack.size());
+    while (!unowned_cell_stack.empty()) {
+      this->unowned_mh_cells.push_back(unowned_cell_stack.top());
+      unowned_cell_stack.pop();
+    }
+  }
+
   inline void
   claim_mesh_hierarchy_cells(ExternalCommon::MHGeomMap &mh_element_map) {
 
@@ -98,9 +135,57 @@ protected:
                                  local_claim.claim_weights[cellx].weight);
     }
     mesh_hierarchy->claim_finalise();
+    this->get_unowned_cells(local_claim);
   }
 
-  inline void create_halos(ExternalCommon::MHGeomMap &mh_element_map) {}
+  inline void create_halos(ExternalCommon::MHGeomMap &mh_element_map) {
+
+    std::map<INT, std::vector<DMPlexCellSerialise>> map_cell_dmplex;
+    // reserve space
+    for (auto item : mh_element_map) {
+      const INT mh_cell = item.first;
+      map_cell_dmplex[mh_cell].reserve(item.second.size());
+    }
+    // create the objects
+    for (auto item : mh_element_map) {
+      const INT mh_cell = item.first;
+      for (auto dm_cell : item.second) {
+        map_cell_dmplex[mh_cell].push_back(
+            this->dmh->get_copyable_cell(dm_cell));
+      }
+    }
+    // send the packed cells to the owning MPI ranks
+    MeshHierarchyData::MeshHierarchyContainer mhc(this->mesh_hierarchy,
+                                                  map_cell_dmplex);
+    // Explicitly gather all cells this rank owns, this should be a lightweight
+    // call as the constructor above should have gathered these.
+    // TODO add stencil offset
+    mhc.gather(this->owned_mh_cells);
+
+    int rank;
+    MPICHK(MPI_Comm_rank(this->comm, &rank));
+
+    std::set<PetscInt> dmplex_cell_ids;
+    std::list<DMPlexCellSerialise> serialised_halo_cells;
+
+    std::vector<DMPlexCellSerialise> serialised_halo_cells_tmp;
+    for (auto mh_cell : this->owned_mh_cells) {
+      mhc.get(mh_cell, serialised_halo_cells_tmp);
+      for (auto &dmplex_cell : serialised_halo_cells_tmp) {
+        if (
+            // skip cells this rank owns.
+            (dmplex_cell.owning_rank != rank) &&
+            // skip cells already collected.
+            (!dmplex_cell_ids.count(dmplex_cell.cell_global_id))) {
+          serialised_halo_cells.push_back(dmplex_cell);
+        }
+      }
+    }
+
+    // unpack the halo cells into a DMPlex for halo cells
+
+    mhc.free();
+  }
 
 public:
   MPI_Comm comm;

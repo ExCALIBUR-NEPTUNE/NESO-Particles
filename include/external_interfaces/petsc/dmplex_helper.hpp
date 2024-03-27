@@ -6,6 +6,7 @@
 #include "petsc_common.hpp"
 #include <limits>
 #include <memory>
+#include <set>
 #include <vector>
 
 namespace NESO::Particles::PetscInterface {
@@ -79,6 +80,52 @@ inline void setup_local_coordinate_vector(DM &dm, Vec &coordinates) {
 /**
  * TODO
  */
+inline void
+dm_from_serialised_cells(std::set<DMPlexCellSerialise> &serialised_cells,
+                         DM &dm_prototype, DM &dm) {
+
+  const PetscInt num_cells = serialised_cells.size();
+  std::vector<CellSTDRepresentation> std_rep_cells(num_cells);
+  int index = 0;
+  for (auto &sc : serialised_cells) {
+    std_rep_cells.at(index).deserialise(sc.cell_representation);
+  }
+
+  /*
+    // Create the new DMPlex.
+
+    PETSCCHK(DMCreate(MPI_COMM_WORLD, &dm));
+    PETSCCHK(DMSetType(dm, DMPLEX));
+
+    PetscInt tmp_int;
+    PETSCCHK(DMGetDimension(dm_prototype, &tmp_int));
+    PETSCCHK(DMSetDimension(dm, tmp_int));
+    PETSCCHK(DMGetCoordinateDim(dm_prototype, &tmp_int));
+    PETSCCHK(DMSetCoordinateDim(dm, tmp_int));
+
+    // TODO set cones
+
+    PETSCCHK(DMPlexSymmetrize(dm));
+    PETSCCHK(DMPlexStratify(dm));
+
+    PetscInterface::setup_coordinate_section(dm, vertex_start, vertex_end);
+    Vec coordinates;
+    PetscScalar *coords;
+    PetscInterface::setup_local_coordinate_vector(dm, coordinates);
+    PETSCCHK(VecGetArray(coordinates, &coords));
+
+    // TODO write coordinates of vertices
+
+    PETSCCHK(VecRestoreArray(coordinates, &coords));
+    PETSCCHK(DMSetCoordinatesLocal(dm, coordinates));
+    PETSCCHK(VecDestroy(&coordinates));
+
+  */
+}
+
+/**
+ * TODO
+ */
 class DMPlexHelper {
 protected:
   PetscInt cell_start;
@@ -100,7 +147,32 @@ public:
   /**
    * TODO
    */
-  inline DMPlexCellSerialise get_copyable_cell(const PetscInt cell) {}
+  inline DMPlexCellSerialise get_copyable_cell(const PetscInt cell) {
+    DMPlexCellSerialise cs;
+
+    int rank;
+    MPICHK(MPI_Comm_rank(this->comm, &rank));
+    DMPolytopeType cell_type;
+    PETSCCHK(DMPlexGetCellType(dm, cell, &cell_type));
+
+    auto lambda_rename = [&](PetscInt cell) -> PetscInt {
+      return this->get_point_global_index(cell);
+    };
+    std::function<PetscInt(PetscInt)> rename_function = lambda_rename;
+    auto spec =
+        PetscInterface::get_cell_specification(this->dm, cell, rename_function);
+
+    std::vector<std::byte> cell_representation;
+    spec.serialise(cell_representation);
+
+    cs.cell_local_id = cell;
+    cs.cell_global_id = get_point_global_index(cell);
+    cs.owning_rank = rank;
+    cs.cell_type = cell_type;
+    cs.cell_representation = cell_representation;
+
+    return cs;
+  }
 
   /**
    * TODO
@@ -119,6 +191,17 @@ public:
   }
 
   /**
+   * Remove the negation from point indices which DMPlex uses to denote global
+   * vs local indices.
+   *
+   * @param c Input index.
+   * @returns c if c > -1 else ((c * (-1)) - 1)
+   */
+  inline PetscInt signed_global_id_to_global_id(const PetscInt c) {
+    return (c > -1) ? c : ((c * (-1)) - 1);
+  }
+
+  /**
    * Get the global index of a point from the local point index.
    *
    * @param point Local point index.
@@ -130,9 +213,7 @@ public:
     PETSCCHK(ISGetIndices(this->global_point_numbers, &ptr));
     global_point = ptr[point];
     PETSCCHK(ISRestoreIndices(this->global_point_numbers, &ptr));
-    NESOASSERT(global_point > -1,
-               "Point index was negative indicating a remote point.");
-    return global_point;
+    return signed_global_id_to_global_id(global_point);
   }
 
   /**

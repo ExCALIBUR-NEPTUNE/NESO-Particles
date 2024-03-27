@@ -80,7 +80,7 @@ struct CellSTDRepresentation {
                 buffer_scalar.data(), num_bytes_scalar);
   }
 
-  inline void deserialise(std::vector<std::byte> &buffer) {
+  inline void deserialise(const std::vector<std::byte> &buffer) {
     const std::size_t num_bytes_meta = 2 * sizeof(std::size_t);
     NESOASSERT(buffer.size() >= num_bytes_meta,
                "Buffer is too small to hold meta data.");
@@ -208,19 +208,51 @@ class DMPlexCellSerialise : public MeshHierarchyData::SerialInterface {
 public:
   PetscInt cell_local_id;
   PetscInt cell_global_id;
-  PetscInt owning_rank;
+  int owning_rank;
   DMPolytopeType cell_type;
-  PetscInt coord_ndim;
-  std::vector<PetscInt> global_vertex_ids;
-  std::vector<PetscScalar> vertex_coords;
+  std::vector<std::byte> cell_representation;
 
-  virtual inline std::size_t get_num_bytes() const override {}
+  virtual inline std::size_t get_num_bytes() const override {
+    return 2 * sizeof(PetscInt) + 2 * sizeof(int) +
+           this->cell_representation.size();
+  }
 
   virtual inline void serialise(std::byte *buffer,
-                                const std::size_t num_bytes) const override {}
+                                const std::size_t num_bytes) const override {
+    std::byte *buffer_end = buffer + num_bytes;
+    std::memcpy(buffer, &this->cell_local_id, sizeof(PetscInt));
+    buffer += sizeof(PetscInt);
+    std::memcpy(buffer, &this->cell_global_id, sizeof(PetscInt));
+    buffer += sizeof(PetscInt);
+    std::memcpy(buffer, &this->owning_rank, sizeof(int));
+    buffer += sizeof(int);
+    int cell_type_int = static_cast<int>(this->cell_type);
+    std::memcpy(buffer, &cell_type_int, sizeof(int));
+    buffer += sizeof(int);
+    std::memcpy(buffer, this->cell_representation.data(),
+                this->cell_representation.size());
+    buffer += this->cell_representation.size();
+
+    NESOASSERT(buffer == buffer_end, "Error packing cell.");
+  }
 
   virtual inline void deserialise(const std::byte *buffer,
-                                  const std::size_t num_bytes) override {}
+                                  const std::size_t num_bytes) override {
+    auto buffer_end = buffer + num_bytes;
+    std::memcpy(&this->cell_local_id, buffer, sizeof(PetscInt));
+    buffer += sizeof(PetscInt);
+    std::memcpy(&this->cell_global_id, buffer, sizeof(PetscInt));
+    buffer += sizeof(PetscInt);
+    std::memcpy(&this->owning_rank, buffer, sizeof(int));
+    buffer += sizeof(int);
+    int cell_type_int;
+    std::memcpy(&cell_type_int, buffer, sizeof(int));
+    buffer += sizeof(int);
+    this->cell_type = static_cast<DMPolytopeType>(cell_type_int);
+    const size_t num_bytes_remaining = buffer_end - buffer;
+    this->cell_representation.resize(num_bytes_remaining);
+    std::memcpy(this->cell_representation.data(), buffer, num_bytes_remaining);
+  }
 };
 
 } // namespace NESO::Particles::PetscInterface
