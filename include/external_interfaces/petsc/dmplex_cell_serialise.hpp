@@ -5,6 +5,7 @@
 #include "petsc_common.hpp"
 #include <cstring>
 #include <functional>
+#include <limits>
 #include <list>
 #include <map>
 #include <set>
@@ -16,9 +17,39 @@ namespace NESO::Particles::PetscInterface {
 /**
  * TODO
  */
-struct CellSTDRepresentation {
+class CellSTDRepresentation {
+protected:
+  std::map<PetscInt, PetscInt> map_to_depth;
+
+public:
   std::map<PetscInt, std::vector<PetscInt>> point_specs;
   std::map<PetscInt, std::vector<PetscScalar>> vertices;
+
+  inline PetscInt get_point_depth(const PetscInt point) {
+    NESOASSERT(point_specs.count(point), "Unknown point index.");
+    if (this->map_to_depth.count(point)) {
+      return this->map_to_depth.at(point);
+    } else if (point_specs.at(point).size()) {
+      const PetscInt d = this->get_point_depth(point_specs.at(point).at(0)) + 1;
+      this->map_to_depth[point] = d;
+      return d;
+    } else {
+      // Is a vertex hence has depth 0
+      return 0;
+    }
+  }
+
+  inline PetscInt get_depth() {
+    PetscInt d_max = std::numeric_limits<PetscInt>::min();
+    PetscInt d_min = std::numeric_limits<PetscInt>::max();
+    for (const auto &point : this->point_specs) {
+      const auto d = this->get_point_depth(point.first);
+      d_max = std::max(d_max, d);
+      d_min = std::min(d_min, d);
+    }
+    NESOASSERT(d_min == 0, "Expected the minumum to be 0.");
+    return d_max;
+  }
 
   inline void print() {
     nprint("specification:");

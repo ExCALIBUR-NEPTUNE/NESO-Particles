@@ -182,6 +182,9 @@ protected:
       }
     }
 
+    dm_from_serialised_cells(serialised_halo_cells, this->dmh->dm,
+                             this->dm_halo);
+
     // unpack the halo cells into a DMPlex for halo cells
 
     mhc.free();
@@ -190,6 +193,7 @@ protected:
 public:
   MPI_Comm comm;
   std::shared_ptr<DMPlexHelper> dmh;
+  DM dm_halo;
 
   ~DMPlexInterface(){
 
