@@ -113,6 +113,9 @@ struct HaloDMIndexMapper {
    * TODO
    */
   HaloDMIndexMapper(std::vector<CellSTDRepresentation> &cells) {
+    this->chart_start = 0;
+    this->chart_end = 0;
+
     if (cells.size() > 0) {
       std::map<PetscInt, std::set<PetscInt>> map_depth_to_points;
       for (auto &cx : cells) {
@@ -147,8 +150,6 @@ struct HaloDMIndexMapper {
       }
 
       // Get the new indices for points
-      this->chart_start = 0;
-      this->chart_end = 0;
       for (auto &depth_points : map_depth_to_points) {
         const PetscInt depth = depth_points.first;
         for (const PetscInt global_point : depth_points.second) {
@@ -173,7 +174,7 @@ struct HaloDMIndexMapper {
 /**
  * TODO
  */
-inline void
+inline PetscInt
 dm_from_serialised_cells(std::list<DMPlexCellSerialise> &serialised_cells,
                          DM &dm_prototype, DM &dm) {
 
@@ -186,10 +187,11 @@ dm_from_serialised_cells(std::list<DMPlexCellSerialise> &serialised_cells,
 
   HaloDMIndexMapper index_mapper(std_rep_cells);
 
-  /*
-    // Create the new DMPlex.
+  // Create the new DMPlex.
 
-    PETSCCHK(DMCreate(MPI_COMM_WORLD, &dm));
+  PETSCCHK(DMCreate(MPI_COMM_WORLD, &dm));
+
+  if (num_cells > 0) {
     PETSCCHK(DMSetType(dm, DMPLEX));
 
     PetscInt tmp_int;
@@ -198,24 +200,56 @@ dm_from_serialised_cells(std::list<DMPlexCellSerialise> &serialised_cells,
     PETSCCHK(DMGetCoordinateDim(dm_prototype, &tmp_int));
     PETSCCHK(DMSetCoordinateDim(dm, tmp_int));
 
-    // TODO set cones
+    PETSCCHK(
+        DMPlexSetChart(dm, index_mapper.chart_start, index_mapper.chart_end));
+
+    for (auto &std_cell : std_rep_cells) {
+      for (auto &point_spec : std_cell.point_specs) {
+        const PetscInt global_point = point_spec.first;
+        const PetscInt local_point =
+            index_mapper.get_local_point_index(global_point);
+        const PetscInt cone_size = point_spec.second.size();
+        PETSCCHK(DMPlexSetConeSize(dm, local_point, cone_size));
+      }
+    }
+
+    PETSCCHK(DMSetUp(dm));
+    std::vector<PetscInt> cone_local;
+    for (auto &std_cell : std_rep_cells) {
+      for (auto &point_spec : std_cell.point_specs) {
+        const PetscInt global_point = point_spec.first;
+        const PetscInt local_point =
+            index_mapper.get_local_point_index(global_point);
+        auto &cone_global = point_spec.second;
+        cone_local.clear();
+        cone_local.reserve(cone_global.size());
+        for (auto gx : cone_global) {
+          cone_local.push_back(index_mapper.get_local_point_index(gx));
+        }
+        PETSCCHK(DMPlexSetCone(dm, local_point, cone_local.data()));
+      }
+    }
 
     PETSCCHK(DMPlexSymmetrize(dm));
     PETSCCHK(DMPlexStratify(dm));
 
-    PetscInterface::setup_coordinate_section(dm, vertex_start, vertex_end);
+    PetscInt vertex_start, vertex_end;
+    index_mapper.get_depth_stratum(0, &vertex_start, &vertex_end);
+    setup_coordinate_section(dm, vertex_start, vertex_end);
     Vec coordinates;
     PetscScalar *coords;
     PetscInterface::setup_local_coordinate_vector(dm, coordinates);
     PETSCCHK(VecGetArray(coordinates, &coords));
 
     // TODO write coordinates of vertices
+    TODO
 
-    PETSCCHK(VecRestoreArray(coordinates, &coords));
+        PETSCCHK(VecRestoreArray(coordinates, &coords));
     PETSCCHK(DMSetCoordinatesLocal(dm, coordinates));
     PETSCCHK(VecDestroy(&coordinates));
+  }
 
-  */
+  return num_cells;
 }
 
 /**
@@ -223,9 +257,6 @@ dm_from_serialised_cells(std::list<DMPlexCellSerialise> &serialised_cells,
  */
 class DMPlexHelper {
 protected:
-  PetscInt cell_start;
-  PetscInt cell_end;
-
   inline void check_valid_cell(const PetscInt cell) const {
     NESOASSERT((cell > -1) && (cell < (this->cell_end - this->cell_start)),
                "Bad cell index passed.");
@@ -238,7 +269,8 @@ public:
   IS global_cell_numbers;
   IS global_vertex_numbers;
   IS global_point_numbers;
-
+  PetscInt cell_start;
+  PetscInt cell_end;
   /**
    * TODO
    */

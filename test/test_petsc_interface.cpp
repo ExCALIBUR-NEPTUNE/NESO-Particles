@@ -353,3 +353,23 @@ TEST(PETSC, dm_cell_linearise) {
   PETSCCHK(DMDestroy(&dm));
   PETSCCHK(PetscFinalize());
 }
+
+TEST(PETSC, dm_halo_creation) {
+
+  PETSCCHK(PetscInitializeNoArguments());
+  DM dm;
+  // TODO
+  std::string gmsh_filename = "/home/js0259/git-ukaea/NESO-Particles-paper/"
+                              "resources/mesh_ring/mesh_ring.msh";
+  PETSCCHK(DMPlexCreateGmshFromFile(PETSC_COMM_WORLD, gmsh_filename.c_str(),
+                                    PETSC_TRUE, &dm));
+
+  PetscInterface::generic_distribute(&dm);
+
+  auto mesh =
+      std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
+
+  mesh->free();
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}

@@ -170,8 +170,14 @@ public:
 inline void traverse_cell_specification(
     DM &dm, PetscInt index,
     std::map<PetscInt, std::set<PetscInt>> &map_per_height) {
-  PetscInt cone_size, height;
+  PetscInt cone_size, height, depth, point_start, point_end;
+  PETSCCHK(DMPlexGetChart(dm, &point_start, &point_end));
+  NESOASSERT((index >= point_start) && (index < point_end),
+             "Input point not in point range.");
+  PETSCCHK(DMPlexGetDepth(dm, &depth));
   PETSCCHK(DMPlexGetPointHeight(dm, index, &height));
+  NESOASSERT((height >= 0) && (height <= depth), "Bad point height returned.");
+
   map_per_height[height].insert(index);
 
   PETSCCHK(DMPlexGetConeSize(dm, index, &cone_size));

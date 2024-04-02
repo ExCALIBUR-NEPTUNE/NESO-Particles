@@ -119,11 +119,12 @@ protected:
 
     // local claim cells
     ExternalCommon::LocalClaim local_claim;
+    const PetscInt cell_start = this->dmh->cell_start;
+    const PetscInt cell_end = this->dmh->cell_end;
 
-    for (int cellx = 0; cellx < this->cell_count; cellx++) {
-      const int element_id = this->dmh->get_cell_global_index(cellx);
+    for (int cellx = cell_start; cellx < cell_end; cellx++) {
       const auto bounding_box = this->dmh->get_cell_bounding_box(cellx);
-      ExternalCommon::bounding_box_claim(element_id, bounding_box,
+      ExternalCommon::bounding_box_claim(cellx, bounding_box,
                                          this->mesh_hierarchy, local_claim,
                                          mh_element_map);
     }
