@@ -198,6 +198,7 @@ dm_from_serialised_cells(std::list<DMPlexCellSerialise> &serialised_cells,
     PETSCCHK(DMGetDimension(dm_prototype, &tmp_int));
     PETSCCHK(DMSetDimension(dm, tmp_int));
     PETSCCHK(DMGetCoordinateDim(dm_prototype, &tmp_int));
+    const PetscInt ndim_coord = tmp_int;
     PETSCCHK(DMSetCoordinateDim(dm, tmp_int));
 
     PETSCCHK(
@@ -241,10 +242,21 @@ dm_from_serialised_cells(std::list<DMPlexCellSerialise> &serialised_cells,
     PetscInterface::setup_local_coordinate_vector(dm, coordinates);
     PETSCCHK(VecGetArray(coordinates, &coords));
 
-    // TODO write coordinates of vertices
-    TODO
+    // write coordinates of vertices
+    for (auto &std_cell : std_rep_cells) {
+      for (const auto &point_vertex : std_cell.vertices) {
+        const PetscInt global_point = point_vertex.first;
+        const PetscInt local_point =
+            index_mapper.get_local_point_index(global_point);
+        const PetscInt vertex_index = local_point - vertex_start;
+        for (PetscInt dimx = 0; dimx < ndim_coord; dimx++) {
+          const PetscScalar value = point_vertex.second.at(dimx);
+          coords[vertex_index * ndim_coord + dimx] = value;
+        }
+      }
+    }
 
-        PETSCCHK(VecRestoreArray(coordinates, &coords));
+    PETSCCHK(VecRestoreArray(coordinates, &coords));
     PETSCCHK(DMSetCoordinatesLocal(dm, coordinates));
     PETSCCHK(VecDestroy(&coordinates));
   }
