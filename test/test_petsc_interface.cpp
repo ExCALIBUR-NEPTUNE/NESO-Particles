@@ -11,7 +11,6 @@ using namespace NESO::Particles;
 
 // TODO parameterise
 TEST(PETSC, init) {
-
   PETSCCHK(PetscInitializeNoArguments());
   // TODO
   std::string gmsh_filename = "/home/js0259/git-ukaea/NESO-Particles-paper/"

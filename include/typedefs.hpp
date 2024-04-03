@@ -51,7 +51,7 @@ inline void neso_particles_assert(const char *expr_str, bool expr,
                                   const char *file, int line, const char *msg) {
   if (!expr) {
     std::cerr << "NESO Particles Assertion error:\t" << msg << "\n"
-              << "Expected value:\t" << expr_str << "\n"
+              << "Expression evaluated:\t" << expr_str << "\n"
               << "Source location:\t\t" << file << ", line " << line << "\n";
 #ifdef NESO_PARTICLES_NO_MPI_ABORT
     std::abort();
