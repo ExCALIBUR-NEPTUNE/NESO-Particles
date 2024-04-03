@@ -24,7 +24,7 @@ namespace NESO::Particles::PetscInterface {
 
 /**
  * This is a helper function to assert conditions are satisfied and terminate
- * execution if not. 
+ * execution if not.
  *
  *   PETSCCHK(<PETSc call>);
  *

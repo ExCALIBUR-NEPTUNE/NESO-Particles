@@ -183,10 +183,9 @@ protected:
       }
     }
 
-    dm_from_serialised_cells(serialised_halo_cells, this->dmh->dm,
-                             this->dm_halo);
-
     // unpack the halo cells into a DMPlex for halo cells
+    this->dm_halo_num_cells = dm_from_serialised_cells(
+        serialised_halo_cells, this->dmh->dm, this->dm_halo);
 
     mhc.free();
   }
@@ -195,6 +194,7 @@ public:
   MPI_Comm comm;
   std::shared_ptr<DMPlexHelper> dmh;
   DM dm_halo;
+  PetscInt dm_halo_num_cells;
 
   ~DMPlexInterface(){
 
@@ -268,6 +268,8 @@ public:
     return this->mesh_hierarchy;
   }
 };
+
+typedef std::shared_ptr<DMPlexInterface> DMPlexInterfaceSharedPtr;
 
 } // namespace NESO::Particles::PetscInterface
 
