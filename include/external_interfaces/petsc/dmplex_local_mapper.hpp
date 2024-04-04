@@ -12,6 +12,8 @@ namespace NESO::Particles::PetscInterface {
 class DMPlexLocalMapper : public LocalMapper {
 protected:
   std::unique_ptr<BufferDevice<PetscScalar>> d_interlaced_positions;
+  std::unique_ptr<BufferDeviceHost<INT>> dh_cells;
+  std::unique_ptr<BufferDeviceHost<INT>> dh_ranks;
 
   inline void map_host(ParticleGroup &particle_group, const int map_cell) {
 
@@ -28,11 +30,14 @@ protected:
     const PetscInt local_ncomp =
         static_cast<PetscInt>(npart_local) * ndim_coord;
     this->d_interlaced_positions->realloc_no_copy(local_ncomp);
+    this->dh_cells->realloc_no_copy(npart_local);
+    this->dh_ranks->realloc_no_copy(npart_local);
 
     auto dat_positions = particle_group.position_dat;
     auto k_interlaced_positions = this->d_interlaced_positions->ptr;
     auto interlace_loop = particle_loop(
-        "DMPlexLocalMapper", dat_positions,
+        "DMPlexLocalMapper::interlace",
+        dat_positions,
         [=](auto INDEX, auto P) {
           const auto linear_index = INDEX.get_loop_linear_index();
           for (int dx = 0; dx < ndim_coord; dx++) {
@@ -68,11 +73,53 @@ protected:
     PETSCCHK(VecView(v, PETSC_VIEWER_STDOUT_SELF));
 
     // call DMLocatePoints with Vec
+    PetscSF cell_sf = nullptr;
+    // PETSCCHK(PetscSFCreate(MPI_COMM_SELF, &cell_sf));
+    PETSCCHK(DMLocatePoints(dm, v, DM_POINTLOCATION_NONE, &cell_sf));
+    PETSCCHK(PetscSFView(cell_sf, PETSC_VIEWER_STDOUT_SELF));
+    const PetscSFNode *cells;
+    PetscInt n_found;
+    const PetscInt *found;
+    PETSCCHK(PetscSFGetGraph(cell_sf, NULL, &n_found, &found, &cells));   
+
+
+    for(int px=0 ; px<npart_local ; px++){
+      const auto px_cell = cells[px].index;
+      // If the cell is negative then PETSc did not find a cell containing the
+      // point.
+      this->dh_cells->h_buffer.ptr[px] = (px_cell > -1) ? px_cell : -1;
+    }
     
-    //TODO
+    PETSCCHK(PetscSFDestroy(&cells));
+
+    // TODO check halo cells
+
 
     // Write cells back to particles
+    this->dh_cells->copy_to_device();
+    this->dh_ranks->copy_to_device();
     
+    auto k_cells = this->dh_cells->d_buffer.ptr;
+    auto k_ranks = this->dh_ranks->d_buffer.ptr;
+    auto dat_cells = particle_group->cell_id_dat;
+    auto dat_ranks = particle_group->mpi_rank_dat;
+
+    auto deinterlace_loop = particle_loop(
+      "DMPlexLocalMapper::deinterlace",
+      dat_positions,
+      [=](auto INDEX, auto CELL, auto RANK) {
+        const auto linear_index = INDEX.get_loop_linear_index();
+        CELL.at(0) = k_cells[linear_index];
+        TODO check index
+        RANKS.at(1) = k_ranks[linear_index];
+      },
+      Access::read(ParticleLoopIndex{}),
+      Access::write(dat_cells),
+      Access::write(dat_ranks)
+    );
+
+
+
     //TODO
 
     PETSCCHK(VecDestroy(&v));

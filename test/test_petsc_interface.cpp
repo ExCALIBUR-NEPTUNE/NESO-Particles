@@ -369,7 +369,39 @@ TEST(PETSC, dm_halo_creation) {
 
   auto mesh =
       std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
+  auto sycl_target =
+      std::make_shared<SYCLTarget>(GPU_SELECTOR, mesh->get_comm());
+  auto mapper = std::make_shared<PetscInterface::DMPlexLocalMapper>(sycl_target, mesh);
+  auto domain = std::make_shared<Domain>(mesh, mapper);
 
+  const int ndim = 2;
+  ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
+                             ParticleProp(Sym<REAL>("V"), 3),
+                             ParticleProp(Sym<INT>("CELL_ID"), 1, true),
+                             ParticleProp(Sym<INT>("ID"), 1)};
+  auto A = std::make_shared<ParticleGroup>(domain, particle_spec, sycl_target);
+  const int N = 1;
+
+  ParticleSet initial_distribution(N, particle_spec);
+
+  std::vector<double> point_in_domain(ndim);
+  mesh->get_point_in_subdomain(point_in_domain.data());
+  for (int px = 0; px < N; px++) {
+    for (int dimx = 0; dimx < ndim; dimx++) {
+      initial_distribution[Sym<REAL>("P")][px][dimx] = point_in_domain.at(dimx);
+    }
+    initial_distribution[Sym<INT>("CELL_ID")][px][0] = mesh->get_cell_count()-1;
+  }
+
+  A->add_particles_local(initial_distribution);
+  
+  A->print(Sym<REAL>("P"), Sym<INT>("CELL_ID"));
+
+  mapper->map(*A);
+  A->print(Sym<INT>("CELL_ID"));
+  
+  A->free();
+  sycl_target->free();
   mesh->free();
   PETSCCHK(DMDestroy(&dm));
   PETSCCHK(PetscFinalize());
