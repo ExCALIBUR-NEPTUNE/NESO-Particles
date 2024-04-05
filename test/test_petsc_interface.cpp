@@ -371,7 +371,8 @@ TEST(PETSC, dm_halo_creation) {
       std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
   auto sycl_target =
       std::make_shared<SYCLTarget>(GPU_SELECTOR, mesh->get_comm());
-  auto mapper = std::make_shared<PetscInterface::DMPlexLocalMapper>(sycl_target, mesh);
+  auto mapper =
+      std::make_shared<PetscInterface::DMPlexLocalMapper>(sycl_target, mesh);
   auto domain = std::make_shared<Domain>(mesh, mapper);
 
   const int ndim = 2;
@@ -390,16 +391,17 @@ TEST(PETSC, dm_halo_creation) {
     for (int dimx = 0; dimx < ndim; dimx++) {
       initial_distribution[Sym<REAL>("P")][px][dimx] = point_in_domain.at(dimx);
     }
-    initial_distribution[Sym<INT>("CELL_ID")][px][0] = mesh->get_cell_count()-1;
+    initial_distribution[Sym<INT>("CELL_ID")][px][0] =
+        mesh->get_cell_count() - 1;
   }
 
   A->add_particles_local(initial_distribution);
-  
+
   A->print(Sym<REAL>("P"), Sym<INT>("CELL_ID"));
 
   mapper->map(*A);
   A->print(Sym<INT>("CELL_ID"));
-  
+
   A->free();
   sycl_target->free();
   mesh->free();
