@@ -190,9 +190,9 @@ dm_from_serialised_cells(std::list<DMPlexCellSerialise> &serialised_cells,
   // Create the new DMPlex.
 
   PETSCCHK(DMCreate(MPI_COMM_WORLD, &dm));
+  PETSCCHK(DMSetType(dm, DMPLEX));
 
   if (num_cells > 0) {
-    PETSCCHK(DMSetType(dm, DMPLEX));
 
     PetscInt tmp_int;
     PETSCCHK(DMGetDimension(dm_prototype, &tmp_int));
@@ -259,6 +259,11 @@ dm_from_serialised_cells(std::list<DMPlexCellSerialise> &serialised_cells,
     PETSCCHK(VecRestoreArray(coordinates, &coords));
     PETSCCHK(DMSetCoordinatesLocal(dm, coordinates));
     PETSCCHK(VecDestroy(&coordinates));
+
+    DM dm_interpolated;
+    PETSCCHK(DMPlexInterpolate(dm, &dm_interpolated));
+    PETSCCHK(DMDestroy(&dm));
+    dm = dm_interpolated;
   }
 
   return num_cells;
@@ -283,6 +288,7 @@ public:
   IS global_point_numbers;
   PetscInt cell_start;
   PetscInt cell_end;
+
   /**
    * TODO
    */

@@ -184,16 +184,21 @@ protected:
     }
 
     // unpack the halo cells into a DMPlex for halo cells
-    this->dm_halo_num_cells = dm_from_serialised_cells(
-        serialised_halo_cells, this->dmh->dm, this->dm_halo);
-
+    DM dm_halo;
+    this->dm_halo_num_cells =
+        dm_from_serialised_cells(serialised_halo_cells, this->dmh->dm, dm_halo);
+    if (this->dm_halo_num_cells) {
+      this->dmh_halo = std::make_shared<DMPlexHelper>(this->comm, dm_halo);
+    } else {
+      this->dmh_halo = nullptr;
+    }
     mhc.free();
   }
 
 public:
   MPI_Comm comm;
   std::shared_ptr<DMPlexHelper> dmh;
-  DM dm_halo;
+  std::shared_ptr<DMPlexHelper> dmh_halo;
   PetscInt dm_halo_num_cells;
 
   ~DMPlexInterface(){
