@@ -174,9 +174,9 @@ struct HaloDMIndexMapper {
 /**
  * TODO
  */
-inline PetscInt
-dm_from_serialised_cells(std::list<DMPlexCellSerialise> &serialised_cells,
-                         DM &dm_prototype, DM &dm) {
+inline PetscInt dm_from_serialised_cells(
+    std::list<DMPlexCellSerialise> &serialised_cells, DM &dm_prototype, DM &dm,
+    std::map<PetscInt, std::tuple<int, PetscInt>> &map_local_lid_remote_lid) {
 
   const PetscInt num_cells = serialised_cells.size();
   std::vector<CellSTDRepresentation> std_rep_cells(num_cells);
@@ -186,9 +186,19 @@ dm_from_serialised_cells(std::list<DMPlexCellSerialise> &serialised_cells,
   }
 
   HaloDMIndexMapper index_mapper(std_rep_cells);
+  // create the map from the new local dm_halo indices to the original local
+  // indices on the remote ranks
+
+  for (auto &sc : serialised_cells) {
+    const auto global_index = sc.cell_global_id;
+    const PetscInt remote_local_id = sc.cell_local_id;
+    const int remote_rank = sc.owning_rank;
+    const auto local_local_id =
+        index_mapper.get_local_point_index(global_index);
+    map_local_lid_remote_lid[local_local_id] = {remote_rank, remote_local_id};
+  }
 
   // Create the new DMPlex.
-
   PETSCCHK(DMCreate(MPI_COMM_WORLD, &dm));
   PETSCCHK(DMSetType(dm, DMPLEX));
 
@@ -264,6 +274,9 @@ dm_from_serialised_cells(std::list<DMPlexCellSerialise> &serialised_cells,
     PETSCCHK(DMPlexInterpolate(dm, &dm_interpolated));
     PETSCCHK(DMDestroy(&dm));
     dm = dm_interpolated;
+
+    // Create the maps from the created dm cells to the original cell ids and
+    // owning ranks.
   }
 
   return num_cells;

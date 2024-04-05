@@ -128,9 +128,17 @@ protected:
         const int px = not_local_found.at(qx);
         const auto px_cell = cells[qx].index;
         const bool cell_found = px_cell > -1;
-        this->dh_cells->h_buffer.ptr[px] = (cell_found) ? px_cell : -1;
-        // TODO LOOK UP ORIGINAL RANK AND CELL ID
-        this->dh_ranks->h_buffer.ptr[px] = (cell_found) ? rank : -1;
+
+        // Get the owning rank and local index of the cell on the remote rank.
+        INT remote_cell, remote_rank;
+        if (cell_found) {
+          auto rank_cell =
+              dmplex_interface->map_local_lid_remote_lid.at(px_cell);
+          remote_rank = std::get<0>(rank_cell);
+          remote_cell = std::get<1>(rank_cell);
+        }
+        this->dh_cells->h_buffer.ptr[px] = (cell_found) ? remote_cell : -1;
+        this->dh_ranks->h_buffer.ptr[px] = (cell_found) ? remote_rank : -1;
       }
 
       PETSCCHK(VecDestroy(&v_halo));

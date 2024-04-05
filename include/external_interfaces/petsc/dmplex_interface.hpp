@@ -8,6 +8,7 @@
 #include "petsc_common.hpp"
 
 #include <memory>
+#include <tuple>
 
 namespace NESO::Particles::PetscInterface {
 
@@ -186,7 +187,8 @@ protected:
     // unpack the halo cells into a DMPlex for halo cells
     DM dm_halo;
     this->dm_halo_num_cells =
-        dm_from_serialised_cells(serialised_halo_cells, this->dmh->dm, dm_halo);
+        dm_from_serialised_cells(serialised_halo_cells, this->dmh->dm, dm_halo,
+                                 this->map_local_lid_remote_lid);
     if (this->dm_halo_num_cells) {
       this->dmh_halo = std::make_shared<DMPlexHelper>(this->comm, dm_halo);
     } else {
@@ -200,7 +202,7 @@ public:
   std::shared_ptr<DMPlexHelper> dmh;
   std::shared_ptr<DMPlexHelper> dmh_halo;
   PetscInt dm_halo_num_cells;
-
+  std::map<PetscInt, std::tuple<int, PetscInt>> map_local_lid_remote_lid;
   ~DMPlexInterface(){
 
   };
