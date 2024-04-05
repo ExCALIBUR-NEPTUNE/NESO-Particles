@@ -9,38 +9,35 @@
 
 using namespace NESO::Particles;
 
-// TODO parameterise
-TEST(PETSC, init) {
+class PETSC_NDIM : public testing::TestWithParam<int> {};
+TEST_P(PETSC_NDIM, init) {
   PETSCCHK(PetscInitializeNoArguments());
-  // TODO
-  std::string gmsh_filename = "/home/js0259/git-ukaea/NESO-Particles-paper/"
-                              "resources/mesh_ring/mesh_ring.msh";
   DM dm;
-  // PETSCCHK(DMPlexCreateGmshFromFile(PETSC_COMM_WORLD, gmsh_filename.c_str(),
-  //                                   static_cast<PetscBool>(1), &dm));
+  PetscInt ndim = GetParam();
 
-  const int mesh_size = 32;
-  PetscInt faces[2] = {mesh_size, mesh_size};
+  const int mesh_size = (ndim == 2) ? 32 : 16;
+  PetscInt faces[3] = {mesh_size, mesh_size, mesh_size};
 
-  PETSCCHK(DMPlexCreateBoxMesh(PETSC_COMM_WORLD, 2, PETSC_FALSE, faces,
+  PETSCCHK(DMPlexCreateBoxMesh(PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces,
                                /* lower */ NULL,
                                /* upper */ NULL,
                                /* periodicity */ NULL, PETSC_TRUE, &dm));
-
   PetscInterface::generic_distribute(&dm);
-
   auto mesh =
       std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
 
   PetscInt start, end;
   PETSCCHK(DMPlexGetHeightStratum(dm, 0, &start, &end));
   ASSERT_EQ(mesh->get_cell_count(), end - start);
-  ASSERT_EQ(mesh->get_ndim(), 2);
+  ASSERT_EQ(mesh->get_ndim(), ndim);
 
   auto mh = mesh->get_mesh_hierarchy();
 
   ASSERT_EQ(mh->dims[0], 1);
   ASSERT_EQ(mh->dims[1], 1);
+  if (ndim > 2) {
+    ASSERT_EQ(mh->dims[2], 1);
+  }
   ASSERT_EQ(mh->ncells_dim_fine, mesh_size);
 
   // The mesh hierarchy ownership should match the mesh ownership as it is a
@@ -55,10 +52,10 @@ TEST(PETSC, init) {
 
   for (int cellx = 0; cellx < cell_count; cellx++) {
     // Test the bounding box contains the average of the vertices
-    std::vector<REAL> cell_average(2);
+    std::vector<REAL> cell_average(ndim);
     mesh->dmh->get_cell_vertex_average(cellx, cell_average);
     auto bb = mesh->dmh->get_cell_bounding_box(cellx);
-    ASSERT_TRUE(bb->contains_point(2, cell_average));
+    ASSERT_TRUE(bb->contains_point(ndim, cell_average));
 
     // Check cell claimed the corresponding MH cell
     INT mh_tuple[6];
@@ -68,46 +65,12 @@ TEST(PETSC, init) {
     ASSERT_EQ(owner, rank);
   }
 
-  Vec v;
-  PETSCCHK(VecCreate(MPI_COMM_SELF, &v));
-  PETSCCHK(VecSetSizes(v, 4, 4));
-  PETSCCHK(VecSetBlockSize(v, 2));
-  PETSCCHK(VecSetFromOptions(v));
-
-  PetscScalar *v_ptr;
-  PETSCCHK(VecGetArrayWrite(v, &v_ptr));
-  v_ptr[0] = 0.59;
-  v_ptr[1] = 0.59;
-  v_ptr[2] = 0.99;
-  v_ptr[3] = 0.99;
-  PETSCCHK(VecRestoreArrayWrite(v, &v_ptr));
-  PETSCCHK(VecView(v, PETSC_VIEWER_STDOUT_SELF));
-
-  PetscSF cell_sf = nullptr;
-  // PETSCCHK(PetscSFCreate(MPI_COMM_SELF, &cell_sf));
-  PETSCCHK(DMLocatePoints(dm, v, DM_POINTLOCATION_NONE, &cell_sf));
-
-  PETSCCHK(PetscSFView(cell_sf, PETSC_VIEWER_STDOUT_SELF));
-  const PetscSFNode *cells;
-  PetscInt n_found;
-  const PetscInt *found;
-
-  PETSCCHK(PetscSFGetGraph(cell_sf, NULL, &n_found, &found, &cells));
-  nprint("nfound:", n_found);
-  nprint("found:", found);
-  for (int nx = 0; nx < 2; nx++) {
-    nprint("nx:", nx, "cell:", cells[nx].rank, cells[nx].index);
-  }
-
-  PETSCCHK(VecView(v, PETSC_VIEWER_STDOUT_SELF));
-
-  // PETSCCHK(PetscSFDestroy(&cell_sf));
-  PETSCCHK(VecDestroy(&v));
-
   mesh->free();
   PETSCCHK(DMDestroy(&dm));
   PETSCCHK(PetscFinalize());
 }
+
+INSTANTIATE_TEST_SUITE_P(init, PETSC_NDIM, testing::Values(2, 3));
 
 TEST(PETSC, create_dm) {
 

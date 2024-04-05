@@ -142,8 +142,6 @@ protected:
       }
 
       PETSCCHK(VecDestroy(&v_halo));
-    } else {
-      NESOWARN(false, "Particles not mapped into cells.");
     }
 
     PETSCCHK(VecDestroy(&v));
