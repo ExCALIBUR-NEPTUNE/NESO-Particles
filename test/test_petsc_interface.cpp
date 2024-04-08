@@ -70,8 +70,6 @@ TEST_P(PETSC_NDIM, init) {
   PETSCCHK(PetscFinalize());
 }
 
-INSTANTIATE_TEST_SUITE_P(init, PETSC_NDIM, testing::Values(2, 3));
-
 TEST(PETSC, create_dm) {
 
   PETSCCHK(PetscInitializeNoArguments());
@@ -202,13 +200,11 @@ TEST(PETSC, create_dm) {
   v_ptr[2] = 1.99;
   v_ptr[3] = 2.99;
   PETSCCHK(VecRestoreArrayWrite(v, &v_ptr));
-  PETSCCHK(VecView(v, PETSC_VIEWER_STDOUT_SELF));
 
   PetscSF cell_sf = nullptr;
   // PETSCCHK(PetscSFCreate(MPI_COMM_SELF, &cell_sf));
   PETSCCHK(DMLocatePoints(dm, v, DM_POINTLOCATION_NONE, &cell_sf));
 
-  PETSCCHK(PetscSFView(cell_sf, PETSC_VIEWER_STDOUT_SELF));
   const PetscSFNode *cells;
   PetscInt n_found;
   const PetscInt *found;
@@ -318,15 +314,19 @@ TEST(PETSC, dm_cell_linearise) {
   PETSCCHK(PetscFinalize());
 }
 
-TEST(PETSC, dm_halo_creation) {
+TEST_P(PETSC_NDIM, dm_local_mapping) {
 
   PETSCCHK(PetscInitializeNoArguments());
   DM dm;
-  // TODO
-  std::string gmsh_filename = "/home/js0259/git-ukaea/NESO-Particles-paper/"
-                              "resources/mesh_ring/mesh_ring.msh";
-  PETSCCHK(DMPlexCreateGmshFromFile(PETSC_COMM_WORLD, gmsh_filename.c_str(),
-                                    PETSC_TRUE, &dm));
+
+  PetscInt ndim = GetParam();
+  const int mesh_size = (ndim == 2) ? 32 : 16;
+  PetscInt faces[3] = {mesh_size, mesh_size, mesh_size};
+
+  PETSCCHK(DMPlexCreateBoxMesh(PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces,
+                               /* lower */ NULL,
+                               /* upper */ NULL,
+                               /* periodicity */ NULL, PETSC_TRUE, &dm));
 
   PetscInterface::generic_distribute(&dm);
 
@@ -338,32 +338,41 @@ TEST(PETSC, dm_halo_creation) {
       std::make_shared<PetscInterface::DMPlexLocalMapper>(sycl_target, mesh);
   auto domain = std::make_shared<Domain>(mesh, mapper);
 
-  const int ndim = 2;
   ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
                              ParticleProp(Sym<REAL>("V"), 3),
                              ParticleProp(Sym<INT>("CELL_ID"), 1, true),
                              ParticleProp(Sym<INT>("ID"), 1)};
   auto A = std::make_shared<ParticleGroup>(domain, particle_spec, sycl_target);
-  const int N = 1;
+
+  const auto cell_count = mesh->get_cell_count();
+  const int N = cell_count;
 
   ParticleSet initial_distribution(N, particle_spec);
 
   std::vector<double> point_in_domain(ndim);
+  std::vector<REAL> point_tmp(ndim);
   mesh->get_point_in_subdomain(point_in_domain.data());
   for (int px = 0; px < N; px++) {
+    // Get a point in the middle of the px-th cell.
+    mesh->dmh->get_cell_vertex_average(px, point_tmp);
+
     for (int dimx = 0; dimx < ndim; dimx++) {
-      initial_distribution[Sym<REAL>("P")][px][dimx] = point_in_domain.at(dimx);
+      initial_distribution[Sym<REAL>("P")][px][dimx] = point_tmp.at(dimx);
     }
-    initial_distribution[Sym<INT>("CELL_ID")][px][0] =
-        mesh->get_cell_count() - 1;
+    initial_distribution[Sym<INT>("CELL_ID")][px][0] = cell_count - 1;
   }
 
   A->add_particles_local(initial_distribution);
 
-  A->print(Sym<REAL>("P"), Sym<INT>("CELL_ID"));
-
   mapper->map(*A);
-  A->print(Sym<INT>("CELL_ID"));
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto CELL_ID = A->get_cell(Sym<INT>("CELL_ID"), cellx);
+    auto nrow = CELL_ID->nrow;
+    for (int rx = 0; rx < nrow; rx++) {
+      ASSERT_EQ(CELL_ID->at(rx, 0), rx);
+    }
+  }
 
   A->free();
   sycl_target->free();
@@ -371,5 +380,7 @@ TEST(PETSC, dm_halo_creation) {
   PETSCCHK(DMDestroy(&dm));
   PETSCCHK(PetscFinalize());
 }
+
+INSTANTIATE_TEST_SUITE_P(init, PETSC_NDIM, testing::Values(2, 3));
 
 #endif
