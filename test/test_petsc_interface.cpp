@@ -381,6 +381,96 @@ TEST_P(PETSC_NDIM, dm_local_mapping) {
   PETSCCHK(PetscFinalize());
 }
 
+TEST_P(PETSC_NDIM, dm_cart_advection) {
+
+  PETSCCHK(PetscInitializeNoArguments());
+  DM dm;
+
+  PetscInt ndim = GetParam();
+  const int mesh_size = (ndim == 2) ? 32 : 16;
+  PetscInt faces[3] = {mesh_size, mesh_size, mesh_size};
+
+  PETSCCHK(DMPlexCreateBoxMesh(PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces,
+                               /* lower */ NULL,
+                               /* upper */ NULL,
+                               /* periodicity */ NULL, PETSC_TRUE, &dm));
+
+  PetscInterface::generic_distribute(&dm);
+
+  auto mesh =
+      std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
+  auto sycl_target =
+      std::make_shared<SYCLTarget>(GPU_SELECTOR, mesh->get_comm());
+  auto mapper =
+      std::make_shared<PetscInterface::DMPlexLocalMapper>(sycl_target, mesh);
+  auto domain = std::make_shared<Domain>(mesh, mapper);
+
+  ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
+                             ParticleProp(Sym<REAL>("V"), ndim),
+                             ParticleProp(Sym<INT>("CELL_ID"), 1, true),
+                             ParticleProp(Sym<INT>("ID"), 1)};
+  auto A = std::make_shared<ParticleGroup>(domain, particle_spec, sycl_target);
+
+  const auto cell_count = mesh->get_cell_count();
+  const int N = cell_count;
+
+  ParticleSet initial_distribution(N, particle_spec);
+
+  std::vector<double> point_in_domain(ndim);
+  std::vector<REAL> point_tmp(ndim);
+  mesh->get_point_in_subdomain(point_in_domain.data());
+
+  REAL s = 1.0;
+  const REAL h = 1.0 / mesh_size;
+
+  for (int px = 0; px < N; px++) {
+    // Get a point in the middle of the px-th cell.
+    mesh->dmh->get_cell_vertex_average(px, point_tmp);
+
+    for (int dimx = 0; dimx < ndim; dimx++) {
+      initial_distribution[Sym<REAL>("P")][px][dimx] = point_tmp.at(dimx);
+      initial_distribution[Sym<REAL>("V")][px][dimx] = s * h;
+      s *= -1.0;
+    }
+
+    initial_distribution[Sym<INT>("CELL_ID")][px][0] = cell_count - 1;
+  }
+
+  A->add_particles_local(initial_distribution);
+
+  auto loop_advect = particle_loop(
+      A,
+      [=](auto P, auto V) {
+        for (int dx = 0; dx < ndim; dx++) {
+          P.at(dx) += V.at(dx);
+        }
+      },
+      Access::write(Sym<REAL>("P")), Access::read(Sym<REAL>("V")));
+
+  auto loop_pbc = particle_loop(
+      A,
+      [=](auto P) {
+        for (int dx = 0; dx < ndim; dx++) {
+          P.at(dx) = fmod(P.at(dx) + 100.0, 1.0);
+        }
+      },
+      Access::write(Sym<REAL>("P")));
+
+  const int N_step = 10;
+  for (int stepx = 0; stepx < N_step; stepx++) {
+    loop_advect->execute();
+    loop_pbc->execute();
+    A->hybrid_move();
+    A->cell_move();
+  }
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
+
 INSTANTIATE_TEST_SUITE_P(init, PETSC_NDIM, testing::Values(2, 3));
 
 #endif
