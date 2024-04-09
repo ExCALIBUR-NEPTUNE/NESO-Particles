@@ -21,8 +21,6 @@ ParticleGroupSharedPtr particle_loop_common(const int N = 1093) {
   auto mesh = std::make_shared<CartesianHMesh>(MPI_COMM_WORLD, ndim, dims,
                                                cell_extent, subdivision_order);
 
-  const int cell_count = mesh->get_cell_count();
-
   auto sycl_target =
       std::make_shared<SYCLTarget>(GPU_SELECTOR, mesh->get_comm());
 
@@ -42,7 +40,6 @@ ParticleGroupSharedPtr particle_loop_common(const int N = 1093) {
                                   domain->mesh->get_cell_count()));
 
   const int rank = sycl_target->comm_pair.rank_parent;
-  const int size = sycl_target->comm_pair.size_parent;
   const INT id_offset = rank * N;
 
   std::mt19937 rng_pos(52234234 + rank);
@@ -232,6 +229,28 @@ TEST(ParticleLoop, local_array) {
   EXPECT_EQ(d1[1], local_count * 2);
   EXPECT_EQ(d1[2], local_count * 3);
 
+  // LocalArray write
+  const int num_write = A->get_npart_local();
+  std::vector<INT> h_law(num_write);
+  std::fill(h_law.begin(), h_law.end(), 0);
+  auto law = std::make_shared<LocalArray<INT>>(sycl_target, h_law);
+  auto law_index = std::make_shared<LocalArray<INT>>(sycl_target, 1);
+  law_index->fill(0);
+
+  auto law_loop = particle_loop(
+      A,
+      [=](auto la_index, auto la) {
+        const int index = la_index.fetch_add(0, 1);
+        la[index] = 1;
+      },
+      Access::add(law_index), Access::write(law));
+  law_loop->execute();
+
+  auto post_law = law->get();
+  for (int px = 0; px < num_write; px++) {
+    EXPECT_EQ(post_law.at(px), 1);
+  }
+
   A->free();
   sycl_target->free();
   mesh->free();
@@ -375,7 +394,6 @@ TEST(ParticleLoop, global_array) {
   const int cell_count = mesh->get_cell_count();
   auto sycl_target = A->sycl_target;
 
-  const int rank = sycl_target->comm_pair.rank_parent;
   const int size = sycl_target->comm_pair.size_parent;
 
   const int N = 3;
@@ -440,7 +458,6 @@ TEST(ParticleLoop, global_array_ptr) {
   const int cell_count = mesh->get_cell_count();
   auto sycl_target = A->sycl_target;
 
-  const int rank = sycl_target->comm_pair.rank_parent;
   const int size = sycl_target->comm_pair.size_parent;
 
   const int N = 3;
@@ -497,6 +514,42 @@ TEST(ParticleLoop, global_array_ptr) {
   mesh->free();
 }
 
+namespace {
+
+template <typename T>
+inline void inner_cell_dat_min_max(SYCLTargetSharedPtr sycl_target,
+                                   ParticleGroupSharedPtr particle_group,
+                                   const int cell_count) {
+
+  auto cdc_min =
+      std::make_shared<CellDatConst<T>>(sycl_target, cell_count, 1, 1);
+  auto cdc_max =
+      std::make_shared<CellDatConst<T>>(sycl_target, cell_count, 1, 1);
+  cdc_min->fill((T)100);
+  cdc_max->fill((T)-1);
+  particle_loop(
+      particle_group,
+      [=](auto INDEX, auto CDC_MIN, auto CDC_MAX) {
+        CDC_MIN.fetch_min(0, 0, (T)INDEX.layer);
+        CDC_MAX.fetch_max(0, 0, (T)INDEX.layer);
+      },
+      Access::read(ParticleLoopIndex{}), Access::min(cdc_min),
+      Access::max(cdc_max))
+      ->execute();
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    const INT npart_cell = particle_group->get_npart_cell(cellx);
+    if (npart_cell) {
+      auto data_min = cdc_min->get_cell(cellx);
+      auto data_max = cdc_max->get_cell(cellx);
+      EXPECT_EQ(data_min->at(0, 0), (T)0);
+      EXPECT_EQ(data_max->at(0, 0), (T)(npart_cell - 1));
+    }
+  }
+}
+
+} // namespace
+
 TEST(ParticleLoop, cell_dat_const) {
   const int N_per_rank = 1093;
   auto A = particle_loop_common(N_per_rank);
@@ -506,7 +559,6 @@ TEST(ParticleLoop, cell_dat_const) {
   auto sycl_target = A->sycl_target;
 
   const int rank = sycl_target->comm_pair.rank_parent;
-  const int size = sycl_target->comm_pair.size_parent;
 
   const int N = 3;
   auto c0 = std::make_shared<CellDatConst<REAL>>(sycl_target, cell_count, N, N);
@@ -613,6 +665,11 @@ TEST(ParticleLoop, cell_dat_const) {
     EXPECT_EQ(cell_data->at(1, 1), correct_add.at(cx * 4 + 3));
   }
 
+  inner_cell_dat_min_max<int>(sycl_target, A, cell_count);
+  inner_cell_dat_min_max<REAL>(sycl_target, A, cell_count);
+  // Issues with atomic_max/atomic_min with adaptivecpp cuda-nvcxx
+  // inner_cell_dat_min_max<INT>(sycl_target, A, cell_count);
+
   A->free();
   sycl_target->free();
   mesh->free();
@@ -651,6 +708,304 @@ TEST(ParticleLoop, particle_dat_iterset) {
       for (int dimx = 0; dimx < ndim; dimx++) {
         ASSERT_EQ((*p)[dimx][rowx], (*p2)[dimx][rowx]);
       }
+    }
+  }
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}
+
+TEST(ParticleLoop, sym_vector) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  const int cell_count = mesh->get_cell_count();
+  auto si = SymVector<INT>(A, {Sym<INT>("ID"), Sym<INT>("CELL_ID")});
+  std::vector<Sym<REAL>> srv = {Sym<REAL>("V"), Sym<REAL>("P2")};
+  auto sr = std::make_shared<SymVector<REAL>>(A, srv);
+
+  auto pl = particle_loop(
+      A,
+      [=](auto index, auto dats_real, auto dats_int) {
+        const INT cell = index.cell;
+        const INT layer = index.layer;
+        dats_real.at(1, cell, layer, 0) = dats_real.at(0, cell, layer, 0);
+        dats_real.at(1, index, 1) = dats_int.at(0, 0);
+      },
+      Access::read(ParticleLoopIndex{}), Access::write(sr), Access::read(si));
+
+  pl->execute();
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto v = A->get_dat(Sym<REAL>("V"))->cell_dat.get_cell(cellx);
+    auto p2 = A->get_dat(Sym<REAL>("P2"))->cell_dat.get_cell(cellx);
+    auto id = A->get_dat(Sym<INT>("ID"))->cell_dat.get_cell(cellx);
+    const int nrow = p2->nrow;
+
+    // for each particle in the cell
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      // for each dimension
+      ASSERT_EQ((*p2)[0][rowx], (*v)[0][rowx]);
+      ASSERT_TRUE(std::abs((REAL)(*p2)[1][rowx] - (REAL)(*id)[0][rowx]) <
+                  1.0e-12);
+    }
+  }
+
+  A->free();
+  mesh->free();
+}
+
+TEST(ParticleLoop, single_cell) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  const int cell_count = mesh->get_cell_count();
+  auto sycl_target = A->sycl_target;
+
+  auto pl = particle_loop(
+      A, [=](auto ID) { ID.at(0) = -1; }, Access::write(Sym<INT>("ID")));
+
+  pl->execute(cell_count - 1);
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto id = A->get_dat(Sym<INT>("ID"))->cell_dat.get_cell(cellx);
+    const int nrow = id->nrow;
+
+    // for each particle in the cell
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      if (cellx < (cell_count - 1)) {
+        ASSERT_TRUE((*id)[0][rowx] > -1);
+      } else {
+        ASSERT_EQ((*id)[0][rowx], -1);
+      }
+    }
+  }
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}
+
+TEST(ParticleLoop, loop_index_linear) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  const int cell_count = mesh->get_cell_count();
+  auto sycl_target = A->sycl_target;
+
+  auto pl = particle_loop(
+      A,
+      [=](auto ID, auto index) { ID.at(0) = index.get_local_linear_index(); },
+      Access::write(Sym<INT>("ID")), Access::read(ParticleLoopIndex{}));
+
+  pl->execute();
+  INT index = 0;
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto id = A->get_dat(Sym<INT>("ID"))->cell_dat.get_cell(cellx);
+    const int nrow = id->nrow;
+    // for each particle in the cell
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      ASSERT_EQ((*id)[0][rowx], index);
+      index++;
+    }
+  }
+
+  auto pl_reset = particle_loop(
+      A, [=](auto ID) { ID.at(0) = -1; }, Access::write(Sym<INT>("ID")));
+  pl_reset->execute();
+
+  pl->execute(cell_count - 1);
+  index = 0;
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto id = A->get_dat(Sym<INT>("ID"))->cell_dat.get_cell(cellx);
+    const int nrow = id->nrow;
+    // for each particle in the cell
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      if (cellx == (cell_count - 1)) {
+        ASSERT_EQ((*id)[0][rowx], index);
+      } else {
+        ASSERT_EQ((*id)[0][rowx], -1);
+      }
+      index++;
+    }
+  }
+
+  pl = particle_loop(
+      A, [=](auto ID, auto index) { ID.at(0) = index.get_loop_linear_index(); },
+      Access::write(Sym<INT>("ID")), Access::read(ParticleLoopIndex{}));
+
+  pl->execute();
+  index = 0;
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto id = A->get_dat(Sym<INT>("ID"))->cell_dat.get_cell(cellx);
+    const int nrow = id->nrow;
+    // for each particle in the cell
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      ASSERT_EQ((*id)[0][rowx], index);
+      index++;
+    }
+  }
+
+  pl_reset->execute();
+  pl->execute(cell_count - 1);
+  index = 0;
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto id = A->get_dat(Sym<INT>("ID"))->cell_dat.get_cell(cellx);
+    const int nrow = id->nrow;
+    // for each particle in the cell
+    index = 0;
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      if (cellx == (cell_count - 1)) {
+        ASSERT_EQ((*id)[0][rowx], index);
+      } else {
+        ASSERT_EQ((*id)[0][rowx], -1);
+      }
+      index++;
+    }
+  }
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}
+
+TEST(ParticleLoop, cell_dat) {
+  const int N_per_rank = 1093;
+  auto A = particle_loop_common(N_per_rank);
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  const int cell_count = mesh->get_cell_count();
+  auto sycl_target = A->sycl_target;
+
+  const int rank = sycl_target->comm_pair.rank_parent;
+
+  const int N = 3;
+  auto c0 = std::make_shared<CellDat<REAL>>(sycl_target, cell_count, N);
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    c0->set_nrow(cellx, N);
+  }
+  c0->wait_set_nrow();
+
+  std::mt19937 rng(522234 + rank);
+  std::uniform_real_distribution<double> uniform_rng(0.0, 1.0);
+
+  std::vector<REAL> correct(cell_count * N);
+  std::vector<REAL> correct_add(cell_count * 4);
+
+  int index = 0;
+  for (int cx = 0; cx < cell_count; cx++) {
+    auto cell_data = c0->get_cell(cx);
+    for (int rowx = 0; rowx < N; rowx++) {
+      REAL tmp = 0.0;
+      for (int colx = 0; colx < N; colx++) {
+        const REAL v = uniform_rng(rng);
+        tmp += v;
+        (*cell_data)[colx][rowx] = v;
+      }
+      correct.at(index) = tmp;
+      index++;
+    }
+    c0->set_cell(cx, cell_data);
+  }
+
+  ParticleLoop pl(
+      A,
+      [=](auto V, auto G0) {
+        for (int dx = 0; dx < N; dx++) {
+          REAL tmp = 0;
+          for (int cx = 0; cx < N; cx++) {
+            tmp += G0.at(dx, cx);
+          }
+          V[dx] = tmp;
+        }
+      },
+      Access::write(Sym<REAL>("V")), Access::read(c0));
+
+  pl.execute();
+
+  std::fill(correct_add.begin(), correct_add.end(), 0);
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto v = A->get_dat(Sym<REAL>("V"))->cell_dat.get_cell(cellx);
+    const int nrow = v->nrow;
+
+    // for each particle in the cell
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      for (int dx = 0; dx < N; dx++) {
+        const REAL to_test = (*v)[dx][rowx];
+        const REAL c = correct.at(cellx * 3 + dx);
+        ASSERT_TRUE(std::abs(c - to_test) < 1.0e-10);
+      }
+      for (int fx = 0; fx < 4; fx++) {
+        correct_add.at(cellx * 4 + fx) += (fx + 1);
+      }
+    }
+  }
+
+  auto g1 = std::make_shared<CellDat<int>>(sycl_target, cell_count, 2);
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    g1->set_nrow(cellx, 2);
+  }
+  g1->wait_set_nrow();
+
+  for (int cx = 0; cx < cell_count; cx++) {
+    auto cell_data = g1->get_cell(cx);
+    cell_data->at(0, 0) = 1.0;
+    cell_data->at(0, 1) = 2.0;
+    cell_data->at(1, 0) = 3.0;
+    cell_data->at(1, 1) = 4.0;
+    g1->set_cell(cx, cell_data);
+  }
+  for (int cx = 0; cx < cell_count; cx++) {
+    auto cell_data = g1->get_cell(cx);
+    EXPECT_EQ(cell_data->at(0, 0), 1.0);
+    EXPECT_EQ(cell_data->at(0, 1), 2.0);
+    EXPECT_EQ(cell_data->at(1, 0), 3.0);
+    EXPECT_EQ(cell_data->at(1, 1), 4.0);
+  }
+
+  for (int cx = 0; cx < cell_count; cx++) {
+    auto cell_data = g1->get_cell(cx);
+    cell_data->at(0, 0) = 0.0;
+    cell_data->at(0, 1) = 0.0;
+    cell_data->at(1, 0) = 0.0;
+    cell_data->at(1, 1) = 0.0;
+    g1->set_cell(cx, cell_data);
+  }
+
+  auto pl2 = particle_loop(
+      A,
+      [=](auto G1) {
+        G1.fetch_add(0, 0, 1);
+        G1.fetch_add(0, 1, 2);
+        G1.fetch_add(1, 0, 3);
+        G1.fetch_add(1, 1, 4);
+      },
+      Access::add(g1));
+
+  pl2->execute();
+  for (int cx = 0; cx < cell_count; cx++) {
+    auto cell_data = g1->get_cell(cx);
+    EXPECT_EQ(cell_data->at(0, 0), correct_add.at(cx * 4 + 0));
+    EXPECT_EQ(cell_data->at(0, 1), correct_add.at(cx * 4 + 1));
+    EXPECT_EQ(cell_data->at(1, 0), correct_add.at(cx * 4 + 2));
+    EXPECT_EQ(cell_data->at(1, 1), correct_add.at(cx * 4 + 3));
+  }
+
+  auto c1 = std::make_shared<CellDat<REAL>>(sycl_target, cell_count, 1);
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    c1->set_nrow(cellx, A->get_npart_cell(cellx));
+  }
+  c1->wait_set_nrow();
+
+  auto pl_write = particle_loop(
+      A, [=](auto index, auto cd) { cd.at(index.layer, 0) = index.layer; },
+      Access::read(ParticleLoopIndex{}), Access::write(c1));
+  pl_write->execute();
+
+  for (int cx = 0; cx < cell_count; cx++) {
+    auto cell_data = c1->get_cell(cx);
+    for (int rowx = 0; rowx < A->get_npart_cell(cx); rowx++) {
+      ASSERT_EQ(rowx, cell_data->at(rowx, 0));
     }
   }
 

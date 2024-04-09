@@ -228,3 +228,68 @@ TEST(CellDatConst, fill) {
     }
   }
 }
+
+TEST(CellDat, get_set_value) {
+
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+  const int cell_count = 4;
+  const int nrow = 3;
+  const int ncol = 2;
+
+  auto cd = std::make_shared<CellDat<INT>>(sycl_target, cell_count, ncol);
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    cd->set_nrow(cellx, nrow);
+    cd->wait_set_nrow();
+  }
+
+  INT index = 0;
+  for (int cx = 0; cx < cell_count; cx++) {
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      for (int colx = 0; colx < ncol; colx++) {
+        index++;
+        cd->set_value(cx, rowx, colx, index);
+      }
+    }
+  }
+  index = 0;
+  for (int cx = 0; cx < cell_count; cx++) {
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      for (int colx = 0; colx < ncol; colx++) {
+        index++;
+        const INT to_test = cd->get_value(cx, rowx, colx);
+        ASSERT_EQ(to_test, index);
+      }
+    }
+  }
+}
+
+TEST(CellDatConst, get_set_value) {
+
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+  const int cell_count = 4;
+  const int nrow = 3;
+  const int ncol = 2;
+
+  auto cdc =
+      std::make_shared<CellDatConst<INT>>(sycl_target, cell_count, nrow, ncol);
+
+  INT index = 0;
+  for (int cx = 0; cx < cell_count; cx++) {
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      for (int colx = 0; colx < ncol; colx++) {
+        index++;
+        cdc->set_value(cx, rowx, colx, index);
+      }
+    }
+  }
+  index = 0;
+  for (int cx = 0; cx < cell_count; cx++) {
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      for (int colx = 0; colx < ncol; colx++) {
+        index++;
+        const INT to_test = cdc->get_value(cx, rowx, colx);
+        ASSERT_EQ(to_test, index);
+      }
+    }
+  }
+}

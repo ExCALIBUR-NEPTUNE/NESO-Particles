@@ -313,6 +313,8 @@ private:
       std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
       std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int) {
 
+    auto r = ProfileRegion("ParticleUnpacker", "get_particle_dat_info");
+
     num_dats_real = particle_dats_real.size();
     dh_particle_dat_ptr_real.realloc_no_copy(num_dats_real);
     dh_particle_dat_ncomp_real.realloc_no_copy(num_dats_real);
@@ -343,6 +345,9 @@ private:
     e1.wait();
     e2.wait();
     e3.wait();
+
+    r.end();
+    this->sycl_target->profile_map.add_region(r);
   }
 
 public:
@@ -427,6 +432,7 @@ public:
          std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int) {
 
     auto t0 = profile_timestamp();
+    auto r = ProfileRegion("unpack", "realloc");
 
     // copy packed data to device
 
@@ -457,6 +463,9 @@ public:
       dat.second->wait_realloc();
     }
 
+    r.end();
+    this->sycl_target->profile_map.add_region(r);
+
     const int k_npart_recv = this->npart_recv;
 
     // get the pointers to the particle dat data and the number of components in
@@ -484,6 +493,7 @@ public:
       event_memcpy.wait_and_throw();
     }
 
+    r = ProfileRegion("unpack", "unpack_loop");
     this->sycl_target->queue
         .submit([&](sycl::handler &cgh) {
           cgh.parallel_for<>(
@@ -523,6 +533,8 @@ public:
               });
         })
         .wait_and_throw();
+    r.end();
+    this->sycl_target->profile_map.add_region(r);
   }
 };
 

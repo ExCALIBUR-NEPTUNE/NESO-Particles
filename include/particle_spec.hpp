@@ -37,6 +37,7 @@ public:
    * @param sym Other Sym to compare against.
    */
   bool operator<(const Sym &sym) const { return this->name < sym.name; }
+  bool operator==(const Sym &sym) const { return this->name == sym.name; }
 };
 
 /**
@@ -46,13 +47,13 @@ template <typename T> class ParticleProp {
 private:
 public:
   /// Symbol giving a label to the property.
-  const Sym<T> sym;
+  Sym<T> sym;
   /// Name of the property.
-  const std::string name;
+  std::string name;
   /// Number of components required by this property.
-  const int ncomp;
+  int ncomp;
   /// Bool to indicate if this property is a particle position or cell id.
-  const bool positions;
+  bool positions;
   /**
    *  Constructor for particle properties.
    *
@@ -63,6 +64,12 @@ public:
    */
   ParticleProp(const Sym<T> sym, int ncomp, bool positions = false)
       : sym(sym), name(sym.name), ncomp(ncomp), positions(positions) {}
+
+  bool operator==(const ParticleProp<T> &prop) const {
+    const bool same = (this->sym == prop.sym) && (this->name == prop.name) &&
+                      (this->ncomp == prop.ncomp);
+    return same;
+  }
 };
 
 /**
@@ -81,6 +88,23 @@ private:
     this->push(args...);
   }
 
+  inline auto find(ParticleProp<REAL> &prop) {
+    return std::find(this->properties_real.begin(), this->properties_real.end(),
+                     prop);
+  }
+  inline auto find(ParticleProp<INT> &prop) {
+    return std::find(this->properties_int.begin(), this->properties_int.end(),
+                     prop);
+  }
+  inline auto end(ParticleProp<REAL> &) { return this->properties_real.end(); }
+  inline auto end(ParticleProp<INT> &) { return this->properties_int.end(); }
+  template <typename T> inline void erase(ParticleProp<REAL>, T &location) {
+    this->properties_real.erase(location);
+  }
+  template <typename T> inline void erase(ParticleProp<INT>, T &location) {
+    this->properties_int.erase(location);
+  }
+
 public:
   /// Collection of REAL ParticleProp
   std::vector<ParticleProp<REAL>> properties_real;
@@ -93,18 +117,73 @@ public:
    *  @param args ParticleSpec is called with a set of ParticleProp arguments.
    */
   template <typename... T> ParticleSpec(T... args) { this->push(args...); };
+
+  /**
+   * Create a particle specification from a vector of REAL properties and a
+   * vector of INT properties.
+   *
+   *  @param properties_real REAL particle properties.
+   *  @param properties_int INT particle properties.
+   */
+  ParticleSpec(std::vector<ParticleProp<REAL>> &properties_real,
+               std::vector<ParticleProp<INT>> &properties_int)
+      : properties_real(properties_real), properties_int(properties_int) {}
+
   /**
    *  Push a ParticleProp<REAL> property onto the specification.
    *
    *  @param pp ParticleProp<REAL> to add to the specification.
    */
-  void push(ParticleProp<REAL> pp) { this->properties_real.push_back(pp); }
+  inline void push(ParticleProp<REAL> pp) {
+    this->properties_real.push_back(pp);
+  }
   /**
    *  Push a ParticleProp<INT> property onto the specification.
    *
    *  @param pp ParticleProp<INT> to add to the specification.
    */
-  void push(ParticleProp<INT> pp) { this->properties_int.push_back(pp); }
+  inline void push(ParticleProp<INT> pp) { this->properties_int.push_back(pp); }
+
+  /**
+   * Determine if a ParticleProp is contained in this specification.
+   *
+   * @param pp ParticleProp to search for.
+   * @returns True if passed ParticleProp is in this ParticleSpec.
+   */
+  template <typename T> inline bool contains(ParticleProp<T> pp) {
+    return this->find(pp) != this->end(pp);
+  }
+
+  /**
+   * Determine if a passed ParticleSpec is a subset of this ParticleSpec.
+   *
+   * @param ps ParticleSpec to compare with.
+   * @returns True if the passed particle spec is a subset of this particle
+   * spec.
+   */
+  inline bool contains(ParticleSpec &ps) {
+    auto dispatch = [&](auto container) -> bool {
+      for (auto pp : container) {
+        if (!this->contains(pp)) {
+          return false;
+        }
+      }
+      return true;
+    };
+    return dispatch(ps.properties_real) && dispatch(ps.properties_int);
+  }
+
+  /**
+   * Remove a particle property from the specification.
+   *
+   * @param pp ParticleProp to remove from the specification.
+   */
+  template <typename T> inline void remove(ParticleProp<T> pp) {
+    auto location = this->find(pp);
+    NESOASSERT(location != this->end(pp),
+               "Property to remove does not exist in specification.");
+    this->erase(pp, location);
+  }
 
   ParticleSpec(){};
   ~ParticleSpec(){};

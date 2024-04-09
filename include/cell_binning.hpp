@@ -112,7 +112,12 @@ public:
    *  Apply the cell binning kernel to each particle stored on this MPI rank.
    *  Particles must be within the domain region owned by this MPI rank.
    */
-  inline void execute() { this->loop->execute(); }
+  inline void execute() {
+    auto r = ProfileRegion("CartesianCellBin", "execute");
+    this->loop->execute();
+    r.end();
+    this->sycl_target->profile_map.add_region(r);
+  }
 };
 
 } // namespace NESO::Particles

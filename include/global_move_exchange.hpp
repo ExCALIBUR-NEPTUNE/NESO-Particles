@@ -93,6 +93,7 @@ public:
     // the packing.
     recv_win_data[0] = 0;
     MPICHK(MPI_Ibarrier(this->comm, &this->mpi_request));
+    // MPICHK(MPI_Barrier(this->comm));
   }
 
   /**
@@ -134,7 +135,7 @@ public:
                                  profile_elapsed(t0, profile_timestamp()));
     MPICHK(MPI_Wait(&this->mpi_request, MPI_STATUS_IGNORE));
     sycl_target->profile_map.inc("GlobalMoveExchange",
-                                 "npart_exchange_sendrecv_post_wait", 1,
+                                 "barrier_wait_npart_exchange_sendrecv", 1,
                                  profile_elapsed(t0, profile_timestamp()));
 
     const int one[1] = {1};
@@ -168,6 +169,9 @@ public:
     // Wait for the accumulation that counts how many remote ranks will send to
     // this rank.
     MPICHK(MPI_Wait(&this->mpi_request, MPI_STATUS_IGNORE));
+    sycl_target->profile_map.inc(
+        "GlobalMoveExchange", "barrier_wait_npart_exchange_finalise", 1,
+        profile_elapsed(t0_npart, profile_timestamp()));
     this->num_remote_recv_ranks = this->recv_win_data[0];
 
     // send particle counts for ranks this ranks will send to and recv counts

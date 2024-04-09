@@ -2,6 +2,7 @@
 #define _NESO_PARTICLES_TYPEDEFS
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
@@ -53,13 +54,59 @@ inline void neso_particles_assert(const char *expr_str, bool expr,
     std::cerr << "NESO Particles Assertion error:\t" << msg << "\n"
               << "Expected value:\t" << expr_str << "\n"
               << "Source location:\t\t" << file << ", line " << line << "\n";
+#ifdef NESO_PARTICLES_NO_MPI_ABORT
+    std::abort();
+#else
     int flag = 0;
     MPI_Initialized(&flag);
     if (flag) {
+      std::abort();
       MPI_Abort(MPI_COMM_WORLD, -1);
     } else {
       std::abort();
     }
+#endif
+  }
+}
+
+/**
+ * \def NESOWARN(expr, msg)
+ * This is a helper macro to call the function neso_particles_warn. Users
+ * should call this helper macro NESOWARN like
+ *
+ *   NESOWARN(conditional, message);
+ *
+ * To check conditionals within their code.
+ */
+#ifdef NESO_PARTICLES_WARN
+#define NESOWARN(expr, msg)                                                    \
+  NESO::Particles::neso_particles_warn(#expr, expr, __FILE__, __LINE__, msg)
+#else
+#define NESOWARN(expr, msg)                                                    \
+  {}
+#endif
+
+/**
+ * This is a helper function to assert conditions are satisfied and print to
+ * stderr if not. A warning is output on stderr. Users should call the
+ * corresponding helper macro NESOWARN like
+ *
+ *   NESOWARN(conditional, message);
+ *
+ * To check conditionals within their code.
+ *
+ * @param expr_str A string identifying the conditional to check.
+ * @param expr Bool resulting from the evaluation of the expression.
+ * @param file Filename containing the call to neso_particles_assert.
+ * @param line Line number for the call to neso_particles assert.
+ * @param msg Message to print to stderr on evaluation of conditional to false.
+ */
+inline void neso_particles_warn(const char *expr_str, bool expr,
+                                const char *file, int line, const char *msg) {
+  if (!expr) {
+    std::cerr << "NESO Particles warning:\t" << msg << "\n"
+              << "Expected value:\t" << expr_str << "\n"
+              << "Source location:\t\t" << file << ", line " << line << "\n";
   }
 }
 
@@ -95,6 +142,15 @@ void get_decomp_1d(const T N_compute_units, const T N_work_items,
 
   *rstart = start;
   *rend = end;
+}
+
+template <typename T>
+inline T get_min_power_of_two(const T N_work_items, const size_t max_size) {
+  const int base_two_power =
+      static_cast<int>(std::log2(static_cast<double>(N_work_items)));
+  const int base_two_power_p1 = base_two_power + 1;
+  const int two_power_p1 = int(1) << base_two_power_p1;
+  return (T)std::min(std::max((INT)two_power_p1, (INT)4), (INT)max_size);
 }
 
 template <typename U> inline void nprint_recurse(int flag, U next) {

@@ -13,10 +13,13 @@
 
 namespace NESO::Particles {
 
+class ParticleGroup;
+
 /**
  *  Container to hold particle data for a set of particles.
  */
 class ParticleSet {
+  friend class ParticleGroup;
 
 private:
   std::map<Sym<REAL>, std::vector<REAL>> values_real;
@@ -24,6 +27,18 @@ private:
 
   std::vector<REAL> dummy_real;
   std::vector<INT> dummy_int;
+
+protected:
+  inline REAL *get_ptr(Sym<REAL> sym, const int particle_index,
+                       const int component_index) {
+    return values_real.at(sym).data() + component_index * this->npart +
+           particle_index;
+  }
+  inline INT *get_ptr(Sym<INT> sym, const int particle_index,
+                      const int component_index) {
+    return values_int.at(sym).data() + component_index * this->npart +
+           particle_index;
+  }
 
 public:
   /// Number of particles stored in the container.
@@ -64,6 +79,36 @@ public:
     return ColumnMajorRowAccessor<std::vector, INT>{values_int[sym],
                                                     this->npart};
   };
+
+  /**
+   * Access REAL elements for a particle.
+   *
+   * @param sym Sym of particle property to access.
+   * @param particle_index Index of particle to access.
+   * @param component_index Index of component to access.
+   * @returns modifiable reference to element.
+   */
+  inline REAL &at(Sym<REAL> sym, const int particle_index,
+                  const int component_index) {
+    NESOASSERT(this->contains(sym), "Property does not exist in ParticleSet");
+    return this->values_real.at(sym).at(component_index * this->npart +
+                                        particle_index);
+  }
+
+  /**
+   * Access REAL elements for a particle.
+   *
+   * @param sym Sym of particle property to access.
+   * @param particle_index Index of particle to access.
+   * @param component_index Index of component to access.
+   * @returns modifiable reference to element.
+   */
+  inline INT &at(Sym<INT> sym, const int particle_index,
+                 const int component_index) {
+    NESOASSERT(this->contains(sym), "Property does not exist in ParticleSet");
+    return this->values_int.at(sym).at(component_index * this->npart +
+                                       particle_index);
+  }
 
   /**
    *  Get the vector of values describing the particle data for a given
@@ -114,6 +159,8 @@ public:
     return (this->values_int.count(sym) > 0);
   }
 };
+
+typedef std::shared_ptr<ParticleSet> ParticleSetSharedPtr;
 
 } // namespace NESO::Particles
 

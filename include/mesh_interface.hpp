@@ -128,7 +128,6 @@ private:
   int mpi_dims[3] = {0, 0, 0};
   std::shared_ptr<MeshHierarchy> mesh_hierarchy;
   bool allocated = false;
-
   std::vector<int> neighbour_ranks;
 
 public:
@@ -167,6 +166,9 @@ public:
   const int ncells_coarse;
   /// Number of coarse cells per fine cell.
   const int ncells_fine;
+  /// Is this mesh running in a mode where it exposes one NP cell per MPI rank.
+  bool single_cell_mode;
+
   /**
    * Construct a mesh over a given MPI communicator with a specified shape.
    *
@@ -190,7 +192,8 @@ public:
         inverse_cell_width_fine(((double)std::pow(2, subdivision_order)) /
                                 extent),
         ncells_coarse(reduce_mul(ndim, dims)),
-        ncells_fine(std::pow(std::pow(2, subdivision_order), ndim)) {
+        ncells_fine(std::pow(std::pow(2, subdivision_order), ndim)),
+        single_cell_mode(false) {
 
     // basic error checking of inputs
     NESOASSERT(dims.size() >= ndim, "vector of dims too small");
@@ -342,7 +345,23 @@ public:
   };
   inline int get_ncells_coarse() { return this->ncells_coarse; };
   inline int get_ncells_fine() { return this->ncells_fine; };
-  inline int get_cell_count() { return this->cell_count; };
+
+  /**
+   * @returns The number of "cell" NESO-Particles should consider.
+   */
+  inline int get_cell_count() {
+    if (this->single_cell_mode) {
+      return 1;
+    } else {
+      return this->cell_count;
+    }
+  };
+
+  /**
+   * @returns The number of Cartesian cells owned by this MPI rank.
+   */
+  inline int get_cart_cell_count() { return this->cell_count; };
+
   inline std::shared_ptr<MeshHierarchy> get_mesh_hierarchy() {
     return this->mesh_hierarchy;
   };

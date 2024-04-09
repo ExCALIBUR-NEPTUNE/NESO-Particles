@@ -130,7 +130,7 @@ inline void uniform_within_cartesian_cells(
   for (int dx = 0; dx < ndim; dx++) {
     extents.at(dx) = cell_width_fine;
   }
-  const int cell_count = mesh->get_cell_count();
+  const int cell_count = mesh->get_cart_cell_count();
   const int npart_total = npart_per_cell * cell_count;
   positions.resize(ndim);
   cells.resize(npart_total);
@@ -143,12 +143,13 @@ inline void uniform_within_cartesian_cells(
   }
 
   auto mesh_cells = mesh->get_owned_cells();
+  const bool single_cell_mode = mesh->single_cell_mode;
 
   for (int cx = 0; cx < cell_count; cx++) {
     const int index_start = cx * npart_per_cell;
     const int index_end = (cx + 1) * npart_per_cell;
     for (int ex = index_start; ex < index_end; ex++) {
-      cells.at(ex) = cx;
+      cells.at(ex) = single_cell_mode ? 0 : cx;
     }
     auto positions_ref_cell =
         uniform_within_extents(npart_per_cell, ndim, extents.data(), rng);
