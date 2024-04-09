@@ -46,6 +46,7 @@ write_basic_package_version_file(
 install(
   FILES ${CMAKE_SOURCE_DIR}/cmake/SYCL.cmake
         ${CMAKE_SOURCE_DIR}/cmake/restrict-keyword.cmake
+        ${CMAKE_SOURCE_DIR}/cmake/check-file-list.cmake
         ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake
         ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME})
