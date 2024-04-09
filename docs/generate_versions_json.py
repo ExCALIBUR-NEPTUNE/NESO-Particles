@@ -9,7 +9,7 @@ def jsonobjectfunc(version):
     urlversion = "https://excalibur-neptune.github.io/NESO-Particles/" + strversion + "/sphinx/html/"
     return {"version": strversion, "url": urlversion}
     
-json_contents = [jsonobjectfunc("main")]
+json_contents = [jsonobjectfunc("main"), jsonobjectfunc("dev")]
 for t in tags:
     tagobject = jsonobjectfunc(t)
     json_contents.append(tagobject)
