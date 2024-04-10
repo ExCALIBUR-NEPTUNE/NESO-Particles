@@ -19,33 +19,41 @@ if(NOT GTest_FOUND)
   FetchContent_MakeAvailable(googletest)
 endif()
 
+set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(TEST_SRCS
-    test_boundary_pbc.cpp
-    test_buffers.cpp
-    test_cell_dat.cpp
-    test_error_propagate.cpp
-    test_examples.cpp
-    test_global_array.cpp
-    test_int_key_value_map.cpp
-    test_local_array.cpp
-    test_local_decomp_mesh.cpp
-    test_mesh_hierarchy.cpp
-    test_parallel_initialisation.cpp
-    test_particle_dat.cpp
-    test_particle_group_cell_move.cpp
-    test_particle_group.cpp
-    test_particle_group_global_move.cpp
-    test_particle_group_hybrid_move.cpp
-    test_particle_group_local_move.cpp
-    test_particle_group_stencil_move.cpp
-    test_particle_h5part.cpp
-    test_particle_loop.cpp
-    test_particle_remover.cpp
-    test_particle_set.cpp
-    test_particle_sub_group.cpp
-    test_sycl_target.cpp
-    test_tuple.cpp
-    test_utility.cpp)
+    ${TEST_DIR}/test_boundary_pbc.cpp
+    ${TEST_DIR}/test_buffers.cpp
+    ${TEST_DIR}/test_cell_dat.cpp
+    ${TEST_DIR}/test_error_propagate.cpp
+    ${TEST_DIR}/test_examples.cpp
+    ${TEST_DIR}/test_global_array.cpp
+    ${TEST_DIR}/test_int_key_value_map.cpp
+    ${TEST_DIR}/test_local_array.cpp
+    ${TEST_DIR}/test_local_decomp_mesh.cpp
+    ${TEST_DIR}/test_mesh_hierarchy.cpp
+    ${TEST_DIR}/test_parallel_initialisation.cpp
+    ${TEST_DIR}/test_particle_dat.cpp
+    ${TEST_DIR}/test_particle_group_cell_move.cpp
+    ${TEST_DIR}/test_particle_group.cpp
+    ${TEST_DIR}/test_particle_group_global_move.cpp
+    ${TEST_DIR}/test_particle_group_hybrid_move.cpp
+    ${TEST_DIR}/test_particle_group_local_move.cpp
+    ${TEST_DIR}/test_particle_group_stencil_move.cpp
+    ${TEST_DIR}/test_particle_h5part.cpp
+    ${TEST_DIR}/test_particle_loop.cpp
+    ${TEST_DIR}/test_particle_remover.cpp
+    ${TEST_DIR}/test_particle_set.cpp
+    ${TEST_DIR}/test_particle_sub_group.cpp
+    ${TEST_DIR}/test_product_matrix.cpp
+    ${TEST_DIR}/test_sycl_target.cpp
+    ${TEST_DIR}/test_tuple.cpp
+    ${TEST_DIR}/test_utility.cpp)
+
+# Check that the files added above are not missing any files in the test
+# directory.
+set(TEST_SRCS_IGNORE ${TEST_DIR}/main.cpp)
+check_added_file_list(${CMAKE_CURRENT_SOURCE_DIR} cpp "${TEST_SRCS}"
+                      "${TEST_SRCS_IGNORE}")
 
 set(EXECUTABLE testNESOParticles)
 set(TEST_MAIN ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp)
