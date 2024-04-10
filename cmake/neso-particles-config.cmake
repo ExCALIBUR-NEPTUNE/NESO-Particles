@@ -87,6 +87,13 @@ target_sources(NESO-Particles
     ${HEADER_FILES}
 )
 
+target_include_directories(
+    NESO-Particles
+    INTERFACE
+    $<BUILD_INTERFACE:${INCLUDE_DIR}>
+    $<INSTALL_INTERFACE:include>
+)
+
 #Don't like this .... TODO: FIXME:
 #Should be a runtime thing?
 if(NESO_PARTICLES_DEVICE_TYPE STREQUAL GPU)
