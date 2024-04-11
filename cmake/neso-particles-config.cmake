@@ -114,6 +114,10 @@ target_link_libraries(NESO-Particles INTERFACE MPI::MPI_CXX)
 set(NESO_PARTICLES_USING_HDF5 FALSE)
 if (NESO_PARTICLES_ENABLE_HDF5) 
     set(HDF5_PREFER_PARALLEL TRUE)
+    # HDF5 requires MPI::MPI_C, which is only loaded if C is
+    # enabled. See https://github.com/HDFGroup/hdf5/issues/3844.  Note
+    # that this issue only arises for certain versions of HDF5.
+    enable_language(C)
     find_package(HDF5 REQUIRED)
     if(HDF5_FOUND AND HDF5_IS_PARALLEL)
         message(STATUS "Parallel HDF5 found")
