@@ -598,8 +598,10 @@ public:
     if (check_exists) {
       const bool dat_exists = this->contains_dat(sym);
       NESOASSERT(dat_exists,
-                 "This ParticleGroup does not contain the requested dat.");
+                 "This ParticleGroup does not contain the requested dat: " +
+                     sym.name);
     }
+
     return (*this)[sym];
   }
 

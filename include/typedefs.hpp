@@ -48,8 +48,9 @@ static inline int reduce_mul(const int nel, std::vector<int> &values) {
  * @param line Line number for the call to neso_particles assert.
  * @param msg Message to print to stderr on evaluation of conditional to false.
  */
+template <typename T>
 inline void neso_particles_assert(const char *expr_str, bool expr,
-                                  const char *file, int line, const char *msg) {
+                                  const char *file, int line, T &&msg) {
   if (!expr) {
     std::cerr << "NESO Particles Assertion error:\t" << msg << "\n"
               << "Expected value:\t" << expr_str << "\n"
@@ -101,8 +102,9 @@ inline void neso_particles_assert(const char *expr_str, bool expr,
  * @param line Line number for the call to neso_particles assert.
  * @param msg Message to print to stderr on evaluation of conditional to false.
  */
+template <typename T>
 inline void neso_particles_warn(const char *expr_str, bool expr,
-                                const char *file, int line, const char *msg) {
+                                const char *file, int line, T &&msg) {
   if (!expr) {
     std::cerr << "NESO Particles warning:\t" << msg << "\n"
               << "Expected value:\t" << expr_str << "\n"
