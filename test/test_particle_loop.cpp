@@ -723,7 +723,9 @@ TEST(ParticleLoop, sym_vector) {
   const int cell_count = mesh->get_cell_count();
   auto si = SymVector<INT>(A, {Sym<INT>("ID"), Sym<INT>("CELL_ID")});
   std::vector<Sym<REAL>> srv = {Sym<REAL>("V"), Sym<REAL>("P2")};
-  auto sr = std::make_shared<SymVector<REAL>>(A, srv);
+
+  auto AA = particle_sub_group(A);
+  auto sr = sym_vector(AA, srv);
 
   auto pl = particle_loop(
       A,

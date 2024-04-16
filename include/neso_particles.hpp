@@ -15,6 +15,7 @@
 #include "containers/local_array.hpp"
 #include "containers/product_matrix.hpp"
 #include "containers/sym_vector.hpp"
+#include "containers/sym_vector_helpers.hpp"
 #include "containers/tuple.hpp"
 #include "domain.hpp"
 #include "error_propagate.hpp"

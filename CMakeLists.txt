@@ -11,15 +11,18 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/restrict-keyword.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/check-file-list.cmake)
 
 option(NESO_PARTICLES_ENABLE_HDF5 "Add HDF5 to targets." ON)
-option(NESO_PARTICLES_ENABLE_FIND_SYCL "Enabling search for a SYCL implementation if add_sycl_to_target is not found." ON)
+option(
+  NESO_PARTICLES_ENABLE_FIND_SYCL
+  "Enabling search for a SYCL implementation if add_sycl_to_target is not found."
+  ON)
 
-#Create interface/Header only library
+# Create interface/Header only library
 add_library(NESO-Particles INTERFACE)
-#Alias the name to the namespaces name.
-#Can use in subdirectory or via Confiig files with namespace
+# Alias the name to the namespaces name. Can use in subdirectory or via Confiig
+# files with namespace
 add_library(NESO-Particles::NESO-Particles ALIAS NESO-Particles)
 
-#Set standard
+# Set standard
 set_property(TARGET NESO-Particles PROPERTY CXX_STANDARD 17)
 
 # Create a list of the header files.
@@ -44,6 +47,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR}/containers/local_array.hpp
     ${INCLUDE_DIR}/containers/product_matrix.hpp
     ${INCLUDE_DIR}/containers/sym_vector.hpp
+    ${INCLUDE_DIR}/containers/sym_vector_helpers.hpp
     ${INCLUDE_DIR}/containers/tuple.hpp
     ${INCLUDE_DIR}/departing_particle_identification.hpp
     ${INCLUDE_DIR}/departing_particle_identification_impl.hpp
@@ -77,71 +81,69 @@ set(HEADER_FILES
     ${INCLUDE_DIR}/profiling.hpp
     ${INCLUDE_DIR}/typedefs.hpp
     ${INCLUDE_DIR}/utility.hpp
-    ${INCLUDE_DIR}/utility_mesh_hierarchy_plotting.hpp
-)
+    ${INCLUDE_DIR}/utility_mesh_hierarchy_plotting.hpp)
 
 # Check that the files added above are not missing any files in the include
 # directory.
 set(HEADER_FILES_IGNORE "")
-check_added_file_list(${INCLUDE_DIR} hpp "${HEADER_FILES}" "${HEADER_FILES_IGNORE}")
+check_added_file_list(${INCLUDE_DIR} hpp "${HEADER_FILES}"
+                      "${HEADER_FILES_IGNORE}")
 
-#Makes it easy to install + adds the files to the INCLUDE property of the lib
-#i.e. don't need target_include_dir.. also no GLOBS
-target_sources(NESO-Particles
-    PUBLIC
-    FILE_SET public_headers
-    TYPE HEADERS
-    BASE_DIRS ${INCLUDE_DIR}
-    FILES
-    ${HEADER_FILES}
-)
+# Makes it easy to install + adds the files to the INCLUDE property of the lib
+# i.e. don't need target_include_dir.. also no GLOBS
+target_sources(
+  NESO-Particles
+  PUBLIC FILE_SET
+         public_headers
+         TYPE
+         HEADERS
+         BASE_DIRS
+         ${INCLUDE_DIR}
+         FILES
+         ${HEADER_FILES})
 
-#target_include_directories(
-#    NESO-Particles
-#    INTERFACE
-#    $<BUILD_INTERFACE:${INCLUDE_DIR}>
-#    $<INSTALL_INTERFACE:include>
-#)
+# target_include_directories( NESO-Particles INTERFACE
+# $<BUILD_INTERFACE:${INCLUDE_DIR}> $<INSTALL_INTERFACE:include> )
 
-#Don't like this .... TODO: FIXME:
-#Should be a runtime thing?
+# Don't like this .... TODO: FIXME: Should be a runtime thing?
 if(NESO_PARTICLES_DEVICE_TYPE STREQUAL GPU)
-    target_compile_definitions(NESO-Particles INTERFACE NESO_PARTICLES_DEVICE_TYPE_GPU)
-    add_definitions(-DNESO_PARTICLES_DEVICE_TYPE_GPU)
-    message(STATUS "Using NESO_PARTICLES_DEVICE_TYPE_GPU")
+  target_compile_definitions(NESO-Particles
+                             INTERFACE NESO_PARTICLES_DEVICE_TYPE_GPU)
+  add_definitions(-DNESO_PARTICLES_DEVICE_TYPE_GPU)
+  message(STATUS "Using NESO_PARTICLES_DEVICE_TYPE_GPU")
 else()
-    target_compile_definitions(NESO-Particles INTERFACE NESO_PARTICLES_DEVICE_TYPE_CPU)
-    message(STATUS "Using NESO_PARTICLES_DEVICE_TYPE_CPU")
+  target_compile_definitions(NESO-Particles
+                             INTERFACE NESO_PARTICLES_DEVICE_TYPE_CPU)
+  message(STATUS "Using NESO_PARTICLES_DEVICE_TYPE_CPU")
 endif()
 
-
-#Get MPI 
+# Get MPI
 find_package(MPI REQUIRED)
 target_link_libraries(NESO-Particles INTERFACE MPI::MPI_CXX)
 
-#Get HDF5 if its around
+# Get HDF5 if its around
 set(NESO_PARTICLES_USING_HDF5 FALSE)
-if (NESO_PARTICLES_ENABLE_HDF5) 
-    set(HDF5_PREFER_PARALLEL TRUE)
-    # HDF5 requires MPI::MPI_C, which is only loaded if C is
-    # enabled. See https://github.com/HDFGroup/hdf5/issues/3844.  Note
-    # that this issue only arises for certain versions of HDF5.
-    enable_language(C)
-    find_package(HDF5 REQUIRED)
-    if(HDF5_FOUND AND HDF5_IS_PARALLEL)
-        message(STATUS "Parallel HDF5 found")
-        target_link_libraries(NESO-Particles INTERFACE HDF5::HDF5 NESO-Particles)
-        target_compile_definitions(NESO-Particles INTERFACE NESO_PARTICLES_HDF5)
-        set(NESO_PARTICLES_USING_HDF5 TRUE)
-    else()
-        message( "HDF5 NOT found")
-    endif()
+if(NESO_PARTICLES_ENABLE_HDF5)
+  set(HDF5_PREFER_PARALLEL TRUE)
+  # HDF5 requires MPI::MPI_C, which is only loaded if C is enabled. See
+  # https://github.com/HDFGroup/hdf5/issues/3844.  Note that this issue only
+  # arises for certain versions of HDF5.
+  enable_language(C)
+  find_package(HDF5 REQUIRED)
+  if(HDF5_FOUND AND HDF5_IS_PARALLEL)
+    message(STATUS "Parallel HDF5 found")
+    target_link_libraries(NESO-Particles INTERFACE HDF5::HDF5 NESO-Particles)
+    target_compile_definitions(NESO-Particles INTERFACE NESO_PARTICLES_HDF5)
+    set(NESO_PARTICLES_USING_HDF5 TRUE)
+  else()
+    message("HDF5 NOT found")
+  endif()
 endif()
 
 # Find SYCL
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/SYCL.cmake)
 if(NESO_PARTICLES_ENABLE_FIND_SYCL)
-    find_sycl_if_required()
+  find_sycl_if_required()
 endif()
 
 option(NESO_PARTICLES_ENABLE_TESTS "Build unit tests for this project." ON)
@@ -180,7 +182,7 @@ write_basic_package_version_file(
   COMPATIBILITY AnyNewerVersion)
 # install the config scripts
 install(
-    FILES ${CMAKE_CURRENT_SOURCE_DIR}/cmake/SYCL.cmake
+  FILES ${CMAKE_CURRENT_SOURCE_DIR}/cmake/SYCL.cmake
         ${CMAKE_CURRENT_SOURCE_DIR}/cmake/restrict-keyword.cmake
         ${CMAKE_CURRENT_SOURCE_DIR}/cmake/check-file-list.cmake
         ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake
