@@ -59,6 +59,8 @@ set(EXECUTABLE testNESOParticles)
 set(TEST_MAIN ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp)
 # Build the tests individually
 include(GoogleTest)
+#Add a a target so we can build all the tests "make tests"
+add_custom_target(tests)
 foreach(TEST ${TEST_SRCS})
   get_filename_component(TEST_NAME ${TEST} NAME_WLE)
   message(STATUS "Found test - ${TEST_NAME}")
@@ -68,7 +70,10 @@ foreach(TEST ${TEST_SRCS})
   add_executable(${TEST_NAME} ${TEST_SOURCES})
   target_link_libraries(${TEST_NAME} PRIVATE NESO-Particles GTest::gtest)
   target_compile_definitions(${TEST_NAME} PRIVATE GPU_SELECTOR=0)
-
+  #exclude from all so indiviual tests aren't built for install
+  set_target_properties(${TEST_NAME} PROPERTIES EXCLUDE_FROM_ALL TRUE)
+  #Make usre the dummy target depends on each tests
+  add_dependencies(tests ${TEST_NAME})
   add_sycl_to_target(TARGET ${TEST_NAME} SOURCES ${TEST_SOURCES})
   gtest_add_tests(TARGET ${TEST_NAME})
 endforeach()
