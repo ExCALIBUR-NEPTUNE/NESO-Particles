@@ -1,7 +1,6 @@
 #ifndef _NESO_PARTICLES_GLOBAL_MOVE
 #define _NESO_PARTICLES_GLOBAL_MOVE
 
-#include <CL/sycl.hpp>
 #include <mpi.h>
 
 #include "cell_dat_compression.hpp"
@@ -12,8 +11,8 @@
 #include "packing_unpacking.hpp"
 #include "profiling.hpp"
 #include "typedefs.hpp"
+#include "sycl_typedefs.hpp"
 
-using namespace cl;
 namespace NESO::Particles {
 
 /**

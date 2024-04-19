@@ -1,7 +1,6 @@
 #ifndef _NESO_PARTICLES_PARTICLE_GROUP
 #define _NESO_PARTICLES_PARTICLE_GROUP
 
-#include <CL/sycl.hpp>
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -24,8 +23,8 @@
 #include "particle_spec.hpp"
 #include "profiling.hpp"
 #include "typedefs.hpp"
+#include "sycl_typedefs.hpp"
 
-using namespace cl;
 namespace NESO::Particles {
 class DescendantProducts;
 class ParticleSubGroup;

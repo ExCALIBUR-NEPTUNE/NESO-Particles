@@ -34,6 +34,7 @@
 #include "particle_spec.hpp"
 #include "particle_sub_group.hpp"
 #include "profiling.hpp"
+#include "sycl_typedefs.hpp"
 #include "typedefs.hpp"
 #include "utility.hpp"
 #include "utility_mesh_hierarchy_plotting.hpp"

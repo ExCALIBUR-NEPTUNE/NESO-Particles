@@ -1,6 +1,13 @@
 #ifndef _NESO_PARTICLES_PARTICLE_LOOP_H_
 #define _NESO_PARTICLES_PARTICLE_LOOP_H_
 
+#include <cstdlib>
+#include <optional>
+#include <string>
+#include <tuple>
+#include <typeinfo>
+#include <vector>
+
 #include "../cell_dat.hpp"
 #include "../compute_target.hpp"
 #include "../containers/descendant_products.hpp"
@@ -11,16 +18,10 @@
 #include "../containers/tuple.hpp"
 #include "../particle_dat.hpp"
 #include "../particle_spec.hpp"
+#include "../sycl_typedefs.hpp"
 #include "particle_loop_base.hpp"
 #include "particle_loop_index.hpp"
 #include "pli_particle_dat.hpp"
-#include <CL/sycl.hpp>
-#include <cstdlib>
-#include <optional>
-#include <string>
-#include <tuple>
-#include <typeinfo>
-#include <vector>
 
 namespace NESO::Particles::ParticleLoopImplementation {
 

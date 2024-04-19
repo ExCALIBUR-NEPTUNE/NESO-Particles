@@ -1,7 +1,6 @@
 #ifndef _NESO_PARTICLES_CELL_BINNING
 #define _NESO_PARTICLES_CELL_BINNING
 
-#include <CL/sycl.hpp>
 #include <cmath>
 
 #include "domain.hpp"
@@ -9,8 +8,7 @@
 #include "particle_dat.hpp"
 #include "profiling.hpp"
 #include "typedefs.hpp"
-
-using namespace cl;
+#include "sycl_typedefs.hpp"
 
 namespace NESO::Particles {
 

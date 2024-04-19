@@ -4,7 +4,6 @@
 #include "departing_particle_identification.hpp"
 #include "loop/particle_loop.hpp"
 
-using namespace cl;
 namespace NESO::Particles {
 
 /**

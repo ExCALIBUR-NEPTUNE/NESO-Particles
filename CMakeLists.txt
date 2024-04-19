@@ -75,6 +75,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR}/particle_spec.hpp
     ${INCLUDE_DIR}/particle_sub_group.hpp
     ${INCLUDE_DIR}/profiling.hpp
+    ${INCLUDE_DIR}/sycl_typedefs.hpp
     ${INCLUDE_DIR}/typedefs.hpp
     ${INCLUDE_DIR}/utility.hpp
     ${INCLUDE_DIR}/utility_mesh_hierarchy_plotting.hpp

@@ -1,7 +1,6 @@
 #ifndef _NESO_PARTICLES_LOCAL_MAPPING
 #define _NESO_PARTICLES_LOCAL_MAPPING
 
-#include <CL/sycl.hpp>
 #include <memory>
 #include <mpi.h>
 
@@ -9,8 +8,8 @@
 #include "particle_dat.hpp"
 #include "profiling.hpp"
 #include "typedefs.hpp"
+#include "sycl_typedefs.hpp"
 
-using namespace cl;
 namespace NESO::Particles {
 
 // Forward declaration of ParticleGroup

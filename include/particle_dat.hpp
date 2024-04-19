@@ -1,7 +1,6 @@
 #ifndef _NESO_PARTICLES_PARTICLE_DAT
 #define _NESO_PARTICLES_PARTICLE_DAT
 
-#include <CL/sycl.hpp>
 #include <cmath>
 #include <functional>
 #include <limits>
@@ -14,8 +13,7 @@
 #include "particle_set.hpp"
 #include "particle_spec.hpp"
 #include "typedefs.hpp"
-
-using namespace cl;
+#include "sycl_typedefs.hpp"
 
 namespace NESO::Particles {
 
