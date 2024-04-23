@@ -349,6 +349,49 @@ TEST(ParticleLoop, base_pointer) {
   mesh->free();
 }
 
+TEST(ParticleLoop, old_interface) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  const int cell_count = mesh->get_cell_count();
+  auto sycl_target = A->sycl_target;
+
+  auto pl_iter_range = A->position_dat->get_particle_loop_iter_range();
+  auto pl_stride = A->position_dat->get_particle_loop_cell_stride();
+  auto pl_npart_cell = A->position_dat->get_particle_loop_npart_cell();
+  auto k_loop_index = A->get_dat(Sym<INT>("LOOP_INDEX"))->cell_dat.device_ptr();
+
+  sycl_target->queue
+      .submit([&](sycl::handler &cgh) {
+        cgh.parallel_for<>(sycl::range<1>(pl_iter_range), [=](sycl::id<1> idx) {
+          NESO_PARTICLES_KERNEL_START
+          const INT cellx = NESO_PARTICLES_KERNEL_CELL;
+          const INT layerx = NESO_PARTICLES_KERNEL_LAYER;
+          k_loop_index[cellx][0][layerx] = cellx;
+          k_loop_index[cellx][1][layerx] = layerx;
+          NESO_PARTICLES_KERNEL_END
+        });
+      })
+      .wait_and_throw();
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto loop_index =
+        A->get_dat(Sym<INT>("LOOP_INDEX"))->cell_dat.get_cell(cellx);
+    const int nrow = loop_index->nrow;
+
+    // for each particle in the cell
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      // for each dimension
+      ASSERT_EQ((*loop_index)[0][rowx], cellx);
+      ASSERT_EQ((*loop_index)[1][rowx], rowx);
+    }
+  }
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}
+
 TEST(ParticleLoop, loop_index) {
   auto A = particle_loop_common();
   auto domain = A->domain;

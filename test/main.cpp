@@ -1,7 +1,7 @@
 #include "gtest/gtest.h"
 #include <iostream>
 #include <mpi.h>
-#include <typedefs.hpp>
+#include <neso_particles/typedefs.hpp>
 
 /*
  *  If an exception is thrown try and abort MPI cleanly to prevent a deadlock.
