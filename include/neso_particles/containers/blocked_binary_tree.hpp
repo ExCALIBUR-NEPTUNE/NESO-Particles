@@ -1,7 +1,7 @@
-#ifndef _NESO_PARTICLES_INT_KEY_VALUE_MAP
-#define _NESO_PARTICLES_INT_KEY_VALUE_MAP
+#ifndef _NESO_PARTICLES_BLOCKED_BINARY_TREE_H_
+#define _NESO_PARTICLES_BLOCKED_BINARY_TREE_H_
 
-#include "compute_target.hpp"
+#include "../compute_target.hpp"
 #include <map>
 #include <set>
 #include <type_traits>
