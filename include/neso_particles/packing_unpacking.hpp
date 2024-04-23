@@ -11,8 +11,8 @@
 #include "compute_target.hpp"
 #include "particle_dat.hpp"
 #include "profiling.hpp"
-#include "typedefs.hpp"
 #include "sycl_typedefs.hpp"
+#include "typedefs.hpp"
 
 namespace NESO::Particles {
 

@@ -9,8 +9,8 @@
 #include <mpi.h>
 #include <string>
 
-#include "typedefs.hpp"
 #include "sycl_typedefs.hpp"
+#include "typedefs.hpp"
 
 namespace NESO::Particles {
 

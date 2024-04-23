@@ -11,8 +11,8 @@
 #include "departing_particle_identification.hpp"
 #include "packing_unpacking.hpp"
 #include "profiling.hpp"
-#include "typedefs.hpp"
 #include "sycl_typedefs.hpp"
+#include "typedefs.hpp"
 
 namespace NESO::Particles {
 

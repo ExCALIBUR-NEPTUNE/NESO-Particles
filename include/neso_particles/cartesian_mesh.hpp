@@ -10,8 +10,8 @@
 #include "particle_dat.hpp"
 #include "particle_group.hpp"
 #include "profiling.hpp"
-#include "typedefs.hpp"
 #include "sycl_typedefs.hpp"
+#include "typedefs.hpp"
 
 namespace NESO::Particles {
 
