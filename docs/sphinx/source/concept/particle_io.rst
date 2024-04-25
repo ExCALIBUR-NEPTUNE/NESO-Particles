@@ -41,7 +41,16 @@ This print method takes as input the `Sym` instances that correspond to the prop
 HDF5
 ====
 
+We use the [H5PART]_ file format as an HDF5 output format for particle trajectories. 
+This format allows for post processing in languages with HDF5 bindings.
 
 
+Paraview
+========
+
+H5Part trajectories can be natively opened in Paraview. 
+Opening a ``.h5part`` file should only involve opening the file in the Paraview file open dialogue or passing the file as a command line argument to Paraview. 
+Note that by default the render view in Paraview may select a 3D view for a 2D simulation, in this case toggle the render view into 2D mode by clicking the small button with the text "3D" at the top left of the rendered view (on the toolbar directly below the tab bar).
 
 
+.. [H5PART] H5Part: A Portable High Performance Parallel Data Interface for Particle Simulations, doi: 10.1109/PAC.2005.1591740. `IEEE <https://ieeexplore.ieee.org/document/1591740>`_ `CERN <https://accelconf.web.cern.ch/p05/papers/fpat083.pdf>`_.
