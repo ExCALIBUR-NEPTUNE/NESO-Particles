@@ -1,4 +1,3 @@
-#include <CL/sycl.hpp>
 #include <algorithm>
 #include <gtest/gtest.h>
 #include <list>
