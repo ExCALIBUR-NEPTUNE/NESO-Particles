@@ -1,7 +1,5 @@
-#include <external_interfaces/petsc/petsc_interface.hpp>
 #ifdef NESO_PARTICLES_PETSC
 
-#include <CL/sycl.hpp>
 #include <gtest/gtest.h>
 #include <memory>
 #include <neso_particles.hpp>

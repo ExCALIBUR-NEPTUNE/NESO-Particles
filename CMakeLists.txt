@@ -39,6 +39,9 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/cell_dat_move.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cell_dat_move_impl.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/communication.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/communication/comm_pair.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/communication/communication_edges_counter.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/communication/communication_typedefs.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/compute_target.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/blocked_binary_tree.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/cell_dat.hpp
@@ -54,6 +57,14 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/departing_particle_identification_impl.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/domain.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/error_propagate.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/common/bounding_box.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/common/local_claim.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/dmplex_cell_serialise.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/dmplex_helper.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/dmplex_interface.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/dmplex_local_mapper.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/petsc_common.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/petsc_interface.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/global_mapping.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/global_mapping_impl.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/global_move.hpp
@@ -66,6 +77,10 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_index.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/pli_particle_dat.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_hierarchy.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/mesh_hierarchy_data/mesh_hierarchy_container.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/mesh_hierarchy_data/mesh_hierarchy_data.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/mesh_hierarchy_data/serial_container.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/mesh_hierarchy_data/serial_interface.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_interface.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_interface_local_decomp.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/packing_unpacking.hpp
@@ -139,6 +154,29 @@ if(NESO_PARTICLES_ENABLE_HDF5)
   else()
     message("HDF5 NOT found")
   endif()
+endif()
+
+# now look for PETSc
+find_package(PkgConfig)
+if(PKG_CONFIG_FOUND)
+  pkg_check_modules(PETSC PETSc)
+endif()
+
+if(PETSC_FOUND)
+  message(STATUS "PETSc found")
+  # TODO CHECK AND CLEANUP
+  target_compile_definitions(NESO-Particles INTERFACE NESO_PARTICLES_PETSC
+                                                      ${PETSC_DEFINITIONS})
+  add_definitions(-DNESO_PARTICLES_PETSC ${PETSC_DEFINITIONS})
+  target_link_libraries(NESO-Particles INTERFACE ${PETSC_LINK_LIBRARIES})
+  target_include_directories(NESO-Particles INTERFACE ${PETSC_INCLUDE_DIRS})
+  message(STATUS PETSC_LINK_LIBRARIES ${PETSC_LINK_LIBRARIES})
+  message(STATUS PETSC_LDFLAGS ${PETSC_LDFLAGS})
+  message(STATUS PETSC_INCLUDE_DIRS ${PETSC_INCLUDE_DIRS})
+  message(STATUS PETSC_LIBRARY_DIRS ${PETSC_LIBRARY_DIRS})
+  message(STATUS PETSC_CFLAGS ${PETSC_CFLAGS})
+else()
+  message(STATUS "PETSc NOT found")
 endif()
 
 # Find SYCL

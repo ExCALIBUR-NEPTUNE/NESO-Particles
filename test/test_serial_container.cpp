@@ -1,7 +1,5 @@
-#include <CL/sycl.hpp>
 #include <gtest/gtest.h>
 #include <memory>
-#include <mesh_hierarchy_data/mesh_hierarchy_data.hpp>
 #include <neso_particles.hpp>
 #include <string>
 #include <vector>

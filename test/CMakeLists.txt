@@ -24,6 +24,7 @@ set(TEST_SRCS
     ${TEST_DIR}/test_boundary_pbc.cpp
     ${TEST_DIR}/test_buffers.cpp
     ${TEST_DIR}/test_cell_dat.cpp
+    ${TEST_DIR}/test_communication.cpp
     ${TEST_DIR}/test_error_propagate.cpp
     ${TEST_DIR}/test_examples.cpp
     ${TEST_DIR}/test_global_array.cpp
@@ -32,6 +33,7 @@ set(TEST_SRCS
     ${TEST_DIR}/test_local_decomp_mesh.cpp
     ${TEST_DIR}/test_mesh_hierarchy.cpp
     ${TEST_DIR}/test_parallel_initialisation.cpp
+    ${TEST_DIR}/test_petsc_interface.cpp
     ${TEST_DIR}/test_particle_dat.cpp
     ${TEST_DIR}/test_particle_group_cell_move.cpp
     ${TEST_DIR}/test_particle_group.cpp
@@ -45,6 +47,7 @@ set(TEST_SRCS
     ${TEST_DIR}/test_particle_set.cpp
     ${TEST_DIR}/test_particle_sub_group.cpp
     ${TEST_DIR}/test_product_matrix.cpp
+    ${TEST_DIR}/test_serial_container.cpp
     ${TEST_DIR}/test_sycl_target.cpp
     ${TEST_DIR}/test_tuple.cpp
     ${TEST_DIR}/test_utility.cpp)

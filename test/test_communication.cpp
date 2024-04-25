@@ -1,5 +1,3 @@
-#include <CL/sycl.hpp>
-#include <external_interfaces/petsc/petsc_interface.hpp>
 #include <gtest/gtest.h>
 #include <memory>
 #include <neso_particles.hpp>
