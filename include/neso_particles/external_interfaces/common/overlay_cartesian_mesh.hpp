@@ -76,10 +76,6 @@ class OverlayCartesianMesh {
 protected:
   inline int get_cell_in_dimension_lower(const int dim, const REAL point) {
     NESOASSERT((dim > -1) && (dim < this->ndim), "Bad dimension passed.");
-    NESOASSERT(point >= (this->origin.at(dim) - 1.0e-8),
-               "Point is below lower bound.");
-    NESOASSERT(point <= (this->origin.at(dim) + this->extents.at(dim) + 1.0e-8),
-               "Point is above upper bound.");
 
     const REAL shifted_point = point - this->origin.at(dim);
     REAL cell_float = shifted_point * this->inverse_cell_widths.at(dim);
@@ -98,10 +94,6 @@ protected:
 
   inline int get_cell_in_dimension_upper(const int dim, const REAL point) {
     NESOASSERT((dim > -1) && (dim < this->ndim), "Bad dimension passed.");
-    NESOASSERT(point >= (this->origin.at(dim) - 1.0e-8),
-               "Point is below lower bound.");
-    NESOASSERT(point <= (this->origin.at(dim) + this->extents.at(dim) + 1.0e-8),
-               "Point is above upper bound.");
 
     const REAL shifted_point = point - this->origin.at(dim);
     REAL cell_float = shifted_point * this->inverse_cell_widths.at(dim);

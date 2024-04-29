@@ -95,6 +95,43 @@ TEST(ExternalCommon, overlay_cartesian_mesh_bb_intersection) {
     ASSERT_EQ(cells.at(2), 1);
     ASSERT_EQ(cells.at(3), 9);
   }
+  {
+    std::vector<REAL> bbv = {1.0, 1.0, 0.0, 1.5, 1.1, 0.1};
+    auto bb = std::make_shared<ExternalCommon::BoundingBox>(bbv);
+    ocm.get_intersecting_cells(bb, cells);
+    ASSERT_EQ(cells.size(), 4);
+    ASSERT_EQ(cells.at(0), 0);
+    ASSERT_EQ(cells.at(1), 8);
+    ASSERT_EQ(cells.at(2), 1);
+    ASSERT_EQ(cells.at(3), 9);
+  }
+  {
+    std::vector<REAL> bbv = {0.5, 0.2, 1.0, 1.0, 1.0, 0.1};
+    auto bb = std::make_shared<ExternalCommon::BoundingBox>(bbv);
+    ocm.get_intersecting_cells(bb, cells);
+    ASSERT_EQ(cells.size(), 4);
+    ASSERT_EQ(cells.at(0), 0);
+    ASSERT_EQ(cells.at(1), 8);
+    ASSERT_EQ(cells.at(2), 1);
+    ASSERT_EQ(cells.at(3), 9);
+  }
+  {
+    std::vector<REAL> bbv = {-0.5, -0.2, 1.0, 1.0, 1.0, 0.1};
+    auto bb = std::make_shared<ExternalCommon::BoundingBox>(bbv);
+    ocm.get_intersecting_cells(bb, cells);
+    ASSERT_EQ(cells.size(), 4);
+    ASSERT_EQ(cells.at(0), 0);
+    ASSERT_EQ(cells.at(1), 8);
+    ASSERT_EQ(cells.at(2), 1);
+    ASSERT_EQ(cells.at(3), 9);
+  }
+  {
+    std::vector<REAL> bbv = {7.9, 15.9, 0, 8.2, 16.1, 0.1};
+    auto bb = std::make_shared<ExternalCommon::BoundingBox>(bbv);
+    ocm.get_intersecting_cells(bb, cells);
+    ASSERT_EQ(cells.size(), 1);
+    ASSERT_EQ(cells.at(0), 8 * 16 - 1);
+  }
 
   sycl_target->free();
 }
