@@ -12,8 +12,9 @@ namespace NESO::Particles {
  * Device type for LookupTable.
  */
 template <typename KEY_TYPE, typename VALUE_TYPE> struct LookupTableNode {
+  typedef int BOOL_TYPE;
   int size;
-  std::int8_t const *RESTRICT d_entry_exists;
+  BOOL_TYPE const *RESTRICT d_entry_exists;
   VALUE_TYPE const *RESTRICT d_entries;
 
   /**
@@ -39,8 +40,8 @@ template <typename KEY_TYPE, typename VALUE_TYPE> struct LookupTableNode {
  */
 template <typename KEY_TYPE, typename VALUE_TYPE> class LookupTable {
 protected:
-  std::set<KEY_TYPE> h_entry_exists;
-  std::unique_ptr<BufferDevice<std::int8_t>> d_entry_exists;
+  typedef int BOOL_TYPE;
+  std::unique_ptr<BufferDevice<BOOL_TYPE>> d_entry_exists;
   std::unique_ptr<BufferDevice<VALUE_TYPE>> d_entries;
   std::unique_ptr<BufferDevice<LookupTableNode<KEY_TYPE, VALUE_TYPE>>> d_root;
 
@@ -57,10 +58,10 @@ public:
    */
   LookupTable(SYCLTargetSharedPtr sycl_target, const int size)
       : sycl_target(sycl_target), size(size) {
-    std::vector<std::int8_t> tmp_false(size);
+    std::vector<BOOL_TYPE> tmp_false(size);
     std::fill(tmp_false.begin(), tmp_false.end(), 0);
     this->d_entry_exists =
-        std::make_unique<BufferDevice<std::int8_t>>(sycl_target, tmp_false);
+        std::make_unique<BufferDevice<BOOL_TYPE>>(sycl_target, tmp_false);
     this->d_entries =
         std::make_unique<BufferDevice<VALUE_TYPE>>(sycl_target, size);
     std::vector<LookupTableNode<KEY_TYPE, VALUE_TYPE>> tmp_root(1);
@@ -81,14 +82,13 @@ public:
    */
   inline void add(const KEY_TYPE key, const VALUE_TYPE value) {
     NESOASSERT((key > -1) && (key < this->size), "Bad key passed to add");
-    const std::int8_t true_value = 1;
+    const BOOL_TYPE true_value = 1;
     auto e0 = this->sycl_target->queue.memcpy(this->d_entry_exists->ptr + key,
-                                              &true_value, sizeof(std::int8_t));
+                                              &true_value, sizeof(BOOL_TYPE));
     auto e1 = this->sycl_target->queue.memcpy(this->d_entries->ptr + key,
                                               &value, sizeof(VALUE_TYPE));
     e0.wait_and_throw();
     e1.wait_and_throw();
-    this->h_entry_exists.insert(key);
   }
 
   /**
@@ -100,7 +100,12 @@ public:
    */
   inline bool host_get(const KEY_TYPE key, VALUE_TYPE *value) {
     NESOASSERT((key > -1) && (key < this->size), "Bad key passed to add");
-    if (!this->h_entry_exists.count(key)) {
+
+    BOOL_TYPE exists;
+    this->sycl_target->queue
+        .memcpy(&exists, this->d_entry_exists->ptr + key, sizeof(BOOL_TYPE))
+        .wait_and_throw();
+    if (!exists) {
       return false;
     } else {
       this->sycl_target->queue
