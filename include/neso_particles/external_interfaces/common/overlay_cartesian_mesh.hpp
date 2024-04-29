@@ -27,9 +27,9 @@ struct OverlayCartesianMeshMapper {
    *  @param[in] point Coordinate in the requested dimension.
    *  @returns Containing cell in dimension.
    */
-  inline int get_cell_in_dimension(const int dim, const double point) {
+  inline int get_cell_in_dimension(const int dim, const REAL point) {
     const REAL shifted_point = point - d_origin[dim];
-    double cell_float = shifted_point * d_inverse_cell_widths[dim];
+    REAL cell_float = shifted_point * d_inverse_cell_widths[dim];
     int cell = cell_float;
     cell = (cell < 0) ? 0 : cell;
     cell = (cell >= d_cell_counts[dim]) ? d_cell_counts[dim] - 1 : cell;
@@ -74,6 +74,66 @@ struct OverlayCartesianMeshMapper {
  */
 class OverlayCartesianMesh {
 protected:
+  inline int get_cell_in_dimension_lower(const int dim, const REAL point) {
+    NESOASSERT((dim > -1) && (dim < this->ndim), "Bad dimension passed.");
+    NESOASSERT(point >= (this->origin.at(dim) - 1.0e-8),
+               "Point is below lower bound.");
+    NESOASSERT(point <= (this->origin.at(dim) + this->extents.at(dim) + 1.0e-8),
+               "Point is above upper bound.");
+
+    const REAL shifted_point = point - this->origin.at(dim);
+    REAL cell_float = shifted_point * this->inverse_cell_widths.at(dim);
+    int cell = cell_float;
+
+    const REAL cell_lower = static_cast<REAL>(cell) * this->cell_widths.at(dim);
+    // move to the cell below if the point is exactly on the boundary.
+    if (cell_lower >= (shifted_point - std::numeric_limits<REAL>::epsilon())) {
+      cell--;
+    }
+    cell = (cell < 0) ? 0 : cell;
+    cell = (cell >= this->cell_counts.at(dim)) ? this->cell_counts.at(dim) - 1
+                                               : cell;
+    return cell;
+  }
+
+  inline int get_cell_in_dimension_upper(const int dim, const REAL point) {
+    NESOASSERT((dim > -1) && (dim < this->ndim), "Bad dimension passed.");
+    NESOASSERT(point >= (this->origin.at(dim) - 1.0e-8),
+               "Point is below lower bound.");
+    NESOASSERT(point <= (this->origin.at(dim) + this->extents.at(dim) + 1.0e-8),
+               "Point is above upper bound.");
+
+    const REAL shifted_point = point - this->origin.at(dim);
+    REAL cell_float = shifted_point * this->inverse_cell_widths.at(dim);
+    int cell = cell_float;
+
+    const REAL cell_upper =
+        static_cast<REAL>(cell + 1) * this->cell_widths.at(dim);
+    // move to the cell below if the point is exactly on the boundary.
+    if (cell_upper <= (shifted_point + std::numeric_limits<REAL>::epsilon())) {
+      cell++;
+    }
+    cell = (cell < 0) ? 0 : cell;
+    cell = (cell >= this->cell_counts.at(dim)) ? this->cell_counts.at(dim) - 1
+                                               : cell;
+    return cell + 1;
+  }
+
+  inline void get_all_cells(int dim, std::vector<int> &cell_starts,
+                            std::vector<int> &cell_ends,
+                            std::vector<int> &index, std::vector<int> &cells) {
+
+    for (int ix = cell_starts.at(dim); ix < cell_ends.at(dim); ix++) {
+      index.at(dim) = ix;
+
+      if (dim < (this->ndim - 1)) {
+        get_all_cells(dim + 1, cell_starts, cell_ends, index, cells);
+      } else {
+        cells.push_back(this->get_linear_cell_index(index));
+      }
+    }
+  }
+
 public:
   SYCLTargetSharedPtr sycl_target;
   int ndim;
@@ -164,15 +224,15 @@ public:
    *  @param[in] point Coordinate in the requested dimension.
    *  @returns Containing cell in dimension.
    */
-  inline int get_cell_in_dimension(const int dim, const double point) {
+  inline int get_cell_in_dimension(const int dim, const REAL point) {
     NESOASSERT((dim > -1) && (dim < this->ndim), "Bad dimension passed.");
     NESOASSERT(point >= (this->origin.at(dim) - 1.0e-8),
                "Point is below lower bound.");
     NESOASSERT(point <= (this->origin.at(dim) + this->extents.at(dim) + 1.0e-8),
                "Point is above upper bound.");
 
-    const double shifted_point = point - this->origin.at(dim);
-    double cell_float = shifted_point * this->inverse_cell_widths.at(dim);
+    const REAL shifted_point = point - this->origin.at(dim);
+    REAL cell_float = shifted_point * this->inverse_cell_widths.at(dim);
     int cell = cell_float;
 
     cell = (cell < 0) ? 0 : cell;
@@ -222,12 +282,41 @@ public:
       NESOASSERT(cell >= 0, "Bad cell index (below 0).");
       NESOASSERT(cell < cell_counts[dimx],
                  "Bad cell index (greater than cell count).");
-      const double lb = origin.at(dimx) + cell * cell_widths.at(dimx);
-      const double ub = origin.at(dimx) + (cell + 1) * cell_widths.at(dimx);
+      const REAL lb = origin.at(dimx) + cell * cell_widths.at(dimx);
+      const REAL ub = origin.at(dimx) + (cell + 1) * cell_widths.at(dimx);
       bounding_box.at(dimx) = lb;
       bounding_box.at(dimx + 3) = ub;
     }
     return std::make_shared<BoundingBox>(bounding_box);
+  }
+
+  /**
+   * Get the Cartesian cells which intersect a bounding box.
+   *
+   * @param[in] bounding_box Bounding box to find cells that intersect with.
+   * @param[in, out] cells Output container for cells that insersect the box.
+   */
+  inline void get_intersecting_cells(BoundingBoxSharedPtr bounding_box,
+                                     std::vector<int> &cells) {
+    cells.clear();
+    std::vector<int> cell_starts;
+    std::vector<int> cell_ends;
+
+    int size = 1;
+    for (int dimx = 0; dimx < this->ndim; dimx++) {
+      const REAL bound_lower = bounding_box->lower(dimx);
+      const int cell_lower =
+          this->get_cell_in_dimension_lower(dimx, bound_lower);
+      const REAL bound_upper = bounding_box->upper(dimx);
+      const int cell_upper =
+          this->get_cell_in_dimension_upper(dimx, bound_upper);
+      cell_starts.push_back(cell_lower);
+      cell_ends.push_back(cell_upper);
+      size *= (cell_upper - cell_lower);
+    }
+    cells.reserve(size);
+    std::vector<int> index(2);
+    this->get_all_cells(0, cell_starts, cell_ends, index, cells);
   }
 };
 

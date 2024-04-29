@@ -21,7 +21,7 @@ public:
     std::fill(this->bb.begin(), this->bb.begin() + 3,
               std::numeric_limits<REAL>::max());
     std::fill(this->bb.begin() + 3, this->bb.begin() + 6,
-              std::numeric_limits<REAL>::min());
+              std::numeric_limits<REAL>::lowest());
   }
 
   /**

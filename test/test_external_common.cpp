@@ -66,6 +66,39 @@ TEST(ExternalCommon, overlay_cartesian_mesh_bb) {
   sycl_target->free();
 }
 
+TEST(ExternalCommon, overlay_cartesian_mesh_bb_intersection) {
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+  const int ndim = 2;
+  std::vector<REAL> origin = {0.0, 0.0};
+  std::vector<REAL> extents = {8.0, 16.0};
+  std::vector<int> cell_counts = {8, 16};
+
+  ExternalCommon::OverlayCartesianMesh ocm(sycl_target, ndim, origin, extents,
+                                           cell_counts);
+
+  std::vector<int> cells;
+
+  {
+    std::vector<REAL> bbv = {0.0, 0.0, 0.0, 0.1, 0.1, 0.1};
+    auto bb = std::make_shared<ExternalCommon::BoundingBox>(bbv);
+    ocm.get_intersecting_cells(bb, cells);
+    ASSERT_EQ(cells.size(), 1);
+    ASSERT_EQ(cells.at(0), 0);
+  }
+  {
+    std::vector<REAL> bbv = {0.5, 0.5, 0.0, 1.5, 1.1, 0.1};
+    auto bb = std::make_shared<ExternalCommon::BoundingBox>(bbv);
+    ocm.get_intersecting_cells(bb, cells);
+    ASSERT_EQ(cells.size(), 4);
+    ASSERT_EQ(cells.at(0), 0);
+    ASSERT_EQ(cells.at(1), 8);
+    ASSERT_EQ(cells.at(2), 1);
+    ASSERT_EQ(cells.at(3), 9);
+  }
+
+  sycl_target->free();
+}
+
 TEST(ExternalCommon, bounding_box_expand) {
   std::vector<REAL> bbv0 = {0.0, 0.0, 0.0, 1.0, 2.0, 0.0};
   std::vector<REAL> bbv1 = {-1.0, 1.0, 0.0, 2.0, 1.5, 0.0};

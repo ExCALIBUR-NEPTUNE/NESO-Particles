@@ -125,7 +125,7 @@ struct HaloDMIndexMapper {
           map_depth_to_points[depth].insert(point);
         }
       }
-      this->depth_max = std::numeric_limits<PetscInt>::min();
+      this->depth_max = std::numeric_limits<PetscInt>::lowest();
       this->depth_min = std::numeric_limits<PetscInt>::max();
       for (auto &depth_points : map_depth_to_points) {
         this->depth_max = std::max(this->depth_max, depth_points.first);
@@ -443,10 +443,12 @@ public:
   get_cell_bounding_box(const PetscInt cell) {
     this->check_valid_cell(cell);
 
-    std::vector<REAL> bb = {
-        std::numeric_limits<REAL>::max(), std::numeric_limits<REAL>::max(),
-        std::numeric_limits<REAL>::max(), std::numeric_limits<REAL>::min(),
-        std::numeric_limits<REAL>::min(), std::numeric_limits<REAL>::min()};
+    std::vector<REAL> bb = {std::numeric_limits<REAL>::max(),
+                            std::numeric_limits<REAL>::max(),
+                            std::numeric_limits<REAL>::max(),
+                            std::numeric_limits<REAL>::lowest(),
+                            std::numeric_limits<REAL>::lowest(),
+                            std::numeric_limits<REAL>::lowest()};
 
     for (int dx = this->ndim; dx < 3; dx++) {
       bb[dx] = 0.0;

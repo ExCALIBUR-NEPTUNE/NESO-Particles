@@ -15,7 +15,7 @@
 
 namespace NESO::Particles {
 
-const int mask = std::numeric_limits<int>::min();
+const int mask = std::numeric_limits<int>::lowest();
 
 /**
  * Structure to place a coarse mesh over an arbitrary shaped domain. Each cell

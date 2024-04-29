@@ -40,7 +40,7 @@ public:
   }
 
   inline PetscInt get_depth() {
-    PetscInt d_max = std::numeric_limits<PetscInt>::min();
+    PetscInt d_max = std::numeric_limits<PetscInt>::lowest();
     PetscInt d_min = std::numeric_limits<PetscInt>::max();
     for (const auto &point : this->point_specs) {
       const auto d = this->get_point_depth(point.first);
