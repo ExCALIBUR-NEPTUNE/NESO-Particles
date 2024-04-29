@@ -292,6 +292,8 @@ protected:
                "Bad cell index passed.");
   }
 
+  ExternalCommon::BoundingBoxSharedPtr bounding_box;
+
 public:
   MPI_Comm comm;
   DM dm;
@@ -335,7 +337,8 @@ public:
   /**
    * TODO
    */
-  DMPlexHelper(MPI_Comm comm, DM dm) : comm(comm), dm(dm) {
+  DMPlexHelper(MPI_Comm comm, DM dm)
+      : comm(comm), dm(dm), bounding_box(nullptr) {
     DMPlexInterpolatedFlag interpolated;
     PETSCCHK(DMPlexIsInterpolated(this->dm, &interpolated));
     NESOASSERT(interpolated == DMPLEX_INTERPOLATED_FULL,
@@ -411,6 +414,23 @@ public:
                "Vertex index was negative indicating a remote vertex.");
 
     return global_vertex;
+  }
+
+  /**
+   * Get a bounding box for the cells on this MPI rank.
+   *
+   * @returns Bounding box for cells in DMPlex.
+   */
+  inline ExternalCommon::BoundingBoxSharedPtr get_bounding_box() {
+    // Create the bounding box on first use.
+    if (!this->bounding_box) {
+      auto bb = std::make_shared<ExternalCommon::BoundingBox>();
+      for (int cellx = this->cell_start; cellx < this->cell_end; cellx++) {
+        bb->expand(this->get_cell_bounding_box(cellx));
+      }
+      this->bounding_box = bb;
+    }
+    return this->bounding_box;
   }
 
   /**

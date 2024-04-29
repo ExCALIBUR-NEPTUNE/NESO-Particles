@@ -50,6 +50,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/descendant_products.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/global_array.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/local_array.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/containers/lookup_table.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/product_matrix.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/sym_vector.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/tuple.hpp

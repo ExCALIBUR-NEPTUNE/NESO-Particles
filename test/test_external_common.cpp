@@ -65,3 +65,22 @@ TEST(ExternalCommon, overlay_cartesian_mesh_bb) {
 
   sycl_target->free();
 }
+
+TEST(ExternalCommon, bounding_box_expand) {
+  std::vector<REAL> bbv0 = {0.0, 0.0, 0.0, 1.0, 2.0, 0.0};
+  std::vector<REAL> bbv1 = {-1.0, 1.0, 0.0, 2.0, 1.5, 0.0};
+  auto bb0 = std::make_shared<ExternalCommon::BoundingBox>(bbv0);
+  auto bb1 = std::make_shared<ExternalCommon::BoundingBox>(bbv1);
+  auto bb = std::make_shared<ExternalCommon::BoundingBox>();
+
+  bb->expand(bb0);
+  ASSERT_EQ(bb->lower(0), 0.0);
+  ASSERT_EQ(bb->lower(1), 0.0);
+  ASSERT_EQ(bb->upper(0), 1.0);
+  ASSERT_EQ(bb->upper(1), 2.0);
+  bb->expand(bb1);
+  ASSERT_EQ(bb->lower(0), -1.0);
+  ASSERT_EQ(bb->lower(1), 0.0);
+  ASSERT_EQ(bb->upper(0), 2.0);
+  ASSERT_EQ(bb->upper(1), 2.0);
+}

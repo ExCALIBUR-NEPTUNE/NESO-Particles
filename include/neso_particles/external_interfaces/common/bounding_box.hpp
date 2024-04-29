@@ -7,6 +7,8 @@
 
 namespace NESO::Particles::ExternalCommon {
 
+class BoundingBox;
+
 /**
  * Container to store bounding boxes.
  */
@@ -14,6 +16,14 @@ class BoundingBox {
   std::vector<REAL> bb;
 
 public:
+  BoundingBox() {
+    this->bb.resize(6);
+    std::fill(this->bb.begin(), this->bb.begin() + 3,
+              std::numeric_limits<REAL>::max());
+    std::fill(this->bb.begin() + 3, this->bb.begin() + 6,
+              std::numeric_limits<REAL>::min());
+  }
+
   /**
    * Create a bounding box from a vector like:
    *  [min_x, min_y, min_z, max_x, max_y, max_z]
@@ -25,6 +35,13 @@ public:
     NESOASSERT(bb.size() == 6,
                "Expected [min_x, min_y, min_z, max_x, max_y, max_z]");
   }
+
+  /**
+   * Expand a bounding box to encompass another bounding box.
+   *
+   * @param bounding_box Bounding box to include in this bounding box.
+   */
+  inline void expand(std::shared_ptr<BoundingBox> bounding_box);
 
   /**
    * Return lower boundary in dimension.
@@ -59,6 +76,19 @@ public:
     return is_contained;
   }
 };
+
+/**
+ * Expand a bounding box to encompass another bounding box.
+ *
+ * @param bounding_box Bounding box to include in this bounding box.
+ */
+inline void BoundingBox::expand(std::shared_ptr<BoundingBox> bounding_box) {
+  for (int dimx = 0; dimx < 3; dimx++) {
+    this->bb.at(dimx) = std::min(this->bb.at(dimx), bounding_box->bb.at(dimx));
+    this->bb.at(dimx + 3) =
+        std::max(this->bb.at(dimx + 3), bounding_box->bb.at(dimx + 3));
+  }
+}
 
 typedef std::shared_ptr<BoundingBox> BoundingBoxSharedPtr;
 

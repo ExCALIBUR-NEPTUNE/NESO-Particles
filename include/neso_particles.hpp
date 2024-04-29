@@ -13,6 +13,7 @@
 #include "neso_particles/containers/descendant_products.hpp"
 #include "neso_particles/containers/global_array.hpp"
 #include "neso_particles/containers/local_array.hpp"
+#include "neso_particles/containers/lookup_table.hpp"
 #include "neso_particles/containers/product_matrix.hpp"
 #include "neso_particles/containers/sym_vector.hpp"
 #include "neso_particles/containers/tuple.hpp"
