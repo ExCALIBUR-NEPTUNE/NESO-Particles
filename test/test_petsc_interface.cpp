@@ -546,19 +546,19 @@ TEST_P(PETSC_NDIM, dm_cart_advection) {
 
 INSTANTIATE_TEST_SUITE_P(init, PETSC_NDIM, testing::Values(2, 3));
 
-//TEST(PETSC, dm_all_types_3d) {
-//  // TODO REMOVE?
-//  PETSCCHK(PetscInitializeNoArguments());
-//  DM dm;
+// TEST(PETSC, dm_all_types_3d) {
+//   // TODO REMOVE?
+//   PETSCCHK(PetscInitializeNoArguments());
+//   DM dm;
 //
-//  std::string filename = "/home/js0259/git-ukaea/NESO-workspace/"
-//                         "reference_all_types_cube/mixed_ref_cube_0.7.msh";
+//   std::string filename = "/home/js0259/git-ukaea/NESO-workspace/"
+//                          "reference_all_types_cube/mixed_ref_cube_0.7.msh";
 //
-//  PETSCCHK(DMPlexCreateGmshFromFile(MPI_COMM_WORLD, filename.c_str(),
-//                                    (PetscBool)1, &dm));
+//   PETSCCHK(DMPlexCreateGmshFromFile(MPI_COMM_WORLD, filename.c_str(),
+//                                     (PetscBool)1, &dm));
 //
-//  PETSCCHK(DMDestroy(&dm));
-//  PETSCCHK(PetscFinalize());
-//}
+//   PETSCCHK(DMDestroy(&dm));
+//   PETSCCHK(PetscFinalize());
+// }
 
 #endif

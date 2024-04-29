@@ -49,3 +49,19 @@ TEST(ExternalCommon, overlay_cartesian_mesh) {
 
   sycl_target->free();
 }
+
+TEST(ExternalCommon, overlay_cartesian_mesh_bb) {
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+  const int ndim = 2;
+
+  std::vector<REAL> bb = {1.0, 2.0, 0.0, 5.0, 10.0, 0.0};
+
+  auto bounding_box = std::make_shared<ExternalCommon::BoundingBox>(bb);
+
+  auto ocm = create_overlay_mesh(sycl_target, ndim, bounding_box, 32);
+
+  ASSERT_TRUE(ocm->get_cell_count() >= 32);
+  ASSERT_EQ(ocm->ndim, 2);
+
+  sycl_target->free();
+}
