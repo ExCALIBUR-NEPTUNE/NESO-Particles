@@ -488,6 +488,36 @@ public:
       average.at(dx) *= tmp_factor;
     }
   }
+
+  /**
+   * Determine if mesh contains a point.
+   *
+   * @param[in] point Point to test.
+   * @returns Negative value if point not located, otherwise owning cell.
+   */
+  inline int contains_point(std::vector<PetscScalar> &point) {
+    const PetscInt ndim = this->ndim;
+    NESOASSERT(point.size() == ndim,
+               "Miss-match in point size and mesh dimension.");
+    Vec v;
+    PETSCCHK(VecCreate(MPI_COMM_SELF, &v));
+    PETSCCHK(VecSetSizes(v, ndim, ndim));
+    PETSCCHK(VecSetBlockSize(v, ndim));
+    PETSCCHK(VecSetFromOptions(v));
+    PetscScalar *v_ptr;
+    PETSCCHK(VecGetArrayWrite(v, &v_ptr));
+    for (int dimx = 0; dimx < ndim; dimx++) {
+      v_ptr[dimx] = point.at(dimx);
+    }
+    PETSCCHK(VecRestoreArrayWrite(v, &v_ptr));
+    PetscSF cell_sf = nullptr;
+    PETSCCHK(DMLocatePoints(dm, v, DM_POINTLOCATION_NONE, &cell_sf));
+    const PetscSFNode *cells;
+    PetscInt n_found;
+    const PetscInt *found;
+    PETSCCHK(PetscSFGetGraph(cell_sf, NULL, &n_found, &found, &cells));
+    return cells[0].index;
+  }
 };
 
 } // namespace NESO::Particles::PetscInterface

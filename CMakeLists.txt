@@ -59,6 +59,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/error_propagate.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/common/bounding_box.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/common/local_claim.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/common/overlay_cartesian_mesh.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/dmplex_cell_serialise.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/dmplex_helper.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/dmplex_interface.hpp

@@ -219,6 +219,67 @@ TEST(PETSC, create_dm) {
 
 namespace {
 
+inline DM get_simple_triangle() {
+  DM dm;
+
+  /*
+   * 6
+   * |\
+   * 3  2
+   * | 0 \
+   * 4--1--5
+   */
+
+  PETSCCHK(DMCreate(MPI_COMM_WORLD, &dm));
+  PETSCCHK(DMSetType(dm, DMPLEX));
+  PETSCCHK(DMSetDimension(dm, 2));
+  PETSCCHK(DMPlexSetChart(dm, 0, 7));
+
+  PETSCCHK(DMPlexSetConeSize(dm, 0, 3));
+  PETSCCHK(DMPlexSetConeSize(dm, 1, 2));
+  PETSCCHK(DMPlexSetConeSize(dm, 2, 2));
+  PETSCCHK(DMPlexSetConeSize(dm, 3, 2));
+  PETSCCHK(DMSetUp(dm));
+
+  std::vector<PetscInt> pts;
+  pts = {1, 2, 3};
+  PETSCCHK(DMPlexSetCone(dm, 0, pts.data()));
+  pts = {4, 5};
+  PETSCCHK(DMPlexSetCone(dm, 1, pts.data()));
+  pts = {5, 6};
+  PETSCCHK(DMPlexSetCone(dm, 2, pts.data()));
+  pts = {6, 4};
+  PETSCCHK(DMPlexSetCone(dm, 3, pts.data()));
+  PETSCCHK(DMPlexSymmetrize(dm));
+  PETSCCHK(DMPlexStratify(dm));
+
+  // create coordinates section for dm
+  const PetscInt ndim = 2;
+  PETSCCHK(DMSetCoordinateDim(dm, ndim));
+  const PetscInt vertex_start = 4;
+  const PetscInt vertex_end = vertex_start + 3;
+  PetscInterface::setup_coordinate_section(dm, vertex_start, vertex_end);
+
+  Vec coordinates;
+  PetscScalar *coords;
+  PetscInterface::setup_local_coordinate_vector(dm, coordinates);
+  PETSCCHK(VecGetArray(coordinates, &coords));
+
+  coords[0] = 0.0;
+  coords[1] = 0.0;
+
+  coords[2] = 1.0;
+  coords[3] = 0.0;
+
+  coords[4] = 0.0;
+  coords[5] = 1.0;
+
+  PETSCCHK(VecRestoreArray(coordinates, &coords));
+  PETSCCHK(DMSetCoordinatesLocal(dm, coordinates));
+  PETSCCHK(VecDestroy(&coordinates));
+  return dm;
+}
+
 inline DM get_simple_square() {
   DM dm;
 
@@ -288,6 +349,20 @@ inline DM get_simple_square() {
 }
 
 } // namespace
+
+TEST(PETSC, dm_triangle_mapping) {
+  PETSCCHK(PetscInitializeNoArguments());
+  auto dm = get_simple_triangle();
+  PetscInterface::DMPlexHelper dmh(MPI_COMM_WORLD, dm);
+
+  std::vector<PetscScalar> inner = {0.1, 0.1};
+  ASSERT_TRUE(dmh.contains_point(inner) > -1);
+  std::vector<PetscScalar> outer = {0.501, 0.501};
+  ASSERT_TRUE(dmh.contains_point(outer) < 0);
+
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
 
 TEST(PETSC, dm_cell_linearise) {
 
@@ -470,5 +545,20 @@ TEST_P(PETSC_NDIM, dm_cart_advection) {
 }
 
 INSTANTIATE_TEST_SUITE_P(init, PETSC_NDIM, testing::Values(2, 3));
+
+//TEST(PETSC, dm_all_types_3d) {
+//  // TODO REMOVE?
+//  PETSCCHK(PetscInitializeNoArguments());
+//  DM dm;
+//
+//  std::string filename = "/home/js0259/git-ukaea/NESO-workspace/"
+//                         "reference_all_types_cube/mixed_ref_cube_0.7.msh";
+//
+//  PETSCCHK(DMPlexCreateGmshFromFile(MPI_COMM_WORLD, filename.c_str(),
+//                                    (PetscBool)1, &dm));
+//
+//  PETSCCHK(DMDestroy(&dm));
+//  PETSCCHK(PetscFinalize());
+//}
 
 #endif

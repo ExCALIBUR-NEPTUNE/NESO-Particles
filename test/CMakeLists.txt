@@ -27,6 +27,7 @@ set(TEST_SRCS
     ${TEST_DIR}/test_communication.cpp
     ${TEST_DIR}/test_error_propagate.cpp
     ${TEST_DIR}/test_examples.cpp
+    ${TEST_DIR}/test_external_common.cpp
     ${TEST_DIR}/test_global_array.cpp
     ${TEST_DIR}/test_int_key_value_map.cpp
     ${TEST_DIR}/test_local_array.cpp

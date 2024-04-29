@@ -1,5 +1,5 @@
-#ifndef NESO_PARTICLES_BOUNDING_BOX_HPP_
-#define NESO_PARTICLES_BOUNDING_BOX_HPP_
+#ifndef _NESO_PARTICLES_BOUNDING_BOX_H_
+#define _NESO_PARTICLES_BOUNDING_BOX_H_
 
 #include "../../typedefs.hpp"
 #include <memory>
