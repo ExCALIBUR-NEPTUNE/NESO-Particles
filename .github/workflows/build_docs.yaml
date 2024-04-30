@@ -25,6 +25,12 @@ concurrency:
 
 jobs:
   build:
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository code
@@ -51,32 +57,12 @@ jobs:
           cp -r ./build/* /tmp/gh-pages/.
           touch /tmp/gh-pages/.nojekyll
           ls /tmp/gh-pages
-      - uses: actions/upload-artifact@master
+      - uses: actions/configure-pages@v1
+      - uses: actions/upload-pages-artifact@v1
         with:
-          name: gh-page
           path: /tmp/gh-pages
-          if-no-files-found: error
+      - id: deployment
+        uses: actions/deploy-pages@main
 
-  # Deployment job
-  deploy:
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-    - uses: actions/download-artifact@master
-      with:
-        name: gh-page
-        path: /tmp/gh-pages
-    - uses: actions/configure-pages@v1
-    - uses: actions/upload-pages-artifact@v1
-      with:
-        path: /tmp/gh-pages
-    - id: deployment
-      uses: actions/deploy-pages@main
 
 
