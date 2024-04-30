@@ -59,7 +59,7 @@ To build NESO-Particles with tests:
     mkdir build
     cd  build
     # Choose a SYCL implementation to build tests with
-    cmake -DHIPSYCL_TARGETS=omp.library-only -DCMAKE_INSTALL_PREFIX=<install location> .
+    cmake -DHIPSYCL_TARGETS=omp.library-only -DCMAKE_INSTALL_PREFIX=<install location> ..
     make
     make install
 
