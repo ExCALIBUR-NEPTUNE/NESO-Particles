@@ -58,7 +58,7 @@ jobs:
           touch /tmp/gh-pages/.nojekyll
           ls /tmp/gh-pages
       - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v4
+      - uses: actions/upload-pages-artifact@v3
         with:
           path: /tmp/gh-pages
       - id: deployment
