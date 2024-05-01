@@ -82,7 +82,7 @@ public:
   SYCLTarget &operator=(SYCLTarget const &a) = delete;
 
 // Add a define to use SYCL 1.2 selectors if 2020 ones are not supported
-#if SYCL_LANGUAGE_VERSION = 202001 && #defined(__INTEL_LLVM_COMPILER)
+#if SYCL_LANGUAGE_VERSION == 202001 && #defined(__INTEL_LLVM_COMPILER)
 #define NESO_PARTICLES_LEGACY_DEVICE_SELECTORS
 #endif
 
