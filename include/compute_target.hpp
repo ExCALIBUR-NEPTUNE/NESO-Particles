@@ -81,6 +81,11 @@ public:
   /// Disable (implicit) copies.
   SYCLTarget &operator=(SYCLTarget const &a) = delete;
 
+// Add a define to use SYCL 1.2 selectors if 2020 ones are not supported
+#if SYCL_LANGUAGE_VERSION = 202001 && #defined(__INTEL_LLVM_COMPILER)
+#define NESO_PARTICLES_LEGACY_DEVICE_SELECTORS
+#endif
+
   /**
    * Create a new SYCLTarget using a flag to specifiy device type and a parent
    * MPI communicator.
@@ -96,20 +101,36 @@ public:
       : comm_pair(comm) {
     if (gpu_device > 0) {
       try {
+#ifdef NESO_PARTICLES_LEGACY_DEVICE_SELECTORS
+        this->device = sycl::device{sycl::gpu_selector()};
+#else
         this->device = sycl::device{sycl::gpu_selector_v};
+#endif
       } catch (sycl::exception const &e) {
         std::cout << "Cannot select a GPU\n" << e.what() << "\n";
         std::cout << "Using a CPU device\n";
+#ifdef NESO_PARTICLES_LEGACY_DEVICE_SELECTORS
+        this->device = sycl::device{sycl::cpu_selector()};
+#else
         this->device = sycl::device{sycl::cpu_selector_v};
+#endif
       }
     } else if (gpu_device < 0) {
+#ifdef NESO_PARTICLES_LEGACY_DEVICE_SELECTORS
+      this->device = sycl::device{sycl::cpu_selector()};
+#else
       this->device = sycl::device{sycl::cpu_selector_v};
+#endif
     } else {
 
       // Get the default device and platform as they are most likely to be the
       // desired device based on SYCL implementation/runtime/environment
       // variables.
+#ifdef NESO_PARTICLES_LEGACY_DEVICE_SELECTORS
+      sycl::device default_device{sycl::default_selector()};
+#else
       sycl::device default_device{sycl::default_selector_v};
+#endif
       auto default_platform = default_device.get_platform();
 
       // Get all devices from the default platform
