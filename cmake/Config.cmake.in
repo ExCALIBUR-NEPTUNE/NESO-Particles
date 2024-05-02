@@ -1,0 +1,22 @@
+@PACKAGE_INIT@
+include("${CMAKE_CURRENT_LIST_DIR}/@PROJECT_NAME@Targets.cmake")
+include(CMakeFindDependencyMacro)
+include("${CMAKE_CURRENT_LIST_DIR}/restrict-keyword.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/SYCL.cmake")
+find_sycl_if_required()
+find_dependency(MPI)
+if (NOT COMMAND add_sycl_to_target) 
+    message( WARNING  
+        "Can't find add_sycl_to_target macro SYCL is required for NESO-Particles
+        call find_package(<IntelSYCL|AdaptiveCPP|HipSYCL etc etc>) before
+        including this module")
+endif()
+
+if (@NESO_PARTICLES_USING_HDF5@)
+    set(NESO_PARTICLES_WITH_HDF5 TRUE)
+    # HDF5 requires MPI::MPI_C, which is only loaded if C is
+    # enabled. See https://github.com/HDFGroup/hdf5/issues/3844.  Note
+    # that this issue only arises for certain versions of HDF5.
+    enable_language(C) 
+    find_dependency(HDF5)
+endif()

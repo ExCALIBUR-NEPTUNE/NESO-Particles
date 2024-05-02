@@ -1,16 +1,15 @@
 #ifndef _NESO_PARTICLES_DEPARTING_PARTICLE_IDENTIFICATION
 #define _NESO_PARTICLES_DEPARTING_PARTICLE_IDENTIFICATION
 
-#include <CL/sycl.hpp>
 #include <mpi.h>
 
 #include "communication.hpp"
 #include "compute_target.hpp"
 #include "particle_dat.hpp"
 #include "profiling.hpp"
+#include "sycl_typedefs.hpp"
 #include "typedefs.hpp"
 
-using namespace cl;
 namespace NESO::Particles {
 
 /**

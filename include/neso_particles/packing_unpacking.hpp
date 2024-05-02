@@ -1,7 +1,6 @@
 #ifndef _NESO_PARTICLES_PACKING_UNPACKING
 #define _NESO_PARTICLES_PACKING_UNPACKING
 
-#include <CL/sycl.hpp>
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -12,6 +11,7 @@
 #include "compute_target.hpp"
 #include "particle_dat.hpp"
 #include "profiling.hpp"
+#include "sycl_typedefs.hpp"
 #include "typedefs.hpp"
 
 namespace NESO::Particles {

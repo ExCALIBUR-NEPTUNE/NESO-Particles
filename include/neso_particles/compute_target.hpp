@@ -1,10 +1,8 @@
 #ifndef _NESO_PARTICLES_COMPUTE_TARGET
 #define _NESO_PARTICLES_COMPUTE_TARGET
 
-#include <cstdlib>
-
-#include <CL/sycl.hpp>
 #include <array>
+#include <cstdlib>
 #include <map>
 #include <mpi.h>
 #include <stack>
@@ -13,9 +11,8 @@
 
 #include "communication.hpp"
 #include "profiling.hpp"
+#include "sycl_typedefs.hpp"
 #include "typedefs.hpp"
-
-using namespace cl;
 
 namespace NESO::Particles {
 

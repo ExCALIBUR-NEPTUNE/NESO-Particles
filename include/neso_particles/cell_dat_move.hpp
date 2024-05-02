@@ -1,7 +1,6 @@
 #ifndef _NESO_PARTICLES_CELL_DAT_MOVE
 #define _NESO_PARTICLES_CELL_DAT_MOVE
 
-#include <CL/sycl.hpp>
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -16,9 +15,9 @@
 #include "particle_set.hpp"
 #include "particle_spec.hpp"
 #include "profiling.hpp"
+#include "sycl_typedefs.hpp"
 #include "typedefs.hpp"
 
-using namespace cl;
 namespace NESO::Particles {
 
 /**

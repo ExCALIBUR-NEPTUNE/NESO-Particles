@@ -1,7 +1,6 @@
 #ifndef _NESO_PARTICLES_PARTICLE_GROUP
 #define _NESO_PARTICLES_PARTICLE_GROUP
 
-#include <CL/sycl.hpp>
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -23,9 +22,9 @@
 #include "particle_set.hpp"
 #include "particle_spec.hpp"
 #include "profiling.hpp"
+#include "sycl_typedefs.hpp"
 #include "typedefs.hpp"
 
-using namespace cl;
 namespace NESO::Particles {
 class DescendantProducts;
 class ParticleSubGroup;
@@ -598,8 +597,10 @@ public:
     if (check_exists) {
       const bool dat_exists = this->contains_dat(sym);
       NESOASSERT(dat_exists,
-                 "This ParticleGroup does not contain the requested dat.");
+                 "This ParticleGroup does not contain the requested dat: " +
+                     sym.name);
     }
+
     return (*this)[sym];
   }
 

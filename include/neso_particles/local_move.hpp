@@ -1,7 +1,6 @@
 #ifndef _NESO_PARTICLES_LOCAL_MOVE
 #define _NESO_PARTICLES_LOCAL_MOVE
 
-#include <CL/sycl.hpp>
 #include <mpi.h>
 #include <set>
 #include <vector>
@@ -12,9 +11,9 @@
 #include "departing_particle_identification.hpp"
 #include "packing_unpacking.hpp"
 #include "profiling.hpp"
+#include "sycl_typedefs.hpp"
 #include "typedefs.hpp"
 
-using namespace cl;
 namespace NESO::Particles {
 
 /**

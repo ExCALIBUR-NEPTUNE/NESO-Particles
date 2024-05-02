@@ -4,7 +4,6 @@
 #include "cell_dat_move.hpp"
 #include "loop/particle_loop.hpp"
 
-using namespace cl;
 namespace NESO::Particles {
 
 /**

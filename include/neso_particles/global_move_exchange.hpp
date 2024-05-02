@@ -1,16 +1,15 @@
 #ifndef _NESO_PARTICLES_GLOBAL_MOVE_EXCHANGE
 #define _NESO_PARTICLES_GLOBAL_MOVE_EXCHANGE
 
-#include <CL/sycl.hpp>
 #include <mpi.h>
 
 #include "communication.hpp"
 #include "compute_target.hpp"
 #include "packing_unpacking.hpp"
 #include "profiling.hpp"
+#include "sycl_typedefs.hpp"
 #include "typedefs.hpp"
 
-using namespace cl;
 namespace NESO::Particles {
 
 /**

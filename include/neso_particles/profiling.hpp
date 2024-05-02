@@ -1,7 +1,6 @@
 #ifndef _NESO_PARTICLES_PROFILING
 #define _NESO_PARTICLES_PROFILING
 
-#include <CL/sycl.hpp>
 #include <chrono>
 #include <cstdint>
 #include <fstream>
@@ -10,9 +9,8 @@
 #include <mpi.h>
 #include <string>
 
+#include "sycl_typedefs.hpp"
 #include "typedefs.hpp"
-
-using namespace cl;
 
 namespace NESO::Particles {
 

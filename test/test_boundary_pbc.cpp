@@ -1,4 +1,3 @@
-#include <CL/sycl.hpp>
 #include <cmath>
 #include <gtest/gtest.h>
 #include <neso_particles.hpp>

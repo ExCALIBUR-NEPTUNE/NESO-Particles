@@ -1,16 +1,15 @@
 #ifndef _NESO_PARTICLES_GLOBAL_MAPPING
 #define _NESO_PARTICLES_GLOBAL_MAPPING
 
-#include <CL/sycl.hpp>
 #include <mpi.h>
 
 #include "domain.hpp"
 #include "error_propagate.hpp"
 #include "particle_dat.hpp"
 #include "profiling.hpp"
+#include "sycl_typedefs.hpp"
 #include "typedefs.hpp"
 
-using namespace cl;
 namespace NESO::Particles {
 
 /**

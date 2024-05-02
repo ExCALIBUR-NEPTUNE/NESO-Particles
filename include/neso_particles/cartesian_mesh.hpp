@@ -1,7 +1,6 @@
 #ifndef _NESO_CARTESIAN_MESH
 #define _NESO_CARTESIAN_MESH
 
-#include <CL/sycl.hpp>
 #include <memory>
 #include <mpi.h>
 
@@ -11,9 +10,9 @@
 #include "particle_dat.hpp"
 #include "particle_group.hpp"
 #include "profiling.hpp"
+#include "sycl_typedefs.hpp"
 #include "typedefs.hpp"
 
-using namespace cl;
 namespace NESO::Particles {
 
 /**

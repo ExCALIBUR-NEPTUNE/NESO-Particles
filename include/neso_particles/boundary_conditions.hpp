@@ -1,18 +1,15 @@
 #ifndef _NESO_PARTICLES_BOUNDARY_CONDITIONS
 #define _NESO_PARTICLES_BOUNDARY_CONDITIONS
 
-#include <CL/sycl.hpp>
 #include <cmath>
+#include <memory>
 
 #include "domain.hpp"
 #include "loop/particle_loop.hpp"
 #include "particle_dat.hpp"
 #include "profiling.hpp"
+#include "sycl_typedefs.hpp"
 #include "typedefs.hpp"
-#include <memory>
-
-using namespace cl;
-using namespace std;
 
 namespace NESO::Particles {
 

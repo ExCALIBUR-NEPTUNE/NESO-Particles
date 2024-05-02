@@ -48,8 +48,9 @@ static inline int reduce_mul(const int nel, std::vector<int> &values) {
  * @param line Line number for the call to neso_particles assert.
  * @param msg Message to print to stderr on evaluation of conditional to false.
  */
+template <typename T>
 inline void neso_particles_assert(const char *expr_str, bool expr,
-                                  const char *file, int line, const char *msg) {
+                                  const char *file, int line, T &&msg) {
   if (!expr) {
     std::cerr << "NESO Particles Assertion error:\t" << msg << "\n"
               << "Expected value:\t" << expr_str << "\n"
@@ -101,8 +102,9 @@ inline void neso_particles_assert(const char *expr_str, bool expr,
  * @param line Line number for the call to neso_particles assert.
  * @param msg Message to print to stderr on evaluation of conditional to false.
  */
+template <typename T>
 inline void neso_particles_warn(const char *expr_str, bool expr,
-                                const char *file, int line, const char *msg) {
+                                const char *file, int line, T &&msg) {
   if (!expr) {
     std::cerr << "NESO Particles warning:\t" << msg << "\n"
               << "Expected value:\t" << expr_str << "\n"
@@ -185,9 +187,9 @@ template <typename... T> inline void nprint(T... args) {
 //#define NESO_PARTICLES_KERNEL_START                                            \
 //  const int neso_npart = pl_npart_cell[idx];                                   \
 //  for (int neso_layer = 0; neso_layer < neso_npart; neso_layer++) {
-//#define NESO_PARTICLES_KERNEL_END }
-//#define NESO_PARTICLES_KERNEL_CELL idx
-//#define NESO_PARTICLES_KERNEL_LAYER neso_layer
+// #define NESO_PARTICLES_KERNEL_END }
+// #define NESO_PARTICLES_KERNEL_CELL idx
+// #define NESO_PARTICLES_KERNEL_LAYER neso_layer
 
 #define NESO_PARTICLES_KERNEL_START                                            \
   const int neso_cell = (((INT)idx) / pl_stride);                              \
@@ -216,7 +218,7 @@ template <typename... T> inline void nprint(T... args) {
 
 #endif
 
-//#define DEBUG_OOB_CHECK
+// #define DEBUG_OOB_CHECK
 #define DEBUG_OOB_WIDTH 1000
 
 /**
