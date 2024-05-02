@@ -34,8 +34,8 @@ template <typename T> struct Read {
   /// Pointer to underlying data for the array.
   Read() = default;
   T const *ptr;
-  const T at(const int component) { return ptr[component]; }
-  const T &operator[](const int component) { return ptr[component]; }
+  const T at(const int component) const { return ptr[component]; }
+  const T &operator[](const int component) const { return ptr[component]; }
 };
 
 /**

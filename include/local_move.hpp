@@ -313,6 +313,7 @@ public:
     const int num_particles_leaving =
         this->departing_identify.dh_num_particle_send.h_buffer.ptr[0];
 
+    ProfileRegion r("local_move", "packing");
     // start the packing
     auto global_pack_event = this->particle_packer.pack(
         this->num_remote_send_ranks, this->h_send_rank_npart,
@@ -321,9 +322,14 @@ public:
         this->departing_identify.d_pack_layers_src,
         this->departing_identify.d_pack_layers_dst, this->particle_dats_real,
         this->particle_dats_int, 1);
+    r.end();
+    this->sycl_target->profile_map.add_region(r);
 
     // exchange the send/recv counts with neighbours
+    r = ProfileRegion("local_move", "npart_exchange_sendrecv");
     this->npart_exchange_sendrecv();
+    r.end();
+    this->sycl_target->profile_map.add_region(r);
 
     // allocate space to recv packed particles
     particle_unpacker.reset(this->num_remote_recv_ranks,
@@ -339,19 +345,27 @@ public:
     // start exchange particles
     this->exchange_init();
 
+    r = ProfileRegion("local_move", "remove_particles");
     // remove the sent particles whilst the communication occurs
     this->layer_compressor.remove_particles(
         num_particles_leaving, this->departing_identify.d_pack_cells.ptr,
         this->departing_identify.d_pack_layers_src.ptr);
+    r.end();
+    this->sycl_target->profile_map.add_region(r);
 
     // finalise exchange particles
     this->exchange_finalise();
 
     // Unpack the recv'd particles
+    r = ProfileRegion("local_move", "unpack");
     this->particle_unpacker.unpack(particle_dats_real, particle_dats_int);
+    r.end();
+    this->sycl_target->profile_map.add_region(r);
 
     sycl_target->profile_map.inc("LocalMove", "Move", 1,
                                  profile_elapsed(t0, profile_timestamp()));
+    sycl_target->profile_map.inc("LocalMove", "send_count",
+                                 num_particles_leaving, 0.0);
   };
 };
 

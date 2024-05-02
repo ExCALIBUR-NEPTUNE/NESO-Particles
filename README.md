@@ -45,3 +45,8 @@ SYCL_DEVICE_FILTER=host mpirun -n <nproc> bin/testNESOParticles
 OMP_NUM_THREADS=<nthreads> mpirun -n <nproc> bin/testNESOParticles
 ```
 
+## Contributing
+
+* Please branch from and create PRs into the `dev` branch. 
+* Please run `cmake-format` on any CMake changes.
+* Please run `clang-format` (version 14.0.0) on any C++ changes.

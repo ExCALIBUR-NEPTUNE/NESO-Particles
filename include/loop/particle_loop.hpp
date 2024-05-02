@@ -53,7 +53,7 @@ struct ParticleLoopIterationSet {
   ParticleLoopIterationSet(const int nbin, const int ncell, int *h_npart_cell)
       : nbin(std::min(ncell, nbin)), ncell(ncell), h_npart_cell(h_npart_cell) {
     this->iteration_set.reserve(nbin);
-    this->cell_offsets.resize(nbin);
+    this->cell_offsets.reserve(nbin);
   }
 
   /**
@@ -69,41 +69,56 @@ struct ParticleLoopIterationSet {
                     std::vector<std::size_t> &>
   get(const std::optional<int> cell = std::nullopt,
       const size_t local_size = 256) {
+
     this->iteration_set.clear();
+    this->cell_offsets.clear();
 
     if (cell == std::nullopt) {
       for (int binx = 0; binx < nbin; binx++) {
         int start, end;
         get_decomp_1d(nbin, ncell, binx, &start, &end);
         const int bin_width = end - start;
-        this->cell_offsets[binx] = static_cast<std::size_t>(start);
         int cell_maxi = 0;
+        int cell_avg = 0;
         for (int cellx = start; cellx < end; cellx++) {
-          cell_maxi = std::max(cell_maxi, h_npart_cell[cellx]);
+          const int cell_occ = h_npart_cell[cellx];
+          cell_maxi = std::max(cell_maxi, cell_occ);
+          cell_avg += cell_occ;
         }
+        cell_avg = (((REAL)cell_avg) / ((REAL)(end - start)));
+        const size_t cell_local_size =
+            get_min_power_of_two((size_t)cell_avg, local_size);
         const auto div_mod = std::div(static_cast<long long>(cell_maxi),
-                                      static_cast<long long>(local_size));
+                                      static_cast<long long>(cell_local_size));
         const std::size_t outer_size =
             static_cast<std::size_t>(div_mod.quot +
                                      (div_mod.rem == 0 ? 0 : 1)) *
-            local_size;
+            cell_local_size;
 
-        this->iteration_set.emplace_back(
-            sycl::nd_range<2>(sycl::range<2>(bin_width, outer_size),
-                              sycl::range<2>(1, local_size)));
+        if (cell_maxi > 0) {
+          this->iteration_set.emplace_back(
+              sycl::nd_range<2>(sycl::range<2>(bin_width, outer_size),
+                                sycl::range<2>(1, cell_local_size)));
+          this->cell_offsets.push_back(static_cast<std::size_t>(start));
+        }
       }
-      return {this->nbin, this->iteration_set, this->cell_offsets};
+
+      return {this->iteration_set.size(), this->iteration_set,
+              this->cell_offsets};
     } else {
       const int cellx = cell.value();
       const size_t cell_maxi = static_cast<size_t>(h_npart_cell[cellx]);
+      const size_t cell_local_size =
+          get_min_power_of_two((size_t)cell_maxi, local_size);
+
       const auto div_mod = std::div(static_cast<long long>(cell_maxi),
-                                    static_cast<long long>(local_size));
+                                    static_cast<long long>(cell_local_size));
       const std::size_t outer_size =
           static_cast<std::size_t>(div_mod.quot + (div_mod.rem == 0 ? 0 : 1)) *
-          local_size;
+          cell_local_size;
       this->iteration_set.emplace_back(sycl::nd_range<2>(
-          sycl::range<2>(1, outer_size), sycl::range<2>(1, local_size)));
-      this->cell_offsets[0] = static_cast<std::size_t>(cellx);
+          sycl::range<2>(1, outer_size), sycl::range<2>(1, cell_local_size)));
+      this->cell_offsets.push_back(static_cast<std::size_t>(cellx));
       return {1, this->iteration_set, this->cell_offsets};
     }
   }
@@ -294,6 +309,7 @@ protected:
   // point of view.
   INT *d_npart_cell_es_lb;
   int ncell;
+  size_t local_size;
 
   template <typename T>
   inline void init_from_particle_dat(ParticleDatSharedPtr<T> particle_dat) {
@@ -303,9 +319,19 @@ protected:
     this->d_npart_cell_lb = this->d_npart_cell;
     this->d_npart_cell_es = particle_dat->get_d_npart_cell_es();
     this->d_npart_cell_es_lb = this->d_npart_cell_es;
+
+    int nbin = 16;
+    if (const char *env_nbin = std::getenv("NESO_PARTICLES_LOOP_NBIN")) {
+      nbin = std::stoi(env_nbin);
+    }
+    this->local_size = 256;
+    if (const char *env_ls = std::getenv("NESO_PARTICLES_LOOP_LOCAL_SIZE")) {
+      this->local_size = std::stoi(env_ls);
+    }
+
     this->iteration_set =
         std::make_unique<ParticleLoopImplementation::ParticleLoopIterationSet>(
-            1, ncell, this->h_npart_cell_lb);
+            nbin, ncell, this->h_npart_cell_lb);
   }
 
   template <template <typename> typename T, typename U>
@@ -456,7 +482,7 @@ public:
     global_info.starting_cell = (cell == std::nullopt) ? 0 : cell.value();
 
     auto k_npart_cell_lb = this->d_npart_cell_lb;
-    auto is = this->iteration_set->get(cell);
+    auto is = this->iteration_set->get(cell, this->local_size);
     auto k_kernel = this->kernel;
 
     const int nbin = std::get<0>(is);
@@ -464,6 +490,7 @@ public:
         "ParticleLoop", "Init", 1, profile_elapsed(t0, profile_timestamp()));
 
     for (int binx = 0; binx < nbin; binx++) {
+
       sycl::nd_range<2> ndr = std::get<1>(is).at(binx);
       const size_t cell_offset = std::get<2>(is).at(binx);
       this->event_stack.push(
@@ -471,14 +498,14 @@ public:
             loop_parameter_type loop_args;
             create_loop_args(cgh, loop_args, &global_info);
             cgh.parallel_for<>(ndr, [=](sycl::nd_item<2> idx) {
-              const std::size_t index = idx.get_global_linear_id();
+              // const std::size_t index = idx.get_global_linear_id();
               const size_t cellxs = idx.get_global_id(0) + cell_offset;
               const size_t layerxs = idx.get_global_id(1);
               const int cellx = static_cast<int>(cellxs);
               const int layerx = static_cast<int>(layerxs);
               ParticleLoopImplementation::ParticleLoopIteration iterationx;
               if (layerx < k_npart_cell_lb[cellx]) {
-                iterationx.index = index;
+                // iterationx.index = index;
                 iterationx.cellx = cellx;
                 iterationx.layerx = layerx;
                 iterationx.loop_layerx = layerx;

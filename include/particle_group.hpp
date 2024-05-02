@@ -92,6 +92,7 @@ protected:
   typedef std::map<ParticleDatVersion, int64_t> ParticleDatVersionTracker;
 
   int ncell;
+  int npart_local;
   BufferHost<INT> h_npart_cell;
   BufferDevice<INT> d_npart_cell;
 
@@ -316,6 +317,7 @@ protected:
       h_ptr[cellx] = total;
       total += h_ptr_s[cellx];
     }
+    this->npart_local = static_cast<int>(total);
     this->dh_npart_cell_es->host_to_device();
   }
 
@@ -375,7 +377,8 @@ public:
         global_move_ctx(sycl_target, layer_compressor, particle_dats_real,
                         particle_dats_int),
         cell_move_ctx(sycl_target, this->ncell, layer_compressor,
-                      particle_dats_real, particle_dats_int) {
+                      particle_dats_real, particle_dats_int),
+        npart_local(0) {
 
     this->h_npart_cell.realloc_no_copy(this->ncell);
     this->d_npart_cell.realloc_no_copy(this->ncell);
@@ -559,7 +562,7 @@ public:
    *
    *  @returns Local particle count.
    */
-  inline int get_npart_local() { return this->position_dat->get_npart_local(); }
+  inline int get_npart_local() { return this->npart_local; }
 
   /**
    *  Determine if the ParticleGroup contains a ParticleDat of a given name.

@@ -585,7 +585,7 @@ template <typename U>
 inline void ParticleDatT<T>::realloc(BufferHost<U> &npart_cell_new) {
   NESOASSERT(npart_cell_new.size >= this->ncell, "Insufficent new cell counts");
   for (int cellx = 0; cellx < this->ncell; cellx++) {
-    this->cell_dat.set_nrow(cellx, npart_cell_new.ptr[cellx]);
+    this->cell_dat.set_nrow_inner(cellx, npart_cell_new.ptr[cellx]);
   }
 }
 template <typename T>
@@ -595,14 +595,7 @@ inline void ParticleDatT<T>::realloc(const int cell, const int npart_cell_new) {
 }
 
 template <typename T> inline void ParticleDatT<T>::trim_cell_dat_rows() {
-  for (int cellx = 0; cellx < this->ncell; cellx++) {
-    NESOASSERT((this->h_npart_cell[cellx] <= this->cell_dat.nrow[cellx]),
-               "A trim should not increase the number of rows");
-    this->cell_dat.set_nrow(cellx, this->h_npart_cell[cellx]);
-    // A trim should not be expected to realloc or perform memcpy so we can
-    // call wait immediately
-    // this->cell_dat.wait_set_nrow();
-  }
+  this->cell_dat.reduce_nrow(this->h_npart_cell);
   this->write_callback_wrapper(0);
 }
 

@@ -234,6 +234,7 @@ public:
    *  @param particle_group ParticleGroup to use.
    */
   inline void map(ParticleGroup &particle_group, const int map_cell = -1) {
+    auto r = ProfileRegion("CartesianHMeshLocalMapper", "map");
 
     ParticleDatSharedPtr<REAL> &position_dat = particle_group.position_dat;
     ParticleDatSharedPtr<INT> &mpi_rank_dat = particle_group.mpi_rank_dat;
@@ -274,7 +275,14 @@ public:
         },
         Access::read(position_dat), Access::write(mpi_rank_dat));
 
-    pl.execute();
+    if (map_cell == -1) {
+      pl.execute();
+    } else {
+      pl.execute(map_cell);
+    }
+
+    r.end();
+    this->sycl_target->profile_map.add_region(r);
   };
 
   /**

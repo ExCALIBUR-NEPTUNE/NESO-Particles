@@ -36,7 +36,7 @@ struct Read {
   INT const *npart_cell_es_lb;
   /// Loop iteration index (intended for internal use - see
   /// get_loop_linear_index)
-  size_t index;
+  // size_t index;
   /// Starting cell for ParticleLoop called cell wise (intended for internal
   /// use).
   int starting_cell;
@@ -117,7 +117,7 @@ inline void create_kernel_arg(ParticleLoopIteration &iterationx,
   lhs.cell = iterationx.cellx;
   lhs.layer = iterationx.layerx;
   lhs.loop_layer = iterationx.loop_layerx;
-  lhs.index = iterationx.index;
+  // lhs.index = iterationx.index;
   lhs.starting_cell = rhs.starting_cell;
   lhs.loop_type_int = rhs.loop_type_int;
   lhs.npart_cell_es = rhs.npart_cell_es;
