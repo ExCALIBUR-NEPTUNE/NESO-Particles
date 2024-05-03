@@ -80,7 +80,9 @@ public:
 
 // Add a define to use SYCL 1.2 selectors if 2020 ones are not supported
 #if (SYCL_LANGUAGE_VERSION == 202001) && defined(__INTEL_LLVM_COMPILER)
+#if (__INTEL_LLVM_COMPILER < 20230000)
 #define NESO_PARTICLES_LEGACY_DEVICE_SELECTORS
+#endif
 #endif
 
   /**
