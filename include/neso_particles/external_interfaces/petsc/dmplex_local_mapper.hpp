@@ -7,13 +7,16 @@
 #include "../../particle_group.hpp"
 #include "dmplex_interface.hpp"
 #include "particle_cell_mapping/dmplex_host_mapper.hpp"
+#include "particle_cell_mapping/dmplex_2d_mapper.hpp"
 #include <deque>
 
 namespace NESO::Particles::PetscInterface {
 
 class DMPlexLocalMapper : public LocalMapper {
 protected:
-  std::unique_ptr<DMPlexHostMapper> host_mapper;
+  std::unique_ptr<DMPlexHostMapper> mapper_host;
+  std::unique_ptr<DMPlex2DMapper> mapper_2d;
+  int ndim;
 
 public:
   SYCLTargetSharedPtr sycl_target;
@@ -25,8 +28,15 @@ public:
   DMPlexLocalMapper(SYCLTargetSharedPtr sycl_target,
                     DMPlexInterfaceSharedPtr dmplex_interface)
       : sycl_target(sycl_target), dmplex_interface(dmplex_interface) {
-    this->host_mapper =
-        std::make_unique<DMPlexHostMapper>(sycl_target, dmplex_interface);
+
+    this->ndim = dmplex_interface->get_ndim();
+    if (this->ndim == 2){
+      this->mapper_2d =
+          std::make_unique<DMPlex2DMapper>(sycl_target, dmplex_interface);
+    } else {
+      this->mapper_host =
+          std::make_unique<DMPlexHostMapper>(sycl_target, dmplex_interface);
+    }
   }
 
   /**
@@ -36,7 +46,11 @@ public:
    */
   virtual inline void map(ParticleGroup &particle_group,
                           const int map_cell = -1) override {
-    this->host_mapper->map(particle_group, map_cell);
+    if (this->mapper_2d){
+      this->mapper_2d->map(particle_group, map_cell);
+    } else {
+      this->mapper_host->map(particle_group, map_cell);
+    }
   }
 
   /**
