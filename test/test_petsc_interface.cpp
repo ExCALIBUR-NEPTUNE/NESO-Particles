@@ -561,4 +561,75 @@ INSTANTIATE_TEST_SUITE_P(init, PETSC_NDIM, testing::Values(2));
 //   PETSCCHK(PetscFinalize());
 // }
 
+TEST(PETSC, foo_internal) {
+  // TODO REMOVE?
+  PETSCCHK(PetscInitializeNoArguments());
+  DM dm;
+  
+  const int ndim = 2;
+  const int mesh_size = (ndim == 2) ? 32 : 16;
+  PetscInt faces[3] = {mesh_size, mesh_size, mesh_size};
+
+  PETSCCHK(DMPlexCreateBoxMesh(PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces,
+                               /* lower */ NULL,
+                               /* upper */ NULL,
+                               /* periodicity */ NULL, PETSC_TRUE, &dm));
+
+  PetscInterface::generic_distribute(&dm);
+  auto mesh =
+      std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
+
+  auto num_labels = mesh->dmh->get_num_labels();
+  nprint("num_labels:", num_labels);
+  for (int lx = 0; lx < num_labels; lx++) {
+    nprint(lx, mesh->dmh->get_label_name(lx));
+  }
+
+  //auto map_face = mesh->dmh->get_face_sets();
+  //for (auto &item : map_face) {
+  //  nprint(item.first);
+  //  for (auto px : item.second) {
+  //    nprint("\t", px);
+  //  }
+  //}
+
+  mesh->free();
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
+
+
+TEST(PETSC, foo_gmsh) {
+  // TODO REMOVE?
+  PETSCCHK(PetscInitializeNoArguments());
+  DM dm;
+
+  std::string filename = "/home/js0259/git-ukaea/NESO-Particles-paper/"
+                         "resources/mesh_ring/mesh_ring.msh";
+  PETSCCHK(DMPlexCreateGmshFromFile(MPI_COMM_WORLD, filename.c_str(),
+                                    (PetscBool)1, &dm));
+
+  PetscInterface::generic_distribute(&dm);
+  auto mesh =
+      std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
+
+  auto num_labels = mesh->dmh->get_num_labels();
+  nprint("num_labels:", num_labels);
+  for (int lx = 0; lx < num_labels; lx++) {
+    nprint(lx, mesh->dmh->get_label_name(lx));
+  }
+
+  //auto map_face = mesh->dmh->get_face_sets();
+  //for (auto &item : map_face) {
+  //  nprint(item.first);
+  //  for (auto px : item.second) {
+  //    nprint("\t", px);
+  //  }
+  //}
+
+  mesh->free();
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
+
 #endif

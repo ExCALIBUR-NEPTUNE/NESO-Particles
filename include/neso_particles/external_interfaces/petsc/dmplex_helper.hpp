@@ -545,6 +545,70 @@ public:
     PETSCCHK(PetscSFGetGraph(cell_sf, NULL, &n_found, &found, &cells));
     return cells[0].index;
   }
+
+  /**
+   * @returns The number of labels in the DMPlex.
+   */
+  inline PetscInt get_num_labels() {
+    PetscInt num_labels;
+    PETSCCHK(DMGetNumLabels(this->dm, &num_labels));
+    return num_labels;
+  }
+
+  /**
+   * @returns The DMLabel for "Face Sets"
+   */
+  inline DMLabel get_face_sets_label() {
+    const char *name = "Face Sets";
+    PetscBool has_label;
+    PETSCCHK(DMHasLabel(this->dm, name, &has_label));
+    NESOASSERT(has_label,
+               "The Face Sets label does not exist on this DMPlex. If using "
+               "gmsh, check Physical Lines and Physical Surfaces are set.");
+    DMLabel label;
+    PETSCCHK(DMGetLabel(this->dm, name, &label));
+    return label;
+  }
+
+  /**
+   * @param index Index of label to get name of.
+   * @returns The label name corresponding to an index.
+   */
+  inline std::string get_label_name(const PetscInt index) {
+    const char *name;
+    PETSCCHK(DMGetLabelName(this->dm, index, &name));
+    return std::string(name);
+  }
+
+  /**
+   * Get boundary points start and end. In 2D the boundary point types are
+   * edges. In 3D the boundary point types are faces. Returns [start, end).
+   *
+   * @param[in, out] start First boundary point.
+   * @param[in, out] end Last boundary point plus one.
+   */
+  inline void get_boundary_stratum(PetscInt *start, PetscInt *end) {
+    PetscInt depth = this->ndim - 1;
+    PETSCCHK(DMPlexGetDepthStratum(this->dm, depth, start, end));
+  }
+
+  /**
+   * @returns Map from face sets int label to DMPlex points with that label.
+   */
+  inline std::map<PetscInt, std::vector<PetscInt>> get_face_sets() {
+    DMLabel face_sets_label = this->get_face_sets_label();
+    PetscInt points_start, points_end;
+    this->get_boundary_stratum(&points_start, &points_end);
+
+    std::map<PetscInt, std::vector<PetscInt>> map;
+    for (PetscInt px = points_start; px < points_end; px++) {
+      PetscInt value;
+      PETSCCHK(DMLabelGetValue(face_sets_label, px, &value));
+      map[value].push_back(px);
+    }
+
+    return map;
+  }
 };
 
 } // namespace NESO::Particles::PetscInterface
