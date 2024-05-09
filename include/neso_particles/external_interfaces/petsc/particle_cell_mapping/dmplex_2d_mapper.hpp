@@ -10,6 +10,7 @@
 #include "../dmplex_interface.hpp"
 #include <list>
 #include <memory>
+#include <stack>
 
 namespace NESO::Particles::PetscInterface {
 
@@ -33,6 +34,13 @@ protected:
   std::unique_ptr<LookupTable<int, Implementation2DLinear::Linear2DData>>
       cell_data;
   std::shared_ptr<ExternalCommon::OverlayCartesianMesh> overlay_mesh;
+
+  // size of candidate maps for each overlay cell
+  std::unique_ptr<LookupTable<int, int>> map_sizes;
+  // candidate maps for each overlay cell
+  std::unique_ptr<LookupTable<int, int *>> map_candidates;
+  // stack for device map of candidate cells
+  std::stack<std::unique_ptr<BufferDevice<int>>> map_stack;
 
 public:
   SYCLTargetSharedPtr sycl_target;
@@ -154,6 +162,41 @@ public:
     }
 
     // Create the map from overlay cartesian cells to DMPlex cells
+    const int overlay_cell_count = this->overlay_mesh->get_cell_count();
+    this->map_sizes = std::make_unique<LookupTable<int, int>>(
+        this->sycl_target, overlay_cell_count);
+
+    for (int cx = 0; cx < overlay_cell_count; cx++) {
+      // The keys untouched above will have a default initialised list of size
+      // 0.
+      this->map_sizes->add(cx, map_overlay_cells[cx].size());
+    }
+
+    // Create the lookup table for candidate cells
+    this->map_candidates = std::make_unique<LookupTable<int, int *>>(
+        this->sycl_target, overlay_cell_count);
+
+    // push the maps from overlay cells to candidate cells onto device
+    std::vector<int> candidate_cells;
+    for (int cx = 0; cx < overlay_cell_count; cx++) {
+      const int num_candidates = map_overlay_cells.at(cx).size();
+      if (num_candidates) {
+        candidate_cells.clear();
+        // Use .at now has the previous loop default initialised all the cells.
+        candidate_cells.reserve(num_candidates);
+        // Convert to std vector to make copying to device easier.
+        candidate_cells.insert(candidate_cells.end(),
+                               map_overlay_cells.at(cx).begin(),
+                               map_overlay_cells.at(cx).end());
+        // copy candidate cells to device
+        auto tmp_ptr = std::make_unique<BufferDevice<int>>(this->sycl_target,
+                                                           candidate_cells);
+        // push the device pointer onto the lookup table
+        this->map_candidates->add(cx, tmp_ptr->ptr);
+        // push this unique ptr onto a stack to keep it in scope
+        this->map_stack.push(std::move(tmp_ptr));
+      }
+    }
   }
 
   /**
