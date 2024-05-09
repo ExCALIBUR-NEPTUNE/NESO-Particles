@@ -202,7 +202,83 @@ public:
   /**
    * TODO
    */
-  inline void map(ParticleGroup &particle_group, const int map_cell) {}
+  inline void map(ParticleGroup &particle_group, const int map_cell) {
+
+    auto dat_positions = particle_group.position_dat;
+    auto dat_cells = particle_group.cell_id_dat;
+    auto dat_ranks = particle_group.mpi_rank_dat;
+
+    auto k_overlay_mapper = this->overlay_mesh->get_device_mapper();
+    auto k_map_sizes = this->map_sizes->root;
+    auto k_map_candidates = this->map_candidates->root;
+    auto k_cell_data = this->cell_data->root;
+
+    auto map_loop = particle_loop(
+        "DMPlex2DMapper::map", dat_positions,
+        [=](auto P, auto CELL, auto RANK) {
+          // Find the cell in the overlayed mesh
+          const REAL x0 = P.at(0);
+          const REAL x1 = P.at(1);
+          int cell_tuple[2] = {k_overlay_mapper.get_cell_in_dimension(0, x0),
+                               k_overlay_mapper.get_cell_in_dimension(1, x1)};
+          const int overlay_cell =
+              k_overlay_mapper.get_linear_cell_index(cell_tuple);
+          // Get the number of candidate cells
+          int num_candidates;
+          k_map_sizes->get(overlay_cell, &num_candidates);
+          int *candidates;
+          k_map_candidates->get(overlay_cell, &candidates);
+          // loop over candidates and test if point in cell
+          for (int cx = 0; cx < num_candidates; cx++) {
+            const int candidate = candidates[cx];
+            // Get the cell data for this candidate cell
+            Implementation2DLinear::Linear2DData const *cell_data;
+            k_cell_data->get(candidate, &cell_data);
+            // Test if point in candidate cell
+            int num_crossings = 0;
+            const int num_vertices = cell_data->num_vertices;
+            const int *faces = cell_data->faces;
+            const REAL *vertices = cell_data->vertices;
+
+            for (int facex = 0; facex < num_vertices; facex++) {
+              REAL x_i = vertices[faces[2 * facex + 0] * 2 + 0];
+              REAL y_i = vertices[faces[2 * facex + 0] * 2 + 1];
+              REAL x_j = vertices[faces[2 * facex + 1] * 2 + 0];
+              REAL y_j = vertices[faces[2 * facex + 1] * 2 + 1];
+              // Is the point in a corner
+              if ((x0 == x_j) && (x1 == y_j)) {
+                num_crossings = 1;
+                break;
+              }
+              if ((y_j > x1) != (y_i > x1)) {
+                REAL slope =
+                    (x0 - x_j) * (y_i - y_j) - (x_i - x_j) * (x1 - y_j);
+                if (slope == 0) {
+                  // Point is in a corner
+                  num_crossings = 1;
+                  break;
+                }
+                if ((slope < 0) != (y_i < y_j)) {
+                  num_crossings++;
+                }
+              }
+            }
+            // If the number of crossings is odd then the point is in the cell.
+            if (num_crossings % 2) {
+              CELL.at(0) = cell_data->local_id;
+              RANK.at(1) = cell_data->owning_rank;
+            }
+          }
+        },
+        Access::read(dat_positions), Access::write(dat_cells),
+        Access::write(dat_ranks));
+
+    if (map_cell > -1) {
+      map_loop->execute(map_cell);
+    } else {
+      map_loop->execute();
+    }
+  }
 };
 
 } // namespace NESO::Particles::PetscInterface

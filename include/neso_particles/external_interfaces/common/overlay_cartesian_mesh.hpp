@@ -27,7 +27,7 @@ struct OverlayCartesianMeshMapper {
    *  @param[in] point Coordinate in the requested dimension.
    *  @returns Containing cell in dimension.
    */
-  inline int get_cell_in_dimension(const int dim, const REAL point) {
+  inline int get_cell_in_dimension(const int dim, const REAL point) const {
     const REAL shifted_point = point - d_origin[dim];
     REAL cell_float = shifted_point * d_inverse_cell_widths[dim];
     int cell = cell_float;
@@ -43,7 +43,8 @@ struct OverlayCartesianMeshMapper {
    *  dimension.
    *  @returns Linear cell index.
    */
-  template <typename T> inline int get_linear_cell_index(const T &cell_tuple) {
+  template <typename T>
+  inline int get_linear_cell_index(const T &cell_tuple) const {
     int idx = cell_tuple[this->ndim - 1];
     for (int dimx = (this->ndim - 2); dimx >= 0; dimx--) {
       idx *= d_cell_counts[dimx];
@@ -59,7 +60,7 @@ struct OverlayCartesianMeshMapper {
    * @returns True if cells is valid.
    */
   template <typename T>
-  inline bool valid_linear_cell_index(const T &cell_tuple) {
+  inline bool valid_linear_cell_index(const T &cell_tuple) const {
     bool valid = true;
     for (int dimx = 0; dimx < ndim; dimx++) {
       valid = valid && ((cell_tuple[dimx] > -1) &&
