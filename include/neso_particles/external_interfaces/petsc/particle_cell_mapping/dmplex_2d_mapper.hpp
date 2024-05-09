@@ -46,13 +46,18 @@ public:
       : sycl_target(sycl_target), dmplex_interface(dmplex_interface) {
 
     constexpr int ndim = 2;
-    const int num_local_cells = dmplex_interface->dmh->get_num_cells();
-    const int num_halo_cells = dmplex_interface->dmh_halo->get_num_cells();
+    auto dmh = dmplex_interface->dmh;
+    auto dmh_halo = dmplex_interface->dmh_halo;
+
+    const int num_local_cells = dmh->get_num_cells();
+    const int num_halo_cells = dmh_halo ? dmh_halo->get_num_cells() : 0;
     const int num_total_cells = num_local_cells + num_halo_cells;
 
     // Create a bounding box for halo cells and local cells.
     auto bounding_box = dmplex_interface->dmh->get_bounding_box();
-    bounding_box->expand(dmplex_interface->dmh_halo->get_bounding_box());
+    if (dmh_halo) {
+      bounding_box->expand(dmh_halo->get_bounding_box());
+    }
 
     // Create an overlayed Cartesian mesh.
     this->overlay_mesh = ExternalCommon::create_overlay_mesh(
@@ -77,7 +82,7 @@ public:
       PetscScalar *coords = nullptr;
       PETSCCHK(DMPlexGetCellCoordinates(dm, c, &is_dg, &num_coords, &array,
                                         &coords));
-      for (int cx = 0; cx < num_coords * ndim; cx++) {
+      for (int cx = 0; cx < num_coords; cx++) {
         tmp_data.vertices[cx] = coords[cx];
       }
       NESOASSERT((num_coords == 6) || (num_coords == 8),
@@ -105,6 +110,8 @@ public:
       }
       tmp_data.owning_rank = owning_rank;
       tmp_data.local_id = local_id;
+      PETSCCHK(DMPlexRestoreCellCoordinates(dm, c, &is_dg, &num_coords, &array,
+                                            &coords));
       return tmp_data;
     };
 
@@ -126,22 +133,24 @@ public:
       this->cell_data->add(index, tmp_data);
       index++;
     }
+
     // Halo cells
-    cell_start = dmplex_interface->dmh_halo->cell_start;
-    cell_end = dmplex_interface->dmh_halo->cell_end;
-    for (int cx = cell_start; cx < cell_end; cx++) {
-      auto bb = dmplex_interface->dmh_halo->get_cell_bounding_box(cx);
-      this->overlay_mesh->get_intersecting_cells(bb, overlay_cells);
-      for (auto &ox : overlay_cells) {
-        map_overlay_cells[ox].push_back(index);
+    if (dmh_halo) {
+      cell_start = dmh_halo->cell_start;
+      cell_end = dmh_halo->cell_end;
+      for (int cx = cell_start; cx < cell_end; cx++) {
+        auto bb = dmh_halo->get_cell_bounding_box(cx);
+        this->overlay_mesh->get_intersecting_cells(bb, overlay_cells);
+        for (auto &ox : overlay_cells) {
+          map_overlay_cells[ox].push_back(index);
+        }
+        // Record the description of this cell
+        auto id_rank = dmplex_interface->map_local_lid_remote_lid.at(cx);
+        auto tmp_data = lambda_populate_cell_data(
+            dmh_halo->dm, cx, std::get<0>(id_rank), std::get<1>(id_rank));
+        this->cell_data->add(index, tmp_data);
+        index++;
       }
-      // Record the description of this cell
-      auto id_rank = dmplex_interface->map_local_lid_remote_lid.at(cx);
-      auto tmp_data =
-          lambda_populate_cell_data(dmplex_interface->dmh_halo->dm, cx,
-                                    std::get<0>(id_rank), std::get<1>(id_rank));
-      this->cell_data->add(index, tmp_data);
-      index++;
     }
 
     // Create the map from overlay cartesian cells to DMPlex cells
