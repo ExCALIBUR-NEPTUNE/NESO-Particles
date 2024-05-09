@@ -352,6 +352,11 @@ public:
   }
 
   /**
+   * @returns the number of cells.
+   */
+  inline int get_num_cells() { return this->cell_end - this->cell_start; }
+
+  /**
    * Remove the negation from point indices which DMPlex uses to denote global
    * vs local indices.
    *

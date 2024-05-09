@@ -14,8 +14,25 @@ namespace NESO::Particles {
 template <typename KEY_TYPE, typename VALUE_TYPE> struct LookupTableNode {
   typedef int BOOL_TYPE;
   int size;
-  BOOL_TYPE const *RESTRICT d_entry_exists;
-  VALUE_TYPE const *RESTRICT d_entries;
+  BOOL_TYPE const *d_entry_exists;
+  VALUE_TYPE const *d_entries;
+
+  /**
+   *  For a given key find and return the stored value.
+   *
+   *  @param[in] key Input global key to retrieve value for.
+   *  @param[in, out] value_ptr Pointer to populate with pointer to stored data.
+   *  @returns True if the key is found in the tree otherwise false.
+   */
+  inline bool get(const KEY_TYPE key, VALUE_TYPE const **value_ptr) const {
+    const bool exists = d_entry_exists[key] > 0;
+    if (exists) {
+      *value_ptr = &d_entries[key];
+      return true;
+    } else {
+      return false;
+    }
+  }
 
   /**
    *  For a given key find and return the stored value.
@@ -24,14 +41,13 @@ template <typename KEY_TYPE, typename VALUE_TYPE> struct LookupTableNode {
    *  @param[in, out] value Pointer to value, only valid if the key is found.
    *  @returns True if the key is found in the tree otherwise false.
    */
-  inline bool get(const KEY_TYPE key, VALUE_TYPE *value) {
-    const bool exists = d_entry_exists[key] > 0;
+  inline bool get(const KEY_TYPE key, VALUE_TYPE *value) const {
+    VALUE_TYPE const *ptr;
+    const bool exists = this->get(key, &ptr);
     if (exists) {
-      *value = d_entries[key];
-      return true;
-    } else {
-      return false;
+      *value = *ptr;
     }
+    return exists;
   }
 };
 

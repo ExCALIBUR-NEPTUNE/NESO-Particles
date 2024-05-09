@@ -6,8 +6,8 @@
 #include "../../loop/particle_loop.hpp"
 #include "../../particle_group.hpp"
 #include "dmplex_interface.hpp"
-#include "particle_cell_mapping/dmplex_host_mapper.hpp"
 #include "particle_cell_mapping/dmplex_2d_mapper.hpp"
+#include "particle_cell_mapping/dmplex_host_mapper.hpp"
 #include <deque>
 
 namespace NESO::Particles::PetscInterface {
@@ -30,7 +30,7 @@ public:
       : sycl_target(sycl_target), dmplex_interface(dmplex_interface) {
 
     this->ndim = dmplex_interface->get_ndim();
-    if (this->ndim == 2){
+    if (this->ndim == 2) {
       this->mapper_2d =
           std::make_unique<DMPlex2DMapper>(sycl_target, dmplex_interface);
     } else {
@@ -46,7 +46,7 @@ public:
    */
   virtual inline void map(ParticleGroup &particle_group,
                           const int map_cell = -1) override {
-    if (this->mapper_2d){
+    if (this->mapper_2d) {
       this->mapper_2d->map(particle_group, map_cell);
     } else {
       this->mapper_host->map(particle_group, map_cell);
