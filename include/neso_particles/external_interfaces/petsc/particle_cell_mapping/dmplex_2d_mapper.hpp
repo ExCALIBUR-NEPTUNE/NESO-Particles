@@ -241,24 +241,24 @@ public:
             const REAL *vertices = cell_data->vertices;
 
             for (int facex = 0; facex < num_vertices; facex++) {
-              REAL x_i = vertices[faces[2 * facex + 0] * 2 + 0];
-              REAL y_i = vertices[faces[2 * facex + 0] * 2 + 1];
-              REAL x_j = vertices[faces[2 * facex + 1] * 2 + 0];
-              REAL y_j = vertices[faces[2 * facex + 1] * 2 + 1];
+              REAL xi = vertices[faces[2 * facex + 0] * 2 + 0];
+              REAL yi = vertices[faces[2 * facex + 0] * 2 + 1];
+              REAL xj = vertices[faces[2 * facex + 1] * 2 + 0];
+              REAL yj = vertices[faces[2 * facex + 1] * 2 + 1];
               // Is the point in a corner
-              if ((x0 == x_j) && (x1 == y_j)) {
+              if ((x0 == xj) && (x1 == yj)) {
                 num_crossings = 1;
                 break;
               }
-              if ((y_j > x1) != (y_i > x1)) {
-                REAL slope =
-                    (x0 - x_j) * (y_i - y_j) - (x_i - x_j) * (x1 - y_j);
-                if (slope == 0) {
-                  // Point is in a corner
+              if ((yj > x1) != (yi > x1)) {
+                REAL determinate =
+                    (x0 - xj) * (yi - yj) - (xi - xj) * (x1 - yj);
+                if (determinate == 0) {
+                  // Point is on line
                   num_crossings = 1;
                   break;
                 }
-                if ((slope < 0) != (y_i < y_j)) {
+                if ((determinate < 0) != (yi < yj)) {
                   num_crossings++;
                 }
               }

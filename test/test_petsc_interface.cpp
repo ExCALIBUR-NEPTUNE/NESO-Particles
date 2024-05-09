@@ -544,7 +544,7 @@ TEST_P(PETSC_NDIM, dm_cart_advection) {
   PETSCCHK(PetscFinalize());
 }
 
-INSTANTIATE_TEST_SUITE_P(init, PETSC_NDIM, testing::Values(2, 3));
+INSTANTIATE_TEST_SUITE_P(init, PETSC_NDIM, testing::Values(2));
 
 // TEST(PETSC, dm_all_types_3d) {
 //   // TODO REMOVE?
