@@ -170,6 +170,8 @@ public:
   }
 };
 
+typedef std::shared_ptr<SubGroupSelector> SubGroupSelectorSharedPtr;
+
 } // namespace ParticleSubGroupImplementation
 
 // This allows the ParticleLoop to access the implementation methods.
@@ -193,7 +195,7 @@ class ParticleSubGroup {
 protected:
   bool is_static;
   ParticleGroupSharedPtr particle_group;
-  ParticleSubGroupImplementation::SubGroupSelector selector;
+  ParticleSubGroupImplementation::SubGroupSelectorSharedPtr selector;
   ParticleSubGroupImplementation::SubGroupSelector::SelectionT selection;
 
   int npart_local;
@@ -227,8 +229,9 @@ protected:
     check_sym_type(arg.obj);
   }
 
-  ParticleSubGroup(ParticleSubGroupImplementation::SubGroupSelector selector)
-      : particle_group(selector.particle_group), selector(selector),
+  ParticleSubGroup(
+      ParticleSubGroupImplementation::SubGroupSelectorSharedPtr selector)
+      : particle_group(selector->particle_group), selector(selector),
         is_whole_particle_group(false), is_static(false) {}
 
   /**
@@ -243,7 +246,7 @@ protected:
 
     INT index = 0;
     for (int cellx = 0; cellx < cell_count; cellx++) {
-      auto cell_data = this->selector.map_cell_to_particles->get_cell(cellx);
+      auto cell_data = this->selector->map_cell_to_particles->get_cell(cellx);
       const int nrow = cell_data->nrow;
       for (int rowx = 0; rowx < nrow; rowx++) {
         cells[index] = cellx;
@@ -262,7 +265,7 @@ protected:
                "Explicitly creating the ParticleSubGroup when the sub-group is "
                "the entire ParticleGroup should never be required.");
 
-    this->selection = this->selector.get();
+    this->selection = this->selector->get();
     this->npart_local = this->selection.npart_local;
   }
 
@@ -306,8 +309,9 @@ public:
    */
   template <typename PARENT, typename KERNEL, typename... ARGS>
   ParticleSubGroup(std::shared_ptr<PARENT> parent, KERNEL kernel, ARGS... args)
-      : ParticleSubGroup(ParticleSubGroupImplementation::SubGroupSelector(
-            parent, kernel, args...)) {
+      : ParticleSubGroup(
+            std::make_shared<ParticleSubGroupImplementation::SubGroupSelector>(
+                parent, kernel, args...)) {
     (check_read_access(args), ...);
     this->add_parent_dependencies(parent);
   }
@@ -476,7 +480,7 @@ public:
                    "Layer index not in range.");
 
         const INT parent_layer =
-            this->selector.map_cell_to_particles->get_value(cellx, layerx, 0);
+            this->selector->map_cell_to_particles->get_value(cellx, layerx, 0);
         inner_layers.push_back(parent_layer);
       }
       return this->particle_group->get_particles(cells, inner_layers);
