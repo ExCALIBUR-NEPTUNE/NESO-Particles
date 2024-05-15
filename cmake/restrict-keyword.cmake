@@ -37,4 +37,3 @@ if(NOT DEFINED RESTRICT)
 endif()
 
 message(STATUS "Using restrict keyword: " ${RESTRICT})
-add_compile_definitions(RESTRICT=${RESTRICT})

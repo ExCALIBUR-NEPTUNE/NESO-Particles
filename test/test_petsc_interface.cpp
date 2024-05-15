@@ -565,7 +565,7 @@ TEST(PETSC, foo_internal) {
   // TODO REMOVE?
   PETSCCHK(PetscInitializeNoArguments());
   DM dm;
-  
+
   const int ndim = 2;
   const int mesh_size = (ndim == 2) ? 32 : 16;
   PetscInt faces[3] = {mesh_size, mesh_size, mesh_size};
@@ -585,19 +585,18 @@ TEST(PETSC, foo_internal) {
     nprint(lx, mesh->dmh->get_label_name(lx));
   }
 
-  //auto map_face = mesh->dmh->get_face_sets();
-  //for (auto &item : map_face) {
-  //  nprint(item.first);
-  //  for (auto px : item.second) {
-  //    nprint("\t", px);
-  //  }
-  //}
+  // auto map_face = mesh->dmh->get_face_sets();
+  // for (auto &item : map_face) {
+  //   nprint(item.first);
+  //   for (auto px : item.second) {
+  //     nprint("\t", px);
+  //   }
+  // }
 
   mesh->free();
   PETSCCHK(DMDestroy(&dm));
   PETSCCHK(PetscFinalize());
 }
-
 
 TEST(PETSC, foo_gmsh) {
   // TODO REMOVE?
@@ -619,13 +618,13 @@ TEST(PETSC, foo_gmsh) {
     nprint(lx, mesh->dmh->get_label_name(lx));
   }
 
-  //auto map_face = mesh->dmh->get_face_sets();
-  //for (auto &item : map_face) {
-  //  nprint(item.first);
-  //  for (auto px : item.second) {
-  //    nprint("\t", px);
-  //  }
-  //}
+  // auto map_face = mesh->dmh->get_face_sets();
+  // for (auto &item : map_face) {
+  //   nprint(item.first);
+  //   for (auto px : item.second) {
+  //     nprint("\t", px);
+  //   }
+  // }
 
   mesh->free();
   PETSCCHK(DMDestroy(&dm));

@@ -160,6 +160,9 @@ if(NESO_PARTICLES_ENABLE_HDF5)
   endif()
 endif()
 
+# set the restrict keyword
+target_compile_definitions(NESO-Particles INTERFACE RESTRICT=${RESTRICT})
+
 # now look for PETSc
 find_package(PkgConfig)
 if(PKG_CONFIG_FOUND)
