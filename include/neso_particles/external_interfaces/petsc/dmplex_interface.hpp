@@ -202,7 +202,8 @@ public:
   std::shared_ptr<DMPlexHelper> dmh;
   std::shared_ptr<DMPlexHelper> dmh_halo;
   PetscInt dm_halo_num_cells;
-  std::map<PetscInt, std::tuple<int, PetscInt>> map_local_lid_remote_lid;
+  std::map<PetscInt, std::tuple<int, PetscInt, PetscInt>>
+      map_local_lid_remote_lid;
   ~DMPlexInterface(){
 
   };
@@ -273,6 +274,157 @@ public:
   };
   virtual inline std::shared_ptr<MeshHierarchy> get_mesh_hierarchy() override {
     return this->mesh_hierarchy;
+  }
+
+  /**
+   * TODO
+   */
+  inline bool validate_halos() {
+
+    bool valid = true;
+    auto lambda_assert_true = [&](const bool cond) { valid = valid && cond; };
+    auto lambda_assert_eq = [&](const auto a, const auto b) {
+      valid = valid && (a == b);
+    };
+
+    auto dm = this->dmh->dm;
+    int rank, size;
+    MPICHK(MPI_Comm_rank(this->comm, &rank));
+    MPICHK(MPI_Comm_rank(this->comm, &size));
+
+    PetscInt point_start, point_end;
+    PETSCCHK(DMPlexGetChart(dm, &point_start, &point_end));
+
+    const int num_local_points = point_end - point_start;
+    int max_global_point = 0;
+    for (int ix = 0; ix < num_local_points; ix++) {
+      max_global_point =
+          std::max(max_global_point,
+                   this->dmh->get_point_global_index(ix + point_start));
+    }
+    int num_points;
+    MPICHK(MPI_Allreduce(&max_global_point, &num_points, 1, MPI_INT, MPI_MAX,
+                         MPI_COMM_WORLD));
+    num_points++;
+
+    const int num_components = 1 + 1 + 4 + 1;
+    auto I = [=](const int rx, const int cx) {
+      return rx * num_components + cx;
+    };
+    const int num_components_real = 8;
+    auto F = [=](const int rx, const int cx) {
+      return rx * num_components_real + cx;
+    };
+
+    std::vector<int> int_data(num_points * num_components);
+    std::vector<int> int_rdata(num_points * num_components);
+    std::fill(int_rdata.begin(), int_rdata.end(),
+              std::numeric_limits<int>::lowest());
+    std::vector<double> real_data(num_points * num_components_real);
+    std::vector<double> real_rdata(num_points * num_components_real);
+    std::fill(real_rdata.begin(), real_rdata.end(),
+              std::numeric_limits<double>::lowest());
+
+    for (int ix = 0; ix < num_local_points; ix++) {
+      PetscInt point = ix + point_start;
+      const int global_point = this->dmh->get_point_global_index(point);
+
+      // INT data
+      // Get the point depth
+      PetscInt depth;
+      PETSCCHK(DMPlexGetPointDepth(dm, point, &depth));
+
+      int_data.at(I(global_point, 0)) = depth;
+
+      PetscInt cone_size;
+      PETSCCHK(DMPlexGetConeSize(dm, point, &cone_size));
+      int_data.at(I(global_point, 1)) = cone_size;
+
+      lambda_assert_true(cone_size < 5);
+
+      const PetscInt *cone;
+      PETSCCHK(DMPlexGetCone(dm, point, &cone));
+
+      for (int cx = 0; cx < cone_size; cx++) {
+        int_data.at(I(global_point, 2 + cx)) =
+            this->dmh->get_point_global_index(cone[cx]);
+      }
+
+      int_data.at(I(global_point, 6)) = rank;
+
+      // REAL data
+      PetscBool is_dg;
+      PetscInt num_coords;
+      const PetscScalar *array;
+      PetscScalar *coords = nullptr;
+      PETSCCHK(DMPlexGetCellCoordinates(dm, point, &is_dg, &num_coords, &array,
+                                        &coords));
+      lambda_assert_true(num_coords <= 8);
+      for (int cx = 0; cx < num_coords; cx++) {
+        real_data.at(F(global_point, cx)) = coords[cx];
+      }
+      PETSCCHK(DMPlexRestoreCellCoordinates(dm, point, &is_dg, &num_coords,
+                                            &array, &coords));
+    }
+
+    MPICHK(MPI_Allreduce(int_data.data(), int_rdata.data(), int_rdata.size(),
+                         MPI_INT, MPI_MAX, MPI_COMM_WORLD));
+    MPICHK(MPI_Allreduce(real_data.data(), real_rdata.data(), real_rdata.size(),
+                         MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD));
+
+    if (this->dmh_halo && rank) {
+      // create map from halo points to original global points
+      std::map<PetscInt, PetscInt> map_halo_to_global;
+      std::map<PetscInt, int> map_halo_to_rank;
+      for (auto ix : this->map_local_lid_remote_lid) {
+        map_halo_to_global[ix.first] = std::get<2>(ix.second);
+        map_halo_to_rank[ix.first] = std::get<0>(ix.second);
+      }
+
+      auto dm_halo = this->dmh_halo->dm;
+      PetscInt hpoint_start, hpoint_end;
+      PETSCCHK(DMPlexGetChart(dm_halo, &hpoint_start, &hpoint_end));
+
+      for (int hpoint = hpoint_start; hpoint < hpoint_end; hpoint++) {
+        // Original global point index
+        const PetscInt global_point = map_halo_to_global.at(hpoint);
+
+        PetscInt depth;
+        PETSCCHK(DMPlexGetPointDepth(dm_halo, hpoint, &depth));
+        PetscInt cone_size;
+        PETSCCHK(DMPlexGetConeSize(dm_halo, hpoint, &cone_size));
+        const PetscInt *cone;
+        PETSCCHK(DMPlexGetCone(dm_halo, hpoint, &cone));
+
+        lambda_assert_eq(int_rdata.at(I(global_point, 0)), depth);
+        lambda_assert_eq(int_rdata.at(I(global_point, 1)), cone_size);
+        for (int cx = 0; cx < cone_size; cx++) {
+          lambda_assert_eq(int_rdata.at(I(global_point, 2 + cx)),
+                           map_halo_to_global.at(cone[cx]));
+        }
+
+        const int rank_held = map_halo_to_rank.at(hpoint);
+        if (depth == 2) {
+          lambda_assert_eq(rank_held, int_rdata.at(I(global_point, 6)));
+        }
+
+        // REAL data
+        PetscBool is_dg;
+        PetscInt num_coords;
+        const PetscScalar *array;
+        PetscScalar *coords = nullptr;
+        PETSCCHK(DMPlexGetCellCoordinates(dm_halo, hpoint, &is_dg, &num_coords,
+                                          &array, &coords));
+        lambda_assert_true(num_coords <= 8);
+        for (int cx = 0; cx < num_coords; cx++) {
+          lambda_assert_eq(real_rdata.at(F(global_point, cx)), coords[cx]);
+        }
+        PETSCCHK(DMPlexRestoreCellCoordinates(dm_halo, hpoint, &is_dg,
+                                              &num_coords, &array, &coords));
+      }
+    }
+
+    return valid;
   }
 };
 

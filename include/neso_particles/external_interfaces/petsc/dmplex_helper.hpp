@@ -174,15 +174,18 @@ struct HaloDMIndexMapper {
 /**
  * TODO
  */
-inline PetscInt dm_from_serialised_cells(
-    std::list<DMPlexCellSerialise> &serialised_cells, DM &dm_prototype, DM &dm,
-    std::map<PetscInt, std::tuple<int, PetscInt>> &map_local_lid_remote_lid) {
+inline PetscInt
+dm_from_serialised_cells(std::list<DMPlexCellSerialise> &serialised_cells,
+                         DM &dm_prototype, DM &dm,
+                         std::map<PetscInt, std::tuple<int, PetscInt, PetscInt>>
+                             &map_local_lid_remote_lid) {
 
   const PetscInt num_cells = serialised_cells.size();
   std::vector<CellSTDRepresentation> std_rep_cells(num_cells);
   int index = 0;
   for (auto &sc : serialised_cells) {
     std_rep_cells.at(index).deserialise(sc.cell_representation);
+    index++;
   }
 
   HaloDMIndexMapper index_mapper(std_rep_cells);
@@ -195,11 +198,12 @@ inline PetscInt dm_from_serialised_cells(
     const int remote_rank = sc.owning_rank;
     const auto local_local_id =
         index_mapper.get_local_point_index(global_index);
-    map_local_lid_remote_lid[local_local_id] = {remote_rank, remote_local_id};
+    map_local_lid_remote_lid[local_local_id] = {remote_rank, remote_local_id,
+                                                global_index};
   }
 
   // Create the new DMPlex.
-  PETSCCHK(DMCreate(MPI_COMM_WORLD, &dm));
+  PETSCCHK(DMCreate(MPI_COMM_SELF, &dm));
   PETSCCHK(DMSetType(dm, DMPLEX));
 
   if (num_cells > 0) {
@@ -238,6 +242,9 @@ inline PetscInt dm_from_serialised_cells(
           cone_local.push_back(index_mapper.get_local_point_index(gx));
         }
         PETSCCHK(DMPlexSetCone(dm, local_point, cone_local.data()));
+        if (!map_local_lid_remote_lid.count(local_point)) {
+          map_local_lid_remote_lid[local_point] = {-1, -1, global_point};
+        }
       }
     }
 
@@ -291,6 +298,10 @@ protected:
     NESOASSERT((cell > -1) && (cell < (this->cell_end - this->cell_start)),
                "Bad cell index passed.");
   }
+  inline void check_valid_petsc_cell(const PetscInt cell) const {
+    NESOASSERT((this->cell_start <= cell) && (cell < this->cell_end),
+               "Bad DMPlex cell index passed.");
+  }
 
   ExternalCommon::BoundingBoxSharedPtr bounding_box;
 
@@ -308,6 +319,7 @@ public:
    * TODO
    */
   inline DMPlexCellSerialise get_copyable_cell(const PetscInt cell) {
+    this->check_valid_petsc_cell(cell);
     DMPlexCellSerialise cs;
 
     int rank;
@@ -325,7 +337,7 @@ public:
     std::vector<std::byte> cell_representation;
     spec.serialise(cell_representation);
 
-    cs.cell_local_id = cell;
+    cs.cell_local_id = this->get_local_cell_index(cell);
     cs.cell_global_id = get_point_global_index(cell);
     cs.owning_rank = rank;
     cs.cell_type = cell_type;
@@ -346,6 +358,9 @@ public:
     PETSCCHK(DMGetCoordinateDim(this->dm, &this->ndim));
     PETSCCHK(DMPlexGetHeightStratum(this->dm, 0, &this->cell_start,
                                     &this->cell_end));
+
+    int num_cells = this->get_num_cells();
+    NESOASSERT(num_cells, "A rank has zero cells.");
     PETSCCHK(DMPlexGetCellNumbering(this->dm, &this->global_cell_numbers));
     PETSCCHK(DMPlexGetVertexNumbering(this->dm, &this->global_vertex_numbers));
     PETSCCHK(DMPlexCreatePointNumbering(this->dm, &this->global_point_numbers));
@@ -355,6 +370,32 @@ public:
    * @returns the number of cells.
    */
   inline int get_num_cells() { return this->cell_end - this->cell_start; }
+
+  /**
+   * Convert a local cell id into a DMPlex cell id.
+   *
+   * @param local_index Local index in [0, num_cells).
+   * @returns DMPlex point index in [cell_start, cell_end).
+   */
+  inline PetscInt get_dmplex_cell_index(const PetscInt local_index) {
+    this->check_valid_cell(local_index);
+    const auto index = this->cell_start + local_index;
+    this->check_valid_petsc_cell(index);
+    return index;
+  }
+
+  /**
+   * Convert a DMPlex cell id into a local cell id.
+   *
+   * @param petsc_index Local index in [cell_start, cell_end).
+   * @returns Local point index in [0, num_cells).
+   */
+  inline PetscInt get_local_cell_index(const PetscInt petsc_index) {
+    this->check_valid_petsc_cell(petsc_index);
+    const auto index = petsc_index - this->cell_start;
+    this->check_valid_cell(index);
+    return index;
+  }
 
   /**
    * Remove the negation from point indices which DMPlex uses to denote global
@@ -430,7 +471,8 @@ public:
     // Create the bounding box on first use.
     if (!this->bounding_box) {
       auto bb = std::make_shared<ExternalCommon::BoundingBox>();
-      for (int cellx = this->cell_start; cellx < this->cell_end; cellx++) {
+      const auto num_cells = this->get_num_cells();
+      for (int cellx = 0; cellx < num_cells; cellx++) {
         bb->expand(this->get_cell_bounding_box(cellx));
       }
       this->bounding_box = bb;

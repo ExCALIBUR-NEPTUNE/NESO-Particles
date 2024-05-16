@@ -81,15 +81,16 @@ public:
 
     // Helper lambda to populate the cell data
     auto lambda_populate_cell_data =
-        [&](DM &dm, PetscInt c, const int owning_rank,
+        [&](DM &dm, PetscInt petsc_index, const int owning_rank,
             const int local_id) -> Implementation2DLinear::Linear2DData {
       Implementation2DLinear::Linear2DData tmp_data;
       PetscBool is_dg;
       PetscInt num_coords;
       const PetscScalar *array;
       PetscScalar *coords = nullptr;
-      PETSCCHK(DMPlexGetCellCoordinates(dm, c, &is_dg, &num_coords, &array,
-                                        &coords));
+
+      PETSCCHK(DMPlexGetCellCoordinates(dm, petsc_index, &is_dg, &num_coords,
+                                        &array, &coords));
       for (int cx = 0; cx < num_coords; cx++) {
         tmp_data.vertices[cx] = coords[cx];
       }
@@ -118,25 +119,26 @@ public:
       }
       tmp_data.owning_rank = owning_rank;
       tmp_data.local_id = local_id;
-      PETSCCHK(DMPlexRestoreCellCoordinates(dm, c, &is_dg, &num_coords, &array,
-                                            &coords));
+      PETSCCHK(DMPlexRestoreCellCoordinates(dm, petsc_index, &is_dg,
+                                            &num_coords, &array, &coords));
       return tmp_data;
     };
 
     // Local cells
     int index = 0;
-    int cell_start = dmplex_interface->dmh->cell_start;
-    int cell_end = dmplex_interface->dmh->cell_end;
+    const int num_cells_local = dmplex_interface->dmh->get_num_cells();
     std::vector<int> overlay_cells;
-    for (int cx = cell_start; cx < cell_end; cx++) {
+    for (int cx = 0; cx < num_cells_local; cx++) {
       auto bb = dmplex_interface->dmh->get_cell_bounding_box(cx);
       this->overlay_mesh->get_intersecting_cells(bb, overlay_cells);
       for (auto &ox : overlay_cells) {
         map_overlay_cells[ox].push_back(index);
       }
       // Record the description of this cell
+      const PetscInt petsc_index =
+          dmplex_interface->dmh->get_dmplex_cell_index(cx);
       auto tmp_data =
-          lambda_populate_cell_data(dmplex_interface->dmh->dm, cx,
+          lambda_populate_cell_data(dmplex_interface->dmh->dm, petsc_index,
                                     sycl_target->comm_pair.rank_parent, index);
       this->cell_data->add(index, tmp_data);
       index++;
@@ -144,18 +146,25 @@ public:
 
     // Halo cells
     if (dmh_halo) {
-      cell_start = dmh_halo->cell_start;
-      cell_end = dmh_halo->cell_end;
-      for (int cx = cell_start; cx < cell_end; cx++) {
+      const int num_cells_halo = dmplex_interface->dmh_halo->get_num_cells();
+      for (int cx = 0; cx < num_cells_halo; cx++) {
         auto bb = dmh_halo->get_cell_bounding_box(cx);
         this->overlay_mesh->get_intersecting_cells(bb, overlay_cells);
         for (auto &ox : overlay_cells) {
           map_overlay_cells[ox].push_back(index);
         }
         // Record the description of this cell
-        auto id_rank = dmplex_interface->map_local_lid_remote_lid.at(cx);
-        auto tmp_data = lambda_populate_cell_data(
-            dmh_halo->dm, cx, std::get<0>(id_rank), std::get<1>(id_rank));
+
+        const PetscInt point_index =
+            dmplex_interface->dmh_halo->get_dmplex_cell_index(cx);
+        auto id_rank =
+            dmplex_interface->map_local_lid_remote_lid.at(point_index);
+        const PetscInt petsc_index =
+            dmplex_interface->dmh_halo->get_dmplex_cell_index(cx);
+
+        auto tmp_data = lambda_populate_cell_data(dmh_halo->dm, petsc_index,
+                                                  std::get<0>(id_rank),
+                                                  std::get<1>(id_rank));
         this->cell_data->add(index, tmp_data);
         index++;
       }
