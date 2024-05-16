@@ -372,7 +372,7 @@ public:
     MPICHK(MPI_Allreduce(real_data.data(), real_rdata.data(), real_rdata.size(),
                          MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD));
 
-    if (this->dmh_halo && rank) {
+    if (this->dmh_halo) {
       // create map from halo points to original global points
       std::map<PetscInt, PetscInt> map_halo_to_global;
       std::map<PetscInt, int> map_halo_to_rank;
