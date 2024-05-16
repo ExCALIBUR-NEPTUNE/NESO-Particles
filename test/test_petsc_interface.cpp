@@ -563,7 +563,7 @@ TEST(PETSC, dm_halos) {
   auto mesh =
       std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
 
-  ASSERT_TRUE(mesh->validate_halos());
+  ASSERT_TRUE(mesh->validate_halos(false));
 
   mesh->free();
   PETSCCHK(DMDestroy(&dm));

@@ -279,12 +279,20 @@ public:
   /**
    * TODO
    */
-  inline bool validate_halos() {
+  inline bool validate_halos(const bool fatal = true) {
 
     bool valid = true;
-    auto lambda_assert_true = [&](const bool cond) { valid = valid && cond; };
+    auto lambda_assert_true = [&](const bool cond) {
+      valid = valid && cond;
+      if (fatal) {
+        NESOASSERT(cond, "Conditional failed in validate_halos.");
+      }
+    };
     auto lambda_assert_eq = [&](const auto a, const auto b) {
       valid = valid && (a == b);
+      if (fatal) {
+        NESOASSERT(a == b, "Conditional failed in validate_halos.");
+      }
     };
 
     auto dm = this->dmh->dm;
