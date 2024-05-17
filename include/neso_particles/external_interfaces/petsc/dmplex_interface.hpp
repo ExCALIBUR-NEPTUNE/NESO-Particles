@@ -191,6 +191,18 @@ protected:
                                  this->map_local_lid_remote_lid);
     if (this->dm_halo_num_cells) {
       this->dmh_halo = std::make_shared<DMPlexHelper>(this->comm, dm_halo);
+      std::set<int> remote_ranks;
+      int size;
+      MPICHK(MPI_Comm_size(this->comm, &size));
+      for (auto &ix : this->map_local_lid_remote_lid) {
+        const int remote_rank = std::get<0>(ix.second);
+        if (remote_rank > -1) {
+          NESOASSERT(remote_rank < size, "Bad remote rank.");
+          remote_ranks.insert(remote_rank);
+        }
+      }
+      this->neighbour_ranks.insert(this->neighbour_ranks.end(),
+                                   remote_ranks.begin(), remote_ranks.end());
     } else {
       this->dmh_halo = nullptr;
     }

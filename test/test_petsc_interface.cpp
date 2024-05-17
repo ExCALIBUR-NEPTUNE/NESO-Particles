@@ -393,7 +393,7 @@ TEST_P(PETSC_NDIM, dm_local_mapping) {
   DM dm;
 
   PetscInt ndim = GetParam();
-  const int mesh_size = (ndim == 2) ? 32 : 16;
+  const int mesh_size = (ndim == 2) ? 31 : 17;
   PetscInt faces[3] = {mesh_size, mesh_size, mesh_size};
 
   PETSCCHK(DMPlexCreateBoxMesh(PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces,
@@ -441,9 +441,11 @@ TEST_P(PETSC_NDIM, dm_local_mapping) {
 
   for (int cellx = 0; cellx < cell_count; cellx++) {
     auto CELL_ID = A->get_cell(Sym<INT>("CELL_ID"), cellx);
+    auto RANK = A->get_cell(Sym<INT>("NESO_MPI_RANK"), cellx);
     auto nrow = CELL_ID->nrow;
     for (int rx = 0; rx < nrow; rx++) {
       ASSERT_EQ(CELL_ID->at(rx, 0), rx);
+      ASSERT_EQ(RANK->at(rx, 1), sycl_target->comm_pair.rank_parent);
     }
   }
 
