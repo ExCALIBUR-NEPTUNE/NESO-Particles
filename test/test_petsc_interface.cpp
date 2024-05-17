@@ -638,6 +638,8 @@ TEST(PETSC, foo_gmsh) {
   auto mesh =
       std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
 
+  ASSERT_TRUE(mesh->validate_halos());
+
   auto num_labels = mesh->dmh->get_num_labels();
   nprint("num_labels:", num_labels);
   for (int lx = 0; lx < num_labels; lx++) {

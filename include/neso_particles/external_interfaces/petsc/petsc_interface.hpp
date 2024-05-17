@@ -4,6 +4,7 @@
 #ifdef NESO_PARTICLES_PETSC
 #include "dmplex_interface.hpp"
 #include "dmplex_local_mapper.hpp"
+#include "dmplex_utility.hpp"
 #include "petsc_common.hpp"
 #endif
 

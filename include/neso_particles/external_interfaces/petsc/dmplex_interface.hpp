@@ -326,10 +326,14 @@ public:
 
     std::vector<int> int_data(num_points * num_components);
     std::vector<int> int_rdata(num_points * num_components);
+    std::fill(int_data.begin(), int_data.end(),
+              std::numeric_limits<int>::lowest());
     std::fill(int_rdata.begin(), int_rdata.end(),
               std::numeric_limits<int>::lowest());
     std::vector<double> real_data(num_points * num_components_real);
     std::vector<double> real_rdata(num_points * num_components_real);
+    std::fill(real_data.begin(), real_data.end(),
+              std::numeric_limits<double>::lowest());
     std::fill(real_rdata.begin(), real_rdata.end(),
               std::numeric_limits<double>::lowest());
 
@@ -399,6 +403,7 @@ public:
 
         PetscInt depth;
         PETSCCHK(DMPlexGetPointDepth(dm_halo, hpoint, &depth));
+
         PetscInt cone_size;
         PETSCCHK(DMPlexGetConeSize(dm_halo, hpoint, &cone_size));
         const PetscInt *cone;
@@ -424,9 +429,15 @@ public:
         PETSCCHK(DMPlexGetCellCoordinates(dm_halo, hpoint, &is_dg, &num_coords,
                                           &array, &coords));
         lambda_assert_true(num_coords <= 8);
-        for (int cx = 0; cx < num_coords; cx++) {
-          lambda_assert_eq(real_rdata.at(F(global_point, cx)), coords[cx]);
+
+        std::set<std::tuple<double, double>> correct, to_test;
+        for (int cx = 0; cx < num_coords; cx += 2) {
+          correct.insert({real_rdata.at(F(global_point, cx)),
+                          real_rdata.at(F(global_point, cx + 1))});
+          to_test.insert({coords[cx], coords[cx + 1]});
         }
+        lambda_assert_eq(to_test, correct);
+
         PETSCCHK(DMPlexRestoreCellCoordinates(dm_halo, hpoint, &is_dg,
                                               &num_coords, &array, &coords));
       }
