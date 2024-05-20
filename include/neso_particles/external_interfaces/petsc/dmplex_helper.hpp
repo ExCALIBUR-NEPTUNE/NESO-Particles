@@ -16,13 +16,14 @@ namespace NESO::Particles::PetscInterface {
  *
  * @param[in, out] dm DMPlex to distribute, original DMPlex is destroyed.
  * @param[in] comm MPI communicator, default MPI_COMM_WORLD.
+ * @param[in] overlap Optional overlap to pass to PETSc (default 0).
  */
-inline void generic_distribute(DM *dm, MPI_Comm comm = MPI_COMM_WORLD) {
+inline void generic_distribute(DM *dm, MPI_Comm comm = MPI_COMM_WORLD, const PetscInt overlap = 0) {
   int size;
   MPICHK(MPI_Comm_size(comm, &size));
   if (size > 1) {
     DM dm_out;
-    PETSCCHK(DMPlexDistribute(*dm, 0, nullptr, &dm_out));
+    PETSCCHK(DMPlexDistribute(*dm, overlap, nullptr, &dm_out));
     NESOASSERT(dm_out, "Could not distribute mesh.");
     PETSCCHK(DMDestroy(dm));
     *dm = dm_out;
@@ -106,7 +107,8 @@ struct HaloDMIndexMapper {
    * @returns Local point index for a new DM.
    */
   inline PetscInt get_local_point_index(const PetscInt point) {
-    return this->map_global_to_local.at(point);
+    const auto local_point = this->map_global_to_local.at(point);
+    return local_point;
   }
 
   /**
@@ -117,6 +119,8 @@ struct HaloDMIndexMapper {
     this->chart_end = 0;
 
     if (cells.size() > 0) {
+      nprint("num input cells:", cells.size());
+
       std::map<PetscInt, std::set<PetscInt>> map_depth_to_points;
       for (auto &cx : cells) {
         for (auto &px : cx.point_specs) {
@@ -174,7 +178,7 @@ struct HaloDMIndexMapper {
 /**
  * TODO
  */
-inline PetscInt
+inline bool
 dm_from_serialised_cells(std::list<DMPlexCellSerialise> &serialised_cells,
                          DM &dm_prototype, DM &dm,
                          std::map<PetscInt, std::tuple<int, PetscInt, PetscInt>>
@@ -203,7 +207,7 @@ dm_from_serialised_cells(std::list<DMPlexCellSerialise> &serialised_cells,
   }
 
   // Create the new DMPlex.
-  PETSCCHK(DMCreate(MPI_COMM_SELF, &dm));
+  PETSCCHK(DMCreate(PETSC_COMM_SELF, &dm));
   PETSCCHK(DMSetType(dm, DMPLEX));
 
   if (num_cells > 0) {
@@ -217,33 +221,44 @@ dm_from_serialised_cells(std::list<DMPlexCellSerialise> &serialised_cells,
 
     PETSCCHK(
         DMPlexSetChart(dm, index_mapper.chart_start, index_mapper.chart_end));
-
+    
+    std::set<PetscInt> points_set;
     for (auto &std_cell : std_rep_cells) {
       for (auto &point_spec : std_cell.point_specs) {
         const PetscInt global_point = point_spec.first;
-        const PetscInt local_point =
-            index_mapper.get_local_point_index(global_point);
-        const PetscInt cone_size = point_spec.second.size();
-        PETSCCHK(DMPlexSetConeSize(dm, local_point, cone_size));
+        if (!points_set.count(global_point)){
+          points_set.insert(global_point);
+          const PetscInt local_point =
+              index_mapper.get_local_point_index(global_point);
+          const PetscInt cone_size = point_spec.second.size();
+          nprint("cone size:", local_point, cone_size);
+          PETSCCHK(DMPlexSetConeSize(dm, local_point, cone_size));
+        }
       }
     }
 
     PETSCCHK(DMSetUp(dm));
     std::vector<PetscInt> cone_local;
+    points_set.clear();
     for (auto &std_cell : std_rep_cells) {
       for (auto &point_spec : std_cell.point_specs) {
         const PetscInt global_point = point_spec.first;
-        const PetscInt local_point =
-            index_mapper.get_local_point_index(global_point);
-        auto &cone_global = point_spec.second;
-        cone_local.clear();
-        cone_local.reserve(cone_global.size());
-        for (auto gx : cone_global) {
-          cone_local.push_back(index_mapper.get_local_point_index(gx));
-        }
-        PETSCCHK(DMPlexSetCone(dm, local_point, cone_local.data()));
-        if (!map_local_lid_remote_lid.count(local_point)) {
-          map_local_lid_remote_lid[local_point] = {-1, -1, global_point};
+        if (!points_set.count(global_point)){
+          points_set.insert(global_point);
+          const PetscInt local_point =
+              index_mapper.get_local_point_index(global_point);
+          auto &cone_global = point_spec.second;
+          cone_local.clear();
+          cone_local.reserve(cone_global.size());
+          nprint("setting:", local_point);
+          for (auto gx : cone_global) {
+            nprint("\tcone:", index_mapper.get_local_point_index(gx));
+            cone_local.push_back(index_mapper.get_local_point_index(gx));
+          }
+          PETSCCHK(DMPlexSetCone(dm, local_point, cone_local.data()));
+          if (!map_local_lid_remote_lid.count(local_point)) {
+            map_local_lid_remote_lid[local_point] = {-1, -1, global_point};
+          }
         }
       }
     }
@@ -277,16 +292,48 @@ dm_from_serialised_cells(std::list<DMPlexCellSerialise> &serialised_cells,
     PETSCCHK(DMSetCoordinatesLocal(dm, coordinates));
     PETSCCHK(VecDestroy(&coordinates));
 
-    DM dm_interpolated;
-    PETSCCHK(DMPlexInterpolate(dm, &dm_interpolated));
-    PETSCCHK(DMDestroy(&dm));
-    dm = dm_interpolated;
+    //DM dm_interpolated;
+    //PETSCCHK(DMPlexInterpolate(dm, &dm_interpolated));
+    //PETSCCHK(DMDestroy(&dm));
+    //PETSCCHK(DMClone(dm_interpolated, &dm));
+    //PETSCCHK(DMDestroy(&dm_interpolated));
+
+
+    IS global_cell_numbers;
+    PETSCCHK(DMPlexGetCellNumbering(dm, &global_cell_numbers));
+    IS global_vertex_numbers;
+    PETSCCHK(DMPlexGetVertexNumbering(dm, &global_vertex_numbers));
+
+    const PetscInt *ptr;
+    PETSCCHK(ISGetIndices(global_cell_numbers, &ptr));
+    
+    for(int cx=index_mapper.chart_start ; cx<index_mapper.chart_end ; cx++){
+      nprint("T:", cx, ptr[cx]);
+    }
+
+    PETSCCHK(ISRestoreIndices(global_cell_numbers, &ptr));
+
+    IS globalPointNumbers;
+    PETSCCHK(DMPlexCreatePointNumbering(dm, &globalPointNumbers));
+    
+    nprint("-----------");
+    nprint("POINT:");
+    PETSCCHK(ISView(globalPointNumbers, PETSC_VIEWER_STDOUT_SELF));
+  
+    nprint("VERTEX");
+    PETSCCHK(ISView(global_vertex_numbers, PETSC_VIEWER_STDOUT_SELF));
+
+    nprint("CELL:");
+    PETSCCHK(ISView(global_cell_numbers, PETSC_VIEWER_STDOUT_SELF));
+
+    PETSCCHK(DMView(dm, PETSC_VIEWER_STDOUT_SELF));
+    nprint("-----------");
 
     // Create the maps from the created dm cells to the original cell ids and
     // owning ranks.
   }
 
-  return num_cells;
+  return num_cells > 0;
 }
 
 /**
@@ -294,13 +341,34 @@ dm_from_serialised_cells(std::list<DMPlexCellSerialise> &serialised_cells,
  */
 class DMPlexHelper {
 protected:
-  inline void check_valid_cell(const PetscInt cell) const {
-    NESOASSERT((cell > -1) && (cell < (this->cell_end - this->cell_start)),
-               "Bad cell index passed.");
+  IS global_point_numbers;
+  PetscInt point_start;
+  PetscInt point_end;
+  PetscInt cell_start;
+  PetscInt cell_end;
+  std::vector<PetscInt> map_np_to_petsc;
+  std::map<PetscInt, PetscInt> map_petsc_to_np;
+
+
+  inline void check_valid_local_cell(const PetscInt cell) const {
+    NESOASSERT((cell > -1) && (cell < this->ncells),
+               "Bad NESO-Particles cell index passed: Out of range.");
   }
   inline void check_valid_petsc_cell(const PetscInt cell) const {
     NESOASSERT((this->cell_start <= cell) && (cell < this->cell_end),
-               "Bad DMPlex cell index passed.");
+               "Bad DMPlex cell index passed: Not in range.");
+    NESOASSERT(this->map_petsc_to_np.count(cell),
+               "Bad DMPlex cell index passed: PETSc cell index is not local.");
+
+  }
+
+  inline PetscInt internal_get_point_global_index(const PetscInt point) {
+    PetscInt global_point;
+    const PetscInt *ptr;
+    PETSCCHK(ISGetIndices(this->global_point_numbers, &ptr));
+    global_point = ptr[point - this->point_start];
+    PETSCCHK(ISRestoreIndices(this->global_point_numbers, &ptr));
+    return global_point;
   }
 
   ExternalCommon::BoundingBoxSharedPtr bounding_box;
@@ -309,11 +377,8 @@ public:
   MPI_Comm comm;
   DM dm;
   PetscInt ndim;
-  IS global_cell_numbers;
-  IS global_vertex_numbers;
-  IS global_point_numbers;
-  PetscInt cell_start;
-  PetscInt cell_end;
+  PetscInt ncells;
+
 
   /**
    * TODO
@@ -358,18 +423,38 @@ public:
     PETSCCHK(DMGetCoordinateDim(this->dm, &this->ndim));
     PETSCCHK(DMPlexGetHeightStratum(this->dm, 0, &this->cell_start,
                                     &this->cell_end));
-
-    int num_cells = this->get_num_cells();
-    NESOASSERT(num_cells, "A rank has zero cells.");
-    PETSCCHK(DMPlexGetCellNumbering(this->dm, &this->global_cell_numbers));
-    PETSCCHK(DMPlexGetVertexNumbering(this->dm, &this->global_vertex_numbers));
+    PETSCCHK(DMPlexGetChart(this->dm, &this->point_start, &this->point_end));
     PETSCCHK(DMPlexCreatePointNumbering(this->dm, &this->global_point_numbers));
+
+    // TODO
+    PETSCCHK(ISView(this->global_point_numbers, PETSC_VIEWER_STDOUT_SELF));
+    
+    this->map_np_to_petsc.clear();
+    nprint(
+      "cell_start:",
+      cell_start,
+      "cell_end:",
+      cell_end
+    );
+    PetscInt ix = 0;
+    for(int cx=this->cell_start ; cx<this->cell_end ; cx++){
+      auto global = this->internal_get_point_global_index(cx);
+      if (global > -1){
+        this->map_np_to_petsc.push_back(cx);
+        this->map_petsc_to_np[cx] = ix++;
+      }
+      nprint("I:", cx, global);
+    }
+    NESOASSERT(ix == this->map_petsc_to_np.size(), "Size missmatch.");
+    NESOASSERT(ix == this->map_np_to_petsc.size(), "Size missmatch.");
+    this->ncells = this->map_np_to_petsc.size();
+    NESOASSERT(this->ncells, "A rank has zero cells.");
   }
 
   /**
    * @returns the number of cells.
    */
-  inline int get_num_cells() { return this->cell_end - this->cell_start; }
+  inline int get_num_cells() { return this->ncells; }
 
   /**
    * Convert a local cell id into a DMPlex cell id.
@@ -378,8 +463,8 @@ public:
    * @returns DMPlex point index in [cell_start, cell_end).
    */
   inline PetscInt get_dmplex_cell_index(const PetscInt local_index) {
-    this->check_valid_cell(local_index);
-    const auto index = this->cell_start + local_index;
+    this->check_valid_local_cell(local_index);
+    const auto index = this->map_np_to_petsc.at(local_index);
     this->check_valid_petsc_cell(index);
     return index;
   }
@@ -392,8 +477,8 @@ public:
    */
   inline PetscInt get_local_cell_index(const PetscInt petsc_index) {
     this->check_valid_petsc_cell(petsc_index);
-    const auto index = petsc_index - this->cell_start;
-    this->check_valid_cell(index);
+    const auto index = this->map_petsc_to_np.at(petsc_index);
+    this->check_valid_local_cell(index);
     return index;
   }
 
@@ -415,51 +500,11 @@ public:
    * @returns Global point index.
    */
   inline PetscInt get_point_global_index(const PetscInt point) {
-    PetscInt global_point;
-    const PetscInt *ptr;
-    PETSCCHK(ISGetIndices(this->global_point_numbers, &ptr));
-    global_point = ptr[point];
-    PETSCCHK(ISRestoreIndices(this->global_point_numbers, &ptr));
+    NESOASSERT((this->point_start <= point) && (point < this->point_end),
+      "Bad point passed.");
+    PetscInt global_point = this->internal_get_point_global_index(point);
+
     return signed_global_id_to_global_id(global_point);
-  }
-
-  /**
-   * Get the global index of a cell from the local cell index.
-   *
-   * @param cell Local cell index.
-   * @returns Global cell index.
-   */
-  inline PetscInt get_cell_global_index(const PetscInt cell) {
-    this->check_valid_cell(cell);
-
-    PetscInt global_cell;
-    const PetscInt *ptr;
-    PETSCCHK(ISGetIndices(this->global_cell_numbers, &ptr));
-    global_cell = ptr[cell];
-    PETSCCHK(ISRestoreIndices(this->global_cell_numbers, &ptr));
-    NESOASSERT(global_cell > -1,
-               "Cell index was negative indicating a remote cell.");
-
-    return global_cell;
-  }
-
-  /**
-   * Get the global index of a vertex from the local vertex index.
-   *
-   * @param vertex Local vertex index.
-   * @returns Global vertex index.
-   */
-  inline PetscInt get_vertex_global_index(const PetscInt vertex) {
-
-    PetscInt global_vertex;
-    const PetscInt *ptr;
-    PETSCCHK(ISGetIndices(this->global_vertex_numbers, &ptr));
-    global_vertex = ptr[vertex];
-    PETSCCHK(ISRestoreIndices(this->global_vertex_numbers, &ptr));
-    NESOASSERT(global_vertex > -1,
-               "Vertex index was negative indicating a remote vertex.");
-
-    return global_vertex;
   }
 
   /**
@@ -488,7 +533,7 @@ public:
    */
   inline ExternalCommon::BoundingBoxSharedPtr
   get_cell_bounding_box(const PetscInt cell) {
-    this->check_valid_cell(cell);
+    this->check_valid_local_cell(cell);
 
     std::vector<REAL> bb = {std::numeric_limits<REAL>::max(),
                             std::numeric_limits<REAL>::max(),
@@ -506,7 +551,9 @@ public:
     PetscScalar *coords = nullptr;
     PetscInt num_coords;
     PetscBool is_dg;
-    PETSCCHK(DMPlexGetCellCoordinates(dm, this->cell_start + cell, &is_dg,
+    const PetscInt petsc_index = this->map_np_to_petsc.at(cell);
+    this->check_valid_petsc_cell(petsc_index);
+    PETSCCHK(DMPlexGetCellCoordinates(dm, petsc_index, &is_dg,
                                       &num_coords, &array, &coords));
     NESOASSERT(coords != nullptr, "No vertices returned for cell.");
     const PetscInt num_verts = num_coords / ndim;
@@ -517,7 +564,7 @@ public:
         bb[dimx + 3] = std::max(bb[dimx + 3], cx);
       }
     }
-    PETSCCHK(DMPlexRestoreCellCoordinates(dm, this->cell_start + cell, &is_dg,
+    PETSCCHK(DMPlexRestoreCellCoordinates(dm, petsc_index, &is_dg,
                                           &num_coords, &array, &coords));
     return std::make_shared<ExternalCommon::BoundingBox>(bb);
   }
@@ -530,7 +577,7 @@ public:
    */
   inline void get_cell_vertex_average(const PetscInt cell,
                                       std::vector<REAL> &average) {
-    this->check_valid_cell(cell);
+    this->check_valid_local_cell(cell);
     NESOASSERT(average.size() == this->ndim,
                "Missmatch between vector size and number of dimensions");
 
@@ -539,7 +586,9 @@ public:
     PetscScalar *coords = nullptr;
     PetscInt num_coords;
     PetscBool is_dg;
-    PETSCCHK(DMPlexGetCellCoordinates(dm, this->cell_start + cell, &is_dg,
+    const PetscInt petsc_index = this->map_np_to_petsc.at(cell);
+    this->check_valid_petsc_cell(petsc_index);
+    PETSCCHK(DMPlexGetCellCoordinates(dm, petsc_index, &is_dg,
                                       &num_coords, &array, &coords));
     NESOASSERT(coords != nullptr, "No vertices returned for cell.");
     const PetscInt num_verts = num_coords / ndim;
@@ -549,7 +598,7 @@ public:
         average.at(dimx) += cx;
       }
     }
-    PETSCCHK(DMPlexRestoreCellCoordinates(dm, this->cell_start + cell, &is_dg,
+    PETSCCHK(DMPlexRestoreCellCoordinates(dm, petsc_index, &is_dg,
                                           &num_coords, &array, &coords));
 
     const REAL tmp_factor = 1.0 / ((REAL)num_verts);

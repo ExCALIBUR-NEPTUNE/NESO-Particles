@@ -124,6 +124,7 @@ protected:
     const PetscInt cell_end = this->dmh->cell_end;
 
     for (int cellx = cell_start; cellx < cell_end; cellx++) {
+      TODO check all this code is using the right cell index
       const auto bounding_box = this->dmh->get_cell_bounding_box(cellx);
       ExternalCommon::bounding_box_claim(cellx, bounding_box,
                                          this->mesh_hierarchy, local_claim,
@@ -186,11 +187,11 @@ protected:
 
     // unpack the halo cells into a DMPlex for halo cells
     DM dm_halo;
-    this->dm_halo_num_cells =
+    auto halo_exists =
         dm_from_serialised_cells(serialised_halo_cells, this->dmh->dm, dm_halo,
                                  this->map_local_lid_remote_lid);
-    if (this->dm_halo_num_cells) {
-      this->dmh_halo = std::make_shared<DMPlexHelper>(this->comm, dm_halo);
+    if (halo_exists) {
+      this->dmh_halo = std::make_shared<DMPlexHelper>(PETSC_COMM_SELF, dm_halo);
       std::set<int> remote_ranks;
       int size;
       MPICHK(MPI_Comm_size(this->comm, &size));
@@ -213,7 +214,6 @@ public:
   MPI_Comm comm;
   std::shared_ptr<DMPlexHelper> dmh;
   std::shared_ptr<DMPlexHelper> dmh_halo;
-  PetscInt dm_halo_num_cells;
   std::map<PetscInt, std::tuple<int, PetscInt, PetscInt>>
       map_local_lid_remote_lid;
   ~DMPlexInterface(){
