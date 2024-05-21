@@ -670,6 +670,32 @@ public:
     PETSCCHK(DMView(this->dm, viewer));
     PETSCCHK(PetscViewerDestroy(&viewer));
   }
+
+  /**
+   * Print to stdout information about the held DMPlex.
+   */
+  inline void print() {
+    for (int cx = 0; cx < this->ncells; cx++) {
+      const PetscInt point_index = this->map_np_to_petsc.at(cx);
+      nprint("---------------------------------------------------------------");
+      nprint("Local index:", cx, "point index:", point_index);
+      PetscBool is_dg;
+      PetscInt nc;
+      const PetscScalar *array;
+      PetscScalar *coords;
+      PETSCCHK(DMPlexGetCellCoordinates(dm, cx, &is_dg, &nc, &array, &coords));
+      const PetscInt npoints = nc / this->ndim;
+      for (int px; px < nc; px += this->ndim) {
+        std::cout << "\t";
+        for (int dx = 0; dx < this->ndim; dx++) {
+          std::cout << coords[px + dx] << " ";
+        }
+        std::cout << std::endl;
+      }
+      PETSCCHK(
+          DMPlexRestoreCellCoordinates(dm, cx, &is_dg, &nc, &array, &coords));
+    }
+  }
 };
 
 } // namespace NESO::Particles::PetscInterface

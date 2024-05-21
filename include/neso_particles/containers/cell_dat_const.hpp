@@ -423,6 +423,9 @@ public:
   }
 };
 
+template <typename T>
+using CellDatConstSharedPtr = std::shared_ptr<CellDatConst<T>>;
+
 } // namespace NESO::Particles
 
 #endif

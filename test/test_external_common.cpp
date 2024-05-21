@@ -154,3 +154,71 @@ TEST(ExternalCommon, bounding_box_expand) {
   ASSERT_EQ(bb->upper(0), 2.0);
   ASSERT_EQ(bb->upper(1), 2.0);
 }
+
+TEST(ExternalCommon, dof_mapper_dg) {
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+  const int num_cells = 15;
+  const int num_dofs = 3;
+  const int num_dofs_total = num_cells * num_dofs;
+  auto cell_dat_const =
+      std::make_shared<CellDatConst<REAL>>(sycl_target, num_cells, num_dofs, 1);
+
+  auto mapper = std::make_shared<ExternalCommon::DOFMapperDG>(
+      sycl_target, num_cells, num_dofs);
+
+  auto lambda_host_order = [&](const int cell, const int dof) {
+    // reverse the order as a test
+    return num_dofs_total - 1 - (cell * num_dofs + dof);
+  };
+
+  for (int cx = 0; cx < num_cells; cx++) {
+    for (int dx = 0; dx < num_dofs; dx++) {
+      mapper->set(cx, dx, lambda_host_order(cx, dx));
+    }
+  }
+
+  for (int cx = 0; cx < num_cells; cx++) {
+    for (int dx = 0; dx < num_dofs; dx++) {
+      ASSERT_EQ(mapper->get(cx, dx), lambda_host_order(cx, dx));
+    }
+  }
+
+  REAL value = 100.0;
+  for (int cx = 0; cx < num_cells; cx++) {
+    for (int dx = 0; dx < num_dofs; dx++) {
+      cell_dat_const->set_value(cx, dx, 0, value++);
+    }
+  }
+
+  value = 100.0;
+  for (int cx = 0; cx < num_cells; cx++) {
+    for (int dx = 0; dx < num_dofs; dx++) {
+      ASSERT_EQ(cell_dat_const->get_value(cx, dx, 0), value++);
+    }
+  }
+
+  std::vector<REAL> ext(num_cells * num_dofs);
+
+  EventStack es;
+  mapper->copy_to_external(cell_dat_const, ext.data(), es);
+
+  es.wait();
+  value = 100.0;
+  for (int cx = 0; cx < num_cells; cx++) {
+    for (int dx = 0; dx < num_dofs; dx++) {
+      ASSERT_EQ(ext.at(lambda_host_order(cx, dx)), value++);
+      ext.at(lambda_host_order(cx, dx)) += 100.0;
+    }
+  }
+
+  mapper->copy_from_external(cell_dat_const, ext.data(), es);
+  es.wait();
+  for (int cx = 0; cx < num_cells; cx++) {
+    for (int dx = 0; dx < num_dofs; dx++) {
+      ASSERT_EQ(ext.at(lambda_host_order(cx, dx)),
+                cell_dat_const->get_value(cx, dx, 0));
+    }
+  }
+
+  sycl_target->free();
+}
