@@ -655,6 +655,21 @@ public:
 
     return map;
   }
+
+  /**
+   * Write the DM to a file for visualisation in paraview.
+   *
+   * @param filename Filename for VTK file.
+   */
+  inline void write_vtk(const std::string filename) {
+    PetscViewer viewer;
+    PETSCCHK(PetscViewerCreate(PETSC_COMM_SELF, &viewer));
+    PETSCCHK(PetscViewerSetType(viewer, PETSCVIEWERVTK));
+    PETSCCHK(PetscViewerFileSetMode(viewer, FILE_MODE_WRITE));
+    PETSCCHK(PetscViewerFileSetName(viewer, filename.c_str()));
+    PETSCCHK(DMView(this->dm, viewer));
+    PETSCCHK(PetscViewerDestroy(&viewer));
+  }
 };
 
 } // namespace NESO::Particles::PetscInterface
