@@ -553,7 +553,7 @@ TEST_P(PETSC_HALO_OVERLAP, dm_halos) {
   DM dm;
 
   const PetscInt ndim = 2;
-  const int mesh_size = (ndim == 2) ? 5 : 17;
+  const int mesh_size = (ndim == 2) ? 31 : 17;
   PetscInt faces[3] = {mesh_size, mesh_size, mesh_size};
 
   PETSCCHK(DMPlexCreateBoxMesh(PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces,
@@ -561,23 +561,13 @@ TEST_P(PETSC_HALO_OVERLAP, dm_halos) {
                                /* upper */ NULL,
                                /* periodicity */ NULL, PETSC_TRUE, &dm));
 
-
   PetscInt overlap = GetParam();
   PetscInterface::generic_distribute(&dm, MPI_COMM_WORLD, overlap);
 
   auto mesh =
       std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
-  
 
-  int rank;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  nprint("RANK:", rank);
-  nprint("cell_count:", mesh->get_cell_count());
-
-  
-  // TODO undo
-  //ASSERT_TRUE(mesh->validate_halos(false));
-  ASSERT_TRUE(mesh->validate_halos());
+  ASSERT_TRUE(mesh->validate_halos(false));
 
   mesh->free();
   PETSCCHK(DMDestroy(&dm));
@@ -585,7 +575,6 @@ TEST_P(PETSC_HALO_OVERLAP, dm_halos) {
 }
 
 INSTANTIATE_TEST_SUITE_P(init, PETSC_HALO_OVERLAP, testing::Values(0, 1));
-
 
 INSTANTIATE_TEST_SUITE_P(init, PETSC_NDIM, testing::Values(2));
 

@@ -59,7 +59,6 @@ public:
         nprint("  ", px);
       }
     }
-    nprint("vertices:");
     for (auto vx : vertices) {
       nprint(std::to_string(vx.first) + ":");
       std::cout << "  ";

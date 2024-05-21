@@ -120,11 +120,9 @@ protected:
 
     // local claim cells
     ExternalCommon::LocalClaim local_claim;
-    const PetscInt cell_start = this->dmh->cell_start;
-    const PetscInt cell_end = this->dmh->cell_end;
 
-    for (int cellx = cell_start; cellx < cell_end; cellx++) {
-      TODO check all this code is using the right cell index
+    const int num_cells = this->dmh->get_cell_count();
+    for (int cellx = 0; cellx < num_cells; cellx++) {
       const auto bounding_box = this->dmh->get_cell_bounding_box(cellx);
       ExternalCommon::bounding_box_claim(cellx, bounding_box,
                                          this->mesh_hierarchy, local_claim,
@@ -351,44 +349,45 @@ public:
 
     for (int ix = 0; ix < num_local_points; ix++) {
       PetscInt point = ix + point_start;
-      const int global_point = this->dmh->get_point_global_index(point);
+      const int global_point = this->dmh->get_point_global_index(point, true);
+      if (global_point > -1) {
+        // INT data
+        // Get the point depth
+        PetscInt depth;
+        PETSCCHK(DMPlexGetPointDepth(dm, point, &depth));
 
-      // INT data
-      // Get the point depth
-      PetscInt depth;
-      PETSCCHK(DMPlexGetPointDepth(dm, point, &depth));
+        int_data.at(I(global_point, 0)) = depth;
 
-      int_data.at(I(global_point, 0)) = depth;
+        PetscInt cone_size;
+        PETSCCHK(DMPlexGetConeSize(dm, point, &cone_size));
+        int_data.at(I(global_point, 1)) = cone_size;
 
-      PetscInt cone_size;
-      PETSCCHK(DMPlexGetConeSize(dm, point, &cone_size));
-      int_data.at(I(global_point, 1)) = cone_size;
+        lambda_assert_true(cone_size < 5);
 
-      lambda_assert_true(cone_size < 5);
+        const PetscInt *cone;
+        PETSCCHK(DMPlexGetCone(dm, point, &cone));
 
-      const PetscInt *cone;
-      PETSCCHK(DMPlexGetCone(dm, point, &cone));
+        for (int cx = 0; cx < cone_size; cx++) {
+          int_data.at(I(global_point, 2 + cx)) =
+              this->dmh->get_point_global_index(cone[cx]);
+        }
 
-      for (int cx = 0; cx < cone_size; cx++) {
-        int_data.at(I(global_point, 2 + cx)) =
-            this->dmh->get_point_global_index(cone[cx]);
+        int_data.at(I(global_point, 6)) = rank;
+
+        // REAL data
+        PetscBool is_dg;
+        PetscInt num_coords;
+        const PetscScalar *array;
+        PetscScalar *coords = nullptr;
+        PETSCCHK(DMPlexGetCellCoordinates(dm, point, &is_dg, &num_coords,
+                                          &array, &coords));
+        lambda_assert_true(num_coords <= 8);
+        for (int cx = 0; cx < num_coords; cx++) {
+          real_data.at(F(global_point, cx)) = coords[cx];
+        }
+        PETSCCHK(DMPlexRestoreCellCoordinates(dm, point, &is_dg, &num_coords,
+                                              &array, &coords));
       }
-
-      int_data.at(I(global_point, 6)) = rank;
-
-      // REAL data
-      PetscBool is_dg;
-      PetscInt num_coords;
-      const PetscScalar *array;
-      PetscScalar *coords = nullptr;
-      PETSCCHK(DMPlexGetCellCoordinates(dm, point, &is_dg, &num_coords, &array,
-                                        &coords));
-      lambda_assert_true(num_coords <= 8);
-      for (int cx = 0; cx < num_coords; cx++) {
-        real_data.at(F(global_point, cx)) = coords[cx];
-      }
-      PETSCCHK(DMPlexRestoreCellCoordinates(dm, point, &is_dg, &num_coords,
-                                            &array, &coords));
     }
 
     MPICHK(MPI_Allreduce(int_data.data(), int_rdata.data(), int_rdata.size(),

@@ -57,8 +57,8 @@ public:
     auto dmh = dmplex_interface->dmh;
     auto dmh_halo = dmplex_interface->dmh_halo;
 
-    const int num_local_cells = dmh->get_num_cells();
-    const int num_halo_cells = dmh_halo ? dmh_halo->get_num_cells() : 0;
+    const int num_local_cells = dmh->get_cell_count();
+    const int num_halo_cells = dmh_halo ? dmh_halo->get_cell_count() : 0;
     const int num_total_cells = num_local_cells + num_halo_cells;
 
     // Create a bounding box for halo cells and local cells.
@@ -126,7 +126,7 @@ public:
 
     // Local cells
     int index = 0;
-    const int num_cells_local = dmplex_interface->dmh->get_num_cells();
+    const int num_cells_local = dmplex_interface->dmh->get_cell_count();
     std::vector<int> overlay_cells;
     for (int cx = 0; cx < num_cells_local; cx++) {
       auto bb = dmplex_interface->dmh->get_cell_bounding_box(cx);
@@ -146,7 +146,7 @@ public:
 
     // Halo cells
     if (dmh_halo) {
-      const int num_cells_halo = dmplex_interface->dmh_halo->get_num_cells();
+      const int num_cells_halo = dmplex_interface->dmh_halo->get_cell_count();
       for (int cx = 0; cx < num_cells_halo; cx++) {
         auto bb = dmh_halo->get_cell_bounding_box(cx);
         this->overlay_mesh->get_intersecting_cells(bb, overlay_cells);
