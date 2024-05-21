@@ -3,6 +3,7 @@
 
 #include "../../../compute_target.hpp"
 #include "../../../containers/lookup_table.hpp"
+#include "../../../error_propagate.hpp"
 #include "../../../local_mapping.hpp"
 #include "../../../loop/particle_loop.hpp"
 #include "../../../particle_group.hpp"
@@ -41,6 +42,7 @@ protected:
   std::unique_ptr<LookupTable<int, int *>> map_candidates;
   // stack for device map of candidate cells
   std::stack<std::unique_ptr<BufferDevice<int>>> map_stack;
+  std::unique_ptr<ErrorPropagate> ep;
 
 public:
   SYCLTargetSharedPtr sycl_target;
@@ -206,6 +208,9 @@ public:
         this->map_stack.push(std::move(tmp_ptr));
       }
     }
+
+    // Checking loop that all particles were binned into cells.
+    this->ep = std::make_unique<ErrorPropagate>(this->sycl_target);
   }
 
   /**
@@ -286,6 +291,17 @@ public:
       map_loop->execute(map_cell);
     } else {
       map_loop->execute();
+    }
+
+    if (map_cell > -1) {
+      auto k_ep = this->ep->device_ptr();
+      particle_loop(
+          "DMPlex2DMapper::check", dat_positions,
+          [=](auto RANK) { NESO_KERNEL_ASSERT(RANK.at(1) > -1, k_ep); },
+          Access::read(dat_ranks))
+          ->execute(map_cell);
+      this->ep->check_and_throw("DMPlex2DMapper Failed to find local cell for "
+                                "one or more particles.");
     }
   }
 };
