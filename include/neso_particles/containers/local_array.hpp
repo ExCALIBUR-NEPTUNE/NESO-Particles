@@ -63,7 +63,7 @@ template <typename T> struct Write {
   /// Pointer to underlying data for the array.
   Write() = default;
   T *ptr;
-  T at(const int component) { return ptr[component]; }
+  T &at(const int component) { return ptr[component]; }
   T &operator[](const int component) { return ptr[component]; }
 };
 

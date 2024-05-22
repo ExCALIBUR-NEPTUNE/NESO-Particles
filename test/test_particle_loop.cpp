@@ -240,7 +240,11 @@ TEST(ParticleLoop, local_array) {
       A,
       [=](auto la_index, auto la) {
         const int index = la_index.fetch_add(0, 1);
-        la[index] = 1;
+        if (index % 2 == 0) {
+          la[index] = 1;
+        } else {
+          la.at(index) = 1;
+        }
       },
       Access::add(law_index), Access::write(law));
   law_loop->execute();
