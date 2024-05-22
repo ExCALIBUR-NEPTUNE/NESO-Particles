@@ -1,0 +1,55 @@
+name: Build Docs
+on: 
+  push:
+    branches:
+      - main
+      - dev
+    tags:
+      - v*
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v3
+      - name: Install Sphinx/Doxygen
+        run: |
+          sudo apt update
+          sudo apt install -y doxygen graphviz python3-pip
+      - name: Install pip requirements
+        run: |
+          ls -l
+          pip3 install -r ./docs/sphinx/requirements.txt
+      - name: Build docs
+        working-directory: ./docs/
+        run: |
+          bash build_branch_docs.sh
+      - name: Build Website
+        working-directory: ./docs/
+        run: |
+          ls build
+          mkdir -p /tmp/gh-pages
+          cp -r ./build/* /tmp/gh-pages/.
+          touch /tmp/gh-pages/.nojekyll
+          ls /tmp/gh-pages
+      - name: Push Website
+        working-directory: /tmp/gh-pages
+        env:
+            GH_DOCS_WEBSITE_PUSH_KEY: ${{secrets.GH_DOCS_WEBSITE_PUSH_KEY}}
+        run: |
+            git init
+            git remote -v
+            git remote add origin git@github.com:ExCALIBUR-NEPTUNE/NESO-Particles.git
+            git checkout -b gh-pages
+            git add *
+            git add .nojekyll
+            git status
+            git config --global user.email "GitHubActions"
+            git config --global user.name "Github Actions"
+            git commit -am "generated website: $(date)"
+            export GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=no"
+            eval `ssh-agent -s`
+            echo "$GH_DOCS_WEBSITE_PUSH_KEY" > /tmp/id_rsa
+            chmod 600 /tmp/id_rsa
+            ssh-add /tmp/id_rsa
+            git push origin gh-pages --force
