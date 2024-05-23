@@ -733,6 +733,7 @@ public:
    *  Move particles between cells using the cell ids stored in the cell id dat.
    */
   inline void cell_move() {
+    this->domain->local_mapper->map_cells(*this);
     this->cell_move_ctx.move();
     this->set_npart_cell_from_dat();
   };

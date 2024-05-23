@@ -13,6 +13,9 @@
 
 namespace NESO::Particles::ExternalCommon {
 
+/**
+ * TODO
+ */
 class QuadraturePointMapper {
 protected:
   int ndim;
@@ -105,7 +108,8 @@ public:
    * TODO
    */
   QuadraturePointMapper(SYCLTargetSharedPtr sycl_target, DomainSharedPtr domain)
-      : sycl_target(sycl_target), ndim(domain->mesh->get_ndim()),
+      : sycl_target(sycl_target), domain(domain),
+        ndim(domain->mesh->get_ndim()),
         rank(sycl_target->comm_pair.rank_parent),
         size(sycl_target->comm_pair.size_parent) {
     NESOASSERT((0 < ndim) && (ndim < 4), "Bad number of dimensions.");
@@ -134,6 +138,7 @@ public:
 
   /**
    * TODO
+   * Collective
    */
   inline void add_points_finalise() {
     ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
@@ -158,6 +163,7 @@ public:
       this->added_points.pop();
       index++;
     }
+    this->particle_group->add_particles_local(initial_distribution);
     this->npoint_local = index;
     this->particle_group->hybrid_move();
     this->particle_group->cell_move();
@@ -217,10 +223,6 @@ public:
     // Group the remote points by rank and determine an ordering such that
     // the "particles" can write their contribution into a contiguous block
     // for each remote rank.
-
-    for (int ix = 0; ix < num_remote_points; ix++) {
-      remote_points.push_back(la_points.at(ix));
-    }
 
     // setup the communication patterns
     std::map<int, std::vector<int>> map_ranks_to_adding_index;
@@ -329,13 +331,15 @@ public:
     auto adding_point_indices = la_remote_point_indices->get();
     la_remote_point_indices = nullptr;
 
+    this->adding_ptrs.resize(this->adding_ranks.size());
+    this->owning_ptrs.resize(this->owning_ranks.size());
+    this->adding_num_bytes.resize(this->adding_ranks.size());
+    this->owning_num_bytes.resize(this->owning_ranks.size());
+
     const auto num_entries = this->compute_num_bytes<int>(1);
     NESOASSERT(num_entries.first == adding_point_indices.size(),
                "Num entries mismatch.");
     this->owning_point_indices = std::vector<int>(num_entries.second);
-
-    this->adding_ptrs = std::vector<void *>(this->adding_ranks.size());
-    this->owning_ptrs = std::vector<void *>(this->owning_ranks.size());
     this->compute_offsets<int>(1, adding_point_indices,
                                this->owning_point_indices);
 

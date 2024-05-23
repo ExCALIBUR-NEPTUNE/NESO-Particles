@@ -222,3 +222,124 @@ TEST(ExternalCommon, dof_mapper_dg) {
 
   sycl_target->free();
 }
+
+TEST(ExternalCommon, quadrature_point_mapper) {
+
+  const int N = 32;
+  const int ndim = 2;
+  std::vector<int> dims(ndim);
+  dims[0] = 4;
+  dims[1] = 8;
+
+  const double cell_extent = 1.0;
+  const int subdivision_order = 2;
+  auto mesh = std::make_shared<CartesianHMesh>(MPI_COMM_WORLD, ndim, dims,
+                                               cell_extent, subdivision_order);
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+  auto cart_local_mapper = CartesianHMeshLocalMapper(sycl_target, mesh);
+  auto domain = std::make_shared<Domain>(mesh, cart_local_mapper);
+  auto qpm = std::make_shared<ExternalCommon::QuadraturePointMapper>(
+      sycl_target, domain);
+
+  auto owned_cells = mesh->get_owned_cells();
+  ASSERT_EQ(owned_cells.size(), mesh->get_cell_count());
+
+  std::vector<REAL> qpoints;
+  const int NT = owned_cells.size() + N;
+  qpoints.reserve(NT * ndim);
+  const REAL h = mesh->cell_width_fine;
+  for (auto &ox : owned_cells) {
+    for (int dx = 0; dx < ndim; dx++) {
+      qpoints.push_back((ox[dx] + 0.5) * h);
+    }
+  }
+
+  std::mt19937 rng_pos(52234234);
+  auto positions =
+      uniform_within_extents(N, ndim, mesh->global_extents, rng_pos);
+  for (int px = 0; px < N; px++) {
+    for (int dx = 0; dx < ndim; dx++) {
+      qpoints.push_back(positions[dx][px]);
+    }
+  }
+
+  qpm->add_points_initialise();
+  std::vector<REAL> point(ndim);
+  for (int ix = 0; ix < NT * ndim; ix += ndim) {
+    for (int dx = 0; dx < ndim; dx++) {
+      point.at(dx) = qpoints.at(ix + dx);
+    }
+    qpm->add_point(point.data());
+  }
+  qpm->add_points_finalise();
+
+  // Create some data
+  ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
+                             ParticleProp(Sym<INT>("CELL_ID"), 1, true),
+                             ParticleProp(Sym<INT>("GLOBAL_CELL_ID"), 1)};
+  auto A = std::make_shared<ParticleGroup>(domain, particle_spec, sycl_target);
+  const int cell_count = owned_cells.size();
+  ParticleSet initial_distribution(cell_count, particle_spec);
+  for (int px = 0; px < cell_count; px++) {
+    for (int dx = 0; dx < ndim; dx++) {
+      initial_distribution[Sym<REAL>("P")][px][dx] = qpoints.at(px * ndim + dx);
+    }
+  }
+  A->add_particles_local(initial_distribution);
+  A->cell_move();
+
+  // Assemble some known data onto a CellDatConst in each cell
+  auto mapper = std::make_shared<MeshHierarchyMapper>(
+      sycl_target, mesh->get_mesh_hierarchy());
+  auto k_mapper = mapper->get_device_mapper();
+  auto cac_global_cell_index =
+      std::make_shared<CellDatConst<REAL>>(sycl_target, cell_count, 1, 1);
+  cac_global_cell_index->fill(0);
+  particle_loop(
+      A,
+      [=](auto P, auto G, auto C) {
+        REAL position[3];
+        for (int dx = 0; dx < ndim; dx++) {
+          position[dx] = P.at(dx);
+        }
+        INT global_cell[6];
+        k_mapper.map_to_tuple(position, global_cell);
+        const INT linear_global_cell =
+            k_mapper.tuple_to_linear_global(global_cell);
+        C.fetch_add(0, 0, (REAL)linear_global_cell);
+      },
+      Access::read(Sym<REAL>("P")), Access::write(Sym<INT>("GLOBAL_CELL_ID")),
+      Access::add(cac_global_cell_index))
+      ->execute();
+
+  // Copy the data into the quadrature point values
+  particle_loop(
+      qpm->particle_group, [=](auto Q, auto C) { Q.at(0) = C.at(0, 0); },
+      Access::write(qpm->get_sym(1)), Access::read(cac_global_cell_index))
+      ->execute();
+
+  std::vector<REAL> output(NT);
+  qpm->get(1, output);
+
+  // For each point compute the global mesh hiererachy cell and hence get the
+  // value that should have been returned.
+
+  auto h_mapper = mapper->get_host_mapper();
+  REAL position[3];
+  INT global_index[6];
+
+  for (int px = 0; px < NT; px++) {
+    for (int dx = 0; dx < ndim; dx++) {
+      position[dx] = qpoints.at(px * ndim + dx);
+    }
+    h_mapper.map_to_tuple(position, global_index);
+    const REAL index = h_mapper.tuple_to_linear_global(global_index);
+    const REAL to_test = output.at(px);
+
+    ASSERT_NEAR(to_test, index, 1.0e-15);
+  }
+
+  qpm->free();
+  mesh->free();
+  sycl_target->free();
+}
