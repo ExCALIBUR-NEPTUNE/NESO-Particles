@@ -300,6 +300,22 @@ public:
           [=](auto RANK) { NESO_KERNEL_ASSERT(RANK.at(1) > -1, k_ep); },
           Access::read(dat_ranks))
           ->execute(map_cell);
+      if (this->ep->get_flag()) {
+        auto ranks = dat_ranks->cell_dat.get_cell(map_cell);
+        auto positions = dat_positions->cell_dat.get_cell(map_cell);
+        for (int rx = 0; rx < ranks->nrow; rx++) {
+          if (ranks->at(rx, 1) < 0) {
+            nprint("-----------Failing particle info------------");
+            nprint("Rank dat:", ranks->at(rx, 0), ranks->at(rx, 1));
+            std::cout << "Position dat: ";
+            for (int cx = 0; cx < positions->ncol; cx++) {
+              std::cout << positions->at(rx, cx) << " ";
+            }
+            std::cout << std::endl;
+            nprint("--------------------------------------------");
+          }
+        }
+      }
       this->ep->check_and_throw("DMPlex2DMapper Failed to find local cell for "
                                 "one or more particles.");
     }
