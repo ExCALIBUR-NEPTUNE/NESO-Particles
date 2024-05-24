@@ -276,6 +276,7 @@ TEST(ExternalCommon, quadrature_point_mapper) {
   // Create some data
   ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
                              ParticleProp(Sym<INT>("CELL_ID"), 1, true),
+                             ParticleProp(Sym<REAL>("Q"), 1),
                              ParticleProp(Sym<INT>("GLOBAL_CELL_ID"), 1)};
   auto A = std::make_shared<ParticleGroup>(domain, particle_spec, sycl_target);
   const int cell_count = owned_cells.size();
@@ -307,6 +308,7 @@ TEST(ExternalCommon, quadrature_point_mapper) {
         const INT linear_global_cell =
             k_mapper.tuple_to_linear_global(global_cell);
         C.fetch_add(0, 0, (REAL)linear_global_cell);
+        G.at(0) = linear_global_cell;
       },
       Access::read(Sym<REAL>("P")), Access::write(Sym<INT>("GLOBAL_CELL_ID")),
       Access::add(cac_global_cell_index))
@@ -337,6 +339,41 @@ TEST(ExternalCommon, quadrature_point_mapper) {
     const REAL to_test = output.at(px);
 
     ASSERT_NEAR(to_test, index, 1.0e-15);
+  }
+
+  // test the set call
+  for (auto &ox : output) {
+    ox *= 3.14;
+  }
+  qpm->set(1, output);
+
+  // write to the CellDatConst for each cell.
+  cac_global_cell_index->fill(0);
+  particle_loop(
+      qpm->particle_group,
+      [=](auto Q, auto O, auto C) {
+        if (O.at(3) == 0) {
+          C.at(0, 0) = Q.at(0);
+        }
+      },
+      Access::read(qpm->get_sym(1)),
+      Access::read(Sym<INT>("ADDING_RANK_INDEX")),
+      Access::write(cac_global_cell_index))
+      ->execute();
+
+  // Read from the test ParticleGroup
+  particle_loop(
+      A, [=](auto Q, auto C) { Q.at(0) = C.at(0, 0); },
+      Access::write(Sym<REAL>("Q")), Access::read(cac_global_cell_index))
+      ->execute();
+
+  for (int cx = 0; cx < cell_count; cx++) {
+    auto Q = A->get_cell(Sym<REAL>("Q"), cx);
+    auto G = A->get_cell(Sym<INT>("GLOBAL_CELL_ID"), cx);
+    const auto nrow = Q->nrow;
+    for (int rx = 0; rx < nrow; rx++) {
+      ASSERT_NEAR(Q->at(rx, 0), ((REAL)G->at(rx, 0)) * 3.14, 1.0e-14);
+    }
   }
 
   qpm->free();

@@ -29,8 +29,8 @@ protected:
   };
   std::stack<Point> added_points;
   std::unique_ptr<CommunicationEdgesCounter> cec;
-  std::shared_ptr<LocalArray<REAL>> la_local_contribs;
-  std::shared_ptr<LocalArray<REAL>> la_remote_contribs;
+  std::unique_ptr<BufferDevice<REAL>> d_local_contribs;
+  std::unique_ptr<BufferDevice<REAL>> d_remote_contribs;
 
   int npoint_local;
   int npoint_remote;
@@ -53,6 +53,22 @@ protected:
   std::vector<int> owning_point_indices;
 
   std::vector<REAL> recv_buffer;
+
+  inline void make_contribs_buffers(int ncomp_local, int ncomp_remote) {
+    ncomp_local = std::max(ncomp_local, 1);
+    ncomp_remote = std::max(ncomp_remote, 1);
+
+    if (!this->d_local_contribs) {
+      this->d_local_contribs =
+          std::make_unique<BufferDevice<REAL>>(this->sycl_target, ncomp_local);
+    }
+    this->d_local_contribs->realloc_no_copy(ncomp_local);
+    if (!this->d_remote_contribs) {
+      this->d_remote_contribs =
+          std::make_unique<BufferDevice<REAL>>(this->sycl_target, ncomp_remote);
+    }
+    this->d_remote_contribs->realloc_no_copy(ncomp_remote);
+  }
 
   template <typename T>
   inline std::pair<int, int> compute_num_bytes(const int ncomp) {
@@ -143,7 +159,7 @@ public:
   inline void add_points_finalise() {
     ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
                                ParticleProp(Sym<INT>("CELL_ID"), 1, true),
-                               ParticleProp(Sym<INT>("ADDING_RANK_INDEX"), 3)};
+                               ParticleProp(Sym<INT>("ADDING_RANK_INDEX"), 4)};
 
     this->particle_group = std::make_shared<ParticleGroup>(
         this->domain, particle_spec, this->sycl_target);
@@ -350,6 +366,27 @@ public:
     // the vector owning_point_indices should now contain the point indices for
     // points which were added on this rank but the location is owned by a
     // remote rank
+
+    // Compute an ordering for the locally added points in each cell for
+    // evaluation.
+    auto la_ordering = std::make_shared<LocalArray<int>>(
+        this->sycl_target, this->domain->mesh->get_cell_count());
+    la_ordering->fill(0);
+
+    particle_loop(
+        "QuadraturePointMapper::add_points_finalise_3", this->particle_group,
+        [=](auto INDEX, auto ADDING_RANK_INDEX, auto ORDERING) {
+          if (ADDING_RANK_INDEX.at(0) == k_rank) {
+            const int cell = INDEX.cell;
+            const int tmp_index = ORDERING.fetch_add(cell, 1);
+            ADDING_RANK_INDEX.at(3) = tmp_index;
+          } else {
+            ADDING_RANK_INDEX.at(3) = -1;
+          }
+        },
+        Access::read(ParticleLoopIndex{}),
+        Access::write(Sym<INT>("ADDING_RANK_INDEX")), Access::add(la_ordering))
+        ->execute();
   }
 
   /**
@@ -375,54 +412,47 @@ public:
 
     const int ncomp_local = this->npoint_local * ncomp;
     const int ncomp_remote = this->npoint_remote * ncomp;
-
-    if (!this->la_local_contribs) {
-      this->la_local_contribs =
-          std::make_shared<LocalArray<REAL>>(this->sycl_target, ncomp_local);
-    }
-    if (!this->la_remote_contribs) {
-      this->la_remote_contribs =
-          std::make_shared<LocalArray<REAL>>(this->sycl_target, ncomp_remote);
-    }
-    if (this->la_local_contribs->size != ncomp_local) {
-      this->la_local_contribs->realloc_no_copy(ncomp_local);
-    }
-    if (this->la_remote_contribs->size != ncomp_remote) {
-      this->la_remote_contribs->realloc_no_copy(ncomp_remote);
-    }
+    this->make_contribs_buffers(ncomp_local, ncomp_remote);
 
     const int k_rank = this->rank;
     const int k_ncomp = ncomp;
+    auto k_local = this->d_local_contribs->ptr;
+    auto k_remote = this->d_remote_contribs->ptr;
+
     particle_loop(
         "QuadraturePointMapper::get", this->particle_group,
-        [=](auto ADDING_RANK_INDEX, auto CONTRIB, auto LA_LOCAL,
-            auto LA_REMOTE) {
-          const int start = ADDING_RANK_INDEX.at(2);
+        [=](auto ADDING_RANK_INDEX, auto CONTRIB) {
+          const int start = ADDING_RANK_INDEX.at(2) * k_ncomp;
           if (ADDING_RANK_INDEX.at(0) == k_rank) {
             for (int cx = 0; cx < k_ncomp; cx++) {
-              LA_LOCAL.at(start + cx) = CONTRIB.at(cx);
+              k_local[start + cx] = CONTRIB.at(cx);
             }
           } else {
             for (int cx = 0; cx < k_ncomp; cx++) {
-              LA_REMOTE.at(start + cx) = CONTRIB.at(cx);
+              k_remote[start + cx] = CONTRIB.at(cx);
             }
           }
         },
-        Access::read(Sym<INT>("ADDING_RANK_INDEX")), Access::read(sym),
-        Access::write(this->la_local_contribs),
-        Access::write(this->la_remote_contribs))
+        Access::read(Sym<INT>("ADDING_RANK_INDEX")), Access::read(sym))
         ->execute();
 
     if (output.size() != ncomp_local) {
       output.resize(ncomp_local);
     }
-    this->la_local_contribs->get(output);
-    auto send_buffer = this->la_remote_contribs->get();
+
+    auto e0 = this->sycl_target->queue.memcpy(
+        output.data(), this->d_local_contribs->ptr, ncomp_local * sizeof(REAL));
+
+    std::vector<REAL> send_buffer(ncomp_remote);
+    auto e1 = this->sycl_target->queue.memcpy(send_buffer.data(),
+                                              this->d_remote_contribs->ptr,
+                                              ncomp_remote * sizeof(REAL));
 
     // Need to exchange and populate the points where the evaluation point is
     // not owned by the rank which added the point.
     auto sizes = this->compute_num_bytes<REAL>(ncomp);
     this->recv_buffer.resize(sizes.second);
+    e1.wait_and_throw();
     this->compute_offsets<REAL>(ncomp, send_buffer, recv_buffer);
 
     // actually exchange the data
@@ -432,6 +462,7 @@ public:
 
     // copy the recieved data into the right index
     const int num_entries = this->owning_point_indices.size();
+    e0.wait_and_throw();
     for (int ix = 0; ix < num_entries; ix++) {
       const int dst_index = this->owning_point_indices.at(ix);
       for (int cx = 0; cx < ncomp; cx++) {
@@ -439,6 +470,36 @@ public:
             this->recv_buffer.at(ix * ncomp + cx);
       }
     }
+  }
+
+  /**
+   * TODO
+   */
+  inline void set(const int ncomp, std::vector<REAL> &input) {
+    auto sym = this->get_sym(ncomp);
+    const int ncomp_local = this->npoint_local * ncomp;
+    NESOASSERT(input.size() >= ncomp_local, "Input vector is too small.");
+    this->make_contribs_buffers(ncomp_local, 0);
+
+    auto k_local = this->d_local_contribs->ptr;
+    this->sycl_target->queue
+        .memcpy(k_local, input.data(), ncomp_local * sizeof(REAL))
+        .wait_and_throw();
+
+    const int k_rank = this->rank;
+    const int k_ncomp = ncomp;
+    particle_loop(
+        "QuadraturePointMapper::set", this->particle_group,
+        [=](auto ADDING_RANK_INDEX, auto CONTRIB) {
+          const int start = ADDING_RANK_INDEX.at(2) * k_ncomp;
+          if (ADDING_RANK_INDEX.at(0) == k_rank) {
+            for (int cx = 0; cx < k_ncomp; cx++) {
+              CONTRIB.at(cx) = k_local[start + cx];
+            }
+          }
+        },
+        Access::read(Sym<INT>("ADDING_RANK_INDEX")), Access::write(sym))
+        ->execute();
   }
 
   /**
