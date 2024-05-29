@@ -3,6 +3,9 @@
 
 #include "test_base.hpp"
 #include "test_particle_group.hpp"
+#include <cstdlib>
+#include <filesystem>
+#include <string>
 
 namespace NESO::Particles {
 
@@ -14,6 +17,46 @@ template <typename T, typename... ARGS>
 inline auto make_test_obj(ARGS... args) {
   return std::make_shared<typename NPToTestMapper<T>::type>(args...);
 }
+
+inline std::filesystem::path get_test_resource(std::string resource_name) {
+  std::filesystem::path path;
+  path.clear();
+
+  std::vector<std::filesystem::path> directories;
+  directories.reserve(3);
+
+  // Allow a pointing directly to test_resources with an environment variable
+  char *env_test_resources = getenv("NESO_PARTICLES_TEST_RESOURCES_DIR");
+  if (env_test_resources) {
+    directories.push_back(std::filesystem::path(env_test_resources));
+  }
+  // If the test binary is in <install location>/bin then this points to
+  // <install location>/test_resources
+  directories.push_back(std::filesystem::path("../test_resources"));
+  // This always points to the download/git location for a build
+  directories.push_back(std::filesystem::path(__FILE__).parent_path() /
+                        std::filesystem::path("../test_resources"));
+
+  const std::filesystem::path resource_base{resource_name};
+  for (auto &root : directories) {
+    const auto resource_path = std::filesystem::absolute(root / resource_base);
+    if (std::filesystem::exists(resource_path)) {
+      return resource_path;
+    }
+  }
+
+  return path;
+}
+
+#ifndef GET_TEST_RESOURCE
+#define GET_TEST_RESOURCE(x, y)                                                \
+  {                                                                            \
+    x = get_test_resource(y);                                                  \
+    if (x.empty()) {                                                           \
+      GTEST_SKIP() << "Skipping test as resource missing: " << y;              \
+    }                                                                          \
+  }
+#endif
 
 } // namespace NESO::Particles
 

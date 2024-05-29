@@ -1,8 +1,8 @@
 #ifdef NESO_PARTICLES_PETSC
 
+#include "include/test_neso_particles.hpp"
 #include <gtest/gtest.h>
 #include <memory>
-#include <neso_particles.hpp>
 #include <string>
 
 using namespace NESO::Particles;
@@ -628,6 +628,12 @@ TEST(PETSC, foo_internal) {
   mesh->free();
   PETSCCHK(DMDestroy(&dm));
   PETSCCHK(PetscFinalize());
+}
+
+TEST(PETSC, foo_internal_triangle) {
+
+  std::filesystem::path foo;
+  GET_TEST_RESOURCE(foo, "foo");
 }
 
 TEST(PETSC, foo_gmsh) {

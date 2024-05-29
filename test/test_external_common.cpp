@@ -263,6 +263,7 @@ TEST(ExternalCommon, quadrature_point_mapper) {
     }
   }
 
+  ASSERT_FALSE(qpm->points_added());
   qpm->add_points_initialise();
   std::vector<REAL> point(ndim);
   for (int ix = 0; ix < NT * ndim; ix += ndim) {
@@ -272,6 +273,7 @@ TEST(ExternalCommon, quadrature_point_mapper) {
     qpm->add_point(point.data());
   }
   qpm->add_points_finalise();
+  ASSERT_TRUE(qpm->points_added());
 
   // Create some data
   ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),

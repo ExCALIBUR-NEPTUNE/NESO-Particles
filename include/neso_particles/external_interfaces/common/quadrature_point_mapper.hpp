@@ -21,6 +21,7 @@ protected:
   int ndim;
   int rank;
   int size;
+  bool internal_points_added;
 
   struct Point {
     REAL coords[3];
@@ -127,7 +128,7 @@ public:
       : sycl_target(sycl_target), domain(domain),
         ndim(domain->mesh->get_ndim()),
         rank(sycl_target->comm_pair.rank_parent),
-        size(sycl_target->comm_pair.size_parent) {
+        size(sycl_target->comm_pair.size_parent), internal_points_added(false) {
     NESOASSERT((0 < ndim) && (ndim < 4), "Bad number of dimensions.");
   }
 
@@ -387,6 +388,8 @@ public:
         Access::read(ParticleLoopIndex{}),
         Access::write(Sym<INT>("ADDING_RANK_INDEX")), Access::add(la_ordering))
         ->execute();
+
+    this->internal_points_added = true;
   }
 
   /**
@@ -515,7 +518,13 @@ public:
       this->cec = nullptr;
     }
   }
+  /**
+   * @returns true if points have been added to the mapper.
+   */
+  inline bool points_added() { return this->internal_points_added; }
 };
+
+typedef std::shared_ptr<QuadraturePointMapper> QuadraturePointMapperSharedPtr;
 
 } // namespace NESO::Particles::ExternalCommon
 

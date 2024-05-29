@@ -696,6 +696,23 @@ public:
           DMPlexRestoreCellCoordinates(dm, cx, &is_dg, &nc, &array, &coords));
     }
   }
+
+  /**
+   * Get the volume of a cell in the local mesh.
+   *
+   * @param cell Local index of cell.
+   * @returns Volume of cell.
+   */
+  inline REAL get_cell_volume(const int index) {
+    this->check_valid_local_cell(index);
+    const PetscInt petsc_index = this->map_np_to_petsc.at(index);
+    PetscReal vol;
+    PetscReal centroid[3];
+    PetscReal normal[3];
+    PETSCCHK(DMPlexComputeCellGeometryFVM(this->dm, petsc_index, &vol, centroid,
+                                          normal));
+    return vol;
+  }
 };
 
 } // namespace NESO::Particles::PetscInterface
