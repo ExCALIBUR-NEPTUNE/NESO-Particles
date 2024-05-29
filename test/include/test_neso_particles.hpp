@@ -7,6 +7,10 @@
 #include <filesystem>
 #include <string>
 
+#ifndef TO_STRING_MACRO
+#define TO_STRING_MACRO(s) #s
+#endif
+
 namespace NESO::Particles {
 
 template <typename T> inline auto as_orig_t(std::shared_ptr<T> ptr) {
@@ -30,12 +34,16 @@ inline std::filesystem::path get_test_resource(std::string resource_name) {
   if (env_test_resources) {
     directories.push_back(std::filesystem::path(env_test_resources));
   }
+  // If we are in <git root>/build then this points to
+  // <git root>/tests/test_resources.
+  directories.push_back(std::filesystem::path("../test/test_resources"));
   // If the test binary is in <install location>/bin then this points to
   // <install location>/test_resources
-  directories.push_back(std::filesystem::path("../test_resources"));
-  // This always points to the download/git location for a build
-  directories.push_back(std::filesystem::path(__FILE__).parent_path() /
-                        std::filesystem::path("../test_resources"));
+#ifdef CMAKE_INSTALL_PREFIX
+  directories.push_back(
+      std::filesystem::path(TO_STRING_MACRO(CMAKE_INSTALL_PREFIX)) /
+      std::filesystem::path("test_resources"));
+#endif
 
   const std::filesystem::path resource_base{resource_name};
   for (auto &root : directories) {

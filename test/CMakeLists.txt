@@ -74,6 +74,8 @@ foreach(TEST ${TEST_SRCS})
   add_executable(${TEST_NAME} ${TEST_SOURCES})
   target_link_libraries(${TEST_NAME} PRIVATE NESO-Particles GTest::gtest)
   target_compile_definitions(${TEST_NAME} PRIVATE GPU_SELECTOR=0)
+  target_compile_definitions(
+    ${TEST_NAME} PRIVATE CMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX})
   # exclude from all so indiviual tests aren't built for install
   set_target_properties(${TEST_NAME} PROPERTIES EXCLUDE_FROM_ALL TRUE)
   # Make usre the dummy target depends on each tests
@@ -87,6 +89,8 @@ add_executable(${EXECUTABLE} ${TEST_MAIN} ${TEST_LIST})
 
 target_link_libraries(${EXECUTABLE} PRIVATE NESO-Particles GTest::gtest)
 target_compile_definitions(${EXECUTABLE} PRIVATE GPU_SELECTOR=0)
+target_compile_definitions(${EXECUTABLE}
+                           PRIVATE CMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX})
 
 # define the test executable as a sycl target
 add_sycl_to_target(TARGET ${EXECUTABLE} SOURCES ${TEST_MAIN} ${TEST_LIST})
