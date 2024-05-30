@@ -226,10 +226,7 @@ public:
       : comm(comm), subdivision_order_offset(subdivision_order_offset) {
 
     this->dmh = std::make_shared<DMPlexHelper>(comm, dm);
-
-    PetscInt start, end;
-    PETSCCHK(DMPlexGetHeightStratum(this->dmh->dm, 0, &start, &end));
-    this->cell_count = static_cast<int>(end) - static_cast<int>(start);
+    this->cell_count = this->dmh->get_cell_count();
     this->ndim = this->dmh->ndim;
 
     NESOASSERT((this->ndim > 0) && (this->ndim < 4),
