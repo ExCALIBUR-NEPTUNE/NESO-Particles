@@ -23,8 +23,6 @@ inline auto make_test_obj(ARGS... args) {
 }
 
 inline std::filesystem::path get_test_resource(std::string resource_name) {
-  std::filesystem::path path;
-  path.clear();
 
   std::vector<std::filesystem::path> directories;
   directories.reserve(3);
@@ -53,6 +51,8 @@ inline std::filesystem::path get_test_resource(std::string resource_name) {
     }
   }
 
+  std::filesystem::path path;
+  path.clear();
   return path;
 }
 

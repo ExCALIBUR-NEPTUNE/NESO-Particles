@@ -593,6 +593,89 @@ public:
   }
 
   /**
+   * Determine if mesh cell contains a point.
+   *
+   * @param[in] index Local cell index.
+   * @param[in] point Point to test.
+   * @returns true if point contains cell.
+   */
+  inline bool cell_contains_point(const PetscInt index,
+                                  std::vector<PetscScalar> &point) {
+    const PetscInt ndim = this->ndim;
+    NESOASSERT(point.size() == ndim,
+               "Miss-match in point size and mesh dimension.");
+    NESOASSERT(2 == ndim, "Only implemented in 2D.");
+    this->check_valid_local_cell(index);
+    const PetscInt petsc_index = this->map_np_to_petsc.at(index);
+    bool contained = false;
+    const PetscScalar x0 = point.at(0);
+    const PetscScalar x1 = point.at(1);
+
+    const PetscScalar *tmp;
+    PetscScalar *vertices = nullptr;
+    PetscReal x = PetscRealPart(point[0]);
+    PetscReal y = PetscRealPart(point[1]);
+    PetscInt num_crossings = 0, num_coords, f;
+    PetscBool is_dg;
+
+    PETSCCHK(DMPlexGetCellCoordinates(dm, petsc_index, &is_dg, &num_coords,
+                                      &tmp, &vertices));
+    const int num_faces = num_coords / 2;
+    int faces[8];
+    if (num_coords == 8) {
+      // {0, 1, 1, 2, 2, 3, 3, 0};
+      faces[0] = 0;
+      faces[1] = 1;
+      faces[2] = 1;
+      faces[3] = 2;
+      faces[4] = 2;
+      faces[5] = 3;
+      faces[6] = 3;
+      faces[7] = 0;
+    } else {
+      // {0, 1, 1, 2, 2, 0};
+      faces[0] = 0;
+      faces[1] = 1;
+      faces[2] = 1;
+      faces[3] = 2;
+      faces[4] = 2;
+      faces[5] = 0;
+    }
+
+    for (int facex = 0; facex < num_faces; facex++) {
+      REAL xi = vertices[faces[2 * facex + 0] * 2 + 0];
+      REAL yi = vertices[faces[2 * facex + 0] * 2 + 1];
+      REAL xj = vertices[faces[2 * facex + 1] * 2 + 0];
+      REAL yj = vertices[faces[2 * facex + 1] * 2 + 1];
+      // Is the point in a corner
+      if ((x0 == xj) && (x1 == yj)) {
+        num_crossings = 1;
+        break;
+      }
+      if ((yj > x1) != (yi > x1)) {
+        REAL determinate = (x0 - xj) * (yi - yj) - (xi - xj) * (x1 - yj);
+        if (determinate == 0) {
+          // Point is on line
+          num_crossings = 1;
+          break;
+        }
+        if ((determinate < 0) != (yi < yj)) {
+          num_crossings++;
+        }
+      }
+    }
+
+    // odd number of crossings implies the point is contained
+    if ((num_crossings % 2) == 1) {
+      contained = true;
+    };
+    PETSCCHK(DMPlexRestoreCellCoordinates(dm, petsc_index, &is_dg, &num_coords,
+                                          &tmp, &vertices));
+
+    return contained;
+  }
+
+  /**
    * @returns The number of labels in the DMPlex.
    */
   inline PetscInt get_num_labels() {

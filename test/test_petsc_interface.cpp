@@ -573,8 +573,108 @@ TEST_P(PETSC_HALO_OVERLAP, dm_halos) {
   PETSCCHK(DMDestroy(&dm));
   PETSCCHK(PetscFinalize());
 }
-
 INSTANTIATE_TEST_SUITE_P(init, PETSC_HALO_OVERLAP, testing::Values(0, 1));
+
+TEST(PETSC, dmplex_project_evaluate) {
+  std::filesystem::path gmsh_filepath;
+  GET_TEST_RESOURCE(gmsh_filepath, "gmsh/reference_all_types_square_0.2.msh");
+
+  PETSCCHK(PetscInitializeNoArguments());
+  DM dm;
+  PETSCCHK(DMPlexCreateGmshFromFile(MPI_COMM_WORLD,
+                                    gmsh_filepath.generic_string().c_str(),
+                                    (PetscBool)1, &dm));
+  PetscInterface::generic_distribute(&dm);
+
+  auto mesh =
+      std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
+  const int ndim = mesh->get_ndim();
+  const int cell_count = mesh->get_cell_count();
+  auto sycl_target =
+      std::make_shared<SYCLTarget>(GPU_SELECTOR, mesh->get_comm());
+  auto mapper =
+      std::make_shared<PetscInterface::DMPlexLocalMapper>(sycl_target, mesh);
+  auto domain = std::make_shared<Domain>(mesh, mapper);
+
+  auto qpm = std::make_shared<ExternalCommon::QuadraturePointMapper>(
+      sycl_target, domain);
+  std::vector<std::vector<double>> positions;
+  std::vector<int> cells;
+
+  PetscInterface::uniform_within_dmplex_cells(mesh, 2, positions, cells);
+
+  qpm->add_points_initialise();
+  const int npart_qpm = positions.at(0).size();
+  REAL point[2];
+  for (int px = 0; px < npart_qpm; px++) {
+    point[0] = positions.at(0).at(px);
+    point[1] = positions.at(1).at(px);
+    qpm->add_point(point);
+  }
+  qpm->add_points_finalise();
+
+  ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
+                             ParticleProp(Sym<REAL>("Q"), 1),
+                             ParticleProp(Sym<REAL>("R"), 1),
+                             ParticleProp(Sym<INT>("CELL_ID"), 1, true)};
+  auto A = std::make_shared<ParticleGroup>(domain, particle_spec, sycl_target);
+
+  const int npart_per_cell = 17;
+  PetscInterface::uniform_within_dmplex_cells(mesh, npart_per_cell, positions,
+                                              cells);
+  const int N = cells.size();
+  ParticleSet initial_distribution(N, particle_spec);
+
+  for (int px = 0; px < N; px++) {
+    for (int dimx = 0; dimx < ndim; dimx++) {
+      initial_distribution[Sym<REAL>("P")][px][dimx] =
+          positions.at(dimx).at(px);
+    }
+    initial_distribution[Sym<INT>("CELL_ID")][px][0] = cells.at(px);
+    initial_distribution[Sym<REAL>("Q")][px][0] = cells.at(px) + 1.0;
+  }
+  A->add_particles_local(initial_distribution);
+
+  auto dpe =
+      std::make_shared<PetscInterface::DMPlexProjectEvaluate>(qpm, "DG", 0);
+  dpe->project(A, Sym<REAL>("Q"));
+
+  for (int cx = 0; cx < cell_count; cx++) {
+    auto Q = qpm->particle_group->get_cell(qpm->get_sym(1), cx);
+    for (int rx = 0; rx < Q->nrow; rx++) {
+      ASSERT_NEAR(Q->at(rx, 0),
+                  (cx + 1) * npart_per_cell / mesh->dmh->get_cell_volume(cx),
+                  1.0e-10);
+    }
+  }
+
+  // scale the quadrature point values
+  const REAL k_scale = 3.14;
+  particle_loop(
+      qpm->particle_group, [=](auto Q) { Q.at(0) *= k_scale; },
+      Access::write(Sym<REAL>(qpm->get_sym(1))))
+      ->execute();
+
+  // evalutate the scale quadrature point values
+  dpe->evaluate(A, Sym<REAL>("R"));
+
+  for (int cx = 0; cx < cell_count; cx++) {
+    auto R = A->get_cell(Sym<REAL>("R"), cx);
+    for (int rx = 0; rx < R->nrow; rx++) {
+      const REAL correct =
+          k_scale * (cx + 1) * npart_per_cell / mesh->dmh->get_cell_volume(cx);
+      const REAL rescale = 1.0 / std::max(1.0, std::abs(correct));
+      ASSERT_NEAR(R->at(rx, 0) * rescale, correct * rescale, 1.0e-10);
+    }
+  }
+
+  A->free();
+  qpm->free();
+  sycl_target->free();
+  mesh->free();
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
 
 INSTANTIATE_TEST_SUITE_P(init, PETSC_NDIM, testing::Values(2));
 
@@ -630,20 +730,15 @@ TEST(PETSC, foo_internal) {
   PETSCCHK(PetscFinalize());
 }
 
-TEST(PETSC, foo_internal_triangle) {
-
-  std::filesystem::path foo;
-  GET_TEST_RESOURCE(foo, "foo");
-}
-
 TEST(PETSC, foo_gmsh) {
   // TODO REMOVE?
+  std::filesystem::path gmsh_filepath;
+  GET_TEST_RESOURCE(gmsh_filepath, "gmsh/reference_all_types_square_0.2.msh");
+
   PETSCCHK(PetscInitializeNoArguments());
   DM dm;
-
-  std::string filename = "/home/js0259/git-ukaea/NESO-Particles-paper/"
-                         "resources/mesh_ring/mesh_ring.msh";
-  PETSCCHK(DMPlexCreateGmshFromFile(MPI_COMM_WORLD, filename.c_str(),
+  PETSCCHK(DMPlexCreateGmshFromFile(MPI_COMM_WORLD,
+                                    gmsh_filepath.generic_string().c_str(),
                                     (PetscBool)1, &dm));
 
   PetscInterface::generic_distribute(&dm);
