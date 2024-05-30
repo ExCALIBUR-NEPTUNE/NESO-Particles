@@ -305,6 +305,7 @@ protected:
   PetscInt cell_end;
   std::vector<PetscInt> map_np_to_petsc;
   std::map<PetscInt, PetscInt> map_petsc_to_np;
+  double volume;
 
   inline void check_valid_local_cell(const PetscInt cell) const {
     NESOASSERT((cell > -1) && (cell < this->ncells),
@@ -370,7 +371,7 @@ public:
    * TODO
    */
   DMPlexHelper(MPI_Comm comm, DM dm)
-      : comm(comm), dm(dm), bounding_box(nullptr) {
+      : comm(comm), dm(dm), bounding_box(nullptr), volume(-1.0) {
     DMPlexInterpolatedFlag interpolated;
     PETSCCHK(DMPlexIsInterpolated(this->dm, &interpolated));
     NESOASSERT(interpolated == DMPLEX_INTERPOLATED_FULL,
@@ -795,6 +796,22 @@ public:
     PETSCCHK(DMPlexComputeCellGeometryFVM(this->dm, petsc_index, &vol, centroid,
                                           normal));
     return vol;
+  }
+
+  /**
+   * @returns The total volume of the mesh. Must be called collectively on the
+   * communicator.
+   */
+  inline REAL get_volume() {
+    if (this->volume < 0.0) {
+      double local_volume = 0.0;
+      for (int cx = 0; cx < this->ncells; cx++) {
+        local_volume += this->get_cell_volume(cx);
+      }
+      MPICHK(MPI_Allreduce(&local_volume, &this->volume, 1, MPI_DOUBLE, MPI_SUM,
+                           this->comm));
+    }
+    return this->volume;
   }
 };
 
