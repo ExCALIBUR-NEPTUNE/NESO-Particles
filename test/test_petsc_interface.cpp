@@ -698,6 +698,68 @@ TEST(PETSC, dmplex_volume) {
   PETSCCHK(PetscFinalize());
 }
 
+TEST(PETSC, cartesian_to_barycentric) {
+  {
+    const REAL x1 = 0.0;
+    const REAL y1 = 0.0;
+    const REAL x2 = 2.0;
+    const REAL y2 = 0.0;
+    const REAL x3 = 0.0;
+    const REAL y3 = 3.0;
+    REAL l1, l2, l3, xx, yy;
+    {
+      const REAL x = 0.0;
+      const REAL y = 0.0;
+      PetscInterface::triangle_cartesian_to_barycentric(x1, y1, x2, y2, x3, y3,
+                                                        x, y, &l1, &l2, &l3);
+      ASSERT_NEAR(l1, 1.0, 1.0e-10);
+      ASSERT_NEAR(l2, 0.0, 1.0e-10);
+      ASSERT_NEAR(l3, 0.0, 1.0e-10);
+      PetscInterface::triangle_barycentric_to_cartesian(x1, y1, x2, y2, x3, y3,
+                                                        l1, l2, l3, &xx, &yy);
+      ASSERT_NEAR(x, xx, 1.0e-10);
+      ASSERT_NEAR(y, yy, 1.0e-10);
+    }
+    {
+      const REAL x = 2.0;
+      const REAL y = 0.0;
+      PetscInterface::triangle_cartesian_to_barycentric(x1, y1, x2, y2, x3, y3,
+                                                        x, y, &l1, &l2, &l3);
+      ASSERT_NEAR(l1, 0.0, 1.0e-10);
+      ASSERT_NEAR(l2, 1.0, 1.0e-10);
+      ASSERT_NEAR(l3, 0.0, 1.0e-10);
+      PetscInterface::triangle_barycentric_to_cartesian(x1, y1, x2, y2, x3, y3,
+                                                        l1, l2, l3, &xx, &yy);
+      ASSERT_NEAR(x, xx, 1.0e-10);
+      ASSERT_NEAR(y, yy, 1.0e-10);
+    }
+    {
+      const REAL x = 0.0;
+      const REAL y = 3.0;
+      PetscInterface::triangle_cartesian_to_barycentric(x1, y1, x2, y2, x3, y3,
+                                                        x, y, &l1, &l2, &l3);
+      ASSERT_NEAR(l1, 0.0, 1.0e-10);
+      ASSERT_NEAR(l2, 0.0, 1.0e-10);
+      ASSERT_NEAR(l3, 1.0, 1.0e-10);
+      PetscInterface::triangle_barycentric_to_cartesian(x1, y1, x2, y2, x3, y3,
+                                                        l1, l2, l3, &xx, &yy);
+      ASSERT_NEAR(x, xx, 1.0e-10);
+      ASSERT_NEAR(y, yy, 1.0e-10);
+    }
+    {
+      const REAL x = 0.2;
+      const REAL y = 0.3;
+      PetscInterface::triangle_cartesian_to_barycentric(x1, y1, x2, y2, x3, y3,
+                                                        x, y, &l1, &l2, &l3);
+      ASSERT_NEAR(std::abs(l1) + std::abs(l2) + std::abs(l3), 1.0, 1.0e-10);
+      PetscInterface::triangle_barycentric_to_cartesian(x1, y1, x2, y2, x3, y3,
+                                                        l1, l2, l3, &xx, &yy);
+      ASSERT_NEAR(x, xx, 1.0e-10);
+      ASSERT_NEAR(y, yy, 1.0e-10);
+    }
+  }
+}
+
 INSTANTIATE_TEST_SUITE_P(init, PETSC_NDIM, testing::Values(2));
 
 // TEST(PETSC, dm_all_types_3d) {

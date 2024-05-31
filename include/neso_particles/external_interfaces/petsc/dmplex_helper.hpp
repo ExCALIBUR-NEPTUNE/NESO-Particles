@@ -526,6 +526,41 @@ public:
   }
 
   /**
+   * Get the vertices of a cell.
+   *
+   * @param[in] cell Local cell index.
+   * @param[in, out] vertices Vector of vertices.
+   */
+  inline void get_cell_vertices(const PetscInt cell,
+                                std::vector<std::vector<REAL>> &vertices) {
+    this->check_valid_local_cell(cell);
+
+    const PetscScalar *array;
+    PetscScalar *coords = nullptr;
+    PetscInt num_coords;
+    PetscBool is_dg;
+    const PetscInt petsc_index = this->map_np_to_petsc.at(cell);
+    this->check_valid_petsc_cell(petsc_index);
+    PETSCCHK(DMPlexGetCellCoordinates(dm, petsc_index, &is_dg, &num_coords,
+                                      &array, &coords));
+    NESOASSERT(coords != nullptr, "No vertices returned for cell.");
+    const PetscInt num_verts = num_coords / ndim;
+
+    vertices.clear();
+    vertices.reserve(num_verts);
+    for (PetscInt vx = 0; vx < num_verts; vx++) {
+      std::vector<REAL> tmp(ndim);
+      for (PetscInt dimx = 0; dimx < this->ndim; dimx++) {
+        const REAL cx = coords[vx * ndim + dimx];
+        tmp.at(dimx) = cx;
+      }
+      vertices.push_back(tmp);
+    }
+    PETSCCHK(DMPlexRestoreCellCoordinates(dm, petsc_index, &is_dg, &num_coords,
+                                          &array, &coords));
+  }
+
+  /**
    * Get average of the vertices of a cell.
    *
    * @param[in] cell Local cell index.
@@ -538,25 +573,15 @@ public:
                "Missmatch between vector size and number of dimensions");
 
     std::fill(average.begin(), average.end(), 0.0);
-    const PetscScalar *array;
-    PetscScalar *coords = nullptr;
-    PetscInt num_coords;
-    PetscBool is_dg;
-    const PetscInt petsc_index = this->map_np_to_petsc.at(cell);
-    this->check_valid_petsc_cell(petsc_index);
-    PETSCCHK(DMPlexGetCellCoordinates(dm, petsc_index, &is_dg, &num_coords,
-                                      &array, &coords));
-    NESOASSERT(coords != nullptr, "No vertices returned for cell.");
-    const PetscInt num_verts = num_coords / ndim;
+    std::vector<std::vector<REAL>> vertices;
+    this->get_cell_vertices(cell, vertices);
+    const int num_verts = vertices.size();
     for (PetscInt vx = 0; vx < num_verts; vx++) {
       for (PetscInt dimx = 0; dimx < this->ndim; dimx++) {
-        const REAL cx = coords[vx * ndim + dimx];
+        const REAL cx = vertices.at(vx).at(dimx);
         average.at(dimx) += cx;
       }
     }
-    PETSCCHK(DMPlexRestoreCellCoordinates(dm, petsc_index, &is_dg, &num_coords,
-                                          &array, &coords));
-
     const REAL tmp_factor = 1.0 / ((REAL)num_verts);
     for (int dx = 0; dx < this->ndim; dx++) {
       average.at(dx) *= tmp_factor;
