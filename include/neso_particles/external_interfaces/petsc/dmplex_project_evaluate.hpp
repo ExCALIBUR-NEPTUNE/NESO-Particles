@@ -61,9 +61,10 @@ public:
               std::make_shared<DMPlexProjectEvaluateDG>(qpm, function_space,
                                                         polynomial_order));
     } else if (function_space == "Barycentric") {
-      std::dynamic_pointer_cast<DMPlexProjectEvaluateBase>(
-          std::make_shared<DMPlexProjectEvaluateBarycentric>(
-              qpm, function_space, polynomial_order));
+      this->implementation =
+          std::dynamic_pointer_cast<DMPlexProjectEvaluateBase>(
+              std::make_shared<DMPlexProjectEvaluateBarycentric>(
+                  qpm, function_space, polynomial_order));
     }
   }
 
