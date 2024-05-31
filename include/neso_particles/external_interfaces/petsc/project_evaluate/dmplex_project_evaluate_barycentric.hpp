@@ -59,16 +59,105 @@ inline void triangle_barycentric_to_cartesian(const REAL x1, const REAL y1,
 /**
  * TODO
  */
+inline void triangle_barycentric_invert(const REAL *RESTRICT L,
+                                        REAL *RESTRICT M) {
+
+  const REAL inverse_denom =
+      1.0 / (L[0] * L[4] * L[8] - L[0] * L[5] * L[7] - L[1] * L[3] * L[8] +
+             L[1] * L[5] * L[6] + L[2] * L[3] * L[7] - L[2] * L[4] * L[6]);
+
+  // row: 0 col: 0
+  M[0] = (L[4] * L[8] - L[5] * L[7]) * inverse_denom;
+  // row: 0 col: 1
+  M[1] = (-L[1] * L[8] + L[2] * L[7]) * inverse_denom;
+  // row: 0 col: 2
+  M[2] = (L[1] * L[5] - L[2] * L[4]) * inverse_denom;
+  // row: 1 col: 0
+  M[3] = (-L[3] * L[8] + L[5] * L[6]) * inverse_denom;
+  // row: 1 col: 1
+  M[4] = (L[0] * L[8] - L[2] * L[6]) * inverse_denom;
+  // row: 1 col: 2
+  M[5] = (-L[0] * L[5] + L[2] * L[3]) * inverse_denom;
+  // row: 2 col: 0
+  M[6] = (L[3] * L[7] - L[4] * L[6]) * inverse_denom;
+  // row: 2 col: 1
+  M[7] = (-L[0] * L[7] + L[1] * L[6]) * inverse_denom;
+  // row: 2 col: 2
+  M[8] = (L[0] * L[4] - L[1] * L[3]) * inverse_denom;
+}
+
+/**
+ * TODO
+ */
 class DMPlexProjectEvaluateBarycentric : public DMPlexProjectEvaluateBase {
 protected:
   std::shared_ptr<CellDatConst<REAL>> cdc_project;
   std::shared_ptr<CellDatConst<int>> cdc_num_vertices;
   std::shared_ptr<CellDatConst<REAL>> cdc_vertices;
+  std::shared_ptr<CellDatConst<REAL>> cdc_matrices;
   DMPlexInterfaceSharedPtr mesh;
 
   inline void check_setup() {
     NESOASSERT(this->qpm->points_added(),
                "QuadraturePointMapper needs points adding to it.");
+  }
+  inline void check_ncomp(const int ncomp) {
+    if (this->cdc_project->nrow < ncomp) {
+      const int cell_count = this->qpm->domain->mesh->get_cell_count();
+      this->cdc_project = std::make_shared<CellDatConst<REAL>>(
+          this->qpm->sycl_target, cell_count, ncomp, 3);
+    }
+  }
+
+  inline void setup_matrices() {
+    if (this->cdc_matrices != nullptr) {
+      const int cell_count = this->qpm->domain->mesh->get_cell_count();
+      this->cdc_matrices = std::make_shared<CellDatConst<REAL>>(
+          this->qpm->sycl_target, cell_count, 3, 3);
+      this->cdc_matrices->fill(-1000.0);
+      auto position_dat = this->qpm->particle_group->position_dat;
+
+      particle_loop(
+          this->qpm->particle_group,
+          [=](auto VERTICES, auto POS, auto MASK, auto MATRIX) {
+            const auto quad_index = MASK.at(3);
+            if (quad_index < 3) {
+              REAL l1, l2, l3;
+              const REAL x = POS.at(0);
+              const REAL y = POS.at(1);
+              triangle_cartesian_to_barycentric(
+                  VERTICES.at(0, 0), VERTICES.at(0, 1), VERTICES.at(1, 0),
+                  VERTICES.at(1, 1), VERTICES.at(2, 0), VERTICES.at(2, 1), x, y,
+                  &l1, &l2, &l3);
+              MATRIX.at(quad_index, 0) = l1;
+              MATRIX.at(quad_index, 1) = l2;
+              MATRIX.at(quad_index, 2) = l3;
+            }
+          },
+          Access::read(this->cdc_vertices), Access::read(position_dat),
+          Access::read(Sym<INT>("ADDING_RANK_INDEX")),
+          Access::write(this->cdc_matrices))
+          ->execute();
+
+      // compute the inverses
+      REAL L[9], M[9];
+      for (int cellx = 0; cellx < cell_count; cellx++) {
+        for (int rx = 0; rx < 3; rx++) {
+          for (int cx = 0; cx < 3; cx++) {
+            const REAL v = this->cdc_matrices->get_value(cellx, rx, cx);
+            NESOASSERT(((0.0 <= v) && (v <= 1.0)),
+                       "Bad Barycentric coordinate for quadrature point.");
+            L[rx * 3 + cx] = v;
+          }
+        }
+        triangle_barycentric_invert(L, M);
+        for (int rx = 0; rx < 3; rx++) {
+          for (int cx = 0; cx < 3; cx++) {
+            this->cdc_matrices->set_value(cellx, rx, cx, M[rx * 3 + cx]);
+          }
+        }
+      }
+    }
   }
 
 public:
@@ -113,6 +202,7 @@ public:
         this->qpm->sycl_target, cell_count, 1, 1);
     this->cdc_vertices = std::make_shared<CellDatConst<REAL>>(
         this->qpm->sycl_target, cell_count, 4, 2);
+    this->cdc_matrices = nullptr;
 
     // For each cell record the volume.
     std::vector<std::vector<REAL>> vertices;
@@ -141,32 +231,55 @@ public:
     auto position_dat = particle_group->position_dat;
 
     const int ncomp = dat->ncomp;
+    this->check_ncomp(ncomp);
+
     auto destination_dat = this->qpm->get_sym(ncomp);
+    auto destination_position_dat = this->qpm->particle_group->position_dat;
 
     // DG0 projection onto the CellDatConst
     this->cdc_project->fill(0.0);
     particle_loop(
         "DMPlexProjectEvaluateBarycentric::project_0", particle_group,
-        [=](auto NUM_VERTICES, auto VERTICES, auto SRC, auto DST) {
-          const int num_vertices = NUM_VERTICES.at(0, 0);
+        [=](auto POS, auto VERTICES, auto SRC, auto DST) {
+          REAL l1, l2, l3;
+          const REAL x = POS.at(0);
+          const REAL y = POS.at(1);
+          triangle_cartesian_to_barycentric(
+              VERTICES.at(0, 0), VERTICES.at(0, 1), VERTICES.at(1, 0),
+              VERTICES.at(1, 1), VERTICES.at(2, 0), VERTICES.at(2, 1), x, y,
+              &l1, &l2, &l3);
+          const REAL value = SRC.at(0);
+          for (int cx = 0; cx < ncomp; cx++) {
+            DST.fetch_add(cx, 0, l1 * SRC.at(cx));
+            DST.fetch_add(cx, 1, l2 * SRC.at(cx));
+            DST.fetch_add(cx, 2, l3 * SRC.at(cx));
+          }
         },
-        Access::read(this->cdc_num_vertices), Access::read(this->cdc_vertices),
+        Access::read(position_dat), Access::read(this->cdc_vertices),
         Access::read(sym), Access::add(this->cdc_project))
         ->execute();
 
     // Read the CellDatConst values onto the quadrature point values
-    // particle_loop(
-    //    "DMPlexProjectEvaluateBarycentric::project_1",
-    //    this->qpm->particle_group,
-    //    [=](auto VOLS, auto SRC, auto DST) {
-    //      const REAL iv = 1.0 / VOLS.at(0, 0);
-    //      for (int cx = 0; cx < ncomp; cx++) {
-    //        DST.at(cx) = SRC.at(cx, 0) * iv;
-    //      }
-    //    },
-    //    Access::read(this->cdc_project),
-    //    Access::write(destination_dat))
-    //    ->execute();
+    particle_loop(
+        "DMPlexProjectEvaluateBarycentric::project_1",
+        this->qpm->particle_group,
+        [=](auto POS, auto VERTICES, auto SRC, auto DST) {
+          REAL l1, l2, l3;
+          const REAL x = POS.at(0);
+          const REAL y = POS.at(1);
+          triangle_cartesian_to_barycentric(
+              VERTICES.at(0, 0), VERTICES.at(0, 1), VERTICES.at(1, 0),
+              VERTICES.at(1, 1), VERTICES.at(2, 0), VERTICES.at(2, 1), x, y,
+              &l1, &l2, &l3);
+          for (int cx = 0; cx < ncomp; cx++) {
+            DST.at(cx) =
+                SRC.at(cx, 0) * l1 + SRC.at(cx, 1) * l2 + SRC.at(cx, 2) * l3;
+          }
+        },
+        Access::read(destination_position_dat),
+        Access::read(this->cdc_vertices), Access::read(this->cdc_project),
+        Access::write(destination_dat))
+        ->execute();
   }
 
   /**
@@ -176,33 +289,97 @@ public:
    */
   inline void evaluate(ParticleGroupSharedPtr particle_group,
                        Sym<REAL> sym) override {
+
+    /*
+      If:
+        1) Quadrature point i has Barycentric coordinates li1, li2, li3 and
+      evaluation ui. 2) The vertices have values q1, q2 and q3.
+
+      Then
+        | l11 l12 l13 |   |q1|   |u1|
+        | l21 l22 l23 | x |q2| = |u2|
+        | l31 l32 l33 |   |q3|   |u3|
+    */
+    this->setup_matrices();
+
     auto dat = particle_group->get_dat(sym);
+    auto position_dat = particle_group->position_dat;
+
     const int ncomp = dat->ncomp;
+    this->check_ncomp(ncomp);
     auto source_dat = this->qpm->get_sym(ncomp);
+    this->cdc_project->fill(0.0);
 
     // Copy from the quadrature point values into the CellDatConst
     particle_loop(
         "DMPlexProjectEvaluateBarycentric::evaluate_0",
         this->qpm->particle_group,
-        [=](auto SRC, auto DST, auto MASK) {
-          if (MASK.at(3) == 0) {
+        [=](auto MATRIX, auto SRC, auto DST, auto MASK) {
+          /*
+            Using the identity
+
+            | m11 m12 m13 |   |u_1|   | m11 m12 m13 |   |u_1|
+            | m21 m22 m23 | x |u_2| = | m21 m22 m23 | x | 0 | +
+            | m31 m32 m33 |   |u_3|   | m31 m32 m33 |   | 0 |
+
+                                      | m11 m12 m13 |   | 0 |
+                                      | m21 m22 m23 | x |u_2| +
+                                      | m31 m32 m33 |   | 0 |
+
+                                      | m11 m12 m13 |   | 0 |
+                                      | m21 m22 m23 | x | 0 |
+                                      | m31 m32 m33 |   |u_3|
+
+            quad_index is a row in the above matrix equation. Hence this kernel
+            is performing
+
+            | m11 m12 m13 |   | 0 |   |v1|
+            | m21 m22 m23 | x |u_i| = |v2|
+            | m31 m32 m33 |   | 0 |   |v3|
+
+            where i is quad_index. Hence the kernel performs the scales the
+            i^th column by the contribution. Then atomically adding the
+            v1,v2,v3 values across all the quad indices.
+
+           */
+          const auto quad_index = MASK.at(3);
+
+          if (quad_index < 3) {
             for (int cx = 0; cx < ncomp; cx++) {
-              DST.at(cx, 0) = SRC.at(cx);
+              const REAL value = SRC.at(cx);
+
+              const REAL v1 = MATRIX.at(0, quad_index) * value;
+              const REAL v2 = MATRIX.at(1, quad_index) * value;
+              const REAL v3 = MATRIX.at(2, quad_index) * value;
+              DST.fetch_add(cx, 0, v1);
+              DST.fetch_add(cx, 1, v2);
+              DST.fetch_add(cx, 2, v3);
             }
           }
         },
-        Access::read(source_dat), Access::write(this->cdc_project),
+        Access::read(this->cdc_matrices), Access::read(source_dat),
+        Access::add(this->cdc_project),
         Access::read(Sym<INT>("ADDING_RANK_INDEX")))
         ->execute();
 
     // Copy from the CellDatConst to the output particle group
     particle_loop(
         "DMPlexProjectEvaluateBarycentric::evaluate_1", particle_group,
-        [=](auto SRC, auto DST) {
+        [=](auto POS, auto VERTICES, auto SRC, auto DST) {
+          REAL l1, l2, l3;
+          const REAL x = POS.at(0);
+          const REAL y = POS.at(1);
+          triangle_cartesian_to_barycentric(
+              VERTICES.at(0, 0), VERTICES.at(0, 1), VERTICES.at(1, 0),
+              VERTICES.at(1, 1), VERTICES.at(2, 0), VERTICES.at(2, 1), x, y,
+              &l1, &l2, &l3);
+
           for (int cx = 0; cx < ncomp; cx++) {
-            DST.at(cx) = SRC.at(cx, 0);
+            DST.at(cx) =
+                SRC.at(cx, 0) * l1 + SRC.at(cx, 1) * l2 + SRC.at(cx, 2) * l3;
           }
         },
+        Access::read(position_dat), Access::read(this->cdc_vertices),
         Access::read(this->cdc_project), Access::write(sym))
         ->execute();
   }

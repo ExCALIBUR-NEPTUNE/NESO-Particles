@@ -25,7 +25,6 @@ public:
   std::string function_space;
   int polynomial_order;
   std::shared_ptr<DMPlexProjectEvaluateBase> implementation;
-
   DMPlexProjectEvaluate() = default;
 
   /**

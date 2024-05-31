@@ -19,6 +19,14 @@ protected:
                "QuadraturePointMapper needs points adding to it.");
   }
 
+  inline void check_ncomp(const int ncomp) {
+    if (this->cdc_project->nrow < ncomp) {
+      const int cell_count = this->qpm->domain->mesh->get_cell_count();
+      this->cdc_project = std::make_shared<CellDatConst<REAL>>(
+          this->qpm->sycl_target, cell_count, ncomp, 1);
+    }
+  }
+
 public:
   ExternalCommon::QuadraturePointMapperSharedPtr qpm;
   std::string function_space;
@@ -75,6 +83,7 @@ public:
                       Sym<REAL> sym) override {
     auto dat = particle_group->get_dat(sym);
     const int ncomp = dat->ncomp;
+    this->check_ncomp(ncomp);
     auto destination_dat = this->qpm->get_sym(ncomp);
 
     // DG0 projection onto the CellDatConst
@@ -112,6 +121,7 @@ public:
                        Sym<REAL> sym) override {
     auto dat = particle_group->get_dat(sym);
     const int ncomp = dat->ncomp;
+    this->check_ncomp(ncomp);
     auto source_dat = this->qpm->get_sym(ncomp);
 
     // Copy from the quadrature point values into the CellDatConst
