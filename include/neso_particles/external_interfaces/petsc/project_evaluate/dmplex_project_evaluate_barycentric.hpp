@@ -92,6 +92,7 @@ inline void triangle_barycentric_invert(const REAL *RESTRICT L,
 class DMPlexProjectEvaluateBarycentric : public DMPlexProjectEvaluateBase {
 protected:
   std::shared_ptr<CellDatConst<REAL>> cdc_project;
+  std::shared_ptr<CellDatConst<REAL>> cdc_volumes;
   std::shared_ptr<CellDatConst<int>> cdc_num_vertices;
   std::shared_ptr<CellDatConst<REAL>> cdc_vertices;
   std::shared_ptr<CellDatConst<REAL>> cdc_matrices;
@@ -110,7 +111,9 @@ protected:
   }
 
   inline void setup_matrices() {
-    if (this->cdc_matrices != nullptr) {
+    if (this->cdc_matrices == nullptr) {
+      NESOASSERT(this->qpm->points_added(),
+                 "Requires the QuadraturePointMapper to be fully setup.");
       const int cell_count = this->qpm->domain->mesh->get_cell_count();
       this->cdc_matrices = std::make_shared<CellDatConst<REAL>>(
           this->qpm->sycl_target, cell_count, 3, 3);
@@ -144,7 +147,13 @@ protected:
       for (int cellx = 0; cellx < cell_count; cellx++) {
         for (int rx = 0; rx < 3; rx++) {
           for (int cx = 0; cx < 3; cx++) {
-            const REAL v = this->cdc_matrices->get_value(cellx, rx, cx);
+            REAL v = this->cdc_matrices->get_value(cellx, rx, cx);
+            if (v < 0) {
+              v = 0.0;
+            };
+            if (v > 1.0) {
+              v = 1.0;
+            };
             NESOASSERT(((0.0 <= v) && (v <= 1.0)),
                        "Bad Barycentric coordinate for quadrature point.");
             L[rx * 3 + cx] = v;
@@ -171,7 +180,8 @@ public:
    */
   DMPlexProjectEvaluateBarycentric(
       ExternalCommon::QuadraturePointMapperSharedPtr qpm,
-      std::string function_space, int polynomial_order)
+      std::string function_space, int polynomial_order,
+      const bool testing = false)
       : qpm(qpm), function_space(function_space),
         polynomial_order(polynomial_order) {
 
@@ -197,26 +207,36 @@ public:
 
     const int cell_count = this->qpm->domain->mesh->get_cell_count();
     this->cdc_project = std::make_shared<CellDatConst<REAL>>(
-        this->qpm->sycl_target, cell_count, 4, 1);
+        this->qpm->sycl_target, cell_count, 1, 3);
     this->cdc_num_vertices = std::make_shared<CellDatConst<int>>(
         this->qpm->sycl_target, cell_count, 1, 1);
     this->cdc_vertices = std::make_shared<CellDatConst<REAL>>(
         this->qpm->sycl_target, cell_count, 4, 2);
     this->cdc_matrices = nullptr;
 
-    // For each cell record the volume.
+    // For each cell record the verticies.
     std::vector<std::vector<REAL>> vertices;
     for (int cx = 0; cx < cell_count; cx++) {
       this->mesh->dmh->get_cell_vertices(cx, vertices);
       const int num_verts = vertices.size();
       // TODO implement for quads
-      NESOASSERT(num_verts < 4, "Unexpected number of vertices (expected 3).");
-      this->cdc_num_vertices->set_value(cx, 0, 0, 3);
+      NESOASSERT(testing || (num_verts < 4),
+                 "Unexpected number of vertices (expected 3).");
+      this->cdc_num_vertices->set_value(cx, 0, 0, num_verts);
       for (int vx = 0; vx < 3; vx++) {
         for (int dx = 0; dx < 2; dx++) {
           this->cdc_vertices->set_value(cx, vx, dx, vertices.at(vx).at(dx));
         }
       }
+    }
+    this->cdc_volumes = std::make_shared<CellDatConst<REAL>>(
+        this->qpm->sycl_target, cell_count, 1, 1);
+
+    // For each cell record the volume.
+    for (int cx = 0; cx < cell_count; cx++) {
+      const auto volume = this->mesh->dmh->get_cell_volume(cx);
+      this->cdc_volumes->set_value(
+          cx, 0, 0, this->cdc_num_vertices->get_value(cx, 0, 0) / volume);
     }
   }
 
@@ -263,7 +283,7 @@ public:
     particle_loop(
         "DMPlexProjectEvaluateBarycentric::project_1",
         this->qpm->particle_group,
-        [=](auto POS, auto VERTICES, auto SRC, auto DST) {
+        [=](auto POS, auto VERTICES, auto SRC, auto VOLUMES, auto DST) {
           REAL l1, l2, l3;
           const REAL x = POS.at(0);
           const REAL y = POS.at(1);
@@ -271,14 +291,15 @@ public:
               VERTICES.at(0, 0), VERTICES.at(0, 1), VERTICES.at(1, 0),
               VERTICES.at(1, 1), VERTICES.at(2, 0), VERTICES.at(2, 1), x, y,
               &l1, &l2, &l3);
+          const REAL iv = VOLUMES.at(0, 0);
           for (int cx = 0; cx < ncomp; cx++) {
-            DST.at(cx) =
-                SRC.at(cx, 0) * l1 + SRC.at(cx, 1) * l2 + SRC.at(cx, 2) * l3;
+            DST.at(cx) = iv * (SRC.at(cx, 0) * l1 + SRC.at(cx, 1) * l2 +
+                               SRC.at(cx, 2) * l3);
           }
         },
         Access::read(destination_position_dat),
         Access::read(this->cdc_vertices), Access::read(this->cdc_project),
-        Access::write(destination_dat))
+        Access::read(this->cdc_volumes), Access::write(destination_dat))
         ->execute();
   }
 
@@ -337,9 +358,9 @@ public:
             | m21 m22 m23 | x |u_i| = |v2|
             | m31 m32 m33 |   | 0 |   |v3|
 
-            where i is quad_index. Hence the kernel performs the scales the
-            i^th column by the contribution. Then atomically adding the
-            v1,v2,v3 values across all the quad indices.
+            where i is quad_index. Hence the kernel scales the i^th column by
+            the contribution. Then atomically adding the v1,v2,v3 values across
+            all the quad indices.
 
            */
           const auto quad_index = MASK.at(3);

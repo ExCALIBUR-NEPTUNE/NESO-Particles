@@ -70,7 +70,7 @@ public:
     // For each cell record the volume.
     for (int cx = 0; cx < cell_count; cx++) {
       const auto volume = this->mesh->dmh->get_cell_volume(cx);
-      this->cdc_volumes->set_value(cx, 0, 0, volume);
+      this->cdc_volumes->set_value(cx, 0, 0, 1.0 / volume);
     }
   }
 
@@ -102,7 +102,7 @@ public:
     particle_loop(
         "DMPlexProjectEvaluateDG::project_1", this->qpm->particle_group,
         [=](auto VOLS, auto SRC, auto DST) {
-          const REAL iv = 1.0 / VOLS.at(0, 0);
+          const REAL iv = VOLS.at(0, 0);
           for (int cx = 0; cx < ncomp; cx++) {
             DST.at(cx) = SRC.at(cx, 0) * iv;
           }
