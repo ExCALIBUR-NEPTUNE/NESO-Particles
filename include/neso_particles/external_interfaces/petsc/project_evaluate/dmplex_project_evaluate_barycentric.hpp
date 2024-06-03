@@ -124,7 +124,7 @@ protected:
           this->qpm->particle_group,
           [=](auto VERTICES, auto POS, auto MASK, auto MATRIX) {
             const auto quad_index = MASK.at(3);
-            if (quad_index < 3) {
+            if ((-1 < quad_index) && (quad_index < 3)) {
               REAL l1, l2, l3;
               const REAL x = POS.at(0);
               const REAL y = POS.at(1);
@@ -365,7 +365,7 @@ public:
            */
           const auto quad_index = MASK.at(3);
 
-          if (quad_index < 3) {
+          if ((-1 < quad_index) && (quad_index < 3)) {
             for (int cx = 0; cx < ncomp; cx++) {
               const REAL value = SRC.at(cx);
 
