@@ -180,7 +180,7 @@ inline void ParticleGroup::local_move() {
 
 inline std::string fixed_width_format(INT value) {
   char buffer[128];
-  const int err = snprintf(buffer, 128, "%ld", value);
+  const int err = snprintf(buffer, 128, "%lld", static_cast<long long>(value));
   NESOASSERT(err >= 0 && err < 128, "Bad snprintf return code.");
   return std::string(buffer);
 }
