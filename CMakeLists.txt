@@ -15,6 +15,8 @@ option(
   NESO_PARTICLES_ENABLE_FIND_SYCL
   "Enabling search for a SYCL implementation if add_sycl_to_target is not found."
   ON)
+option(NESO_PARTICLES_LEGACY_DEVICE_SELECTORS
+       "Option to use SYCL 1.2 selectors if 2020 ones are not supported." OFF)
 
 # Create interface/Header only library
 add_library(NESO-Particles INTERFACE)
@@ -116,6 +118,12 @@ else()
   target_compile_definitions(NESO-Particles
                              INTERFACE NESO_PARTICLES_DEVICE_TYPE_CPU)
   message(STATUS "Using NESO_PARTICLES_DEVICE_TYPE_CPU")
+endif()
+
+if(NESO_PARTICLES_LEGACY_DEVICE_SELECTORS)
+  target_compile_definitions(NESO-Particles
+                             INTERFACE NESO_PARTICLES_LEGACY_DEVICE_SELECTORS)
+  message(STATUS "Using legacy SYCL device selectors")
 endif()
 
 # Get MPI
