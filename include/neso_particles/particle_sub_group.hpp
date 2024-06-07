@@ -842,11 +842,12 @@ inline void ParticleSubGroup::get_cells_layers(INT *d_cells, INT *d_layers) {
   }
 }
 
+namespace ParticleSubGroupImplementation {
+
 /**
  * ParticleSubGroup selector for a single cell.
  */
-class CellSubGroupSelector
-    : public ParticleSubGroupImplementation::SubGroupSelector {
+class CellSubGroupSelector : public SubGroupSelector {
 protected:
   bool parent_is_whole_group;
   int cell;
@@ -981,6 +982,8 @@ public:
   }
 };
 
+} // namespace ParticleSubGroupImplementation
+
 /**
  * Create a ParticleSubGroup that selects all particles int a particular cell.
  *
@@ -995,7 +998,8 @@ particle_sub_group(std::shared_ptr<PARENT> parent, const int cell,
                    const bool make_static = false) {
   auto selector = std::dynamic_pointer_cast<
       ParticleSubGroupImplementation::SubGroupSelector>(
-      std::make_shared<CellSubGroupSelector>(parent, cell));
+      std::make_shared<ParticleSubGroupImplementation::CellSubGroupSelector>(
+          parent, cell));
   auto group = std::make_shared<ParticleSubGroup>(selector);
   group->static_status(make_static);
   return group;

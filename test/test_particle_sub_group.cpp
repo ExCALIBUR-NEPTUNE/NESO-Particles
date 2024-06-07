@@ -155,6 +155,223 @@ TEST(ParticleSubGroup, selector) {
   mesh->free();
 }
 
+namespace {
+struct TestSubGroupSelector
+    : public ParticleSubGroupImplementation::SubGroupSelector {
+
+  template <typename... T>
+  TestSubGroupSelector(T... args)
+      : ParticleSubGroupImplementation::SubGroupSelector(args...) {}
+
+  inline std::shared_ptr<CellDat<INT>> get_map() {
+    return this->map_cell_to_particles;
+  }
+};
+
+struct TestCellSubGroupSelector
+    : public ParticleSubGroupImplementation::CellSubGroupSelector {
+
+  template <typename... T>
+  TestCellSubGroupSelector(T... args)
+      : ParticleSubGroupImplementation::CellSubGroupSelector(args...) {}
+
+  inline std::shared_ptr<CellDat<INT>> get_map() {
+    return this->map_cell_to_particles;
+  }
+};
+
+template <typename T>
+inline bool check_selector(ParticleGroupSharedPtr particle_group,
+                           std::shared_ptr<T> selector, std::vector<int> &cells,
+                           std::vector<int> &layers) {
+  bool status = true;
+  auto s = selector->get();
+  auto lambda_check_eq = [&](auto a, auto b) { status = status && (a == b); };
+  auto lambda_check_true = [&](const bool a) { status = status && a; };
+
+  lambda_check_eq(cells.size(), layers.size());
+  lambda_check_eq(s.npart_local, layers.size());
+  lambda_check_eq(s.ncell, particle_group->domain->mesh->get_cell_count());
+
+  std::map<int, std::set<int>> map_cells_layers;
+  for (int ix = 0; ix < s.npart_local; ix++) {
+    auto c = cells.at(ix);
+    auto l = layers.at(ix);
+    lambda_check_true(!static_cast<bool>(map_cells_layers[c].count(l)));
+    map_cells_layers[c].insert(l);
+  }
+
+  auto sycl_target = particle_group->sycl_target;
+  std::vector<int> tmp_int(s.ncell);
+  sycl_target->queue
+      .memcpy(tmp_int.data(), s.d_npart_cell, s.ncell * sizeof(int))
+      .wait_and_throw();
+
+  for (int cx = 0; cx < s.ncell; cx++) {
+    lambda_check_eq(s.h_npart_cell[cx], map_cells_layers[cx].size());
+    lambda_check_eq(tmp_int.at(cx), map_cells_layers[cx].size());
+  }
+
+  std::vector<INT> tmp_INT(s.ncell);
+  sycl_target->queue
+      .memcpy(tmp_INT.data(), s.d_npart_cell_es, s.ncell * sizeof(INT))
+      .wait_and_throw();
+
+  INT total = 0;
+  for (int cx = 0; cx < s.ncell; cx++) {
+    lambda_check_eq(tmp_INT.at(cx), total);
+    total += s.h_npart_cell[cx];
+  }
+
+  auto map_device = selector->get_map();
+
+  for (int cx = 0; cx < s.ncell; cx++) {
+    const int nrow = s.h_npart_cell[cx];
+    lambda_check_true(map_device->nrow.at(cx) >= nrow);
+    std::set<int> in_map;
+    for (int rx = 0; rx < nrow; rx++) {
+      in_map.insert(map_device->get_value(cx, rx, 0));
+    }
+    lambda_check_eq(in_map, map_cells_layers.at(cx));
+  }
+
+  return status;
+}
+} // namespace
+
+TEST(ParticleSubGroup, selector_get_even_id) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  auto sycl_target = A->sycl_target;
+
+  auto s = std::make_shared<TestSubGroupSelector>(
+      A, [=](auto ID) { return ((ID[0] % 2) == 0); },
+      Access::read(Sym<INT>("ID")));
+
+  std::vector<int> cells;
+  std::vector<int> layers;
+  cells.reserve(A->get_npart_local());
+  layers.reserve(A->get_npart_local());
+
+  int cell_count = A->domain->mesh->get_cell_count();
+  for (int cx = 0; cx < cell_count; cx++) {
+    auto ID = A->get_cell(Sym<INT>("ID"), cx);
+    for (int rx = 0; rx < ID->nrow; rx++) {
+      if (ID->at(rx, 0) % 2 == 0) {
+        cells.push_back(cx);
+        layers.push_back(rx);
+      }
+    }
+  }
+
+  ASSERT_TRUE(check_selector(A, s, cells, layers));
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}
+
+TEST(ParticleSubGroup, selector_get_even_id_even_cell) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  auto sycl_target = A->sycl_target;
+
+  auto aa = particle_sub_group(
+      A, [=](auto CELL_ID) { return ((CELL_ID.at(0) % 2) == 0); },
+      Access::read(Sym<INT>("CELL_ID")));
+
+  auto s = std::make_shared<TestSubGroupSelector>(
+      aa, [=](auto ID) { return ((ID.at(0) % 2) == 0); },
+      Access::read(Sym<INT>("ID")));
+
+  std::vector<int> cells;
+  std::vector<int> layers;
+  cells.reserve(A->get_npart_local());
+  layers.reserve(A->get_npart_local());
+
+  int cell_count = A->domain->mesh->get_cell_count();
+  for (int cx = 0; cx < cell_count; cx++) {
+    auto ID = A->get_cell(Sym<INT>("ID"), cx);
+    auto CELL_ID = A->get_cell(Sym<INT>("CELL_ID"), cx);
+    for (int rx = 0; rx < ID->nrow; rx++) {
+      if ((ID->at(rx, 0) % 2 == 0) && (CELL_ID->at(rx, 0) % 2 == 0)) {
+        cells.push_back(cx);
+        layers.push_back(rx);
+      }
+    }
+  }
+
+  ASSERT_TRUE(check_selector(A, s, cells, layers));
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}
+
+TEST(ParticleSubGroup, selector_get_cell) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  auto sycl_target = A->sycl_target;
+  int cell_count = A->domain->mesh->get_cell_count();
+  int cx = cell_count - 1;
+
+  auto s = std::make_shared<TestCellSubGroupSelector>(A, cx);
+
+  std::vector<int> cells;
+  std::vector<int> layers;
+  cells.reserve(A->get_npart_local());
+  layers.reserve(A->get_npart_local());
+
+  const int nrow = A->get_npart_cell(cx);
+  for (int rx = 0; rx < nrow; rx++) {
+    cells.push_back(cx);
+    layers.push_back(rx);
+  }
+
+  ASSERT_TRUE(check_selector(A, s, cells, layers));
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}
+
+TEST(ParticleSubGroup, selector_get_cell_even_id) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  auto sycl_target = A->sycl_target;
+  int cell_count = A->domain->mesh->get_cell_count();
+  int cx = cell_count - 1;
+
+  auto aa = particle_sub_group(
+      A, [=](auto ID) { return ((ID.at(0) % 2) == 0); },
+      Access::read(Sym<INT>("ID")));
+  auto s = std::make_shared<TestCellSubGroupSelector>(aa, cx);
+
+  std::vector<int> cells;
+  std::vector<int> layers;
+  cells.reserve(A->get_npart_local());
+  layers.reserve(A->get_npart_local());
+
+  const int nrow = A->get_npart_cell(cx);
+  auto ID = A->get_cell(Sym<INT>("ID"), cx);
+  for (int rx = 0; rx < nrow; rx++) {
+    if (ID->at(rx, 0) % 2 == 0) {
+      cells.push_back(cx);
+      layers.push_back(rx);
+    }
+  }
+
+  ASSERT_TRUE(check_selector(A, s, cells, layers));
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}
+
 TEST(ParticleSubGroup, particle_loop) {
   auto A = particle_loop_common();
   auto domain = A->domain;
