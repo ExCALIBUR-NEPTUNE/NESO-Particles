@@ -867,7 +867,6 @@ public:
     this->parent_is_whole_group = this->get_parent_is_whole_group(parent);
     this->internal_setup(parent);
     if (!this->parent_is_whole_group) {
-      const auto k_cell = cell;
       this->loop_0 = particle_loop(
           "sub_group_selector_0", parent,
           [=](auto loop_index, auto k_map_ptrs) {
