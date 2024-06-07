@@ -38,10 +38,42 @@ protected:
     return parent;
   }
 
+  template <template <typename> typename T, typename U>
+  inline void check_sym_type(T<U> arg) {
+    static_assert(std::is_same<T<U>, Sym<U>>::value == true,
+                  "Filtering lambda arguments must be read access particle "
+                  "properties (Sym instances). Sym type check failed.");
+
+    // add this sym to the version checker signature
+    this->particle_dat_versions[arg] = 0;
+  }
+
+  template <typename T> inline void check_sym_type(SymVectorSharedPtr<T> sv) {
+    auto dats = sv->get_particle_dats();
+    for (auto &dx : dats) {
+      this->check_sym_type(dx->sym);
+    }
+  }
+
+  inline void check_sym_type([[maybe_unused]] ParticleLoopIndex &) {}
+
+  template <template <typename> typename T, typename U>
+  inline void check_read_access(T<U> arg) {
+    static_assert(std::is_same<T<U>, Access::Read<U>>::value == true,
+                  "Filtering lambda arguments must be read access particle "
+                  "properties (Sym instances). Read access check failed.");
+    check_sym_type(arg.obj);
+  }
+
+  inline void add_parent_dependencies(ParticleGroupSharedPtr parent) {}
+  inline void add_parent_dependencies(std::shared_ptr<ParticleSubGroup> parent);
+
   SubGroupSelector() = default;
 
   template <typename PARENT>
   inline void internal_setup(std::shared_ptr<PARENT> parent) {
+    this->add_parent_dependencies(parent);
+
     auto sycl_target = particle_group->sycl_target;
     const int cell_count = particle_group->domain->mesh->get_cell_count();
     this->map_cell_to_particles =
@@ -73,6 +105,7 @@ protected:
 
 public:
   ParticleGroupSharedPtr particle_group;
+  ParticleGroup::ParticleDatVersionTracker particle_dat_versions;
 
   struct SelectionT {
     int npart_local;
@@ -101,6 +134,7 @@ public:
   SubGroupSelector(std::shared_ptr<PARENT> parent, KERNEL kernel, ARGS... args)
       : particle_group(get_particle_group(parent)) {
 
+    (check_read_access(args), ...);
     this->internal_setup(parent);
 
     this->loop_0 = particle_loop(
@@ -202,6 +236,7 @@ class ParticleSubGroup {
   template <typename KERNEL, typename... ARGS>
   friend class ParticleLoopSubGroup;
   friend class ParticleGroup;
+  friend class ParticleSubGroupImplementation::SubGroupSelector;
 
 protected:
   bool is_static;
@@ -210,35 +245,7 @@ protected:
   ParticleSubGroupImplementation::SubGroupSelector::SelectionT selection;
 
   int npart_local;
-  ParticleGroup::ParticleDatVersionTracker particle_dat_versions;
   bool is_whole_particle_group;
-
-  template <template <typename> typename T, typename U>
-  inline void check_sym_type(T<U> arg) {
-    static_assert(std::is_same<T<U>, Sym<U>>::value == true,
-                  "Filtering lambda arguments must be read access particle "
-                  "properties (Sym instances). Sym type check failed.");
-
-    // add this sym to the version checker signature
-    this->particle_dat_versions[arg] = 0;
-  }
-
-  template <typename T> inline void check_sym_type(SymVectorSharedPtr<T> sv) {
-    auto dats = sv->get_particle_dats();
-    for (auto &dx : dats) {
-      this->check_sym_type(dx->sym);
-    }
-  }
-
-  inline void check_sym_type([[maybe_unused]] ParticleLoopIndex &) {}
-
-  template <template <typename> typename T, typename U>
-  inline void check_read_access(T<U> arg) {
-    static_assert(std::is_same<T<U>, Access::Read<U>>::value == true,
-                  "Filtering lambda arguments must be read access particle "
-                  "properties (Sym instances). Read access check failed.");
-    check_sym_type(arg.obj);
-  }
 
   /**
    * Get the cells and layers of the particles in the sub group (slow)
@@ -270,22 +277,14 @@ protected:
     NESOASSERT(!this->is_whole_particle_group,
                "Explicitly creating the ParticleSubGroup when the sub-group is "
                "the entire ParticleGroup should never be required.");
-
     this->selection = this->selector->get();
     this->npart_local = this->selection.npart_local;
   }
 
   inline void create_and_update_cache() {
     create_inner();
-    this->particle_group->check_validation(this->particle_dat_versions);
-  }
-
-  inline void add_parent_dependencies(ParticleGroupSharedPtr parent) {}
-  inline void
-  add_parent_dependencies(std::shared_ptr<ParticleSubGroup> parent) {
-    for (const auto dep : parent->particle_dat_versions) {
-      this->particle_dat_versions[dep.first] = 0;
-    }
+    this->particle_group->check_validation(
+        this->selector->particle_dat_versions);
   }
 
 public:
@@ -317,10 +316,7 @@ public:
   ParticleSubGroup(std::shared_ptr<PARENT> parent, KERNEL kernel, ARGS... args)
       : ParticleSubGroup(
             std::make_shared<ParticleSubGroupImplementation::SubGroupSelector>(
-                parent, kernel, args...)) {
-    (check_read_access(args), ...);
-    this->add_parent_dependencies(parent);
-  }
+                parent, kernel, args...)) {}
 
   /**
    * Create a ParticleSubGroup which is simply a reference/view into an entire
@@ -399,7 +395,7 @@ public:
   inline bool is_valid() {
     if (this->is_static) {
       return !this->particle_group->check_validation(
-          this->particle_dat_versions, false);
+          this->selector->particle_dat_versions, false);
     }
     return true;
   }
@@ -416,7 +412,8 @@ public:
       return false;
     }
 
-    if (this->particle_group->check_validation(this->particle_dat_versions)) {
+    if (this->particle_group->check_validation(
+            this->selector->particle_dat_versions)) {
       this->create_inner();
       return true;
     }
@@ -510,6 +507,15 @@ namespace ParticleSubGroupImplementation {
 inline ParticleGroupSharedPtr
 SubGroupSelector::get_particle_group(std::shared_ptr<ParticleSubGroup> parent) {
   return parent->get_particle_group();
+}
+
+inline void SubGroupSelector::add_parent_dependencies(
+    std::shared_ptr<ParticleSubGroup> parent) {
+  if (parent != nullptr) {
+    for (const auto dep : parent->selector->particle_dat_versions) {
+      this->particle_dat_versions[dep.first] = 0;
+    }
+  }
 }
 
 } // namespace ParticleSubGroupImplementation
@@ -853,7 +859,10 @@ public:
   template <typename PARENT>
   CellSubGroupSelector(std::shared_ptr<PARENT> parent, const int cell)
       : SubGroupSelector(), cell(cell) {
+
     this->particle_group = get_particle_group(parent);
+
+    this->check_sym_type(this->particle_group->cell_id_dat->sym);
     this->parent_is_whole_group = this->get_parent_is_whole_group(parent);
     this->internal_setup(parent);
     if (!this->parent_is_whole_group) {
@@ -885,6 +894,7 @@ public:
   }
 
   virtual inline SelectionT get() override {
+
     const int cell_count = this->particle_group->domain->mesh->get_cell_count();
     auto sycl_target = this->particle_group->sycl_target;
     auto pg_map_layers = this->get_particle_group_sub_group_layers();
@@ -970,6 +980,26 @@ public:
     }
   }
 };
+
+/**
+ * Create a ParticleSubGroup that selects all particles int a particular cell.
+ *
+ * @param parent Parent ParticleGroup or ParticleSubGroup from which to form
+ * ParticleSubGroup.
+ * @param cell Local cell index to select all particles in.
+ * @param make_static Make the ParticleSubGroup static (default false).
+ */
+template <typename PARENT>
+inline ParticleSubGroupSharedPtr
+particle_sub_group(std::shared_ptr<PARENT> parent, const int cell,
+                   const bool make_static = false) {
+  auto selector = std::dynamic_pointer_cast<
+      ParticleSubGroupImplementation::SubGroupSelector>(
+      std::make_shared<CellSubGroupSelector>(parent, cell));
+  auto group = std::make_shared<ParticleSubGroup>(selector);
+  group->static_status(make_static);
+  return group;
+}
 
 } // namespace NESO::Particles
 
