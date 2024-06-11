@@ -187,6 +187,7 @@ public:
 
     return {num_particles, this->d_buffers.at(sycl_target)->ptr};
   }
+
   /**
    * Create the loop arguments for the RNG implementation.
    *
@@ -225,8 +226,8 @@ public:
     const int num_random_numbers = num_particles * num_components;
 
     // Create the random number in blocks and copy to device blockwise.
-    std::vector<T> block0(block_size);
-    std::vector<T> block1(block_size);
+    std::vector<T> block0(this->block_size);
+    std::vector<T> block1(this->block_size);
 
     T *ptr_tmp;
     T *ptr_current = block0.data();
@@ -237,7 +238,7 @@ public:
     while (num_numbers_moved < num_random_numbers) {
 
       // Create a block of samples
-      for (int ix = 0; ix < block_size; ix++) {
+      for (int ix = 0; ix < this->block_size; ix++) {
         ptr_current[ix] = this->generation_function();
       }
 
@@ -245,7 +246,7 @@ public:
       // copy
       e.wait_and_throw();
       const std::size_t num_to_memcpy =
-          std::min(block_size, num_random_numbers - num_numbers_moved);
+          std::min(this->block_size, num_random_numbers - num_numbers_moved);
       e = sycl_target->queue.memcpy(d_ptr, ptr_current,
                                     num_to_memcpy * sizeof(T));
       d_ptr += num_to_memcpy;
