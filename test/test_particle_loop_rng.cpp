@@ -30,7 +30,7 @@ ParticleGroupSharedPtr particle_loop_common(const int N = 1093) {
                              ParticleProp(Sym<REAL>("V"), 3),
                              ParticleProp(Sym<REAL>("P2"), ndim),
                              ParticleProp(Sym<INT>("CELL_ID"), 1, true),
-                             ParticleProp(Sym<INT>("LOOP_INDEX"), 2),
+                             ParticleProp(Sym<INT>("LOOP_INDEX"), 4),
                              ParticleProp(Sym<INT>("ID"), 1)};
 
   auto A = std::make_shared<ParticleGroup>(domain, particle_spec, sycl_target);
@@ -85,6 +85,46 @@ TEST(ParticleLoopRNG, base) {
 
   const int rank = sycl_target->comm_pair.rank_parent;
 
+  INT count = 0;
+  auto seq_lambda = [&]() -> INT { return count++; };
+
+  const int seq_ncomp = 2;
+  auto seq_kernel = host_kernel_rng<INT>(seq_lambda, seq_ncomp);
+
+  particle_loop(
+      A,
+      [=](auto INDEX, auto RNG, auto LOOP_INDEX) {
+        LOOP_INDEX.at(0) = INDEX.get_loop_linear_index();
+        LOOP_INDEX.at(1) = RNG.at(INDEX, 0);
+        LOOP_INDEX.at(2) = RNG.at(INDEX, 1);
+      },
+      Access::read(ParticleLoopIndex{}), Access::read(seq_kernel),
+      Access::write(Sym<INT>("LOOP_INDEX")))
+      ->execute();
+
+  const int npart_local = A->get_npart_local();
+  for (int cx = 0; cx < cell_count; cx++) {
+    auto loop_index = A->get_cell(Sym<INT>("LOOP_INDEX"), cx);
+    for (int rx = 0; rx < loop_index->nrow; rx++) {
+      ASSERT_EQ(loop_index->at(rx, 0), loop_index->at(rx, 1));
+      ASSERT_EQ(loop_index->at(rx, 0) + npart_local, loop_index->at(rx, 2));
+    }
+  }
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}
+
+TEST(ParticleLoopRNG, uniform) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  const int cell_count = mesh->get_cell_count();
+  auto sycl_target = A->sycl_target;
+
+  const int rank = sycl_target->comm_pair.rank_parent;
+
   std::mt19937 rng_state(52234234 + rank);
   const REAL a = 10.0;
   const REAL b = 20.0;
@@ -92,7 +132,7 @@ TEST(ParticleLoopRNG, base) {
   auto rng_lambda = [&]() -> REAL { return rng_dist(rng_state); };
 
   const int rng_ncomp = 3;
-  auto rng_kernel = host_kernel_rng<REAL>(rng_lambda);
+  auto rng_kernel = host_kernel_rng<REAL>(rng_lambda, rng_ncomp);
 
   particle_loop(
       A,

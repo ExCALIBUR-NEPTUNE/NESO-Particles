@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <map>
 #include <mpi.h>
+#include <optional>
 #include <stack>
 #include <string>
 #include <vector>
@@ -356,9 +357,20 @@ public:
    * current allocation. Current contents is not copied to the new buffer.
    *
    * @param size Minimum number of elements this buffer should be able to hold.
+   * @param max_size_factor (Optional) Specify a ratio, if the underlying
+   * buffer is larger than the requested ammount times this ratio then free the
+   * buffer and reallocate.
    */
-  inline int realloc_no_copy(const std::size_t size) {
-    if (size > this->size) {
+  inline int
+  realloc_no_copy(const std::size_t size,
+                  const std::optional<REAL> max_size_factor = std::nullopt) {
+
+    const std::size_t max_size = std::max(
+        size, (std::size_t)(max_size_factor != std::nullopt
+                                ? max_size_factor.value() * ((REAL)size)
+                                : this->size));
+
+    if ((size > this->size) || (this->size > max_size)) {
       this->assert_allocated();
       this->free_wrapper(this->ptr);
       this->ptr = this->malloc_wrapper(size * sizeof(T));

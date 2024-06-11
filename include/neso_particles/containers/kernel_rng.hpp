@@ -76,6 +76,11 @@ inline void create_kernel_arg(ParticleLoopIteration &iterationx,
   lhs = rhs;
 }
 template <typename T>
+inline void pre_loop(ParticleLoopGlobalInfo *global_info,
+                     Access::Read<KernelRNG<T> *> &arg) {
+  arg.obj->impl_pre_loop_read(global_info);
+}
+template <typename T>
 inline void post_loop(ParticleLoopGlobalInfo *global_info,
                       Access::Read<KernelRNG<T> *> &arg) {
   arg.obj->impl_post_loop_read(global_info);
@@ -99,7 +104,14 @@ template <typename T> struct KernelRNG {
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info) = 0;
 
   /**
-   * Ran executed by the loop post execution.
+   * Executed by the loop pre execution.
+   * @param global_info Global information for the loop which is to be executed.
+   */
+  virtual inline void impl_pre_loop_read(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info) = 0;
+
+  /**
+   * Executed by the loop post execution.
    * @param global_info Global information for the loop which completed.
    */
   virtual inline void impl_post_loop_read(
@@ -109,11 +121,37 @@ template <typename T> struct KernelRNG {
 /**
  * TODO PLACE IN OWN FILE
  */
-template <typename T> struct HostKernelRNG : KernelRNG<T> {
+template <typename T> class HostKernelRNG : public KernelRNG<T> {
+protected:
+  std::map<SYCLTargetSharedPtr, std::shared_ptr<BufferDevice<T>>> d_buffers;
 
+  inline T *allocate(SYCLTargetSharedPtr sycl_target, const int nrow) {
+    if (nrow <= 0) {
+      return nullptr;
+    }
+    const std::size_t required_size = nrow * this->num_components;
+
+    if (!this->d_buffers.count(sycl_target)) {
+      this->d_buffers[sycl_target] =
+          std::make_unique<BufferDevice<T>>(sycl_target, required_size);
+    } else {
+      this->d_buffers.at(sycl_target)->realloc_no_copy(required_size, 1.2);
+    }
+
+    return this->d_buffers.at(sycl_target)->ptr;
+  }
+
+public:
+  int num_components;
   std::function<T()> generation_function;
+
   template <typename FUNC_TYPE>
-  HostKernelRNG(FUNC_TYPE func) : generation_function(func) {}
+  HostKernelRNG(FUNC_TYPE func, const int num_components)
+      : generation_function(func), num_components(num_components) {
+    NESOASSERT(num_components > 0, "Cannot have a RNG for " +
+                                       std::to_string(num_components) +
+                                       " components.");
+  }
 
   /**
    * Create the loop arguments for the RNG implementation.
@@ -123,24 +161,111 @@ template <typename T> struct HostKernelRNG : KernelRNG<T> {
    */
   virtual inline std::tuple<int, T *> impl_get_const(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info)
-      override {}
+      override {
+    const int cell_start = global_info->starting_cell;
+    const int cell_end = global_info->bounding_cell;
+    int num_particles;
+    if ((cell_end - cell_start) == 1) {
+      // Single cell looping case
+      // Allocate for all the particles in the cell. Slightly inefficient if
+      // the loop is a particle sub group that only selects a small amount of
+      // the cell.
+      num_particles = global_info->particle_group->get_npart_cell(cell_start);
+    } else {
+      // Whole ParticleGroup looping case
+      num_particles = global_info->particle_group->get_npart_local();
+    }
+
+    auto sycl_target = global_info->particle_group->sycl_target;
+
+    return {num_particles, this->d_buffers.at(sycl_target)->ptr};
+  }
+  /**
+   * Create the loop arguments for the RNG implementation.
+   *
+   * @param global_info Global information for the loop about to be executed.
+   * @returns Pointer to the device data that contains the RNG data.
+   */
+  virtual inline void impl_pre_loop_read(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info)
+      override {
+
+    const int cell_start = global_info->starting_cell;
+    const int cell_end = global_info->bounding_cell;
+
+    int num_particles;
+    if ((cell_end - cell_start) == 1) {
+      // Single cell looping case
+      // Allocate for all the particles in the cell. Slightly inefficient if
+      // the loop is a particle sub group that only selects a small amount of
+      // the cell.
+      num_particles = global_info->particle_group->get_npart_cell(cell_start);
+    } else {
+      // Whole ParticleGroup looping case
+      num_particles = global_info->particle_group->get_npart_local();
+    }
+
+    // Allocate space
+    auto sycl_target = global_info->particle_group->sycl_target;
+    auto d_ptr = this->allocate(sycl_target, num_particles);
+    auto d_ptr_start = d_ptr;
+
+    // Create num_particles * num_components random numbers from the RNG
+    constexpr int block_size = 512;
+    const int num_random_numbers = num_particles * num_components;
+
+    std::vector<T> block0(block_size);
+    std::vector<T> block1(block_size);
+
+    T *ptr_tmp;
+    T *ptr_current = block0.data();
+    T *ptr_next = block1.data();
+    int num_numbers_moved = 0;
+
+    sycl::event e;
+    while (num_numbers_moved < num_random_numbers) {
+      for (int ix = 0; ix < block_size; ix++) {
+        ptr_current[ix] = this->generation_function();
+      }
+
+      const std::size_t num_to_memcpy =
+          std::min(block_size, num_random_numbers - num_numbers_moved);
+
+      e.wait_and_throw();
+      e = sycl_target->queue.memcpy(d_ptr, ptr_current,
+                                    num_to_memcpy * sizeof(T));
+      d_ptr += num_to_memcpy;
+      num_numbers_moved += num_to_memcpy;
+
+      // swap ptr_current and ptr_next
+      ptr_tmp = ptr_current;
+      ptr_current = ptr_next;
+      ptr_next = ptr_tmp;
+    }
+
+    e.wait_and_throw();
+
+    NESOASSERT(d_ptr == d_ptr_start + num_random_numbers,
+               "Failed to copy the correct number of random numbers");
+  }
 
   /**
    * Ran executed by the loop post execution.
    * @param global_info Global information for the loop which completed.
    */
   virtual inline void impl_post_loop_read(
-      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info)
-      override {}
+      [[maybe_unused]] ParticleLoopImplementation::ParticleLoopGlobalInfo
+          *global_info) override {}
 };
 
 /**
  * TODO place in own file
  */
 template <typename T, typename FUNC_TYPE>
-inline std::shared_ptr<KernelRNG<T>> host_kernel_rng(FUNC_TYPE func) {
+inline std::shared_ptr<KernelRNG<T>> host_kernel_rng(FUNC_TYPE func,
+                                                     const int num_components) {
   return std::dynamic_pointer_cast<KernelRNG<T>>(
-      std::make_shared<HostKernelRNG<T>>(func));
+      std::make_shared<HostKernelRNG<T>>(func, num_components));
 }
 
 } // namespace NESO::Particles
