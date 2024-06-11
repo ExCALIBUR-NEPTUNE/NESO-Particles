@@ -9,7 +9,7 @@ namespace {
 
 const int ndim = 2;
 
-ParticleGroupSharedPtr particle_loop_common(const int N = 1093) {
+ParticleGroupSharedPtr particle_loop_common(const int N = 10093) {
   std::vector<int> dims(ndim);
   dims[0] = 4;
   dims[1] = 8;

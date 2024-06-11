@@ -211,9 +211,10 @@ public:
     auto d_ptr_start = d_ptr;
 
     // Create num_particles * num_components random numbers from the RNG
-    constexpr int block_size = 512;
     const int num_random_numbers = num_particles * num_components;
 
+    // Create the random number in blocks and copy to device blockwise.
+    constexpr int block_size = 4096;
     std::vector<T> block0(block_size);
     std::vector<T> block1(block_size);
 
@@ -224,20 +225,24 @@ public:
 
     sycl::event e;
     while (num_numbers_moved < num_random_numbers) {
+
+      // Create a block of samples
       for (int ix = 0; ix < block_size; ix++) {
         ptr_current[ix] = this->generation_function();
       }
 
+      // Wait until the previous block finished copying before starting this
+      // copy
+      e.wait_and_throw();
       const std::size_t num_to_memcpy =
           std::min(block_size, num_random_numbers - num_numbers_moved);
-
-      e.wait_and_throw();
       e = sycl_target->queue.memcpy(d_ptr, ptr_current,
                                     num_to_memcpy * sizeof(T));
       d_ptr += num_to_memcpy;
       num_numbers_moved += num_to_memcpy;
 
-      // swap ptr_current and ptr_next
+      // swap ptr_current and ptr_next such that the new samples are written
+      // into ptr_next whilst ptr_current is being copied to the device.
       ptr_tmp = ptr_current;
       ptr_current = ptr_next;
       ptr_next = ptr_tmp;
@@ -245,8 +250,11 @@ public:
 
     e.wait_and_throw();
 
-    NESOASSERT(d_ptr == d_ptr_start + num_random_numbers,
+    NESOASSERT(num_numbers_moved == num_random_numbers,
                "Failed to copy the correct number of random numbers");
+    NESOASSERT(d_ptr == d_ptr_start + num_random_numbers,
+               "Failed to copy the correct number of random numbers (pointer "
+               "arithmetic)");
   }
 
   /**
