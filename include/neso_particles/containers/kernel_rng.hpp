@@ -144,12 +144,14 @@ protected:
 
 public:
   int num_components;
+  int block_size;
   std::function<T()> generation_function;
 
   template <typename FUNC_TYPE>
-  HostKernelRNG(FUNC_TYPE func, const int num_components)
+  HostKernelRNG(FUNC_TYPE func, const int num_components,
+                const int block_size = 4096)
       : generation_function(func), num_components(num_components),
-        internal_state(0) {
+        internal_state(0), block_size(block_size) {
     NESOASSERT(num_components > 0, "Cannot have a RNG for " +
                                        std::to_string(num_components) +
                                        " components.");
@@ -223,7 +225,6 @@ public:
     const int num_random_numbers = num_particles * num_components;
 
     // Create the random number in blocks and copy to device blockwise.
-    constexpr int block_size = 4096;
     std::vector<T> block0(block_size);
     std::vector<T> block1(block_size);
 
