@@ -12,6 +12,7 @@
 #include "../compute_target.hpp"
 #include "../containers/descendant_products.hpp"
 #include "../containers/global_array.hpp"
+#include "../containers/kernel_rng.hpp"
 #include "../containers/local_array.hpp"
 #include "../containers/product_matrix.hpp"
 #include "../containers/sym_vector.hpp"
@@ -358,6 +359,7 @@ protected:
     global_info.d_npart_cell_es = this->d_npart_cell_es;
     global_info.d_npart_cell_es_lb = this->d_npart_cell_es_lb;
     global_info.starting_cell = 0;
+    global_info.bounding_cell = this->ncell;
     global_info.loop_type_int = this->get_loop_type_int();
     return global_info;
   }
@@ -481,6 +483,8 @@ public:
 
     auto global_info = this->create_global_info();
     global_info.starting_cell = (cell == std::nullopt) ? 0 : cell.value();
+    global_info.bounding_cell =
+        (cell == std::nullopt) ? global_info.bounding_cell : cell.value() + 1;
 
     auto k_npart_cell_lb = this->d_npart_cell_lb;
     auto is = this->iteration_set->get(cell, this->local_size);

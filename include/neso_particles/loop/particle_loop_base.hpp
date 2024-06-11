@@ -36,6 +36,8 @@ struct ParticleLoopGlobalInfo {
   INT *d_npart_cell_es_lb;
   // The starting cell is only set for calls to create_loop_args.
   int starting_cell;
+  // Last cell plus one. Only set for calls to create_loop_args.
+  int bounding_cell;
   int loop_type_int;
 };
 
