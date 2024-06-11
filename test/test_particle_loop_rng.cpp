@@ -83,8 +83,6 @@ TEST(ParticleLoopRNG, base) {
   const int cell_count = mesh->get_cell_count();
   auto sycl_target = A->sycl_target;
 
-  const int rank = sycl_target->comm_pair.rank_parent;
-
   INT count = 0;
   auto seq_lambda = [&]() -> INT { return count++; };
 

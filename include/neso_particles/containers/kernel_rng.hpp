@@ -123,6 +123,7 @@ template <typename T> struct KernelRNG {
  */
 template <typename T> class HostKernelRNG : public KernelRNG<T> {
 protected:
+  int internal_state;
   std::map<SYCLTargetSharedPtr, std::shared_ptr<BufferDevice<T>>> d_buffers;
 
   inline T *allocate(SYCLTargetSharedPtr sycl_target, const int nrow) {
@@ -147,7 +148,8 @@ public:
 
   template <typename FUNC_TYPE>
   HostKernelRNG(FUNC_TYPE func, const int num_components)
-      : generation_function(func), num_components(num_components) {
+      : generation_function(func), num_components(num_components),
+        internal_state(0) {
     NESOASSERT(num_components > 0, "Cannot have a RNG for " +
                                        std::to_string(num_components) +
                                        " components.");
@@ -162,6 +164,9 @@ public:
   virtual inline std::tuple<int, T *> impl_get_const(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info)
       override {
+    NESOASSERT((this->internal_state == 1) || (this->internal_state == 2),
+               "Unexpected internal state.");
+    this->internal_state = 2;
     const int cell_start = global_info->starting_cell;
     const int cell_end = global_info->bounding_cell;
     int num_particles;
@@ -189,6 +194,10 @@ public:
   virtual inline void impl_pre_loop_read(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info)
       override {
+    NESOASSERT(this->internal_state == 0,
+               "HostKernelRNG Cannot be used within two loops which have "
+               "overlapping execution.");
+    this->internal_state = 1;
 
     const int cell_start = global_info->starting_cell;
     const int cell_end = global_info->bounding_cell;
@@ -263,7 +272,12 @@ public:
    */
   virtual inline void impl_post_loop_read(
       [[maybe_unused]] ParticleLoopImplementation::ParticleLoopGlobalInfo
-          *global_info) override {}
+          *global_info) override {
+    NESOASSERT(this->internal_state == 2,
+               "HostKernelRNG Unexpected state, post loop called but internal "
+               "state does not expect a loop to be running.");
+    this->internal_state = 0;
+  }
 };
 
 /**
