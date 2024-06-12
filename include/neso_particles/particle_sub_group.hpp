@@ -991,9 +991,10 @@ public:
  * @param cell Local cell index to select all particles in.
  * @param make_static Make the ParticleSubGroup static (default false).
  */
-template <typename PARENT>
+template <typename PARENT, typename INT_TYPE,
+          std::enable_if_t<std::is_integral<INT_TYPE>::value, bool> = true>
 inline ParticleSubGroupSharedPtr
-particle_sub_group(std::shared_ptr<PARENT> parent, const int cell,
+particle_sub_group(std::shared_ptr<PARENT> parent, const INT_TYPE cell,
                    const bool make_static = false) {
   auto selector = std::dynamic_pointer_cast<
       ParticleSubGroupImplementation::SubGroupSelector>(
