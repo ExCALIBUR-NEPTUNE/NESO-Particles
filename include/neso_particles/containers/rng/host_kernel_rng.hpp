@@ -148,7 +148,7 @@ public:
       const std::size_t num_to_memcpy =
           std::min(static_cast<std::size_t>(this->block_size),
                    num_random_numbers - num_numbers_moved);
-      for (int ix = 0; ix < num_to_memcpy; ix++) {
+      for (std::size_t ix = 0; ix < num_to_memcpy; ix++) {
         ptr_current[ix] = this->generation_function();
       }
 
