@@ -277,3 +277,53 @@ TEST(ParticleLoopRNG, uniform_sub_group) {
   sycl_target->free();
   mesh->free();
 }
+
+TEST(ParticleLoopRNG, foo) {
+  auto A = particle_loop_common(1000000);
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  const int cell_count = mesh->get_cell_count();
+  auto sycl_target = A->sycl_target;
+
+  const int rank = sycl_target->comm_pair.rank_parent;
+
+  std::mt19937 rng_state(52234234 + rank);
+  const REAL a = 10.0;
+  const REAL b = 20.0;
+  std::uniform_real_distribution<> rng_dist(a, b);
+  auto rng_lambda = [&]() -> REAL { return rng_dist(rng_state); };
+
+  const int rng_ncomp = 3;
+
+  std::vector<int> block_sizes = {
+      128,      512,      1024,     2048,      4096,      8192,
+      8192 * 2, 8192 * 4, 8192 * 8, 8192 * 16, 8192 * 32,
+  };
+  const int N_sample = 10;
+
+  for (auto block_size : block_sizes) {
+    auto rng_kernel = host_kernel_rng<REAL>(rng_lambda, rng_ncomp, block_size);
+    auto loop = particle_loop(
+        A,
+        [=](auto INDEX, auto RNG, auto V) {
+          for (int cx = 0; cx < rng_ncomp; cx++) {
+            V.at(cx) = RNG.at(INDEX, cx);
+          }
+        },
+        Access::read(ParticleLoopIndex{}), Access::read(rng_kernel),
+        Access::write(Sym<REAL>("V")));
+
+    loop->execute();
+    sycl_target->profile_map.reset();
+    for (int samplex = 0; samplex < N_sample; samplex++) {
+      loop->execute();
+    }
+    auto tt = sycl_target->profile_map.profile.at("HostKernelRNG")
+                  .at("impl_pre_loop_read");
+    nprint(block_size, "\t", tt.value_real / N_sample);
+  }
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}

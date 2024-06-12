@@ -46,7 +46,9 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/cell_dat.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/cell_dat_const.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/cell_data.hpp
-    ${INCLUDE_DIR_NESO_PARTICLES}/containers/kernel_rng.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/containers/rng/rng.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/containers/rng/kernel_rng.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/containers/rng/host_kernel_rng.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/descendant_products.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/global_array.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/local_array.hpp

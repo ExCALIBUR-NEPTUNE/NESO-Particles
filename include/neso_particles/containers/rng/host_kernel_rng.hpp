@@ -1,125 +1,16 @@
-#ifndef _NESO_PARTICLES_KERNEL_RNG_H_
-#define _NESO_PARTICLES_KERNEL_RNG_H_
+#ifndef _NESO_PARTICLES_HOST_KERNEL_RNG_H_
+#define _NESO_PARTICLES_HOST_KERNEL_RNG_H_
 
-#include "../loop/particle_loop_base.hpp"
-#include "../loop/particle_loop_index.hpp"
-#include "../particle_group.hpp"
+#include "kernel_rng.hpp"
 
 #include <functional>
 #include <tuple>
 
 namespace NESO::Particles {
 
-template <typename T> struct KernelRNG;
-
-namespace Access::KernelRNG {
-
-template <typename T> struct Read {
-  int stride;
-  T const *RESTRICT d_ptr;
-
-  /**
-   * Access the RNG data directly (advanced).
-   *
-   * @param row Row index to access.
-   * @param col Column index to access.
-   * @returns Constant reference to RNG data.
-   */
-  inline const T &at(const int row, const int col) const {
-    return d_ptr[col * stride + row];
-  }
-
-  /**
-   * Access the RNG data for this particle.
-   *
-   * @param particle_index Particle index to access.
-   * @param component RNG component to access.
-   * @returns Constant reference to RNG data.
-   */
-  inline const T &at(const Access::LoopIndex::Read &particle_index,
-                     const int component) const {
-    const auto index = particle_index.get_loop_linear_index();
-    return at(index, component);
-  }
-};
-
-} // namespace Access::KernelRNG
-
-namespace ParticleLoopImplementation {
-
 /**
- *  KernelParameter type for read-only access to a KernelRNG.
- */
-template <typename T> struct KernelParameter<Access::Read<KernelRNG<T>>> {
-  using type = Access::KernelRNG::Read<T>;
-};
-
-template <typename T> struct LoopParameter<Access::Read<KernelRNG<T>>> {
-  using type = Access::KernelRNG::Read<T>;
-};
-
-template <typename T>
-inline Access::KernelRNG::Read<T>
-create_loop_arg(ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
-                sycl::handler &cgh, Access::Read<KernelRNG<T> *> &a) {
-
-  const auto host_arg = a.obj->impl_get_const(global_info);
-  Access::KernelRNG::Read<T> kernel_arg = {std::get<0>(host_arg),
-                                           std::get<1>(host_arg)};
-  return kernel_arg;
-}
-
-template <typename T>
-inline void create_kernel_arg(ParticleLoopIteration &iterationx,
-                              Access::KernelRNG::Read<T> &rhs,
-                              Access::KernelRNG::Read<T> &lhs) {
-  lhs = rhs;
-}
-template <typename T>
-inline void pre_loop(ParticleLoopGlobalInfo *global_info,
-                     Access::Read<KernelRNG<T> *> &arg) {
-  arg.obj->impl_pre_loop_read(global_info);
-}
-template <typename T>
-inline void post_loop(ParticleLoopGlobalInfo *global_info,
-                      Access::Read<KernelRNG<T> *> &arg) {
-  arg.obj->impl_post_loop_read(global_info);
-}
-
-} // namespace ParticleLoopImplementation
-
-/**
- * Abstract base class for RNG implementations which create a block of random
- * numbers on the device prior to the loop execution.
- */
-template <typename T> struct KernelRNG {
-
-  /**
-   * Create the loop arguments for the RNG implementation.
-   *
-   * @param global_info Global information for the loop about to be executed.
-   * @returns Pointer to the device data that contains the RNG data.
-   */
-  virtual inline std::tuple<int, T *> impl_get_const(
-      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info) = 0;
-
-  /**
-   * Executed by the loop pre execution.
-   * @param global_info Global information for the loop which is to be executed.
-   */
-  virtual inline void impl_pre_loop_read(
-      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info) = 0;
-
-  /**
-   * Executed by the loop post execution.
-   * @param global_info Global information for the loop which completed.
-   */
-  virtual inline void impl_post_loop_read(
-      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info) = 0;
-};
-
-/**
- * TODO PLACE IN OWN FILE
+ * KernelRNG implementation for RNG implementations which call a host function
+ * to sample a value.
  */
 template <typename T> class HostKernelRNG : public KernelRNG<T> {
 protected:
@@ -145,13 +36,24 @@ protected:
   }
 
 public:
+  /// The number of RNG values required per particle.
   int num_components;
+  /// RNG values are sampled and copied to the device in this block size.
   int block_size;
+  /// The function pointer which returns samples when called.
   std::function<T()> generation_function;
 
+  /**
+   * Create a KernelRNG from a host function handle which returns values of
+   * type T when called.
+   *
+   * @param func Host function handle which returns samples when called.
+   * @param num_components Number of RNG values required per particle.
+   * @param block_size Optional block size.
+   */
   template <typename FUNC_TYPE>
   HostKernelRNG(FUNC_TYPE func, const int num_components,
-                const int block_size = 4096)
+                const int block_size = 8192)
       : generation_function(func), num_components(num_components),
         internal_state(0), block_size(block_size) {
     NESOASSERT(num_components > 0, "Cannot have a RNG for " +
@@ -221,6 +123,7 @@ public:
 
     // Allocate space
     auto sycl_target = global_info->particle_group->sycl_target;
+    auto t0 = profile_timestamp();
     auto d_ptr = this->allocate(sycl_target, num_particles);
     auto d_ptr_start = d_ptr;
 
@@ -242,16 +145,16 @@ public:
     while (num_numbers_moved < num_random_numbers) {
 
       // Create a block of samples
-      for (int ix = 0; ix < this->block_size; ix++) {
+      const std::size_t num_to_memcpy =
+          std::min(static_cast<std::size_t>(this->block_size),
+                   num_random_numbers - num_numbers_moved);
+      for (int ix = 0; ix < num_to_memcpy; ix++) {
         ptr_current[ix] = this->generation_function();
       }
 
       // Wait until the previous block finished copying before starting this
       // copy
       e.wait_and_throw();
-      const std::size_t num_to_memcpy =
-          std::min(static_cast<std::size_t>(this->block_size),
-                   num_random_numbers - num_numbers_moved);
       e = sycl_target->queue.memcpy(d_ptr, ptr_current,
                                     num_to_memcpy * sizeof(T));
       d_ptr += num_to_memcpy;
@@ -265,6 +168,8 @@ public:
     }
 
     e.wait_and_throw();
+    sycl_target->profile_map.inc("HostKernelRNG", "impl_pre_loop_read", 1,
+                                 profile_elapsed(t0, profile_timestamp()));
 
     NESOASSERT(num_numbers_moved == num_random_numbers,
                "Failed to copy the correct number of random numbers");
@@ -288,13 +193,20 @@ public:
 };
 
 /**
- * TODO place in own file
+ * Helper function to create a KernelRNG around a host RNG sampling function.
+ *
+ * @param func Host function which takes no arguments and returns a single
+ * value of type T when called.
+ * @param num_components Number of samples required per particle in the kernel.
+ * @param block_size Optional block size to sample RNG values and copy to the
+ * device in.
  */
 template <typename T, typename FUNC_TYPE>
-inline std::shared_ptr<KernelRNG<T>> host_kernel_rng(FUNC_TYPE func,
-                                                     const int num_components) {
+inline std::shared_ptr<KernelRNG<T>>
+host_kernel_rng(FUNC_TYPE func, const int num_components,
+                const int block_size = 8192) {
   return std::dynamic_pointer_cast<KernelRNG<T>>(
-      std::make_shared<HostKernelRNG<T>>(func, num_components));
+      std::make_shared<HostKernelRNG<T>>(func, num_components, block_size));
 }
 
 } // namespace NESO::Particles
