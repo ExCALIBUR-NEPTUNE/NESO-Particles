@@ -130,7 +130,9 @@ protected:
     if (nrow <= 0) {
       return nullptr;
     }
-    const std::size_t required_size = nrow * this->num_components;
+    const std::size_t required_size =
+        static_cast<std::size_t>(nrow) *
+        static_cast<std::size_t>(this->num_components);
 
     if (!this->d_buffers.count(sycl_target)) {
       this->d_buffers[sycl_target] =
@@ -223,7 +225,9 @@ public:
     auto d_ptr_start = d_ptr;
 
     // Create num_particles * num_components random numbers from the RNG
-    const int num_random_numbers = num_particles * num_components;
+    const std::size_t num_random_numbers =
+        static_cast<std::size_t>(num_particles) *
+        static_cast<std::size_t>(num_components);
 
     // Create the random number in blocks and copy to device blockwise.
     std::vector<T> block0(this->block_size);
@@ -232,7 +236,7 @@ public:
     T *ptr_tmp;
     T *ptr_current = block0.data();
     T *ptr_next = block1.data();
-    int num_numbers_moved = 0;
+    std::size_t num_numbers_moved = 0;
 
     sycl::event e;
     while (num_numbers_moved < num_random_numbers) {
@@ -246,7 +250,8 @@ public:
       // copy
       e.wait_and_throw();
       const std::size_t num_to_memcpy =
-          std::min(this->block_size, num_random_numbers - num_numbers_moved);
+          std::min(static_cast<std::size_t>(this->block_size),
+                   num_random_numbers - num_numbers_moved);
       e = sycl_target->queue.memcpy(d_ptr, ptr_current,
                                     num_to_memcpy * sizeof(T));
       d_ptr += num_to_memcpy;
