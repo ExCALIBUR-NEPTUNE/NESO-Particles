@@ -233,30 +233,6 @@ public:
   }
 };
 
-/**
- * Helper function to create a SymVector.
- *
- * @param particle_group ParticleGroup to use.
- * @param syms Vector of Syms to use from particle_group.
- */
-template <typename T>
-std::shared_ptr<SymVector<T>> sym_vector(ParticleGroupSharedPtr particle_group,
-                                         std::vector<Sym<T>> syms) {
-  return std::make_shared<SymVector<T>>(particle_group, syms);
-}
-
-/**
- * Helper function to create a SymVector.
- *
- * @param particle_group ParticleGroup to use.
- * @param syms Syms to use from particle_group.
- */
-template <typename T>
-std::shared_ptr<SymVector<T>> sym_vector(ParticleGroupSharedPtr particle_group,
-                                         std::initializer_list<Sym<T>> syms) {
-  return std::make_shared<SymVector<T>>(particle_group, syms);
-}
-
 template <typename T> using SymVectorSharedPtr = std::shared_ptr<SymVector<T>>;
 
 } // namespace NESO::Particles

@@ -785,12 +785,15 @@ TEST(ParticleLoop, sym_vector) {
   auto domain = A->domain;
   auto mesh = domain->mesh;
   const int cell_count = mesh->get_cell_count();
-  auto si = SymVector<INT>(A, {Sym<INT>("ID"), Sym<INT>("CELL_ID")});
+
+  auto aa = particle_sub_group(A);
+
+  auto si = sym_vector(aa, {Sym<INT>("ID"), Sym<INT>("CELL_ID")});
   std::vector<Sym<REAL>> srv = {Sym<REAL>("V"), Sym<REAL>("P2")};
-  auto sr = std::make_shared<SymVector<REAL>>(A, srv);
+  auto sr = sym_vector(aa, srv);
 
   auto pl = particle_loop(
-      A,
+      aa,
       [=](auto index, auto dats_real, auto dats_int) {
         const INT cell = index.cell;
         const INT layer = index.layer;

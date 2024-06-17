@@ -52,7 +52,7 @@ public:
       : comm(comm), ndim(ndim), cell_count(cell_count) {
 
     std::vector<int> dims(this->ndim);
-    for (int dimx = 0; dimx < 3; dimx++) {
+    for (int dimx = 0; dimx < this->ndim; dimx++) {
       this->global_origin[dimx] = origin[dimx];
       this->global_extents[dimx] = extents[dimx];
       dims[dimx] = 1;
