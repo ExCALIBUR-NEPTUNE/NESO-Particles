@@ -10,7 +10,8 @@
 namespace NESO::Particles::ExternalCommon {
 
 /**
- * TODO
+ * Mapper for instances of @ref OverlayCartesianMesh. This type is designed to
+ * be device copyable.
  */
 struct OverlayCartesianMeshMapper {
   int ndim;
@@ -71,7 +72,9 @@ struct OverlayCartesianMeshMapper {
 };
 
 /**
- * TODO
+ * Generic n-D Cartesian mesh which can be placed over the locally owned
+ * domain. For example if a coarse mesh is required to facilitate binning
+ * particles into cells.
  */
 class OverlayCartesianMesh {
 protected:
@@ -143,7 +146,16 @@ public:
   std::shared_ptr<BufferDevice<REAL>> d_inverse_cell_widths;
 
   /**
-   * TODO
+   * Create an instance of a Cartesian mesh.
+   *
+   * @param sycl_target Compute device on which to place the mesh.
+   * @param ndim Number of dimensions.
+   * @param origin Origin for the mesh, must have size equal to the number of
+   * dimensions.
+   * @param extents Extents for the mesh, must have size equal to the number of
+   * dimensions.
+   * @param cell_counts Cell counts for the mesh, must have size equal to the
+   * number of dimensions.
    */
   OverlayCartesianMesh(SYCLTargetSharedPtr sycl_target, const int ndim,
                        const std::vector<REAL> &origin,
@@ -155,6 +167,8 @@ public:
                "Missmatch between origin.size and ndim.");
     NESOASSERT(extents.size() == ndim,
                "Missmatch between extents.size and ndim.");
+    NESOASSERT(cell_counts.size() == ndim,
+               "Missmatch between cell_counts.size and ndim.");
 
     this->cell_widths = std::vector<REAL>(ndim);
     this->inverse_cell_widths = std::vector<REAL>(ndim);
@@ -183,7 +197,10 @@ public:
   }
 
   /**
-   * TODO
+   * Get a mapper instance which is device copyable and which methods are only
+   * callable on the device of the SYCL target.
+   *
+   * @returns Mapper instance only usable on the device.
    */
   inline OverlayCartesianMeshMapper get_device_mapper() {
     OverlayCartesianMeshMapper mapper;
@@ -197,7 +214,9 @@ public:
   }
 
   /**
-   * TODO
+   * Get a mapper instance which methods are only callable on the host.
+   *
+   * @returns Mapper instance only usable on the host.
    */
   inline OverlayCartesianMeshMapper get_host_mapper() {
     OverlayCartesianMeshMapper mapper;

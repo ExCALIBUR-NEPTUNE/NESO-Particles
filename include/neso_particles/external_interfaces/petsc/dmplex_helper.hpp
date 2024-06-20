@@ -641,7 +641,7 @@ public:
     PetscScalar *vertices = nullptr;
     PetscReal x = PetscRealPart(point[0]);
     PetscReal y = PetscRealPart(point[1]);
-    PetscInt num_crossings = 0, num_coords, f;
+    PetscInt num_crossings = 0, num_coords;
     PetscBool is_dg;
 
     PETSCCHK(DMPlexGetCellCoordinates(dm, petsc_index, &is_dg, &num_coords,
@@ -793,8 +793,7 @@ public:
       const PetscScalar *array;
       PetscScalar *coords;
       PETSCCHK(DMPlexGetCellCoordinates(dm, cx, &is_dg, &nc, &array, &coords));
-      const PetscInt npoints = nc / this->ndim;
-      for (int px; px < nc; px += this->ndim) {
+      for (int px = 0; px < nc; px += this->ndim) {
         std::cout << "\t";
         for (int dx = 0; dx < this->ndim; dx++) {
           std::cout << coords[px + dx] << " ";

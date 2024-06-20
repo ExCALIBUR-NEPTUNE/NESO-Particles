@@ -9,7 +9,10 @@
 namespace NESO::Particles {
 
 /**
- * TODO
+ * Helper class for setting up communication between MPI ranks where at the
+ * outset only one of the two MPI ranks knows that communication should occur.
+ * See @ref get_remote_ranks and @ref exchange_send_recv_data as the primary
+ * methods.
  */
 class CommunicationEdgesCounter {
 protected:
@@ -20,7 +23,10 @@ protected:
 
 public:
   /**
-   * TODO
+   * Create a new instance for subsequent communication. Collective for all MPI
+   * ranks on the communicator.
+   *
+   * @param comm MPI communicator.
    */
   CommunicationEdgesCounter(MPI_Comm comm) : comm(comm) {
     MPICHK(MPI_Win_allocate(sizeof(int), sizeof(int), MPI_INFO_NULL, this->comm,
@@ -28,7 +34,7 @@ public:
   }
 
   /**
-   * TODO
+   * Reset the internal state. Collective on the communicator.
    */
   inline void reset() {
     recv_win_data[0] = 0;
@@ -36,7 +42,11 @@ public:
   }
 
   /**
-   * TODO
+   * Determine how many remote MPI ranks are to send/recv data with this MPI
+   * rank. The number of ranks is returned by @ref get_count. Collective on the
+   * communicator.
+   *
+   * @param ranks Vector of remote ranks which this rank will communicate with.
    */
   inline void init_count(std::vector<int> &ranks) {
     MPICHK(MPI_Wait(&this->mpi_request, MPI_STATUS_IGNORE));
@@ -54,7 +64,12 @@ public:
   }
 
   /**
-   * TODO
+   * Get the number of remote ranks which will setup communication patterns
+   * with this MPI rank. See @ref init_count which must be called before
+   * calling this method.
+   *
+   * @returns Number of remote MPI ranks which had this MPI rank in the vector
+   * they passed to @ref init_count.
    */
   inline int get_count() {
     MPICHK(MPI_Wait(&this->mpi_request, MPI_STATUS_IGNORE));
@@ -62,7 +77,16 @@ public:
   }
 
   /**
-   * TODO
+   * Send to each remote rank an integer quantity, e.g. a number of bytes which
+   * will be sent in a call to @ref exchange_send_recv_data. Collective on the
+   * communicator.
+   *
+   * @param recv_ranks[in] Remote MPI ranks which this rank will send data.
+   * @param recv_data[in] An integer to send to each remote rank.
+   * @param send_ranks[in, out] On return contains remote MPI ranks which will
+   * send this rank data.
+   * @param send_data[in, out] On return contains the integers that the remote
+   * ranks sent to this rank.
    */
   inline void exchange_send_recv_counts(std::vector<int> &recv_ranks,
                                         std::vector<std::int64_t> &recv_data,
@@ -104,7 +128,18 @@ public:
   }
 
   /**
-   * TODO
+   *  Send to each remote rank variable length data. Collective on all ranks
+   *  that participate. For exchanging the number of bytes to send with this
+   *  call see @ref exchange_send_recv_counts.
+   *
+   *  @param[in] recv_ranks Remote MPI ranks this rank will send data to.
+   *  @param[in] recv_counts Number of bytes to send to each remote rank.
+   *  @param[in] recv_data Data to send to each remote rank.
+   *  @param[in] send_ranks Remote MPI ranks this rank will receive from.
+   *  @param[in] send_counts Number of bytes each remote rank will send to this
+   * rank.
+   *  @param[in, out] send_data Output locations for received data. Each pointer
+   * should point to memory sufficiently sized for the send counts.
    */
   inline void exchange_send_recv_data(std::vector<int> &recv_ranks,
                                       std::vector<std::int64_t> &recv_counts,
@@ -135,7 +170,16 @@ public:
   }
 
   /**
-   * TODO
+   * Helper method to call the relevant methods required to setup a "standard"
+   * pattern. Collective on the communicator.
+   *
+   * @param[in] recv_ranks Remote MPI ranks this rank will send data to.
+   * @param[in] recv_data Integer quantity to initially send to the remote rank,
+   * e.g. byte count.
+   * @param[in, out] send_ranks On return contains the remote ranks which will
+   * send data to this rank.
+   * @param[in, out] send_data On return contains the integer that the remote
+   * ranks send to this rank.
    */
   inline void get_remote_ranks(std::vector<int> &recv_ranks,
                                std::vector<std::int64_t> &recv_data,
@@ -153,7 +197,7 @@ public:
   }
 
   /**
-   * TODO
+   * Free this instance. Collective on the communicator.
    */
   inline void free() { MPICHK(MPI_Win_free(&this->recv_win)); }
 };
