@@ -49,7 +49,11 @@ public:
   DMPlexInterfaceSharedPtr dmplex_interface;
 
   /**
-   * TODO
+   * Create mapper for a compute target and 2D DMPlex.
+   *
+   * @param sycl_target Compute target to create mapper on.
+   * @param dmplex_interface DMPlexInterface containing 2D DMPlex to create
+   * mapper for.
    */
   DMPlex2DMapper(SYCLTargetSharedPtr sycl_target,
                  DMPlexInterfaceSharedPtr dmplex_interface)
@@ -214,7 +218,11 @@ public:
   }
 
   /**
-   * TODO
+   * Map particles into cells.
+   *
+   * @param particle_group Particles to map into cells.
+   * @param map_cell Cell to explicitly map. Values less than zero imply map
+   * all cells.
    */
   inline void map(ParticleGroup &particle_group, const int map_cell) {
 

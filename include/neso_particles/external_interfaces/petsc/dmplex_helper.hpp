@@ -93,7 +93,11 @@ struct HaloDMIndexMapper {
   std::map<PetscInt, PetscInt> map_global_to_local;
 
   /**
-   * TODO
+   * Get the start and end points for a given depth in the DMPlex.
+   *
+   * @param[in] depth Depth to get stratum for.
+   * @param[in, out] start First PETSc point index for given depth.
+   * @param[in, out] end Last PETSc point index plus one for given depth.
    */
   inline void get_depth_stratum(const PetscInt depth, PetscInt *start,
                                 PetscInt *end) {
@@ -113,7 +117,11 @@ struct HaloDMIndexMapper {
   }
 
   /**
-   * TODO
+   * Create an instance from STD representation on cells, e.g. after cells have
+   * been communicated to ranks for the purpose of building halos.
+   *
+   * @param cells Vector of cells which require new local indices for all the
+   * points contained.
    */
   HaloDMIndexMapper(std::vector<CellSTDRepresentation> &cells) {
     this->chart_start = 0;
@@ -176,7 +184,17 @@ struct HaloDMIndexMapper {
 };
 
 /**
- * TODO
+ * Create a new DMPlex from the serialised cells. These serialised cells are
+ * originally from the prototype DMPlex and have been serialised and
+ * communicated between MPI ranks.
+ *
+ * @param[in] serialised_cells Serialised cells to create a new DMPlex from.
+ * @param[in] dm_prototype The DMPlex from which the serialised cells are from.
+ * @param[in, out] dm The new DMPlex to create from the serialised cells.
+ * @param[in, out] map_local_lid_remote_lid A map from the new local cell
+ * indices to a tuple of {original owning rank, original local id on owning
+ * rank, global petsc index of cell}.
+ * @returns True if the constructed DMPlex is not empty otherwise false.
  */
 inline bool
 dm_from_serialised_cells(std::list<DMPlexCellSerialise> &serialised_cells,
@@ -294,7 +312,7 @@ dm_from_serialised_cells(std::list<DMPlexCellSerialise> &serialised_cells,
 }
 
 /**
- * TODO
+ * Helper class that wraps a PETSc DMPlex and simplifies common operations.
  */
 class DMPlexHelper {
 protected:
@@ -336,12 +354,14 @@ public:
   PetscInt ncells;
 
   /**
-   * TODO
+   * Get a serialisable representation of a cell in the DMPlex.
+   *
+   * @param local_index Local index of the cell to get a representation of.
+   * @returns Serialisable representation of the cell.
    */
   inline DMPlexCellSerialise get_copyable_cell(const PetscInt local_index) {
     this->check_valid_local_cell(local_index);
     const PetscInt point = this->map_np_to_petsc.at(local_index);
-    DMPlexCellSerialise cs;
 
     int rank;
     MPICHK(MPI_Comm_rank(this->comm, &rank));
@@ -352,23 +372,23 @@ public:
       return this->get_point_global_index(cell);
     };
     std::function<PetscInt(PetscInt)> rename_function = lambda_rename;
-    auto spec = PetscInterface::get_cell_specification(this->dm, point,
-                                                       rename_function);
+    auto spec =
+        PetscInterface::CellSTDRepresentation(this->dm, point, rename_function);
 
     std::vector<std::byte> cell_representation;
     spec.serialise(cell_representation);
 
-    cs.cell_local_id = local_index;
-    cs.cell_global_id = lambda_rename(point);
-    cs.owning_rank = rank;
-    cs.cell_type = cell_type;
-    cs.cell_representation = cell_representation;
+    DMPlexCellSerialise cs{local_index, lambda_rename(point), rank, cell_type,
+                           cell_representation};
 
     return cs;
   }
 
   /**
-   * TODO
+   * Construct helper class from DMPlex. Collective on the communicator.
+   *
+   * @param comm MPI communicator the DMPlex is constructed on.
+   * @param dm Input DMPlex to wrap.
    */
   DMPlexHelper(MPI_Comm comm, DM dm)
       : comm(comm), dm(dm), bounding_box(nullptr), volume(-1.0) {
@@ -410,7 +430,6 @@ public:
    * @returns DMPlex point index in [cell_start, cell_end).
    */
   inline PetscInt get_dmplex_cell_index(const PetscInt local_index) {
-    // TODO MAKE PROTECTED
     this->check_valid_local_cell(local_index);
     const auto index = this->map_np_to_petsc.at(local_index);
     this->check_valid_petsc_cell(index);
@@ -424,7 +443,6 @@ public:
    * @returns Local point index in [0, num_cells).
    */
   inline PetscInt get_local_cell_index(const PetscInt petsc_index) {
-    // TODO MAKE PROTECTED
     this->check_valid_petsc_cell(petsc_index);
     const auto index = this->map_petsc_to_np.at(petsc_index);
     this->check_valid_local_cell(index);

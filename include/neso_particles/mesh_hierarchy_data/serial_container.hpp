@@ -10,24 +10,31 @@
 namespace NESO::Particles::MeshHierarchyData {
 
 /**
- * TODO
+ * The MeshHierarchyContainer works with types which inherit the
+ * SerialInterface type. The SerialContainer objects implements the
+ * serialisation/deserialisation of these types.
  */
 template <typename T> class SerialContainer {
 
 public:
-  /// TODO
+  /// The buffer containing serialised objects.
   std::vector<std::byte> buffer;
   SerialContainer() = default;
 
   /**
-   * TODO
+   * Create an instance with an internal buffer of a given size.
+   *
+   * @param num_bytes Size of internal buffer.
    */
   SerialContainer(const std::size_t num_bytes) {
     this->buffer.resize(num_bytes);
   }
 
   /**
-   * TODO
+   * Create an instance from a vector of objects whose type inherits from
+   * SerialInterface. The objects are serialised into the internal buffer.
+   *
+   * @param inputs Vector of serialisable inputs to serialise and store.
    */
   SerialContainer(const std::vector<T> &inputs) {
     const int num_inputs = inputs.size();
@@ -61,7 +68,9 @@ public:
   }
 
   /**
-   * TODO
+   * Deserialise the contents of the internal buffer into a vector of objects.
+   *
+   * @param[in, out] outputs Output vector to deserialise objects into.
    */
   inline void get(std::vector<T> &outputs) const {
     const size_t num_bytes = this->buffer.size();
@@ -97,7 +106,10 @@ public:
   }
 
   /**
-   * TODO
+   * Concatenate onto the end of the buffer in this instance the buffer from
+   * another instance.
+   *
+   * @param other Other instance containing serialised objects in its buffer.
    */
   inline void append(SerialContainer<T> &other) {
     this->buffer.reserve(this->buffer.size() + other.buffer.size());

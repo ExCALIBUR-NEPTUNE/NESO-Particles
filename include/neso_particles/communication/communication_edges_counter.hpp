@@ -16,12 +16,17 @@ namespace NESO::Particles {
  */
 class CommunicationEdgesCounter {
 protected:
+  bool allocated;
   MPI_Comm comm;
   MPI_Win recv_win;
   int *recv_win_data;
   MPI_Request mpi_request;
 
 public:
+  ~CommunicationEdgesCounter() {
+    NESOASSERT(this->allocated == false, "Free was not called.");
+  }
+
   /**
    * Create a new instance for subsequent communication. Collective for all MPI
    * ranks on the communicator.
@@ -31,6 +36,7 @@ public:
   CommunicationEdgesCounter(MPI_Comm comm) : comm(comm) {
     MPICHK(MPI_Win_allocate(sizeof(int), sizeof(int), MPI_INFO_NULL, this->comm,
                             &this->recv_win_data, &this->recv_win));
+    this->allocated = true;
   }
 
   /**
@@ -199,7 +205,10 @@ public:
   /**
    * Free this instance. Collective on the communicator.
    */
-  inline void free() { MPICHK(MPI_Win_free(&this->recv_win)); }
+  inline void free() {
+    MPICHK(MPI_Win_free(&this->recv_win));
+    this->allocated = false;
+  }
 };
 
 } // namespace NESO::Particles

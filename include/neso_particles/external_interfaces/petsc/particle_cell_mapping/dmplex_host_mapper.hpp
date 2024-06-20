@@ -9,6 +9,9 @@
 
 namespace NESO::Particles::PetscInterface {
 
+/**
+ * Particle to cell mapping implementation that uses the host.
+ */
 class DMPlexHostMapper {
 protected:
   std::unique_ptr<BufferDevice<PetscScalar>> d_interlaced_positions;
@@ -20,7 +23,11 @@ public:
   DMPlexInterfaceSharedPtr dmplex_interface;
 
   /**
-   * TODO
+   * Create mapper for compute device and DMPlex using the host.
+   *
+   * @param sycl_target Compute device to create mapper on (the particles must
+   * be on this compute device but the mapping occurs on the host).
+   * @param dmplex_interface DMPlexInterface to create mapper for.
    */
   DMPlexHostMapper(SYCLTargetSharedPtr sycl_target,
                    DMPlexInterfaceSharedPtr dmplex_interface)
@@ -32,7 +39,11 @@ public:
   }
 
   /**
-   * TODO
+   * Map particles to cells on the host.
+   *
+   * @param particle_group Particles to map into cells.
+   * @param map_cell Cell in particle group to determine cells for. Values less
+   * than zero imply all particles should be mapped into cells.
    */
   inline void map(ParticleGroup &particle_group, const int map_cell) {
 

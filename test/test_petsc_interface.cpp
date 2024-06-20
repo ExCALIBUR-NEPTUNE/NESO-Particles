@@ -373,7 +373,7 @@ TEST(PETSC, dm_cell_linearise) {
     return x;
   };
 
-  auto spec = PetscInterface::get_cell_specification(dm, 0, rename_function);
+  auto spec = PetscInterface::CellSTDRepresentation(dm, 0, rename_function);
 
   std::vector<std::byte> spec_buffer;
   spec.serialise(spec_buffer);

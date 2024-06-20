@@ -14,51 +14,87 @@
 
 namespace NESO::Particles::MeshHierarchyData {
 
-struct MHCellBuffer : public SerialInterface {
-  INT cell;
-  std::vector<std::byte> buffer;
-
-  MHCellBuffer() = default;
-  MHCellBuffer(INT cell, std::vector<std::byte> &buffer)
-      : cell(cell), buffer(buffer){};
-
-  virtual inline std::size_t get_num_bytes() const override {
-    return sizeof(INT) + sizeof(std::size_t) + this->buffer.size();
-  }
-  virtual inline void serialise(std::byte *buffer,
-                                const std::size_t num_bytes) const override {
-    const std::byte *check_end = buffer + num_bytes;
-    std::memcpy(buffer, &this->cell, sizeof(INT));
-    buffer += sizeof(INT);
-    const std::size_t buffer_size = this->buffer.size();
-    std::memcpy(buffer, &buffer_size, sizeof(std::size_t));
-    buffer += sizeof(size_t);
-    std::memcpy(buffer, this->buffer.data(), buffer_size);
-    NESOASSERT(buffer + buffer_size == check_end,
-               "Packing under/overflow occured.");
-  }
-  virtual inline void deserialise(const std::byte *buffer,
-                                  const std::size_t num_bytes) override {
-    const std::byte *check_end = buffer + num_bytes;
-    std::memcpy(&this->cell, buffer, sizeof(INT));
-    buffer += sizeof(INT);
-    std::size_t buffer_size = std::numeric_limits<std::size_t>::max();
-    std::memcpy(&buffer_size, buffer, sizeof(std::size_t));
-    buffer += sizeof(std::size_t);
-    NESOASSERT(buffer_size < std::numeric_limits<std::size_t>::max(),
-               "Unexpected buffer size.");
-    this->buffer.resize(buffer_size);
-    std::memcpy(this->buffer.data(), buffer, buffer_size);
-    NESOASSERT(buffer + buffer_size == check_end,
-               "Packing under/overflow occured.");
-  }
-};
-
 /**
- * TODO
+ * A repeated pattern in this library is to collect all objects of a certain
+ * type that touch a particular @ref MeshHierarchy cell on the MPI rank that
+ * owns the cell. Later other MPI ranks request all of these objects for a
+ * particular cell.
+ *
+ * For example to construct the halo regions we collect all mesh cells that
+ * intersect a MH cell on the rank that owns the cell. MPI ranks then request
+ * these cells for all the MH cells that they need to construct the halos.
+ *
+ * A second example would be computing the intersection of particle
+ * trajectories and the mesh boundary. We collect the boundary elements on the
+ * MH cell that intersects the boundary. MPI ranks then pull from the rank that
+ * owns the MH cell all boundary elements that touch the MH cell.
+ *
+ * For a type to be compatible with this class an interface must be defined by
+ * creating a class which inherits from @ref
+ * MeshHierarchyData::SerialInterface.
+ *
+ * The process to use this class is as follows:
+ * 1) On construction pass a map from MH cells to a std::vector of serialisable
+ * objects. 2) Call gather collectively with a vector of cells the MPI rank
+ * requires. 3) Call get to obtain a std::vector of the deserialsed objects for
+ * a cell.
  */
 template <typename T> class MeshHierarchyContainer {
 protected:
+  /**
+   * This class will collect SerialInterface derived types onto an MPI rank.
+   * These collections are need to be serialised then sent to the owning rank.
+   * On the owning rank these buffers are concatenated into a single contiguous
+   * buffer that holds all the information for each cell.
+   *
+   * When a remote rank requests the cell it is served the serialised buffer
+   * that contains all the objects. The remote rank then deserialises all the
+   * objects to return them to the user.
+   *
+   * The serialisation/deserialisation/concatenation of these intermediate
+   * buffers is also described by the SerialInterface and that is what this
+   * helper type implements.
+   */
+  struct MHCellBuffer : public SerialInterface {
+    INT cell;
+    std::vector<std::byte> buffer;
+
+    MHCellBuffer() = default;
+    MHCellBuffer(INT cell, std::vector<std::byte> &buffer)
+        : cell(cell), buffer(buffer){};
+
+    virtual inline std::size_t get_num_bytes() const override {
+      return sizeof(INT) + sizeof(std::size_t) + this->buffer.size();
+    }
+    virtual inline void serialise(std::byte *buffer,
+                                  const std::size_t num_bytes) const override {
+      const std::byte *check_end = buffer + num_bytes;
+      std::memcpy(buffer, &this->cell, sizeof(INT));
+      buffer += sizeof(INT);
+      const std::size_t buffer_size = this->buffer.size();
+      std::memcpy(buffer, &buffer_size, sizeof(std::size_t));
+      buffer += sizeof(size_t);
+      std::memcpy(buffer, this->buffer.data(), buffer_size);
+      NESOASSERT(buffer + buffer_size == check_end,
+                 "Packing under/overflow occured.");
+    }
+    virtual inline void deserialise(const std::byte *buffer,
+                                    const std::size_t num_bytes) override {
+      const std::byte *check_end = buffer + num_bytes;
+      std::memcpy(&this->cell, buffer, sizeof(INT));
+      buffer += sizeof(INT);
+      std::size_t buffer_size = std::numeric_limits<std::size_t>::max();
+      std::memcpy(&buffer_size, buffer, sizeof(std::size_t));
+      buffer += sizeof(std::size_t);
+      NESOASSERT(buffer_size < std::numeric_limits<std::size_t>::max(),
+                 "Unexpected buffer size.");
+      this->buffer.resize(buffer_size);
+      std::memcpy(this->buffer.data(), buffer, buffer_size);
+      NESOASSERT(buffer + buffer_size == check_end,
+                 "Packing under/overflow occured.");
+    }
+  };
+
   MPI_Comm comm;
   CommunicationEdgesCounter ece;
   std::map<int, SerialContainer<T>> map_cell_buffers;
@@ -87,8 +123,12 @@ public:
   std::shared_ptr<MeshHierarchy> mesh_hierarchy;
 
   /**
-   * TODO
-   * not collective
+   * Get the deserialised objects for all objects related to a particular cell.
+   * The gather method must have been called with the requested cell prior to
+   * calling get. This method is NOT collective on the communicator.
+   *
+   * @param[in] cell MeshHierarchy cell to collect objects for.
+   * @param[in, out] output Container to place objects in.
    */
   inline void get(const INT cell, std::vector<T> &output) {
     NESOASSERT(this->map_cell_buffers.count(cell),
@@ -97,8 +137,11 @@ public:
   }
 
   /**
-   * TODO
-   * collective
+   * Locally gather on this MPI rank all the serialised objects which are
+   * stored on the passed MeshHierarchy cells. This method is collective on the
+   * communicator.
+   *
+   * @param cells MeshHierarchy cells for which to gather objects.
    */
   inline void gather(const std::vector<INT> &cells) {
     int mpi_size;
@@ -209,8 +252,13 @@ public:
   }
 
   /**
-   * TODO
-   * collective
+   * Initialise the container by passing a map from MeshHierarchy cell indices
+   * to a vector of serialisable objects that this rank holds. This
+   * initialisation is collective on the communicator. The serialisable type
+   * should inherit from SerialInterface.
+   *
+   * @param mesh_hierarchy MeshHierarchy instance used for this data structure.
+   * @param data Map from MH cells to serialisable instances.
    */
   MeshHierarchyContainer(std::shared_ptr<MeshHierarchy> mesh_hierarchy,
                          std::map<INT, std::vector<T>> &data)
@@ -284,7 +332,7 @@ public:
   }
 
   /**
-   * TODO
+   * Free the container.
    */
   inline void free() { this->ece.free(); }
 };

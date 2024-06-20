@@ -14,6 +14,7 @@ namespace NESO::Particles::PetscInterface {
 
 class DMPlexInterface : public HMesh {
 protected:
+  bool allocated;
   int ndim;
   int subdivision_order;
   int subdivision_order_offset;
@@ -214,16 +215,25 @@ public:
   std::shared_ptr<DMPlexHelper> dmh_halo;
   std::map<PetscInt, std::tuple<int, PetscInt, PetscInt>>
       map_local_lid_remote_lid;
-  ~DMPlexInterface(){
 
+  ~DMPlexInterface() {
+    NESOASSERT(this->allocated == false,
+               "DMPlexInterface::free() not called before destruction.");
   };
 
   /**
-   * TODO
+   * Create a DMPlex interface object from a DMPlex. Collective on the passed
+   * communicator.
+   *
+   * @param dm DMPlex to create interface from.
+   * @param subdivision_order_offset Offset to the subdivision order used to
+   * create the mesh hierarchy (default 0).
+   * @param comm MPI communicator to use (default MPI_COMM_WORLD).
    */
   DMPlexInterface(DM dm, const int subdivision_order_offset = 0,
                   MPI_Comm comm = MPI_COMM_WORLD)
-      : comm(comm), subdivision_order_offset(subdivision_order_offset) {
+      : comm(comm), subdivision_order_offset(subdivision_order_offset),
+        allocated(true) {
 
     this->dmh = std::make_shared<DMPlexHelper>(comm, dm);
     this->cell_count = this->dmh->get_cell_count();
@@ -238,7 +248,10 @@ public:
     this->create_halos(mh_element_map);
   }
 
-  virtual inline void free() override { this->mesh_hierarchy->free(); }
+  virtual inline void free() override {
+    this->mesh_hierarchy->free();
+    this->allocated = false;
+  }
 
   virtual inline void get_point_in_subdomain(double *point) override {
     NESOASSERT(this->cell_count > 0, "This MPI rank does not own any cells.");
@@ -284,7 +297,12 @@ public:
   }
 
   /**
-   * TODO
+   * This is a helper function to test that the halos are valid when comparing
+   * the topology and coordinates of the halo DMPlex with the original DMPlex
+   * the interface was constructed with. Collective on the communicator.
+   *
+   * @param fatal If true then an error in the validation is fatal.
+   * @returns True if no errors are discovered otherwise false.
    */
   inline bool validate_halos(const bool fatal = true) {
 

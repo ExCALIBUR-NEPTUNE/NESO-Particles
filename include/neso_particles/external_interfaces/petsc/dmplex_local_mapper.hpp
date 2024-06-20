@@ -12,6 +12,9 @@
 
 namespace NESO::Particles::PetscInterface {
 
+/**
+ * Top level interface for mapping particles into DMPlex cells.
+ */
 class DMPlexLocalMapper : public LocalMapper {
 protected:
   std::unique_ptr<DMPlexHostMapper> mapper_host;
@@ -23,7 +26,11 @@ public:
   DMPlexInterfaceSharedPtr dmplex_interface;
 
   /**
-   * TODO
+   * Create mappers for a DMPlex.
+   *
+   * @param sycl_target Compute target for mappers.
+   * @param dmplex_interface DMPlexInterface for which to create particle to
+   * cell mappers for.
    */
   DMPlexLocalMapper(SYCLTargetSharedPtr sycl_target,
                     DMPlexInterfaceSharedPtr dmplex_interface)
