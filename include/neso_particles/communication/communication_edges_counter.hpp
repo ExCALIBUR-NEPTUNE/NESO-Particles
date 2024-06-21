@@ -24,7 +24,9 @@ protected:
 
 public:
   ~CommunicationEdgesCounter() {
-    NESOASSERT(this->allocated == false, "Free was not called.");
+    if (this->allocated == true) {
+      nprint("CommunicationEdgesCounter::free() was not called.");
+    }
   }
 
   /**

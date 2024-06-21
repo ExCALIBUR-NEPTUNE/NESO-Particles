@@ -217,8 +217,9 @@ public:
       map_local_lid_remote_lid;
 
   ~DMPlexInterface() {
-    NESOASSERT(this->allocated == false,
-               "DMPlexInterface::free() not called before destruction.");
+    if (this->allocated == true) {
+      nprint("DMPlexInterface::free() not called before destruction.");
+    }
   };
 
   /**
