@@ -2,6 +2,7 @@
 #define _NESO_PARTICLES_PETSC_INTERFACE_HPP_
 
 #ifdef NESO_PARTICLES_PETSC
+#include "boundary_interaction/boundary_interaction.hpp"
 #include "dmplex_interface.hpp"
 #include "dmplex_local_mapper.hpp"
 #include "dmplex_project_evaluate.hpp"

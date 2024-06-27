@@ -544,6 +544,39 @@ public:
   }
 
   /**
+   * Get the vertices of an edge using a PETSc index.
+   *
+   * @param[in] petsc_index PETSc point index.
+   * @param[in, out] vertices Vector of vertices.
+   */
+  inline void get_generic_vertices(const PetscInt petsc_index,
+                                   std::vector<std::vector<REAL>> &vertices) {
+
+    const PetscScalar *array;
+    PetscScalar *coords = nullptr;
+    PetscInt num_coords;
+    PetscBool is_dg;
+    this->check_valid_petsc_cell(petsc_index);
+    PETSCCHK(DMPlexGetCellCoordinates(dm, petsc_index, &is_dg, &num_coords,
+                                      &array, &coords));
+    NESOASSERT(coords != nullptr, "No vertices returned for cell.");
+    const PetscInt num_verts = num_coords / ndim;
+
+    vertices.clear();
+    vertices.reserve(num_verts);
+    for (PetscInt vx = 0; vx < num_verts; vx++) {
+      std::vector<REAL> tmp(ndim);
+      for (PetscInt dimx = 0; dimx < this->ndim; dimx++) {
+        const REAL cx = coords[vx * ndim + dimx];
+        tmp.at(dimx) = cx;
+      }
+      vertices.push_back(tmp);
+    }
+    PETSCCHK(DMPlexRestoreCellCoordinates(dm, petsc_index, &is_dg, &num_coords,
+                                          &array, &coords));
+  }
+
+  /**
    * Get the vertices of a cell.
    *
    * @param[in] cell Local cell index.
