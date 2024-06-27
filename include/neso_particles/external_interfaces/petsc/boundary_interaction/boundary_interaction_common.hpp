@@ -1,6 +1,7 @@
 #ifndef _NESO_PARTICLES_PETSC_BOUNDARY_INTERACTION_BOUNDARY_INTERACTION_COMMON_HPP_
 #define _NESO_PARTICLES_PETSC_BOUNDARY_INTERACTION_BOUNDARY_INTERACTION_COMMON_HPP_
 
+#include "../../../containers/blocked_binary_tree.hpp"
 #include "../../../loop/particle_loop.hpp"
 #include "../../../particle_sub_group.hpp"
 #include "../dmplex_interface.hpp"

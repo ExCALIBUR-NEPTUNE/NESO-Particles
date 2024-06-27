@@ -26,6 +26,9 @@ template <> inline MPI_Datatype map_ctype_mpi_type_inner<uint64_t>() {
 template <> inline MPI_Datatype map_ctype_mpi_type_inner<double>() {
   return MPI_DOUBLE;
 }
+template <> inline MPI_Datatype map_ctype_mpi_type_inner<float>() {
+  return MPI_FLOAT;
+}
 
 } // namespace
 

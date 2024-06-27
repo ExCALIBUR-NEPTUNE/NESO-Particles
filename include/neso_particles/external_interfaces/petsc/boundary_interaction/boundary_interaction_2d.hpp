@@ -2,17 +2,30 @@
 #define _NESO_PARTICLES_PETSC_BOUNDARY_INTERACTION_BOUNDARY_INTERACTION_2D_HPP_
 
 #include "boundary_interaction_common.hpp"
+#include <cmath>
 #include <numeric>
 
 namespace NESO::Particles::PetscInterface {
 
+struct BoundaryInteractionHit {
+  REAL *d_real;
+  int face_set;
+};
+
 /**
  * TODO
- * collective
  */
 class BoundaryInteraction2D : public BoundaryInteractionCommon {
 protected:
+  std::unique_ptr<BufferDevice<REAL>> d_data_real;
+  std::unique_ptr<BlockedBinaryTree<int, BoundaryInteractionHit, 8>>
+      d_map_gid_data;
+
 public:
+  /**
+   * TODO
+   * collective
+   */
   template <typename... T>
   BoundaryInteraction2D(T... args) : BoundaryInteractionCommon(args...) {
 
@@ -65,8 +78,9 @@ public:
     std::exclusive_scan(facet_counts.begin(), facet_counts.end(),
                         displacements.begin(), 0);
 
-    // An edge has two vertices and each vertex has a coordinate in 2D.
-    const int ncomp_real = 2 * 2;
+    // An edge has two vertices and each vertex has a coordinate in 2D. Then the
+    // normal vector.
+    const int ncomp_real = 2 * 2 + 2;
 
     // label id, global edge point index
     const int ncomp_int = 2;
@@ -84,7 +98,7 @@ public:
     }
 
     // space to store the local contributions
-    std::vector<double> local_real(num_facets_local * ncomp_real);
+    std::vector<REAL> local_real(num_facets_local * ncomp_real);
     std::vector<int> local_int(num_facets_local * ncomp_int);
 
     // collect the local edges to send
@@ -99,10 +113,27 @@ public:
                  "Expected edge vertex to be embedded in 2D.");
       NESOASSERT(coords.at(1).size() == 2,
                  "Expected edge vertex to be embedded in 2D.");
-      local_real.at(ix * ncomp_real + 0) = coords.at(0).at(0);
-      local_real.at(ix * ncomp_real + 1) = coords.at(0).at(1);
-      local_real.at(ix * ncomp_real + 2) = coords.at(1).at(0);
-      local_real.at(ix * ncomp_real + 3) = coords.at(1).at(1);
+
+      const REAL x0 = coords.at(0).at(0);
+      const REAL y0 = coords.at(0).at(1);
+      const REAL x1 = coords.at(1).at(0);
+      const REAL y1 = coords.at(1).at(1);
+
+      // compute the normal to the facet
+      const REAL dx = x1 - x0;
+      const REAL dy = y1 - y0;
+      const REAL n0t = -dy;
+      const REAL n1t = dx;
+      const REAL l = 1.0 / std::sqrt(n0t * n0t + n1t * n1t);
+      const REAL n0 = n0t * l;
+      const REAL n1 = n1t * l;
+
+      local_real.at(ix * ncomp_real + 0) = x0;
+      local_real.at(ix * ncomp_real + 1) = y0;
+      local_real.at(ix * ncomp_real + 2) = x1;
+      local_real.at(ix * ncomp_real + 3) = y1;
+      local_real.at(ix * ncomp_real + 4) = n0;
+      local_real.at(ix * ncomp_real + 5) = n1;
 
       // collect the label index and edge global id
       const PetscInt facet_global_id =
@@ -112,17 +143,45 @@ public:
     }
 
     // space to store all the edges from all ranks
-    std::vector<double> global_real(num_facets_global * ncomp_real);
+    std::vector<REAL> global_real(num_facets_global * ncomp_real);
     std::vector<int> global_int(num_facets_global * ncomp_int);
 
     // Gather all the edge data on all the ranks
     MPICHK(MPI_Allgatherv(local_real.data(), num_facets_local * ncomp_real,
-                          MPI_DOUBLE, global_real.data(),
+                          map_ctype_mpi_type<REAL>(), global_real.data(),
                           recv_counts_real.data(), displacements_real.data(),
-                          MPI_DOUBLE, comm));
+                          map_ctype_mpi_type<REAL>(), comm));
     MPICHK(MPI_Allgatherv(local_int.data(), num_facets_local * ncomp_int,
-                          MPI_DOUBLE, global_int.data(), recv_counts_int.data(),
-                          displacements_int.data(), MPI_DOUBLE, comm));
+                          MPI_INT, global_int.data(), recv_counts_int.data(),
+                          displacements_int.data(), MPI_INT, comm));
+
+    // Create the data structures for kernels.
+    // Push the actual data onto the device.
+    this->d_data_real =
+        std::make_unique<BufferDevice<REAL>>(this->sycl_target, global_real);
+
+    // Alloc the map from global ids to data
+    this->d_map_gid_data =
+        std::make_unique<BlockedBinaryTree<int, BoundaryInteractionHit, 8>>(
+            this->sycl_target);
+    // Build the entries
+    for (int ix = 0; ix < num_facets_global; ix++) {
+      const int face_set = global_int.at(ncomp_int * ix + 0);
+      const int global_id = global_int.at(ncomp_int * ix + 1);
+      BoundaryInteractionHit v;
+      v.d_real = this->d_data_real->ptr + ncomp_real * ix;
+      v.face_set = face_set;
+      this->d_map_gid_data->add(global_id, v);
+    }
+
+    // TODO Create an overlay mesh
+    // TODO create map from overlay mesh cells to global ids of edges
+    // Maybe redo the LUT to be directly to the data in an overlay cell to have
+    // 1 redirection instead of \approx 3
+    // TODO do this map assembly per overlay cell in a separate function so can
+    // add more data to the device only as needed otherwise we will end up
+    // pushing all the edges for the whole domain onto the device from the
+    // start which will be expensive?
   }
 };
 
