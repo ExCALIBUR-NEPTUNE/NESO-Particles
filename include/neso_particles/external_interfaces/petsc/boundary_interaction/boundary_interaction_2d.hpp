@@ -1,6 +1,7 @@
 #ifndef _NESO_PARTICLES_PETSC_BOUNDARY_INTERACTION_BOUNDARY_INTERACTION_2D_HPP_
 #define _NESO_PARTICLES_PETSC_BOUNDARY_INTERACTION_BOUNDARY_INTERACTION_2D_HPP_
 
+#include "../../common/local_claim.hpp"
 #include "boundary_interaction_common.hpp"
 #include <cmath>
 #include <numeric>
@@ -17,7 +18,57 @@ struct BoundaryInteractionHit {
  */
 class BoundaryInteraction2D : public BoundaryInteractionCommon {
 protected:
+  // An edge has two vertices and each vertex has a coordinate in 2D. Then the
+  // normal vector.
+  static constexpr int ncomp_real = 2 * 2 + 2;
+
+  // label id, global edge point index
+  static constexpr int ncomp_int = 2;
+
+  std::map<INT, std::set<int>> map_mh_index_to_index;
+
+  MPI_Win facets_win_real;
+  REAL *facets_base_real = nullptr;
+  REAL *facets_real = nullptr;
+  MPI_Win facets_win_int;
+  int *facets_base_int = nullptr;
+  int *facets_int = nullptr;
+
+  inline ExternalCommon::BoundingBoxSharedPtr
+  get_bounding_box(const int index) {
+    NESOASSERT(this->facets_real != nullptr, "Expected a non-nullptr.");
+    auto bb = std::make_shared<ExternalCommon::BoundingBox>();
+    std::vector<REAL> bbv(6);
+    bbv.at(2) = 0.0;
+    bbv.at(5) = 0.0;
+
+    for (int vx = 0; vx < 2; vx++) {
+      auto x = this->facets_real[index * this->ncomp_real + vx * 2 + 0];
+      auto y = this->facets_real[index * this->ncomp_real + vx * 2 + 1];
+      bbv.at(0) = x;
+      bbv.at(1) = y;
+      bbv.at(3) = x;
+      bbv.at(4) = y;
+      auto bbt = std::make_shared<ExternalCommon::BoundingBox>(bbv);
+      bb->expand(bbt);
+    }
+
+    return bb;
+  }
+
 public:
+  /**
+   * Free the instance. Must be called. Collective on the communicator.
+   */
+  inline void free() {
+    MPICHK(MPI_Win_free(&this->facets_win_real));
+    MPICHK(MPI_Win_free(&this->facets_win_int));
+    this->facets_base_real = nullptr;
+    this->facets_real = nullptr;
+    this->facets_base_int = nullptr;
+    this->facets_int = nullptr;
+  }
+
   /**
    * TODO
    * collective
@@ -49,12 +100,6 @@ public:
     face_sets.clear();
 
     int num_facets_local = facet_labels.size();
-    // An edge has two vertices and each vertex has a coordinate in 2D. Then the
-    // normal vector.
-    const int ncomp_real = 2 * 2 + 2;
-
-    // label id, global edge point index
-    const int ncomp_int = 2;
 
     // space to store the local contributions
     std::vector<REAL> local_real(num_facets_local * ncomp_real);
@@ -119,24 +164,60 @@ public:
     std::vector<REAL> global_real;
     std::vector<int> global_int;
 
+    int num_facets_global_tmp = 0;
     if (rank_intra == 0) {
       all_gather_v(node_real, comm_inter, global_real);
       all_gather_v(node_int, comm_inter, global_int);
+      num_facets_global_tmp = global_int.size() / ncomp_int;
     }
     node_real.clear();
     node_int.clear();
 
+    // Allocate the shared space to store the edges
+    MPICHK(MPI_Win_allocate_shared(
+        num_facets_global_tmp * ncomp_real * sizeof(REAL), sizeof(REAL),
+        MPI_INFO_NULL, comm_intra, (void *)&this->facets_base_real,
+        &this->facets_win_real));
+    MPICHK(MPI_Win_allocate_shared(
+        num_facets_global_tmp * ncomp_int * sizeof(int), sizeof(int),
+        MPI_INFO_NULL, comm_intra, (void *)&this->facets_base_int,
+        &this->facets_win_int));
+    // Get the pointers to the shared space on each rank
+    MPI_Aint win_size_tmp;
+    int disp_unit_tmp;
+    MPICHK(MPI_Win_shared_query(this->facets_win_real, 0, &win_size_tmp,
+                                &disp_unit_tmp, (void *)&this->facets_real));
+    MPICHK(MPI_Win_shared_query(this->facets_win_int, 0, &win_size_tmp,
+                                &disp_unit_tmp, (void *)&this->facets_int));
+
+    // On node rank zero copy the data into the shared region.
+    if (rank_intra == 0) {
+      std::memcpy(this->facets_real, global_real.data(),
+                  num_facets_global_tmp * ncomp_real * sizeof(REAL));
+      std::memcpy(this->facets_int, global_int.data(),
+                  num_facets_global_tmp * ncomp_int * sizeof(int));
+    }
+    global_real.clear();
+    global_int.clear();
+
     // On each node the rank where rank_intra == 0 now holds all the boundary
     // edges.
+    MPICHK(MPI_Bcast(&num_facets_global_tmp, 1, MPI_INT, 0, comm_intra));
+    const int num_facets_global = num_facets_global_tmp;
+    // Wait for node rank 0 to populate shared memory
+    MPICHK(MPI_Barrier(comm_intra));
 
-    // TODO Create an overlay mesh
-    // TODO create map from overlay mesh cells to global ids of edges
-    // Maybe redo the LUT to be directly to the data in an overlay cell to have
-    // 1 redirection instead of \approx 3
-    // TODO do this map assembly per overlay cell in a separate function so can
-    // add more data to the device only as needed otherwise we will end up
-    // pushing all the edges for the whole domain onto the device from the
-    // start which will be expensive?
+    // build map from mesh hierarchy cells to indices in the edge data store
+    auto mesh_hierarchy = this->mesh->get_mesh_hierarchy();
+    std::deque<std::pair<INT, double>> cells;
+    for (int ex = 0; ex < num_facets_global; ex++) {
+      cells.clear();
+      auto bb = this->get_bounding_box(ex);
+      ExternalCommon::bounding_box_map(bb, mesh_hierarchy, cells);
+      for (auto &cx_w : cells) {
+        this->map_mh_index_to_index[cx_w.first].insert(ex);
+      }
+    }
   }
 };
 
