@@ -1,6 +1,7 @@
 #ifndef _NESO_PARTICLES_PETSC_BOUNDARY_INTERACTION_BOUNDARY_INTERACTION_2D_HPP_
 #define _NESO_PARTICLES_PETSC_BOUNDARY_INTERACTION_BOUNDARY_INTERACTION_2D_HPP_
 
+#include "../../../containers/blocked_binary_tree.hpp"
 #include "../../common/local_claim.hpp"
 #include "boundary_interaction_common.hpp"
 #include <cmath>
@@ -56,12 +57,101 @@ protected:
     return bb;
   }
 
-  inline void collect_cells(){
+  std::stack<std::shared_ptr<BufferDevice<REAL>>> stack_d_real;
+  std::stack<std::shared_ptr<BufferDevice<int>>> stack_d_int;
+  std::set<int> pushed_edge_data;
 
+  struct BoundaryInteractionCellData2D {
+    int num_edges;
+    REAL *d_real;
+    int *d_int;
+  };
 
+  struct BoundaryInteractionNormalData2D {
+    REAL *d_normal;
+  };
 
+  std::shared_ptr<BlockedBinaryTree<INT, BoundaryInteractionCellData2D, 8>>
+      d_map_edge_discovery;
+  std::shared_ptr<BlockedBinaryTree<INT, BoundaryInteractionNormalData2D, 8>>
+      d_map_edge_normals;
+
+  inline void collect_cells() {
+    for (auto cell : this->required_mh_cells) {
+      // Does the mh cell actually have any edges intersecting it?
+      if (this->map_mh_index_to_index.count(cell)) {
+        const int num_edges = this->map_mh_index_to_index.at(cell).size();
+
+        // get the real and int data for the mh cell
+        std::vector<REAL> h_real(num_edges * 4);
+        std::vector<int> h_int(num_edges * ncomp_int);
+        int index = 0;
+        for (auto ix : this->map_mh_index_to_index.at(cell)) {
+          for (int cx = 0; cx < 4; cx++) {
+            h_real.at(index * 4 + cx) = this->facets_real[ix * ncomp_real + cx];
+          }
+          for (int cx = 0; cx < ncomp_int; cx++) {
+            h_int.at(index * ncomp_int + cx) =
+                this->facets_int[ix * ncomp_int + cx];
+          }
+          index++;
+
+          // Is this edge in the map of edge data for interactions?
+          if (this->pushed_edge_data.count(ix) == 0) {
+            std::vector<REAL> h_norm(2);
+            h_norm.at(0) = this->facets_real[ix * ncomp_real + 4];
+            h_norm.at(1) = this->facets_real[ix * ncomp_real + 5];
+            auto t_norm =
+                std::make_shared<BufferDevice<REAL>>(this->sycl_target, h_norm);
+            this->stack_d_real.push(t_norm);
+            BoundaryInteractionNormalData2D dnorm;
+            dnorm.d_normal = t_norm->ptr;
+            this->d_map_edge_normals->add(ix, dnorm);
+            this->pushed_edge_data.insert(ix);
+          }
+        }
+
+        // push cell data onto device
+        auto t_real =
+            std::make_shared<BufferDevice<REAL>>(this->sycl_target, h_real);
+        auto t_int =
+            std::make_shared<BufferDevice<int>>(this->sycl_target, h_int);
+
+        this->stack_d_real.push(t_real);
+        this->stack_d_int.push(t_int);
+
+        BoundaryInteractionCellData2D d;
+        d.num_edges = num_edges;
+        d.d_real = t_real->ptr;
+        d.d_int = t_int->ptr;
+        this->d_map_edge_discovery->add(cell, d);
+      }
+      this->collected_mh_cells.insert(cell);
+    }
   }
 
+  template <typename T>
+  inline void find_intersections(std::shared_ptr<T> particle_sub_group) {
+
+    this->find_cells(particle_sub_group);
+    this->collect_cells();
+
+    auto particle_group = this->get_particle_group(particle_sub_group);
+    const auto k_ndim = particle_group->position_dat->ncomp;
+    particle_loop(
+        "BoundaryInteraction2D::find_intersections_0", particle_sub_group,
+        [=](auto C, auto P) {
+          for (int dimx = 0; dimx < k_ndim; dimx++) {
+            P.at(dimx) = 0;
+          }
+          C.at(0) = 0;
+          C.at(1) = 0;
+          C.at(2) = 0;
+        },
+        Access::write(this->boundary_label_sym),
+        Access::write(this->boundary_position_sym))
+        ->execute();
+  }
 
 public:
   /**
@@ -226,8 +316,6 @@ public:
       }
     }
   }
-
-    
 };
 
 } // namespace NESO::Particles::PetscInterface

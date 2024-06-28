@@ -83,7 +83,6 @@ protected:
   }
 
 public:
-
   SYCLTargetSharedPtr sycl_target;
   DMPlexInterfaceSharedPtr mesh;
   std::map<PetscInt, std::vector<PetscInt>> boundary_groups;
