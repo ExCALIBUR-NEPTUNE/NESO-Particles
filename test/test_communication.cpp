@@ -98,3 +98,69 @@ TEST(Communication, edges_ranks) {
 
   counter.free();
 }
+
+TEST(communication_utility, gather_v) {
+
+  int rank, size;
+  MPICHK(MPI_Comm_size(MPI_COMM_WORLD, &size));
+  MPICHK(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
+
+  const int offset = 3;
+  const int N = rank + offset;
+  std::vector<REAL> input(N);
+  std::iota(input.begin(), input.end(), N * rank);
+
+  std::vector<REAL> output;
+
+  const int root = size - 1;
+  const bool root_rank = rank == root;
+  gather_v(input, MPI_COMM_WORLD, root, output);
+
+  if (root_rank) {
+    int total_size = 0;
+    for (int rx = 0; rx < size; rx++) {
+      total_size += rx + offset;
+    }
+
+    ASSERT_EQ(output.size(), total_size);
+    int index = 0;
+    for (int rx = 0; rx < size; rx++) {
+      const int start_rank = (rx + offset) * rx;
+      for (int ix = 0; ix < (rx + offset); ix++) {
+        ASSERT_EQ(output.at(index), start_rank + ix);
+        index++;
+      }
+    }
+  }
+}
+
+TEST(communication_utility, all_gather_v) {
+
+  int rank, size;
+  MPICHK(MPI_Comm_size(MPI_COMM_WORLD, &size));
+  MPICHK(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
+
+  const int offset = 5;
+  const int N = rank + offset;
+  std::vector<REAL> input(N);
+  std::iota(input.begin(), input.end(), N * rank);
+
+  std::vector<REAL> output;
+
+  all_gather_v(input, MPI_COMM_WORLD, output);
+
+  int total_size = 0;
+  for (int rx = 0; rx < size; rx++) {
+    total_size += rx + offset;
+  }
+
+  ASSERT_EQ(output.size(), total_size);
+  int index = 0;
+  for (int rx = 0; rx < size; rx++) {
+    const int start_rank = (rx + offset) * rx;
+    for (int ix = 0; ix < (rx + offset); ix++) {
+      ASSERT_EQ(output.at(index), start_rank + ix);
+      index++;
+    }
+  }
+}
