@@ -54,8 +54,8 @@ TEST(Communication, edges_ranks) {
     counter.get_remote_ranks(recv_ranks, recv_data, send_ranks, send_data);
 
     std::vector<int> correct_send_ranks = {
-        (rank - 1 + size) % size,
-        (rank - 3 + size) % size,
+        (rank - 1 + 10 * size) % size,
+        (rank - 3 + 10 * size) % size,
     };
 
     for (auto rx : correct_send_ranks) {
