@@ -56,6 +56,13 @@ protected:
     return bb;
   }
 
+  inline void collect_cells(){
+
+
+
+  }
+
+
 public:
   /**
    * Free the instance. Must be called. Collective on the communicator.
@@ -219,6 +226,8 @@ public:
       }
     }
   }
+
+    
 };
 
 } // namespace NESO::Particles::PetscInterface

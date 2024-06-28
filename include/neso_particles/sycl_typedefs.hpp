@@ -8,4 +8,14 @@
 using namespace cl;
 #endif
 
+#ifndef KERNEL_MIN
+#define KERNEL_MIN(x, y) (((x) < (y)) ? (x) : (y))
+#endif
+#ifndef KERNEL_MAX
+#define KERNEL_MAX(x, y) (((x) > (y)) ? (x) : (y))
+#endif
+#ifndef KERNEL_ABS
+#define KERNEL_ABS(x) (((x) < 0) ? (-(x)) : (x))
+#endif
+
 #endif
