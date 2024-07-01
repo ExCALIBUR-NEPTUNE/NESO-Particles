@@ -18,6 +18,7 @@
 #include "neso_particles/containers/sym_vector.hpp"
 #include "neso_particles/containers/sym_vector_impl.hpp"
 #include "neso_particles/containers/tuple.hpp"
+#include "neso_particles/device_functions.hpp"
 #include "neso_particles/domain.hpp"
 #include "neso_particles/error_propagate.hpp"
 #include "neso_particles/external_interfaces/common/common.hpp"

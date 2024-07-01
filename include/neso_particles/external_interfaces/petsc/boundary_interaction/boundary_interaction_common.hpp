@@ -44,7 +44,7 @@ protected:
 
   std::unique_ptr<MeshHierarchyMapper> mesh_hierarchy_mapper;
   std::unique_ptr<BufferDeviceHost<int>> dh_max_box_size;
-  std::unique_ptr<BufferDevice<int>> d_max_possible_cell;
+  std::unique_ptr<BufferDevice<int>> d_cell_bounds;
   std::unique_ptr<BufferDeviceHost<INT>> dh_mh_cells;
   std::shared_ptr<CellDatConst<int>> cdc_mh_min;
   std::shared_ptr<CellDatConst<int>> cdc_mh_max;
@@ -80,6 +80,92 @@ protected:
       }
     }
     return labels;
+  }
+
+  template <typename T, typename U>
+  inline void find_intersections_inner(std::shared_ptr<T> particle_sub_group,
+                                       const U &intersect_object) {
+
+    auto particle_group = this->get_particle_group(particle_sub_group);
+    const auto k_ndim = particle_group->position_dat->ncomp;
+
+    auto mesh_hierarchy_device_mapper =
+        this->mesh_hierarchy_mapper->get_device_mapper();
+    const auto k_cell_bounds = this->d_cell_bounds->ptr;
+    particle_loop(
+        "BoundaryInteractionCommon::find_intersections_inner",
+        particle_sub_group,
+        [=](auto B_C, auto B_P, auto PREV_POS, auto CURR_POS) {
+          // Get the cells containing the start and end points
+          REAL curr_position[3];
+          REAL prev_position[3];
+          INT cell_starts[3] = {0, 0, 0};
+          INT cell_ends[3] = {1, 1, 1};
+
+          for (int dimx = 0; dimx < k_ndim; dimx++) {
+            prev_position[dimx] = PREV_POS.at(dimx);
+            curr_position[dimx] = CURR_POS.at(dimx);
+          }
+          mesh_hierarchy_device_mapper.map_to_cart_tuple_no_trunc(prev_position,
+                                                                  cell_starts);
+          mesh_hierarchy_device_mapper.map_to_cart_tuple_no_trunc(curr_position,
+                                                                  cell_ends);
+
+          // reorder such that start < end for canonical loop ordering
+          for (int dimx = 0; dimx < k_ndim; dimx++) {
+            const auto a = cell_starts[dimx];
+            const auto b = cell_ends[dimx];
+            cell_starts[dimx] = KERNEL_MIN(a, b);
+            cell_ends[dimx] = KERNEL_MAX(a, b);
+          }
+
+          // Truncate the start/end cells to actually be within the range of
+          // the grid
+          for (int dimx = 0; dimx < k_ndim; dimx++) {
+            cell_starts[dimx] = KERNEL_MAX(cell_starts[dimx], 0);
+            cell_ends[dimx] = KERNEL_MIN(k_cell_bounds[dimx], cell_ends[dimx]);
+          }
+
+          // Fill the rest of the iteration set for when k_ndim <3 such that
+          // the generic looping works.
+          for (int dimx = k_ndim; dimx < 3; dimx++) {
+            cell_starts[dimx] = 0;
+            cell_ends[dimx] = 1;
+          }
+
+          REAL current_distance;
+          intersect_object.reset(current_distance);
+
+          // loop over the grid of MH cells
+          INT cell_index[3];
+          for (cell_index[2] = cell_starts[2]; cell_index[2] < cell_ends[2];
+               cell_index[2]++) {
+            for (cell_index[1] = cell_starts[1]; cell_index[1] < cell_ends[1];
+                 cell_index[1]++) {
+              for (cell_index[0] = cell_starts[0]; cell_index[0] < cell_ends[0];
+                   cell_index[0]++) {
+
+                // convert the cartesian cell index into a mesh heirarchy
+                // index
+                INT mh_tuple[6];
+                mesh_hierarchy_device_mapper.cart_tuple_to_tuple(cell_index,
+                                                                 mh_tuple);
+                // convert the mesh hierarchy tuple to linear index
+                const INT linear_index =
+                    mesh_hierarchy_device_mapper.tuple_to_linear_global(
+                        mh_tuple);
+                intersect_object.find(linear_index, prev_position,
+                                      curr_position, current_distance, B_P,
+                                      B_C);
+              }
+            }
+          }
+        },
+        Access::write(this->boundary_label_sym),
+        Access::write(this->boundary_position_sym),
+        Access::read(this->previous_position_sym),
+        Access::read(particle_group->position_dat))
+        ->execute();
   }
 
 public:
@@ -127,15 +213,15 @@ public:
     const auto mesh_hierarchy_host_mapper =
         this->mesh_hierarchy_mapper->get_host_mapper();
 
-    std::vector<int> h_max_possible_cell = {0, 0, 0};
+    std::vector<int> h_cell_bounds = {0, 0, 0};
     for (int dimx = 0; dimx < k_ndim; dimx++) {
       const int max_possible_cell = mesh_hierarchy_host_mapper.dims[dimx] *
                                     mesh_hierarchy_host_mapper.ncells_dim_fine;
-      h_max_possible_cell.at(dimx) = max_possible_cell;
+      h_cell_bounds.at(dimx) = max_possible_cell;
     }
 
-    this->d_max_possible_cell = std::make_unique<BufferDevice<int>>(
-        this->sycl_target, h_max_possible_cell);
+    this->d_cell_bounds =
+        std::make_unique<BufferDevice<int>>(this->sycl_target, h_cell_bounds);
     this->dh_mh_cells =
         std::make_unique<BufferDeviceHost<INT>>(this->sycl_target, 1024);
   }
@@ -215,7 +301,7 @@ public:
 
     this->dh_max_box_size->h_buffer.ptr[0] = 0;
     this->dh_max_box_size->host_to_device();
-    const auto k_max_possible_cell = this->d_max_possible_cell->ptr;
+    const auto k_cell_bounds = this->d_cell_bounds->ptr;
     int *k_max_ptr = this->dh_max_box_size->d_buffer.ptr;
 
     int *k_cdc_max = this->cdc_mh_max->device_ptr();
@@ -232,7 +318,7 @@ public:
                   const int index = idx * k_ndim + dimx;
                   const int bound_min = KERNEL_MAX(0, k_cdc_min[index]);
                   const int bound_max =
-                      KERNEL_MIN(k_max_possible_cell[dimx], k_cdc_max[index]);
+                      KERNEL_MIN(k_cell_bounds[dimx] - 1, k_cdc_max[index]);
 
                   // Truncated for future computation.
                   k_cdc_min[index] = bound_min;

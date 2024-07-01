@@ -2,6 +2,7 @@
 #define _NESO_PARTICLES_PETSC_BOUNDARY_INTERACTION_BOUNDARY_INTERACTION_2D_HPP_
 
 #include "../../../containers/blocked_binary_tree.hpp"
+#include "../../../device_functions.hpp"
 #include "../../common/local_claim.hpp"
 #include "boundary_interaction_common.hpp"
 #include <cmath>
@@ -130,6 +131,54 @@ protected:
     }
   }
 
+  struct TrajectoryIntersect2D {
+    REAL max_distance;
+    REAL epsilon;
+    BlockedBinaryNode<INT, BoundaryInteractionCellData2D, 8> *root;
+
+    inline void reset(REAL &current_distance) const {
+      current_distance = max_distance;
+    }
+
+    template <typename P_TYPE, typename C_TYPE>
+    inline void find(const INT linear_cell, const REAL *a, const REAL *b,
+                     REAL &current_distance, P_TYPE &P, C_TYPE &C) const {
+
+      bool *exists;
+      BoundaryInteractionCellData2D *data;
+      root->get_location(linear_cell, &exists, &data);
+
+      if (*exists) {
+        const REAL xa = a[0];
+        const REAL ya = a[1];
+        const REAL xb = b[0];
+        const REAL yb = b[1];
+        REAL xi, yi, l0;
+
+        for (int edgex = 0; edgex < (data->num_edges); edgex++) {
+          const REAL x0 = data->d_real[edgex * 4 + 0];
+          const REAL y0 = data->d_real[edgex * 4 + 1];
+          const REAL x1 = data->d_real[edgex * 4 + 2];
+          const REAL y1 = data->d_real[edgex * 4 + 3];
+          const INT label_id = data->d_int[edgex * 2 + 0];
+          const INT edge_id = data->d_int[edgex * 2 + 1];
+
+          const bool intersects = line_segment_intersection_2d(
+              xa, ya, xb, yb, x0, y0, x1, y1, xi, yi, l0);
+
+          if (intersects && (l0 < current_distance)) {
+            P.at(0) = xi;
+            P.at(1) = yi;
+            C.at(0) = 1;
+            C.at(1) = label_id;
+            C.at(2) = label_id;
+            current_distance = l0;
+          }
+        }
+      }
+    }
+  };
+
   template <typename T>
   inline void find_intersections(std::shared_ptr<T> particle_sub_group) {
 
@@ -151,6 +200,13 @@ protected:
         Access::write(this->boundary_label_sym),
         Access::write(this->boundary_position_sym))
         ->execute();
+
+    TrajectoryIntersect2D intersect_object;
+    intersect_object.max_distance = std::numeric_limits<REAL>::max();
+    intersect_object.epsilon = std::numeric_limits<REAL>::min();
+    intersect_object.root = this->d_map_edge_discovery->root;
+
+    this->find_intersections_inner(particle_sub_group, intersect_object);
   }
 
 public:
