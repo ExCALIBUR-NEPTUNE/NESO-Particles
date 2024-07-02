@@ -27,8 +27,11 @@ protected:
   // label id, global edge point index
   static constexpr int ncomp_int = 2;
 
+  static constexpr REAL padding = 1.0e-8;
+
   std::map<INT, std::set<int>> map_mh_index_to_index;
 
+  int num_facets_global;
   MPI_Win facets_win_real;
   REAL *facets_base_real = nullptr;
   REAL *facets_real = nullptr;
@@ -47,10 +50,10 @@ protected:
     for (int vx = 0; vx < 2; vx++) {
       auto x = this->facets_real[index * this->ncomp_real + vx * 2 + 0];
       auto y = this->facets_real[index * this->ncomp_real + vx * 2 + 1];
-      bbv.at(0) = x;
-      bbv.at(1) = y;
-      bbv.at(3) = x;
-      bbv.at(4) = y;
+      bbv.at(0) = x - this->padding;
+      bbv.at(1) = y - this->padding;
+      bbv.at(3) = x + this->padding;
+      bbv.at(4) = y + this->padding;
       auto bbt = std::make_shared<ExternalCommon::BoundingBox>(bbv);
       bb->expand(bbt);
     }
@@ -100,7 +103,7 @@ protected:
           index++;
 
           // Is this edge in the map of edge data for interactions?
-          if (this->pushed_edge_data.count(ix) == 0) {
+          if (this->pushed_edge_data.count(edge_id) == 0) {
             std::vector<REAL> h_norm(2);
             h_norm.at(0) = this->facets_real[ix * ncomp_real + 4];
             h_norm.at(1) = this->facets_real[ix * ncomp_real + 5];
@@ -109,8 +112,8 @@ protected:
             this->stack_d_real.push(t_norm);
             BoundaryInteractionNormalData2D dnorm;
             dnorm.d_normal = t_norm->ptr;
-            this->d_map_edge_normals->add(ix, dnorm);
-            this->pushed_edge_data.insert(ix);
+            this->d_map_edge_normals->add(edge_id, dnorm);
+            this->pushed_edge_data.insert(edge_id);
           }
         }
 
@@ -377,14 +380,14 @@ public:
     // On each node the rank where rank_intra == 0 now holds all the boundary
     // edges.
     MPICHK(MPI_Bcast(&num_facets_global_tmp, 1, MPI_INT, 0, comm_intra));
-    const int num_facets_global = num_facets_global_tmp;
+    this->num_facets_global = num_facets_global_tmp;
     // Wait for node rank 0 to populate shared memory
     MPICHK(MPI_Barrier(comm_intra));
 
     // build map from mesh hierarchy cells to indices in the edge data store
     auto mesh_hierarchy = this->mesh->get_mesh_hierarchy();
     std::deque<std::pair<INT, double>> cells;
-    for (int ex = 0; ex < num_facets_global; ex++) {
+    for (int ex = 0; ex < this->num_facets_global; ex++) {
       cells.clear();
       auto bb = this->get_bounding_box(ex);
       ExternalCommon::bounding_box_map(bb, mesh_hierarchy, cells);
@@ -392,6 +395,13 @@ public:
         this->map_mh_index_to_index[cx_w.first].insert(ex);
       }
     }
+
+    this->d_map_edge_discovery = std::make_shared<
+        BlockedBinaryTree<INT, BoundaryInteractionCellData2D, 8>>(
+        this->sycl_target);
+    this->d_map_edge_normals = std::make_shared<
+        BlockedBinaryTree<INT, BoundaryInteractionNormalData2D, 8>>(
+        this->sycl_target);
   }
 };
 

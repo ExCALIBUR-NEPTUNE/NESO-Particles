@@ -335,6 +335,12 @@ protected:
     NESOASSERT(this->map_petsc_to_np.count(cell),
                "Bad DMPlex cell index passed: PETSc cell index is not local.");
   }
+  inline void check_valid_petsc_point(const PetscInt petsc_index) const {
+    NESOASSERT((this->point_start <= petsc_index) &&
+                   (petsc_index < this->point_end),
+               "Bad point index passed: " + std::to_string(petsc_index) +
+                   ". Not in range.");
+  }
 
   inline PetscInt internal_get_point_global_index(const PetscInt point) {
     PetscInt global_point;
@@ -556,7 +562,7 @@ public:
     PetscScalar *coords = nullptr;
     PetscInt num_coords;
     PetscBool is_dg;
-    this->check_valid_petsc_cell(petsc_index);
+    this->check_valid_petsc_point(petsc_index);
     PETSCCHK(DMPlexGetCellCoordinates(dm, petsc_index, &is_dg, &num_coords,
                                       &array, &coords));
     NESOASSERT(coords != nullptr, "No vertices returned for cell.");

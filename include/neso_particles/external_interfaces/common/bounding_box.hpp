@@ -75,6 +75,18 @@ public:
     }
     return is_contained;
   }
+
+  /**
+   * Print the bounding box information on stdout.
+   */
+  inline void print() {
+    nprint("x_direction, min: " + std::to_string(this->bb[0]) +
+               ", max: " + std::to_string(this->bb[3]) + "\n",
+           "y_direction, min: " + std::to_string(this->bb[1]) +
+               ", max: " + std::to_string(this->bb[4]) + "\n",
+           "z_direction, min: " + std::to_string(this->bb[2]) +
+               ", max: " + std::to_string(this->bb[5]) + "\n");
+  }
 };
 
 /**

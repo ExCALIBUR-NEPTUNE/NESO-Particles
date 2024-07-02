@@ -5,6 +5,8 @@
 #include "test_particle_group.hpp"
 #include <cstdlib>
 #include <filesystem>
+#include <gtest/gtest.h>
+#include <memory>
 #include <string>
 
 #ifndef TO_STRING_MACRO
@@ -64,6 +66,35 @@ inline std::filesystem::path get_test_resource(std::string resource_name) {
       GTEST_SKIP() << "Skipping test as resource missing: " << y;              \
     }                                                                          \
   }
+#endif
+
+/*
+ * When called like MAKE_WRAP_METHOD(foo) creates source like
+ *
+ *  template <typename... T> auto wrap_foo(T... args)
+ *    return foo(args...);
+ *  };
+ *
+ *  to make publicly callable wrappers for protected methods.
+ */
+#ifndef MAKE_WRAP_METHOD
+#define MAKE_WRAP_METHOD(method_name)                                          \
+  template <typename... T> auto wrap_##method_name(T... args) {                \
+    return method_name(args...);                                               \
+  };
+#endif
+
+/**
+ *  When called like MAKE_GETTER_METHOD(foo) creates source like
+ *
+ *  auto get_foo(){
+ *    return foo;
+ *  }
+ *
+ */
+#ifndef MAKE_GETTER_METHOD
+#define MAKE_GETTER_METHOD(member_variable)                                    \
+  auto &get_##member_variable() { return member_variable; }
 #endif
 
 } // namespace NESO::Particles
