@@ -202,4 +202,20 @@ This data structure is read-only.
      - Access::ParticleLoopIndex::Read
      - Indices accessed via .cell, .layer, .get_local_linear_index and .get_loop_linear_index.
 
+
+KernelRNG
+~~~~~~~~~
+
+We assume that there are two main methods for accessing RNG values in a ParticleLoop, the first method separately generates samples and places them in a temporary buffer prior to the loop launch.
+The second approach provides a kernel function which samples values on the fly.
+
+KernelRNG is an abstract base class that encapsulates the first approach where RNG values are sampled and stored in a temporary device buffer prior to the particle loop execution.
+We provide a specialisation of KernelRNG called HostKernelRNG which allows any host function which takes no arguments and returns a single value to be used as a sampling function.
+
+In the following example we use a host normal distribution as a source of random velocity values in a ParticleLoop.
+
+.. literalinclude:: ../example_sources/example_particle_loop_rng.hpp
+   :language: cpp
+   :caption: Particle loop example where a ParticleLoop accesses random values for each particle. 
+
 .. [SAUNDERS2018] A domain specific language for performance portable molecular dynamics algorithms. `CPC <https://doi.org/10.1016/j.cpc.2017.11.006>`_ , `arXiv <https://arxiv.org/abs/1704.03329>`_.

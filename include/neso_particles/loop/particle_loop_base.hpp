@@ -36,6 +36,8 @@ struct ParticleLoopGlobalInfo {
   INT *d_npart_cell_es_lb;
   // The starting cell is only set for calls to create_loop_args.
   int starting_cell;
+  // Last cell plus one. Only set for calls to create_loop_args.
+  int bounding_cell;
   int loop_type_int;
 };
 
@@ -58,6 +60,11 @@ struct ParticleLoopIteration {
 /**
  * The functions to run for each argument to the kernel post loop completion.
  */
+/**
+ * Default pre loop execution function.
+ */
+template <typename T>
+inline void pre_loop(ParticleLoopGlobalInfo *global_info, T &arg) {}
 /**
  * Default post loop execution function.
  */
