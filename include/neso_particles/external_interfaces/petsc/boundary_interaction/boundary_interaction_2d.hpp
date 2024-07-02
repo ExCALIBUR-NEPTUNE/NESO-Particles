@@ -91,10 +91,12 @@ protected:
           for (int cx = 0; cx < 4; cx++) {
             h_real.at(index * 4 + cx) = this->facets_real[ix * ncomp_real + cx];
           }
-          for (int cx = 0; cx < ncomp_int; cx++) {
-            h_int.at(index * ncomp_int + cx) =
-                this->facets_int[ix * ncomp_int + cx];
-          }
+
+          const auto label = this->facets_int[ix * ncomp_int + 0];
+          const auto edge_id = this->facets_int[ix * ncomp_int + 1];
+          const auto group_id = this->map_label_to_groups.at(label);
+          h_int.at(index * ncomp_int + 0) = group_id;
+          h_int.at(index * ncomp_int + 1) = edge_id;
           index++;
 
           // Is this edge in the map of edge data for interactions?
@@ -160,7 +162,7 @@ protected:
           const REAL y0 = data->d_real[edgex * 4 + 1];
           const REAL x1 = data->d_real[edgex * 4 + 2];
           const REAL y1 = data->d_real[edgex * 4 + 3];
-          const INT label_id = data->d_int[edgex * 2 + 0];
+          const INT group_id = data->d_int[edgex * 2 + 0];
           const INT edge_id = data->d_int[edgex * 2 + 1];
 
           const bool intersects = line_segment_intersection_2d(
@@ -170,44 +172,14 @@ protected:
             P.at(0) = xi;
             P.at(1) = yi;
             C.at(0) = 1;
-            C.at(1) = label_id;
-            C.at(2) = label_id;
+            C.at(1) = group_id;
+            C.at(2) = edge_id;
             current_distance = l0;
           }
         }
       }
     }
   };
-
-  template <typename T>
-  inline void find_intersections(std::shared_ptr<T> particle_sub_group) {
-
-    this->find_cells(particle_sub_group);
-    this->collect_cells();
-
-    auto particle_group = this->get_particle_group(particle_sub_group);
-    const auto k_ndim = particle_group->position_dat->ncomp;
-    particle_loop(
-        "BoundaryInteraction2D::find_intersections_0", particle_sub_group,
-        [=](auto C, auto P) {
-          for (int dimx = 0; dimx < k_ndim; dimx++) {
-            P.at(dimx) = 0;
-          }
-          C.at(0) = 0;
-          C.at(1) = 0;
-          C.at(2) = 0;
-        },
-        Access::write(this->boundary_label_sym),
-        Access::write(this->boundary_position_sym))
-        ->execute();
-
-    TrajectoryIntersect2D intersect_object;
-    intersect_object.max_distance = std::numeric_limits<REAL>::max();
-    intersect_object.epsilon = std::numeric_limits<REAL>::min();
-    intersect_object.root = this->d_map_edge_discovery->root;
-
-    this->find_intersections_inner(particle_sub_group, intersect_object);
-  }
 
 public:
   /**
@@ -220,6 +192,55 @@ public:
     this->facets_real = nullptr;
     this->facets_base_int = nullptr;
     this->facets_int = nullptr;
+  }
+
+  /**
+   * TODO
+   */
+  template <typename T>
+  inline std::map<PetscInt, ParticleSubGroupSharedPtr>
+  post_integration(std::shared_ptr<T> particles) {
+
+    this->find_cells(particles);
+    this->collect_cells();
+
+    auto particle_group = this->get_particle_group(particles);
+    const auto k_ndim = particle_group->position_dat->ncomp;
+    particle_loop(
+        "BoundaryInteraction2D::find_intersections_0", particles,
+        [=](auto C) { C.at(0) = -1; }, Access::write(this->boundary_label_sym))
+        ->execute();
+
+    TrajectoryIntersect2D intersect_object;
+    intersect_object.max_distance = std::numeric_limits<REAL>::max();
+    intersect_object.epsilon = std::numeric_limits<REAL>::min();
+    intersect_object.root = this->d_map_edge_discovery->root;
+
+    this->find_intersections_inner(particles, intersect_object);
+
+    std::map<PetscInt, ParticleSubGroupSharedPtr> m;
+
+    auto lambda_make_sub_group = [&](auto iteration_set) {
+      for (auto &group_labels : this->boundary_groups) {
+        const PetscInt k_group = group_labels.first;
+        m[k_group] = particle_sub_group(
+            iteration_set, [=](auto C) -> bool { return C.at(0) == k_group; },
+            Access::read(this->boundary_label_sym));
+      }
+    };
+
+    // If there is more than one boundary group it is probably more efficient
+    // to prune all particles hitting the boundary then all sub divide that
+    // group into the output groups.
+    if (this->boundary_groups.size() == 1) {
+      lambda_make_sub_group(particles);
+    } else {
+      lambda_make_sub_group(particle_sub_group(
+          particles, [=](auto C) -> bool { return C.at(0) > -1; },
+          Access::read(this->boundary_label_sym)));
+    }
+
+    return m;
   }
 
   /**

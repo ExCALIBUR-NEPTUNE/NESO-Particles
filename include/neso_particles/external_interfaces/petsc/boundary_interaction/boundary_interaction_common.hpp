@@ -42,6 +42,8 @@ protected:
     }
   }
 
+  std::map<PetscInt, PetscInt> map_label_to_groups;
+
   std::unique_ptr<MeshHierarchyMapper> mesh_hierarchy_mapper;
   std::unique_ptr<BufferDeviceHost<int>> dh_max_box_size;
   std::unique_ptr<BufferDevice<int>> d_cell_bounds;
@@ -184,6 +186,14 @@ public:
       std::optional<Sym<REAL>> boundary_position_sym = std::nullopt,
       std::optional<Sym<INT>> boundary_label_sym = std::nullopt)
       : sycl_target(sycl_target), mesh(mesh), boundary_groups(boundary_groups) {
+
+    for (auto &bx : boundary_groups) {
+      NESOASSERT(bx.first >= 0, "Group id cannot be negative.");
+      for (auto &lx : bx.second) {
+        this->map_label_to_groups[lx] = bx.first;
+      }
+    }
+
     auto assign_sym = [=](auto &output_sym, auto &input_sym, auto default_sym) {
       if (input_sym != std::nullopt) {
         output_sym = input_sym.value();
@@ -230,9 +240,9 @@ public:
    * TODO
    */
   template <typename T>
-  inline void pre_integration(std::shared_ptr<T> particle_sub_group) {
-    prepare_particle_group(particle_sub_group);
-    auto particle_group = this->get_particle_group(particle_sub_group);
+  inline void pre_integration(std::shared_ptr<T> particles) {
+    prepare_particle_group(particles);
+    auto particle_group = this->get_particle_group(particles);
     auto position_dat = particle_group->position_dat;
     const int k_ncomp = position_dat->ncomp;
     const int k_ndim = this->mesh->get_ndim();
@@ -241,7 +251,7 @@ public:
         "Positions ncomp is smaller than the number of mesh dimensions.");
 
     particle_loop(
-        "BoundaryInteractionCommon::pre_integration", particle_sub_group,
+        "BoundaryInteractionCommon::pre_integration", particles,
         [=](auto P, auto PP) {
           for (int dimx = 0; dimx < k_ndim; dimx++) {
             PP.at(dimx) = P.at(dimx);
