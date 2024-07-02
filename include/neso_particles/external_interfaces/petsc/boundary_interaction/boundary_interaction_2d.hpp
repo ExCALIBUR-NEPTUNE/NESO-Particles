@@ -233,8 +233,8 @@ public:
     };
 
     // If there is more than one boundary group it is probably more efficient
-    // to prune all particles hitting the boundary then all sub divide that
-    // group into the output groups.
+    // to find all particles hitting the boundary then sub-divide that group
+    // into the output groups.
     if (this->boundary_groups.size() == 1) {
       lambda_make_sub_group(particles);
     } else {
