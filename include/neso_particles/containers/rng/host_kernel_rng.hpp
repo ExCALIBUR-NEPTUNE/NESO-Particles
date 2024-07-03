@@ -3,6 +3,7 @@
 
 #include "kernel_rng.hpp"
 
+#include "../../particle_sub_group.hpp"
 #include <functional>
 #include <tuple>
 
@@ -112,13 +113,20 @@ public:
     int num_particles;
     if ((cell_end - cell_start) == 1) {
       // Single cell looping case
-      // Allocate for all the particles in the cell. Slightly inefficient if
-      // the loop is a particle sub group that only selects a small amount of
-      // the cell.
-      num_particles = global_info->particle_group->get_npart_cell(cell_start);
+      // Allocate for all the particles in the cell.
+      if (global_info->particle_sub_group != nullptr) {
+        num_particles =
+            global_info->particle_sub_group->get_npart_cell(cell_start);
+      } else {
+        num_particles = global_info->particle_group->get_npart_cell(cell_start);
+      }
     } else {
-      // Whole ParticleGroup looping case
-      num_particles = global_info->particle_group->get_npart_local();
+      // Whole domain looping case
+      if (global_info->particle_sub_group != nullptr) {
+        num_particles = global_info->particle_sub_group->get_npart_local();
+      } else {
+        num_particles = global_info->particle_group->get_npart_local();
+      }
     }
 
     // Allocate space

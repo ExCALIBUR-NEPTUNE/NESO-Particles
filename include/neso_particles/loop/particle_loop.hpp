@@ -14,7 +14,7 @@
 #include "../containers/global_array.hpp"
 #include "../containers/local_array.hpp"
 #include "../containers/product_matrix.hpp"
-#include "../containers/rng/rng.hpp"
+#include "../containers/rng/kernel_rng.hpp"
 #include "../containers/sym_vector.hpp"
 #include "../containers/tuple.hpp"
 #include "../particle_dat.hpp"
