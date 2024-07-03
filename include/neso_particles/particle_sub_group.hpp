@@ -723,9 +723,9 @@ public:
 
     auto &selection = this->particle_sub_group->selection;
     this->setup_subgroup_is(selection);
-
-    auto global_info = this->create_global_info();
-    global_info.starting_cell = (cell == std::nullopt) ? 0 : cell.value();
+    auto global_info = this->create_global_info(cell);
+    global_info.particle_sub_group = this->particle_sub_group.get();
+    this->apply_pre_loop(global_info);
 
     auto k_kernel = this->kernel;
     auto k_npart_cell_lb = this->d_npart_cell_lb;

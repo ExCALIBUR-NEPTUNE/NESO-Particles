@@ -14,6 +14,7 @@
 #include "../containers/global_array.hpp"
 #include "../containers/local_array.hpp"
 #include "../containers/product_matrix.hpp"
+#include "../containers/rng/kernel_rng.hpp"
 #include "../containers/sym_vector.hpp"
 #include "../containers/tuple.hpp"
 #include "../particle_dat.hpp"
@@ -220,6 +221,26 @@ protected:
     T<U *> c = {&a.obj};
     ParticleLoopImplementation::post_loop(global_info, c);
   }
+  /**
+   * Method to compute access to a type wrapped in a shared_ptr.
+   */
+  template <template <typename> typename T, typename U>
+  static inline auto
+  pre_loop_cast(ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+                T<std::shared_ptr<U>> a) {
+    T<U *> c = {a.obj.get()};
+    ParticleLoopImplementation::pre_loop(global_info, c);
+  }
+  /**
+   * Method to compute access to a type not wrapper in a shared_ptr
+   */
+  template <template <typename> typename T, typename U>
+  static inline auto
+  pre_loop_cast(ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+                T<U> a) {
+    T<U *> c = {&a.obj};
+    ParticleLoopImplementation::pre_loop(global_info, c);
+  }
 
   /*
    * =================================================================
@@ -352,12 +373,17 @@ protected:
   virtual inline int get_loop_type_int() { return 0; }
 
   inline ParticleLoopImplementation::ParticleLoopGlobalInfo
-  create_global_info() {
+  create_global_info(const std::optional<int> cell = std::nullopt) {
     ParticleLoopImplementation::ParticleLoopGlobalInfo global_info;
     global_info.particle_group = this->particle_group_ptr;
+    global_info.particle_sub_group = nullptr;
     global_info.d_npart_cell_es = this->d_npart_cell_es;
     global_info.d_npart_cell_es_lb = this->d_npart_cell_es_lb;
-    global_info.starting_cell = 0;
+
+    global_info.starting_cell = (cell == std::nullopt) ? 0 : cell.value();
+    global_info.bounding_cell =
+        (cell == std::nullopt) ? this->ncell : cell.value() + 1;
+
     global_info.loop_type_int = this->get_loop_type_int();
     return global_info;
   }
@@ -374,6 +400,13 @@ protected:
     } else {
       return false;
     }
+  }
+
+  inline void apply_pre_loop(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo &global_info) {
+    auto cast_wrapper = [&](auto t) { pre_loop_cast(&global_info, t); };
+    auto pre_loop_caller = [&](auto... as) { (cast_wrapper(as), ...); };
+    std::apply(pre_loop_caller, this->args);
   }
 
 public:
@@ -478,9 +511,8 @@ public:
     }
 
     auto t0 = profile_timestamp();
-
-    auto global_info = this->create_global_info();
-    global_info.starting_cell = (cell == std::nullopt) ? 0 : cell.value();
+    auto global_info = this->create_global_info(cell);
+    this->apply_pre_loop(global_info);
 
     auto k_npart_cell_lb = this->d_npart_cell_lb;
     auto is = this->iteration_set->get(cell, this->local_size);
