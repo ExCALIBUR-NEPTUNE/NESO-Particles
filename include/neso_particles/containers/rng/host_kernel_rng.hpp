@@ -36,6 +36,32 @@ protected:
     return this->d_buffers.at(sycl_target)->ptr;
   }
 
+  inline int
+  get_npart(ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info) {
+    const int cell_start = global_info->starting_cell;
+    const int cell_end = global_info->bounding_cell;
+
+    int num_particles;
+    if ((cell_end - cell_start) == 1) {
+      // Single cell looping case
+      // Allocate for all the particles in the cell.
+      if (global_info->particle_sub_group != nullptr) {
+        num_particles =
+            global_info->particle_sub_group->get_npart_cell(cell_start);
+      } else {
+        num_particles = global_info->particle_group->get_npart_cell(cell_start);
+      }
+    } else {
+      // Whole domain looping case
+      if (global_info->particle_sub_group != nullptr) {
+        num_particles = global_info->particle_sub_group->get_npart_local();
+      } else {
+        num_particles = global_info->particle_group->get_npart_local();
+      }
+    }
+    return num_particles;
+  }
+
 public:
   /// The number of RNG values required per particle.
   int num_components;
@@ -74,20 +100,8 @@ public:
     NESOASSERT((this->internal_state == 1) || (this->internal_state == 2),
                "Unexpected internal state.");
     this->internal_state = 2;
-    const int cell_start = global_info->starting_cell;
-    const int cell_end = global_info->bounding_cell;
-    int num_particles;
-    if ((cell_end - cell_start) == 1) {
-      // Single cell looping case
-      // Allocate for all the particles in the cell. Slightly inefficient if
-      // the loop is a particle sub group that only selects a small amount of
-      // the cell.
-      num_particles = global_info->particle_group->get_npart_cell(cell_start);
-    } else {
-      // Whole ParticleGroup looping case
-      num_particles = global_info->particle_group->get_npart_local();
-    }
 
+    const auto num_particles = this->get_npart(global_info);
     auto sycl_target = global_info->particle_group->sycl_target;
 
     return {num_particles, this->d_buffers.at(sycl_target)->ptr};
@@ -107,27 +121,7 @@ public:
                "overlapping execution.");
     this->internal_state = 1;
 
-    const int cell_start = global_info->starting_cell;
-    const int cell_end = global_info->bounding_cell;
-
-    int num_particles;
-    if ((cell_end - cell_start) == 1) {
-      // Single cell looping case
-      // Allocate for all the particles in the cell.
-      if (global_info->particle_sub_group != nullptr) {
-        num_particles =
-            global_info->particle_sub_group->get_npart_cell(cell_start);
-      } else {
-        num_particles = global_info->particle_group->get_npart_cell(cell_start);
-      }
-    } else {
-      // Whole domain looping case
-      if (global_info->particle_sub_group != nullptr) {
-        num_particles = global_info->particle_sub_group->get_npart_local();
-      } else {
-        num_particles = global_info->particle_group->get_npart_local();
-      }
-    }
+    const auto num_particles = this->get_npart(global_info);
 
     // Allocate space
     auto sycl_target = global_info->particle_group->sycl_target;
