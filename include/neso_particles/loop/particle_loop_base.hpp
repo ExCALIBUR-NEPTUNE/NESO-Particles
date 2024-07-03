@@ -8,6 +8,7 @@
 
 namespace NESO::Particles {
 class ParticleGroup;
+class ParticleSubGroup;
 
 namespace ParticleLoopImplementation {
 
@@ -31,7 +32,11 @@ template <typename T> struct KernelParameter { using type = void; };
  * loop.
  */
 struct ParticleLoopGlobalInfo {
+  // Underlying @ref ParticleGroup that created the iteration set.
   ParticleGroup *particle_group;
+  // If the iteration set is actually a @ref ParticleSubGroup then this is a
+  // pointer to the sub group. Otherwise this member is a nullptr.
+  ParticleSubGroup *particle_sub_group;
   INT *d_npart_cell_es;
   INT *d_npart_cell_es_lb;
   // The starting cell is only set for calls to create_loop_args.
