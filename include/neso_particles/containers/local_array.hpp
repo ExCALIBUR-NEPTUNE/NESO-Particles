@@ -257,8 +257,8 @@ public:
     NESOASSERT(data.size() == this->size, "Input data is incorrectly sized.");
     const std::size_t size_bytes = sizeof(T) * this->size;
     if (size_bytes) {
-      auto copy_event =
-          sycl_target->queue.memcpy(this->buffer->ptr, data.data(), size_bytes);
+      auto copy_event = this->sycl_target->queue.memcpy(
+          this->buffer->ptr, data.data(), size_bytes);
       return copy_event;
     } else {
       return sycl::event();
@@ -285,8 +285,8 @@ public:
     NESOASSERT(data.size() == this->size, "Input data is incorrectly sized.");
     const std::size_t size_bytes = sizeof(T) * this->size;
     if (size_bytes) {
-      auto copy_event =
-          sycl_target->queue.memcpy(data.data(), this->buffer->ptr, size_bytes);
+      auto copy_event = this->sycl_target->queue.memcpy(
+          data.data(), this->buffer->ptr, size_bytes);
       return copy_event;
     } else {
       return sycl::event();

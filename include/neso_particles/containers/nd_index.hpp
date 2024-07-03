@@ -43,6 +43,17 @@ public:
     this->linearise_inner<0>(index, args...);
     return index;
   }
+
+  /**
+   * @returns The total size of the index set.
+   */
+  inline INT size() const {
+    INT s = this->shape[0];
+    for (int ix = 1; ix < N; ix++) {
+      s *= this->shape[ix];
+    }
+    return s;
+  }
 };
 
 } // namespace NESO::Particles

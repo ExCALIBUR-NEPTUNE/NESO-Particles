@@ -205,5 +205,36 @@ TEST(NDIndex, linear_index) {
     ASSERT_EQ(index.get_linear_index(0, 0, 0), 0);
     ASSERT_EQ(index.get_linear_index(2, 6, 4), 3 * 7 * 5 - 1);
     ASSERT_EQ(index.get_linear_index(2, 6, 1), 3 * 7 * 5 - 4);
+    ASSERT_EQ(index.size(), 3 * 7 * 5);
   }
+}
+
+TEST(ParticleLoop, nd_local_array) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  const int cell_count = mesh->get_cell_count();
+  auto sycl_target = A->sycl_target;
+
+  auto ndla = std::make_shared<NDLocalArray<REAL, 2>>(sycl_target, 3, 5);
+  ndla->fill(-1.0);
+
+  auto h_ndla = ndla->get();
+  ASSERT_EQ(h_ndla.size(), 3 * 5);
+
+  for (int ix = 0; ix < 3 * 5; ix++) {
+    ASSERT_EQ(h_ndla.at(ix), -1.0);
+    h_ndla.at(ix) = 7.0;
+  }
+
+  ndla->set(h_ndla);
+  std::fill(h_ndla.begin(), h_ndla.end(), -1.0);
+  h_ndla = ndla->get();
+  for (int ix = 0; ix < 3 * 5; ix++) {
+    ASSERT_EQ(h_ndla.at(ix), 7.0);
+  }
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
 }
