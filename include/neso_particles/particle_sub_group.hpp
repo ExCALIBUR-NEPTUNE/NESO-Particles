@@ -1005,6 +1005,48 @@ particle_sub_group(std::shared_ptr<PARENT> parent, const INT_TYPE cell,
   return group;
 }
 
+/**
+ * Create a ParticleSubGroup that selects all particles int a particular cell.
+ *
+ * @param parent Parent ParticleGroup or ParticleSubGroup from which to form
+ * ParticleSubGroup.
+ * @param cell Local cell index to select all particles in.
+ * @param make_static Make the ParticleSubGroup static (default false).
+ */
+template <typename PARENT>
+inline ParticleSubGroupSharedPtr
+particle_sub_group(std::shared_ptr<PARENT> parent, const int cell,
+                   const bool make_static = false) {
+  auto selector = std::dynamic_pointer_cast<
+      ParticleSubGroupImplementation::SubGroupSelector>(
+      std::make_shared<ParticleSubGroupImplementation::CellSubGroupSelector>(
+          parent, cell));
+  auto group = std::make_shared<ParticleSubGroup>(selector);
+  group->static_status(make_static);
+  return group;
+}
+
+/**
+ * Create a ParticleSubGroup that selects all particles int a particular cell.
+ *
+ * @param parent Parent ParticleGroup or ParticleSubGroup from which to form
+ * ParticleSubGroup.
+ * @param cell Local cell index to select all particles in.
+ * @param make_static Make the ParticleSubGroup static (default false).
+ */
+template <typename PARENT>
+inline ParticleSubGroupSharedPtr
+particle_sub_group(std::shared_ptr<PARENT> parent, const INT cell,
+                   const bool make_static = false) {
+  auto selector = std::dynamic_pointer_cast<
+      ParticleSubGroupImplementation::SubGroupSelector>(
+      std::make_shared<ParticleSubGroupImplementation::CellSubGroupSelector>(
+          parent, cell));
+  auto group = std::make_shared<ParticleSubGroup>(selector);
+  group->static_status(make_static);
+  return group;
+}
+
 } // namespace NESO::Particles
 
 #endif
