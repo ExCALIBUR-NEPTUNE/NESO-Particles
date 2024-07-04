@@ -33,7 +33,7 @@ template <typename T, std::size_t N> struct Read {
 };
 
 /**
- * ParticleLoop access type for NDLocalArray Read access.
+ * ParticleLoop access type for NDLocalArray Write access.
  */
 template <typename T, std::size_t N> struct Write {
   /// Pointer to underlying data for the array.
@@ -46,7 +46,7 @@ template <typename T, std::size_t N> struct Write {
 };
 
 /**
- * ParticleLoop access type for NDLocalArray Read access.
+ * ParticleLoop access type for NDLocalArray Add access.
  */
 template <typename T, std::size_t N> struct Add {
   /// Pointer to underlying data for the array.
@@ -139,7 +139,7 @@ create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
 }
 
 /**
- * Method to compute access to a NDLocalArray (write)
+ * Method to compute access to a NDLocalArray (add)
  */
 template <typename T, std::size_t N>
 inline Access::NDLocalArray::Add<T, N>
