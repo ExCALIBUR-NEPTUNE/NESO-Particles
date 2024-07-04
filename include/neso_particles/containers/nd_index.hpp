@@ -56,6 +56,31 @@ public:
   }
 };
 
+namespace {
+template <std::size_t INDEX, std::size_t N, typename T>
+inline void nd_index_inner(NDIndex<N> &index, T t) {
+  index.shape[INDEX] = static_cast<int>(t);
+}
+
+template <std::size_t INDEX, std::size_t N, typename... S, typename T>
+inline void nd_index_inner(NDIndex<N> &index, T t, S... s) {
+  index.shape[INDEX] = static_cast<int>(t);
+  nd_index_inner<INDEX + 1>(index, s...);
+}
+} // namespace
+
+/**
+ * Make an NDIndex from parameter list of generic integral types.
+ *
+ * @param shape Parameter pack of integral types.
+ * @returns NDIndex from shape.
+ */
+template <std::size_t N, typename... S> inline NDIndex<N> nd_index(S... shape) {
+  NDIndex<N> index;
+  nd_index_inner<0>(index, shape...);
+  return index;
+}
+
 } // namespace NESO::Particles
 
 #endif

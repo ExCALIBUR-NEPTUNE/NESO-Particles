@@ -58,3 +58,24 @@ TEST(Tuple, apply) {
   EXPECT_EQ(Tuple::get<1>(t), bb);
   EXPECT_EQ(Tuple::get<2>(t), cc);
 }
+
+TEST(Tuple, truncated_apply) {
+  {
+    auto t = Tuple::to_tuple(1, 4.3, 7.2);
+    EXPECT_EQ(Tuple::get<0>(t), 1);
+    EXPECT_EQ(Tuple::get<1>(t), 4.3);
+    EXPECT_EQ(Tuple::get<2>(t), 7.2);
+  }
+
+  {
+    auto t = Tuple::get_last_arg(1, 4.3, 7.2);
+    EXPECT_EQ(t, 7.2);
+  }
+
+  {
+    auto t = Tuple::to_tuple(1, 2, 3, 4);
+    auto lambda_func = [&](auto a, auto b, auto c) { return a + b + c; };
+    auto s = Tuple::apply_truncated<3>(lambda_func, t);
+    EXPECT_EQ(s, 1 + 2 + 3);
+  }
+}

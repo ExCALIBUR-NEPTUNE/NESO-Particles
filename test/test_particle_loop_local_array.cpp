@@ -209,31 +209,174 @@ TEST(NDIndex, linear_index) {
   }
 }
 
-TEST(ParticleLoop, nd_local_array) {
+template <typename T, std::size_t N> struct Read {
+  /// Pointer to underlying data for the array.
+  Read() = default;
+  T *ptr;
+  NDIndex<N> index;
+  template <typename... I> const T &at(I... ix) const {
+    return ptr[index.get_linear_index(ix...)];
+  }
+};
+
+TEST(ParticleLoop, nd_local_array_host) {
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+
+  {
+    auto ndla = std::make_shared<NDLocalArray<REAL, 2>>(sycl_target, 3, 5);
+    ndla->fill(-1.0);
+
+    auto h_ndla = ndla->get();
+    ASSERT_EQ(h_ndla.size(), 3 * 5);
+
+    for (int ix = 0; ix < 3 * 5; ix++) {
+      ASSERT_EQ(h_ndla.at(ix), -1.0);
+      h_ndla.at(ix) = 7.0;
+    }
+
+    ndla->set(h_ndla);
+    std::fill(h_ndla.begin(), h_ndla.end(), -1.0);
+    h_ndla = ndla->get();
+    for (int ix = 0; ix < 3 * 5; ix++) {
+      ASSERT_EQ(h_ndla.at(ix), 7.0);
+    }
+  }
+
+  {
+    auto ndla = std::make_shared<NDLocalArray<int, 2>>(sycl_target, 3, 5);
+    ndla->fill(-1);
+
+    auto h_ndla = ndla->get();
+    ASSERT_EQ(h_ndla.size(), 3 * 5);
+
+    for (int ix = 0; ix < 3 * 5; ix++) {
+      ASSERT_EQ(h_ndla.at(ix), -1);
+      h_ndla.at(ix) = 7;
+    }
+
+    ndla->set(h_ndla);
+    std::fill(h_ndla.begin(), h_ndla.end(), -1);
+    h_ndla = ndla->get();
+    for (int ix = 0; ix < 3 * 5; ix++) {
+      ASSERT_EQ(h_ndla.at(ix), 7);
+    }
+  }
+
+  sycl_target->free();
+}
+
+TEST(ParticleLoop, nd_local_array_device) {
   auto A = particle_loop_common();
   auto domain = A->domain;
   auto mesh = domain->mesh;
   const int cell_count = mesh->get_cell_count();
   auto sycl_target = A->sycl_target;
 
-  auto ndla = std::make_shared<NDLocalArray<REAL, 2>>(sycl_target, 3, 5);
-  ndla->fill(-1.0);
+  const int N = 3;
+  const int M = 1;
+  auto ndla =
+      std::make_shared<NDLocalArray<REAL, 3>>(sycl_target, cell_count, N, M);
+  ndla->fill(0.0);
 
-  auto h_ndla = ndla->get();
-  ASSERT_EQ(h_ndla.size(), 3 * 5);
+  auto d = ndla->get();
+  int index = 0;
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    for (int rx = 0; rx < N; rx++) {
+      for (int cx = 0; cx < M; cx++) {
+        d.at(cellx * N * M + rx * M + cx) = index++;
+      }
+    }
+  }
+  ndla->set(d);
 
-  for (int ix = 0; ix < 3 * 5; ix++) {
-    ASSERT_EQ(h_ndla.at(ix), -1.0);
-    h_ndla.at(ix) = 7.0;
+  particle_loop(
+      A,
+      [=](auto index, auto V, auto LA) {
+        V.at(0) = LA.at(index.cell, 0, 0);
+        V.at(1) = LA.at(index.cell, 1, 0);
+        V.at(2) = LA.at(index.cell, 2, 0);
+      },
+      Access::read(ParticleLoopIndex{}), Access::write(Sym<REAL>("V")),
+      Access::read(ndla))
+      ->execute();
+
+  index = 0;
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto V = A->get_dat(Sym<REAL>("V"))->cell_dat.get_cell(cellx);
+    const int nrow = V->nrow;
+    // for each particle in the cell
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      ASSERT_EQ(V->at(rowx, 0), (REAL)(index + 0));
+      ASSERT_EQ(V->at(rowx, 1), (REAL)(index + 1));
+      ASSERT_EQ(V->at(rowx, 2), (REAL)(index + 2));
+    }
+    index += M * N;
   }
 
-  ndla->set(h_ndla);
-  std::fill(h_ndla.begin(), h_ndla.end(), -1.0);
-  h_ndla = ndla->get();
-  for (int ix = 0; ix < 3 * 5; ix++) {
-    ASSERT_EQ(h_ndla.at(ix), 7.0);
+  {
+    auto ndla_int =
+        std::make_shared<NDLocalArray<int, 1>>(sycl_target, cell_count);
+    ndla_int->fill(0);
+
+    particle_loop(
+        A, [=](auto index, auto LA) { LA.fetch_add(index.cell, 1); },
+        Access::read(ParticleLoopIndex{}), Access::add(ndla_int))
+        ->execute();
+
+    auto c = ndla_int->get();
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      ASSERT_EQ(c.at(cellx), A->get_npart_cell(cellx));
+    }
   }
 
+  {
+    auto ndla_int =
+        std::make_shared<NDLocalArray<int, 2>>(sycl_target, cell_count, 1);
+    ndla_int->fill(0);
+
+    particle_loop(
+        A, [=](auto index, auto LA) { LA.fetch_add(index.cell, 0, 1); },
+        Access::read(ParticleLoopIndex{}), Access::add(ndla_int))
+        ->execute();
+
+    auto c = ndla_int->get();
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      ASSERT_EQ(c.at(cellx), A->get_npart_cell(cellx));
+    }
+  }
+
+  {
+    INT max_npart_cell = 0;
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      max_npart_cell = std::max(max_npart_cell, A->get_npart_cell(cellx));
+    }
+    auto ndla_int = std::make_shared<NDLocalArray<int, 3>>(
+        sycl_target, cell_count, max_npart_cell, 2);
+    ndla_int->fill(-1);
+
+    particle_loop(
+        A,
+        [=](auto index, auto LA) {
+          LA.at(index.cell, index.layer, 0) = index.cell;
+          LA.at(index.cell, index.layer, 1) = index.layer;
+        },
+        Access::read(ParticleLoopIndex{}), Access::write(ndla_int))
+        ->execute();
+
+    auto d = ndla_int->get();
+
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      const INT num_layers = A->get_npart_cell(cellx);
+      for (int rx = 0; rx < num_layers; rx++) {
+        ASSERT_EQ(d.at(cellx * max_npart_cell * 2 + rx * 2 + 0), cellx);
+        ASSERT_EQ(d.at(cellx * max_npart_cell * 2 + rx * 2 + 1), rx);
+      }
+      for (int rx = num_layers; rx < max_npart_cell; rx++) {
+        ASSERT_EQ(d.at(cellx * max_npart_cell * 2 + rx * 2 + 0), -1);
+        ASSERT_EQ(d.at(cellx * max_npart_cell * 2 + rx * 2 + 1), -1);
+      }
+    }
+  }
   A->free();
   sycl_target->free();
   mesh->free();

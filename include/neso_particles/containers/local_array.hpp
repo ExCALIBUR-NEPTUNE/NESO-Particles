@@ -33,7 +33,7 @@ namespace Access::LocalArray {
 template <typename T> struct Read {
   /// Pointer to underlying data for the array.
   Read() = default;
-  T const *ptr;
+  T const *RESTRICT ptr;
   const T at(const int component) const { return ptr[component]; }
   const T &operator[](const int component) const { return ptr[component]; }
 };
@@ -44,7 +44,7 @@ template <typename T> struct Read {
 template <typename T> struct Add {
   /// Pointer to underlying data for the array.
   Add() = default;
-  T *ptr;
+  T *RESTRICT ptr;
   /**
    * The local array is local to the MPI rank where the partial sum is a
    * meaningful value.
@@ -62,7 +62,7 @@ template <typename T> struct Add {
 template <typename T> struct Write {
   /// Pointer to underlying data for the array.
   Write() = default;
-  T *ptr;
+  T *RESTRICT ptr;
   T &at(const int component) { return ptr[component]; }
   T &operator[](const int component) { return ptr[component]; }
 };
