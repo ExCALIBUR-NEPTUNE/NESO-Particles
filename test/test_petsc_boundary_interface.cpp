@@ -373,6 +373,54 @@ TEST(PETScBoundary, pre_integrate) {
   auto k_ep = ep->device_ptr();
   particle_loop(
       A,
+      [=](auto CURR_POS, auto PREV_POS) {
+        for (int dimx = 0; dimx < ndim; dimx++) {
+          NESO_KERNEL_ASSERT(CURR_POS.at(dimx) == PREV_POS.at(dimx), k_ep);
+        }
+      },
+      Access::read(A->position_dat), Access::read(b2d->previous_position_sym))
+      ->execute();
+  EXPECT_EQ(ep->get_flag(), 0);
+
+  b2d->free();
+  sycl_target->free();
+  mesh->free();
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
+
+TEST(PETScBoundary, post_integrate) {
+
+  PETSCCHK(PetscInitializeNoArguments());
+  DM dm;
+
+  const int ndim = 2;
+  const int mesh_size = 8;
+  const REAL h = 1.0;
+  PetscInt faces[3] = {mesh_size, mesh_size, mesh_size};
+  PetscReal lower[3] = {0.0, 0.0, 0.0};
+  PetscReal upper[3] = {mesh_size * h, mesh_size * h, mesh_size * h};
+
+  PETSCCHK(DMPlexCreateBoxMesh(PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces,
+                               lower, upper,
+                               /* periodicity */ NULL, PETSC_TRUE, &dm));
+  PetscInterface::generic_distribute(&dm);
+  auto A = particle_loop_common(dm, 128);
+  auto mesh = std::dynamic_pointer_cast<PetscInterface::DMPlexInterface>(
+      A->domain->mesh);
+  auto sycl_target = A->sycl_target;
+
+  std::map<PetscInt, std::vector<PetscInt>> boundary_groups;
+  boundary_groups[1] = {1, 2, 3, 4};
+
+  auto b2d = std::make_shared<TestBoundaryInteraction2D>(sycl_target, mesh,
+                                                         boundary_groups);
+  // Test pre_integration
+  b2d->pre_integration(A);
+  auto ep = std::make_shared<ErrorPropagate>(sycl_target);
+  auto k_ep = ep->device_ptr();
+  particle_loop(
+      A,
       [=](auto CURR_POS, auto PREV_POS, auto P2) {
         for (int dimx = 0; dimx < ndim; dimx++) {
           NESO_KERNEL_ASSERT(CURR_POS.at(dimx) == PREV_POS.at(dimx), k_ep);

@@ -88,7 +88,6 @@ protected:
   template <typename T, typename U>
   inline void find_intersections_inner(std::shared_ptr<T> particle_sub_group,
                                        const U &intersect_object) {
-
     if (intersect_object.boundary_elements_exist()) {
       auto particle_group = this->get_particle_group(particle_sub_group);
       const auto k_ndim = particle_group->position_dat->ncomp;

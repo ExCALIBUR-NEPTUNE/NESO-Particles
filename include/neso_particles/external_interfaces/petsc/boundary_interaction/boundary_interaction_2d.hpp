@@ -155,9 +155,7 @@ protected:
 
       bool *exists;
       BoundaryInteractionCellData2D *data;
-      root->get_location(linear_cell, &exists, &data);
-
-      if (*exists) {
+      if (root->get_location(linear_cell, &exists, &data)) {
         const REAL xa = a[0];
         const REAL ya = a[1];
         const REAL xb = b[0];
