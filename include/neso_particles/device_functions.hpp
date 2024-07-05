@@ -77,13 +77,13 @@ inline bool line_segment_intersection_2d(const REAL &xa, const REAL &ya,
       line_segment_intersection_2d_lambda(xa, ya, xb, yb, x0, y0, x1, y1, l0,
                                           l1);
       xi = xa + l0 * (xb - xa);
-      yi = xa + l0 * (xb - xa);
+      yi = ya + l0 * (yb - ya);
       l0_out = l0;
     } else {
       line_segment_intersection_2d_lambda(x0, y0, x1, y1, xa, ya, xb, yb, l0,
                                           l1);
-      xi = x0 + l0 * (x1 - x0);
-      yi = y0 + l0 * (y1 - y0);
+      xi = xa + l1 * (xb - xa);
+      yi = ya + l1 * (yb - ya);
       l0_out = l1;
     }
     return (0 <= l0) && (l0 <= 1.0) && (0 <= l1) && (l1 <= 1.0);

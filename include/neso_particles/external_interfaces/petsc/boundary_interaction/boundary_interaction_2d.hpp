@@ -141,6 +141,10 @@ protected:
     REAL epsilon;
     BlockedBinaryNode<INT, BoundaryInteractionCellData2D, 8> *root;
 
+    inline bool boundary_elements_exist() const {
+      return this->root != nullptr;
+    }
+
     inline void reset(REAL &current_distance) const {
       current_distance = max_distance;
     }
@@ -189,12 +193,16 @@ public:
    * Free the instance. Must be called. Collective on the communicator.
    */
   inline void free() {
-    MPICHK(MPI_Win_free(&this->facets_win_real));
-    MPICHK(MPI_Win_free(&this->facets_win_int));
-    this->facets_base_real = nullptr;
-    this->facets_real = nullptr;
-    this->facets_base_int = nullptr;
-    this->facets_int = nullptr;
+    if (this->facets_real != nullptr) {
+      MPICHK(MPI_Win_free(&this->facets_win_real));
+      this->facets_base_real = nullptr;
+      this->facets_real = nullptr;
+    }
+    if (this->facets_int != nullptr) {
+      MPICHK(MPI_Win_free(&this->facets_win_int));
+      this->facets_base_int = nullptr;
+      this->facets_int = nullptr;
+    }
   }
 
   /**
@@ -250,9 +258,19 @@ public:
    * TODO
    * collective
    */
-  template <typename... T>
-  BoundaryInteraction2D(T... args) : BoundaryInteractionCommon(args...) {
+  BoundaryInteraction2D(
+      SYCLTargetSharedPtr sycl_target, DMPlexInterfaceSharedPtr mesh,
+      std::map<PetscInt, std::vector<PetscInt>> &boundary_groups,
+      std::optional<Sym<REAL>> previous_position_sym = std::nullopt,
+      std::optional<Sym<REAL>> boundary_position_sym = std::nullopt,
+      std::optional<Sym<INT>> boundary_label_sym = std::nullopt)
+      :
 
+        BoundaryInteractionCommon(sycl_target, mesh, boundary_groups,
+                                  previous_position_sym, boundary_position_sym,
+                                  boundary_label_sym)
+
+  {
     // Get the boundary labels this instance should detect interactions with.
     auto labels = this->get_labels();
 

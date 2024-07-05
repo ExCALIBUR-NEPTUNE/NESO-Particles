@@ -82,4 +82,18 @@ TEST(DeviceFunctions, line_segment_intersection) {
                                    yi, l0);
 
   ASSERT_TRUE(!e);
+
+  e = line_segment_intersection_2d(0.345521, 7.12994, 0.345521, 8.12994, 0.0,
+                                   8.0, 1.0, 8.0, xi, yi, l0);
+  ASSERT_TRUE(e);
+  ASSERT_NEAR(xi, 0.345521, 1.0e-15);
+  ASSERT_NEAR(yi, 8.0, 1.0e-15);
+  ASSERT_NEAR(l0, 8.0 - 7.12994, 1.0e-15);
+
+  e = line_segment_intersection_2d(0.5, 7.5, 0.5, 8.5, 0.0, 8.0, 1.0, 8.0, xi,
+                                   yi, l0);
+  ASSERT_TRUE(e);
+  ASSERT_NEAR(xi, 0.5, 1.0e-15);
+  ASSERT_NEAR(yi, 8.0, 1.0e-15);
+  ASSERT_NEAR(l0, 0.5, 1.0e-15);
 }

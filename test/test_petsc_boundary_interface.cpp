@@ -5,8 +5,18 @@
 namespace {
 class TestBoundaryInteraction2D : public PetscInterface::BoundaryInteraction2D {
 public:
-  template <typename... T>
-  TestBoundaryInteraction2D(T... args) : BoundaryInteraction2D(args...) {}
+  TestBoundaryInteraction2D(
+      SYCLTargetSharedPtr sycl_target,
+      PetscInterface::DMPlexInterfaceSharedPtr mesh,
+      std::map<PetscInt, std::vector<PetscInt>> &boundary_groups,
+      std::optional<Sym<REAL>> previous_position_sym = std::nullopt,
+      std::optional<Sym<REAL>> boundary_position_sym = std::nullopt,
+      std::optional<Sym<INT>> boundary_label_sym = std::nullopt)
+      :
+
+        PetscInterface::BoundaryInteraction2D(
+            sycl_target, mesh, boundary_groups, previous_position_sym,
+            boundary_position_sym, boundary_label_sym) {}
 
   using BoundaryInteractionCellData2D =
       BoundaryInteraction2D::BoundaryInteractionCellData2D;
@@ -26,6 +36,68 @@ public:
   MAKE_GETTER_METHOD(d_map_edge_discovery)
   MAKE_GETTER_METHOD(d_map_edge_normals)
 };
+
+ParticleGroupSharedPtr particle_loop_common(DM dm, const int N = 1093) {
+
+  const int ndim = 2;
+  auto mesh =
+      std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
+
+  auto sycl_target =
+      std::make_shared<SYCLTarget>(GPU_SELECTOR, mesh->get_comm());
+
+  auto mapper =
+      std::make_shared<PetscInterface::DMPlexLocalMapper>(sycl_target, mesh);
+  auto domain = std::make_shared<Domain>(mesh, mapper);
+
+  ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
+                             ParticleProp(Sym<REAL>("V"), 3),
+                             ParticleProp(Sym<REAL>("P2"), ndim),
+                             ParticleProp(Sym<INT>("CELL_ID"), 1, true),
+                             ParticleProp(Sym<INT>("LOOP_INDEX"), 2),
+                             ParticleProp(Sym<INT>("ID"), 1)};
+
+  auto A = std::make_shared<ParticleGroup>(domain, particle_spec, sycl_target);
+
+  int ncell_local = mesh->get_cell_count();
+  int ncell_global;
+
+  MPICHK(MPI_Allreduce(&ncell_local, &ncell_global, 1, MPI_INT, MPI_SUM,
+                       MPI_COMM_WORLD));
+  const int npart_per_cell = std::max(1, N / ncell_global);
+  const int rank = sycl_target->comm_pair.rank_parent;
+  const INT id_offset = rank * N;
+
+  std::mt19937 rng_pos(52234234 + rank);
+  std::mt19937 rng_vel(52234231 + rank);
+  std::vector<std::vector<double>> positions;
+  std::vector<int> cells;
+
+  uniform_within_dmplex_cells(mesh, npart_per_cell, positions, cells, rng_pos);
+
+  const int N_actual = cells.size();
+  auto velocities =
+      NESO::Particles::normal_distribution(N_actual, 3, 0.0, 1.0, rng_vel);
+
+  ParticleSet initial_distribution(N_actual, particle_spec);
+
+  for (int px = 0; px < N_actual; px++) {
+    for (int dimx = 0; dimx < ndim; dimx++) {
+      initial_distribution[Sym<REAL>("P")][px][dimx] = positions[dimx][px];
+    }
+    for (int dimx = 0; dimx < 3; dimx++) {
+      initial_distribution[Sym<REAL>("V")][px][dimx] = velocities[dimx][px];
+    }
+    initial_distribution[Sym<INT>("CELL_ID")][px][0] = cells.at(px);
+    initial_distribution[Sym<INT>("ID")][px][0] = px + id_offset;
+  }
+
+  A->add_particles_local(initial_distribution);
+
+  return A;
+}
+
+} // namespace
 
 TEST(PETScBoundary, constructor_2d) {
 
@@ -269,6 +341,116 @@ TEST(PETScBoundary, collect_2d) {
   PETSCCHK(PetscFinalize());
 }
 
-} // namespace
+TEST(PETScBoundary, pre_integrate) {
 
+  PETSCCHK(PetscInitializeNoArguments());
+  DM dm;
+
+  const int ndim = 2;
+  const int mesh_size = 8;
+  const REAL h = 1.0;
+  PetscInt faces[3] = {mesh_size, mesh_size, mesh_size};
+  PetscReal lower[3] = {0.0, 0.0, 0.0};
+  PetscReal upper[3] = {mesh_size * h, mesh_size * h, mesh_size * h};
+
+  PETSCCHK(DMPlexCreateBoxMesh(PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces,
+                               lower, upper,
+                               /* periodicity */ NULL, PETSC_TRUE, &dm));
+  PetscInterface::generic_distribute(&dm);
+  auto A = particle_loop_common(dm, 128);
+  auto mesh = std::dynamic_pointer_cast<PetscInterface::DMPlexInterface>(
+      A->domain->mesh);
+  auto sycl_target = A->sycl_target;
+
+  std::map<PetscInt, std::vector<PetscInt>> boundary_groups;
+  boundary_groups[1] = {1, 2, 3, 4};
+
+  auto b2d = std::make_shared<TestBoundaryInteraction2D>(sycl_target, mesh,
+                                                         boundary_groups);
+  // Test pre_integration
+  b2d->pre_integration(A);
+  auto ep = std::make_shared<ErrorPropagate>(sycl_target);
+  auto k_ep = ep->device_ptr();
+  particle_loop(
+      A,
+      [=](auto CURR_POS, auto PREV_POS, auto P2) {
+        for (int dimx = 0; dimx < ndim; dimx++) {
+          NESO_KERNEL_ASSERT(CURR_POS.at(dimx) == PREV_POS.at(dimx), k_ep);
+          P2.at(dimx) = CURR_POS.at(dimx);
+        }
+      },
+      Access::read(A->position_dat), Access::read(b2d->previous_position_sym),
+      Access::write(Sym<REAL>("P2")))
+      ->execute();
+  EXPECT_EQ(ep->get_flag(), 0);
+
+  // Test post_integration
+  auto reset_positions = particle_loop(
+      A,
+      [=](auto P, auto P2) {
+        for (int dimx = 0; dimx < ndim; dimx++) {
+          P.at(dimx) = P2.at(dimx);
+        }
+      },
+      Access::write(A->position_dat), Access::read(Sym<REAL>("P2")));
+
+  // Offsets to move particles in +x, -x, +y, -y
+  std::vector<std::tuple<std::array<REAL, 2>, int, REAL>> offsets;
+
+  offsets.push_back({{h, 0}, 0, mesh_size * h});
+  offsets.push_back({{-h, 0}, 0, 0.0});
+  offsets.push_back({{0, h}, 1, mesh_size * h});
+  offsets.push_back({{0, -h}, 1, 0.0});
+
+  for (auto &ox : offsets) {
+    reset_positions->execute();
+    const REAL dx = std::get<0>(ox).at(0);
+    const REAL dy = std::get<0>(ox).at(1);
+    const int component = std::get<1>(ox);
+    const REAL value = std::get<2>(ox);
+
+    b2d->pre_integration(A);
+    // move the particles in a direction
+    particle_loop(
+        A,
+        [=](auto P) {
+          P.at(0) += dx;
+          P.at(1) += dy;
+        },
+        Access::write(A->position_dat))
+        ->execute();
+    auto sub_groups = b2d->post_integration(A);
+
+    particle_loop(
+        sub_groups.at(1),
+        [=](auto INDEX, auto CURR_POSITION, auto PREV_POSITION,
+            auto BOUNDARY_POSITION) {
+          NESO_KERNEL_ASSERT(
+              KERNEL_ABS(BOUNDARY_POSITION.at(component) - value) < 1.0e-14,
+              k_ep);
+        },
+        Access::read(ParticleLoopIndex{}), Access::read(Sym<REAL>("P")),
+        Access::read(b2d->previous_position_sym),
+        Access::read(b2d->boundary_position_sym))
+        ->execute();
+    ASSERT_EQ(ep->get_flag(), 0);
+
+    particle_loop(
+        sub_groups.at(1),
+        [=](auto BOUNDARY_INFO) {
+          NESO_KERNEL_ASSERT(BOUNDARY_INFO.at(0) > -1, k_ep);
+          NESO_KERNEL_ASSERT(BOUNDARY_INFO.at(1) == 1, k_ep);
+          NESO_KERNEL_ASSERT(BOUNDARY_INFO.at(2) > -1, k_ep);
+        },
+        Access::read(b2d->boundary_label_sym))
+        ->execute();
+    ASSERT_EQ(ep->get_flag(), 0);
+  }
+
+  b2d->free();
+  sycl_target->free();
+  mesh->free();
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
 #endif

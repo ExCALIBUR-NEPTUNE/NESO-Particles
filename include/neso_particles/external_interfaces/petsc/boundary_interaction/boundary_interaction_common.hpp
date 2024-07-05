@@ -89,86 +89,91 @@ protected:
   inline void find_intersections_inner(std::shared_ptr<T> particle_sub_group,
                                        const U &intersect_object) {
 
-    auto particle_group = this->get_particle_group(particle_sub_group);
-    const auto k_ndim = particle_group->position_dat->ncomp;
+    if (intersect_object.boundary_elements_exist()) {
+      auto particle_group = this->get_particle_group(particle_sub_group);
+      const auto k_ndim = particle_group->position_dat->ncomp;
 
-    auto mesh_hierarchy_device_mapper =
-        this->mesh_hierarchy_mapper->get_device_mapper();
-    const auto k_cell_bounds = this->d_cell_bounds->ptr;
-    particle_loop(
-        "BoundaryInteractionCommon::find_intersections_inner",
-        particle_sub_group,
-        [=](auto B_C, auto B_P, auto PREV_POS, auto CURR_POS) {
-          // Get the cells containing the start and end points
-          REAL curr_position[3];
-          REAL prev_position[3];
-          INT cell_starts[3] = {0, 0, 0};
-          INT cell_ends[3] = {1, 1, 1};
+      auto mesh_hierarchy_device_mapper =
+          this->mesh_hierarchy_mapper->get_device_mapper();
+      const auto k_cell_bounds = this->d_cell_bounds->ptr;
 
-          for (int dimx = 0; dimx < k_ndim; dimx++) {
-            prev_position[dimx] = PREV_POS.at(dimx);
-            curr_position[dimx] = CURR_POS.at(dimx);
-          }
-          mesh_hierarchy_device_mapper.map_to_cart_tuple_no_trunc(prev_position,
-                                                                  cell_starts);
-          mesh_hierarchy_device_mapper.map_to_cart_tuple_no_trunc(curr_position,
-                                                                  cell_ends);
+      particle_loop(
+          "BoundaryInteractionCommon::find_intersections_inner",
+          particle_sub_group,
+          [=](auto B_C, auto B_P, auto PREV_POS, auto CURR_POS) {
+            // Get the cells containing the start and end points
+            REAL curr_position[3];
+            REAL prev_position[3];
+            INT cell_starts[3] = {0, 0, 0};
+            INT cell_ends[3] = {1, 1, 1};
 
-          // reorder such that start < end for canonical loop ordering
-          for (int dimx = 0; dimx < k_ndim; dimx++) {
-            const auto a = cell_starts[dimx];
-            const auto b = cell_ends[dimx];
-            cell_starts[dimx] = KERNEL_MIN(a, b);
-            cell_ends[dimx] = KERNEL_MAX(a, b);
-          }
+            for (int dimx = 0; dimx < k_ndim; dimx++) {
+              prev_position[dimx] = PREV_POS.at(dimx);
+              curr_position[dimx] = CURR_POS.at(dimx);
+            }
+            mesh_hierarchy_device_mapper.map_to_cart_tuple_no_trunc(
+                prev_position, cell_starts);
+            mesh_hierarchy_device_mapper.map_to_cart_tuple_no_trunc(
+                curr_position, cell_ends);
 
-          // Truncate the start/end cells to actually be within the range of
-          // the grid
-          for (int dimx = 0; dimx < k_ndim; dimx++) {
-            cell_starts[dimx] = KERNEL_MAX(cell_starts[dimx], 0);
-            cell_ends[dimx] = KERNEL_MIN(k_cell_bounds[dimx], cell_ends[dimx]);
-          }
+            // reorder such that start < end for canonical loop ordering
+            for (int dimx = 0; dimx < k_ndim; dimx++) {
+              const auto a = cell_starts[dimx];
+              const auto b = cell_ends[dimx];
+              cell_starts[dimx] = KERNEL_MIN(a, b);
+              cell_ends[dimx] = KERNEL_MAX(a, b);
+            }
 
-          // Fill the rest of the iteration set for when k_ndim <3 such that
-          // the generic looping works.
-          for (int dimx = k_ndim; dimx < 3; dimx++) {
-            cell_starts[dimx] = 0;
-            cell_ends[dimx] = 1;
-          }
+            // Truncate the start/end cells to actually be within the range of
+            // the grid
+            for (int dimx = 0; dimx < k_ndim; dimx++) {
+              cell_starts[dimx] = KERNEL_MAX(cell_starts[dimx], 0);
+              cell_ends[dimx] =
+                  KERNEL_MIN(k_cell_bounds[dimx] - 1, cell_ends[dimx]);
+              cell_ends[dimx] += 1;
+            }
 
-          REAL current_distance;
-          intersect_object.reset(current_distance);
+            // Fill the rest of the iteration set for when k_ndim <3 such that
+            // the generic looping works.
+            for (int dimx = k_ndim; dimx < 3; dimx++) {
+              cell_starts[dimx] = 0;
+              cell_ends[dimx] = 1;
+            }
 
-          // loop over the grid of MH cells
-          INT cell_index[3];
-          for (cell_index[2] = cell_starts[2]; cell_index[2] < cell_ends[2];
-               cell_index[2]++) {
-            for (cell_index[1] = cell_starts[1]; cell_index[1] < cell_ends[1];
-                 cell_index[1]++) {
-              for (cell_index[0] = cell_starts[0]; cell_index[0] < cell_ends[0];
-                   cell_index[0]++) {
+            REAL current_distance;
+            intersect_object.reset(current_distance);
 
-                // convert the cartesian cell index into a mesh heirarchy
-                // index
-                INT mh_tuple[6];
-                mesh_hierarchy_device_mapper.cart_tuple_to_tuple(cell_index,
-                                                                 mh_tuple);
-                // convert the mesh hierarchy tuple to linear index
-                const INT linear_index =
-                    mesh_hierarchy_device_mapper.tuple_to_linear_global(
-                        mh_tuple);
-                intersect_object.find(linear_index, prev_position,
-                                      curr_position, current_distance, B_P,
-                                      B_C);
+            // loop over the grid of MH cells
+            INT cell_index[3];
+            for (cell_index[2] = cell_starts[2]; cell_index[2] < cell_ends[2];
+                 cell_index[2]++) {
+              for (cell_index[1] = cell_starts[1]; cell_index[1] < cell_ends[1];
+                   cell_index[1]++) {
+                for (cell_index[0] = cell_starts[0];
+                     cell_index[0] < cell_ends[0]; cell_index[0]++) {
+
+                  // convert the cartesian cell index into a mesh heirarchy
+                  // index
+                  INT mh_tuple[6];
+                  mesh_hierarchy_device_mapper.cart_tuple_to_tuple(cell_index,
+                                                                   mh_tuple);
+                  // convert the mesh hierarchy tuple to linear index
+                  const INT linear_index =
+                      mesh_hierarchy_device_mapper.tuple_to_linear_global(
+                          mh_tuple);
+                  intersect_object.find(linear_index, prev_position,
+                                        curr_position, current_distance, B_P,
+                                        B_C);
+                }
               }
             }
-          }
-        },
-        Access::write(this->boundary_label_sym),
-        Access::write(this->boundary_position_sym),
-        Access::read(this->previous_position_sym),
-        Access::read(particle_group->position_dat))
-        ->execute();
+          },
+          Access::write(this->boundary_label_sym),
+          Access::write(this->boundary_position_sym),
+          Access::read(this->previous_position_sym),
+          Access::read(particle_group->position_dat))
+          ->execute();
+    }
   }
 
   /**
@@ -369,11 +374,11 @@ public:
 
     const int k_ndim = this->mesh->get_ndim();
     const int k_cell_count = this->mesh->get_cell_count();
-
     this->cdc_mh_min = std::make_shared<CellDatConst<int>>(
-        this->sycl_target, k_ndim, 1, k_cell_count);
+        this->sycl_target, k_cell_count, k_ndim, 1);
     this->cdc_mh_max = std::make_shared<CellDatConst<int>>(
-        this->sycl_target, k_ndim, 1, k_cell_count);
+        this->sycl_target, k_cell_count, k_ndim, 1);
+
     this->mesh_hierarchy_mapper = std::make_unique<MeshHierarchyMapper>(
         this->sycl_target, this->mesh->get_mesh_hierarchy());
     this->dh_max_box_size =
