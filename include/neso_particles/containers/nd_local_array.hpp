@@ -185,15 +185,15 @@ inline void create_kernel_arg(ParticleLoopIteration &iterationx,
 template <typename T, std::size_t N> class NDLocalArray {
 
   friend Access::NDLocalArray::Read<T, N>
-  ParticleLoopImplementation::create_loop_arg(
+  ParticleLoopImplementation::create_loop_arg<T, N>(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
       sycl::handler &cgh, Access::Read<NDLocalArray<T, N> *> &a);
   friend Access::NDLocalArray::Write<T, N>
-  ParticleLoopImplementation::create_loop_arg(
+  ParticleLoopImplementation::create_loop_arg<T, N>(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
       sycl::handler &cgh, Access::Write<NDLocalArray<T, N> *> &a);
   friend Access::NDLocalArray::Add<T, N>
-  ParticleLoopImplementation::create_loop_arg(
+  ParticleLoopImplementation::create_loop_arg<T, N>(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
       sycl::handler &cgh, Access::Add<NDLocalArray<T, N> *> &a);
 
@@ -315,6 +315,9 @@ public:
     return data;
   }
 };
+
+template <typename T, std::size_t N>
+using NDLocalArraySharedPtr = std::shared_ptr<NDLocalArray<T, N>>;
 
 } // namespace NESO::Particles
 

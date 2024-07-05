@@ -326,6 +326,9 @@ public:
   }
 };
 
+template <typename T>
+using LocalArraySharedPtr = std::shared_ptr<LocalArray<T>>;
+
 } // namespace NESO::Particles
 
 #endif
