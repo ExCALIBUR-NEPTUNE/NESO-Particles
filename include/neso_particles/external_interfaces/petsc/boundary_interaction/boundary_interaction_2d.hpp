@@ -10,9 +10,45 @@
 
 namespace NESO::Particles::PetscInterface {
 
-struct BoundaryInteractionHit {
+/**
+ * Type to point to the boundary elements that intersect a MeshHierarchy cell.
+ */
+struct BoundaryInteractionCellData2D {
+  int num_edges;
   REAL *d_real;
-  int face_set;
+  int *d_int;
+};
+
+/**
+ * Type to point to the normal vector for a boundary element.
+ */
+struct BoundaryInteractionNormalData2D {
+  REAL *d_normal;
+};
+
+/**
+ * Device type to help finding the normal vector for a particle-boundary
+ * interaction.
+ */
+struct BoundaryNormalMapper {
+  // Root of the tree containing normal data.
+  BlockedBinaryNode<INT, BoundaryInteractionNormalData2D, 8> *root;
+
+  /**
+   * Get a pointer to the normal data for an edge element.
+   *
+   * @param[in] global_id Global index of boundary element to retrive normal
+   * for.
+   * @param[in, out] normal Pointer to populate with address of normal vector.
+   * @returns True if the boundary element is found otherwise false.
+   */
+  inline bool get(const INT global_id, REAL **normal) const {
+    BoundaryInteractionNormalData2D *node;
+    bool *exists;
+    const bool e = root->get_location(global_id, &exists, &node);
+    *normal = node->d_normal;
+    return e;
+  }
 };
 
 /**
@@ -64,16 +100,6 @@ protected:
   std::stack<std::shared_ptr<BufferDevice<REAL>>> stack_d_real;
   std::stack<std::shared_ptr<BufferDevice<int>>> stack_d_int;
   std::set<int> pushed_edge_data;
-
-  struct BoundaryInteractionCellData2D {
-    int num_edges;
-    REAL *d_real;
-    int *d_int;
-  };
-
-  struct BoundaryInteractionNormalData2D {
-    REAL *d_normal;
-  };
 
   std::shared_ptr<BlockedBinaryTree<INT, BoundaryInteractionCellData2D, 8>>
       d_map_edge_discovery;
@@ -190,6 +216,19 @@ protected:
 public:
   /// Tolerance for line-line intersections.
   REAL tol;
+
+  /**
+   * Get a device callable mapper to map from global boundary indices to normal
+   * vectors. This method should be called after @ref post_integrate as the map
+   * is populated with potentially relvant normal data on the fly.
+   *
+   * @returns Device copyable and callable mapper.
+   */
+  inline BoundaryNormalMapper get_device_normal_mapper() {
+    BoundaryNormalMapper mapper;
+    mapper.root = this->d_map_edge_normals->root;
+    return mapper;
+  }
 
   /**
    * Free the instance. Must be called. Collective on the communicator.

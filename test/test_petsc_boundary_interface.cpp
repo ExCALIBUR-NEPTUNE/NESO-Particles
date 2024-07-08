@@ -20,9 +20,9 @@ public:
             boundary_position_sym, boundary_label_sym) {}
 
   using BoundaryInteractionCellData2D =
-      BoundaryInteraction2D::BoundaryInteractionCellData2D;
+      PetscInterface::BoundaryInteractionCellData2D;
   using BoundaryInteractionNormalData2D =
-      BoundaryInteraction2D::BoundaryInteractionNormalData2D;
+      PetscInterface::BoundaryInteractionNormalData2D;
 
   MAKE_WRAP_METHOD(get_labels)
   MAKE_WRAP_METHOD(get_bounding_box)
@@ -445,12 +445,13 @@ TEST(PETScBoundary, post_integrate) {
       Access::write(A->position_dat), Access::read(Sym<REAL>("P2")));
 
   // Offsets to move particles in +x, -x, +y, -y
-  std::vector<std::tuple<std::array<REAL, 2>, int, REAL>> offsets;
+  std::vector<std::tuple<std::array<REAL, 2>, int, REAL, std::array<REAL, 2>>>
+      offsets;
 
-  offsets.push_back({{h, 0}, 0, mesh_size * h});
-  offsets.push_back({{-h, 0}, 0, 0.0});
-  offsets.push_back({{0, h}, 1, mesh_size * h});
-  offsets.push_back({{0, -h}, 1, 0.0});
+  offsets.push_back({{h, 0}, 0, mesh_size * h, {1.0, 0.0}});
+  offsets.push_back({{-h, 0}, 0, 0.0, {-1.0, 0.0}});
+  offsets.push_back({{0, h}, 1, mesh_size * h, {0.0, 1.0}});
+  offsets.push_back({{0, -h}, 1, 0.0, {0.0, 1.0}});
 
   for (auto &ox : offsets) {
     reset_positions->execute();
@@ -458,6 +459,8 @@ TEST(PETScBoundary, post_integrate) {
     const REAL dy = std::get<0>(ox).at(1);
     const int component = std::get<1>(ox);
     const REAL value = std::get<2>(ox);
+    const REAL normalx = std::get<3>(ox).at(0);
+    const REAL normaly = std::get<3>(ox).at(1);
 
     b2d->pre_integration(A);
     // move the particles in a direction
@@ -470,7 +473,7 @@ TEST(PETScBoundary, post_integrate) {
         Access::write(A->position_dat))
         ->execute();
     auto sub_groups = b2d->post_integration(A);
-
+    // Check the boundary intersection is at the expected place
     particle_loop(
         sub_groups.at(1),
         [=](auto INDEX, auto CURR_POSITION, auto PREV_POSITION,
@@ -484,13 +487,32 @@ TEST(PETScBoundary, post_integrate) {
         Access::read(b2d->boundary_position_sym))
         ->execute();
     ASSERT_EQ(ep->get_flag(), 0);
-
+    // Check the boundary metadata is as expected
     particle_loop(
         sub_groups.at(1),
         [=](auto BOUNDARY_INFO) {
           NESO_KERNEL_ASSERT(BOUNDARY_INFO.at(0) > -1, k_ep);
           NESO_KERNEL_ASSERT(BOUNDARY_INFO.at(1) == 1, k_ep);
           NESO_KERNEL_ASSERT(BOUNDARY_INFO.at(2) > -1, k_ep);
+        },
+        Access::read(b2d->boundary_label_sym))
+        ->execute();
+    ASSERT_EQ(ep->get_flag(), 0);
+    // Check that the normal for the intersection point is as expected
+    auto normal_mapper = b2d->get_device_normal_mapper();
+    particle_loop(
+        sub_groups.at(1),
+        [=](auto B_C) {
+          REAL *normal;
+          NESO_KERNEL_ASSERT(normal_mapper.get(B_C.at(2), &normal), k_ep);
+
+          const bool bx0 = KERNEL_ABS(normal[0] - normalx) < 1.0e-15;
+          const bool bx1 = KERNEL_ABS(normal[0] + normalx) < 1.0e-15;
+          const bool by0 = KERNEL_ABS(normal[1] - normaly) < 1.0e-15;
+          const bool by1 = KERNEL_ABS(normal[1] + normaly) < 1.0e-15;
+
+          NESO_KERNEL_ASSERT(bx0 || bx1, k_ep);
+          NESO_KERNEL_ASSERT(by0 || by1, k_ep);
         },
         Access::read(b2d->boundary_label_sym))
         ->execute();
@@ -605,7 +627,6 @@ TEST(PETScBoundary, corners) {
         Access::read(b2d->boundary_position_sym),
         Access::read(b2d->boundary_label_sym))
         ->execute();
-
     ASSERT_EQ(ep->get_flag(), 0);
   }
 
