@@ -2,5 +2,6 @@
 #define _NESO_PARTICLES_PETSC_BOUNDARY_INTERACTION_BOUNDARY_INTERACTION_HPP_
 
 #include "boundary_interaction_2d.hpp"
+#include "boundary_reflection.hpp"
 
 #endif

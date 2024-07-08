@@ -53,6 +53,7 @@ ParticleGroupSharedPtr particle_loop_common(DM dm, const int N = 1093) {
 
   ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
                              ParticleProp(Sym<REAL>("V"), 3),
+                             ParticleProp(Sym<REAL>("TSP"), 2),
                              ParticleProp(Sym<REAL>("P2"), ndim),
                              ParticleProp(Sym<INT>("CELL_ID"), 1, true),
                              ParticleProp(Sym<INT>("LOOP_INDEX"), 2),
@@ -100,7 +101,7 @@ ParticleGroupSharedPtr particle_loop_common(DM dm, const int N = 1093) {
 
 } // namespace
 
-TEST(PETScBoundary, constructor_2d) {
+TEST(PETScBoundary2D, constructor_2d) {
 
   PETSCCHK(PetscInitializeNoArguments());
   DM dm;
@@ -225,7 +226,7 @@ TEST(PETScBoundary, constructor_2d) {
   PETSCCHK(PetscFinalize());
 }
 
-TEST(PETScBoundary, collect_2d) {
+TEST(PETScBoundary2D, collect_2d) {
 
   PETSCCHK(PetscInitializeNoArguments());
   DM dm;
@@ -342,7 +343,7 @@ TEST(PETScBoundary, collect_2d) {
   PETSCCHK(PetscFinalize());
 }
 
-TEST(PETScBoundary, pre_integrate) {
+TEST(PETScBoundary2D, pre_integrate) {
 
   PETSCCHK(PetscInitializeNoArguments());
   DM dm;
@@ -391,7 +392,7 @@ TEST(PETScBoundary, pre_integrate) {
   PETSCCHK(PetscFinalize());
 }
 
-TEST(PETScBoundary, post_integrate) {
+TEST(PETScBoundary2D, post_integrate) {
 
   PETSCCHK(PetscInitializeNoArguments());
   DM dm;
@@ -526,7 +527,7 @@ TEST(PETScBoundary, post_integrate) {
   PETSCCHK(PetscFinalize());
 }
 
-TEST(PETScBoundary, corners) {
+TEST(PETScBoundary2D, corners) {
 
   PETSCCHK(PetscInitializeNoArguments());
   DM dm;
@@ -633,6 +634,112 @@ TEST(PETScBoundary, corners) {
   b2d->free();
   sycl_target->free();
   A->free();
+  mesh->free();
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
+
+TEST(PETScBoundary2D, reflection) {
+
+  PETSCCHK(PetscInitializeNoArguments());
+  DM dm;
+
+  const int nsteps = 100;
+  const REAL dt = 0.1;
+
+  const int ndim = 2;
+  const int mesh_size = 8;
+  const REAL h = 1.0;
+  PetscInt faces[3] = {mesh_size, mesh_size, mesh_size};
+  PetscReal lower[3] = {0.0, 0.0, 0.0};
+  PetscReal upper[3] = {mesh_size * h, mesh_size * h, mesh_size * h};
+
+  PETSCCHK(DMPlexCreateBoxMesh(PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces,
+                               lower, upper,
+                               /* periodicity */ NULL, PETSC_TRUE, &dm));
+  PetscInterface::generic_distribute(&dm);
+  auto A = particle_loop_common(dm, 128);
+  auto mesh = std::dynamic_pointer_cast<PetscInterface::DMPlexInterface>(
+      A->domain->mesh);
+  auto sycl_target = A->sycl_target;
+
+  std::map<PetscInt, std::vector<PetscInt>> boundary_groups;
+  boundary_groups[1] = {1, 2, 3, 4};
+
+  auto b2d = std::make_shared<TestBoundaryInteraction2D>(sycl_target, mesh,
+                                                         boundary_groups);
+  auto reflection =
+      std::make_shared<PetscInterface::BoundaryReflection>(b2d, 1.0e-10);
+
+  auto lambda_apply_boundary_conditions = [&](auto aa) {
+    auto sub_groups = b2d->post_integration(aa);
+    reflection->execute(sub_groups.at(1), Sym<REAL>("P"), Sym<REAL>("V"),
+                        Sym<REAL>("TSP"));
+  };
+  auto lambda_apply_timestep_reset = [&](auto aa) {
+    particle_loop(
+        aa,
+        [=](auto TSP) {
+          TSP.at(0) = 0.0;
+          TSP.at(1) = 0.0;
+        },
+        Access::write(Sym<REAL>("TSP")))
+        ->execute();
+  };
+  auto lambda_apply_advection_step =
+      [=](ParticleSubGroupSharedPtr iteration_set) -> void {
+    particle_loop(
+        "euler_advection", iteration_set,
+        [=](auto V, auto P, auto TSP) {
+          const REAL dt_left = dt - TSP.at(0);
+          if (dt_left > 0.0) {
+            P.at(0) += dt_left * V.at(0);
+            P.at(1) += dt_left * V.at(1);
+            TSP.at(0) = dt;
+            TSP.at(1) = dt_left;
+          }
+        },
+        Access::read(Sym<REAL>("V")), Access::write(Sym<REAL>("P")),
+        Access::write(Sym<REAL>("TSP")))
+        ->execute();
+  };
+  auto lambda_pre_advection = [&](auto aa) { b2d->pre_integration(aa); };
+  auto lambda_find_partial_moves = [&](auto aa) {
+    return static_particle_sub_group(
+        A, [=](auto TSP) { return TSP.at(0) < dt; },
+        Access::read(Sym<REAL>("TSP")));
+  };
+  auto lambda_partial_moves_remaining = [&](auto aa) -> bool {
+    aa = lambda_find_partial_moves(aa);
+    const int size = aa->get_npart_local();
+    return size > 0;
+  };
+  auto lambda_apply_timestep = [&](auto aa) {
+    lambda_apply_timestep_reset(aa);
+    lambda_pre_advection(aa);
+    lambda_apply_advection_step(aa);
+    lambda_apply_boundary_conditions(aa);
+    aa = lambda_find_partial_moves(aa);
+    while (lambda_partial_moves_remaining(aa)) {
+      lambda_pre_advection(aa);
+      lambda_apply_advection_step(aa);
+      lambda_apply_boundary_conditions(aa);
+    }
+  };
+
+  H5Part h5part("traj_reflection.h5part", A, Sym<REAL>("P"), Sym<REAL>("V"));
+
+  for (int stepx = 0; stepx < nsteps; stepx++) {
+    nprint("step:", stepx);
+    lambda_apply_timestep(static_particle_sub_group(A));
+    //A->hybrid_move();
+    //A->cell_move();
+    h5part.write();
+  }
+  h5part.close();
+
+  b2d->free();
+  sycl_target->free();
   mesh->free();
   PETSCCHK(DMDestroy(&dm));
   PETSCCHK(PetscFinalize());

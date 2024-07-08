@@ -183,30 +183,36 @@ protected:
       bool *exists;
       BoundaryInteractionCellData2D *data;
       if (root->get_location(linear_cell, &exists, &data)) {
-        const REAL xa = a[0];
-        const REAL ya = a[1];
-        const REAL xb = b[0];
-        const REAL yb = b[1];
-        REAL xi, yi, l0;
+        if (*exists){
+          const REAL xa = a[0];
+          const REAL ya = a[1];
+          const REAL xb = b[0];
+          const REAL yb = b[1];
+          REAL xi, yi, l0;
 
-        for (int edgex = 0; edgex < (data->num_edges); edgex++) {
-          const REAL x0 = data->d_real[edgex * 4 + 0];
-          const REAL y0 = data->d_real[edgex * 4 + 1];
-          const REAL x1 = data->d_real[edgex * 4 + 2];
-          const REAL y1 = data->d_real[edgex * 4 + 3];
-          const INT group_id = data->d_int[edgex * 2 + 0];
-          const INT edge_id = data->d_int[edgex * 2 + 1];
+          for (int edgex = 0; edgex < (data->num_edges); edgex++) {
+            const REAL x0 = data->d_real[edgex * 4 + 0];
+            const REAL y0 = data->d_real[edgex * 4 + 1];
+            const REAL x1 = data->d_real[edgex * 4 + 2];
+            const REAL y1 = data->d_real[edgex * 4 + 3];
+            const INT group_id = data->d_int[edgex * 2 + 0];
+            const INT edge_id = data->d_int[edgex * 2 + 1];
 
-          const bool intersects = line_segment_intersection_2d(
-              xa, ya, xb, yb, x0, y0, x1, y1, xi, yi, l0, tol);
+            const bool intersects = line_segment_intersection_2d(
+                xa, ya, xb, yb, x0, y0, x1, y1, xi, yi, l0, tol);
 
-          if (intersects && (l0 < current_distance)) {
-            P.at(0) = xi;
-            P.at(1) = yi;
-            C.at(0) = 1;
-            C.at(1) = group_id;
-            C.at(2) = edge_id;
-            current_distance = l0;
+            nprint("TESTING TRAJ:", xa, ya, xb, yb);
+            nprint("TESTING LINE:", x0, y0, x1, y1);
+
+            if (intersects && (l0 < current_distance)) {
+              nprint("INTERSECTS!", xi, yi);
+              P.at(0) = xi;
+              P.at(1) = yi;
+              C.at(0) = 1;
+              C.at(1) = group_id;
+              C.at(2) = edge_id;
+              current_distance = l0;
+            }
           }
         }
       }
