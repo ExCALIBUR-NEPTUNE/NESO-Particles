@@ -732,8 +732,8 @@ TEST(PETScBoundary2D, reflection) {
   for (int stepx = 0; stepx < nsteps; stepx++) {
     nprint("step:", stepx);
     lambda_apply_timestep(static_particle_sub_group(A));
-    //A->hybrid_move();
-    //A->cell_move();
+    // A->hybrid_move();
+    // A->cell_move();
     h5part.write();
   }
   h5part.close();

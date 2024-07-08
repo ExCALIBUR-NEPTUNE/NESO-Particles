@@ -49,7 +49,8 @@ protected:
             V.at(0) = v0 - 2.0 * in_dot_product * n0;
             V.at(1) = v1 - 2.0 * in_dot_product * n1;
 
-            if ((KERNEL_ABS(B_P.at(0)) < 0.2) && (KERNEL_ABS(B_P.at(1)) < 0.2)){
+            if ((KERNEL_ABS(B_P.at(0)) < 0.2) &&
+                (KERNEL_ABS(B_P.at(1)) < 0.2)) {
               nprint("--------------------------------------------------");
               nprint("P:", P.at(0), P.at(1));
               nprint("PP:", PP.at(0), PP.at(1));

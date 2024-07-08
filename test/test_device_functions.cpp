@@ -96,4 +96,11 @@ TEST(DeviceFunctions, line_segment_intersection) {
   ASSERT_NEAR(xi, 0.5, 1.0e-15);
   ASSERT_NEAR(yi, 8.0, 1.0e-15);
   ASSERT_NEAR(l0, 0.5, 1.0e-15);
+
+  e = line_segment_intersection_2d(0.5, 1.5, -0.5, 0.5, 0.0, 2.0, 0.0, -2.0, xi,
+                                   yi, l0);
+  ASSERT_TRUE(e);
+  ASSERT_NEAR(xi, 0.0, 1.0e-15);
+  ASSERT_NEAR(yi, 1.0, 1.0e-15);
+  ASSERT_NEAR(l0, 0.5, 1.0e-15);
 }
