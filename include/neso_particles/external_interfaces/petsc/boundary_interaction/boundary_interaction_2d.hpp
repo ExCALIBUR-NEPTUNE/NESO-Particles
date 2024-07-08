@@ -140,6 +140,7 @@ protected:
     REAL max_distance;
     REAL epsilon;
     BlockedBinaryNode<INT, BoundaryInteractionCellData2D, 8> *root;
+    REAL tol;
 
     inline bool boundary_elements_exist() const {
       return this->root != nullptr;
@@ -171,7 +172,7 @@ protected:
           const INT edge_id = data->d_int[edgex * 2 + 1];
 
           const bool intersects = line_segment_intersection_2d(
-              xa, ya, xb, yb, x0, y0, x1, y1, xi, yi, l0);
+              xa, ya, xb, yb, x0, y0, x1, y1, xi, yi, l0, tol);
 
           if (intersects && (l0 < current_distance)) {
             P.at(0) = xi;
@@ -187,6 +188,9 @@ protected:
   };
 
 public:
+  /// Tolerance for line-line intersections.
+  REAL tol;
+
   /**
    * Free the instance. Must be called. Collective on the communicator.
    */
@@ -207,7 +211,7 @@ public:
    * TODO
    */
   template <typename T>
-  inline std::map<PetscInt, ParticleSubGroupSharedPtr>
+  [[nodiscard]] inline std::map<PetscInt, ParticleSubGroupSharedPtr>
   post_integration(std::shared_ptr<T> particles) {
 
     this->find_cells(particles);
@@ -224,6 +228,7 @@ public:
     intersect_object.max_distance = std::numeric_limits<REAL>::max();
     intersect_object.epsilon = std::numeric_limits<REAL>::min();
     intersect_object.root = this->d_map_edge_discovery->root;
+    intersect_object.tol = this->tol;
 
     this->find_intersections_inner(particles, intersect_object);
 
@@ -259,6 +264,7 @@ public:
   BoundaryInteraction2D(
       SYCLTargetSharedPtr sycl_target, DMPlexInterfaceSharedPtr mesh,
       std::map<PetscInt, std::vector<PetscInt>> &boundary_groups,
+      const REAL tol = 0.0,
       std::optional<Sym<REAL>> previous_position_sym = std::nullopt,
       std::optional<Sym<REAL>> boundary_position_sym = std::nullopt,
       std::optional<Sym<INT>> boundary_label_sym = std::nullopt)
@@ -269,6 +275,8 @@ public:
                                   boundary_label_sym)
 
   {
+    this->tol = tol;
+
     // Get the boundary labels this instance should detect interactions with.
     auto labels = this->get_labels();
 

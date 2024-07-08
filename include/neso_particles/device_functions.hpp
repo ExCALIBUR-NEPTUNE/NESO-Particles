@@ -56,13 +56,16 @@ inline void line_segment_intersection_2d_lambda(const REAL &xa, const REAL &ya,
  * param[in, out] yi Output intersection point if it exists.
  * param[in, out] l0_out Proportion of the distance between a and b the
  * intersection point exists at.
+ * param[in] tol Tolerance for intersection, e.g. how closely do the lines pass
+ * at the ends default 0.0.
  * @returns True if the line segments intersect otherwise false.
  */
 inline bool line_segment_intersection_2d(const REAL &xa, const REAL &ya,
                                          const REAL &xb, const REAL &yb,
                                          const REAL &x0, const REAL &y0,
                                          const REAL &x1, const REAL &y1,
-                                         REAL &xi, REAL &yi, REAL &l0_out) {
+                                         REAL &xi, REAL &yi, REAL &l0_out,
+                                         const REAL tol = 0.0) {
 
   const REAL vabx = xb - xa;
   const REAL vaby = yb - ya;
@@ -86,7 +89,8 @@ inline bool line_segment_intersection_2d(const REAL &xa, const REAL &ya,
       yi = ya + l1 * (yb - ya);
       l0_out = l1;
     }
-    return (0 <= l0) && (l0 <= 1.0) && (0 <= l1) && (l1 <= 1.0);
+    return ((0.0 - tol) <= l0) && (l0 <= (1.0 + tol)) && ((0 - tol) <= l1) &&
+           (l1 <= (1.0 + tol));
   } else {
     return false;
   }
