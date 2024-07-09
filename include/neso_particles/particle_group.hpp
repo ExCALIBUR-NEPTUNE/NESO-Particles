@@ -314,14 +314,20 @@ protected:
     return updated;
   }
   inline bool check_validation(ParticleGroupVersion &to_check,
-                               const bool update_to_check = true) const {
+                               const bool update_to_check = true) {
     const bool updated = this->particle_group_version != to_check;
     if (update_to_check && updated) {
       to_check = this->particle_group_version;
     }
     return updated;
   }
-  inline void invalidate_group_version() { this->particle_group_version++; }
+  inline void invalidate_group_version() {
+    this->particle_group_version++;
+    // Ensure this value is never 0.
+    if (this->particle_group_version == 0) {
+      this->particle_group_version++;
+    }
+  }
 
   inline void recompute_npart_cell_es() {
     auto h_ptr_s = this->h_npart_cell.ptr;
@@ -392,7 +398,7 @@ public:
                         particle_dats_int),
         cell_move_ctx(sycl_target, this->ncell, layer_compressor,
                       particle_dats_real, particle_dats_int),
-        npart_local(0), particle_group_version(0) {
+        npart_local(0), particle_group_version(1) {
 
     this->h_npart_cell.realloc_no_copy(this->ncell);
     this->d_npart_cell.realloc_no_copy(this->ncell);

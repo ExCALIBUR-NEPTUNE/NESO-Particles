@@ -73,6 +73,7 @@ protected:
   template <typename PARENT>
   inline void internal_setup(std::shared_ptr<PARENT> parent) {
     this->add_parent_dependencies(parent);
+    this->particle_group_version = 0;
 
     auto sycl_target = particle_group->sycl_target;
     const int cell_count = particle_group->domain->mesh->get_cell_count();
@@ -106,6 +107,7 @@ protected:
 public:
   ParticleGroupSharedPtr particle_group;
   ParticleGroup::ParticleDatVersionTracker particle_dat_versions;
+  ParticleGroup::ParticleGroupVersion particle_group_version;
 
   struct SelectionT {
     int npart_local;
@@ -163,7 +165,6 @@ public:
    * @returns List of cells and layers of particles in the sub group.
    */
   virtual inline SelectionT get() {
-
     const int cell_count = this->particle_group->domain->mesh->get_cell_count();
     auto sycl_target = this->particle_group->sycl_target;
     auto pg_map_layers = particle_group->d_sub_group_layers;
@@ -210,7 +211,6 @@ public:
     s.d_npart_cell = d_npart_cell_ptr;
     s.d_npart_cell_es = d_npart_cell_es_ptr;
     s.d_map_cells_to_particles = this->map_cell_to_particles->device_ptr();
-
     return s;
   }
 };
@@ -285,6 +285,8 @@ protected:
     create_inner();
     this->particle_group->check_validation(
         this->selector->particle_dat_versions);
+    this->particle_group->check_validation(
+        this->selector->particle_group_version);
   }
 
 public:
@@ -395,7 +397,7 @@ public:
   inline bool is_valid() {
     if (this->is_static) {
       return !this->particle_group->check_validation(
-          this->selector->particle_dat_versions, false);
+          this->selector->particle_group_version, false);
     }
     return true;
   }
@@ -412,8 +414,12 @@ public:
       return false;
     }
 
-    if (this->particle_group->check_validation(
-            this->selector->particle_dat_versions)) {
+    const bool bool_dats = this->particle_group->check_validation(
+        this->selector->particle_dat_versions);
+    const bool bool_group = this->particle_group->check_validation(
+        this->selector->particle_group_version);
+
+    if (bool_dats || bool_group) {
       this->create_inner();
       return true;
     }
@@ -894,7 +900,6 @@ public:
   }
 
   virtual inline SelectionT get() override {
-
     const int cell_count = this->particle_group->domain->mesh->get_cell_count();
     auto sycl_target = this->particle_group->sycl_target;
     auto pg_map_layers = this->get_particle_group_sub_group_layers();

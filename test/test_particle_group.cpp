@@ -769,8 +769,9 @@ TEST(ParticleGroup, structure_version) {
     initial_distribution[Sym<INT>("ID")][px][0] = px;
   }
 
-  int64_t version;
+  int64_t version = 0;
   A->wrap_check_validation(version);
+  ASSERT_TRUE(version != 0);
 
   A->add_particles_local(initial_distribution);
   ASSERT_TRUE(A->wrap_check_validation(version));
