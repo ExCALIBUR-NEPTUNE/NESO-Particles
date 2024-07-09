@@ -377,6 +377,44 @@ TEST(ParticleLoop, nd_local_array_device) {
       }
     }
   }
+
+  {
+    auto ndla_real =
+        std::make_shared<NDLocalArray<REAL, 3>>(sycl_target, cell_count, 3, 1);
+    ndla_real->fill(0.0);
+    auto cdc_real =
+        std::make_shared<CellDatConst<REAL>>(sycl_target, cell_count, 3, 1);
+    cdc_real->fill(0.0);
+
+    particle_loop(
+        A,
+        [=](auto index, auto V, auto LA, auto CDC) {
+          LA.fetch_add(index.cell, 0, 0, V.at(0));
+          LA.fetch_add(index.cell, 1, 0, V.at(1));
+          LA.fetch_add(index.cell, 2, 0, V.at(2));
+          CDC.fetch_add(0, 0, V.at(0));
+          CDC.fetch_add(1, 0, V.at(1));
+          CDC.fetch_add(2, 0, V.at(2));
+        },
+        Access::read(ParticleLoopIndex{}), Access::read(Sym<REAL>("V")),
+        Access::add(ndla_real), Access::add(cdc_real))
+        ->execute();
+
+    auto h_ndla_real = ndla_real->get();
+
+    int index = 0;
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      for (int rx = 0; rx < 3; rx++) {
+        for (int cx = 0; cx < 1; cx++) {
+          const REAL correct = cdc_real->get_value(cellx, rx, cx);
+          const REAL to_test = h_ndla_real.at(index);
+          ASSERT_NEAR(to_test, correct, 1.0e-15);
+          index++;
+        }
+      }
+    }
+  }
+
   A->free();
   sycl_target->free();
   mesh->free();

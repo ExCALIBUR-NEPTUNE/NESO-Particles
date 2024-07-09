@@ -65,7 +65,7 @@ template <typename T, std::size_t N> struct Add {
     sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>
         element_atomic(ptr[index]);
 
-    const auto value = Tuple::get_last_arg(ix...);
+    const T value = Tuple::get_last_arg(ix...);
     return element_atomic.fetch_add(value);
   }
 };
