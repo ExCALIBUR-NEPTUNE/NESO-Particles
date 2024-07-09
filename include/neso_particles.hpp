@@ -15,6 +15,7 @@
 #include "neso_particles/containers/local_array.hpp"
 #include "neso_particles/containers/lookup_table.hpp"
 #include "neso_particles/containers/product_matrix.hpp"
+#include "neso_particles/containers/rng/rng.hpp"
 #include "neso_particles/containers/sym_vector.hpp"
 #include "neso_particles/containers/sym_vector_impl.hpp"
 #include "neso_particles/containers/tuple.hpp"
