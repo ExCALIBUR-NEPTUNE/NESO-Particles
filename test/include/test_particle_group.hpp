@@ -133,6 +133,13 @@ struct TestParticleGroup : public ParticleGroup {
         ranks.size(), ranks.data());
     this->local_move_ctx->set_mpi_rank_dat(mpi_rank_dat);
   }
+
+  inline auto get_particle_group_version() {
+    return this->particle_group_version;
+  }
+  inline bool wrap_check_validation(int64_t &to_check) {
+    return this->check_validation(to_check);
+  }
 };
 
 template <> struct TestMapperToNP<TestParticleGroup> {
