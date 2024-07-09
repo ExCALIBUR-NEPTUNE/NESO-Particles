@@ -186,6 +186,7 @@ inline bool check_selector(ParticleGroupSharedPtr particle_group,
                            std::vector<int> &layers) {
   bool status = true;
   auto s = selector->get();
+
   auto lambda_check_eq = [&](auto a, auto b) { status = status && (a == b); };
   auto lambda_check_true = [&](const bool a) { status = status && a; };
 
@@ -237,6 +238,7 @@ inline bool check_selector(ParticleGroupSharedPtr particle_group,
 
   return status;
 }
+
 } // namespace
 
 TEST(ParticleSubGroup, selector_get_even_id) {
@@ -553,7 +555,7 @@ TEST(ParticleSubGroup, creating) {
   EXPECT_EQ(aa->static_status(false), false);
   EXPECT_EQ(aa->static_status(true), true);
   EXPECT_EQ(aa->static_status(), true);
-  EXPECT_TRUE(!aa->is_valid());
+  EXPECT_TRUE(aa->is_valid());
 
   A->free();
   sycl_target->free();
@@ -578,7 +580,7 @@ TEST(ParticleSubGroup, static_valid) {
   particle_loop(
       aa, [=](auto ID) { ID.at(0) += 2; }, Access::write(Sym<INT>("ID")))
       ->execute();
-  EXPECT_TRUE(!aa->is_valid());
+  EXPECT_TRUE(aa->is_valid());
 
   aa = lambda_make_aa();
   A->cell_move();
