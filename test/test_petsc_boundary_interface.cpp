@@ -644,7 +644,7 @@ TEST(PETScBoundary2D, reflection) {
   PETSCCHK(PetscInitializeNoArguments());
   DM dm;
 
-  const int nsteps = 100;
+  const int nsteps = 200;
   const REAL dt = 0.1;
 
   const int ndim = 2;
@@ -658,7 +658,7 @@ TEST(PETScBoundary2D, reflection) {
                                lower, upper,
                                /* periodicity */ NULL, PETSC_TRUE, &dm));
   PetscInterface::generic_distribute(&dm);
-  auto A = particle_loop_common(dm, 128);
+  auto A = particle_loop_common(dm, 1024);
   auto mesh = std::dynamic_pointer_cast<PetscInterface::DMPlexInterface>(
       A->domain->mesh);
   auto sycl_target = A->sycl_target;
@@ -732,8 +732,8 @@ TEST(PETScBoundary2D, reflection) {
   for (int stepx = 0; stepx < nsteps; stepx++) {
     nprint("step:", stepx);
     lambda_apply_timestep(static_particle_sub_group(A));
-    // A->hybrid_move();
-    // A->cell_move();
+    A->hybrid_move();
+    A->cell_move();
     h5part.write();
   }
   h5part.close();

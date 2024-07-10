@@ -42,23 +42,11 @@ protected:
             const REAL v1 = V.at(1);
             // We don't know if the normal is inwards pointing or outwards
             // pointing.
-            const REAL in_dot_product =
-                -1.0 * KERNEL_ABS(KERNEL_DOT_PRODUCT_2D(n0, n1, v0, v1));
+            const REAL in_dot_product = KERNEL_DOT_PRODUCT_2D(n0, n1, v0, v1);
 
             // compute new velocity from reflection
             V.at(0) = v0 - 2.0 * in_dot_product * n0;
             V.at(1) = v1 - 2.0 * in_dot_product * n1;
-
-            if ((KERNEL_ABS(B_P.at(0)) < 0.2) &&
-                (KERNEL_ABS(B_P.at(1)) < 0.2)) {
-              nprint("--------------------------------------------------");
-              nprint("P:", P.at(0), P.at(1));
-              nprint("PP:", PP.at(0), PP.at(1));
-              nprint("V_old:", v0, v1);
-              nprint("V_new:", V.at(0), V.at(1));
-              nprint("normal:", n0, n1);
-              nprint("v dot normal:", KERNEL_DOT_PRODUCT_2D(n0, n1, v0, v1));
-            }
 
             // Try and compute a sane new position
             // vector from intersection point back towards previous position

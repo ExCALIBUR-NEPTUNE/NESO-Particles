@@ -201,11 +201,8 @@ protected:
             const bool intersects = line_segment_intersection_2d(
                 xa, ya, xb, yb, x0, y0, x1, y1, xi, yi, l0, tol);
 
-            nprint("TESTING TRAJ:", xa, ya, xb, yb);
-            nprint("TESTING LINE:", x0, y0, x1, y1);
-
             if (intersects && (l0 < current_distance)) {
-              nprint("INTERSECTS!", xi, yi);
+              // nprint("INTERSECTS!", xi, yi);
               P.at(0) = xi;
               P.at(1) = yi;
               C.at(0) = 1;
