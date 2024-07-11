@@ -33,7 +33,7 @@ namespace Access::LocalArray {
 template <typename T> struct Read {
   /// Pointer to underlying data for the array.
   Read() = default;
-  T const *ptr;
+  T const *RESTRICT ptr;
   const T at(const int component) const { return ptr[component]; }
   const T &operator[](const int component) const { return ptr[component]; }
 };
@@ -44,7 +44,7 @@ template <typename T> struct Read {
 template <typename T> struct Add {
   /// Pointer to underlying data for the array.
   Add() = default;
-  T *ptr;
+  T *RESTRICT ptr;
   /**
    * The local array is local to the MPI rank where the partial sum is a
    * meaningful value.
@@ -62,7 +62,7 @@ template <typename T> struct Add {
 template <typename T> struct Write {
   /// Pointer to underlying data for the array.
   Write() = default;
-  T *ptr;
+  T *RESTRICT ptr;
   T &at(const int component) { return ptr[component]; }
   T &operator[](const int component) { return ptr[component]; }
 };
@@ -257,8 +257,8 @@ public:
     NESOASSERT(data.size() == this->size, "Input data is incorrectly sized.");
     const std::size_t size_bytes = sizeof(T) * this->size;
     if (size_bytes) {
-      auto copy_event =
-          sycl_target->queue.memcpy(this->buffer->ptr, data.data(), size_bytes);
+      auto copy_event = this->sycl_target->queue.memcpy(
+          this->buffer->ptr, data.data(), size_bytes);
       return copy_event;
     } else {
       return sycl::event();
@@ -285,8 +285,8 @@ public:
     NESOASSERT(data.size() == this->size, "Input data is incorrectly sized.");
     const std::size_t size_bytes = sizeof(T) * this->size;
     if (size_bytes) {
-      auto copy_event =
-          sycl_target->queue.memcpy(data.data(), this->buffer->ptr, size_bytes);
+      auto copy_event = this->sycl_target->queue.memcpy(
+          data.data(), this->buffer->ptr, size_bytes);
       return copy_event;
     } else {
       return sycl::event();
@@ -325,6 +325,9 @@ public:
     this->buffer->realloc_no_copy(size);
   }
 };
+
+template <typename T>
+using LocalArraySharedPtr = std::shared_ptr<LocalArray<T>>;
 
 } // namespace NESO::Particles
 

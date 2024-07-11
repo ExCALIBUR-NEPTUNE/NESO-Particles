@@ -64,7 +64,7 @@ LocalArray
 ~~~~~~~~~~
 
 The local array type is local to each MPI rank. No communication between MPI ranks is performed by the particle loop. 
-The local array can be accessed in particle loops with "read" and "add" access modes.
+The local array can be accessed in particle loops with the access modes in the following table.
 
 .. literalinclude:: ../example_sources/example_particle_loop_local_array.hpp
    :language: cpp
@@ -86,6 +86,31 @@ The local array can be accessed in particle loops with "read" and "add" access m
      - Access::LocalArray::Add<T>
      - fetch_add(index, value) atomically increments the element referenced by the index with the passed value. Returns the previous value stored at the index. Users may assume that the memory region accessed is the same for all invocations of the kernel. Hence adding 1 for each particle gives a total ordering for each participating calls.
 
+NDLocalArray
+~~~~~~~~~~~~
+
+NDLocalArray is a N-Dimensional local array type with a templated data type (T) and number of dimensions (N). Otherwise the behaviour is intended to be analogous to LocalArray.
+The indices of the NDLocalArray are linearised such that the first index is the slowest varying index and the last index is the fastest varying index.
+
+.. literalinclude:: ../example_sources/example_particle_loop_nd_local_array.hpp
+   :language: cpp
+   :caption: Particle loop example where a N-Dimensionsal local array is incremented by each particle and another ND local array is read by each particle. 
+
+.. list-table:: NDLocalArray<T> Access
+   :header-rows: 1
+
+   * - Access Descriptors
+     - Kernel Types
+     - Notes
+   * - Read
+     - Access::NDLocalArray::Read<T, N>
+     - Components accessed for each array element via .at(i_0, ..., i_n-1) which returns a const reference.
+   * - Write
+     - Access::NDLocalArray::Write<T, N>
+     - Components accessed for each array element via .at(i_0, ..., i_n-1) which returns a modifiable reference. It is the responsiblity of the user to avoid write conflicts and race conditions between loop iterations.
+   * - Add
+     - Access::NDLocalArray::Add<T, N>
+     - fetch_add(i_0, ..., i_n-1, value) atomically increments the element referenced by the index with the passed value. Returns the previous value stored at the index. Users may assume that the memory region accessed is the same for all invocations of the kernel. Hence adding 1 for each particle gives a total ordering for each participating calls.
 
 GlobalArray
 ~~~~~~~~~~~
@@ -217,5 +242,15 @@ In the following example we use a host normal distribution as a source of random
 .. literalinclude:: ../example_sources/example_particle_loop_rng.hpp
    :language: cpp
    :caption: Particle loop example where a ParticleLoop accesses random values for each particle. 
+
+.. list-table:: KernelRNG Access
+   :header-rows: 1
+
+   * - Access Descriptors
+     - Kernel Types
+     - Notes
+   * - Read
+     - Access::KernelRNG::Read<T>
+     - Values are accessed via .at(particle_index, component) where particle_index is a ParticleLoopIndex. Alternatively .at(row, col) directly indexes into the data structure.
 
 .. [SAUNDERS2018] A domain specific language for performance portable molecular dynamics algorithms. `CPC <https://doi.org/10.1016/j.cpc.2017.11.006>`_ , `arXiv <https://arxiv.org/abs/1704.03329>`_.
