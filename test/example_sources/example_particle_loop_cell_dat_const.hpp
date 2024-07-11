@@ -7,7 +7,7 @@ inline void cell_dat_const_example(
   const int cell_count = particle_group->domain->mesh->get_cell_count();
 
   // Create a 3x1 matrix for cell_count cells.
-  auto g1 = std::make_shared<CellDatConst<int>>(
+  auto g1 = std::make_shared<CellDatConst<REAL>>(
       particle_group->sycl_target, cell_count, 3, 1);
   
   // For each cell get the current matrix and zero the values then write back
