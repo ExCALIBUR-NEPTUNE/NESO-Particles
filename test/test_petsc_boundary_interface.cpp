@@ -690,11 +690,14 @@ TEST(PETScBoundary2D, reflection_truncated) {
   auto lambda_apply_boundary_conditions = [&](auto aa) {
     auto sub_groups = b2d->post_integration(aa);
 
-    nprint(1, sub_groups.at(1)->get_npart_local());
-    nprint(2, sub_groups.at(2)->get_npart_local());
 
-    reflection->execute(sub_groups.at(1), Sym<REAL>("P"), Sym<REAL>("V"),
-                        Sym<REAL>("TSP"));
+
+    for (auto &gx : sub_groups) {
+      reflection->execute(gx.second, Sym<REAL>("P"), Sym<REAL>("V"),
+                          Sym<REAL>("TSP"));
+    }
+
+
   };
 
   auto lambda_apply_timestep_reset = [&](auto aa) {
@@ -801,8 +804,10 @@ TEST(PETScBoundary2D, reflection_advection) {
 
   auto lambda_apply_boundary_conditions = [&](auto aa) {
     auto sub_groups = b2d->post_integration(aa);
-    reflection->execute(sub_groups.at(1), Sym<REAL>("P"), Sym<REAL>("V"),
-                        Sym<REAL>("TSP"));
+    for (auto &gx : sub_groups) {
+      reflection->execute(gx.second, Sym<REAL>("P"), Sym<REAL>("V"),
+                          Sym<REAL>("TSP"));
+    }
   };
   auto lambda_apply_timestep_reset = [&](auto aa) {
     particle_loop(

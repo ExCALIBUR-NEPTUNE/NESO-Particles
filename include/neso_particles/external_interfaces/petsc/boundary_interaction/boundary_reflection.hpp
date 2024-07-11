@@ -31,6 +31,9 @@ protected:
         [=](auto P, auto V, auto TSP, auto PP, auto B_P, auto B_C) {
           REAL *normal;
           const bool normal_exists = normal_mapper.get(B_C.at(2), &normal);
+          if (!normal_exists) {
+            nprint(B_C.at(0), B_C.at(1), B_C.at(2));
+          }
           NESO_KERNEL_ASSERT(normal_exists, k_ep);
           if (normal_exists) {
             // Normal vector

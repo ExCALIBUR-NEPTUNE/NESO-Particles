@@ -47,7 +47,7 @@ struct BoundaryNormalMapper {
     bool *exists;
     const bool e = root->get_location(global_id, &exists, &node);
     *normal = node->d_normal;
-    return e;
+    return e && (*exists);
   }
 };
 
@@ -280,7 +280,10 @@ public:
       for (auto &group_labels : this->boundary_groups) {
         const PetscInt k_group = group_labels.first;
         m[k_group] = particle_sub_group(
-            iteration_set, [=](auto C) -> bool { return C.at(1) == k_group; },
+            iteration_set,
+            [=](auto C) -> bool {
+              return (C.at(0) > -1) && (C.at(1) == k_group);
+            },
             Access::read(this->boundary_label_sym));
       }
     };
