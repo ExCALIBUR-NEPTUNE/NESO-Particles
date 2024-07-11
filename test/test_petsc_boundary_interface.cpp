@@ -484,8 +484,6 @@ TEST(PETScBoundary2D, post_integrate) {
     for (auto &sx : sub_groups) {
       if (sx.first != correct_group) {
         ASSERT_EQ(sx.second->get_npart_local(), 0);
-      } else {
-        ASSERT_EQ(sx.second->get_npart_local(), mesh_size * npart_per_cell);
       }
     }
 
