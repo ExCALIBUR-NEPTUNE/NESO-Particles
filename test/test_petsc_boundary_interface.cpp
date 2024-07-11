@@ -53,6 +53,7 @@ ParticleGroupSharedPtr particle_loop_common(DM dm, const int N = 1093) {
 
   ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
                              ParticleProp(Sym<REAL>("V"), 3),
+                             ParticleProp(Sym<REAL>("U"), 3),
                              ParticleProp(Sym<REAL>("TSP"), 2),
                              ParticleProp(Sym<REAL>("P2"), ndim),
                              ParticleProp(Sym<INT>("CELL_ID"), 1, true),
@@ -679,22 +680,48 @@ TEST(PETScBoundary2D, reflection_truncated) {
   auto sycl_target = A->sycl_target;
 
   std::map<PetscInt, std::vector<PetscInt>> boundary_groups;
-  boundary_groups[1] = {1, 2};
-  boundary_groups[2] = {3, 4};
+  boundary_groups[0] = {1};
+  boundary_groups[1] = {2};
+  boundary_groups[2] = {3};
+  boundary_groups[3] = {4};
 
   auto b2d = std::make_shared<TestBoundaryInteraction2D>(sycl_target, mesh,
                                                          boundary_groups);
   auto reflection =
       std::make_shared<PetscInterface::BoundaryReflection>(b2d, 1.0e-10);
 
+  auto ep = std::make_shared<ErrorPropagate>(sycl_target);
+  auto k_ep = ep->device_ptr();
+
   auto lambda_apply_boundary_conditions = [&](auto aa) {
     auto sub_groups = b2d->post_integration(aa);
 
-
-
     for (auto &gx : sub_groups) {
+      particle_loop(
+        gx.second,
+        [=](auto V, auto U){
+          U.at(0) = V.at(0);
+          U.at(1) = V.at(1);
+          U.at(2) = V.at(2);
+        },
+        Access::read(Sym<REAL>("V")),
+        Access::write(Sym<REAL>("U"))
+      )->execute();
+
       reflection->execute(gx.second, Sym<REAL>("P"), Sym<REAL>("V"),
                           Sym<REAL>("TSP"));
+
+      particle_loop(
+        gx.second,
+        [=](auto V, auto U){
+          const REAL V_mag = V.at(0) * V.at(0) + V.at(1) * V.at(1) + V.at(2) * V.at(2);
+          const REAL U_mag = U.at(0) * U.at(0) + U.at(1) * U.at(1) + U.at(2) * U.at(2);
+          NESO_KERNEL_ASSERT(Kernel::abs(V_mag - U_mag) < 1.0e-14, k_ep);
+        },
+        Access::read(Sym<REAL>("V")),
+        Access::write(Sym<REAL>("U"))
+      )->execute();
+
     }
 
 
