@@ -416,9 +416,9 @@ TEST(PETScBoundary2D, post_integrate) {
   auto sycl_target = A->sycl_target;
 
   std::map<PetscInt, std::vector<PetscInt>> boundary_groups;
-  boundary_groups[1] = {1, 2}; // x=0, x=L
-  boundary_groups[2] = {3};    // y == 0
-  boundary_groups[3] = {4};    // y = L
+  boundary_groups[1] = {1, 2}; // x=L, y=0
+  boundary_groups[2] = {3};    // y=L
+  boundary_groups[3] = {4};    // x=0
 
   auto b2d = std::make_shared<TestBoundaryInteraction2D>(sycl_target, mesh,
                                                          boundary_groups);
@@ -698,33 +698,59 @@ TEST(PETScBoundary2D, reflection_truncated) {
 
     for (auto &gx : sub_groups) {
       particle_loop(
-        gx.second,
-        [=](auto V, auto U){
-          U.at(0) = V.at(0);
-          U.at(1) = V.at(1);
-          U.at(2) = V.at(2);
-        },
-        Access::read(Sym<REAL>("V")),
-        Access::write(Sym<REAL>("U"))
-      )->execute();
+          gx.second,
+          [=](auto V, auto U) {
+            U.at(0) = V.at(0);
+            U.at(1) = V.at(1);
+            U.at(2) = V.at(2);
+          },
+          Access::read(Sym<REAL>("V")), Access::write(Sym<REAL>("U")))
+          ->execute();
 
       reflection->execute(gx.second, Sym<REAL>("P"), Sym<REAL>("V"),
                           Sym<REAL>("TSP"));
 
       particle_loop(
-        gx.second,
-        [=](auto V, auto U){
-          const REAL V_mag = V.at(0) * V.at(0) + V.at(1) * V.at(1) + V.at(2) * V.at(2);
-          const REAL U_mag = U.at(0) * U.at(0) + U.at(1) * U.at(1) + U.at(2) * U.at(2);
-          NESO_KERNEL_ASSERT(Kernel::abs(V_mag - U_mag) < 1.0e-14, k_ep);
-        },
-        Access::read(Sym<REAL>("V")),
-        Access::write(Sym<REAL>("U"))
-      )->execute();
+          gx.second,
+          [=](auto V, auto U) {
+            const REAL V_mag =
+                V.at(0) * V.at(0) + V.at(1) * V.at(1) + V.at(2) * V.at(2);
+            const REAL U_mag =
+                U.at(0) * U.at(0) + U.at(1) * U.at(1) + U.at(2) * U.at(2);
 
+            NESO_KERNEL_ASSERT(Kernel::abs(V_mag - U_mag) < 1.0e-14, k_ep);
+
+            if ((Kernel::abs(V.at(0)) > 1.0e-14) &&
+                (Kernel::abs(V.at(1)) > 1.0e-14)) {
+              const bool x_flipped = Kernel::abs(V.at(0) + U.at(0)) < 1.0e-15;
+              const bool y_flipped = Kernel::abs(V.at(1) + U.at(1)) < 1.0e-15;
+              NESO_KERNEL_ASSERT(x_flipped != y_flipped, k_ep);
+              if (x_flipped) {
+                NESO_KERNEL_ASSERT(Kernel::abs(V.at(1) - U.at(1)) < 1.0e-15,
+                                   k_ep);
+              }
+              if (y_flipped) {
+                NESO_KERNEL_ASSERT(Kernel::abs(V.at(0) - U.at(0)) < 1.0e-15,
+                                   k_ep);
+              }
+            }
+          },
+          Access::read(Sym<REAL>("V")), Access::write(Sym<REAL>("U")))
+          ->execute();
+      ASSERT_EQ(ep->get_flag(), 0);
+
+      particle_loop(
+          gx.second,
+          [=](auto P) {
+            NESO_KERNEL_ASSERT((0.0 < P.at(0)) && (P.at(0) < mesh_size * h),
+                               k_ep);
+            NESO_KERNEL_ASSERT((0.0 < P.at(1)) && (P.at(1) < mesh_size * h),
+                               k_ep);
+          },
+          Access::read(Sym<REAL>("P")))
+          ->execute();
+      ASSERT_EQ(ep->get_flag(), 0);
     }
-
-
   };
 
   auto lambda_apply_timestep_reset = [&](auto aa) {
@@ -778,17 +804,11 @@ TEST(PETScBoundary2D, reflection_truncated) {
     }
   };
 
-  H5Part h5part("traj_reflection_truncated.h5part", A, Sym<REAL>("P"),
-                Sym<REAL>("V"));
-
   for (int stepx = 0; stepx < nsteps; stepx++) {
-    nprint("step:", stepx);
     lambda_apply_timestep(static_particle_sub_group(A));
     A->hybrid_move();
     A->cell_move();
-    h5part.write();
   }
-  h5part.close();
 
   b2d->free();
   sycl_target->free();
