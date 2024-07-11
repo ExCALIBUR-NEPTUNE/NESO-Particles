@@ -222,8 +222,8 @@ public:
 
   /**
    * Get a device callable mapper to map from global boundary indices to normal
-   * vectors. This method should be called after @ref post_integrate as the map
-   * is populated with potentially relvant normal data on the fly.
+   * vectors. This method should be called after @ref post_integration as the
+   * map is populated with potentially relvant normal data on the fly.
    *
    * @returns Device copyable and callable mapper.
    */
@@ -280,7 +280,7 @@ public:
       for (auto &group_labels : this->boundary_groups) {
         const PetscInt k_group = group_labels.first;
         m[k_group] = particle_sub_group(
-            iteration_set, [=](auto C) -> bool { return C.at(0) == k_group; },
+            iteration_set, [=](auto C) -> bool { return C.at(1) == k_group; },
             Access::read(this->boundary_label_sym));
       }
     };

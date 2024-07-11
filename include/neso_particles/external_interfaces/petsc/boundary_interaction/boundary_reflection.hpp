@@ -56,7 +56,7 @@ protected:
             REAL o1 = oo1;
 
             const REAL o_norm2 = KERNEL_DOT_PRODUCT_2D(oo0, oo1, oo0, oo1);
-            const REAL o_norm = sqrt(o_norm2);
+            const REAL o_norm = Kernel::sqrt(o_norm2);
             const bool small_move = o_norm < (k_reset_distance * 0.1);
             const REAL o_inorm =
                 small_move ? k_reset_distance : k_reset_distance / o_norm;
@@ -92,7 +92,7 @@ protected:
                 tmp_prop_achieved > 1.0 ? 1.0 : tmp_prop_achieved;
 
             // proportion along the full step that we truncated at
-            const REAL proportion_achieved = sqrt(tmp_prop_achieved);
+            const REAL proportion_achieved = Kernel::sqrt(tmp_prop_achieved);
             const REAL last_dt = TSP.at(1);
             const REAL correct_last_dt = TSP.at(1) * proportion_achieved;
             TSP.at(0) = TSP.at(0) - last_dt + correct_last_dt;

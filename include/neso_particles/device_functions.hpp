@@ -96,6 +96,28 @@ inline bool line_segment_intersection_2d(const REAL &xa, const REAL &ya,
   }
 }
 
+namespace Kernel {
+
+template <typename T, typename U> inline auto min(const T &x, const U &y) {
+  return KERNEL_MIN(x, y);
+}
+inline auto min(const REAL &x, const REAL &y) { return sycl::fmin(x, y); }
+template <typename T, typename U> inline auto max(const T &x, const U &y) {
+  return KERNEL_MIN(x, y);
+}
+inline auto max(const REAL &x, const REAL &y) { return sycl::fmax(x, y); }
+template <typename T> inline auto abs(const T &x) { return KERNEL_ABS(x); }
+inline auto abs(const REAL &x) { return sycl::fabs(x); }
+inline auto sqrt(const REAL &x) { return sycl::sqrt(x); }
+inline auto rsqrt(const REAL &x) { return sycl::rsqrt(x); }
+inline auto exp(const REAL &x) { return sycl::exp(x); }
+inline auto fmod(const REAL &x, const REAL &y) { return sycl::fmod(x, y); }
+inline auto fma(const REAL &x, const REAL &y, const REAL &z) {
+  return sycl::fma(x, y, z);
+}
+
+} // namespace Kernel
+
 } // namespace NESO::Particles
 
 #endif

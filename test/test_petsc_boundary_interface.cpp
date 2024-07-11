@@ -399,6 +399,7 @@ TEST(PETScBoundary2D, post_integrate) {
 
   const int ndim = 2;
   const int mesh_size = 8;
+  const int npart_per_cell = 3;
   const REAL h = 1.0;
   PetscInt faces[3] = {mesh_size, mesh_size, mesh_size};
   PetscReal lower[3] = {0.0, 0.0, 0.0};
@@ -408,13 +409,15 @@ TEST(PETScBoundary2D, post_integrate) {
                                lower, upper,
                                /* periodicity */ NULL, PETSC_TRUE, &dm));
   PetscInterface::generic_distribute(&dm);
-  auto A = particle_loop_common(dm, 128);
+  auto A = particle_loop_common(dm, mesh_size * mesh_size * npart_per_cell);
   auto mesh = std::dynamic_pointer_cast<PetscInterface::DMPlexInterface>(
       A->domain->mesh);
   auto sycl_target = A->sycl_target;
 
   std::map<PetscInt, std::vector<PetscInt>> boundary_groups;
-  boundary_groups[1] = {1, 2, 3, 4};
+  boundary_groups[1] = {1, 2}; // x=0, x=L
+  boundary_groups[2] = {3};    // y == 0
+  boundary_groups[3] = {4};    // y = L
 
   auto b2d = std::make_shared<TestBoundaryInteraction2D>(sycl_target, mesh,
                                                          boundary_groups);
@@ -446,13 +449,14 @@ TEST(PETScBoundary2D, post_integrate) {
       Access::write(A->position_dat), Access::read(Sym<REAL>("P2")));
 
   // Offsets to move particles in +x, -x, +y, -y
-  std::vector<std::tuple<std::array<REAL, 2>, int, REAL, std::array<REAL, 2>>>
+  std::vector<
+      std::tuple<std::array<REAL, 2>, int, REAL, std::array<REAL, 2>, int>>
       offsets;
 
-  offsets.push_back({{h, 0}, 0, mesh_size * h, {1.0, 0.0}});
-  offsets.push_back({{-h, 0}, 0, 0.0, {-1.0, 0.0}});
-  offsets.push_back({{0, h}, 1, mesh_size * h, {0.0, 1.0}});
-  offsets.push_back({{0, -h}, 1, 0.0, {0.0, 1.0}});
+  offsets.push_back({{h, 0}, 0, mesh_size * h, {1.0, 0.0}, 1});
+  offsets.push_back({{-h, 0}, 0, 0.0, {-1.0, 0.0}, 3});
+  offsets.push_back({{0, h}, 1, mesh_size * h, {0.0, 1.0}, 2});
+  offsets.push_back({{0, -h}, 1, 0.0, {0.0, 1.0}, 1});
 
   for (auto &ox : offsets) {
     reset_positions->execute();
@@ -462,6 +466,7 @@ TEST(PETScBoundary2D, post_integrate) {
     const REAL value = std::get<2>(ox);
     const REAL normalx = std::get<3>(ox).at(0);
     const REAL normaly = std::get<3>(ox).at(1);
+    const int correct_group = std::get<4>(ox);
 
     b2d->pre_integration(A);
     // move the particles in a direction
@@ -474,9 +479,18 @@ TEST(PETScBoundary2D, post_integrate) {
         Access::write(A->position_dat))
         ->execute();
     auto sub_groups = b2d->post_integration(A);
+
+    for (auto &sx : sub_groups) {
+      if (sx.first != correct_group) {
+        ASSERT_EQ(sx.second->get_npart_local(), 0);
+      } else {
+        ASSERT_EQ(sx.second->get_npart_local(), mesh_size * npart_per_cell);
+      }
+    }
+
     // Check the boundary intersection is at the expected place
     particle_loop(
-        sub_groups.at(1),
+        sub_groups.at(correct_group),
         [=](auto INDEX, auto CURR_POSITION, auto PREV_POSITION,
             auto BOUNDARY_POSITION) {
           NESO_KERNEL_ASSERT(
@@ -490,10 +504,10 @@ TEST(PETScBoundary2D, post_integrate) {
     ASSERT_EQ(ep->get_flag(), 0);
     // Check the boundary metadata is as expected
     particle_loop(
-        sub_groups.at(1),
+        sub_groups.at(correct_group),
         [=](auto BOUNDARY_INFO) {
           NESO_KERNEL_ASSERT(BOUNDARY_INFO.at(0) > -1, k_ep);
-          NESO_KERNEL_ASSERT(BOUNDARY_INFO.at(1) == 1, k_ep);
+          NESO_KERNEL_ASSERT(BOUNDARY_INFO.at(1) == correct_group, k_ep);
           NESO_KERNEL_ASSERT(BOUNDARY_INFO.at(2) > -1, k_ep);
         },
         Access::read(b2d->boundary_label_sym))
@@ -502,7 +516,7 @@ TEST(PETScBoundary2D, post_integrate) {
     // Check that the normal for the intersection point is as expected
     auto normal_mapper = b2d->get_device_normal_mapper();
     particle_loop(
-        sub_groups.at(1),
+        sub_groups.at(correct_group),
         [=](auto B_C) {
           REAL *normal;
           NESO_KERNEL_ASSERT(normal_mapper.get(B_C.at(2), &normal), k_ep);
@@ -573,6 +587,7 @@ TEST(PETScBoundary2D, corners) {
 
   std::map<PetscInt, std::vector<PetscInt>> boundary_groups;
   boundary_groups[1] = {1, 2, 3, 4};
+
   auto b2d = std::make_shared<TestBoundaryInteraction2D>(sycl_target, mesh,
                                                          boundary_groups);
 
@@ -639,7 +654,120 @@ TEST(PETScBoundary2D, corners) {
   PETSCCHK(PetscFinalize());
 }
 
-TEST(PETScBoundary2D, reflection) {
+TEST(PETScBoundary2D, reflection_truncated) {
+
+  PETSCCHK(PetscInitializeNoArguments());
+  DM dm;
+
+  const int nsteps = 200;
+  const REAL dt = 0.1;
+
+  const int ndim = 2;
+  const int mesh_size = 8;
+  const REAL h = 1.0;
+  PetscInt faces[3] = {mesh_size, mesh_size, mesh_size};
+  PetscReal lower[3] = {0.0, 0.0, 0.0};
+  PetscReal upper[3] = {mesh_size * h, mesh_size * h, mesh_size * h};
+
+  PETSCCHK(DMPlexCreateBoxMesh(PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces,
+                               lower, upper,
+                               /* periodicity */ NULL, PETSC_TRUE, &dm));
+  PetscInterface::generic_distribute(&dm);
+  auto A = particle_loop_common(dm, 1024);
+  auto mesh = std::dynamic_pointer_cast<PetscInterface::DMPlexInterface>(
+      A->domain->mesh);
+  auto sycl_target = A->sycl_target;
+
+  std::map<PetscInt, std::vector<PetscInt>> boundary_groups;
+  boundary_groups[1] = {1, 2};
+  boundary_groups[2] = {3, 4};
+
+  auto b2d = std::make_shared<TestBoundaryInteraction2D>(sycl_target, mesh,
+                                                         boundary_groups);
+  auto reflection =
+      std::make_shared<PetscInterface::BoundaryReflection>(b2d, 1.0e-10);
+
+  auto lambda_apply_boundary_conditions = [&](auto aa) {
+    auto sub_groups = b2d->post_integration(aa);
+
+    nprint(1, sub_groups.at(1)->get_npart_local());
+    nprint(2, sub_groups.at(2)->get_npart_local());
+
+    reflection->execute(sub_groups.at(1), Sym<REAL>("P"), Sym<REAL>("V"),
+                        Sym<REAL>("TSP"));
+  };
+
+  auto lambda_apply_timestep_reset = [&](auto aa) {
+    particle_loop(
+        aa,
+        [=](auto TSP) {
+          TSP.at(0) = 0.0;
+          TSP.at(1) = 0.0;
+        },
+        Access::write(Sym<REAL>("TSP")))
+        ->execute();
+  };
+  auto lambda_apply_advection_step =
+      [=](ParticleSubGroupSharedPtr iteration_set) -> void {
+    particle_loop(
+        "euler_advection", iteration_set,
+        [=](auto V, auto P, auto TSP) {
+          const REAL dt_left = dt - TSP.at(0);
+          if (dt_left > 0.0) {
+            P.at(0) += dt_left * V.at(0);
+            P.at(1) += dt_left * V.at(1);
+            TSP.at(0) = dt;
+            TSP.at(1) = dt_left;
+          }
+        },
+        Access::read(Sym<REAL>("V")), Access::write(Sym<REAL>("P")),
+        Access::write(Sym<REAL>("TSP")))
+        ->execute();
+  };
+  auto lambda_pre_advection = [&](auto aa) { b2d->pre_integration(aa); };
+  auto lambda_find_partial_moves = [&](auto aa) {
+    return static_particle_sub_group(
+        A, [=](auto TSP) { return TSP.at(0) < dt; },
+        Access::read(Sym<REAL>("TSP")));
+  };
+  auto lambda_partial_moves_remaining = [&](auto aa) -> bool {
+    aa = lambda_find_partial_moves(aa);
+    const int size = aa->get_npart_local();
+    return size > 0;
+  };
+  auto lambda_apply_timestep = [&](auto aa) {
+    lambda_apply_timestep_reset(aa);
+    lambda_pre_advection(aa);
+    lambda_apply_advection_step(aa);
+    lambda_apply_boundary_conditions(aa);
+    aa = lambda_find_partial_moves(aa);
+    while (lambda_partial_moves_remaining(aa)) {
+      lambda_pre_advection(aa);
+      lambda_apply_advection_step(aa);
+      lambda_apply_boundary_conditions(aa);
+    }
+  };
+
+  H5Part h5part("traj_reflection_truncated.h5part", A, Sym<REAL>("P"),
+                Sym<REAL>("V"));
+
+  for (int stepx = 0; stepx < nsteps; stepx++) {
+    nprint("step:", stepx);
+    lambda_apply_timestep(static_particle_sub_group(A));
+    A->hybrid_move();
+    A->cell_move();
+    h5part.write();
+  }
+  h5part.close();
+
+  b2d->free();
+  sycl_target->free();
+  mesh->free();
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
+
+TEST(PETScBoundary2D, reflection_advection) {
 
   PETSCCHK(PetscInitializeNoArguments());
   DM dm;
