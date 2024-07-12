@@ -14,7 +14,10 @@
 namespace NESO::Particles::PetscInterface {
 
 /**
- * TODO
+ * Common implementation elements for identifying intersections between
+ * particle trajectories and the mesh boundary. Users probably want to create
+ * an instance of classes which inherit from this base, e.g. @ref
+ * BoundaryInteraction2D.
  */
 class BoundaryInteractionCommon {
 protected:
@@ -333,15 +336,6 @@ protected:
     }
   }
 
-public:
-  SYCLTargetSharedPtr sycl_target;
-  DMPlexInterfaceSharedPtr mesh;
-  std::map<PetscInt, std::vector<PetscInt>> boundary_groups;
-
-  Sym<REAL> previous_position_sym;
-  Sym<REAL> boundary_position_sym;
-  Sym<INT> boundary_label_sym;
-
   BoundaryInteractionCommon(
       SYCLTargetSharedPtr sycl_target, DMPlexInterfaceSharedPtr mesh,
       std::map<PetscInt, std::vector<PetscInt>> &boundary_groups,
@@ -399,8 +393,38 @@ public:
         std::make_unique<BufferDeviceHost<INT>>(this->sycl_target, 1024);
   }
 
+
+public:
+
+  /// The compute device used to find intersections.
+  SYCLTargetSharedPtr sycl_target;
+  /// The interface to a DMPlex mesh.
+  DMPlexInterfaceSharedPtr mesh;
+  /// The map from boundary groups to the labels which form the group.
+  std::map<PetscInt, std::vector<PetscInt>> boundary_groups;
+  
+  /// The Sym for the particle property which holds the position of each
+  /// particle before the positions were updated in a time stepping loop. These
+  /// positions are populated on call to @ref pre_integration.
+  Sym<REAL> previous_position_sym;
+  /// The Sym for the intersection point for the particle trajectory and the
+  /// boundary. This property is populated if an intersection is discovered in
+  /// a call to @ref post_integration.
+  Sym<REAL> boundary_position_sym;
+  /// The Sym which holds the metadata information for the intersection point
+  /// between the trajectory and the boundary. Component 0 holds a 1 if an
+  /// intersection is found. Component 1 holds the group ID identifed for the
+  /// intersection. Component 2 holds the global ID of the boundary element for
+  /// which the intersection was identified between trajectory and the
+  /// boundary.
+  Sym<INT> boundary_label_sym;
+
   /**
-   * TODO
+   * This method should be called with a collection of particles prior to
+   * updating the positions of these particles.
+   *
+   * @param particles ParticleGroup or ParticleSubGroup of particles whose
+   * positions are about to be updated, e.g. in a time stepping operation.
    */
   template <typename T>
   inline void pre_integration(std::shared_ptr<T> particles) {

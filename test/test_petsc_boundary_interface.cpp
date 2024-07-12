@@ -820,21 +820,26 @@ TEST(PETScBoundary2D, reflection_advection) {
   PETSCCHK(PetscInitializeNoArguments());
   DM dm;
 
-  const int nsteps = 200;
-  const REAL dt = 0.1;
+  const int nsteps = 500;
+  const REAL dt = 0.01;
 
   const int ndim = 2;
-  const int mesh_size = 8;
+  const int mesh_size = 32;
   const REAL h = 1.0;
   PetscInt faces[3] = {mesh_size, mesh_size, mesh_size};
   PetscReal lower[3] = {0.0, 0.0, 0.0};
   PetscReal upper[3] = {mesh_size * h, mesh_size * h, mesh_size * h};
 
-  PETSCCHK(DMPlexCreateBoxMesh(PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces,
-                               lower, upper,
-                               /* periodicity */ NULL, PETSC_TRUE, &dm));
+  //PETSCCHK(DMPlexCreateBoxMesh(PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces,
+  //                             lower, upper,
+  //                             /* periodicity */ NULL, PETSC_TRUE, &dm));
+
+  PETSCCHK(DMPlexCreateGmshFromFile(MPI_COMM_WORLD,
+                                    "/home/js0259/git-ukaea/NESO-Particles-paper/resources/mesh_ring/mesh_ring.msh",
+                                    (PetscBool)1, &dm));
+
   PetscInterface::generic_distribute(&dm);
-  auto A = particle_loop_common(dm, 1024);
+  auto A = particle_loop_common(dm, 2048);
   auto mesh = std::dynamic_pointer_cast<PetscInterface::DMPlexInterface>(
       A->domain->mesh);
   auto sycl_target = A->sycl_target;
@@ -908,7 +913,9 @@ TEST(PETScBoundary2D, reflection_advection) {
   H5Part h5part("traj_reflection.h5part", A, Sym<REAL>("P"), Sym<REAL>("V"));
 
   for (int stepx = 0; stepx < nsteps; stepx++) {
-    nprint("step:", stepx);
+    if ((stepx % 20 == 0) && (sycl_target->comm_pair.rank_parent == 0)){
+      nprint("step:", stepx);
+    }
     lambda_apply_timestep(static_particle_sub_group(A));
     A->hybrid_move();
     A->cell_move();

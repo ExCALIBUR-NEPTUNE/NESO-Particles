@@ -52,7 +52,15 @@ struct BoundaryNormalMapper {
 };
 
 /**
- * TODO
+ * Implementation of identifying the intersection of particle trajectories of
+ * 2D meshes (with 1D) boundaries. For an instance of this class named b2d
+ * users should call @ref pre_integration prior to modifying particle positions
+ * and @ref post_integration after modifying particles positions. The
+ * constructor and free calls must be collective on the communicator.
+ *
+ * For creating particle loops which interact with the boundary the normal
+ * vector for each boundary element can be identified via the helper struct
+ * returned from @ref get_device_normal_mapper.
  */
 class BoundaryInteraction2D : public BoundaryInteractionCommon {
 protected:
@@ -250,7 +258,14 @@ public:
   }
 
   /**
-   * TODO
+   * Called after updating to find particles whose trajectories intersect the
+   * DMPlex boundary.
+   *
+   * @param particles Collection of particles, either a ParticleGroup or
+   * ParticleSubGroup, to identify trajectory-boundary intersections of.
+   * @returns Map from boundary groups ids, which were passed in the
+   * constructor, to a ParticleSubGroup of particles which crossed the boundary
+   * elements which form the boundary group.
    */
   template <typename T>
   [[nodiscard]] inline std::map<PetscInt, ParticleSubGroupSharedPtr>
@@ -303,8 +318,14 @@ public:
   }
 
   /**
-   * TODO
-   * collective
+   * Create an instance of the class for a particular mesh. This constructor
+   * must be called collectively on the communicator of the mesh.
+   * 
+   * @param sycl_target Compute device to use to identify intersections of
+   * trajectories and the boundary.
+   * @param mesh 2D DMPlex mesh interface to use.
+   * @param boundary_groups Map from group IDs to the boundary labels (i.e.
+   * gmsh physical lines) that form the group.
    */
   BoundaryInteraction2D(
       SYCLTargetSharedPtr sycl_target, DMPlexInterfaceSharedPtr mesh,
