@@ -830,13 +830,15 @@ TEST(PETScBoundary2D, reflection_advection) {
   PetscReal lower[3] = {0.0, 0.0, 0.0};
   PetscReal upper[3] = {mesh_size * h, mesh_size * h, mesh_size * h};
 
-  //PETSCCHK(DMPlexCreateBoxMesh(PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces,
-  //                             lower, upper,
-  //                             /* periodicity */ NULL, PETSC_TRUE, &dm));
+  // PETSCCHK(DMPlexCreateBoxMesh(PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces,
+  //                              lower, upper,
+  //                              /* periodicity */ NULL, PETSC_TRUE, &dm));
 
-  PETSCCHK(DMPlexCreateGmshFromFile(MPI_COMM_WORLD,
-                                    "/home/js0259/git-ukaea/NESO-Particles-paper/resources/mesh_ring/mesh_ring.msh",
-                                    (PetscBool)1, &dm));
+  PETSCCHK(
+      DMPlexCreateGmshFromFile(MPI_COMM_WORLD,
+                               "/home/js0259/git-ukaea/NESO-Particles-paper/"
+                               "resources/mesh_ring/mesh_ring.msh",
+                               (PetscBool)1, &dm));
 
   PetscInterface::generic_distribute(&dm);
   auto A = particle_loop_common(dm, 2048);
@@ -913,7 +915,7 @@ TEST(PETScBoundary2D, reflection_advection) {
   H5Part h5part("traj_reflection.h5part", A, Sym<REAL>("P"), Sym<REAL>("V"));
 
   for (int stepx = 0; stepx < nsteps; stepx++) {
-    if ((stepx % 20 == 0) && (sycl_target->comm_pair.rank_parent == 0)){
+    if ((stepx % 20 == 0) && (sycl_target->comm_pair.rank_parent == 0)) {
       nprint("step:", stepx);
     }
     lambda_apply_timestep(static_particle_sub_group(A));

@@ -393,16 +393,14 @@ protected:
         std::make_unique<BufferDeviceHost<INT>>(this->sycl_target, 1024);
   }
 
-
 public:
-
   /// The compute device used to find intersections.
   SYCLTargetSharedPtr sycl_target;
   /// The interface to a DMPlex mesh.
   DMPlexInterfaceSharedPtr mesh;
   /// The map from boundary groups to the labels which form the group.
   std::map<PetscInt, std::vector<PetscInt>> boundary_groups;
-  
+
   /// The Sym for the particle property which holds the position of each
   /// particle before the positions were updated in a time stepping loop. These
   /// positions are populated on call to @ref pre_integration.

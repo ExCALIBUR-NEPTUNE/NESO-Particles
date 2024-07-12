@@ -320,12 +320,29 @@ public:
   /**
    * Create an instance of the class for a particular mesh. This constructor
    * must be called collectively on the communicator of the mesh.
-   * 
+   *
    * @param sycl_target Compute device to use to identify intersections of
    * trajectories and the boundary.
    * @param mesh 2D DMPlex mesh interface to use.
    * @param boundary_groups Map from group IDs to the boundary labels (i.e.
    * gmsh physical lines) that form the group.
+   * @param tol Tolerance for intersection of trajectories and the line
+   * segments that form the boundary. If particles are passing through corners
+   * try increasing this value (default 0.0).
+   * @param previous_position_sym The Sym for the particle property which holds
+   * the position of each particle before the positions were updated in a time
+   * stepping loop. These positions are populated on call to @ref
+   * pre_integration.
+   * @param boundary_position_sym The Sym for the intersection point for the
+   * particle trajectory and the boundary. This property is populated if an
+   * intersection is discovered in a call to @ref post_integration.
+   * @param boundary_label_sym The Sym which holds the metadata information for
+   * the intersection point between the trajectory and the boundary. Component 0
+   * holds a 1 if an intersection is found. Component 1 holds the group ID
+   * identifed for the intersection. Component 2 holds the global ID of the
+   * boundary element for which the intersection was identified between
+   * trajectory and the boundary.
+   *
    */
   BoundaryInteraction2D(
       SYCLTargetSharedPtr sycl_target, DMPlexInterfaceSharedPtr mesh,
