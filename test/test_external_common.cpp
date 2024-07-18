@@ -382,3 +382,172 @@ TEST(ExternalCommon, quadrature_point_mapper) {
   mesh->free();
   sycl_target->free();
 }
+
+TEST(PETSC, cartesian_to_barycentric_triangle) {
+  {
+    const REAL x1 = 0.0;
+    const REAL y1 = 0.0;
+    const REAL x2 = 2.0;
+    const REAL y2 = 0.0;
+    const REAL x3 = 0.0;
+    const REAL y3 = 3.0;
+    REAL l1, l2, l3, xx, yy;
+    {
+      const REAL x = 0.0;
+      const REAL y = 0.0;
+      ExternalCommon::triangle_cartesian_to_barycentric(x1, y1, x2, y2, x3, y3,
+                                                        x, y, &l1, &l2, &l3);
+      ASSERT_NEAR(l1, 1.0, 1.0e-10);
+      ASSERT_NEAR(l2, 0.0, 1.0e-10);
+      ASSERT_NEAR(l3, 0.0, 1.0e-10);
+      ExternalCommon::triangle_barycentric_to_cartesian(x1, y1, x2, y2, x3, y3,
+                                                        l1, l2, l3, &xx, &yy);
+      ASSERT_NEAR(x, xx, 1.0e-10);
+      ASSERT_NEAR(y, yy, 1.0e-10);
+    }
+    {
+      const REAL x = 2.0;
+      const REAL y = 0.0;
+      ExternalCommon::triangle_cartesian_to_barycentric(x1, y1, x2, y2, x3, y3,
+                                                        x, y, &l1, &l2, &l3);
+      ASSERT_NEAR(l1, 0.0, 1.0e-10);
+      ASSERT_NEAR(l2, 1.0, 1.0e-10);
+      ASSERT_NEAR(l3, 0.0, 1.0e-10);
+      ExternalCommon::triangle_barycentric_to_cartesian(x1, y1, x2, y2, x3, y3,
+                                                        l1, l2, l3, &xx, &yy);
+      ASSERT_NEAR(x, xx, 1.0e-10);
+      ASSERT_NEAR(y, yy, 1.0e-10);
+    }
+    {
+      const REAL x = 0.0;
+      const REAL y = 3.0;
+      ExternalCommon::triangle_cartesian_to_barycentric(x1, y1, x2, y2, x3, y3,
+                                                        x, y, &l1, &l2, &l3);
+      ASSERT_NEAR(l1, 0.0, 1.0e-10);
+      ASSERT_NEAR(l2, 0.0, 1.0e-10);
+      ASSERT_NEAR(l3, 1.0, 1.0e-10);
+      ExternalCommon::triangle_barycentric_to_cartesian(x1, y1, x2, y2, x3, y3,
+                                                        l1, l2, l3, &xx, &yy);
+      ASSERT_NEAR(x, xx, 1.0e-10);
+      ASSERT_NEAR(y, yy, 1.0e-10);
+    }
+    {
+      const REAL x = 0.2;
+      const REAL y = 0.3;
+      ExternalCommon::triangle_cartesian_to_barycentric(x1, y1, x2, y2, x3, y3,
+                                                        x, y, &l1, &l2, &l3);
+      ASSERT_NEAR(std::abs(l1) + std::abs(l2) + std::abs(l3), 1.0, 1.0e-10);
+      ExternalCommon::triangle_barycentric_to_cartesian(x1, y1, x2, y2, x3, y3,
+                                                        l1, l2, l3, &xx, &yy);
+      ASSERT_NEAR(x, xx, 1.0e-10);
+      ASSERT_NEAR(y, yy, 1.0e-10);
+    }
+  }
+}
+
+TEST(PETSC, cartesian_to_barycentric_quad) {
+
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+
+  auto lambda_wrap_call_inner = [&](const REAL x0, const REAL y0, const REAL x1,
+                                    const REAL y1, const REAL x2, const REAL y2,
+                                    const REAL x3, const REAL y3, const REAL x,
+                                    const REAL y, REAL *RESTRICT eta0,
+                                    REAL *RESTRICT eta1) {
+    BufferDeviceHost<REAL> dh_buffer(sycl_target, 2);
+
+    auto k_ptr = dh_buffer.d_buffer.ptr;
+    sycl_target->queue
+        .submit([&](sycl::handler &cgh) {
+          cgh.single_task<>([=]() {
+            ExternalCommon::quad_cartesian_to_collapsed(
+                x0, y0, x1, y1, x2, y2, x3, y3, x, y, &k_ptr[0], &k_ptr[1]);
+          });
+        })
+        .wait_and_throw();
+
+    dh_buffer.device_to_host();
+    auto h_buffer = dh_buffer.h_buffer.get();
+    *eta0 = h_buffer.at(0);
+    *eta1 = h_buffer.at(1);
+  };
+
+  std::array<REAL, 2> v0;
+  std::array<REAL, 2> v1;
+  std::array<REAL, 2> v2;
+  std::array<REAL, 2> v3;
+  auto lambda_wrap_call = [&](const REAL x, const REAL y, REAL *RESTRICT eta0,
+                              REAL *RESTRICT eta1) {
+    lambda_wrap_call_inner(v0[0], v0[1], v1[0], v1[1], v2[0], v2[1], v3[0],
+                           v3[1], x, y, eta0, eta1);
+  };
+
+  auto lambda_wrap_forward_call = [&](const REAL eta0, const REAL eta1, REAL *x,
+                                      REAL *y) {
+    ExternalCommon::quad_collapsed_to_cartesian(v0[0], v0[1], v1[0], v1[1],
+                                                v2[0], v2[1], v3[0], v3[1],
+                                                eta0, eta1, x, y);
+  };
+
+  REAL eta0 = -100.0;
+  REAL eta1 = -100.0;
+
+  v0 = {0.0, 0.0};
+  v1 = {1.0, 0.0};
+  v2 = {1.0, 1.0};
+  v3 = {0.0, 1.0};
+  lambda_wrap_call(0.0, 0.0, &eta0, &eta1);
+  ASSERT_NEAR(eta0, -1.0, 1.0e-15);
+  ASSERT_NEAR(eta1, -1.0, 1.0e-15);
+  lambda_wrap_call(1.0, 0.0, &eta0, &eta1);
+  ASSERT_NEAR(eta0, 1.0, 1.0e-15);
+  ASSERT_NEAR(eta1, -1.0, 1.0e-15);
+  lambda_wrap_call(1.0, 1.0, &eta0, &eta1);
+  ASSERT_NEAR(eta0, 1.0, 1.0e-15);
+  ASSERT_NEAR(eta1, 1.0, 1.0e-15);
+  lambda_wrap_call(0.0, 1.0, &eta0, &eta1);
+  ASSERT_NEAR(eta0, -1.0, 1.0e-15);
+  ASSERT_NEAR(eta1, 1.0, 1.0e-15);
+  lambda_wrap_call(0.5, 0.5, &eta0, &eta1);
+  ASSERT_NEAR(eta0, 0.0, 1.0e-15);
+  ASSERT_NEAR(eta1, 0.0, 1.0e-15);
+
+  // slightly out of the element
+  v0 = {-1.0, -1.0};
+  v1 = {1.0, -1.0};
+  v2 = {1.0, 1.0};
+  v3 = {-1.0, 1.0};
+  lambda_wrap_call(1.1, 1.1, &eta0, &eta1);
+  ASSERT_NEAR(eta0, 1.1, 1.0e-15);
+  ASSERT_NEAR(eta1, 1.1, 1.0e-15);
+  lambda_wrap_call(-1.1, -1.1, &eta0, &eta1);
+  ASSERT_NEAR(eta0, -1.1, 1.0e-15);
+  ASSERT_NEAR(eta1, -1.1, 1.0e-15);
+
+  // random tests
+  std::uniform_real_distribution<double> uniform_rng(0.0, 1.0);
+  std::mt19937 rng = std::mt19937(34235481);
+
+  auto lambda_test = [&]() {
+    for (int testx = 0; testx < 10; testx++) {
+      const REAL eta0 = uniform_rng(rng);
+      const REAL eta1 = uniform_rng(rng);
+      REAL eta0t, eta1t;
+      REAL x, y;
+      lambda_wrap_forward_call(eta0, eta1, &x, &y);
+      lambda_wrap_call(x, y, &eta0t, &eta1t);
+      ASSERT_NEAR(eta0, eta0t, 1.0e-15);
+      ASSERT_NEAR(eta1, eta1t, 1.0e-15);
+    }
+  };
+
+  // test on the reference element
+  lambda_test();
+
+  // test on a more complicated element
+  v0 = {-4.0, -3.0};
+  v1 = {2.3, -4.2};
+  v2 = {3.4, 1.3};
+  v3 = {-3.0, 2.3};
+  lambda_test();
+}

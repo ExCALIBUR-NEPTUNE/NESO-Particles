@@ -70,6 +70,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/error_propagate.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/common/bounding_box.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/common/common.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/common/coordinate_mapping.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/common/local_claim.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/common/overlay_cartesian_mesh.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/common/dof_mapper_dg.hpp

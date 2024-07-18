@@ -1,90 +1,10 @@
 #ifndef _NESO_PARTICLES_EXTERNAL_PETSC_DMPLEX_PROJECT_EVALUATE_BARYCENTRIC_H_
 #define _NESO_PARTICLES_EXTERNAL_PETSC_DMPLEX_PROJECT_EVALUATE_BARYCENTRIC_H_
 
+#include "../../common/coordinate_mapping.hpp"
 #include "dmplex_project_evaluate_base.hpp"
 
 namespace NESO::Particles::PetscInterface {
-
-/**
- * Convert 2D Cartesian coordinates to Barycentric coordinates.
- *
- *  @param[in] x1 Triangle vertex 1, x component.
- *  @param[in] y1 Triangle vertex 1, y component.
- *  @param[in] x2 Triangle vertex 2, x component.
- *  @param[in] y2 Triangle vertex 2, y component.
- *  @param[in] x3 Triangle vertex 3, x component.
- *  @param[in] y3 Triangle vertex 3, y component.
- *  @param[in] x Point Cartesian coordinate, x component.
- *  @param[in] y Point Cartesian coordinate, y component.
- *  @param[in, out] l1 Point Barycentric coordinate, lambda 1.
- *  @param[in, out] l2 Point Barycentric coordinate, lambda 2.
- *  @param[in, out] l3 Point Barycentric coordinate, lambda 3.
- */
-inline void
-triangle_cartesian_to_barycentric(const REAL x1, const REAL y1, const REAL x2,
-                                  const REAL y2, const REAL x3, const REAL y3,
-                                  const REAL x, const REAL y, REAL *RESTRICT l1,
-                                  REAL *RESTRICT l2, REAL *RESTRICT l3) {
-  const REAL scaling = 1.0 / (x1 * (y2 - y3) + x2 * (y3 - y1) + x3 * (y1 - y2));
-  *l1 = scaling * ((x2 * y3 - x3 * y2) + (y2 - y3) * x + (x3 - x2) * y);
-  *l2 = scaling * ((x3 * y1 - x1 * y3) + (y3 - y1) * x + (x1 - x3) * y);
-  *l3 = scaling * ((x1 * y2 - x2 * y1) + (y1 - y2) * x + (x2 - x1) * y);
-};
-
-/**
- * Convert 2D Barycentric coordinates to Cartesian coordinates.
- *
- *  @param[in] x1 Triangle vertex 1, x component.
- *  @param[in] y1 Triangle vertex 1, y component.
- *  @param[in] x2 Triangle vertex 2, x component.
- *  @param[in] y2 Triangle vertex 2, y component.
- *  @param[in] x3 Triangle vertex 3, x component.
- *  @param[in] y3 Triangle vertex 3, y component.
- *  @param[in] l1 Point Barycentric coordinate, lambda 1.
- *  @param[in] l2 Point Barycentric coordinate, lambda 2.
- *  @param[in] l3 Point Barycentric coordinate, lambda 3.
- *  @param[in, out] x Point Cartesian coordinate, x component.
- *  @param[in, out] y Point Cartesian coordinate, y component.
- */
-inline void triangle_barycentric_to_cartesian(const REAL x1, const REAL y1,
-                                              const REAL x2, const REAL y2,
-                                              const REAL x3, const REAL y3,
-                                              const REAL l1, const REAL l2,
-                                              const REAL l3, REAL *RESTRICT x,
-                                              REAL *RESTRICT y) {
-  *x = l1 * x1 + l2 * x2 + l3 * x3;
-  *y = l1 * y1 + l2 * y2 + l3 * y3;
-};
-
-/**
- * TODO
- */
-inline void triangle_barycentric_invert(const REAL *RESTRICT L,
-                                        REAL *RESTRICT M) {
-
-  const REAL inverse_denom =
-      1.0 / (L[0] * L[4] * L[8] - L[0] * L[5] * L[7] - L[1] * L[3] * L[8] +
-             L[1] * L[5] * L[6] + L[2] * L[3] * L[7] - L[2] * L[4] * L[6]);
-
-  // row: 0 col: 0
-  M[0] = (L[4] * L[8] - L[5] * L[7]) * inverse_denom;
-  // row: 0 col: 1
-  M[1] = (-L[1] * L[8] + L[2] * L[7]) * inverse_denom;
-  // row: 0 col: 2
-  M[2] = (L[1] * L[5] - L[2] * L[4]) * inverse_denom;
-  // row: 1 col: 0
-  M[3] = (-L[3] * L[8] + L[5] * L[6]) * inverse_denom;
-  // row: 1 col: 1
-  M[4] = (L[0] * L[8] - L[2] * L[6]) * inverse_denom;
-  // row: 1 col: 2
-  M[5] = (-L[0] * L[5] + L[2] * L[3]) * inverse_denom;
-  // row: 2 col: 0
-  M[6] = (L[3] * L[7] - L[4] * L[6]) * inverse_denom;
-  // row: 2 col: 1
-  M[7] = (-L[0] * L[7] + L[1] * L[6]) * inverse_denom;
-  // row: 2 col: 2
-  M[8] = (L[0] * L[4] - L[1] * L[3]) * inverse_denom;
-}
 
 /**
  * TODO
@@ -128,7 +48,7 @@ protected:
               REAL l1, l2, l3;
               const REAL x = POS.at(0);
               const REAL y = POS.at(1);
-              triangle_cartesian_to_barycentric(
+              ExternalCommon::triangle_cartesian_to_barycentric(
                   VERTICES.at(0, 0), VERTICES.at(0, 1), VERTICES.at(1, 0),
                   VERTICES.at(1, 1), VERTICES.at(2, 0), VERTICES.at(2, 1), x, y,
                   &l1, &l2, &l3);
@@ -159,7 +79,7 @@ protected:
             L[rx * 3 + cx] = v;
           }
         }
-        triangle_barycentric_invert(L, M);
+        ExternalCommon::triangle_barycentric_invert(L, M);
         for (int rx = 0; rx < 3; rx++) {
           for (int cx = 0; cx < 3; cx++) {
             this->cdc_matrices->set_value(cellx, rx, cx, M[rx * 3 + cx]);
@@ -264,7 +184,7 @@ public:
           REAL l1, l2, l3;
           const REAL x = POS.at(0);
           const REAL y = POS.at(1);
-          triangle_cartesian_to_barycentric(
+          ExternalCommon::triangle_cartesian_to_barycentric(
               VERTICES.at(0, 0), VERTICES.at(0, 1), VERTICES.at(1, 0),
               VERTICES.at(1, 1), VERTICES.at(2, 0), VERTICES.at(2, 1), x, y,
               &l1, &l2, &l3);
@@ -287,7 +207,7 @@ public:
           REAL l1, l2, l3;
           const REAL x = POS.at(0);
           const REAL y = POS.at(1);
-          triangle_cartesian_to_barycentric(
+          ExternalCommon::triangle_cartesian_to_barycentric(
               VERTICES.at(0, 0), VERTICES.at(0, 1), VERTICES.at(1, 0),
               VERTICES.at(1, 1), VERTICES.at(2, 0), VERTICES.at(2, 1), x, y,
               &l1, &l2, &l3);
@@ -390,7 +310,7 @@ public:
           REAL l1, l2, l3;
           const REAL x = POS.at(0);
           const REAL y = POS.at(1);
-          triangle_cartesian_to_barycentric(
+          ExternalCommon::triangle_cartesian_to_barycentric(
               VERTICES.at(0, 0), VERTICES.at(0, 1), VERTICES.at(1, 0),
               VERTICES.at(1, 1), VERTICES.at(2, 0), VERTICES.at(2, 1), x, y,
               &l1, &l2, &l3);

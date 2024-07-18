@@ -1,6 +1,7 @@
 #ifndef _NESO_PARTICLES_DMPLEX_HELPER_HPP_
 #define _NESO_PARTICLES_DMPLEX_HELPER_HPP_
 
+#include "../../containers/cell_dat_const.hpp"
 #include "../common/bounding_box.hpp"
 #include "dmplex_cell_serialise.hpp"
 #include "petsc_common.hpp"
@@ -895,6 +896,49 @@ public:
     return this->volume;
   }
 };
+
+/**
+ * Get the number of cell vertices and cell vertices in a CellDatConst.
+ *
+ * @returns CellDatConst for number of cell vertices and cell vertices.
+ */
+inline std::tuple<std::shared_ptr<CellDatConst<int>>,
+                  std::shared_ptr<CellDatConst<REAL>>>
+get_cell_vertices_cdc(SYCLTargetSharedPtr sycl_target,
+                      std::shared_ptr<DMPlexHelper> dmh) {
+  std::tuple<std::shared_ptr<CellDatConst<int>>,
+             std::shared_ptr<CellDatConst<REAL>>>
+      d;
+  const int cell_count = dmh->get_cell_count();
+
+  std::vector<std::vector<std::vector<REAL>>> vertices(cell_count);
+
+  std::size_t max_num_vertices = 0;
+  const auto ndim = dmh->ndim;
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    dmh->get_cell_vertices(cellx, vertices.at(cellx));
+    max_num_vertices = std::max(max_num_vertices, vertices.at(cellx).size());
+  }
+
+  std::get<0>(d) =
+      std::make_shared<CellDatConst<int>>(sycl_target, cell_count, 1, 1);
+  std::get<1>(d) = std::make_shared<CellDatConst<REAL>>(sycl_target, cell_count,
+                                                        max_num_vertices, ndim);
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    const int num_vertices = vertices.at(cellx).size();
+    std::get<0>(d)->set_value(cellx, 0, 0, num_vertices);
+    auto c = std::get<1>(d)->get_cell(cellx);
+    for (int rx = 0; rx < num_vertices; rx++) {
+      for (int cx = 0; cx < ndim; cx++) {
+        c->at(rx, cx) = vertices.at(cellx).at(rx).at(cx);
+      }
+    }
+    std::get<1>(d)->set_cell(cellx, c);
+  }
+
+  return d;
+}
 
 } // namespace NESO::Particles::PetscInterface
 
