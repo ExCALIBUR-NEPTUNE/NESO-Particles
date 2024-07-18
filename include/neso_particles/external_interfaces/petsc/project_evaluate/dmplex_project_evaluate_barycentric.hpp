@@ -127,7 +127,7 @@ public:
 
     const int cell_count = this->qpm->domain->mesh->get_cell_count();
     this->cdc_project = std::make_shared<CellDatConst<REAL>>(
-        this->qpm->sycl_target, cell_count, 1, 3);
+        this->qpm->sycl_target, cell_count, 1, 4);
     this->cdc_num_vertices = std::make_shared<CellDatConst<int>>(
         this->qpm->sycl_target, cell_count, 1, 1);
     this->cdc_vertices = std::make_shared<CellDatConst<REAL>>(
@@ -140,10 +140,10 @@ public:
       this->mesh->dmh->get_cell_vertices(cx, vertices);
       const int num_verts = vertices.size();
       // TODO implement for quads
-      NESOASSERT(testing || (num_verts < 4),
-                 "Unexpected number of vertices (expected 3).");
+      NESOASSERT(testing || ((2 < num_verts) && (num_verts < 5)),
+                 "Unexpected number of vertices (expected 3 or 4).");
       this->cdc_num_vertices->set_value(cx, 0, 0, num_verts);
-      for (int vx = 0; vx < 3; vx++) {
+      for (int vx = 0; vx < num_verts; vx++) {
         for (int dx = 0; dx < 2; dx++) {
           this->cdc_vertices->set_value(cx, vx, dx, vertices.at(vx).at(dx));
         }

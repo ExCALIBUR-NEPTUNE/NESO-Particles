@@ -445,7 +445,7 @@ TEST(PETSC, cartesian_to_barycentric_triangle) {
   }
 }
 
-TEST(PETSC, cartesian_to_barycentric_quad) {
+TEST(PETSC, cartesian_to_collapsed_quad) {
 
   auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
 
@@ -525,7 +525,7 @@ TEST(PETSC, cartesian_to_barycentric_quad) {
   ASSERT_NEAR(eta1, -1.1, 1.0e-15);
 
   // random tests
-  std::uniform_real_distribution<double> uniform_rng(0.0, 1.0);
+  std::uniform_real_distribution<double> uniform_rng(-1.0, 1.0);
   std::mt19937 rng = std::mt19937(34235481);
 
   auto lambda_test = [&]() {
@@ -550,4 +550,102 @@ TEST(PETSC, cartesian_to_barycentric_quad) {
   v2 = {3.4, 1.3};
   v3 = {-3.0, 2.3};
   lambda_test();
+}
+
+TEST(PETSC, cartesian_to_barycentric_quad) {
+
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+
+  auto lambda_wrap_call_inner =
+      [&](const REAL x0, const REAL y0, const REAL x1, const REAL y1,
+          const REAL x2, const REAL y2, const REAL x3, const REAL y3,
+          const REAL x, const REAL y, REAL *RESTRICT l0, REAL *RESTRICT l1,
+          REAL *RESTRICT l2, REAL *RESTRICT l3) {
+        BufferDeviceHost<REAL> dh_buffer(sycl_target, 4);
+
+        auto k_ptr = dh_buffer.d_buffer.ptr;
+        sycl_target->queue
+            .submit([&](sycl::handler &cgh) {
+              cgh.single_task<>([=]() {
+                ExternalCommon::quad_cartesian_to_barycentric(
+                    x0, y0, x1, y1, x2, y2, x3, y3, x, y, &k_ptr[0], &k_ptr[1],
+                    &k_ptr[2], &k_ptr[3]);
+              });
+            })
+            .wait_and_throw();
+
+        dh_buffer.device_to_host();
+        auto h_buffer = dh_buffer.h_buffer.get();
+        *l0 = h_buffer.at(0);
+        *l1 = h_buffer.at(1);
+        *l2 = h_buffer.at(2);
+        *l3 = h_buffer.at(3);
+      };
+
+  std::array<REAL, 2> v0;
+  std::array<REAL, 2> v1;
+  std::array<REAL, 2> v2;
+  std::array<REAL, 2> v3;
+  auto lambda_wrap_call = [&](const REAL x, const REAL y, REAL *RESTRICT l0,
+                              REAL *RESTRICT l1, REAL *RESTRICT l2,
+                              REAL *RESTRICT l3) {
+    lambda_wrap_call_inner(v0[0], v0[1], v1[0], v1[1], v2[0], v2[1], v3[0],
+                           v3[1], x, y, l0, l1, l2, l3);
+  };
+
+  v0 = {0.0, 0.0};
+  v1 = {1.0, 0.0};
+  v2 = {1.0, 1.0};
+  v3 = {0.0, 1.0};
+  REAL l0, l1, l2, l3;
+  lambda_wrap_call(0.0, 0.0, &l0, &l1, &l2, &l3);
+  ASSERT_NEAR(l0, 1.0, 1.0e-15);
+  ASSERT_NEAR(l1, 0.0, 1.0e-15);
+  ASSERT_NEAR(l2, 0.0, 1.0e-15);
+  ASSERT_NEAR(l3, 0.0, 1.0e-15);
+  lambda_wrap_call(1.0, 0.0, &l0, &l1, &l2, &l3);
+  ASSERT_NEAR(l0, 0.0, 1.0e-15);
+  ASSERT_NEAR(l1, 1.0, 1.0e-15);
+  ASSERT_NEAR(l2, 0.0, 1.0e-15);
+  ASSERT_NEAR(l3, 0.0, 1.0e-15);
+  lambda_wrap_call(1.0, 1.0, &l0, &l1, &l2, &l3);
+  ASSERT_NEAR(l0, 0.0, 1.0e-15);
+  ASSERT_NEAR(l1, 0.0, 1.0e-15);
+  ASSERT_NEAR(l2, 1.0, 1.0e-15);
+  ASSERT_NEAR(l3, 0.0, 1.0e-15);
+  lambda_wrap_call(0.0, 1.0, &l0, &l1, &l2, &l3);
+  ASSERT_NEAR(l0, 0.0, 1.0e-15);
+  ASSERT_NEAR(l1, 0.0, 1.0e-15);
+  ASSERT_NEAR(l2, 0.0, 1.0e-15);
+  ASSERT_NEAR(l3, 1.0, 1.0e-15);
+  lambda_wrap_call(0.5, 0.5, &l0, &l1, &l2, &l3);
+  ASSERT_NEAR(l0, 0.25, 1.0e-15);
+  ASSERT_NEAR(l1, 0.25, 1.0e-15);
+  ASSERT_NEAR(l2, 0.25, 1.0e-15);
+  ASSERT_NEAR(l3, 0.25, 1.0e-15);
+  lambda_wrap_call(0.0, 0.5, &l0, &l1, &l2, &l3);
+  ASSERT_NEAR(l0, 0.5, 1.0e-15);
+  ASSERT_NEAR(l1, 0.0, 1.0e-15);
+  ASSERT_NEAR(l2, 0.0, 1.0e-15);
+  ASSERT_NEAR(l3, 0.5, 1.0e-15);
+  lambda_wrap_call(1.0, 0.5, &l0, &l1, &l2, &l3);
+  ASSERT_NEAR(l0, 0.0, 1.0e-15);
+  ASSERT_NEAR(l1, 0.5, 1.0e-15);
+  ASSERT_NEAR(l2, 0.5, 1.0e-15);
+  ASSERT_NEAR(l3, 0.0, 1.0e-15);
+  lambda_wrap_call(0.5, 0.0, &l0, &l1, &l2, &l3);
+  ASSERT_NEAR(l0, 0.5, 1.0e-15);
+  ASSERT_NEAR(l1, 0.5, 1.0e-15);
+  ASSERT_NEAR(l2, 0.0, 1.0e-15);
+  ASSERT_NEAR(l3, 0.0, 1.0e-15);
+  lambda_wrap_call(0.5, 1.0, &l0, &l1, &l2, &l3);
+  ASSERT_NEAR(l0, 0.0, 1.0e-15);
+  ASSERT_NEAR(l1, 0.0, 1.0e-15);
+  ASSERT_NEAR(l2, 0.5, 1.0e-15);
+  ASSERT_NEAR(l3, 0.5, 1.0e-15);
+  lambda_wrap_call(0.75, 0.80, &l0, &l1, &l2, &l3);
+  ASSERT_NEAR(l0, 0.25 * 0.2, 1.0e-15);
+  ASSERT_NEAR(l1, 0.75 * 0.2, 1.0e-15);
+  ASSERT_NEAR(l2, 0.75 * 0.8, 1.0e-15);
+  ASSERT_NEAR(l3, 0.25 * 0.8, 1.0e-15);
 }

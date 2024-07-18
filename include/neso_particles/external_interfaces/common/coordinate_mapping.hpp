@@ -34,9 +34,20 @@ triangle_cartesian_to_barycentric(const REAL x1, const REAL y1, const REAL x2,
 /**
  * TODO
  */
-inline void quad_reference_to_barycentric(
+inline void quad_collapsed_to_barycentric(const REAL eta0, const REAL eta1,
+                                          REAL *RESTRICT l0, REAL *RESTRICT l1,
+                                          REAL *RESTRICT l2,
+                                          REAL *RESTRICT l3) {
+  const REAL etat0 = KERNEL_MAX(-1.0, KERNEL_MIN(1.0, eta0));
+  const REAL etat1 = KERNEL_MAX(-1.0, KERNEL_MIN(1.0, eta1));
+  const REAL xi0 = (etat0 + 1.0) * 0.5;
+  const REAL xi1 = (etat1 + 1.0) * 0.5;
 
-) {}
+  *l0 = (1.0 - xi0) * (1.0 - xi1);
+  *l1 = xi0 * (1.0 - xi1);
+  *l2 = xi0 * xi1;
+  *l3 = (1.0 - xi0) * xi1;
+}
 
 /**
  * TODO
@@ -119,8 +130,15 @@ inline void quad_collapsed_to_cartesian(const REAL x0, const REAL y0,
  * TODO
  */
 inline void quad_cartesian_to_barycentric(
-
-) {}
+    const REAL x0, const REAL y0, const REAL x1, const REAL y1, const REAL x2,
+    const REAL y2, const REAL x3, const REAL y3, const REAL x, const REAL y,
+    REAL *RESTRICT l0, REAL *RESTRICT l1, REAL *RESTRICT l2,
+    REAL *RESTRICT l3) {
+  REAL eta0, eta1;
+  quad_cartesian_to_collapsed(x0, y0, x1, y1, x2, y2, x3, y3, x, y, &eta0,
+                              &eta1);
+  quad_collapsed_to_barycentric(eta0, eta1, l0, l1, l2, l3);
+}
 
 /**
  * Convert 2D Barycentric coordinates to Cartesian coordinates.
