@@ -26,9 +26,15 @@ triangle_cartesian_to_barycentric(const REAL x1, const REAL y1, const REAL x2,
                                   const REAL x, const REAL y, REAL *RESTRICT l1,
                                   REAL *RESTRICT l2, REAL *RESTRICT l3) {
   const REAL scaling = 1.0 / (x1 * (y2 - y3) + x2 * (y3 - y1) + x3 * (y1 - y2));
-  *l1 = scaling * ((x2 * y3 - x3 * y2) + (y2 - y3) * x + (x3 - x2) * y);
-  *l2 = scaling * ((x3 * y1 - x1 * y3) + (y3 - y1) * x + (x1 - x3) * y);
-  *l3 = scaling * ((x1 * y2 - x2 * y1) + (y1 - y2) * x + (x2 - x1) * y);
+  //*l1 = scaling * ((x2 * y3 - x3 * y2) + (y2 - y3) * x + (x3 - x2) * y);
+  //*l2 = scaling * ((x3 * y1 - x1 * y3) + (y3 - y1) * x + (x1 - x3) * y);
+  //*l3 = scaling * ((x1 * y2 - x2 * y1) + (y1 - y2) * x + (x2 - x1) * y);
+  *l1 = scaling * (Kernel::fma(x2, y3, -x3 * y2) +
+                   Kernel::fma((y2 - y3), x, (x3 - x2) * y));
+  *l2 = scaling * (Kernel::fma(x3, y1, -x1 * y3) +
+                   Kernel::fma((y3 - y1), x, (x1 - x3) * y));
+  *l3 = scaling * (Kernel::fma(x1, y2, -x2 * y1) +
+                   Kernel::fma((y1 - y2), x, (x2 - x1) * y));
 };
 
 /**
@@ -66,12 +72,17 @@ inline void quad_cartesian_to_collapsed(
   const REAL b3 = 0.25 * (y0 - y1 + y2 - y3);
 
   // 0 = A * eta0^2 + B * eta0 + C
-  const REAL A = a1 * b3 - a3 * b1;
-  const REAL B = -x * b3 + a0 * b3 + a1 * b2 - a2 * b1 + a3 * y - a3 * b0;
-  const REAL C = -x * b2 + a0 * b2 + a2 * y - a2 * b0;
+  // const REAL A = a1 * b3 - a3 * b1;
+  const REAL A = Kernel::fma(a1, b3, -a3 * b1);
+  // const REAL B = -x * b3 + a0 * b3 + a1 * b2 - a2 * b1 + a3 * y - a3 * b0;
+  const REAL B = Kernel::fma(-x, b3, a0 * b3) + Kernel::fma(a1, b2, -a2 * b1) +
+                 Kernel::fma(a3, y, -a3 * b0);
+  // const REAL C = -x * b2 + a0 * b2 + a2 * y - a2 * b0;
+  const REAL C = Kernel::fma(-x, b2, a0 * b2) + Kernel::fma(a2, y, -a2 * b0);
 
   // Solve the quadratic in a numerically stable way
-  const REAL determinate_inner = B * B - 4.0 * A * C;
+  // const REAL determinate_inner = B * B - 4.0 * A * C;
+  const REAL determinate_inner = Kernel::fma(-4.0 * A, C, B * B);
   const REAL determinate =
       determinate_inner > 0.0 ? Kernel::sqrt(determinate_inner) : 0.0;
   const REAL i2A = 1.0 / (2.0 * A);
@@ -82,8 +93,12 @@ inline void quad_cartesian_to_collapsed(
       Bpos ? ((2.0 * C) / (-B - determinate)) : (-B + determinate) * i2A;
 
   // pick correct eta0, eta1 pair
-  const REAL eta1p = (y - b0 - b1 * eta0p) / (b2 + b3 * eta0p);
-  const REAL eta1m = (y - b0 - b1 * eta0m) / (b2 + b3 * eta0m);
+  // const REAL eta1p = (y - b0 - b1 * eta0p) / (b2 + b3 * eta0p);
+  const REAL eta1p =
+      Kernel::fma(-b1, eta0p, y - b0) / Kernel::fma(b3, eta0p, b2);
+  // const REAL eta1m = (y - b0 - b1 * eta0m) / (b2 + b3 * eta0m);
+  const REAL eta1m =
+      Kernel::fma(-b1, eta0m, y - b0) / Kernel::fma(b3, eta0m, b2);
 
   const REAL abs_eta0p = Kernel::abs(eta0p);
   const REAL abs_eta0m = Kernel::abs(eta0m);
@@ -122,8 +137,10 @@ inline void quad_collapsed_to_cartesian(const REAL x0, const REAL y0,
   const REAL w1 = 0.25 * (1.0 + eta0) * (1.0 - eta1);
   const REAL w2 = 0.25 * (1.0 + eta0) * (1.0 + eta1);
   const REAL w3 = 0.25 * (1.0 - eta0) * (1.0 + eta1);
-  *x = x0 * w0 + x1 * w1 + x2 * w2 + x3 * w3;
-  *y = y0 * w0 + y1 * w1 + y2 * w2 + y3 * w3;
+  // *x = x0 * w0 + x1 * w1 + x2 * w2 + x3 * w3;
+  *x = Kernel::fma(x0, w0, x1 * w1) + Kernel::fma(x2, w2, x3 * w3);
+  //*y = y0 * w0 + y1 * w1 + y2 * w2 + y3 * w3;
+  *y = Kernel::fma(y0, w0, y1 * w1) + Kernel::fma(y2, w2, y3 * w3);
 }
 
 /**
@@ -161,8 +178,8 @@ inline void triangle_barycentric_to_cartesian(const REAL x1, const REAL y1,
                                               const REAL l1, const REAL l2,
                                               const REAL l3, REAL *RESTRICT x,
                                               REAL *RESTRICT y) {
-  *x = l1 * x1 + l2 * x2 + l3 * x3;
-  *y = l1 * y1 + l2 * y2 + l3 * y3;
+  *x = Kernel::fma(l1, x1, l2 * x2) + l3 * x3;
+  *y = Kernel::fma(l1, y1, l2 * y2) + l3 * y3;
 };
 
 /**

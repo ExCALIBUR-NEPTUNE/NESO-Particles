@@ -383,7 +383,7 @@ TEST(ExternalCommon, quadrature_point_mapper) {
   sycl_target->free();
 }
 
-TEST(PETSC, cartesian_to_barycentric_triangle) {
+TEST(ExternalCommon, cartesian_to_barycentric_triangle) {
   {
     const REAL x1 = 0.0;
     const REAL y1 = 0.0;
@@ -445,7 +445,7 @@ TEST(PETSC, cartesian_to_barycentric_triangle) {
   }
 }
 
-TEST(PETSC, cartesian_to_collapsed_quad) {
+TEST(ExternalCommon, cartesian_to_collapsed_quad) {
 
   auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
 
@@ -454,22 +454,8 @@ TEST(PETSC, cartesian_to_collapsed_quad) {
                                     const REAL x3, const REAL y3, const REAL x,
                                     const REAL y, REAL *RESTRICT eta0,
                                     REAL *RESTRICT eta1) {
-    BufferDeviceHost<REAL> dh_buffer(sycl_target, 2);
-
-    auto k_ptr = dh_buffer.d_buffer.ptr;
-    sycl_target->queue
-        .submit([&](sycl::handler &cgh) {
-          cgh.single_task<>([=]() {
-            ExternalCommon::quad_cartesian_to_collapsed(
-                x0, y0, x1, y1, x2, y2, x3, y3, x, y, &k_ptr[0], &k_ptr[1]);
-          });
-        })
-        .wait_and_throw();
-
-    dh_buffer.device_to_host();
-    auto h_buffer = dh_buffer.h_buffer.get();
-    *eta0 = h_buffer.at(0);
-    *eta1 = h_buffer.at(1);
+    ExternalCommon::quad_cartesian_to_collapsed(x0, y0, x1, y1, x2, y2, x3, y3,
+                                                x, y, eta0, eta1);
   };
 
   std::array<REAL, 2> v0;
@@ -552,35 +538,19 @@ TEST(PETSC, cartesian_to_collapsed_quad) {
   lambda_test();
 }
 
-TEST(PETSC, cartesian_to_barycentric_quad) {
+TEST(ExternalCommon, cartesian_to_barycentric_quad) {
 
   auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
 
-  auto lambda_wrap_call_inner =
-      [&](const REAL x0, const REAL y0, const REAL x1, const REAL y1,
-          const REAL x2, const REAL y2, const REAL x3, const REAL y3,
-          const REAL x, const REAL y, REAL *RESTRICT l0, REAL *RESTRICT l1,
-          REAL *RESTRICT l2, REAL *RESTRICT l3) {
-        BufferDeviceHost<REAL> dh_buffer(sycl_target, 4);
-
-        auto k_ptr = dh_buffer.d_buffer.ptr;
-        sycl_target->queue
-            .submit([&](sycl::handler &cgh) {
-              cgh.single_task<>([=]() {
-                ExternalCommon::quad_cartesian_to_barycentric(
-                    x0, y0, x1, y1, x2, y2, x3, y3, x, y, &k_ptr[0], &k_ptr[1],
-                    &k_ptr[2], &k_ptr[3]);
-              });
-            })
-            .wait_and_throw();
-
-        dh_buffer.device_to_host();
-        auto h_buffer = dh_buffer.h_buffer.get();
-        *l0 = h_buffer.at(0);
-        *l1 = h_buffer.at(1);
-        *l2 = h_buffer.at(2);
-        *l3 = h_buffer.at(3);
-      };
+  auto lambda_wrap_call_inner = [&](const REAL x0, const REAL y0, const REAL x1,
+                                    const REAL y1, const REAL x2, const REAL y2,
+                                    const REAL x3, const REAL y3, const REAL x,
+                                    const REAL y, REAL *RESTRICT l0,
+                                    REAL *RESTRICT l1, REAL *RESTRICT l2,
+                                    REAL *RESTRICT l3) {
+    ExternalCommon::quad_cartesian_to_barycentric(x0, y0, x1, y1, x2, y2, x3,
+                                                  y3, x, y, l0, l1, l2, l3);
+  };
 
   std::array<REAL, 2> v0;
   std::array<REAL, 2> v1;
