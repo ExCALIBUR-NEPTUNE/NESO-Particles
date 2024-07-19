@@ -619,3 +619,24 @@ TEST(ExternalCommon, cartesian_to_barycentric_quad) {
   ASSERT_NEAR(l2, 0.75 * 0.8, 1.0e-15);
   ASSERT_NEAR(l3, 0.25 * 0.8, 1.0e-15);
 }
+
+TEST(VTK, VTKHDF) {
+  VTK::VTKHDF vtkhdf("foo.vtkhdf", MPI_COMM_WORLD);
+  int rank;
+  MPICHK(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
+  std::vector<VTK::UnstructuredCell> data(1);
+  data.at(0).cell_type = 5;
+
+  std::vector<double> points = {0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0};
+
+  std::vector<double> point_data = {
+      1.0 + rank,
+      2.0 + rank,
+      3.0 + rank,
+  };
+
+  data.at(0).points = points;
+  data.at(0).point_data = point_data;
+  vtkhdf.write(data);
+  vtkhdf.close();
+}

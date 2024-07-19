@@ -260,4 +260,12 @@ inline void initialise_mpi(int *argc, char ***argv) {
 
 } // namespace NESO::Particles
 
+// HDF5 includes if it exists.
+#ifdef NESO_PARTICLES_HDF5
+#include <hdf5.h>
+#ifndef H5CHK
+#define H5CHK(cmd) NESOASSERT((cmd) >= 0, "HDF5 ERROR");
+#endif
+#endif
+
 #endif
