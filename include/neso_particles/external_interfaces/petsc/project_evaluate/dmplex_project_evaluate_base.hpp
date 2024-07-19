@@ -3,6 +3,7 @@
 
 #include "../../common/quadrature_point_mapper.hpp"
 #include "../../petsc/dmplex_interface.hpp"
+#include "../../vtk/vtk.hpp"
 
 namespace NESO::Particles::PetscInterface {
 
@@ -24,6 +25,11 @@ public:
    */
   virtual inline void evaluate(ParticleGroupSharedPtr particle_group,
                                Sym<REAL> sym) = 0;
+
+  /**
+   * TODO
+   */
+  virtual inline std::vector<VTK::UnstructuredCell> get_vtk_data() = 0;
 };
 
 } // namespace NESO::Particles::PetscInterface

@@ -70,6 +70,13 @@ public:
 
   /**
    * TODO
+   */
+  inline std::vector<VTK::UnstructuredCell> get_vtk_data() {
+    return this->implementation->get_vtk_data();
+  }
+
+  /**
+   * TODO
    * Projects values from particle data onto the values in the
    * QuadraturePointMapper.
    */

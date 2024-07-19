@@ -98,6 +98,16 @@ public:
   /**
    * TODO
    */
+  virtual inline std::vector<VTK::UnstructuredCell> get_vtk_data() override {
+    const int cell_count = this->mesh->get_cell_count();
+    std::vector<VTK::UnstructuredCell> data(cell_count);
+    NESOASSERT(false, "not implemented");
+    return data;
+  }
+
+  /**
+   * TODO
+   */
   DMPlexProjectEvaluateBarycentric(
       ExternalCommon::QuadraturePointMapperSharedPtr qpm,
       std::string function_space, int polynomial_order,

@@ -26,6 +26,7 @@
 #include "neso_particles/error_propagate.hpp"
 #include "neso_particles/external_interfaces/common/common.hpp"
 #include "neso_particles/external_interfaces/petsc/petsc_interface.hpp"
+#include "neso_particles/external_interfaces/vtk/vtk.hpp"
 #include "neso_particles/global_mapping.hpp"
 #include "neso_particles/local_mapping.hpp"
 #include "neso_particles/local_move.hpp"
