@@ -15,12 +15,18 @@
 
 namespace NESO::Particles::VTK {
 
+/**
+ * TODO
+ */
 struct UnstructuredCell {
   std::vector<double> points;
   int cell_type;
   std::vector<double> point_data;
 };
 
+/**
+ * TODO REMOVE?
+ */
 inline void write_legacy_vtk(std::string filename_base,
                              std::vector<UnstructuredCell> data,
                              const int rank = -1, const int timestep = -1) {
@@ -101,78 +107,17 @@ inline void write_legacy_vtk(std::string filename_base,
   vtk_file.close();
 }
 
-struct VTKHDF {
+/**
+ * TODO
+ *
+ * TODO CREATE MASKED OFF VERSION FOR NO HDF5
+ */
+class VTKHDF {
+protected:
   MPI_Comm comm;
   bool is_closed;
   int step, rank, size;
   hid_t plist_id, file_id, root;
-
-  ~VTKHDF() {
-    NESOASSERT(this->is_closed, "VTKHDF file was not closed correctly.");
-  };
-
-  inline void close() {
-    H5CHK(H5Gclose(this->root));
-    H5CHK(H5Fclose(this->file_id));
-    H5CHK(H5Pclose(this->plist_id));
-    this->is_closed = true;
-  };
-
-  VTKHDF(std::string filename, MPI_Comm comm,
-         std::string dataset_type = "UnstructuredGrid")
-      : comm(comm), is_closed(true), step(0) {
-
-    MPICHK(MPI_Comm_rank(this->comm, &this->rank));
-    MPICHK(MPI_Comm_size(this->comm, &this->size));
-
-    this->plist_id = H5Pcreate(H5P_FILE_ACCESS);
-    H5CHK(H5Pset_fapl_mpio(this->plist_id, this->comm, MPI_INFO_NULL));
-    H5CHK(this->file_id = H5Fcreate(filename.c_str(), H5F_ACC_TRUNC,
-                                    H5P_DEFAULT, this->plist_id));
-    this->is_closed = false;
-
-    // Create the root group
-    H5CHK(this->root = H5Gcreate(file_id, "VTKHDF", H5P_DEFAULT, H5P_DEFAULT,
-                                 H5P_DEFAULT));
-
-    // Create the global attributes
-    // Version
-    {
-      hid_t property;
-      H5CHK(property = H5Pcreate(H5P_ATTRIBUTE_CREATE));
-      hid_t dataspace;
-      hsize_t dims[1] = {2};
-      H5CHK(dataspace = H5Screate_simple(1, dims, dims));
-      hid_t version;
-      H5CHK(version = H5Acreate(this->root, "Version", H5T_STD_I64LE, dataspace,
-                                property, H5P_DEFAULT));
-      int value[2] = {2, 0};
-      H5CHK(H5Awrite(version, H5T_NATIVE_INT, &value));
-      H5CHK(H5Aclose(version));
-      H5CHK(H5Sclose(dataspace));
-      H5CHK(H5Pclose(property));
-    }
-    // Type
-    {
-      hid_t property;
-      H5CHK(property = H5Pcreate(H5P_ATTRIBUTE_CREATE));
-      hid_t dataspace;
-      H5CHK(dataspace = H5Screate(H5S_SCALAR));
-      hid_t version;
-
-      std::string value = dataset_type;
-      hid_t string_type;
-      H5CHK(string_type = H5Tcreate(H5T_STRING, value.size()));
-      H5CHK(version = H5Acreate(this->root, "Type", string_type, dataspace,
-                                property, H5P_DEFAULT));
-      H5CHK(H5Awrite(version, string_type, value.c_str()));
-
-      H5CHK(H5Tclose(string_type));
-      H5CHK(H5Aclose(version));
-      H5CHK(H5Sclose(dataspace));
-      H5CHK(H5Pclose(property));
-    }
-  }
 
   template <typename T>
   inline void
@@ -256,6 +201,83 @@ struct VTKHDF {
     H5CHK(H5Sclose(memspace));
   }
 
+public:
+  ~VTKHDF() {
+    NESOASSERT(this->is_closed, "VTKHDF file was not closed correctly.");
+  };
+  
+  /**
+   * TODO
+   */
+  inline void close() {
+    H5CHK(H5Gclose(this->root));
+    H5CHK(H5Fclose(this->file_id));
+    H5CHK(H5Pclose(this->plist_id));
+    this->is_closed = true;
+  };
+  
+  /**
+   * TODO
+   */
+  VTKHDF(std::string filename, MPI_Comm comm,
+         std::string dataset_type = "UnstructuredGrid")
+      : comm(comm), is_closed(true), step(0) {
+
+    MPICHK(MPI_Comm_rank(this->comm, &this->rank));
+    MPICHK(MPI_Comm_size(this->comm, &this->size));
+
+    this->plist_id = H5Pcreate(H5P_FILE_ACCESS);
+    H5CHK(H5Pset_fapl_mpio(this->plist_id, this->comm, MPI_INFO_NULL));
+    H5CHK(this->file_id = H5Fcreate(filename.c_str(), H5F_ACC_TRUNC,
+                                    H5P_DEFAULT, this->plist_id));
+    this->is_closed = false;
+
+    // Create the root group
+    H5CHK(this->root = H5Gcreate(file_id, "VTKHDF", H5P_DEFAULT, H5P_DEFAULT,
+                                 H5P_DEFAULT));
+
+    // Create the global attributes
+    // Version
+    {
+      hid_t property;
+      H5CHK(property = H5Pcreate(H5P_ATTRIBUTE_CREATE));
+      hid_t dataspace;
+      hsize_t dims[1] = {2};
+      H5CHK(dataspace = H5Screate_simple(1, dims, dims));
+      hid_t version;
+      H5CHK(version = H5Acreate(this->root, "Version", H5T_STD_I64LE, dataspace,
+                                property, H5P_DEFAULT));
+      int value[2] = {2, 0};
+      H5CHK(H5Awrite(version, H5T_NATIVE_INT, &value));
+      H5CHK(H5Aclose(version));
+      H5CHK(H5Sclose(dataspace));
+      H5CHK(H5Pclose(property));
+    }
+    // Type
+    {
+      hid_t property;
+      H5CHK(property = H5Pcreate(H5P_ATTRIBUTE_CREATE));
+      hid_t dataspace;
+      H5CHK(dataspace = H5Screate(H5S_SCALAR));
+      hid_t version;
+
+      std::string value = dataset_type;
+      hid_t string_type;
+      H5CHK(string_type = H5Tcreate(H5T_STRING, value.size()));
+      H5CHK(version = H5Acreate(this->root, "Type", string_type, dataspace,
+                                property, H5P_DEFAULT));
+      H5CHK(H5Awrite(version, string_type, value.c_str()));
+
+      H5CHK(H5Tclose(string_type));
+      H5CHK(H5Aclose(version));
+      H5CHK(H5Sclose(dataspace));
+      H5CHK(H5Pclose(property));
+    }
+  }
+
+  /**
+   * TODO
+   */
   inline void write(std::vector<UnstructuredCell> &data) {
 
     int npoint_local = 0;
@@ -269,7 +291,7 @@ struct VTKHDF {
     std::vector<double> cell_data;
 
     int point_index = 0;
-    offsets.push_back(point_index); // TODO RENUMBER FOR GLOBAL
+    offsets.push_back(point_index);
     for (const auto &ex : data) {
       npoint_local += ex.point_data.size();
       ncell_local++;
@@ -278,40 +300,39 @@ struct VTKHDF {
                         ex.point_data.end());
       const int num_vertices = ex.point_data.size();
       for (int vx = 0; vx < num_vertices; vx++) {
-        connectivity.push_back(point_index++); // TODO RENUMBER FOR GLOBAL IDS
+        connectivity.push_back(point_index++);
       }
       types.push_back(ex.cell_type);
-      offsets.push_back(point_index); // TODO RENUMBER FOR GLOBAL
+      offsets.push_back(point_index);
       cell_data.push_back(1.0);
     }
 
-    int point_offset = 0;
-    MPICHK(MPI_Exscan(&npoint_local, &point_offset, 1, MPI_INT, MPI_SUM,
+    int counts_local[4] = {npoint_local, ncell_local,
+                           static_cast<int>(connectivity.size()),
+                           ncell_local + 1};
+    int offsets_array[4] = {0, 0, 0, 0};
+    int counts_global[4];
+    MPICHK(MPI_Exscan(counts_local, offsets_array, 4, MPI_INT, MPI_SUM,
                       this->comm));
-    int npoint_global = point_offset + npoint_local;
-    MPICHK(MPI_Bcast(&npoint_global, 1, MPI_INT, this->size - 1, this->comm));
+    for (int ix = 0; ix < 4; ix++) {
+      counts_global[ix] = offsets_array[ix] + counts_local[ix];
+    }
+    MPICHK(MPI_Bcast(counts_global, 4, MPI_INT, this->size - 1, this->comm));
 
-    int cell_offset = 0;
-    MPICHK(MPI_Exscan(&ncell_local, &cell_offset, 1, MPI_INT, MPI_SUM,
-                      this->comm));
-    int ncell_global = cell_offset + ncell_local;
-    MPICHK(MPI_Bcast(&ncell_global, 1, MPI_INT, this->size - 1, this->comm));
+    const int nconnectivity_local = counts_local[2];
+    const int noffset_local = counts_local[3];
 
-    int connectivity_offset = 0;
-    int nconnectivity_local = connectivity.size();
-    MPICHK(MPI_Exscan(&nconnectivity_local, &connectivity_offset, 1, MPI_INT,
-                      MPI_SUM, this->comm));
-    int nconnectivity_global = nconnectivity_local + connectivity_offset;
-    MPICHK(MPI_Bcast(&nconnectivity_global, 1, MPI_INT, this->size - 1,
-                     this->comm));
+    const int point_offset = offsets_array[0];
+    const int cell_offset = offsets_array[1];
+    const int connectivity_offset = offsets_array[2];
+    const int offset_offset = offsets_array[3];
 
-    int noffset_local = ncell_local + 1;
+    const int npoint_global = counts_global[0];
+    const int ncell_global = counts_global[1];
+    const int nconnectivity_global = counts_global[2];
+    const int noffset_global = counts_global[3];
+
     NESOASSERT(offsets.size() == noffset_local, "offsets sizses missmatch");
-    int offset_offset = 0;
-    MPICHK(MPI_Exscan(&noffset_local, &offset_offset, 1, MPI_INT, MPI_SUM,
-                      this->comm));
-    int noffset_global = noffset_local + offset_offset;
-    MPICHK(MPI_Bcast(&noffset_global, 1, MPI_INT, this->size - 1, this->comm));
 
     this->write_dataset_2d(this->root, npoint_global, point_offset,
                            npoint_local, 3, H5T_IEEE_F64LE, H5T_NATIVE_DOUBLE,

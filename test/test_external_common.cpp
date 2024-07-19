@@ -621,22 +621,40 @@ TEST(ExternalCommon, cartesian_to_barycentric_quad) {
 }
 
 TEST(VTK, VTKHDF) {
-  VTK::VTKHDF vtkhdf("foo.vtkhdf", MPI_COMM_WORLD);
+  VTK::VTKHDF vtkhdf("test_external_common.vtkhdf", MPI_COMM_WORLD);
   int rank;
   MPICHK(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
-  std::vector<VTK::UnstructuredCell> data(1);
-  data.at(0).cell_type = 5;
+  std::vector<VTK::UnstructuredCell> data(2);
+  {
+    data.at(0).cell_type = 5;
+    std::vector<double> points = {0.0, 0.0, static_cast<double>(rank),
+                                  1.0, 0.0, static_cast<double>(rank),
+                                  0.0, 1.0, static_cast<double>(rank)};
+    std::vector<double> point_data = {
+        1.0 + rank,
+        2.0 + rank,
+        3.0 + rank,
+    };
+    data.at(0).points = points;
+    data.at(0).point_data = point_data;
+  }
 
-  std::vector<double> points = {0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0};
+  {
+    data.at(1).cell_type = 9;
+    std::vector<double> points = {1.0, 0.0, static_cast<double>(rank),
+                                  0.0, 1.0, static_cast<double>(rank),
+                                  1.0, 2.0, static_cast<double>(rank),
+                                  2.0, 1.0, static_cast<double>(rank)};
+    std::vector<double> point_data = {
+        1.0 + rank,
+        2.0 + rank,
+        3.0 + rank,
+        4.0 + rank,
+    };
+    data.at(1).points = points;
+    data.at(1).point_data = point_data;
+  }
 
-  std::vector<double> point_data = {
-      1.0 + rank,
-      2.0 + rank,
-      3.0 + rank,
-  };
-
-  data.at(0).points = points;
-  data.at(0).point_data = point_data;
   vtkhdf.write(data);
   vtkhdf.close();
 }
