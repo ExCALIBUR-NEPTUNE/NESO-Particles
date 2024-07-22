@@ -182,36 +182,6 @@ inline void triangle_barycentric_to_cartesian(const REAL x1, const REAL y1,
   *y = Kernel::fma(l1, y1, l2 * y2) + l3 * y3;
 };
 
-/**
- * TODO
- */
-inline void triangle_barycentric_invert(const REAL *RESTRICT L,
-                                        REAL *RESTRICT M) {
-
-  const REAL inverse_denom =
-      1.0 / (L[0] * L[4] * L[8] - L[0] * L[5] * L[7] - L[1] * L[3] * L[8] +
-             L[1] * L[5] * L[6] + L[2] * L[3] * L[7] - L[2] * L[4] * L[6]);
-
-  // row: 0 col: 0
-  M[0] = (L[4] * L[8] - L[5] * L[7]) * inverse_denom;
-  // row: 0 col: 1
-  M[1] = (-L[1] * L[8] + L[2] * L[7]) * inverse_denom;
-  // row: 0 col: 2
-  M[2] = (L[1] * L[5] - L[2] * L[4]) * inverse_denom;
-  // row: 1 col: 0
-  M[3] = (-L[3] * L[8] + L[5] * L[6]) * inverse_denom;
-  // row: 1 col: 1
-  M[4] = (L[0] * L[8] - L[2] * L[6]) * inverse_denom;
-  // row: 1 col: 2
-  M[5] = (-L[0] * L[5] + L[2] * L[3]) * inverse_denom;
-  // row: 2 col: 0
-  M[6] = (L[3] * L[7] - L[4] * L[6]) * inverse_denom;
-  // row: 2 col: 1
-  M[7] = (-L[0] * L[7] + L[1] * L[6]) * inverse_denom;
-  // row: 2 col: 2
-  M[8] = (L[0] * L[4] - L[1] * L[3]) * inverse_denom;
-}
-
 } // namespace NESO::Particles::ExternalCommon
 
 #endif
