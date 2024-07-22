@@ -1046,6 +1046,26 @@ particle_sub_group(std::shared_ptr<PARENT> parent, const INT cell,
   return particle_sub_group(parent, static_cast<int>(cell), make_static);
 }
 
+/**
+ * Helper function to return the underlying ParticleGroup for a type.
+ *
+ * @param particle_sub_group ParticleSubGroup.
+ * @returns Underlying ParticleGroup.
+ */
+inline auto get_particle_group(ParticleSubGroupSharedPtr particle_sub_group) {
+  return particle_sub_group->get_particle_group();
+}
+
+/**
+ * Helper function to return the underlying ParticleGroup for a type.
+ *
+ * @param particle_group ParticleGroup.
+ * @returns Underlying ParticleGroup.
+ */
+inline auto get_particle_group(ParticleGroupSharedPtr particle_group) {
+  return particle_group;
+}
+
 } // namespace NESO::Particles
 
 #endif

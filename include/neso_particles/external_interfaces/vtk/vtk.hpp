@@ -205,7 +205,7 @@ public:
   ~VTKHDF() {
     NESOASSERT(this->is_closed, "VTKHDF file was not closed correctly.");
   };
-  
+
   /**
    * TODO
    */
@@ -215,7 +215,7 @@ public:
     H5CHK(H5Pclose(this->plist_id));
     this->is_closed = true;
   };
-  
+
   /**
    * TODO
    */

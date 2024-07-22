@@ -38,6 +38,7 @@ set(TEST_SRCS
     ${TEST_DIR}/test_petsc_interface.cpp
     ${TEST_DIR}/test_petsc_boundary_interface.cpp
     ${TEST_DIR}/test_petsc_project_evaluate.cpp
+    ${TEST_DIR}/test_petsc_utility.cpp
     ${TEST_DIR}/test_particle_dat.cpp
     ${TEST_DIR}/test_particle_group_cell_move.cpp
     ${TEST_DIR}/test_particle_group.cpp

@@ -26,12 +26,15 @@ protected:
     if (this->cdc_project->nrow < ncomp) {
       const int cell_count = this->qpm->domain->mesh->get_cell_count();
       this->cdc_project = std::make_shared<CellDatConst<REAL>>(
-          this->qpm->sycl_target, cell_count, ncomp, 3);
+          this->qpm->sycl_target, cell_count, ncomp, 4);
     }
   }
 
   inline void setup_matrices() {
     if (this->cdc_matrices == nullptr) {
+      this->compute_barycentric_coordinates(this->qpm->particle_group);
+      // TODO redo below
+
       NESOASSERT(this->qpm->points_added(),
                  "Requires the QuadraturePointMapper to be fully setup.");
       const int cell_count = this->qpm->domain->mesh->get_cell_count();
@@ -86,7 +89,51 @@ protected:
           }
         }
       }
+
+      // TODO Rescale the quadrature point barycentric weights to avoid later
+      // division by volume?
     }
+  }
+
+  template <typename T>
+  inline void
+  compute_barycentric_coordinates(std::shared_ptr<T> particle_sub_group) {
+    auto particle_group = get_particle_group(particle_sub_group);
+
+    // Add the particle property for the Barycentric coordinates if it does not
+    // exist already.
+    if (!particle_group->contains_dat(sym_barycentric_coords)) {
+      particle_group->add_particle_dat(ParticleDat(
+          particle_group->sycl_target,
+          ParticleProp(sym_barycentric_coords, ncomp_barycentric_coords),
+          particle_group->domain->mesh->get_cell_count()));
+    }
+    // Compute the Barycentric coordinates for all the particles in the
+    // ParticleGroup.
+    particle_loop(
+        "DMPlexProjectEvaluateBarycentric::compute_barycentric_coordinates",
+        particle_sub_group,
+        [=](auto P, auto B, auto NUM_VERTICES, auto VERTICES) {
+          const int num_vertices = NUM_VERTICES.at(0, 0);
+          if (num_vertices == 3) {
+            // Is triangle
+            ExternalCommon::triangle_cartesian_to_barycentric(
+                VERTICES.at(0, 0), VERTICES.at(0, 1), VERTICES.at(1, 0),
+                VERTICES.at(1, 1), VERTICES.at(2, 0), VERTICES.at(2, 1),
+                P.at(0), P.at(1), &B.at(0), &B.at(1), &B.at(2));
+          } else {
+            // Is quad
+            ExternalCommon::quad_cartesian_to_barycentric(
+                VERTICES.at(0, 0), VERTICES.at(0, 1), VERTICES.at(1, 0),
+                VERTICES.at(1, 1), VERTICES.at(2, 0), VERTICES.at(2, 1),
+                VERTICES.at(3, 0), VERTICES.at(3, 1), P.at(0), P.at(1),
+                &B.at(0), &B.at(1), &B.at(2), &B.at(3));
+          }
+        },
+        Access::read(particle_group->position_dat),
+        Access::write(sym_barycentric_coords),
+        Access::read(this->cdc_num_vertices), Access::read(this->cdc_vertices))
+        ->execute();
   }
 
 public:
@@ -94,6 +141,9 @@ public:
   std::string function_space;
   int polynomial_order;
   DMPlexProjectEvaluateBarycentric() = default;
+  inline const static Sym<REAL> sym_barycentric_coords =
+      Sym<REAL>("NESO_PARTICLES_DMPLEX_PROJ_EVAL_BARY_COORDS");
+  inline constexpr static int ncomp_barycentric_coords = 4;
 
   /**
    * TODO
@@ -184,51 +234,45 @@ public:
     this->check_ncomp(ncomp);
 
     auto destination_dat = this->qpm->get_sym(ncomp);
-    auto destination_position_dat = this->qpm->particle_group->position_dat;
 
-    // DG0 projection onto the CellDatConst
+    this->compute_barycentric_coordinates(particle_group);
+
+    // Barycentric interpolation onto the CellDatConst
     this->cdc_project->fill(0.0);
     particle_loop(
         "DMPlexProjectEvaluateBarycentric::project_0", particle_group,
-        [=](auto POS, auto VERTICES, auto SRC, auto DST) {
-          REAL l1, l2, l3;
-          const REAL x = POS.at(0);
-          const REAL y = POS.at(1);
-          ExternalCommon::triangle_cartesian_to_barycentric(
-              VERTICES.at(0, 0), VERTICES.at(0, 1), VERTICES.at(1, 0),
-              VERTICES.at(1, 1), VERTICES.at(2, 0), VERTICES.at(2, 1), x, y,
-              &l1, &l2, &l3);
-          const REAL value = SRC.at(0);
-          for (int cx = 0; cx < ncomp; cx++) {
-            DST.fetch_add(cx, 0, l1 * SRC.at(cx));
-            DST.fetch_add(cx, 1, l2 * SRC.at(cx));
-            DST.fetch_add(cx, 2, l3 * SRC.at(cx));
+        [=](auto B, auto NUM_VERTICES, auto SRC, auto DST) {
+          const int num_vertices = NUM_VERTICES.at(0, 0);
+          for (int vx = 0; vx < num_vertices; vx++) {
+            for (int cx = 0; cx < ncomp; cx++) {
+              const REAL lx = B.at(vx);
+              DST.fetch_add(cx, vx, lx * SRC.at(cx));
+            }
           }
         },
-        Access::read(position_dat), Access::read(this->cdc_vertices),
-        Access::read(sym), Access::add(this->cdc_project))
+        Access::read(sym_barycentric_coords),
+        Access::read(this->cdc_num_vertices), Access::read(sym),
+        Access::add(this->cdc_project))
         ->execute();
 
     // Read the CellDatConst values onto the quadrature point values
     particle_loop(
         "DMPlexProjectEvaluateBarycentric::project_1",
         this->qpm->particle_group,
-        [=](auto POS, auto VERTICES, auto SRC, auto VOLUMES, auto DST) {
-          REAL l1, l2, l3;
-          const REAL x = POS.at(0);
-          const REAL y = POS.at(1);
-          ExternalCommon::triangle_cartesian_to_barycentric(
-              VERTICES.at(0, 0), VERTICES.at(0, 1), VERTICES.at(1, 0),
-              VERTICES.at(1, 1), VERTICES.at(2, 0), VERTICES.at(2, 1), x, y,
-              &l1, &l2, &l3);
+        [=](auto B, auto NUM_VERTICES, auto SRC, auto VOLUMES, auto DST) {
+          const int num_vertices = NUM_VERTICES.at(0, 0);
           const REAL iv = VOLUMES.at(0, 0);
           for (int cx = 0; cx < ncomp; cx++) {
-            DST.at(cx) = iv * (SRC.at(cx, 0) * l1 + SRC.at(cx, 1) * l2 +
-                               SRC.at(cx, 2) * l3);
+            REAL tmp_accumulation = 0.0;
+            for (int vx = 0; vx < num_vertices; vx++) {
+              const REAL lx = B.at(vx);
+              tmp_accumulation += B.at(vx) * SRC.at(cx, vx);
+            }
+            DST.at(cx) = iv * tmp_accumulation;
           }
         },
-        Access::read(destination_position_dat),
-        Access::read(this->cdc_vertices), Access::read(this->cdc_project),
+        Access::read(sym_barycentric_coords),
+        Access::read(this->cdc_num_vertices), Access::read(this->cdc_project),
         Access::read(this->cdc_volumes), Access::write(destination_dat))
         ->execute();
   }

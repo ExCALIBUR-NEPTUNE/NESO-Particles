@@ -88,6 +88,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/particle_cell_mapping/dmplex_2d_mapper.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/particle_cell_mapping/dmplex_host_mapper.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/petsc_common.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/petsc_utility.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/petsc_interface.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/project_evaluate/dmplex_project_evaluate_base.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/project_evaluate/dmplex_project_evaluate_barycentric.hpp

@@ -96,6 +96,100 @@ inline bool line_segment_intersection_2d(const REAL &xa, const REAL &ya,
   }
 }
 
+/**
+ * Naively invert a matrix. The error bars on this call may be quite large.
+ * This function uses row-major format.
+ *
+ * @param[in] M Matrix to invert.
+ * @param[in, out] L Output space for M^-1.
+ */
+template <std::size_t N>
+inline void naive_matrix_inverse([[maybe_unused]] const REAL *RESTRICT M,
+                                 [[maybe_unused]] REAL *RESTRICT L) {
+  static_assert(N == -1, "Not implemented, see specialisations.");
+}
+
+template <>
+inline void naive_matrix_inverse<3>(const REAL *RESTRICT M, REAL *RESTRICT L) {
+  const REAL inverse_factor =
+      1.0 / (M[0] * M[4] * M[8] - M[0] * M[5] * M[7] - M[1] * M[3] * M[8] +
+             M[1] * M[5] * M[6] + M[2] * M[3] * M[7] - M[2] * M[4] * M[6]);
+  L[0] = (M[4] * M[8] - M[5] * M[7]) * inverse_factor;
+  L[1] = (-M[1] * M[8] + M[2] * M[7]) * inverse_factor;
+  L[2] = (M[1] * M[5] - M[2] * M[4]) * inverse_factor;
+  L[3] = (-M[3] * M[8] + M[5] * M[6]) * inverse_factor;
+  L[4] = (M[0] * M[8] - M[2] * M[6]) * inverse_factor;
+  L[5] = (-M[0] * M[5] + M[2] * M[3]) * inverse_factor;
+  L[6] = (M[3] * M[7] - M[4] * M[6]) * inverse_factor;
+  L[7] = (-M[0] * M[7] + M[1] * M[6]) * inverse_factor;
+  L[8] = (M[0] * M[4] - M[1] * M[3]) * inverse_factor;
+}
+
+template <>
+inline void naive_matrix_inverse<4>(const REAL *RESTRICT M, REAL *RESTRICT L) {
+  const REAL inverse_factor =
+      1.0 / (-M[0] * M[10] * M[13] * M[7] + M[0] * M[10] * M[15] * M[5] +
+             M[0] * M[11] * M[13] * M[6] - M[0] * M[11] * M[14] * M[5] +
+             M[0] * M[14] * M[7] * M[9] - M[0] * M[15] * M[6] * M[9] +
+             M[10] * M[12] * M[1] * M[7] - M[10] * M[12] * M[3] * M[5] +
+             M[10] * M[13] * M[3] * M[4] - M[10] * M[15] * M[1] * M[4] -
+             M[11] * M[12] * M[1] * M[6] + M[11] * M[12] * M[2] * M[5] -
+             M[11] * M[13] * M[2] * M[4] + M[11] * M[14] * M[1] * M[4] -
+             M[12] * M[2] * M[7] * M[9] + M[12] * M[3] * M[6] * M[9] +
+             M[13] * M[2] * M[7] * M[8] - M[13] * M[3] * M[6] * M[8] -
+             M[14] * M[1] * M[7] * M[8] - M[14] * M[3] * M[4] * M[9] +
+             M[14] * M[3] * M[5] * M[8] + M[15] * M[1] * M[6] * M[8] +
+             M[15] * M[2] * M[4] * M[9] - M[15] * M[2] * M[5] * M[8]);
+  L[0] = (-M[10] * M[13] * M[7] + M[10] * M[15] * M[5] + M[11] * M[13] * M[6] -
+          M[11] * M[14] * M[5] + M[14] * M[7] * M[9] - M[15] * M[6] * M[9]) *
+         inverse_factor;
+  L[1] = (M[10] * M[13] * M[3] - M[10] * M[15] * M[1] - M[11] * M[13] * M[2] +
+          M[11] * M[14] * M[1] - M[14] * M[3] * M[9] + M[15] * M[2] * M[9]) *
+         inverse_factor;
+  L[2] = (M[13] * M[2] * M[7] - M[13] * M[3] * M[6] - M[14] * M[1] * M[7] +
+          M[14] * M[3] * M[5] + M[15] * M[1] * M[6] - M[15] * M[2] * M[5]) *
+         inverse_factor;
+  L[3] = (M[10] * M[1] * M[7] - M[10] * M[3] * M[5] - M[11] * M[1] * M[6] +
+          M[11] * M[2] * M[5] - M[2] * M[7] * M[9] + M[3] * M[6] * M[9]) *
+         inverse_factor;
+  L[4] = (M[10] * M[12] * M[7] - M[10] * M[15] * M[4] - M[11] * M[12] * M[6] +
+          M[11] * M[14] * M[4] - M[14] * M[7] * M[8] + M[15] * M[6] * M[8]) *
+         inverse_factor;
+  L[5] = (M[0] * M[10] * M[15] - M[0] * M[11] * M[14] - M[10] * M[12] * M[3] +
+          M[11] * M[12] * M[2] + M[14] * M[3] * M[8] - M[15] * M[2] * M[8]) *
+         inverse_factor;
+  L[6] = (M[0] * M[14] * M[7] - M[0] * M[15] * M[6] - M[12] * M[2] * M[7] +
+          M[12] * M[3] * M[6] - M[14] * M[3] * M[4] + M[15] * M[2] * M[4]) *
+         inverse_factor;
+  L[7] = (-M[0] * M[10] * M[7] + M[0] * M[11] * M[6] + M[10] * M[3] * M[4] -
+          M[11] * M[2] * M[4] + M[2] * M[7] * M[8] - M[3] * M[6] * M[8]) *
+         inverse_factor;
+  L[8] = (M[11] * M[12] * M[5] - M[11] * M[13] * M[4] - M[12] * M[7] * M[9] +
+          M[13] * M[7] * M[8] + M[15] * M[4] * M[9] - M[15] * M[5] * M[8]) *
+         inverse_factor;
+  L[9] = (M[0] * M[11] * M[13] - M[0] * M[15] * M[9] - M[11] * M[12] * M[1] +
+          M[12] * M[3] * M[9] - M[13] * M[3] * M[8] + M[15] * M[1] * M[8]) *
+         inverse_factor;
+  L[10] = (-M[0] * M[13] * M[7] + M[0] * M[15] * M[5] + M[12] * M[1] * M[7] -
+           M[12] * M[3] * M[5] + M[13] * M[3] * M[4] - M[15] * M[1] * M[4]) *
+          inverse_factor;
+  L[11] = (-M[0] * M[11] * M[5] + M[0] * M[7] * M[9] + M[11] * M[1] * M[4] -
+           M[1] * M[7] * M[8] - M[3] * M[4] * M[9] + M[3] * M[5] * M[8]) *
+          inverse_factor;
+  L[12] = (-M[10] * M[12] * M[5] + M[10] * M[13] * M[4] + M[12] * M[6] * M[9] -
+           M[13] * M[6] * M[8] - M[14] * M[4] * M[9] + M[14] * M[5] * M[8]) *
+          inverse_factor;
+  L[13] = (-M[0] * M[10] * M[13] + M[0] * M[14] * M[9] + M[10] * M[12] * M[1] -
+           M[12] * M[2] * M[9] + M[13] * M[2] * M[8] - M[14] * M[1] * M[8]) *
+          inverse_factor;
+  L[14] = (M[0] * M[13] * M[6] - M[0] * M[14] * M[5] - M[12] * M[1] * M[6] +
+           M[12] * M[2] * M[5] - M[13] * M[2] * M[4] + M[14] * M[1] * M[4]) *
+          inverse_factor;
+  L[15] = (M[0] * M[10] * M[5] - M[0] * M[6] * M[9] - M[10] * M[1] * M[4] +
+           M[1] * M[6] * M[8] + M[2] * M[4] * M[9] - M[2] * M[5] * M[8]) *
+          inverse_factor;
+}
+
 namespace Kernel {
 
 template <typename T, typename U> inline auto min(const T &x, const U &y) {
