@@ -110,7 +110,7 @@ inline REAL barycentric_test_function(const REAL x, const REAL y) {
 }
 
 TEST(PETSC, dmplex_project_evaluate_barycentric) {
-  
+
   nprint("TODO UNCOMMENT DG TEST");
 
   std::filesystem::path gmsh_filepath;
