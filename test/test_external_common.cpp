@@ -442,6 +442,35 @@ TEST(ExternalCommon, cartesian_to_barycentric_triangle) {
       ASSERT_NEAR(x, xx, 1.0e-10);
       ASSERT_NEAR(y, yy, 1.0e-10);
     }
+
+    // rotated vertices
+    {
+      const REAL x = x1;
+      const REAL y = y1;
+      ExternalCommon::triangle_cartesian_to_barycentric(x1, y1, x2, y2, x3, y3,
+                                                        x, y, &l1, &l2, &l3);
+      ASSERT_NEAR(l1, 1.0, 1.0e-10);
+      ASSERT_NEAR(l2, 0.0, 1.0e-10);
+      ASSERT_NEAR(l3, 0.0, 1.0e-10);
+    }
+    {
+      const REAL x = x1;
+      const REAL y = y1;
+      ExternalCommon::triangle_cartesian_to_barycentric(x3, y3, x1, y1, x2, y2,
+                                                        x, y, &l1, &l2, &l3);
+      ASSERT_NEAR(l1, 0.0, 1.0e-10);
+      ASSERT_NEAR(l2, 1.0, 1.0e-10);
+      ASSERT_NEAR(l3, 0.0, 1.0e-10);
+    }
+    {
+      const REAL x = x1;
+      const REAL y = y1;
+      ExternalCommon::triangle_cartesian_to_barycentric(x2, y2, x3, y3, x1, y1,
+                                                        x, y, &l1, &l2, &l3);
+      ASSERT_NEAR(l1, 0.0, 1.0e-10);
+      ASSERT_NEAR(l2, 0.0, 1.0e-10);
+      ASSERT_NEAR(l3, 1.0, 1.0e-10);
+    }
   }
 }
 
@@ -473,6 +502,40 @@ TEST(ExternalCommon, cartesian_to_collapsed_quad) {
     ExternalCommon::quad_collapsed_to_cartesian(v0[0], v0[1], v1[0], v1[1],
                                                 v2[0], v2[1], v3[0], v3[1],
                                                 eta0, eta1, x, y);
+  };
+
+  // rotate vertices
+  auto lambda_test_rotate = [&]() {
+    const REAL x0 = v0[0];
+    const REAL y0 = v0[1];
+    const REAL x1 = v1[0];
+    const REAL y1 = v1[1];
+    const REAL x2 = v2[0];
+    const REAL y2 = v2[1];
+    const REAL x3 = v3[0];
+    const REAL y3 = v3[1];
+    const REAL x = x0;
+    const REAL y = y0;
+    REAL eta0, eta1;
+    ExternalCommon::quad_cartesian_to_collapsed(x0, y0, x1, y1, x2, y2, x3, y3,
+                                                x, y, &eta0, &eta1);
+    ASSERT_NEAR(eta0, -1.0, 1.0e-15);
+    ASSERT_NEAR(eta1, -1.0, 1.0e-15);
+
+    ExternalCommon::quad_cartesian_to_collapsed(x3, y3, x0, y0, x1, y1, x2, y2,
+                                                x, y, &eta0, &eta1);
+    ASSERT_NEAR(eta0, 1.0, 1.0e-15);
+    ASSERT_NEAR(eta1, -1.0, 1.0e-15);
+
+    ExternalCommon::quad_cartesian_to_collapsed(x2, y2, x3, y3, x0, y0, x1, y1,
+                                                x, y, &eta0, &eta1);
+    ASSERT_NEAR(eta0, 1.0, 1.0e-15);
+    ASSERT_NEAR(eta1, 1.0, 1.0e-15);
+
+    ExternalCommon::quad_cartesian_to_collapsed(x1, y1, x2, y2, x3, y3, x0, y0,
+                                                x, y, &eta0, &eta1);
+    ASSERT_NEAR(eta0, -1.0, 1.0e-15);
+    ASSERT_NEAR(eta1, 1.0, 1.0e-15);
   };
 
   REAL eta0 = -100.0;
@@ -529,6 +592,7 @@ TEST(ExternalCommon, cartesian_to_collapsed_quad) {
 
   // test on the reference element
   lambda_test();
+  lambda_test_rotate();
 
   // test on a more complicated element
   v0 = {-4.0, -3.0};
@@ -536,11 +600,17 @@ TEST(ExternalCommon, cartesian_to_collapsed_quad) {
   v2 = {3.4, 1.3};
   v3 = {-3.0, 2.3};
   lambda_test();
+  lambda_test_rotate();
 }
 
 TEST(ExternalCommon, cartesian_to_barycentric_quad) {
 
   auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+
+  std::array<REAL, 2> v0;
+  std::array<REAL, 2> v1;
+  std::array<REAL, 2> v2;
+  std::array<REAL, 2> v3;
 
   auto lambda_wrap_call_inner = [&](const REAL x0, const REAL y0, const REAL x1,
                                     const REAL y1, const REAL x2, const REAL y2,
@@ -552,10 +622,14 @@ TEST(ExternalCommon, cartesian_to_barycentric_quad) {
                                                   y3, x, y, l0, l1, l2, l3);
   };
 
-  std::array<REAL, 2> v0;
-  std::array<REAL, 2> v1;
-  std::array<REAL, 2> v2;
-  std::array<REAL, 2> v3;
+  auto lambda_wrap_call_collapsed = [&](const REAL x, const REAL y,
+                                        REAL *RESTRICT eta0,
+                                        REAL *RESTRICT eta1) {
+    ExternalCommon::quad_cartesian_to_collapsed(v0[0], v0[1], v1[0], v1[1],
+                                                v2[0], v2[1], v3[0], v3[1], x,
+                                                y, eta0, eta1);
+  };
+
   auto lambda_wrap_call = [&](const REAL x, const REAL y, REAL *RESTRICT l0,
                               REAL *RESTRICT l1, REAL *RESTRICT l2,
                               REAL *RESTRICT l3) {
@@ -618,6 +692,21 @@ TEST(ExternalCommon, cartesian_to_barycentric_quad) {
   ASSERT_NEAR(l1, 0.75 * 0.2, 1.0e-15);
   ASSERT_NEAR(l2, 0.75 * 0.8, 1.0e-15);
   ASSERT_NEAR(l3, 0.25 * 0.8, 1.0e-15);
+
+  v0 = {1.0, -0.25};
+  v1 = {1.0, -0.125};
+  v2 = {0.8, -0.125};
+  v3 = {0.8, -0.25};
+
+  REAL eta0, eta1;
+  REAL x = 1.0;
+  REAL y = -0.25;
+
+  lambda_wrap_call(x, y, &l0, &l1, &l2, &l3);
+  ASSERT_NEAR(l0, 1.0, 1.0e-15);
+  ASSERT_NEAR(l1, 0.0, 1.0e-15);
+  ASSERT_NEAR(l2, 0.0, 1.0e-15);
+  ASSERT_NEAR(l3, 0.0, 1.0e-15);
 }
 
 TEST(VTK, VTKHDF) {

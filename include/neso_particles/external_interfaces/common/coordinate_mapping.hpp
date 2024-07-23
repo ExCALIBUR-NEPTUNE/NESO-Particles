@@ -60,16 +60,31 @@ inline void quad_collapsed_to_barycentric(const REAL eta0, const REAL eta1,
  */
 inline void quad_cartesian_to_collapsed(
     const REAL x0, const REAL y0, const REAL x1, const REAL y1, const REAL x2,
-    const REAL y2, const REAL x3, const REAL y3, const REAL x, const REAL y,
+    const REAL y2, const REAL x3, const REAL y3, const REAL xx, const REAL yy,
     REAL *RESTRICT eta0, REAL *RESTRICT eta1) {
-  const REAL a0 = 0.25 * (x0 + x1 + x2 + x3);
-  const REAL a1 = 0.25 * (-x0 + x1 + x2 - x3);
-  const REAL a2 = 0.25 * (-x0 - x1 + x2 + x3);
-  const REAL a3 = 0.25 * (x0 - x1 + x2 - x3);
-  const REAL b0 = 0.25 * (y0 + y1 + y2 + y3);
-  const REAL b1 = 0.25 * (-y0 + y1 + y2 - y3);
-  const REAL b2 = 0.25 * (-y0 - y1 + y2 + y3);
-  const REAL b3 = 0.25 * (y0 - y1 + y2 - y3);
+
+  const REAL aa0 = 0.25 * (x0 + x1 + x2 + x3);
+  const REAL aa1 = 0.25 * (-x0 + x1 + x2 - x3);
+  const REAL aa2 = 0.25 * (-x0 - x1 + x2 + x3);
+  const REAL aa3 = 0.25 * (x0 - x1 + x2 - x3);
+  const REAL bb0 = 0.25 * (y0 + y1 + y2 + y3);
+  const REAL bb1 = 0.25 * (-y0 + y1 + y2 - y3);
+  const REAL bb2 = 0.25 * (-y0 - y1 + y2 + y3);
+  const REAL bb3 = 0.25 * (y0 - y1 + y2 - y3);
+
+  // Do we need to swap the rows of the vector system to avoid a 0/0?
+  const bool swap_rows = (Kernel::abs(bb2) + Kernel::abs(bb3)) <
+                         (Kernel::abs(aa2) + Kernel::abs(aa3));
+  const REAL a0 = swap_rows ? bb0 : aa0;
+  const REAL a1 = swap_rows ? bb1 : aa1;
+  const REAL a2 = swap_rows ? bb2 : aa2;
+  const REAL a3 = swap_rows ? bb3 : aa3;
+  const REAL b0 = swap_rows ? aa0 : bb0;
+  const REAL b1 = swap_rows ? aa1 : bb1;
+  const REAL b2 = swap_rows ? aa2 : bb2;
+  const REAL b3 = swap_rows ? aa3 : bb3;
+  const REAL x = swap_rows ? yy : xx;
+  const REAL y = swap_rows ? xx : yy;
 
   // 0 = A * eta0^2 + B * eta0 + C
   // const REAL A = a1 * b3 - a3 * b1;
@@ -86,19 +101,31 @@ inline void quad_cartesian_to_collapsed(
   const REAL determinate =
       determinate_inner > 0.0 ? Kernel::sqrt(determinate_inner) : 0.0;
   const REAL i2A = 1.0 / (2.0 * A);
+  const bool bad2A = 2.0 * A == 0.0;
   const REAL Bpos = B >= 0.0;
-  const REAL eta0p =
-      Bpos ? ((-B - determinate) * i2A) : (2 * C) / (-B + determinate);
-  const REAL eta0m =
+  REAL eta0p = Bpos ? ((-B - determinate) * i2A) : (2 * C) / (-B + determinate);
+  REAL eta0m =
       Bpos ? ((2.0 * C) / (-B - determinate)) : (-B + determinate) * i2A;
+
+  // Determine if there are NaNs
+  const bool bad_eta0p = Bpos ? bad2A : ((-B + determinate) == 0.0);
+  const bool bad_eta0m = Bpos ? ((-B - determinate) == 0.0) : bad2A;
+
+  const REAL denom1p = Kernel::fma(b3, eta0p, b2);
+  const REAL denom1m = Kernel::fma(b3, eta0m, b2);
+  const bool bad_eta1p = (denom1p == 0.0) || (bad_eta0p);
+  const bool bad_eta1m = (denom1m == 0.0) || (bad_eta0m);
 
   // pick correct eta0, eta1 pair
   // const REAL eta1p = (y - b0 - b1 * eta0p) / (b2 + b3 * eta0p);
-  const REAL eta1p =
-      Kernel::fma(-b1, eta0p, y - b0) / Kernel::fma(b3, eta0p, b2);
+  REAL eta1p = Kernel::fma(-b1, eta0p, y - b0) / denom1p;
   // const REAL eta1m = (y - b0 - b1 * eta0m) / (b2 + b3 * eta0m);
-  const REAL eta1m =
-      Kernel::fma(-b1, eta0m, y - b0) / Kernel::fma(b3, eta0m, b2);
+  REAL eta1m = Kernel::fma(-b1, eta0m, y - b0) / denom1m;
+
+  eta0p = (bad_eta0p) ? 1000.0 : eta0p;
+  eta1p = (bad_eta1p) ? 1000.0 : eta1p;
+  eta0m = (bad_eta0m) ? 1000.0 : eta0m;
+  eta1m = (bad_eta1m) ? 1000.0 : eta1m;
 
   const REAL abs_eta0p = Kernel::abs(eta0p);
   const REAL abs_eta0m = Kernel::abs(eta0m);
@@ -115,6 +142,7 @@ inline void quad_cartesian_to_collapsed(
   // closest pair
   const REAL eta0d = distp < distm ? eta0p : eta0m;
   const REAL eta1d = distp < distm ? eta1p : eta1m;
+
   // contained pair
   const REAL eta0c = containedp ? eta0p : eta0m;
   const REAL eta1c = containedp ? eta1p : eta1m;

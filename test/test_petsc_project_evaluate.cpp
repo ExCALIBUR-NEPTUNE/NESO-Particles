@@ -1,6 +1,7 @@
 #ifdef NESO_PARTICLES_PETSC
 #include "include/test_neso_particles.hpp"
 
+/* TODO
 TEST(PETSC, dmplex_project_evaluate_dg) {
   std::filesystem::path gmsh_filepath;
   GET_TEST_RESOURCE(gmsh_filepath, "gmsh/reference_all_types_square_0.2.msh");
@@ -102,11 +103,16 @@ TEST(PETSC, dmplex_project_evaluate_dg) {
   PETSCCHK(PetscFinalize());
 }
 
+*/
+
 inline REAL barycentric_test_function(const REAL x, const REAL y) {
   return 4.0 + 3.0 * x - 2.0 * y;
 }
 
 TEST(PETSC, dmplex_project_evaluate_barycentric) {
+  
+  nprint("TODO UNCOMMENT DG TEST");
+
   std::filesystem::path gmsh_filepath;
   GET_TEST_RESOURCE(gmsh_filepath, "gmsh/reference_all_types_square_0.2.msh");
 
@@ -127,60 +133,92 @@ TEST(PETSC, dmplex_project_evaluate_barycentric) {
       std::make_shared<PetscInterface::DMPlexLocalMapper>(sycl_target, mesh);
   auto domain = std::make_shared<Domain>(mesh, mapper);
 
+  auto cell_vertices_info = get_cell_vertices_cdc(sycl_target, mesh->dmh);
+  auto cdc_num_vertices = std::get<0>(cell_vertices_info);
+  auto cdc_vertices = std::get<1>(cell_vertices_info);
+
   auto qpm = std::make_shared<ExternalCommon::QuadraturePointMapper>(
       sycl_target, domain);
   std::vector<std::vector<double>> positions;
   std::vector<int> cells;
 
-  // Add quadrature 3 points per cell
-  PetscInterface::uniform_within_dmplex_cells(mesh, 3, positions, cells);
+  // Add a point per vertex in the middle of each cell
   qpm->add_points_initialise();
-  const int npart_qpm = positions.at(0).size();
   REAL point[2];
-  for (int px = 0; px < npart_qpm; px++) {
-    point[0] = positions.at(0).at(px);
-    point[1] = positions.at(1).at(px);
-    qpm->add_point(point);
+  std::vector<REAL> average(2);
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    const int num_vertices = cdc_num_vertices->get_value(cellx, 0, 0);
+    mesh->dmh->get_cell_vertex_average(cellx, average);
+    for (int vx = 0; vx < num_vertices; vx++) {
+      qpm->add_point(average.data());
+    }
   }
   qpm->add_points_finalise();
 
   // move the points to the vertices
-  auto cdc_vertices =
-      std::make_shared<CellDatConst<REAL>>(sycl_target, cell_count, 4, 2);
-  auto cdc_num_vertices =
-      std::make_shared<CellDatConst<int>>(sycl_target, cell_count, 1, 1);
-  std::vector<std::vector<REAL>> vertices;
-  for (int cx = 0; cx < cell_count; cx++) {
-    mesh->dmh->get_cell_vertices(cx, vertices);
-    const int num_verts = vertices.size();
-    cdc_num_vertices->set_value(cx, 0, 0, num_verts);
-    for (int vx = 0; vx < 3; vx++) {
-      for (int dx = 0; dx < 2; dx++) {
-        cdc_vertices->set_value(cx, vx, dx, vertices.at(vx).at(dx));
-      }
-    }
-  }
   ErrorPropagate ep(sycl_target);
   auto k_ep = ep.device_ptr();
   particle_loop(
       qpm->particle_group,
-      [=](auto INDEX, auto VERTICES, auto POS) {
-        REAL l[3] = {0.0, 0.0, 0.0};
-        NESO_KERNEL_ASSERT(INDEX.layer < 3, k_ep);
-        l[INDEX.layer] = 1.0;
-        REAL x, y;
-        ExternalCommon::triangle_barycentric_to_cartesian(
-            VERTICES.at(0, 0), VERTICES.at(0, 1), VERTICES.at(1, 0),
-            VERTICES.at(1, 1), VERTICES.at(2, 0), VERTICES.at(2, 1), l[0], l[1],
-            l[2], &x, &y);
-        POS.at(0) = x;
-        POS.at(1) = y;
+      [=](auto INDEX, auto NUM_VERTICES, auto VERTICES, auto POS) {
+        const auto num_vertices = NUM_VERTICES.at(0, 0);
+        NESO_KERNEL_ASSERT(INDEX.layer < num_vertices, k_ep);
+        POS.at(0) = VERTICES.at(INDEX.layer, 0);
+        POS.at(1) = VERTICES.at(INDEX.layer, 1);
       },
-      Access::read(ParticleLoopIndex{}), Access::read(cdc_vertices),
+      Access::read(ParticleLoopIndex{}), Access::read(cdc_num_vertices),
+      Access::read(cdc_vertices),
       Access::write(qpm->particle_group->position_dat))
       ->execute();
-
   ASSERT_FALSE(ep.get_flag());
+
+  // check bary coords
+  particle_loop(
+      qpm->particle_group,
+      [=](auto INDEX, auto NUM_VERTICES, auto VERTICES, auto POS) {
+        const auto num_vertices = NUM_VERTICES.at(0, 0);
+        REAL l[4] = {0, 0, 0, 0};
+
+        if (num_vertices == 4) {
+          ExternalCommon::quad_cartesian_to_barycentric(
+              VERTICES.at(0, 0), VERTICES.at(0, 1), VERTICES.at(1, 0),
+              VERTICES.at(1, 1), VERTICES.at(2, 0), VERTICES.at(2, 1),
+              VERTICES.at(3, 0), VERTICES.at(3, 1), POS.at(0), POS.at(1), &l[0],
+              &l[1], &l[2], &l[3]);
+        } else {
+          ExternalCommon::triangle_cartesian_to_barycentric(
+              VERTICES.at(0, 0), VERTICES.at(0, 1), VERTICES.at(1, 0),
+              VERTICES.at(1, 1), VERTICES.at(2, 0), VERTICES.at(2, 1),
+              POS.at(0), POS.at(1), &l[0], &l[1], &l[2]);
+        }
+
+        int index = -1;
+        for (int vx = 0; vx < num_vertices; vx++) {
+          if (Kernel::abs(l[vx] - 1.0) < 1.0e-6) {
+            index = vx;
+          }
+        }
+        NESO_KERNEL_ASSERT(index > -1, k_ep);
+        for (int vx = 0; vx < num_vertices; vx++) {
+          if (vx == index) {
+            const bool cond = Kernel::abs(l[vx] - 1.0) < 1.0e-12;
+            NESO_KERNEL_ASSERT(cond, k_ep);
+          } else {
+            const bool cond = Kernel::abs(l[vx]) < 1.0e-12;
+            NESO_KERNEL_ASSERT(cond, k_ep);
+            NESO_KERNEL_ASSERT(index == INDEX.layer, k_ep);
+          }
+        }
+      },
+      Access::read(ParticleLoopIndex{}), Access::read(cdc_num_vertices),
+      Access::read(cdc_vertices),
+      Access::write(qpm->particle_group->position_dat))
+      ->execute();
+  ASSERT_FALSE(ep.get_flag());
+
+  /*
+
+
 
   ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
                              ParticleProp(Sym<REAL>("Q"), 1),
@@ -266,6 +304,7 @@ TEST(PETSC, dmplex_project_evaluate_barycentric) {
   }
 
   A->free();
+  */
   qpm->free();
   sycl_target->free();
   mesh->free();

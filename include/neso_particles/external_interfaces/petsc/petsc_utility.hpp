@@ -35,6 +35,8 @@ template <typename T> inline void invert_matrix(const int N, const T *A, T *X) {
   PETSCCHK(MatCreateSeqDense(PETSC_COMM_SELF, N, N, hB.data(), &pB));
   PETSCCHK(MatCreateSeqDense(PETSC_COMM_SELF, N, N, hX.data(), &pX));
 
+  MatView(pA, PETSC_VIEWER_STDOUT_SELF);
+
   // In-place LU factorise A.
   PETSCCHK(MatLUFactor(pA, NULL, NULL, NULL));
   // Solve for the columns of B into X.

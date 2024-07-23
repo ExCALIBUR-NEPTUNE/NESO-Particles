@@ -346,28 +346,28 @@ public:
           /*
             Using the identity
 
-            | m11 m12 m13 |   |u_1|   | m11 m12 m13 |   |u_1|
-            | m21 m22 m23 | x |u_2| = | m21 m22 m23 | x | 0 | +
-            | m31 m32 m33 |   |u_3|   | m31 m32 m33 |   | 0 |
+            | m11 m12 m13 |  |u_1|   | m11 m12 m13 |  |u_1|
+            | m21 m22 m23 |  |u_2| = | m21 m22 m23 |  | 0 | +
+            | m31 m32 m33 |  |u_3|   | m31 m32 m33 |  | 0 |
 
-                                      | m11 m12 m13 |   | 0 |
-                                      | m21 m22 m23 | x |u_2| +
-                                      | m31 m32 m33 |   | 0 |
+                                     | m11 m12 m13 |  | 0 |
+                                     | m21 m22 m23 |  |u_2| +
+                                     | m31 m32 m33 |  | 0 |
 
-                                      | m11 m12 m13 |   | 0 |
-                                      | m21 m22 m23 | x | 0 |
-                                      | m31 m32 m33 |   |u_3|
+                                     | m11 m12 m13 |  | 0 |
+                                     | m21 m22 m23 |  | 0 |
+                                     | m31 m32 m33 |  |u_3|
 
             quad_index is a row in the above matrix equation. Hence this kernel
             is performing
 
-            | m11 m12 m13 |   | 0 |   |v1|
-            | m21 m22 m23 | x |u_i| = |v2|
-            | m31 m32 m33 |   | 0 |   |v3|
+            | m11 m12 m13 |  | 0 |   |u_i m1i|
+            | m21 m22 m23 |  |u_i| = |u_i m2i|
+            | m31 m32 m33 |  | 0 |   |u_i m3i|
 
             where i is quad_index. Hence the kernel scales the i^th column by
-            the contribution. Then atomically adding the v1,v2,v3 values across
-            all the quad indices.
+            the contribution. Then atomically adding the values across all the
+            quad indices.
            */
           const auto num_vertices = NUM_VERTICES.at(0, 0);
           const auto quad_index = MASK.at(3);
