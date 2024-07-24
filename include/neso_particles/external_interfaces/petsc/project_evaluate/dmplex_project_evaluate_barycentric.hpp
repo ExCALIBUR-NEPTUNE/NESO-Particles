@@ -199,7 +199,8 @@ public:
         for (int dx = ndim; dx < 3; dx++) {
           data.at(cellx).points.push_back(0.0);
         }
-        data.at(cellx).point_data.push_back(values->at(0, vx) * inverse_volumes);
+        data.at(cellx).point_data.push_back(values->at(0, vx) *
+                                            inverse_volumes);
       }
     }
     return data;

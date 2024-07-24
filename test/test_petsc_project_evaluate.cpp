@@ -750,21 +750,20 @@ TEST(PETSC, foo) {
   ErrorPropagate ep(sycl_target);
   auto k_ep = ep.device_ptr();
 
-  ParticleSpec particle_spec{
-      ParticleProp(Sym<REAL>("P"), ndim, true), ParticleProp(Sym<REAL>("Q"), 1),
-      ParticleProp(Sym<REAL>("R"), 1),
-      ParticleProp(Sym<INT>("CELL_ID"), 1, true)};
+  ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
+                             ParticleProp(Sym<REAL>("Q"), 1),
+                             ParticleProp(Sym<REAL>("R"), 1),
+                             ParticleProp(Sym<INT>("CELL_ID"), 1, true)};
   auto A = std::make_shared<ParticleGroup>(domain, particle_spec, sycl_target);
 
   std::vector<std::vector<double>> positions;
   std::vector<int> cells;
-  const int npart_per_cell = 1000;
-  PetscInterface::uniform_within_dmplex_cells(mesh, npart_per_cell, positions,
-                                              cells);
+  const int number_density = 1000000 / mesh->dmh->get_volume();
+  PetscInterface::uniform_density_within_dmplex_cells(mesh, number_density,
+                                                      positions, cells);
   const int N = cells.size();
   int npart_global;
-  MPICHK(MPI_Allreduce(&N, &npart_global, 1,
-                  MPI_INT, MPI_SUM, MPI_COMM_WORLD));
+  MPICHK(MPI_Allreduce(&N, &npart_global, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD));
 
   ParticleSet initial_distribution(N, particle_spec);
 
@@ -779,7 +778,8 @@ TEST(PETSC, foo) {
 
     const REAL x = positions.at(0).at(px);
     const REAL y = positions.at(1).at(px);
-    initial_distribution[Sym<REAL>("Q")][px][0] = 4.0 * std::exp( -4.0 * (x*x + y*y)) / npart_global;
+    initial_distribution[Sym<REAL>("Q")][px][0] =
+        4.0 * std::exp(-4.0 * (x * x + y * y)) / npart_global;
   }
   A->add_particles_local(initial_distribution);
 
@@ -790,18 +790,19 @@ TEST(PETSC, foo) {
 
   dpe->project(A, Sym<REAL>("Q"));
   dpe_dg->project(A, Sym<REAL>("Q"));
-  
-  auto vtk_data_dg = dpe_dg->get_vtk_data();
-  auto vtk_data = dpe->get_vtk_data();
 
-  VTK::VTKHDF vtkhdf_dg("gaussian_dg.vtkhdf", MPI_COMM_WORLD);
-  vtkhdf_dg.write(vtk_data_dg);
-  vtkhdf_dg.close();
-
-  VTK::VTKHDF vtkhdf("gaussian.vtkhdf", MPI_COMM_WORLD);
-  vtkhdf.write(vtk_data);
-  vtkhdf.close();
-
+  {
+    auto vtk_data_dg = dpe_dg->get_vtk_data();
+    VTK::VTKHDF vtkhdf_dg("gaussian_dg.vtkhdf", MPI_COMM_WORLD);
+    vtkhdf_dg.write(vtk_data_dg);
+    vtkhdf_dg.close();
+  }
+  {
+    auto vtk_data = dpe->get_vtk_data();
+    VTK::VTKHDF vtkhdf("gaussian.vtkhdf", MPI_COMM_WORLD);
+    vtkhdf.write(vtk_data);
+    vtkhdf.close();
+  }
   H5Part h5part("gaussian.h5part", A, Sym<REAL>("Q"));
   h5part.write();
   h5part.close();
@@ -813,6 +814,5 @@ TEST(PETSC, foo) {
   PETSCCHK(DMDestroy(&dm));
   PETSCCHK(PetscFinalize());
 }
-
 
 #endif
