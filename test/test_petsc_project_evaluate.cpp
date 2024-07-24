@@ -717,4 +717,102 @@ TEST(PETSC, dmplex_project_barycentric_coeffs) {
   PETSCCHK(PetscFinalize());
 }
 
+TEST(PETSC, foo) {
+
+  std::filesystem::path gmsh_filepath;
+  GET_TEST_RESOURCE(gmsh_filepath, "gmsh/reference_all_types_square_0.2.msh");
+
+  PETSCCHK(PetscInitializeNoArguments());
+  DM dm;
+  PETSCCHK(DMPlexCreateGmshFromFile(MPI_COMM_WORLD,
+                                    gmsh_filepath.generic_string().c_str(),
+                                    (PetscBool)1, &dm));
+  PetscInterface::generic_distribute(&dm);
+
+  auto mesh =
+      std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
+  const int ndim = mesh->get_ndim();
+  const int cell_count = mesh->get_cell_count();
+  auto sycl_target =
+      std::make_shared<SYCLTarget>(GPU_SELECTOR, mesh->get_comm());
+  auto mapper =
+      std::make_shared<PetscInterface::DMPlexLocalMapper>(sycl_target, mesh);
+  auto domain = std::make_shared<Domain>(mesh, mapper);
+
+  auto cell_vertices_info = get_cell_vertices_cdc(sycl_target, mesh->dmh);
+  auto cdc_num_vertices = std::get<0>(cell_vertices_info);
+  auto cdc_vertices = std::get<1>(cell_vertices_info);
+
+  auto bool_qpm = make_qpm(sycl_target, domain, cdc_num_vertices, cdc_vertices);
+  auto qpm = std::get<1>(bool_qpm);
+  ASSERT_FALSE(std::get<0>(bool_qpm));
+
+  ErrorPropagate ep(sycl_target);
+  auto k_ep = ep.device_ptr();
+
+  ParticleSpec particle_spec{
+      ParticleProp(Sym<REAL>("P"), ndim, true), ParticleProp(Sym<REAL>("Q"), 1),
+      ParticleProp(Sym<REAL>("R"), 1),
+      ParticleProp(Sym<INT>("CELL_ID"), 1, true)};
+  auto A = std::make_shared<ParticleGroup>(domain, particle_spec, sycl_target);
+
+  std::vector<std::vector<double>> positions;
+  std::vector<int> cells;
+  const int npart_per_cell = 1000;
+  PetscInterface::uniform_within_dmplex_cells(mesh, npart_per_cell, positions,
+                                              cells);
+  const int N = cells.size();
+  int npart_global;
+  MPICHK(MPI_Allreduce(&N, &npart_global, 1,
+                  MPI_INT, MPI_SUM, MPI_COMM_WORLD));
+
+  ParticleSet initial_distribution(N, particle_spec);
+
+  std::mt19937 rng_state(52234234 + sycl_target->comm_pair.rank_parent);
+  std::normal_distribution<REAL> rng_dist(0, 1.0);
+  for (int px = 0; px < N; px++) {
+    for (int dimx = 0; dimx < ndim; dimx++) {
+      initial_distribution[Sym<REAL>("P")][px][dimx] =
+          positions.at(dimx).at(px);
+    }
+    initial_distribution[Sym<INT>("CELL_ID")][px][0] = cells.at(px);
+
+    const REAL x = positions.at(0).at(px);
+    const REAL y = positions.at(1).at(px);
+    initial_distribution[Sym<REAL>("Q")][px][0] = 4.0 * std::exp( -4.0 * (x*x + y*y)) / npart_global;
+  }
+  A->add_particles_local(initial_distribution);
+
+  auto dpe = std::make_shared<PetscInterface::DMPlexProjectEvaluateBarycentric>(
+      qpm, "Barycentric", 1, true);
+  auto dpe_dg =
+      std::make_shared<PetscInterface::DMPlexProjectEvaluate>(qpm, "DG", 0);
+
+  dpe->project(A, Sym<REAL>("Q"));
+  dpe_dg->project(A, Sym<REAL>("Q"));
+  
+  auto vtk_data_dg = dpe_dg->get_vtk_data();
+  auto vtk_data = dpe->get_vtk_data();
+
+  VTK::VTKHDF vtkhdf_dg("gaussian_dg.vtkhdf", MPI_COMM_WORLD);
+  vtkhdf_dg.write(vtk_data_dg);
+  vtkhdf_dg.close();
+
+  VTK::VTKHDF vtkhdf("gaussian.vtkhdf", MPI_COMM_WORLD);
+  vtkhdf.write(vtk_data);
+  vtkhdf.close();
+
+  H5Part h5part("gaussian.h5part", A, Sym<REAL>("Q"));
+  h5part.write();
+  h5part.close();
+
+  A->free();
+  qpm->free();
+  sycl_target->free();
+  mesh->free();
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
+
+
 #endif

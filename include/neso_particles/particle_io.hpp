@@ -34,6 +34,7 @@ private:
     for (auto &sym : this->sym_store.syms_int) {
       max_ncomp = MAX(max_ncomp, (*this->particle_group)[sym]->ncomp);
     }
+    max_ncomp = MAX(max_ncomp, this->particle_group->position_dat->ncomp);
     size_t size_el = MAX(sizeof(double), sizeof(long long));
     return static_cast<size_t>(max_ncomp) * size_el;
   };

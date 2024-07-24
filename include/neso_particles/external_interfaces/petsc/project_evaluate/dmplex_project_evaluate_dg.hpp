@@ -45,6 +45,7 @@ public:
       vertices.clear();
       mesh->dmh->get_cell_vertices(cellx, vertices);
       const int num_vertices = vertices.size();
+      auto inverse_volumes = this->cdc_volumes->get_value(cellx, 0, 0);
       const auto cell_value = this->cdc_project->get_value(cellx, 0, 0);
       data.at(cellx).cell_type = num_vertices == 3 ? 5 : 9;
       data.at(cellx).points.reserve(num_vertices * 3);
@@ -56,7 +57,7 @@ public:
         for (int dx = ndim; dx < 3; dx++) {
           data.at(cellx).points.push_back(0.0);
         }
-        data.at(cellx).point_data.push_back(cell_value);
+        data.at(cellx).point_data.push_back(cell_value * inverse_volumes);
       }
     }
     return data;
