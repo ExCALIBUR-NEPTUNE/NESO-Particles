@@ -117,55 +117,7 @@ inline REAL barycentric_test_function_bilinear1(const REAL x, const REAL y) {
   return 40.0 + 30.0 * x - 20.0 * y + 50.0 * x * y;
 }
 
-namespace {
-inline std::tuple<bool, std::shared_ptr<ExternalCommon::QuadraturePointMapper>>
-make_qpm(SYCLTargetSharedPtr sycl_target, DomainSharedPtr domain,
-         std::shared_ptr<CellDatConst<int>> cdc_num_vertices,
-         std::shared_ptr<CellDatConst<REAL>> cdc_vertices) {
-
-  auto mesh =
-      std::dynamic_pointer_cast<PetscInterface::DMPlexInterface>(domain->mesh);
-  const int cell_count = domain->mesh->get_cell_count();
-  auto qpm = std::make_shared<ExternalCommon::QuadraturePointMapper>(
-      sycl_target, domain);
-  std::vector<std::vector<double>> positions;
-  std::vector<int> cells;
-
-  // Add a point per vertex in the middle of each cell
-  qpm->add_points_initialise();
-  REAL point[2];
-  std::vector<REAL> average(2);
-  for (int cellx = 0; cellx < cell_count; cellx++) {
-    const int num_vertices = cdc_num_vertices->get_value(cellx, 0, 0);
-    mesh->dmh->get_cell_vertex_average(cellx, average);
-    for (int vx = 0; vx < num_vertices; vx++) {
-      qpm->add_point(average.data());
-    }
-  }
-  qpm->add_points_finalise();
-
-  // move the points to the vertices
-  ErrorPropagate ep(sycl_target);
-  auto k_ep = ep.device_ptr();
-  particle_loop(
-      qpm->particle_group,
-      [=](auto INDEX, auto NUM_VERTICES, auto VERTICES, auto POS) {
-        const auto num_vertices = NUM_VERTICES.at(0, 0);
-        NESO_KERNEL_ASSERT(INDEX.layer < num_vertices, k_ep);
-        POS.at(0) = VERTICES.at(INDEX.layer, 0);
-        POS.at(1) = VERTICES.at(INDEX.layer, 1);
-      },
-      Access::read(ParticleLoopIndex{}), Access::read(cdc_num_vertices),
-      Access::read(cdc_vertices),
-      Access::write(qpm->particle_group->position_dat))
-      ->execute();
-
-  return {ep.get_flag(), qpm};
-}
-
-} // namespace
-
-TEST(PETSC, dmplex_project_evaluate_qpm) {
+TEST(PETSC, dmplex_project_evaluate_qpm_vertex) {
 
   std::filesystem::path gmsh_filepath;
   GET_TEST_RESOURCE(gmsh_filepath, "gmsh/reference_all_types_square_0.2.msh");
@@ -191,9 +143,8 @@ TEST(PETSC, dmplex_project_evaluate_qpm) {
   auto cdc_num_vertices = std::get<0>(cell_vertices_info);
   auto cdc_vertices = std::get<1>(cell_vertices_info);
 
-  auto bool_qpm = make_qpm(sycl_target, domain, cdc_num_vertices, cdc_vertices);
-  auto qpm = std::get<1>(bool_qpm);
-  ASSERT_FALSE(std::get<0>(bool_qpm));
+  auto qpm =
+      PetscInterface::make_quadrature_point_mapper_vertex(sycl_target, domain);
 
   ErrorPropagate ep(sycl_target);
   auto k_ep = ep.device_ptr();
@@ -249,6 +200,53 @@ TEST(PETSC, dmplex_project_evaluate_qpm) {
   PETSCCHK(PetscFinalize());
 }
 
+TEST(PETSC, dmplex_project_evaluate_qpm_average) {
+
+  std::filesystem::path gmsh_filepath;
+  GET_TEST_RESOURCE(gmsh_filepath, "gmsh/reference_all_types_square_0.2.msh");
+
+  PETSCCHK(PetscInitializeNoArguments());
+  DM dm;
+  PETSCCHK(DMPlexCreateGmshFromFile(MPI_COMM_WORLD,
+                                    gmsh_filepath.generic_string().c_str(),
+                                    (PetscBool)1, &dm));
+  PetscInterface::generic_distribute(&dm);
+
+  auto mesh =
+      std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
+  const int ndim = mesh->get_ndim();
+  const int cell_count = mesh->get_cell_count();
+  auto sycl_target =
+      std::make_shared<SYCLTarget>(GPU_SELECTOR, mesh->get_comm());
+  auto mapper =
+      std::make_shared<PetscInterface::DMPlexLocalMapper>(sycl_target, mesh);
+  auto domain = std::make_shared<Domain>(mesh, mapper);
+
+  auto cell_vertices_info = get_cell_vertices_cdc(sycl_target, mesh->dmh);
+  auto cdc_num_vertices = std::get<0>(cell_vertices_info);
+  auto cdc_vertices = std::get<1>(cell_vertices_info);
+
+  auto qpm =
+      PetscInterface::make_quadrature_point_mapper_average(sycl_target, domain);
+
+  std::vector<REAL> average(ndim);
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto sym = qpm->particle_group->position_dat->sym;
+    auto W = qpm->particle_group->get_cell(sym, cellx);
+    mesh->dmh->get_cell_vertex_average(cellx, average);
+    ASSERT_EQ(W->nrow, 1);
+    for (int dx = 0; dx < ndim; dx++) {
+      ASSERT_NEAR(W->at(0, dx), average.at(dx), 1.0e-15);
+    }
+  }
+
+  qpm->free();
+  sycl_target->free();
+  mesh->free();
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
+
 TEST(PETSC, dmplex_evaluate_barycentric) {
 
   std::filesystem::path gmsh_filepath;
@@ -275,9 +273,8 @@ TEST(PETSC, dmplex_evaluate_barycentric) {
   auto cdc_num_vertices = std::get<0>(cell_vertices_info);
   auto cdc_vertices = std::get<1>(cell_vertices_info);
 
-  auto bool_qpm = make_qpm(sycl_target, domain, cdc_num_vertices, cdc_vertices);
-  auto qpm = std::get<1>(bool_qpm);
-  ASSERT_FALSE(std::get<0>(bool_qpm));
+  auto qpm =
+      PetscInterface::make_quadrature_point_mapper_vertex(sycl_target, domain);
 
   ErrorPropagate ep(sycl_target);
   auto k_ep = ep.device_ptr();
@@ -309,18 +306,23 @@ TEST(PETSC, dmplex_evaluate_barycentric) {
   auto dpe = std::make_shared<PetscInterface::DMPlexProjectEvaluateBarycentric>(
       qpm, "Barycentric", 1, true);
 
+  auto lambda_l0 = [=](auto x, auto y) -> REAL {
+    return barycentric_test_function_linear0(x, y);
+  };
+  auto lambda_l1 = [=](auto x, auto y) -> REAL {
+    return barycentric_test_function_linear1(x, y);
+  };
+  auto lambda_b0 = [=](auto x, auto y) -> REAL {
+    return barycentric_test_function_bilinear0(x, y);
+  };
+  auto lambda_b1 = [=](auto x, auto y) -> REAL {
+    return barycentric_test_function_bilinear1(x, y);
+  };
+
   // Linear test function over the domain should be exactly representable in
   // both quads and triangles.
+  ExternalCommon::interpolate<2, 1>(qpm, lambda_l0);
 
-  // 1 component
-  particle_loop(
-      qpm->particle_group,
-      [=](auto POS, auto Q) {
-        Q.at(0) = barycentric_test_function_linear0(POS.at(0), POS.at(1));
-      },
-      Access::read(qpm->particle_group->position_dat),
-      Access::write(qpm->get_sym(1)))
-      ->execute();
   dpe->evaluate(A, Sym<REAL>("Q"));
   for (int cx = 0; cx < cell_count; cx++) {
     auto P = A->get_cell(Sym<REAL>("P"), cx);
@@ -335,14 +337,8 @@ TEST(PETSC, dmplex_evaluate_barycentric) {
   }
 
   // Bilinear function exactly representable in the quads only.
-  particle_loop(
-      qpm->particle_group,
-      [=](auto POS, auto Q) {
-        Q.at(0) = barycentric_test_function_bilinear0(POS.at(0), POS.at(1));
-      },
-      Access::read(qpm->particle_group->position_dat),
-      Access::write(qpm->get_sym(1)))
-      ->execute();
+  ExternalCommon::interpolate<2>(qpm, 1, 0, lambda_b0);
+
   dpe->evaluate(A, Sym<REAL>("Q"));
   for (int cx = 0; cx < cell_count; cx++) {
     const auto num_vertices = cdc_num_vertices->get_value(cx, 0, 0);
@@ -361,15 +357,8 @@ TEST(PETSC, dmplex_evaluate_barycentric) {
 
   // 2 components
   // linear
-  particle_loop(
-      qpm->particle_group,
-      [=](auto POS, auto Q) {
-        Q.at(0) = barycentric_test_function_linear0(POS.at(0), POS.at(1));
-        Q.at(1) = barycentric_test_function_linear1(POS.at(0), POS.at(1));
-      },
-      Access::read(qpm->particle_group->position_dat),
-      Access::write(qpm->get_sym(2)))
-      ->execute();
+  ExternalCommon::interpolate<2, 2>(qpm, lambda_l0, lambda_l1);
+
   dpe->evaluate(A, Sym<REAL>("Q2"));
   for (int cx = 0; cx < cell_count; cx++) {
     auto P = A->get_cell(Sym<REAL>("P"), cx);
@@ -391,16 +380,11 @@ TEST(PETSC, dmplex_evaluate_barycentric) {
       }
     }
   }
+
   // bilinear
-  particle_loop(
-      qpm->particle_group,
-      [=](auto POS, auto Q) {
-        Q.at(0) = barycentric_test_function_bilinear0(POS.at(0), POS.at(1));
-        Q.at(1) = barycentric_test_function_bilinear1(POS.at(0), POS.at(1));
-      },
-      Access::read(qpm->particle_group->position_dat),
-      Access::write(qpm->get_sym(2)))
-      ->execute();
+  ExternalCommon::interpolate<2>(qpm, 2, 0, lambda_b0);
+  ExternalCommon::interpolate<2>(qpm, 2, 1, lambda_b1);
+
   dpe->evaluate(A, Sym<REAL>("Q2"));
   for (int cx = 0; cx < cell_count; cx++) {
     const auto num_vertices = cdc_num_vertices->get_value(cx, 0, 0);
@@ -459,9 +443,8 @@ TEST(PETSC, dmplex_project_barycentric_dg) {
   auto cdc_num_vertices = std::get<0>(cell_vertices_info);
   auto cdc_vertices = std::get<1>(cell_vertices_info);
 
-  auto bool_qpm = make_qpm(sycl_target, domain, cdc_num_vertices, cdc_vertices);
-  auto qpm = std::get<1>(bool_qpm);
-  ASSERT_FALSE(std::get<0>(bool_qpm));
+  auto qpm =
+      PetscInterface::make_quadrature_point_mapper_vertex(sycl_target, domain);
 
   ErrorPropagate ep(sycl_target);
   auto k_ep = ep.device_ptr();
@@ -579,9 +562,8 @@ TEST(PETSC, dmplex_project_barycentric_coeffs) {
   auto cdc_num_vertices = std::get<0>(cell_vertices_info);
   auto cdc_vertices = std::get<1>(cell_vertices_info);
 
-  auto bool_qpm = make_qpm(sycl_target, domain, cdc_num_vertices, cdc_vertices);
-  auto qpm = std::get<1>(bool_qpm);
-  ASSERT_FALSE(std::get<0>(bool_qpm));
+  auto qpm =
+      PetscInterface::make_quadrature_point_mapper_vertex(sycl_target, domain);
 
   ErrorPropagate ep(sycl_target);
   auto k_ep = ep.device_ptr();
@@ -743,9 +725,8 @@ TEST(PETSC, foo) {
   auto cdc_num_vertices = std::get<0>(cell_vertices_info);
   auto cdc_vertices = std::get<1>(cell_vertices_info);
 
-  auto bool_qpm = make_qpm(sycl_target, domain, cdc_num_vertices, cdc_vertices);
-  auto qpm = std::get<1>(bool_qpm);
-  ASSERT_FALSE(std::get<0>(bool_qpm));
+  auto qpm =
+      PetscInterface::make_quadrature_point_mapper_vertex(sycl_target, domain);
 
   ErrorPropagate ep(sycl_target);
   auto k_ep = ep.device_ptr();
@@ -758,9 +739,11 @@ TEST(PETSC, foo) {
 
   std::vector<std::vector<double>> positions;
   std::vector<int> cells;
-  const int number_density = 1000000 / mesh->dmh->get_volume();
+  const int Ntarget = 1000000;
+  const int number_density = Ntarget / mesh->dmh->get_volume();
   PetscInterface::uniform_density_within_dmplex_cells(mesh, number_density,
                                                       positions, cells);
+
   const int N = cells.size();
   int npart_global;
   MPICHK(MPI_Allreduce(&N, &npart_global, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD));
@@ -805,6 +788,203 @@ TEST(PETSC, foo) {
   }
   H5Part h5part("gaussian.h5part", A, Sym<REAL>("Q"));
   h5part.write();
+  h5part.close();
+
+  A->free();
+  qpm->free();
+  sycl_target->free();
+  mesh->free();
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
+
+TEST(PETSC, bar) {
+
+  std::filesystem::path gmsh_filepath;
+  // GET_TEST_RESOURCE(gmsh_filepath,
+  // "gmsh/reference_all_types_square_0.2.msh");
+  GET_TEST_RESOURCE(gmsh_filepath, "mesh_ring/mesh_ring.msh");
+
+  PETSCCHK(PetscInitializeNoArguments());
+  DM dm;
+  PETSCCHK(DMPlexCreateGmshFromFile(MPI_COMM_WORLD,
+                                    gmsh_filepath.generic_string().c_str(),
+                                    (PetscBool)1, &dm));
+  PetscInterface::generic_distribute(&dm);
+
+  auto mesh =
+      std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
+  const int ndim = mesh->get_ndim();
+  const int cell_count = mesh->get_cell_count();
+  auto sycl_target =
+      std::make_shared<SYCLTarget>(GPU_SELECTOR, mesh->get_comm());
+  auto mapper =
+      std::make_shared<PetscInterface::DMPlexLocalMapper>(sycl_target, mesh);
+  auto domain = std::make_shared<Domain>(mesh, mapper);
+
+  auto cell_vertices_info = get_cell_vertices_cdc(sycl_target, mesh->dmh);
+  auto cdc_num_vertices = std::get<0>(cell_vertices_info);
+  auto cdc_vertices = std::get<1>(cell_vertices_info);
+
+  auto qpm =
+      PetscInterface::make_quadrature_point_mapper_vertex(sycl_target, domain);
+
+  ErrorPropagate ep(sycl_target);
+  auto k_ep = ep.device_ptr();
+
+  ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
+                             ParticleProp(Sym<REAL>("V"), ndim),
+                             ParticleProp(Sym<REAL>("TSP"), 2),
+                             ParticleProp(Sym<REAL>("Q"), 1),
+                             ParticleProp(Sym<REAL>("R"), 1),
+                             ParticleProp(Sym<INT>("CELL_ID"), 1, true)};
+  auto A = std::make_shared<ParticleGroup>(domain, particle_spec, sycl_target);
+
+  std::vector<std::vector<double>> positions;
+  std::vector<int> cells;
+
+  auto lambda_func = [&](const REAL x, const REAL y) {
+    if (x > 0.0) {
+      return 4.0 * Kernel::exp(-2.0 * (y * y));
+    } else {
+      return 0.0;
+    }
+  };
+
+  const int nsteps = 500;
+  const REAL dt = 0.01;
+  const REAL particle_weight = 0.0001;
+
+  auto stats = PetscInterface::sample_points_for_distribution<2>(
+      sycl_target, domain, particle_weight, lambda_func, positions, cells);
+
+  nprint("min, max, total:", stats.at(0), stats.at(1), stats.at(2));
+
+  const int N = cells.size();
+  int npart_global;
+  MPICHK(MPI_Allreduce(&N, &npart_global, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD));
+
+  ParticleSet initial_distribution(N, particle_spec);
+
+  std::mt19937 rng_vel(52234234 + sycl_target->comm_pair.rank_parent);
+
+  const int N_actual = cells.size();
+  auto velocities =
+      NESO::Particles::normal_distribution(N_actual, ndim, 0.0, 1.0, rng_vel);
+
+  for (int px = 0; px < N; px++) {
+    for (int dimx = 0; dimx < ndim; dimx++) {
+      initial_distribution[Sym<REAL>("P")][px][dimx] =
+          positions.at(dimx).at(px);
+      initial_distribution[Sym<REAL>("V")][px][dimx] = velocities[dimx][px];
+    }
+
+    initial_distribution[Sym<INT>("CELL_ID")][px][0] = cells.at(px);
+    initial_distribution[Sym<REAL>("Q")][px][0] = particle_weight;
+  }
+  A->add_particles_local(initial_distribution);
+
+  auto dpe = std::make_shared<PetscInterface::DMPlexProjectEvaluateBarycentric>(
+      qpm, "Barycentric", 1, true);
+  auto dpe_dg =
+      std::make_shared<PetscInterface::DMPlexProjectEvaluate>(qpm, "DG", 0);
+
+  std::map<PetscInt, std::vector<PetscInt>> boundary_groups;
+  boundary_groups[1] = {1, 2, 3, 4};
+
+  auto b2d = std::make_shared<PetscInterface::BoundaryInteraction2D>(
+      sycl_target, mesh, boundary_groups);
+  auto reflection =
+      std::make_shared<PetscInterface::BoundaryReflection>(b2d, 1.0e-10);
+
+  auto lambda_apply_boundary_conditions = [&](auto aa) {
+    auto sub_groups = b2d->post_integration(aa);
+    for (auto &gx : sub_groups) {
+      reflection->execute(gx.second, Sym<REAL>("P"), Sym<REAL>("V"),
+                          Sym<REAL>("TSP"));
+    }
+  };
+  auto lambda_apply_timestep_reset = [&](auto aa) {
+    particle_loop(
+        aa,
+        [=](auto TSP) {
+          TSP.at(0) = 0.0;
+          TSP.at(1) = 0.0;
+        },
+        Access::write(Sym<REAL>("TSP")))
+        ->execute();
+  };
+  auto lambda_apply_advection_step =
+      [=](ParticleSubGroupSharedPtr iteration_set) -> void {
+    particle_loop(
+        "euler_advection", iteration_set,
+        [=](auto V, auto P, auto TSP) {
+          const REAL dt_left = dt - TSP.at(0);
+          if (dt_left > 0.0) {
+            P.at(0) += dt_left * V.at(0);
+            P.at(1) += dt_left * V.at(1);
+            TSP.at(0) = dt;
+            TSP.at(1) = dt_left;
+          }
+        },
+        Access::read(Sym<REAL>("V")), Access::write(Sym<REAL>("P")),
+        Access::write(Sym<REAL>("TSP")))
+        ->execute();
+  };
+  auto lambda_pre_advection = [&](auto aa) { b2d->pre_integration(aa); };
+  auto lambda_find_partial_moves = [&](auto aa) {
+    return static_particle_sub_group(
+        A, [=](auto TSP) { return TSP.at(0) < dt; },
+        Access::read(Sym<REAL>("TSP")));
+  };
+  auto lambda_partial_moves_remaining = [&](auto aa) -> bool {
+    aa = lambda_find_partial_moves(aa);
+    const int size = aa->get_npart_local();
+    return size > 0;
+  };
+  auto lambda_apply_timestep = [&](auto aa) {
+    lambda_apply_timestep_reset(aa);
+    lambda_pre_advection(aa);
+    lambda_apply_advection_step(aa);
+    lambda_apply_boundary_conditions(aa);
+    aa = lambda_find_partial_moves(aa);
+    while (lambda_partial_moves_remaining(aa)) {
+      lambda_pre_advection(aa);
+      lambda_apply_advection_step(aa);
+      lambda_apply_boundary_conditions(aa);
+    }
+  };
+
+  H5Part h5part("mesh_ring.h5part", A, Sym<REAL>("P"), Sym<REAL>("V"));
+
+  for (int stepx = 0; stepx < nsteps; stepx++) {
+    if ((stepx % 20 == 0) && (sycl_target->comm_pair.rank_parent == 0)) {
+      nprint("step:", stepx);
+    }
+    lambda_apply_timestep(static_particle_sub_group(A));
+    A->hybrid_move();
+    A->cell_move();
+
+    h5part.write();
+
+    dpe->project(A, Sym<REAL>("Q"));
+    dpe_dg->project(A, Sym<REAL>("Q"));
+
+    {
+      auto vtk_data_dg = dpe_dg->get_vtk_data();
+      VTK::VTKHDF vtkhdf_dg(
+          "mesh_ring_dg0." + std::to_string(stepx) + ".vtkhdf", MPI_COMM_WORLD);
+      vtkhdf_dg.write(vtk_data_dg);
+      vtkhdf_dg.close();
+    }
+    {
+      auto vtk_data = dpe->get_vtk_data();
+      VTK::VTKHDF vtkhdf("mesh_ring_dg1." + std::to_string(stepx) + ".vtkhdf",
+                         MPI_COMM_WORLD);
+      vtkhdf.write(vtk_data);
+      vtkhdf.close();
+    }
+  }
   h5part.close();
 
   A->free();

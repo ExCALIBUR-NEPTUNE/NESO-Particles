@@ -3,6 +3,7 @@
 #include "../../communication/communication_edges_counter.hpp"
 #include "../../compute_target.hpp"
 #include "../../containers/cell_dat_const.hpp"
+#include "../../containers/tuple.hpp"
 #include "../../particle_group.hpp"
 #include "../../particle_group_impl.hpp"
 #include "../../typedefs.hpp"
@@ -525,6 +526,117 @@ public:
 };
 
 typedef std::shared_ptr<QuadraturePointMapper> QuadraturePointMapperSharedPtr;
+
+namespace {
+template <std::size_t N> struct InterpTupleType {};
+
+template <> struct InterpTupleType<1> { using type = Tuple::Tuple<REAL>; };
+template <> struct InterpTupleType<2> {
+  using type = Tuple::Tuple<REAL, REAL>;
+};
+template <> struct InterpTupleType<3> {
+  using type = Tuple::Tuple<REAL, REAL, REAL>;
+};
+
+template <typename PTYPE>
+inline void assemble_args(PTYPE &P, Tuple::Tuple<REAL> &args) {
+  Tuple::get<0>(args) = P.at(0);
+}
+template <typename PTYPE>
+inline void assemble_args(PTYPE &P, Tuple::Tuple<REAL, REAL> &args) {
+  Tuple::get<0>(args) = P.at(0);
+  Tuple::get<1>(args) = P.at(1);
+}
+template <typename PTYPE>
+inline void assemble_args(PTYPE &P, Tuple::Tuple<REAL, REAL, REAL> &args) {
+  Tuple::get<0>(args) = P.at(0);
+  Tuple::get<1>(args) = P.at(1);
+  Tuple::get<2>(args) = P.at(2);
+}
+
+template <typename... ARGS, typename DST_DAT, typename FUNC_TOP>
+inline void apply_args_inner(const int index, Tuple::Tuple<ARGS...> &args,
+                             DST_DAT &dst, FUNC_TOP func_top) {
+  dst.at(index) = Tuple::apply(func_top, args);
+}
+template <typename... ARGS, typename DST_DAT, typename FUNC_TOP,
+          typename... FUNC>
+inline void apply_args_inner(int index, Tuple::Tuple<ARGS...> &args,
+                             DST_DAT &dst, FUNC_TOP func_top, FUNC... func) {
+  dst.at(index) = Tuple::apply(func_top, args);
+  index++;
+  apply_args_inner(index, args, dst, func...);
+}
+template <typename... ARGS, typename DST_DAT, typename... FUNC>
+inline void apply_args(Tuple::Tuple<ARGS...> &args, DST_DAT &dst,
+                       FUNC... func) {
+  apply_args_inner(0, args, dst, func...);
+}
+
+} // namespace
+
+/**
+ * Helper function to evaluate functions at the points in a
+ * QuadraturePointMapper.
+ *
+ * @param qpm QuadraturePointMapper to evaluate functions at.
+ * @param func Parameter pack with function per component. These functions must
+ * be device copyable types (i.e. not function pointers). Functions wrapped in
+ * a lambda function should work.
+ */
+template <std::size_t NDIM, std::size_t NCOMP, typename... FUNC>
+inline void interpolate(QuadraturePointMapperSharedPtr qpm, FUNC... func) {
+
+  static_assert((0 < NDIM) && (NDIM < 4), "Only implemented for NDIM=1,2,3");
+  NESOASSERT(NDIM == qpm->particle_group->domain->mesh->get_ndim(),
+             "Number of dimensions missmatch.");
+
+  static_assert(
+      sizeof...(FUNC) == NCOMP,
+      "Number of passed functions does not match the number of components.");
+
+  particle_loop(
+      qpm->particle_group,
+      [=](auto POS, auto Q) {
+        typename InterpTupleType<NDIM>::type args;
+        assemble_args(POS, args);
+        apply_args(args, Q, func...);
+      },
+      Access::read(qpm->particle_group->position_dat),
+      Access::write(qpm->get_sym(NCOMP)))
+      ->execute();
+}
+
+/**
+ * Helper function to evaluate functions at the points in a
+ * QuadraturePointMapper.
+ *
+ * @param qpm QuadraturePointMapper to evaluate functions at.
+ * @param ncomp Number of components of the space to interpolate into.
+ * @param component Component of the space to interpolate into.
+ * @param func Function to interpolate. This function must be a device copyable
+ * type (i.e. not function pointers). Functions wrapped in a lambda function
+ * should work.
+ */
+template <std::size_t NDIM, typename FUNC>
+inline void interpolate(QuadraturePointMapperSharedPtr qpm, const int ncomp,
+                        const int component, FUNC func) {
+
+  static_assert((0 < NDIM) && (NDIM < 4), "Only implemented for NDIM=1,2,3");
+  NESOASSERT(NDIM == qpm->particle_group->domain->mesh->get_ndim(),
+             "Number of dimensions missmatch.");
+
+  particle_loop(
+      qpm->particle_group,
+      [=](auto POS, auto Q) {
+        typename InterpTupleType<NDIM>::type args;
+        assemble_args(POS, args);
+        Q.at(component) = Tuple::apply(func, args);
+      },
+      Access::read(qpm->particle_group->position_dat),
+      Access::write(qpm->get_sym(ncomp)))
+      ->execute();
+}
 
 } // namespace NESO::Particles::ExternalCommon
 
