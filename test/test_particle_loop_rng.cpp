@@ -155,6 +155,31 @@ TEST(ParticleLoopRNG, base_single_cell) {
   mesh->free();
 }
 
+TEST(ParticleLoopRNG, zero_components) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  const int cell_count = mesh->get_cell_count();
+  auto sycl_target = A->sycl_target;
+
+  INT count = 0;
+  auto seq_lambda = [&]() -> INT { return count++; };
+
+  auto seq_kernel = host_kernel_rng<INT>(seq_lambda, 0);
+
+  particle_loop(
+      A, [=]([[maybe_unused]] auto INDEX, [[maybe_unused]] auto RNG) {},
+      Access::read(ParticleLoopIndex{}), Access::read(seq_kernel))
+      ->execute();
+
+  // This sampling function should never actually be called.
+  ASSERT_EQ(count, 0);
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}
+
 TEST(ParticleLoopRNG, uniform) {
   auto A = particle_loop_common();
   auto domain = A->domain;
