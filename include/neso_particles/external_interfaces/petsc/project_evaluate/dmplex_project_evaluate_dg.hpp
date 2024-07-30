@@ -6,7 +6,8 @@
 namespace NESO::Particles::PetscInterface {
 
 /**
- * TODO
+ * Implementation to deposit particle data into and evalute from DG0 function
+ * spaces.
  */
 class DMPlexProjectEvaluateDG : public DMPlexProjectEvaluateBase {
 protected:
@@ -27,6 +28,77 @@ protected:
     }
   }
 
+  template <typename T>
+  inline void project_inner(std::shared_ptr<T> particle_sub_group,
+                            Sym<REAL> sym) {
+    auto particle_group = get_particle_group(particle_sub_group);
+    auto dat = particle_group->get_dat(sym);
+    const int ncomp = dat->ncomp;
+    this->check_ncomp(ncomp);
+    auto destination_dat = this->qpm->get_sym(ncomp);
+
+    // DG0 projection onto the CellDatConst
+    this->cdc_project->fill(0.0);
+    particle_loop(
+        "DMPlexProjectEvaluateDG::project_0", particle_sub_group,
+        [=](auto SRC, auto DST) {
+          for (int cx = 0; cx < ncomp; cx++) {
+            DST.fetch_add(cx, 0, SRC.at(cx));
+          }
+        },
+        Access::read(sym), Access::add(this->cdc_project))
+        ->execute();
+
+    // Read the CellDatConst values onto the quadrature point values
+    particle_loop(
+        "DMPlexProjectEvaluateDG::project_1", this->qpm->particle_group,
+        [=](auto VOLS, auto SRC, auto DST) {
+          const REAL iv = VOLS.at(0, 0);
+          for (int cx = 0; cx < ncomp; cx++) {
+            DST.at(cx) = SRC.at(cx, 0) * iv;
+          }
+        },
+        Access::read(this->cdc_volumes), Access::read(this->cdc_project),
+        Access::write(destination_dat))
+        ->execute();
+  }
+
+  template <typename T>
+  inline void evaluate_inner(std::shared_ptr<T> particle_sub_group,
+                             Sym<REAL> sym) {
+
+    auto particle_group = get_particle_group(particle_sub_group);
+    auto dat = particle_group->get_dat(sym);
+    const int ncomp = dat->ncomp;
+    this->check_ncomp(ncomp);
+    auto source_dat = this->qpm->get_sym(ncomp);
+
+    // Copy from the quadrature point values into the CellDatConst
+    particle_loop(
+        "DMPlexProjectEvaluateDG::evaluate_0", this->qpm->particle_group,
+        [=](auto SRC, auto DST, auto MASK) {
+          if (MASK.at(3) == 0) {
+            for (int cx = 0; cx < ncomp; cx++) {
+              DST.at(cx, 0) = SRC.at(cx);
+            }
+          }
+        },
+        Access::read(source_dat), Access::write(this->cdc_project),
+        Access::read(Sym<INT>("ADDING_RANK_INDEX")))
+        ->execute();
+
+    // Copy from the CellDatConst to the output particle group
+    particle_loop(
+        "DMPlexProjectEvaluateDG::evaluate_1", particle_sub_group,
+        [=](auto SRC, auto DST) {
+          for (int cx = 0; cx < ncomp; cx++) {
+            DST.at(cx) = SRC.at(cx, 0);
+          }
+        },
+        Access::read(this->cdc_project), Access::write(sym))
+        ->execute();
+  }
+
 public:
   ExternalCommon::QuadraturePointMapperSharedPtr qpm;
   std::string function_space;
@@ -34,7 +106,10 @@ public:
   DMPlexProjectEvaluateDG() = default;
 
   /**
-   * TODO
+   * Get a representation of the internal state which can be passed to the
+   * VTKHDF writer.
+   *
+   * @returns Data for VTKHDF unstructured grid writer.
    */
   virtual inline std::vector<VTK::UnstructuredCell> get_vtk_data() override {
     const int cell_count = this->mesh->get_cell_count();
@@ -64,7 +139,11 @@ public:
   }
 
   /**
-   * TODO
+   * Create a DG0 project/evaluate instance from a QuadraturePointMapper.
+   *
+   * @param qpm QuadraturePointMapper with a single point per cell.
+   * @param function_space Should be "DG".
+   * @param polynomial_order Should be 0.
    */
   DMPlexProjectEvaluateDG(ExternalCommon::QuadraturePointMapperSharedPtr qpm,
                           std::string function_space, int polynomial_order)
@@ -105,79 +184,61 @@ public:
   }
 
   /**
-   * TODO
    * Projects values from particle data onto the values in the
    * QuadraturePointMapper.
+   *
+   * @param particle_group ParticleGroup of particles containing data to deposit
+   * onto the grid.
+   * @param sym Sym objects which indices which particle data to deposit. This
+   * projects into the QuadraturePointMapper particle group into the particle
+   * properties given by calling QuadraturePointMapper::get_sym(ncomp).
    */
-  inline void project(ParticleGroupSharedPtr particle_group,
-                      Sym<REAL> sym) override {
-    auto dat = particle_group->get_dat(sym);
-    const int ncomp = dat->ncomp;
-    this->check_ncomp(ncomp);
-    auto destination_dat = this->qpm->get_sym(ncomp);
-
-    // DG0 projection onto the CellDatConst
-    this->cdc_project->fill(0.0);
-    particle_loop(
-        "DMPlexProjectEvaluateDG::project_0", particle_group,
-        [=](auto SRC, auto DST) {
-          for (int cx = 0; cx < ncomp; cx++) {
-            DST.fetch_add(cx, 0, SRC.at(cx));
-          }
-        },
-        Access::read(sym), Access::add(this->cdc_project))
-        ->execute();
-
-    // Read the CellDatConst values onto the quadrature point values
-    particle_loop(
-        "DMPlexProjectEvaluateDG::project_1", this->qpm->particle_group,
-        [=](auto VOLS, auto SRC, auto DST) {
-          const REAL iv = VOLS.at(0, 0);
-          for (int cx = 0; cx < ncomp; cx++) {
-            DST.at(cx) = SRC.at(cx, 0) * iv;
-          }
-        },
-        Access::read(this->cdc_volumes), Access::read(this->cdc_project),
-        Access::write(destination_dat))
-        ->execute();
+  virtual inline void project(ParticleGroupSharedPtr particle_group,
+                              Sym<REAL> sym) override {
+    this->project_inner(particle_group, sym);
   }
 
   /**
-   * TODO
-   * Evaluates the function defined by the values in the QuadraturePointValues
-   * at the particle locations.
+   * Projects values from particle data onto the values in the
+   * QuadraturePointMapper.
+   *
+   * @param particle_sub_group ParticleSubGroup of particles containing data to
+   * deposit onto the grid.
+   * @param sym Sym objects which indices which particle data to deposit. This
+   * projects into the QuadraturePointMapper particle group into the particle
+   * properties given by calling QuadraturePointMapper::get_sym(ncomp).
    */
-  inline void evaluate(ParticleGroupSharedPtr particle_group,
-                       Sym<REAL> sym) override {
-    auto dat = particle_group->get_dat(sym);
-    const int ncomp = dat->ncomp;
-    this->check_ncomp(ncomp);
-    auto source_dat = this->qpm->get_sym(ncomp);
+  virtual inline void project(ParticleSubGroupSharedPtr particle_sub_group,
+                              Sym<REAL> sym) override {
+    this->project_inner(particle_sub_group, sym);
+  }
 
-    // Copy from the quadrature point values into the CellDatConst
-    particle_loop(
-        "DMPlexProjectEvaluateDG::evaluate_0", this->qpm->particle_group,
-        [=](auto SRC, auto DST, auto MASK) {
-          if (MASK.at(3) == 0) {
-            for (int cx = 0; cx < ncomp; cx++) {
-              DST.at(cx, 0) = SRC.at(cx);
-            }
-          }
-        },
-        Access::read(source_dat), Access::write(this->cdc_project),
-        Access::read(Sym<INT>("ADDING_RANK_INDEX")))
-        ->execute();
+  /**
+   * If the output sym has ncomp components then this method evaluates the
+   * function defined in the point properties given by
+   * QuadraturePointMapper::get_sym(ncomp) at the location of each particle.
+   *
+   * @param particle_group Set of particles to evaluate the deposited function
+   * at.
+   * @param sym Output particle property on which to place evaluations.
+   */
+  virtual inline void evaluate(ParticleGroupSharedPtr particle_group,
+                               Sym<REAL> sym) override {
+    this->evaluate_inner(particle_group, sym);
+  }
 
-    // Copy from the CellDatConst to the output particle group
-    particle_loop(
-        "DMPlexProjectEvaluateDG::evaluate_1", particle_group,
-        [=](auto SRC, auto DST) {
-          for (int cx = 0; cx < ncomp; cx++) {
-            DST.at(cx) = SRC.at(cx, 0);
-          }
-        },
-        Access::read(this->cdc_project), Access::write(sym))
-        ->execute();
+  /**
+   * If the output sym has ncomp components then this method evaluates the
+   * function defined in the point properties given by
+   * QuadraturePointMapper::get_sym(ncomp) at the location of each particle.
+   *
+   * @param particle_sub_group Set of particles to evaluate the deposited
+   * function at.
+   * @param sym Output particle property on which to place evaluations.
+   */
+  virtual inline void evaluate(ParticleSubGroupSharedPtr particle_sub_group,
+                               Sym<REAL> sym) override {
+    this->evaluate_inner(particle_sub_group, sym);
   }
 };
 

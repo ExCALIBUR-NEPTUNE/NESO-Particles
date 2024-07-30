@@ -8,7 +8,8 @@
 namespace NESO::Particles::PetscInterface {
 
 /**
- * TODO
+ * Implementation to deposit particle data into and evalute from DG1 function
+ * spaces by using Barycentric interpolation.
  */
 class DMPlexProjectEvaluateBarycentric : public DMPlexProjectEvaluateBase {
 protected:
@@ -119,9 +120,6 @@ protected:
         }
         this->cdc_matrices->set_cell(cellx, Mdata);
       }
-
-      // TODO Rescale the quadrature point barycentric weights to avoid later
-      // division by volume?
     }
   }
 
@@ -166,6 +164,151 @@ protected:
         ->execute();
   }
 
+  template <typename T>
+  inline void evaluate_inner(std::shared_ptr<T> particle_sub_group,
+                             Sym<REAL> sym) {
+
+    /*
+      If:
+        1) Quadrature point i has Barycentric coordinates li1, li2, li3 and
+      evaluation ui. 2) The vertices have values q1, q2 and q3.
+
+      Then
+        | l11 l12 l13 |   |q1|   |u1|
+        | l21 l22 l23 | x |q2| = |u2|
+        | l31 l32 l33 |   |q3|   |u3|
+    */
+    this->compute_barycentric_coordinates(particle_sub_group);
+    auto dat = get_particle_group(particle_sub_group)->get_dat(sym);
+
+    const int ncomp = dat->ncomp;
+    this->check_ncomp(ncomp);
+    auto source_dat = this->qpm->get_sym(ncomp);
+    this->cdc_project->fill(0.0);
+
+    // Copy from the quadrature point values into the CellDatConst
+    particle_loop(
+        "DMPlexProjectEvaluateBarycentric::evaluate_0",
+        this->qpm->particle_group,
+        [=](auto NUM_VERTICES, auto MATRIX, auto SRC, auto DST, auto MASK) {
+          /*
+            Using the identity
+
+            | m11 m12 m13 |  |u_1|   | m11 m12 m13 |  |u_1|
+            | m21 m22 m23 |  |u_2| = | m21 m22 m23 |  | 0 | +
+            | m31 m32 m33 |  |u_3|   | m31 m32 m33 |  | 0 |
+
+                                     | m11 m12 m13 |  | 0 |
+                                     | m21 m22 m23 |  |u_2| +
+                                     | m31 m32 m33 |  | 0 |
+
+                                     | m11 m12 m13 |  | 0 |
+                                     | m21 m22 m23 |  | 0 |
+                                     | m31 m32 m33 |  |u_3|
+
+            quad_index is a row in the above matrix equation. Hence this kernel
+            is performing
+
+            | m11 m12 m13 |  | 0 |   |u_i m1i|
+            | m21 m22 m23 |  |u_i| = |u_i m2i|
+            | m31 m32 m33 |  | 0 |   |u_i m3i|
+
+            where i is quad_index. Hence the kernel scales the i^th column by
+            the contribution. Then atomically adding the values across all the
+            quad indices.
+           */
+          const auto num_vertices = NUM_VERTICES.at(0, 0);
+          const auto quad_index = MASK.at(3);
+          if ((-1 < quad_index) && (quad_index < num_vertices)) {
+            for (int vx = 0; vx < num_vertices; vx++) {
+              for (int cx = 0; cx < ncomp; cx++) {
+                const REAL value = SRC.at(cx);
+                const REAL weight = MATRIX.at(vx, quad_index) * value;
+                DST.fetch_add(cx, vx, weight);
+              }
+            }
+          }
+        },
+        Access::read(this->cdc_num_vertices), Access::read(this->cdc_matrices),
+        Access::read(source_dat), Access::add(this->cdc_project),
+        Access::read(Sym<INT>("ADDING_RANK_INDEX")))
+        ->execute();
+
+    // Copy from the CellDatConst to the output particle group
+    particle_loop(
+        "DMPlexProjectEvaluateBarycentric::evaluate_1", particle_sub_group,
+        [=](auto B, auto NUM_VERTICES, auto SRC, auto DST) {
+          const auto num_vertices = NUM_VERTICES.at(0, 0);
+          for (int cx = 0; cx < ncomp; cx++) {
+            REAL tmp = 0.0;
+            for (int vx = 0; vx < num_vertices; vx++) {
+              tmp += B.at(vx) * SRC.at(cx, vx);
+            }
+            DST.at(cx) = tmp;
+          }
+        },
+        Access::read(sym_barycentric_coords),
+        Access::read(this->cdc_num_vertices), Access::read(this->cdc_project),
+        Access::write(sym))
+        ->execute();
+  }
+
+  template <typename T>
+  inline void project_inner(std::shared_ptr<T> particle_sub_group,
+                            Sym<REAL> sym) {
+    auto dat = get_particle_group(particle_sub_group)->get_dat(sym);
+
+    const int ncomp = dat->ncomp;
+    this->check_ncomp(ncomp);
+
+    auto destination_dat = this->qpm->get_sym(ncomp);
+    this->compute_barycentric_coordinates(particle_sub_group);
+
+    // Barycentric interpolation onto the CellDatConst
+    this->cdc_project->fill(0.0);
+    particle_loop(
+        "DMPlexProjectEvaluateBarycentric::project_0", particle_sub_group,
+        [=](auto B, auto NUM_VERTICES, auto SRC, auto DST) {
+          const int num_vertices = NUM_VERTICES.at(0, 0);
+          for (int vx = 0; vx < num_vertices; vx++) {
+            for (int cx = 0; cx < ncomp; cx++) {
+              const REAL lx = B.at(vx);
+              DST.fetch_add(cx, vx, lx * SRC.at(cx));
+            }
+          }
+        },
+        Access::read(sym_barycentric_coords),
+        Access::read(this->cdc_num_vertices), Access::read(sym),
+        Access::add(this->cdc_project))
+        ->execute();
+
+    // Read the CellDatConst values onto the quadrature point values
+    particle_loop(
+        "DMPlexProjectEvaluateBarycentric::project_1",
+        this->qpm->particle_group,
+        [=](auto B, auto NUM_VERTICES, auto SRC, auto VOLUMES, auto DST,
+            auto MASK) {
+          const int num_vertices = NUM_VERTICES.at(0, 0);
+          const auto quad_index = MASK.at(3);
+          if ((-1 < quad_index) && (quad_index < num_vertices)) {
+            const REAL iv = VOLUMES.at(0, 0);
+            for (int cx = 0; cx < ncomp; cx++) {
+              REAL tmp_accumulation = 0.0;
+              for (int vx = 0; vx < num_vertices; vx++) {
+                const REAL lx = B.at(vx);
+                tmp_accumulation += B.at(vx) * SRC.at(cx, vx);
+              }
+              DST.at(cx) = iv * tmp_accumulation;
+            }
+          }
+        },
+        Access::read(sym_barycentric_coords),
+        Access::read(this->cdc_num_vertices), Access::read(this->cdc_project),
+        Access::read(this->cdc_volumes), Access::write(destination_dat),
+        Access::read(Sym<INT>("ADDING_RANK_INDEX")))
+        ->execute();
+  }
+
 public:
   ExternalCommon::QuadraturePointMapperSharedPtr qpm;
   std::string function_space;
@@ -176,7 +319,10 @@ public:
   inline constexpr static int ncomp_barycentric_coords = 4;
 
   /**
-   * TODO
+   * Get a representation of the internal state which can be passed to the
+   * VTKHDF writer.
+   *
+   * @returns Data for VTKHDF unstructured grid writer.
    */
   virtual inline std::vector<VTK::UnstructuredCell> get_vtk_data() override {
     const int cell_count = this->mesh->get_cell_count();
@@ -208,7 +354,12 @@ public:
   }
 
   /**
-   * TODO
+   * Create a DG1 project/evaluate instance from a QuadraturePointMapper which
+   * uses Barycentric interpolation.
+   *
+   * @param qpm QuadraturePointMapper with a single point per cell.
+   * @param function_space Should be "Barycentric".
+   * @param polynomial_order Should be 1.
    */
   DMPlexProjectEvaluateBarycentric(
       ExternalCommon::QuadraturePointMapperSharedPtr qpm,
@@ -274,157 +425,60 @@ public:
   }
 
   /**
-   * TODO
    * Projects values from particle data onto the values in the
    * QuadraturePointMapper.
+   *
+   * @param particle_group ParticleGroup of particles containing data to deposit
+   * onto the grid.
+   * @param sym Sym objects which indices which particle data to deposit. This
+   * projects into the QuadraturePointMapper particle group into the particle
+   * properties given by calling QuadraturePointMapper::get_sym(ncomp).
    */
-  inline void project(ParticleGroupSharedPtr particle_group,
-                      Sym<REAL> sym) override {
-    auto dat = particle_group->get_dat(sym);
-
-    const int ncomp = dat->ncomp;
-    this->check_ncomp(ncomp);
-
-    auto destination_dat = this->qpm->get_sym(ncomp);
-    this->compute_barycentric_coordinates(particle_group);
-
-    // Barycentric interpolation onto the CellDatConst
-    this->cdc_project->fill(0.0);
-    particle_loop(
-        "DMPlexProjectEvaluateBarycentric::project_0", particle_group,
-        [=](auto B, auto NUM_VERTICES, auto SRC, auto DST) {
-          const int num_vertices = NUM_VERTICES.at(0, 0);
-          for (int vx = 0; vx < num_vertices; vx++) {
-            for (int cx = 0; cx < ncomp; cx++) {
-              const REAL lx = B.at(vx);
-              DST.fetch_add(cx, vx, lx * SRC.at(cx));
-            }
-          }
-        },
-        Access::read(sym_barycentric_coords),
-        Access::read(this->cdc_num_vertices), Access::read(sym),
-        Access::add(this->cdc_project))
-        ->execute();
-
-    // Read the CellDatConst values onto the quadrature point values
-    particle_loop(
-        "DMPlexProjectEvaluateBarycentric::project_1",
-        this->qpm->particle_group,
-        [=](auto B, auto NUM_VERTICES, auto SRC, auto VOLUMES, auto DST,
-            auto MASK) {
-          const int num_vertices = NUM_VERTICES.at(0, 0);
-          const auto quad_index = MASK.at(3);
-          if ((-1 < quad_index) && (quad_index < num_vertices)) {
-            const REAL iv = VOLUMES.at(0, 0);
-            for (int cx = 0; cx < ncomp; cx++) {
-              REAL tmp_accumulation = 0.0;
-              for (int vx = 0; vx < num_vertices; vx++) {
-                const REAL lx = B.at(vx);
-                tmp_accumulation += B.at(vx) * SRC.at(cx, vx);
-              }
-              DST.at(cx) = iv * tmp_accumulation;
-            }
-          }
-        },
-        Access::read(sym_barycentric_coords),
-        Access::read(this->cdc_num_vertices), Access::read(this->cdc_project),
-        Access::read(this->cdc_volumes), Access::write(destination_dat),
-        Access::read(Sym<INT>("ADDING_RANK_INDEX")))
-        ->execute();
+  virtual inline void project(ParticleGroupSharedPtr particle_group,
+                              Sym<REAL> sym) override {
+    this->project_inner(particle_group, sym);
   }
 
   /**
-   * TODO
-   * Evaluates the function defined by the values in the QuadraturePointValues
-   * at the particle locations.
+   * Projects values from particle data onto the values in the
+   * QuadraturePointMapper.
+   *
+   * @param particle_sub_group ParticleSubGroup of particles containing data to
+   * deposit onto the grid.
+   * @param sym Sym objects which indices which particle data to deposit. This
+   * projects into the QuadraturePointMapper particle group into the particle
+   * properties given by calling QuadraturePointMapper::get_sym(ncomp).
    */
-  inline void evaluate(ParticleGroupSharedPtr particle_group,
-                       Sym<REAL> sym) override {
+  virtual inline void project(ParticleSubGroupSharedPtr particle_sub_group,
+                              Sym<REAL> sym) override {
+    this->project_inner(particle_sub_group, sym);
+  }
 
-    /*
-      If:
-        1) Quadrature point i has Barycentric coordinates li1, li2, li3 and
-      evaluation ui. 2) The vertices have values q1, q2 and q3.
-
-      Then
-        | l11 l12 l13 |   |q1|   |u1|
-        | l21 l22 l23 | x |q2| = |u2|
-        | l31 l32 l33 |   |q3|   |u3|
-    */
-    this->compute_barycentric_coordinates(particle_group);
-
-    auto dat = particle_group->get_dat(sym);
-
-    const int ncomp = dat->ncomp;
-    this->check_ncomp(ncomp);
-    auto source_dat = this->qpm->get_sym(ncomp);
-    this->cdc_project->fill(0.0);
-
-    // Copy from the quadrature point values into the CellDatConst
-    particle_loop(
-        "DMPlexProjectEvaluateBarycentric::evaluate_0",
-        this->qpm->particle_group,
-        [=](auto NUM_VERTICES, auto MATRIX, auto SRC, auto DST, auto MASK) {
-          /*
-            Using the identity
-
-            | m11 m12 m13 |  |u_1|   | m11 m12 m13 |  |u_1|
-            | m21 m22 m23 |  |u_2| = | m21 m22 m23 |  | 0 | +
-            | m31 m32 m33 |  |u_3|   | m31 m32 m33 |  | 0 |
-
-                                     | m11 m12 m13 |  | 0 |
-                                     | m21 m22 m23 |  |u_2| +
-                                     | m31 m32 m33 |  | 0 |
-
-                                     | m11 m12 m13 |  | 0 |
-                                     | m21 m22 m23 |  | 0 |
-                                     | m31 m32 m33 |  |u_3|
-
-            quad_index is a row in the above matrix equation. Hence this kernel
-            is performing
-
-            | m11 m12 m13 |  | 0 |   |u_i m1i|
-            | m21 m22 m23 |  |u_i| = |u_i m2i|
-            | m31 m32 m33 |  | 0 |   |u_i m3i|
-
-            where i is quad_index. Hence the kernel scales the i^th column by
-            the contribution. Then atomically adding the values across all the
-            quad indices.
-           */
-          const auto num_vertices = NUM_VERTICES.at(0, 0);
-          const auto quad_index = MASK.at(3);
-          if ((-1 < quad_index) && (quad_index < num_vertices)) {
-            for (int vx = 0; vx < num_vertices; vx++) {
-              for (int cx = 0; cx < ncomp; cx++) {
-                const REAL value = SRC.at(cx);
-                const REAL weight = MATRIX.at(vx, quad_index) * value;
-                DST.fetch_add(cx, vx, weight);
-              }
-            }
-          }
-        },
-        Access::read(this->cdc_num_vertices), Access::read(this->cdc_matrices),
-        Access::read(source_dat), Access::add(this->cdc_project),
-        Access::read(Sym<INT>("ADDING_RANK_INDEX")))
-        ->execute();
-
-    // Copy from the CellDatConst to the output particle group
-    particle_loop(
-        "DMPlexProjectEvaluateBarycentric::evaluate_1", particle_group,
-        [=](auto B, auto NUM_VERTICES, auto SRC, auto DST) {
-          const auto num_vertices = NUM_VERTICES.at(0, 0);
-          for (int cx = 0; cx < ncomp; cx++) {
-            REAL tmp = 0.0;
-            for (int vx = 0; vx < num_vertices; vx++) {
-              tmp += B.at(vx) * SRC.at(cx, vx);
-            }
-            DST.at(cx) = tmp;
-          }
-        },
-        Access::read(sym_barycentric_coords),
-        Access::read(this->cdc_num_vertices), Access::read(this->cdc_project),
-        Access::write(sym))
-        ->execute();
+  /**
+   * If the output sym has ncomp components then this method evaluates the
+   * function defined in the point properties given by
+   * QuadraturePointMapper::get_sym(ncomp) at the location of each particle.
+   *
+   * @param particle_group Set of particles to evaluate the deposited function
+   * at.
+   * @param sym Output particle property on which to place evaluations.
+   */
+  virtual inline void evaluate(ParticleGroupSharedPtr particle_group,
+                               Sym<REAL> sym) override {
+    this->evaluate_inner(particle_group, sym);
+  }
+  /**
+   * If the output sym has ncomp components then this method evaluates the
+   * function defined in the point properties given by
+   * QuadraturePointMapper::get_sym(ncomp) at the location of each particle.
+   *
+   * @param particle_sub_group Set of particles to evaluate the deposited
+   * function at.
+   * @param sym Output particle property on which to place evaluations.
+   */
+  virtual inline void evaluate(ParticleSubGroupSharedPtr particle_sub_group,
+                               Sym<REAL> sym) override {
+    this->evaluate_inner(particle_sub_group, sym);
   }
 };
 

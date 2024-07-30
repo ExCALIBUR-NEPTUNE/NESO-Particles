@@ -38,7 +38,14 @@ triangle_cartesian_to_barycentric(const REAL x1, const REAL y1, const REAL x2,
 };
 
 /**
- * TODO
+ * Convert a collapsed reference coordinate into a Barycentric coordinate.
+ *
+ * @param[in] eta0 Collapsed coordinate, x component.
+ * @param[in] eta1 Collapsed coordinate, y component.
+ * @param[in, out] l0 Barycentric coordinate 0.
+ * @param[in, out] l1 Barycentric coordinate 1.
+ * @param[in, out] l2 Barycentric coordinate 2.
+ * @param[in, out] l3 Barycentric coordinate 3.
  */
 inline void quad_collapsed_to_barycentric(const REAL eta0, const REAL eta1,
                                           REAL *RESTRICT l0, REAL *RESTRICT l1,
@@ -217,7 +224,20 @@ inline void quad_cartesian_to_collapsed(
 }
 
 /**
- * TODO
+ * Map a collapsed coordinate back to the physical coordinate.
+ *
+ * @param[in] x0 First vertex x component.
+ * @param[in] y0 First vertex y component.
+ * @param[in] x1 Second vertex x component.
+ * @param[in] y1 Second vertex y component.
+ * @param[in] x2 Third vertex x component.
+ * @param[in] y2 Third vertex y component.
+ * @param[in] x3 Fourth vertex x component.
+ * @param[in] y3 Fourth vertex y component.
+ * @param[in] eta0 Collapsed coordinate, x component.
+ * @param[in] eta1 Collapsed coordinate, y component.
+ * @param[in, out] x Coordinate in physical space, x component.
+ * @param[in, out] y Coordinate in physical space, y component.
  */
 inline void quad_collapsed_to_cartesian(const REAL x0, const REAL y0,
                                         const REAL x1, const REAL y1,
@@ -236,7 +256,22 @@ inline void quad_collapsed_to_cartesian(const REAL x0, const REAL y0,
 }
 
 /**
- * TODO
+ * Map a physical coordinate to Barycentric coordinates.
+ *
+ * @param[in] x0 First vertex x component.
+ * @param[in] y0 First vertex y component.
+ * @param[in] x1 Second vertex x component.
+ * @param[in] y1 Second vertex y component.
+ * @param[in] x2 Third vertex x component.
+ * @param[in] y2 Third vertex y component.
+ * @param[in] x3 Fourth vertex x component.
+ * @param[in] y3 Fourth vertex y component.
+ * @param[in] xx Point to map into reference space, x component.
+ * @param[in] yy Point to map into reference space, y component.
+ * @param[in, out] l0 Barycentric coordinate 0.
+ * @param[in, out] l1 Barycentric coordinate 1.
+ * @param[in, out] l2 Barycentric coordinate 2.
+ * @param[in, out] l3 Barycentric coordinate 3.
  */
 inline void quad_cartesian_to_barycentric(
     const REAL x0, const REAL y0, const REAL x1, const REAL y1, const REAL x2,

@@ -8,7 +8,8 @@
 namespace NESO::Particles::PetscInterface {
 
 /**
- * TODO
+ * Type to handle projection/deposition onto and evaluation from a set of
+ * quadrature (nodal) points.
  */
 class DMPlexProjectEvaluate {
 protected:
@@ -28,7 +29,19 @@ public:
   DMPlexProjectEvaluate() = default;
 
   /**
-   * TODO
+   * Create a handler for projection/deposition onto and evaluation from a set
+   * of quadrature (nodal) points. The currently implemented function spaces
+   * and polynomial orders are:
+   *
+   *    function_space="DG", polynomial_order=0
+   *    function_space="Barycentric", polynomial_order=1
+   *
+   * @param qpm QuadraturePointMapper which describes the quadrature points on
+   * which to deposit and from which functions are evaluated.
+   * @param function_space String which specifies the type of deposition and
+   * evaluation.
+   * @param polynomial_order Polynomial order to use with the specified function
+   * space.
    */
   DMPlexProjectEvaluate(ExternalCommon::QuadraturePointMapperSharedPtr qpm,
                         std::string function_space, int polynomial_order)
@@ -69,16 +82,25 @@ public:
   }
 
   /**
-   * TODO
+   * Get a representation of the internal state which can be passed to the
+   * VTKHDF writer. This method returns a representation that corresponds to
+   * the last projection or evaluation which occured with this instance.
+   *
+   * @returns Data for VTKHDF unstructured grid writer.
    */
   inline std::vector<VTK::UnstructuredCell> get_vtk_data() {
     return this->implementation->get_vtk_data();
   }
 
   /**
-   * TODO
    * Projects values from particle data onto the values in the
    * QuadraturePointMapper.
+   *
+   * @param particle_group ParticleGroup of particles containing data to deposit
+   * onto the grid.
+   * @param sym Sym objects which indices which particle data to deposit. This
+   * projects into the QuadraturePointMapper particle group into the particle
+   * properties given by calling QuadraturePointMapper::get_sym(ncomp).
    */
   inline void project(ParticleGroupSharedPtr particle_group, Sym<REAL> sym) {
     this->check_setup();
@@ -88,15 +110,56 @@ public:
   }
 
   /**
-   * TODO
-   * Evaluates the function defined by the values in the QuadraturePointValues
-   * at the particle locations.
+   * Projects values from particle data onto the values in the
+   * QuadraturePointMapper.
+   *
+   * @param particle_sub_group ParticleSubGroup of particles containing data to
+   * deposit onto the grid.
+   * @param sym Sym objects which indices which particle data to deposit. This
+   * projects into the QuadraturePointMapper particle group into the particle
+   * properties given by calling QuadraturePointMapper::get_sym(ncomp).
+   */
+  inline void project(ParticleSubGroupSharedPtr particle_sub_group,
+                      Sym<REAL> sym) {
+    this->check_setup();
+    auto particle_group = get_particle_group(particle_sub_group);
+    NESOASSERT(particle_group->contains_dat(sym),
+               "ParticleGroup does not contain the sym: " + sym.name);
+    this->implementation->project(particle_sub_group, sym);
+  }
+
+  /**
+   * If the output sym has ncomp components then this method evaluates the
+   * function defined in the point properties given by
+   * QuadraturePointMapper::get_sym(ncomp) at the location of each particle.
+   *
+   * @param particle_group Set of particles to evaluate the deposited function
+   * at.
+   * @param sym Output particle property on which to place evaluations.
    */
   inline void evaluate(ParticleGroupSharedPtr particle_group, Sym<REAL> sym) {
     this->check_setup();
     NESOASSERT(particle_group->contains_dat(sym),
                "ParticleGroup does not contain the sym: " + sym.name);
     this->implementation->evaluate(particle_group, sym);
+  }
+
+  /**
+   * If the output sym has ncomp components then this method evaluates the
+   * function defined in the point properties given by
+   * QuadraturePointMapper::get_sym(ncomp) at the location of each particle.
+   *
+   * @param particle_sub_group Set of particles to evaluate the deposited
+   * function at.
+   * @param sym Output particle property on which to place evaluations.
+   */
+  inline void evaluate(ParticleSubGroupSharedPtr particle_sub_group,
+                       Sym<REAL> sym) {
+    this->check_setup();
+    auto particle_group = get_particle_group(particle_sub_group);
+    NESOASSERT(particle_group->contains_dat(sym),
+               "ParticleGroup does not contain the sym: " + sym.name);
+    this->implementation->evaluate(particle_sub_group, sym);
   }
 };
 
