@@ -83,9 +83,9 @@ public:
                 const int block_size = 8192)
       : generation_function(func), num_components(num_components),
         internal_state(0), block_size(block_size) {
-    NESOASSERT(num_components > 0, "Cannot have a RNG for " +
-                                       std::to_string(num_components) +
-                                       " components.");
+    NESOASSERT(num_components >= 0, "Cannot have a RNG for " +
+                                        std::to_string(num_components) +
+                                        " components.");
   }
 
   /**
@@ -100,11 +100,13 @@ public:
     NESOASSERT((this->internal_state == 1) || (this->internal_state == 2),
                "Unexpected internal state.");
     this->internal_state = 2;
-
-    const auto num_particles = this->get_npart(global_info);
-    auto sycl_target = global_info->particle_group->sycl_target;
-
-    return {num_particles, this->d_buffers.at(sycl_target)->ptr};
+    if (this->num_components == 0) {
+      return {0, nullptr};
+    } else {
+      const auto num_particles = this->get_npart(global_info);
+      auto sycl_target = global_info->particle_group->sycl_target;
+      return {num_particles, this->d_buffers.at(sycl_target)->ptr};
+    }
   }
 
   /**
@@ -120,64 +122,65 @@ public:
                "HostKernelRNG Cannot be used within two loops which have "
                "overlapping execution.");
     this->internal_state = 1;
+    if (this->num_components > 0) {
+      const auto num_particles = this->get_npart(global_info);
 
-    const auto num_particles = this->get_npart(global_info);
+      // Allocate space
+      auto sycl_target = global_info->particle_group->sycl_target;
+      auto t0 = profile_timestamp();
+      auto d_ptr = this->allocate(sycl_target, num_particles);
+      auto d_ptr_start = d_ptr;
 
-    // Allocate space
-    auto sycl_target = global_info->particle_group->sycl_target;
-    auto t0 = profile_timestamp();
-    auto d_ptr = this->allocate(sycl_target, num_particles);
-    auto d_ptr_start = d_ptr;
+      // Create num_particles * num_components random numbers from the RNG
+      const std::size_t num_random_numbers =
+          static_cast<std::size_t>(num_particles) *
+          static_cast<std::size_t>(num_components);
 
-    // Create num_particles * num_components random numbers from the RNG
-    const std::size_t num_random_numbers =
-        static_cast<std::size_t>(num_particles) *
-        static_cast<std::size_t>(num_components);
+      // Create the random number in blocks and copy to device blockwise.
+      std::vector<T> block0(this->block_size);
+      std::vector<T> block1(this->block_size);
 
-    // Create the random number in blocks and copy to device blockwise.
-    std::vector<T> block0(this->block_size);
-    std::vector<T> block1(this->block_size);
+      T *ptr_tmp;
+      T *ptr_current = block0.data();
+      T *ptr_next = block1.data();
+      std::size_t num_numbers_moved = 0;
 
-    T *ptr_tmp;
-    T *ptr_current = block0.data();
-    T *ptr_next = block1.data();
-    std::size_t num_numbers_moved = 0;
+      sycl::event e;
+      while (num_numbers_moved < num_random_numbers) {
 
-    sycl::event e;
-    while (num_numbers_moved < num_random_numbers) {
+        // Create a block of samples
+        const std::size_t num_to_memcpy =
+            std::min(static_cast<std::size_t>(this->block_size),
+                     num_random_numbers - num_numbers_moved);
+        for (std::size_t ix = 0; ix < num_to_memcpy; ix++) {
+          ptr_current[ix] = this->generation_function();
+        }
 
-      // Create a block of samples
-      const std::size_t num_to_memcpy =
-          std::min(static_cast<std::size_t>(this->block_size),
-                   num_random_numbers - num_numbers_moved);
-      for (std::size_t ix = 0; ix < num_to_memcpy; ix++) {
-        ptr_current[ix] = this->generation_function();
+        // Wait until the previous block finished copying before starting this
+        // copy
+        e.wait_and_throw();
+        e = sycl_target->queue.memcpy(d_ptr, ptr_current,
+                                      num_to_memcpy * sizeof(T));
+        d_ptr += num_to_memcpy;
+        num_numbers_moved += num_to_memcpy;
+
+        // swap ptr_current and ptr_next such that the new samples are written
+        // into ptr_next whilst ptr_current is being copied to the device.
+        ptr_tmp = ptr_current;
+        ptr_current = ptr_next;
+        ptr_next = ptr_tmp;
       }
 
-      // Wait until the previous block finished copying before starting this
-      // copy
       e.wait_and_throw();
-      e = sycl_target->queue.memcpy(d_ptr, ptr_current,
-                                    num_to_memcpy * sizeof(T));
-      d_ptr += num_to_memcpy;
-      num_numbers_moved += num_to_memcpy;
+      sycl_target->profile_map.inc("HostKernelRNG", "impl_pre_loop_read", 1,
+                                   profile_elapsed(t0, profile_timestamp()));
 
-      // swap ptr_current and ptr_next such that the new samples are written
-      // into ptr_next whilst ptr_current is being copied to the device.
-      ptr_tmp = ptr_current;
-      ptr_current = ptr_next;
-      ptr_next = ptr_tmp;
+      NESOASSERT(num_numbers_moved == num_random_numbers,
+                 "Failed to copy the correct number of random numbers");
+      NESOASSERT(d_ptr == d_ptr_start + num_random_numbers,
+                 "Failed to copy the correct number of random numbers (pointer "
+                 "arithmetic)");
     }
-
-    e.wait_and_throw();
-    sycl_target->profile_map.inc("HostKernelRNG", "impl_pre_loop_read", 1,
-                                 profile_elapsed(t0, profile_timestamp()));
-
-    NESOASSERT(num_numbers_moved == num_random_numbers,
-               "Failed to copy the correct number of random numbers");
-    NESOASSERT(d_ptr == d_ptr_start + num_random_numbers,
-               "Failed to copy the correct number of random numbers (pointer "
-               "arithmetic)");
   }
 
   /**
