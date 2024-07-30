@@ -189,9 +189,10 @@ public:
       auto values = this->cdc_project->get_cell(cellx);
       auto inverse_volumes = this->cdc_volumes->get_value(cellx, 0, 0);
       const int num_vertices = vertices.size();
-      data.at(cellx).cell_type = num_vertices == 3 ? 5 : 9;
+      data.at(cellx).num_points = num_vertices;
+      data.at(cellx).num_dimensions = 2;
       data.at(cellx).points.reserve(num_vertices * 3);
-      data.at(cellx).point_data.reserve(num_vertices);
+      data.at(cellx).point_data["value"].reserve(num_vertices);
       for (int vx = 0; vx < num_vertices; vx++) {
         for (int dx = 0; dx < ndim; dx++) {
           data.at(cellx).points.push_back(vertices.at(vx).at(dx));
@@ -199,8 +200,8 @@ public:
         for (int dx = ndim; dx < 3; dx++) {
           data.at(cellx).points.push_back(0.0);
         }
-        data.at(cellx).point_data.push_back(values->at(0, vx) *
-                                            inverse_volumes);
+        data.at(cellx).point_data["value"].push_back(values->at(0, vx) *
+                                                     inverse_volumes);
       }
     }
     return data;

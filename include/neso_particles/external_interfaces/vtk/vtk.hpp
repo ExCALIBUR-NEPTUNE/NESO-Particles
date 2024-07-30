@@ -8,6 +8,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <map>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -16,101 +17,30 @@
 namespace NESO::Particles::VTK {
 
 /**
- * TODO
+ * Datatype for representing the data for a single cell.
  */
 struct UnstructuredCell {
+  /// Number of points for the cell.
+  int num_points;
+  /// Coordinates of the points. This vector should be 3 doubles per point
+  /// linearised into a single vector.
   std::vector<double> points;
-  int cell_type;
-  std::vector<double> point_data;
+  /// Number of spatial dimensions for the space the cell is embedded in, e.g. 2
+  /// for Triangles and Quadrilaterals. num_dimensions=2 and num_points=4 is a
+  /// Quadrilateral, num_dimensions=3 and num_points=4 is a Tetrahedron.
+  int num_dimensions;
+  /// Map from a quantity name to a vector of size num_points containing the
+  /// values for each point in the order the vertices are described in the
+  /// points array.
+  std::map<std::string, double> cell_data;
+  /// Map from a quantity name to a single value for the cell.
+  std::map<std::string, std::vector<double>> point_data;
 };
 
-/**
- * TODO REMOVE?
- */
-inline void write_legacy_vtk(std::string filename_base,
-                             std::vector<UnstructuredCell> data,
-                             const int rank = -1, const int timestep = -1) {
-
-  std::string filename = filename_base;
-  if (rank > -1) {
-    filename += "." + std::to_string(rank);
-  }
-  if (timestep > -1) {
-    filename += "." + std::to_string(timestep);
-  }
-  filename += ".vtk";
-
-  std::ofstream vtk_file;
-  vtk_file.open(filename);
-  vtk_file << "# vtk DataFile Version 2.0" << std::endl;
-  std::time_t t = std::time(nullptr);
-  std::tm tm = *std::localtime(&t);
-  vtk_file << "NESO-Particles output from: "
-           << std::put_time(&tm, "%d-%m-%Y %H-%M-%S") << std::endl;
-  vtk_file << "ASCII" << std::endl;
-  vtk_file << "DATASET UNSTRUCTURED_GRID" << std::endl;
-  vtk_file << std::endl;
-
-  int num_points = 0;
-  std::vector<double> points;
-  std::vector<double> point_data;
-  int num_cells = 0;
-  std::vector<int> cells;
-  std::vector<int> cell_types;
-
-  for (const auto &ex : data) {
-    NESOASSERT(ex.points.size() == ex.point_data.size() * 3,
-               "Unexpected data lengths.");
-    const int ex_num_points = ex.point_data.size();
-    cell_types.push_back(ex.cell_type);
-    cells.push_back(ex_num_points);
-    for (int pointx = 0; pointx < ex_num_points; pointx++) {
-      const int point_index = num_points++;
-      cells.push_back(point_index);
-    }
-    num_cells++;
-    points.insert(points.end(), ex.points.begin(), ex.points.end());
-    point_data.insert(point_data.end(), ex.point_data.begin(),
-                      ex.point_data.end());
-  }
-
-  vtk_file << "POINTS " << point_data.size() << " float\n";
-  for (auto &px : points) {
-    vtk_file << std::to_string(px) << " ";
-  }
-  vtk_file << std::endl;
-  vtk_file << std::endl;
-
-  vtk_file << "CELLS " << num_cells << " " << cells.size() << std::endl;
-  for (auto &px : cells) {
-    vtk_file << std::to_string(px) << " ";
-  }
-  vtk_file << std::endl;
-  vtk_file << std::endl;
-
-  vtk_file << "CELL_TYPES " << num_cells << std::endl;
-  for (auto &px : cell_types) {
-    vtk_file << std::to_string(px) << " ";
-  }
-  vtk_file << std::endl;
-  vtk_file << std::endl;
-
-  vtk_file << "POINT_DATA " << point_data.size() << std::endl;
-  vtk_file << "SCALARS scalars float 1" << std::endl;
-  vtk_file << "LOOKUP_TABLE default" << std::endl;
-  for (auto &px : point_data) {
-    vtk_file << std::to_string(px) << " ";
-  }
-  vtk_file << std::endl;
-  vtk_file << std::endl;
-
-  vtk_file.close();
-}
+#ifdef NESO_PARTICLES_HDF5
 
 /**
- * TODO
- *
- * TODO CREATE MASKED OFF VERSION FOR NO HDF5
+ * The VTKHDF class facilitates writing VTKHDF files by using HDF5.
  */
 class VTKHDF {
 protected:
@@ -118,13 +48,15 @@ protected:
   bool is_closed;
   int step, rank, size;
   hid_t plist_id, file_id, root;
+  std::string dataset_type;
 
   template <typename T>
   inline void
   write_dataset_2d(hid_t group, const int global_size, const int offset,
                    const int local_size, const int ncomp, hid_t out_datatype,
                    hid_t datatype, std::string name, std::vector<T> &data) {
-    NESOASSERT(local_size * ncomp == data.size(), "data size missmatch");
+
+    NESOASSERT(local_size * ncomp == data.size(), "data size miss-match");
     // Create the memspace
     hsize_t dims_memspace[2] = {static_cast<hsize_t>(local_size),
                                 static_cast<hsize_t>(ncomp)};
@@ -201,13 +133,47 @@ protected:
     H5CHK(H5Sclose(memspace));
   }
 
+  inline int get_cell_type(const int num_dimensions, const int num_points) {
+    NESOASSERT((-1 < num_dimensions) && (num_dimensions < 4),
+               "Bad number of dimensions specified.");
+    if (num_dimensions < 2) {
+      NESOASSERT((0 < num_points) && (num_points < 3),
+                 "Bad number of points specified.");
+      if (num_points == 1) {
+        return 1; // point
+      } else {
+        return 3; // line
+      }
+    } else if (num_dimensions == 2) {
+      NESOASSERT((2 < num_points) && (num_points < 5),
+                 "Bad number of points specified.");
+      if (num_points == 3) {
+        return 5; // triangle
+      } else {
+        return 9; // quad
+      }
+    } else {
+      NESOASSERT((3 < num_points) && (num_points < 9) && (num_points != 7),
+                 "Bad number of points specified.");
+      if (num_points == 4) {
+        return 10; // tet
+      } else if (num_points == 5) {
+        return 14; // pyr
+      } else if (num_points == 6) {
+        return 13; // prism (vtk wedge)
+      } else {
+        return 12; // hex
+      }
+    }
+  }
+
 public:
   ~VTKHDF() {
     NESOASSERT(this->is_closed, "VTKHDF file was not closed correctly.");
   };
 
   /**
-   * TODO
+   * Close the HDF5 file. This must be called collectively on the communicator.
    */
   inline void close() {
     H5CHK(H5Gclose(this->root));
@@ -217,12 +183,16 @@ public:
   };
 
   /**
-   * TODO
+   * Create a new VTKHDF file. Must be called collectively on the communicator.
+   *
+   * @param filename Output filename. This filename should end with the
+   * extension .vtkhdf.
+   * @param comm MPI communicator to use.
+   * @param dataset_type The type of data the user will write to the file.
    */
   VTKHDF(std::string filename, MPI_Comm comm,
          std::string dataset_type = "UnstructuredGrid")
-      : comm(comm), is_closed(true), step(0) {
-
+      : comm(comm), is_closed(true), step(0), dataset_type(dataset_type) {
     MPICHK(MPI_Comm_rank(this->comm, &this->rank));
     MPICHK(MPI_Comm_size(this->comm, &this->size));
 
@@ -276,9 +246,15 @@ public:
   }
 
   /**
-   * TODO
+   * Write unstructured data to the file. Must be called collectively on the
+   * communicator.
+   *
+   * @param data Data to write to the file.
    */
   inline void write(std::vector<UnstructuredCell> &data) {
+    NESOASSERT(this->dataset_type == "UnstructuredGrid",
+               "Attempting to write unstructured grid data to a file which is "
+               "not set up for unstructured grid data.");
 
     int npoint_local = 0;
     int ncell_local = 0;
@@ -287,24 +263,39 @@ public:
     types.reserve(data.size());
     std::vector<int> connectivity;
     std::vector<int> offsets;
-    std::vector<double> point_data;
-    std::vector<double> cell_data;
+    std::map<std::string, std::vector<double>> point_data;
+    std::map<std::string, std::vector<double>> cell_data;
 
     int point_index = 0;
     offsets.push_back(point_index);
     for (const auto &ex : data) {
-      npoint_local += ex.point_data.size();
+      const int num_points = ex.num_points;
+      npoint_local += num_points;
       ncell_local++;
+      NESOASSERT(ex.points.size() == num_points * 3,
+                 "Incorrect number of coordinates, expected " +
+                     std::to_string(num_points * 3) + " but found " +
+                     std::to_string(ex.points.size()) + ".");
+
       points.insert(points.end(), ex.points.begin(), ex.points.end());
-      point_data.insert(point_data.end(), ex.point_data.begin(),
-                        ex.point_data.end());
-      const int num_vertices = ex.point_data.size();
-      for (int vx = 0; vx < num_vertices; vx++) {
+
+      for (auto &name_data : ex.point_data) {
+        auto &n = name_data.first;
+        auto &d = name_data.second;
+        NESOASSERT(d.size() == num_points,
+                   "Points data for " + n + " has wrong array length.");
+        point_data[n].insert(point_data[n].end(), d.begin(), d.end());
+      }
+
+      for (int vx = 0; vx < num_points; vx++) {
         connectivity.push_back(point_index++);
       }
-      types.push_back(ex.cell_type);
+      const int cell_type = this->get_cell_type(ex.num_dimensions, num_points);
+      types.push_back(cell_type);
       offsets.push_back(point_index);
-      cell_data.push_back(1.0);
+      for (auto &name_data : ex.cell_data) {
+        cell_data[name_data.first].push_back(name_data.second);
+      }
     }
 
     int counts_local[4] = {npoint_local, ncell_local,
@@ -332,7 +323,7 @@ public:
     const int nconnectivity_global = counts_global[2];
     const int noffset_global = counts_global[3];
 
-    NESOASSERT(offsets.size() == noffset_local, "offsets sizses missmatch");
+    NESOASSERT(offsets.size() == noffset_local, "offsets sizes miss-match");
 
     this->write_dataset_2d(this->root, npoint_global, point_offset,
                            npoint_local, 3, H5T_IEEE_F64LE, H5T_NATIVE_DOUBLE,
@@ -369,19 +360,59 @@ public:
     H5CHK(cell_data_group = H5Gcreate(this->root, "CellData", H5P_DEFAULT,
                                       H5P_DEFAULT, H5P_DEFAULT));
 
-    this->write_dataset(point_data_group, npoint_global, point_offset,
-                        H5T_NATIVE_DOUBLE, H5T_NATIVE_DOUBLE, "default",
-                        point_data);
+    for (auto &name_data : point_data) {
+      this->write_dataset(point_data_group, npoint_global, point_offset,
+                          H5T_IEEE_F64LE, H5T_NATIVE_DOUBLE, name_data.first,
+                          name_data.second);
+    }
 
-    this->write_dataset(cell_data_group, ncell_global, cell_offset,
-                        H5T_NATIVE_DOUBLE, H5T_NATIVE_DOUBLE, "default",
-                        cell_data);
+    for (auto &name_data : cell_data) {
+      this->write_dataset(cell_data_group, ncell_global, cell_offset,
+                          H5T_IEEE_F64LE, H5T_NATIVE_DOUBLE, name_data.first,
+                          name_data.second);
+    }
 
     H5CHK(H5Gclose(point_data_group));
     H5CHK(H5Gclose(cell_data_group));
   }
 };
 
+#else
+
+/**
+ * The VTKHDF class facilitates writing VTKHDF files by using HDF5.
+ */
+class VTKHDF {
+protected:
+public:
+  ~VTKHDF(){};
+
+  /**
+   * Close the HDF5 file. This must be called collectively on the communicator.
+   */
+  inline void close(){};
+
+  /**
+   * Create a new VTKHDF file. Must be called collectively on the communicator.
+   *
+   * @param filename Output filename. This filename should end with the
+   * extension .vtkhdf.
+   * @param comm MPI communicator to use.
+   * @param dataset_type The type of data the user will write to the file.
+   */
+  VTKHDF([[maybe_unused]] std::string filename, [[maybe_unused]] MPI_Comm comm,
+         [[maybe_unused]] std::string dataset_type = "UnstructuredGrid") {}
+
+  /**
+   * Write unstructured data to the file. Must be called collectively on the
+   * communicator.
+   *
+   * @param data Data to write to the file.
+   */
+  inline void write([[maybe_unused]] std::vector<UnstructuredCell> &data) {}
+};
+
+#endif
 } // namespace NESO::Particles::VTK
 
 #endif
