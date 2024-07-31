@@ -91,7 +91,6 @@ public:
         dh_send_rank_map(sycl_target, sycl_target->comm_pair.size_parent),
         h_send_rank_npart(sycl_target, 1), h_recv_rank_npart(sycl_target, 1),
         departing_identify(sycl_target) {
-
     std::set<int> ranks_set{};
     const int rank = this->sycl_target->comm_pair.rank_parent;
     const int size = this->sycl_target->comm_pair.size_parent;
@@ -225,13 +224,12 @@ public:
    *  ranks.
    */
   inline void exchange_init() {
-    // Get the packed particle data on the host
-    auto h_send_buffer = this->particle_packer.get_packed_data_on_host(
-        this->num_remote_send_ranks, this->h_send_rank_npart.ptr);
 
-    auto h_send_offsets = this->particle_packer.h_send_offsets.ptr;
-    auto h_recv_buffer = this->particle_unpacker.h_recv_buffer.ptr;
-    auto h_recv_offsets = this->particle_unpacker.h_recv_offsets.ptr;
+    auto send_pointers = this->particle_packer.get_packed_pointers(
+        this->num_remote_send_ranks, this->h_send_rank_npart.ptr);
+    auto recv_pointers =
+        this->particle_unpacker.get_recv_pointers(this->num_remote_recv_ranks);
+
     const int num_bytes_per_particle =
         this->particle_packer.num_bytes_per_particle;
 
@@ -244,7 +242,7 @@ public:
     for (int rankx = 0; rankx < this->num_remote_recv_ranks; rankx++) {
       const int tmp_num_recv = this->h_recv_rank_npart.ptr[rankx];
       if (tmp_num_recv > 0) {
-        MPICHK(MPI_Irecv(&h_recv_buffer[h_recv_offsets[rankx]],
+        MPICHK(MPI_Irecv(recv_pointers[rankx],
                          tmp_num_recv * num_bytes_per_particle, MPI_CHAR,
                          this->h_recv_ranks.ptr[rankx], 43, this->comm,
                          &this->h_recv_requests.ptr[this->in_flight_recvs++]));
@@ -256,7 +254,7 @@ public:
     for (int rankx = 0; rankx < this->num_remote_send_ranks; rankx++) {
       const int tmp_num_send = this->h_send_rank_npart.ptr[rankx];
       if (tmp_num_send > 0) {
-        MPICHK(MPI_Isend(&h_send_buffer[h_send_offsets[rankx]],
+        MPICHK(MPI_Isend(send_pointers[rankx],
                          tmp_num_send * num_bytes_per_particle, MPI_CHAR,
                          this->h_send_ranks.ptr[rankx], 43, this->comm,
                          &this->h_send_requests.ptr[this->in_flight_sends++]));

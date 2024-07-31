@@ -15,8 +15,9 @@ template <typename T> struct KernelDeviceRNG;
 namespace Access::KernelDeviceRNG {
 
 /**
- * This is the kernel type for KernelDeviceRNG which is used for all implementations
- * which present RNG values to the kernel via an allocated device buffer.
+ * This is the kernel type for KernelDeviceRNG which is used for all
+ * implementations which present RNG values to the kernel via an allocated
+ * device buffer.
  */
 template <typename T> struct Read {
 
@@ -46,12 +47,7 @@ template <typename T> struct Read {
 
 } // namespace Access::KernelDeviceRNG
 
-namespace ParticleLoopImplementation {
-
-
-
-} // namespace ParticleLoopImplementation
-
+namespace ParticleLoopImplementation {} // namespace ParticleLoopImplementation
 
 } // namespace NESO::Particles
 
