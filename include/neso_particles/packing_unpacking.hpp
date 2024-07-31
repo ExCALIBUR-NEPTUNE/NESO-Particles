@@ -167,46 +167,6 @@ public:
   }
 
   /**
-   * Get the packed particle data on the host such that it can be sent.
-   *
-   * @param num_remote_send_ranks Number of remote ranks involved in send.
-   * @param h_send_rank_npart_ptr Host accessible pointer holding the number of
-   * particles to be sent to each remote rank.
-   * @returns Pointer to host allocated buffer holding the packed particle data.
-   */
-  inline char *get_packed_data_on_host(const int num_remote_send_ranks,
-                                       const int *h_send_rank_npart_ptr) {
-    this->h_send_buffer.realloc_no_copy(this->required_send_buffer_length);
-    this->h_send_offsets.realloc_no_copy(num_remote_send_ranks);
-    NESOASSERT((this->cell_dat.ncells) >=
-                   (this->sycl_target->comm_pair.size_parent),
-               "Insuffient cells");
-
-    INT offset = 0;
-    std::stack<sycl::event> copy_events{};
-    for (int rankx = 0; rankx < num_remote_send_ranks; rankx++) {
-      const int npart_tmp = h_send_rank_npart_ptr[rankx];
-      const int nbytes_tmp = npart_tmp * this->num_bytes_per_particle;
-
-      auto device_ptr = this->cell_dat.col_device_ptr(rankx, 0);
-      if (nbytes_tmp > 0) {
-        copy_events.push(this->sycl_target->queue.memcpy(
-            &this->h_send_buffer.ptr[offset], device_ptr, nbytes_tmp));
-      }
-      this->h_send_offsets.ptr[rankx] = offset;
-      offset += nbytes_tmp;
-    }
-
-    while (!copy_events.empty()) {
-      auto event = copy_events.top();
-      event.wait_and_throw();
-      copy_events.pop();
-    }
-
-    return this->h_send_buffer.ptr;
-  }
-
-  /**
    *  Pack particle data on the device.
    *
    * @param num_remote_send_ranks Number of remote ranks involved in send.
