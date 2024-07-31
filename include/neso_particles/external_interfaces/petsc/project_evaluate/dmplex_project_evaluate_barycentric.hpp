@@ -336,7 +336,9 @@ public:
       auto inverse_volumes = this->cdc_volumes->get_value(cellx, 0, 0);
       const int num_vertices = vertices.size();
       data.at(cellx).num_points = num_vertices;
-      data.at(cellx).num_dimensions = 2;
+      data.at(cellx).cell_type = num_vertices == 3
+                                     ? VTK::CellType::triangle
+                                     : VTK::CellType::quadrilateral;
       data.at(cellx).points.reserve(num_vertices * 3);
       data.at(cellx).point_data["value"].reserve(num_vertices);
       for (int vx = 0; vx < num_vertices; vx++) {

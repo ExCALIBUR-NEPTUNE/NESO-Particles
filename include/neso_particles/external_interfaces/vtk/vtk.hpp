@@ -16,6 +16,17 @@
 
 namespace NESO::Particles::VTK {
 
+enum CellType {
+  point = 1,
+  line = 3,
+  triangle = 5,
+  quadrilateral = 9,
+  tetrahedron = 10,
+  pyramid = 14,
+  wedge = 13,
+  hex = 12
+};
+
 /**
  * Datatype for representing the data for a single cell.
  */
@@ -25,10 +36,8 @@ struct UnstructuredCell {
   /// Coordinates of the points. This vector should be 3 doubles per point
   /// linearised into a single vector.
   std::vector<double> points;
-  /// Number of spatial dimensions for the space the cell is embedded in, e.g. 2
-  /// for Triangles and Quadrilaterals. num_dimensions=2 and num_points=4 is a
-  /// Quadrilateral, num_dimensions=3 and num_points=4 is a Tetrahedron.
-  int num_dimensions;
+  /// Enum describing the shape type.
+  CellType cell_type;
   /// Map from a quantity name to a vector of size num_points containing the
   /// values for each point in the order the vertices are described in the
   /// points array.
@@ -133,43 +142,11 @@ protected:
     H5CHK(H5Sclose(memspace));
   }
 
-  inline int get_cell_type(const int num_dimensions, const int num_points) {
-    NESOASSERT((-1 < num_dimensions) && (num_dimensions < 4),
-               "Bad number of dimensions specified.");
-    if (num_dimensions < 2) {
-      NESOASSERT((0 < num_points) && (num_points < 3),
-                 "Bad number of points specified.");
-      if (num_points == 1) {
-        return 1; // point
-      } else {
-        return 3; // line
-      }
-    } else if (num_dimensions == 2) {
-      NESOASSERT((2 < num_points) && (num_points < 5),
-                 "Bad number of points specified.");
-      if (num_points == 3) {
-        return 5; // triangle
-      } else {
-        return 9; // quad
-      }
-    } else {
-      NESOASSERT((3 < num_points) && (num_points < 9) && (num_points != 7),
-                 "Bad number of points specified.");
-      if (num_points == 4) {
-        return 10; // tet
-      } else if (num_points == 5) {
-        return 14; // pyr
-      } else if (num_points == 6) {
-        return 13; // prism (vtk wedge)
-      } else {
-        return 12; // hex
-      }
-    }
-  }
-
 public:
   ~VTKHDF() {
-    NESOASSERT(this->is_closed, "VTKHDF file was not closed correctly.");
+    if ((!this->is_closed) && (!this->rank)) {
+      nprint("VTKHDF file was not closed correctly.");
+    }
   };
 
   /**
@@ -290,7 +267,7 @@ public:
       for (int vx = 0; vx < num_points; vx++) {
         connectivity.push_back(point_index++);
       }
-      const int cell_type = this->get_cell_type(ex.num_dimensions, num_points);
+      const int cell_type = static_cast<int>(ex.cell_type);
       types.push_back(cell_type);
       offsets.push_back(point_index);
       for (auto &name_data : ex.cell_data) {
