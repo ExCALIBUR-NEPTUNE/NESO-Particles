@@ -3,5 +3,6 @@
 
 #include "host_kernel_rng.hpp"
 #include "kernel_rng.hpp"
+#include "kernel_device_rng.hpp"
 
 #endif
