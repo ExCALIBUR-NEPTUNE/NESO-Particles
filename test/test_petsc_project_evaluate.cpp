@@ -937,8 +937,7 @@ TEST(PETSC, bar) {
         A, [=](auto TSP) { return TSP.at(0) < dt; },
         Access::read(Sym<REAL>("TSP")));
   };
-  auto lambda_partial_moves_remaining = [&](auto aa) -> bool {
-    aa = lambda_find_partial_moves(aa);
+  auto lambda_partial_moves_remaining = [&](auto &aa) -> bool {
     const int size = aa->get_npart_local();
     return size > 0;
   };
@@ -952,6 +951,7 @@ TEST(PETSC, bar) {
       lambda_pre_advection(aa);
       lambda_apply_advection_step(aa);
       lambda_apply_boundary_conditions(aa);
+      aa = lambda_find_partial_moves(aa);
     }
   };
 
