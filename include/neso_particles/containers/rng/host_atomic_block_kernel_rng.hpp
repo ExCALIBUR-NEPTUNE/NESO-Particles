@@ -18,8 +18,7 @@ template <typename T> struct AtomicBlockRNG {
   int buffer_size;
   int *counter;
   T const *RESTRICT d_ptr;
-  inline T at(const Access::LoopIndex::Read &particle_index,
-              const int component) {
+  inline T at(const Access::LoopIndex::Read &, const int) {
     sycl::atomic_ref<int, sycl::memory_order::relaxed,
                      sycl::memory_scope::device>
         element_atomic(this->counter[0]);
@@ -27,7 +26,6 @@ template <typename T> struct AtomicBlockRNG {
     return (index < buffer_size) ? this->d_ptr[index] : static_cast<T>(0);
   }
 };
-
 
 /**
  * Class for RNG types where there is a host generation function that provides
@@ -143,6 +141,9 @@ public:
               std::min(num_random_numbers, current_count);
           draw_random_samples(sycl_target, this->generation_function, d_ptr,
                               num_required, this->block_size);
+          if (num_required < current_count) {
+            this->set_num_values(sycl_target, num_required);
+          }
         }
         // Fill from the end of the previous required number of values to the
         // end of the new required number of values.
@@ -193,11 +194,11 @@ public:
   std::function<T()> generation_function;
 
   /**
-   * Create a DeviceKernelRNG from a host function handle which returns values of
-   * type T when called. For each loop invocation the implementation will
+   * Create a DeviceKernelRNG from a host function handle which returns values
+   * of type T when called. For each loop invocation the implementation will
    * allocate a buffer equal to the number of particles in the loop times the
    * number of components per particle. The entries in this buffer are
-   * allocated sequentially by atomically incrementing a counter for each call. 
+   * allocated sequentially by atomically incrementing a counter for each call.
    *
    * @param func Host function handle which returns samples when called.
    * @param num_components Number of RNG values required per particle

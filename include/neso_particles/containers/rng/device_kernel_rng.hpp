@@ -32,8 +32,8 @@ template <typename T> struct Read {
    * @param component RNG component to access.
    * @returns Constant reference to RNG data.
    */
-  inline const auto at(const Access::LoopIndex::Read &particle_index,
-                       const int component) {
+  inline auto at(const Access::LoopIndex::Read &particle_index,
+                 const int component) {
     return this->data.at(particle_index, component);
   }
 };
