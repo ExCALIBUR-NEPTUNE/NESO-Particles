@@ -1,9 +1,9 @@
 #ifndef _NESO_PARTICLES_HOST_KERNEL_RNG_H_
 #define _NESO_PARTICLES_HOST_KERNEL_RNG_H_
 
+#include "../../loop/particle_loop_utility.hpp"
+#include "host_rng_common.hpp"
 #include "kernel_rng.hpp"
-
-#include "../../particle_sub_group.hpp"
 #include <functional>
 #include <tuple>
 
@@ -13,60 +13,12 @@ namespace NESO::Particles {
  * KernelRNG implementation for RNG implementations which call a host function
  * to sample a value.
  */
-template <typename T> class HostKernelRNG : public KernelRNG<T> {
+template <typename T>
+class HostKernelRNG : public KernelRNG<T>, public BlockKernelRNGBase<T> {
 protected:
   int internal_state;
-  std::map<SYCLTargetSharedPtr, std::shared_ptr<BufferDevice<T>>> d_buffers;
-
-  inline T *allocate(SYCLTargetSharedPtr sycl_target, const int nrow) {
-    if (nrow <= 0) {
-      return nullptr;
-    }
-    const std::size_t required_size =
-        static_cast<std::size_t>(nrow) *
-        static_cast<std::size_t>(this->num_components);
-
-    if (!this->d_buffers.count(sycl_target)) {
-      this->d_buffers[sycl_target] =
-          std::make_unique<BufferDevice<T>>(sycl_target, required_size);
-    } else {
-      this->d_buffers.at(sycl_target)->realloc_no_copy(required_size, 1.2);
-    }
-
-    return this->d_buffers.at(sycl_target)->ptr;
-  }
-
-  inline int
-  get_npart(ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info) {
-    const int cell_start = global_info->starting_cell;
-    const int cell_end = global_info->bounding_cell;
-
-    int num_particles;
-    if ((cell_end - cell_start) == 1) {
-      // Single cell looping case
-      // Allocate for all the particles in the cell.
-      if (global_info->particle_sub_group != nullptr) {
-        num_particles =
-            global_info->particle_sub_group->get_npart_cell(cell_start);
-      } else {
-        num_particles = global_info->particle_group->get_npart_cell(cell_start);
-      }
-    } else {
-      // Whole domain looping case
-      if (global_info->particle_sub_group != nullptr) {
-        num_particles = global_info->particle_sub_group->get_npart_local();
-      } else {
-        num_particles = global_info->particle_group->get_npart_local();
-      }
-    }
-    return num_particles;
-  }
 
 public:
-  /// The number of RNG values required per particle.
-  int num_components;
-  /// RNG values are sampled and copied to the device in this block size.
-  int block_size;
   /// The function pointer which returns samples when called.
   std::function<T()> generation_function;
 
@@ -81,8 +33,8 @@ public:
   template <typename FUNC_TYPE>
   HostKernelRNG(FUNC_TYPE func, const int num_components,
                 const int block_size = 8192)
-      : generation_function(func), num_components(num_components),
-        internal_state(0), block_size(block_size) {
+      : BlockKernelRNGBase<T>(num_components, block_size),
+        generation_function(func), internal_state(0) {
     NESOASSERT(num_components >= 0, "Cannot have a RNG for " +
                                         std::to_string(num_components) +
                                         " components.");
@@ -103,9 +55,9 @@ public:
     if (this->num_components == 0) {
       return {0, nullptr};
     } else {
-      const auto num_particles = this->get_npart(global_info);
+      const auto num_particles = get_loop_npart(global_info);
       auto sycl_target = global_info->particle_group->sycl_target;
-      return {num_particles, this->d_buffers.at(sycl_target)->ptr};
+      return {num_particles, this->get_buffer_ptr(sycl_target)};
     }
   }
 
@@ -123,63 +75,22 @@ public:
                "overlapping execution.");
     this->internal_state = 1;
     if (this->num_components > 0) {
-      const auto num_particles = this->get_npart(global_info);
+      const auto num_particles = get_loop_npart(global_info);
 
       // Allocate space
       auto sycl_target = global_info->particle_group->sycl_target;
       auto t0 = profile_timestamp();
       auto d_ptr = this->allocate(sycl_target, num_particles);
-      auto d_ptr_start = d_ptr;
-
       // Create num_particles * num_components random numbers from the RNG
       const std::size_t num_random_numbers =
           static_cast<std::size_t>(num_particles) *
-          static_cast<std::size_t>(num_components);
+          static_cast<std::size_t>(this->num_components);
 
-      // Create the random number in blocks and copy to device blockwise.
-      std::vector<T> block0(this->block_size);
-      std::vector<T> block1(this->block_size);
+      draw_random_samples(sycl_target, this->generation_function, d_ptr,
+                          num_random_numbers, this->block_size);
 
-      T *ptr_tmp;
-      T *ptr_current = block0.data();
-      T *ptr_next = block1.data();
-      std::size_t num_numbers_moved = 0;
-
-      sycl::event e;
-      while (num_numbers_moved < num_random_numbers) {
-
-        // Create a block of samples
-        const std::size_t num_to_memcpy =
-            std::min(static_cast<std::size_t>(this->block_size),
-                     num_random_numbers - num_numbers_moved);
-        for (std::size_t ix = 0; ix < num_to_memcpy; ix++) {
-          ptr_current[ix] = this->generation_function();
-        }
-
-        // Wait until the previous block finished copying before starting this
-        // copy
-        e.wait_and_throw();
-        e = sycl_target->queue.memcpy(d_ptr, ptr_current,
-                                      num_to_memcpy * sizeof(T));
-        d_ptr += num_to_memcpy;
-        num_numbers_moved += num_to_memcpy;
-
-        // swap ptr_current and ptr_next such that the new samples are written
-        // into ptr_next whilst ptr_current is being copied to the device.
-        ptr_tmp = ptr_current;
-        ptr_current = ptr_next;
-        ptr_next = ptr_tmp;
-      }
-
-      e.wait_and_throw();
       sycl_target->profile_map.inc("HostKernelRNG", "impl_pre_loop_read", 1,
                                    profile_elapsed(t0, profile_timestamp()));
-
-      NESOASSERT(num_numbers_moved == num_random_numbers,
-                 "Failed to copy the correct number of random numbers");
-      NESOASSERT(d_ptr == d_ptr_start + num_random_numbers,
-                 "Failed to copy the correct number of random numbers (pointer "
-                 "arithmetic)");
     }
   }
 

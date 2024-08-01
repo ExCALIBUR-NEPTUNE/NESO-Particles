@@ -302,3 +302,84 @@ TEST(ParticleLoopRNG, uniform_sub_group) {
   sycl_target->free();
   mesh->free();
 }
+
+TEST(ParticleLoopRNG, uniform_atomic_block) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  const int cell_count = mesh->get_cell_count();
+  auto sycl_target = A->sycl_target;
+  const int rank = sycl_target->comm_pair.rank_parent;
+
+  auto zeroer = particle_loop(
+      A,
+      [=](auto V) {
+        for (int cx = 0; cx < 3; cx++) {
+          V.at(cx) = 0.0;
+        }
+      },
+      Access::write(Sym<REAL>("V")));
+  zeroer->execute();
+
+  std::mt19937 rng_state(52234234 + rank);
+  const REAL a = 10.0;
+  const REAL b = 20.0;
+  std::uniform_real_distribution<> rng_dist(a, b);
+  auto rng_lambda = [&]() -> REAL { return rng_dist(rng_state); };
+  const int rng_ncomp = 3;
+
+  // DeviceKernelRNG is the type common to all device rngs.
+  // AtomicBlockRNG is the type that has a buffer with an atomic index.
+  // REAL is the value type.
+  std::shared_ptr<DeviceKernelRNG<AtomicBlockRNG<REAL>>> rng_device_kernel =
+      host_atomic_block_kernel_rng<REAL>(rng_lambda, rng_ncomp);
+
+  particle_loop(
+      A,
+      [=](auto INDEX, Access::DeviceKernelRNG::Read<AtomicBlockRNG<REAL>> RNG,
+          auto V) {
+        for (int cx = 0; cx < rng_ncomp; cx++) {
+          V.at(cx) = RNG.at(INDEX, cx);
+        }
+      },
+      Access::read(ParticleLoopIndex{}), Access::read(rng_device_kernel),
+      Access::write(Sym<REAL>("V")))
+      ->execute();
+
+  ASSERT_TRUE(rng_device_kernel->valid_internal_state());
+
+  for (int cx = 0; cx < cell_count; cx++) {
+    auto V = A->get_cell(Sym<REAL>("V"), cx);
+    for (int rx = 0; rx < V->nrow; rx++) {
+      for (int vx = 0; vx < 3; vx++) {
+        ASSERT_TRUE((a <= V->at(rx, vx)) && (V->at(rx, vx) <= b));
+      }
+    }
+  }
+
+  auto cast_rng_device_kernel =
+      std::dynamic_pointer_cast<HostAtomicBlockKernelRNG<REAL>>(
+          rng_device_kernel);
+  ASSERT_TRUE(cast_rng_device_kernel != nullptr);
+  cast_rng_device_kernel->suppress_warnings = true;
+
+  particle_loop(
+      A,
+      [=](auto INDEX, auto RNG, auto V) {
+        for (int cx = 0; cx < rng_ncomp; cx++) {
+          V.at(cx) = RNG.at(INDEX, cx);
+        }
+        for (int cx = 0; cx < rng_ncomp; cx++) {
+          V.at(cx) = RNG.at(INDEX, cx);
+        }
+      },
+      Access::read(ParticleLoopIndex{}), Access::read(rng_device_kernel),
+      Access::write(Sym<REAL>("V")))
+      ->execute();
+
+  ASSERT_FALSE(rng_device_kernel->valid_internal_state());
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}
