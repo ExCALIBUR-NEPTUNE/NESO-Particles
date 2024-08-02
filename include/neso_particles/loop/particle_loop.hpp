@@ -140,6 +140,26 @@ template <template <typename> typename T, typename U>
 struct LoopParameter<T<std::shared_ptr<U>>> {
   using type = typename LoopParameter<T<U>>::type;
 };
+
+
+template <typename T> struct FooLoopParameter {};
+
+template <template <typename> typename T, typename U> struct FooLoopParameter<T<U>> {
+  // using type = Access::DeviceKernelRNG::Read<T>;
+  using type = decltype(
+    create_loop_arg(
+      std::declval<ParticleLoopGlobalInfo *>(),
+      std::declval<sycl::handler &>(),
+      std::declval<T<U*> &>()
+    )
+  ); 
+};
+
+template <template <typename> typename T, typename U>
+struct FooLoopParameter<T<std::shared_ptr<U>>> {
+  using type = typename FooLoopParameter<T<U>>::type;
+};
+
 /**
  * Catch all for args passed as shared ptrs
  */
@@ -148,9 +168,11 @@ struct KernelParameter<T<std::shared_ptr<U>>> {
   using type = typename KernelParameter<T<U>>::type;
 };
 
+
 } // namespace ParticleLoopImplementation
 
 namespace {
+
 
 /**
  *  This is a metafunction which is passed a input data type and returns the
@@ -158,8 +180,10 @@ namespace {
  * defined above).
  */
 template <class T>
+//using loop_parameter_t =
+//    typename ParticleLoopImplementation::LoopParameter<T>::type;
 using loop_parameter_t =
-    typename ParticleLoopImplementation::LoopParameter<T>::type;
+    typename ParticleLoopImplementation::FooLoopParameter<T>::type;
 
 /**
  *  Function to map access descriptor and data structure type to kernel type.

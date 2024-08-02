@@ -113,6 +113,9 @@ public:
   /// RNG values are sampled and copied to the device in this block size.
   int block_size;
 
+  BlockKernelRNGBase()
+      : num_components(0), block_size(8192) {}
+
   BlockKernelRNGBase(const int num_components, const int block_size = 8192)
       : num_components(num_components), block_size(block_size) {}
 };

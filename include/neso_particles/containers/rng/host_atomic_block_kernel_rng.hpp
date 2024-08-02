@@ -79,8 +79,11 @@ protected:
   }
 
 public:
+  int num_random_numbers_override;
   bool internal_state_is_valid;
   bool suppress_warnings;
+
+  using KernelType = Access::DeviceKernelRNG::Read<AtomicBlockRNG<T>>;
 
   /**
    * Create the loop arguments for the RNG implementation.
@@ -125,8 +128,10 @@ public:
 
       // Create num_particles * num_components random numbers from the RNG
       const std::size_t num_random_numbers =
-          static_cast<std::size_t>(num_particles) *
-          static_cast<std::size_t>(this->num_components);
+          (this->num_random_numbers_override) > -1
+              ? static_cast<std::size_t>(this->num_random_numbers_override)
+              : static_cast<std::size_t>(num_particles) *
+                    static_cast<std::size_t>(this->num_components);
 
       if (reallocated) {
         draw_random_samples(sycl_target, this->generation_function, d_ptr,
@@ -193,6 +198,10 @@ public:
   /// The function pointer which returns samples when called.
   std::function<T()> generation_function;
 
+  HostAtomicBlockKernelRNG() : BlockKernelRNGBase<T>() {
+
+  }
+
   /**
    * Create a DeviceKernelRNG from a host function handle which returns values
    * of type T when called. For each loop invocation the implementation will
@@ -210,7 +219,7 @@ public:
                            const int block_size = 8192)
       : BlockKernelRNGBase<T>(num_components, block_size),
         generation_function(func), internal_state(0), suppress_warnings(false),
-        internal_state_is_valid(true) {
+        internal_state_is_valid(true), num_random_numbers_override(-1) {
     NESOASSERT(num_components >= 0, "Cannot have a RNG for " +
                                         std::to_string(num_components) +
                                         " components.");
@@ -221,6 +230,16 @@ public:
    */
   virtual inline bool valid_internal_state() override {
     return this->internal_state_is_valid;
+  }
+
+  /**
+   * Overrides the required number of sample values in the buffer.
+   *
+   * @param num_random_numbers Number of random numbers. Pass -1 to disable
+   * override.
+   */
+  inline void set_num_random_numbers(const int num_random_numbers) {
+    this->num_random_numbers_override = num_random_numbers;
   }
 };
 
