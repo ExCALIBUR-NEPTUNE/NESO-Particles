@@ -5,6 +5,7 @@
 #include "access_descriptors.hpp"
 #include <memory>
 #include <optional>
+#include <type_traits>
 
 namespace NESO::Particles {
 class ParticleGroup;
@@ -38,16 +39,16 @@ struct ParticleLoopGlobalInfo {
  * LoopParameter is the pointer type that points to the data for all cells,
  * layers and components.
  */
-template <typename T> struct LoopParameter { using type = void *; };
-
-
+// template <typename T> struct LoopParameter { using type = void *; };
+template <typename T, typename U = std::true_type> struct LoopParameter { using type = void *; };
 
 
 /**
  * The KernelParameter types define the types passed to the kernel for each
  * data structure type for each access descriptor.
  */
-template <typename T> struct KernelParameter { using type = void; };
+//template <typename T> struct KernelParameter { using type = void; };
+template <typename T, typename U = std::true_type> struct KernelParameter;// { using type = void; };
 
 
 /**

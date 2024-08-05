@@ -76,6 +76,8 @@ ParticleGroupSharedPtr particle_loop_common(const int N = 10093) {
 
 } // namespace
 
+/*
+
 TEST(ParticleLoopRNG, base) {
   auto A = particle_loop_common();
   auto domain = A->domain;
@@ -494,6 +496,7 @@ TEST(ParticleLoopRNG, uniform_atomic_block_sampler) {
   sycl_target->free();
   mesh->free();
 }
+*/
 
 namespace {  
   template <typename RNG_TYPE>

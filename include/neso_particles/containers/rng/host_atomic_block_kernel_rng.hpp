@@ -79,11 +79,10 @@ protected:
   }
 
 public:
+
   int num_random_numbers_override;
   bool internal_state_is_valid;
   bool suppress_warnings;
-
-  using KernelType = Access::DeviceKernelRNG::Read<AtomicBlockRNG<T>>;
 
   /**
    * Create the loop arguments for the RNG implementation.

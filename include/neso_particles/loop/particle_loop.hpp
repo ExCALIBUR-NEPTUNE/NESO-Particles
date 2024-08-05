@@ -15,8 +15,8 @@
 #include "../containers/local_array.hpp"
 #include "../containers/nd_local_array.hpp"
 #include "../containers/product_matrix.hpp"
-#include "../containers/rng/device_kernel_rng.hpp"
 #include "../containers/rng/kernel_rng.hpp"
+#include "../containers/rng/device_kernel_rng.hpp"
 #include "../containers/sym_vector.hpp"
 #include "../containers/tuple.hpp"
 #include "../particle_dat.hpp"
@@ -136,43 +136,21 @@ namespace ParticleLoopImplementation {
 /**
  * Catch all for args passed as shared ptrs
  */
-template <template <typename> typename T, typename U>
-struct LoopParameter<T<std::shared_ptr<U>>> {
-  using type = typename LoopParameter<T<U>>::type;
+template <template <typename> typename T, typename U, typename V>
+struct LoopParameter<T<std::shared_ptr<U>>, V> {
+  using type = typename LoopParameter<T<U>, V>::type;
 };
-
-
-template <typename T> struct FooLoopParameter {};
-
-template <template <typename> typename T, typename U> struct FooLoopParameter<T<U>> {
-  // using type = Access::DeviceKernelRNG::Read<T>;
-  using type = decltype(
-    create_loop_arg(
-      std::declval<ParticleLoopGlobalInfo *>(),
-      std::declval<sycl::handler &>(),
-      std::declval<T<U*> &>()
-    )
-  ); 
-};
-
-template <template <typename> typename T, typename U>
-struct FooLoopParameter<T<std::shared_ptr<U>>> {
-  using type = typename FooLoopParameter<T<U>>::type;
-};
-
 /**
  * Catch all for args passed as shared ptrs
  */
-template <template <typename> typename T, typename U>
-struct KernelParameter<T<std::shared_ptr<U>>> {
-  using type = typename KernelParameter<T<U>>::type;
+template <template <typename> typename T, typename U, typename V>
+struct KernelParameter<T<std::shared_ptr<U>>, V> {
+  using type = typename KernelParameter<T<U>, V>::type;
 };
-
 
 } // namespace ParticleLoopImplementation
 
 namespace {
-
 
 /**
  *  This is a metafunction which is passed a input data type and returns the
@@ -180,17 +158,15 @@ namespace {
  * defined above).
  */
 template <class T>
-//using loop_parameter_t =
-//    typename ParticleLoopImplementation::LoopParameter<T>::type;
 using loop_parameter_t =
-    typename ParticleLoopImplementation::FooLoopParameter<T>::type;
+    typename ParticleLoopImplementation::LoopParameter<T, std::true_type>::type;
 
 /**
  *  Function to map access descriptor and data structure type to kernel type.
  */
 template <class T>
 using kernel_parameter_t =
-    typename ParticleLoopImplementation::KernelParameter<T>::type;
+    typename ParticleLoopImplementation::KernelParameter<T, std::true_type>::type;
 
 } // namespace
 
