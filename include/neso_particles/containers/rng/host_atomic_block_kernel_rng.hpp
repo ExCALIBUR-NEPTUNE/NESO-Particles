@@ -34,7 +34,7 @@ template <typename T> struct AtomicBlockRNG {
  * counter value.
  */
 template <typename T>
-class HostAtomicBlockKernelRNG : public DeviceKernelRNG<AtomicBlockRNG<T>>,
+class HostAtomicBlockKernelRNG : public KernelRNG<AtomicBlockRNG<T>>,
                                  public BlockKernelRNGBase<T> {
 protected:
   int internal_state;
@@ -89,9 +89,9 @@ public:
    * @param global_info Global information for the loop about to be executed.
    * @returns Pointer to the device data that contains the RNG data.
    */
-  virtual inline Access::DeviceKernelRNG::Read<AtomicBlockRNG<T>>
-  impl_get_const(ParticleLoopImplementation::ParticleLoopGlobalInfo
-                     *global_info) override {
+  virtual inline Access::KernelRNG::Read<AtomicBlockRNG<T>> impl_get_const(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info)
+      override {
     NESOASSERT((this->internal_state == 1) || (this->internal_state == 2),
                "Unexpected internal state.");
     this->internal_state = 2;
@@ -199,7 +199,7 @@ public:
   HostAtomicBlockKernelRNG() : BlockKernelRNGBase<T>() {}
 
   /**
-   * Create a DeviceKernelRNG from a host function handle which returns values
+   * Create a KernelRNG from a host function handle which returns values
    * of type T when called. For each loop invocation the implementation will
    * allocate a buffer equal to the number of particles in the loop times the
    * number of components per particle. The entries in this buffer are
@@ -249,9 +249,9 @@ public:
  * device in.
  */
 template <typename T, typename FUNC_TYPE>
-inline std::shared_ptr<DeviceKernelRNG<AtomicBlockRNG<T>>>
+inline std::shared_ptr<KernelRNG<AtomicBlockRNG<T>>>
 host_atomic_block_kernel_rng(FUNC_TYPE func, const int block_size = 8192) {
-  return std::dynamic_pointer_cast<DeviceKernelRNG<AtomicBlockRNG<T>>>(
+  return std::dynamic_pointer_cast<KernelRNG<AtomicBlockRNG<T>>>(
       std::make_shared<HostAtomicBlockKernelRNG<T>>(func, block_size));
 }
 

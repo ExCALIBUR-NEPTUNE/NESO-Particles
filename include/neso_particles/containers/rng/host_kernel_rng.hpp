@@ -1,7 +1,8 @@
-#ifndef _NESO_PARTICLES_HOST_KERNEL_RNG_H_
-#define _NESO_PARTICLES_HOST_KERNEL_RNG_H_
+#ifndef _NESO_PARTICLES_HOST_PER_PARTICLE_BLOCK_RNG_H_
+#define _NESO_PARTICLES_HOST_PER_PARTICLE_BLOCK_RNG_H_
 
 #include "../../loop/particle_loop_utility.hpp"
+#include "device_kernel_rng.hpp"
 #include "host_rng_common.hpp"
 #include "kernel_rng.hpp"
 #include <functional>
@@ -10,11 +11,55 @@
 namespace NESO::Particles {
 
 /**
+ * This is the kernel type for KernelRNG which is used for all implementations
+ * which present RNG values to the kernel via an allocated device buffer.
+ */
+template <typename T> struct PerParticleBlockRNG {
+
+  /**
+   * Stride for matrix access. We assume the matrix is store column wise and a
+   * particle accesses a row. This stride is essentially the number of rows
+   * (number of particles).
+   */
+  int stride;
+
+  /**
+   * Pointer to the device buffer for all the RNG values.
+   */
+  T const *RESTRICT d_ptr;
+
+  /**
+   * Access the RNG data directly (advanced).
+   *
+   * @param row Row index to access.
+   * @param col Column index to access.
+   * @returns Constant reference to RNG data.
+   */
+  inline const T &at(const int row, const int col) const {
+    return d_ptr[col * stride + row];
+  }
+
+  /**
+   * Access the RNG data for this particle.
+   *
+   * @param particle_index Particle index to access.
+   * @param component RNG component to access.
+   * @returns Constant reference to RNG data.
+   */
+  inline const T &at(const Access::LoopIndex::Read &particle_index,
+                     const int component) const {
+    const auto index = particle_index.get_loop_linear_index();
+    return at(index, component);
+  }
+};
+
+/**
  * KernelRNG implementation for RNG implementations which call a host function
  * to sample a value.
  */
 template <typename T>
-class HostKernelRNG : public KernelRNG<T>, public BlockKernelRNGBase<T> {
+class HostPerParticleBlockRNG : public KernelRNG<PerParticleBlockRNG<T>>,
+                                public BlockKernelRNGBase<T> {
 protected:
   int internal_state;
 
@@ -31,8 +76,8 @@ public:
    * @param block_size Optional block size.
    */
   template <typename FUNC_TYPE>
-  HostKernelRNG(FUNC_TYPE func, const int num_components,
-                const int block_size = 8192)
+  HostPerParticleBlockRNG(FUNC_TYPE func, const int num_components,
+                          const int block_size = 8192)
       : BlockKernelRNGBase<T>(num_components, block_size),
         generation_function(func), internal_state(0) {
     NESOASSERT(num_components >= 0, "Cannot have a RNG for " +
@@ -46,7 +91,7 @@ public:
    * @param global_info Global information for the loop about to be executed.
    * @returns Pointer to the device data that contains the RNG data.
    */
-  virtual inline std::tuple<int, T *> impl_get_const(
+  virtual inline Access::KernelRNG::Read<PerParticleBlockRNG<T>> impl_get_const(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info)
       override {
     NESOASSERT((this->internal_state == 1) || (this->internal_state == 2),
@@ -70,9 +115,10 @@ public:
   virtual inline void impl_pre_loop_read(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info)
       override {
-    NESOASSERT(this->internal_state == 0,
-               "HostKernelRNG Cannot be used within two loops which have "
-               "overlapping execution.");
+    NESOASSERT(
+        this->internal_state == 0,
+        "HostPerParticleBlockRNG Cannot be used within two loops which have "
+        "overlapping execution.");
     this->internal_state = 1;
     if (this->num_components > 0) {
       const auto num_particles = get_loop_npart(global_info);
@@ -89,7 +135,8 @@ public:
       draw_random_samples(sycl_target, this->generation_function, d_ptr,
                           num_random_numbers, this->block_size);
 
-      sycl_target->profile_map.inc("HostKernelRNG", "impl_pre_loop_read", 1,
+      sycl_target->profile_map.inc("HostPerParticleBlockRNG",
+                                   "impl_pre_loop_read", 1,
                                    profile_elapsed(t0, profile_timestamp()));
     }
   }
@@ -102,10 +149,13 @@ public:
       [[maybe_unused]] ParticleLoopImplementation::ParticleLoopGlobalInfo
           *global_info) override {
     NESOASSERT(this->internal_state == 2,
-               "HostKernelRNG Unexpected state, post loop called but internal "
+               "HostPerParticleBlockRNG Unexpected state, post loop called but "
+               "internal "
                "state does not expect a loop to be running.");
     this->internal_state = 0;
   }
+
+  virtual inline bool valid_internal_state() override { return true; };
 };
 
 /**
@@ -118,11 +168,11 @@ public:
  * device in.
  */
 template <typename T, typename FUNC_TYPE>
-inline std::shared_ptr<KernelRNG<T>>
-host_kernel_rng(FUNC_TYPE func, const int num_components,
-                const int block_size = 8192) {
-  return std::dynamic_pointer_cast<KernelRNG<T>>(
-      std::make_shared<HostKernelRNG<T>>(func, num_components, block_size));
+inline std::shared_ptr<HostPerParticleBlockRNG<T>>
+host_per_particle_block_rng(FUNC_TYPE func, const int num_components,
+                            const int block_size = 8192) {
+  return std::make_shared<HostPerParticleBlockRNG<T>>(func, num_components,
+                                                      block_size);
 }
 
 } // namespace NESO::Particles

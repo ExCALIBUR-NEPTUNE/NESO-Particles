@@ -87,7 +87,7 @@ TEST(ParticleLoopRNG, base) {
   auto seq_lambda = [&]() -> INT { return count++; };
 
   const int seq_ncomp = 2;
-  auto seq_kernel = host_kernel_rng<INT>(seq_lambda, seq_ncomp);
+  auto seq_kernel = host_per_particle_block_rng<INT>(seq_lambda, seq_ncomp);
 
   particle_loop(
       A,
@@ -125,7 +125,7 @@ TEST(ParticleLoopRNG, base_single_cell) {
   auto seq_lambda = [&]() -> INT { return count++; };
 
   const int seq_ncomp = 2;
-  auto seq_kernel = host_kernel_rng<INT>(seq_lambda, seq_ncomp);
+  auto seq_kernel = host_per_particle_block_rng<INT>(seq_lambda, seq_ncomp);
 
   particle_loop(
       A,
@@ -165,7 +165,7 @@ TEST(ParticleLoopRNG, zero_components) {
   INT count = 0;
   auto seq_lambda = [&]() -> INT { return count++; };
 
-  auto seq_kernel = host_kernel_rng<INT>(seq_lambda, 0);
+  auto seq_kernel = host_per_particle_block_rng<INT>(seq_lambda, 0);
 
   particle_loop(
       A, [=]([[maybe_unused]] auto INDEX, [[maybe_unused]] auto RNG) {},
@@ -196,7 +196,7 @@ TEST(ParticleLoopRNG, uniform) {
   auto rng_lambda = [&]() -> REAL { return rng_dist(rng_state); };
 
   const int rng_ncomp = 3;
-  auto rng_kernel = host_kernel_rng<REAL>(rng_lambda, rng_ncomp);
+  auto rng_kernel = host_per_particle_block_rng<REAL>(rng_lambda, rng_ncomp);
 
   particle_loop(
       A,
@@ -239,7 +239,7 @@ TEST(ParticleLoopRNG, uniform_sub_group) {
   auto rng_lambda = [&]() -> REAL { return rng_dist(rng_state); };
 
   const int rng_ncomp = 3;
-  auto rng_kernel = host_kernel_rng<REAL>(rng_lambda, rng_ncomp);
+  auto rng_kernel = host_per_particle_block_rng<REAL>(rng_lambda, rng_ncomp);
 
   auto aa = particle_sub_group(
       A, [=](auto ID) { return ID.at(0) % 2 == 0; },
@@ -328,15 +328,15 @@ TEST(ParticleLoopRNG, uniform_atomic_block) {
   auto rng_lambda = [&]() -> REAL { return rng_dist(rng_state); };
   const int rng_ncomp = 3;
 
-  // DeviceKernelRNG is the type common to all device rngs.
+  // KernelRNG is the type common to all device rngs.
   // AtomicBlockRNG is the type that has a buffer with an atomic index.
   // REAL is the value type.
-  std::shared_ptr<DeviceKernelRNG<AtomicBlockRNG<REAL>>> rng_device_kernel =
+  std::shared_ptr<KernelRNG<AtomicBlockRNG<REAL>>> rng_device_kernel =
       host_atomic_block_kernel_rng<REAL>(rng_lambda, rng_ncomp);
 
   particle_loop(
       A,
-      [=](auto INDEX, Access::DeviceKernelRNG::Read<AtomicBlockRNG<REAL>> RNG,
+      [=](auto INDEX, Access::KernelRNG::Read<AtomicBlockRNG<REAL>> RNG,
           auto V) {
         for (int cx = 0; cx < rng_ncomp; cx++) {
           V.at(cx) = RNG.at(INDEX, cx);
