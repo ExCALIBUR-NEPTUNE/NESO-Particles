@@ -15,7 +15,6 @@
 #include "../containers/local_array.hpp"
 #include "../containers/nd_local_array.hpp"
 #include "../containers/product_matrix.hpp"
-#include "../containers/rng/device_kernel_rng.hpp"
 #include "../containers/rng/kernel_rng.hpp"
 #include "../containers/sym_vector.hpp"
 #include "../containers/tuple.hpp"

@@ -2,7 +2,6 @@
 #define _NESO_PARTICLES_HOST_ATOMIC_BLOCK_KERNEL_RNG_H_
 
 #include "../../loop/particle_loop_utility.hpp"
-#include "device_kernel_rng.hpp"
 #include "host_rng_common.hpp"
 #include "kernel_rng.hpp"
 #include <functional>
