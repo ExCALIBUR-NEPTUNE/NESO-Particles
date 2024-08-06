@@ -518,7 +518,7 @@ TEST(ParticleLoopRNG, uniform_atomic_block_sampler) {
 }
 
 namespace {
-template <typename RNG_TYPE, typename T> struct RNGConsumer {
+template <typename RNG_TYPE> struct RNGConsumer {
 
   std::mt19937 rng_state;
   const REAL a = 10.0;
@@ -532,8 +532,9 @@ template <typename RNG_TYPE, typename T> struct RNGConsumer {
     const REAL a = 10.0;
     const REAL b = 20.0;
     this->rng_dist = std::uniform_real_distribution<>(a, b);
-    auto rng_lambda = [&]() -> T {
-      return static_cast<T>(this->rng_dist(this->rng_state));
+    auto rng_lambda = [&]() -> typename RNG_TYPE::RNGValueType {
+      return static_cast<typename RNG_TYPE::RNGValueType>(
+          this->rng_dist(this->rng_state));
     };
     this->rng = std::make_shared<RNG_TYPE>(rng_lambda, 3);
   }
@@ -561,11 +562,31 @@ TEST(ParticleLoopRNG, type_casting) {
   auto sycl_target = A->sycl_target;
   const int rank = sycl_target->comm_pair.rank_parent;
 
-  RNGConsumer<HostAtomicBlockKernelRNG<REAL>, REAL> rng_atomic;
+  static_assert(
+      std::is_same<typename HostAtomicBlockKernelRNG<REAL>::RNGValueType,
+                   REAL>::value);
+  static_assert(
+      std::is_same<typename HostAtomicBlockKernelRNG<REAL>::SpecialisationType,
+                   AtomicBlockRNG<REAL>>::value);
+  static_assert(
+      std::is_same<typename HostAtomicBlockKernelRNG<REAL>::KernelType,
+                   Access::KernelRNG::Read<AtomicBlockRNG<REAL>>>::value);
+
+  static_assert(
+      std::is_same<typename HostPerParticleBlockRNG<int>::RNGValueType,
+                   int>::value);
+  static_assert(
+      std::is_same<typename HostPerParticleBlockRNG<int>::SpecialisationType,
+                   PerParticleBlockRNG<int>>::value);
+  static_assert(
+      std::is_same<typename HostPerParticleBlockRNG<int>::KernelType,
+                   Access::KernelRNG::Read<PerParticleBlockRNG<int>>>::value);
+
+  RNGConsumer<HostAtomicBlockKernelRNG<REAL>> rng_atomic;
   rng_atomic.setup();
   rng_atomic.execute(A);
 
-  RNGConsumer<HostPerParticleBlockRNG<int>, int> rng_block;
+  RNGConsumer<HostPerParticleBlockRNG<int>> rng_block;
   rng_block.setup();
   rng_block.execute(A);
 

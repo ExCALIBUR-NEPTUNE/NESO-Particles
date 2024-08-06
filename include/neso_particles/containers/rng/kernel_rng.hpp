@@ -123,6 +123,17 @@ inline void post_loop(ParticleLoopGlobalInfo *global_info,
 
 } // namespace ParticleLoopImplementation
 
+namespace {
+
+template <typename T> struct get_rng_value_type;
+
+template <template <typename> typename T, typename U>
+struct get_rng_value_type<T<U>> {
+  using type = U;
+};
+
+} // namespace
+
 /**
  * Abstract base class for RNG implementations which create a block of random
  * numbers on the device prior to the loop execution.
@@ -142,6 +153,11 @@ template <typename T> struct KernelRNG {
    * ParticeLoop kernel.
    */
   using KernelType = Access::KernelRNG::Read<T>;
+
+  /**
+   * This type is the, probably scalar, type that the RNG returns when sampled.
+   */
+  using RNGValueType = typename get_rng_value_type<T>::type;
 
   /**
    * Create the loop arguments for the RNG implementation.
