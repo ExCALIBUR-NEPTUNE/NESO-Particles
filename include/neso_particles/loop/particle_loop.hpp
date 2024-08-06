@@ -15,8 +15,8 @@
 #include "../containers/local_array.hpp"
 #include "../containers/nd_local_array.hpp"
 #include "../containers/product_matrix.hpp"
-#include "../containers/rng/kernel_rng.hpp"
 #include "../containers/rng/device_kernel_rng.hpp"
+#include "../containers/rng/kernel_rng.hpp"
 #include "../containers/sym_vector.hpp"
 #include "../containers/tuple.hpp"
 #include "../particle_dat.hpp"
@@ -166,7 +166,8 @@ using loop_parameter_t =
  */
 template <class T>
 using kernel_parameter_t =
-    typename ParticleLoopImplementation::KernelParameter<T, std::true_type>::type;
+    typename ParticleLoopImplementation::KernelParameter<T,
+                                                         std::true_type>::type;
 
 } // namespace
 

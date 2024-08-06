@@ -40,16 +40,17 @@ struct ParticleLoopGlobalInfo {
  * layers and components.
  */
 // template <typename T> struct LoopParameter { using type = void *; };
-template <typename T, typename U = std::true_type> struct LoopParameter { using type = void *; };
-
+template <typename T, typename U = std::true_type> struct LoopParameter {
+  using type = void *;
+};
 
 /**
  * The KernelParameter types define the types passed to the kernel for each
  * data structure type for each access descriptor.
  */
-//template <typename T> struct KernelParameter { using type = void; };
-template <typename T, typename U = std::true_type> struct KernelParameter;// { using type = void; };
-
+// template <typename T> struct KernelParameter { using type = void; };
+template <typename T, typename U = std::true_type>
+struct KernelParameter; // { using type = void; };
 
 /**
  * The description of the iteration index to pas to objects used in the loop.

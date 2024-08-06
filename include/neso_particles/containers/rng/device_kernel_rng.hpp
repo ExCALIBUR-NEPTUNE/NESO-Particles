@@ -42,53 +42,37 @@ template <typename T> struct Read {
 } // namespace Access::DeviceKernelRNG
 
 namespace ParticleLoopImplementation {
-
-///**
-// * LoopParameter type for a DeviceKernelRNG.
-// */
-//template <typename T> struct LoopParameter<Access::Read<DeviceKernelRNG<T>>> {
-//  using type = Access::DeviceKernelRNG::Read<T>;
-//};
-//
 /**
- * Create the loop argument for a DeviceKernelRNG.
+ * The templates in this section match types which are derived from
+ * DeviceKernelRNG<T> for some template parameter T.
  */
-// template <typename T>
-// inline Access::DeviceKernelRNG::Read<T>
-// create_loop_arg(ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
-//                 sycl::handler &cgh, Access::Read<DeviceKernelRNG<T> *> &a) {
-//   return a.obj->impl_get_const(global_info);
-// }
-
-
 
 /**
  * LoopParameter type for a DeviceKernelRNG.
  */
-template<typename T>
+template <typename T>
 struct LoopParameter<
-        Access::Read<T>, 
-        typename std::enable_if<
-            std::is_base_of<DeviceKernelRNG<typename T::KernelSpecialisation>, T>::value, 
-            std::true_type
-        >::type
-    > {
-    using type = Access::DeviceKernelRNG::Read<typename T::KernelSpecialisation>;
+    Access::Read<T>,
+    typename std::enable_if<
+        std::is_base_of<DeviceKernelRNG<typename T::SpecialisationType>,
+                        T>::value,
+        std::true_type>::type> {
+  using type = Access::DeviceKernelRNG::Read<typename T::SpecialisationType>;
 };
 
-
-template<
-    typename T, 
-    std::enable_if_t<
-        std::is_base_of<DeviceKernelRNG<typename T::KernelSpecialisation>, T>::value, bool
-    > = true
->
-inline Access::DeviceKernelRNG::Read<typename T::KernelSpecialisation>
+/**
+ * Create the loop argument for a DeviceKernelRNG.
+ */
+template <typename T,
+          std::enable_if_t<
+              std::is_base_of<DeviceKernelRNG<typename T::SpecialisationType>,
+                              T>::value,
+              bool> = true>
+inline Access::DeviceKernelRNG::Read<typename T::SpecialisationType>
 create_loop_arg(ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
                 sycl::handler &cgh, Access::Read<T *> &a) {
   return a.obj->impl_get_const(global_info);
 }
-
 
 /**
  * Create the kernel argument for a DeviceKernelRNG.
@@ -100,60 +84,42 @@ inline void create_kernel_arg(ParticleLoopIteration &iterationx,
   lhs = rhs;
 }
 
-template<typename T>
+/**
+ *  KernelParameter type for read-only access to a DeviceKernelRNG.
+ */
+template <typename T>
 struct KernelParameter<
-        Access::Read<T>, 
-        typename std::enable_if<
-            std::is_base_of<DeviceKernelRNG<typename T::KernelSpecialisation>, T>::value, 
-            std::true_type
-        >::type
-    > {
-    using type = Access::DeviceKernelRNG::Read<typename T::KernelSpecialisation>;
+    Access::Read<T>,
+    typename std::enable_if<
+        std::is_base_of<DeviceKernelRNG<typename T::SpecialisationType>,
+                        T>::value,
+        std::true_type>::type> {
+  using type = Access::DeviceKernelRNG::Read<typename T::SpecialisationType>;
 };
-
-
-// T = AtomicBlockRNG<REAL>
-
-
-// Cast to base
-// KernelParameter<Access::Read<DeviceKernelRNG<AtomicBlockRNG<double>>>>
-
-// With derived type
-// KernelParameter<Access::Read<HostAtomicBlockKernelRNG<double>>>
-
-
-
-
-///**
-// *  KernelParameter type for read-only access to a DeviceKernelRNG.
-// */
-//template <typename T> struct KernelParameter<Access::Read<DeviceKernelRNG<T>>> {
-//  using type = Access::DeviceKernelRNG::Read<T>;
-//};
-
-///**
-// * LoopParameter type for a DeviceKernelRNG.
-// */
-//template <typename T> struct LoopParameter<Access::Read<DeviceKernelRNG<T>>> {
-//  using type = Access::DeviceKernelRNG::Read<T>;
-//};
-
 
 /**
  * The function called before the ParticleLoop is executed.
  */
-template <typename T>
+template <typename T,
+          std::enable_if_t<
+              std::is_base_of<DeviceKernelRNG<typename T::SpecialisationType>,
+                              T>::value,
+              bool> = true>
 inline void pre_loop(ParticleLoopGlobalInfo *global_info,
-                     Access::Read<DeviceKernelRNG<T> *> &arg) {
+                     Access::Read<T *> &arg) {
   arg.obj->impl_pre_loop_read(global_info);
 }
 
 /**
  * The function called after the ParticleLoop is executed.
  */
-template <typename T>
+template <typename T,
+          std::enable_if_t<
+              std::is_base_of<DeviceKernelRNG<typename T::SpecialisationType>,
+                              T>::value,
+              bool> = true>
 inline void post_loop(ParticleLoopGlobalInfo *global_info,
-                      Access::Read<DeviceKernelRNG<T> *> &arg) {
+                      Access::Read<T *> &arg) {
   arg.obj->impl_post_loop_read(global_info);
 }
 
@@ -165,7 +131,19 @@ inline void post_loop(ParticleLoopGlobalInfo *global_info,
  */
 template <typename T> struct DeviceKernelRNG {
 
-   using KernelSpecialisation = T;
+  /**
+   * This type stores the templated type such that we can retrive it on derived
+   * types and test if a type is a derived type of DeviceKernelRNG<T> for some
+   * type T. The derived types will inherit SpecialisationType as a member
+   * type.
+   */
+  using SpecialisationType = T;
+
+  /**
+   * This type is the type of the parameter that should be used in a
+   * ParticeLoop kernel.
+   */
+  using KernelType = Access::DeviceKernelRNG::Read<T>;
 
   /**
    * Create the loop arguments for the RNG implementation.
@@ -195,14 +173,6 @@ template <typename T> struct DeviceKernelRNG {
    */
   virtual inline bool valid_internal_state() = 0;
 };
-
-
-
-
-
-
-
-
 
 } // namespace NESO::Particles
 

@@ -79,7 +79,6 @@ protected:
   }
 
 public:
-
   int num_random_numbers_override;
   bool internal_state_is_valid;
   bool suppress_warnings;
@@ -197,9 +196,7 @@ public:
   /// The function pointer which returns samples when called.
   std::function<T()> generation_function;
 
-  HostAtomicBlockKernelRNG() : BlockKernelRNGBase<T>() {
-
-  }
+  HostAtomicBlockKernelRNG() : BlockKernelRNGBase<T>() {}
 
   /**
    * Create a DeviceKernelRNG from a host function handle which returns values
