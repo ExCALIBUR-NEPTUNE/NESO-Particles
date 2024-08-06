@@ -231,11 +231,11 @@ This data structure is read-only.
 KernelRNG
 ~~~~~~~~~
 
-We assume that there are two main methods for accessing RNG values in a ParticleLoop, the first method separately generates samples and places them in a temporary buffer prior to the loop launch.
-The second approach provides a kernel function which samples values on the fly.
+We assume that there are potentially many methods for accessing RNG values in a ParticleLoop.
+Each of these methods may require a specialised device implementation.
 
-KernelRNG is an abstract base class that encapsulates the first approach where RNG values are sampled and stored in a temporary device buffer prior to the particle loop execution.
-We provide a specialisation of KernelRNG called HostKernelRNG which allows any host function which takes no arguments and returns a single value to be used as a sampling function.
+HostPerParticleBlockRNG is an abstract base class that encapsulates the an approach where RNG values are sampled and stored in a temporary device buffer prior to the particle loop execution.
+HostPerParticleBlockRNG allows any host function which takes no arguments and returns a single value to be used as a sampling function.
 
 In the following example we use a host normal distribution as a source of random velocity values in a ParticleLoop.
 
@@ -251,6 +251,6 @@ In the following example we use a host normal distribution as a source of random
      - Notes
    * - Read
      - Access::KernelRNG::Read<T>
-     - Values are accessed via .at(particle_index, component) where particle_index is a ParticleLoopIndex. Alternatively .at(row, col) directly indexes into the data structure.
+     - Values are accessed via .at(particle_index, component) where particle_index is a ParticleLoopIndex.
 
 .. [SAUNDERS2018] A domain specific language for performance portable molecular dynamics algorithms. `CPC <https://doi.org/10.1016/j.cpc.2017.11.006>`_ , `arXiv <https://arxiv.org/abs/1704.03329>`_.
