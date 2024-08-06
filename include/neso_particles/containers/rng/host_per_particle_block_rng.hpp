@@ -66,6 +66,8 @@ public:
   /// The function pointer which returns samples when called.
   std::function<T()> generation_function;
 
+  HostPerParticleBlockRNG() : BlockKernelRNGBase<T>() {}
+
   /**
    * Create a KernelRNG from a host function handle which returns values of
    * type T when called.
