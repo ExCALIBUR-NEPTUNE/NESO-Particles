@@ -408,9 +408,8 @@ TEST(ParticleLoopRNG, uniform_atomic_block_sampler) {
   auto rng_device_kernel =
       host_atomic_block_kernel_rng<REAL>(rng_lambda, rng_ncomp);
 
-  auto cast_rng_device_kernel =
-      std::dynamic_pointer_cast<HostAtomicBlockKernelRNG<REAL>>(
-          rng_device_kernel);
+  // prevent realloc downwards
+  rng_device_kernel->max_factor = 10000.0;
 
   auto la = std::make_shared<LocalArray<int>>(sycl_target, 1024);
 
@@ -424,7 +423,7 @@ TEST(ParticleLoopRNG, uniform_atomic_block_sampler) {
     int sample_count = 0;
 
     int num_values = 32;
-    cast_rng_device_kernel->set_num_random_numbers(num_values);
+    rng_device_kernel->set_num_random_numbers(num_values);
 
     auto lambda_loop = [&]() {
       particle_loop(
@@ -439,7 +438,8 @@ TEST(ParticleLoopRNG, uniform_atomic_block_sampler) {
           ->execute();
     };
 
-    // Run the plain kernel
+    //// Run the plain kernel
+    lambda_loop();
     ASSERT_TRUE(rng_device_kernel->valid_internal_state());
     auto hla = la->get();
     sample_count += num_values;
@@ -459,6 +459,7 @@ TEST(ParticleLoopRNG, uniform_atomic_block_sampler) {
     ASSERT_EQ(seen_values.size(), sample_count);
 
     num_values = 4;
+    rng_device_kernel->set_num_random_numbers(num_values);
     lambda_loop();
     ASSERT_TRUE(rng_device_kernel->valid_internal_state());
     hla = la->get();
@@ -469,6 +470,8 @@ TEST(ParticleLoopRNG, uniform_atomic_block_sampler) {
     ASSERT_EQ(seen_values.size(), sample_count);
 
     num_values = 2;
+    rng_device_kernel->set_num_random_numbers(num_values);
+
     lambda_loop();
     ASSERT_TRUE(rng_device_kernel->valid_internal_state());
     hla = la->get();
@@ -479,7 +482,27 @@ TEST(ParticleLoopRNG, uniform_atomic_block_sampler) {
     ASSERT_EQ(seen_values.size(), sample_count);
 
     num_values = 4;
+    rng_device_kernel->set_num_random_numbers(num_values);
+
     lambda_loop();
+    ASSERT_TRUE(rng_device_kernel->valid_internal_state());
+    hla = la->get();
+    sample_count += num_values;
+    for (int ix = 0; ix < num_values; ix++) {
+      seen_values.insert(hla.at(ix));
+    }
+    ASSERT_EQ(seen_values.size(), sample_count);
+
+    // loop where no values are used
+    particle_loop(
+        aa, [=](auto INDEX, auto RNG) {}, Access::read(ParticleLoopIndex{}),
+        Access::read(rng_device_kernel))
+        ->execute();
+
+    num_values = 8;
+    rng_device_kernel->set_num_random_numbers(num_values);
+    lambda_loop();
+
     ASSERT_TRUE(rng_device_kernel->valid_internal_state());
     hla = la->get();
     sample_count += num_values;

@@ -115,13 +115,11 @@ public:
                "HostKernelRNG Cannot be used within two loops which have "
                "overlapping execution.");
     this->internal_state = 1;
+
     if (this->num_components > 0) {
       const auto num_particles = get_loop_npart(global_info);
       auto sycl_target = global_info->particle_group->sycl_target;
       auto t0 = profile_timestamp();
-
-      bool reallocated;
-      auto d_ptr = this->allocate(sycl_target, num_particles, &reallocated);
 
       // Create num_particles * num_components random numbers from the RNG
       const std::size_t num_random_numbers =
@@ -129,6 +127,10 @@ public:
               ? static_cast<std::size_t>(this->num_random_numbers_override)
               : static_cast<std::size_t>(num_particles) *
                     static_cast<std::size_t>(this->num_components);
+
+      bool reallocated;
+      auto d_ptr =
+          this->allocate(sycl_target, num_random_numbers, &reallocated);
 
       if (reallocated) {
         draw_random_samples(sycl_target, this->generation_function, d_ptr,
@@ -174,6 +176,7 @@ public:
   virtual inline void impl_post_loop_read(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info)
       override {
+
     NESOASSERT(this->internal_state == 2,
                "HostKernelRNG Unexpected state, post loop called but internal "
                "state does not expect a loop to be running.");
@@ -248,10 +251,9 @@ public:
  * device in.
  */
 template <typename T, typename FUNC_TYPE>
-inline std::shared_ptr<KernelRNG<AtomicBlockRNG<T>>>
+inline std::shared_ptr<HostAtomicBlockKernelRNG<T>>
 host_atomic_block_kernel_rng(FUNC_TYPE func, const int block_size = 8192) {
-  return std::dynamic_pointer_cast<KernelRNG<AtomicBlockRNG<T>>>(
-      std::make_shared<HostAtomicBlockKernelRNG<T>>(func, block_size));
+  return std::make_shared<HostAtomicBlockKernelRNG<T>>(func, block_size);
 }
 
 } // namespace NESO::Particles

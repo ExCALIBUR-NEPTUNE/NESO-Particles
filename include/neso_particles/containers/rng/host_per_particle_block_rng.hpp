@@ -125,11 +125,12 @@ public:
       // Allocate space
       auto sycl_target = global_info->particle_group->sycl_target;
       auto t0 = profile_timestamp();
-      auto d_ptr = this->allocate(sycl_target, num_particles);
+
       // Create num_particles * num_components random numbers from the RNG
       const std::size_t num_random_numbers =
           static_cast<std::size_t>(num_particles) *
           static_cast<std::size_t>(this->num_components);
+      auto d_ptr = this->allocate(sycl_target, num_random_numbers);
 
       draw_random_samples(sycl_target, this->generation_function, d_ptr,
                           num_random_numbers, this->block_size);

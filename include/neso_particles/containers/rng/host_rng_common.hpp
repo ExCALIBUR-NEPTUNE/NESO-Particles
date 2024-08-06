@@ -78,22 +78,21 @@ protected:
     }
   }
 
-  inline T *allocate(SYCLTargetSharedPtr sycl_target, const int nrow,
+  inline T *allocate(SYCLTargetSharedPtr sycl_target,
+                     const std::size_t required_size,
                      bool *reallocated = nullptr) {
     auto size_start = this->get_buffer_size(sycl_target);
 
-    if (nrow <= 0) {
+    if (required_size == 0) {
       return nullptr;
     }
-    const std::size_t required_size =
-        static_cast<std::size_t>(nrow) *
-        static_cast<std::size_t>(this->num_components);
 
     if (!this->d_buffers.count(sycl_target)) {
       this->d_buffers[sycl_target] =
           std::make_unique<BufferDevice<T>>(sycl_target, required_size);
     } else {
-      this->d_buffers.at(sycl_target)->realloc_no_copy(required_size, 1.2);
+      this->d_buffers.at(sycl_target)
+          ->realloc_no_copy(required_size, this->max_factor);
     }
 
     auto size_end = this->get_buffer_size(sycl_target);
@@ -112,8 +111,10 @@ public:
   int num_components;
   /// RNG values are sampled and copied to the device in this block size.
   int block_size;
+  /// Factor for allocation
+  REAL max_factor;
 
-  BlockKernelRNGBase() : num_components(0), block_size(8192) {}
+  BlockKernelRNGBase() : num_components(0), block_size(8192), max_factor(1.2) {}
 
   BlockKernelRNGBase(const int num_components, const int block_size = 8192)
       : num_components(num_components), block_size(block_size) {}
