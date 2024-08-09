@@ -175,6 +175,8 @@ template <typename... T> inline void nprint(T... args) {
   nprint_recurse(0, args...);
 }
 
+#define nprint_variable(x) nprint(std::string(#x) + ":", x)
+
 #ifndef NESO_PARTICLES_BLOCK_SIZE
 #define NESO_PARTICLES_BLOCK_SIZE 1024
 #endif

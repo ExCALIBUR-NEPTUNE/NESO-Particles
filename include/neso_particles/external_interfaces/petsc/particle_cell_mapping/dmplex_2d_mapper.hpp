@@ -6,7 +6,7 @@
 #include "../../../error_propagate.hpp"
 #include "../../../local_mapping.hpp"
 #include "../../../loop/particle_loop.hpp"
-#include "../../../particle_group.hpp"
+#include "../../../particle_group_impl.hpp"
 #include "../../common/overlay_cartesian_mesh.hpp"
 #include "../dmplex_interface.hpp"
 #include <list>
@@ -314,12 +314,7 @@ public:
         for (int rx = 0; rx < ranks->nrow; rx++) {
           if (ranks->at(rx, 1) < 0) {
             nprint("-----------Failing particle info------------");
-            nprint("Rank dat:", ranks->at(rx, 0), ranks->at(rx, 1));
-            std::cout << "Position dat: ";
-            for (int cx = 0; cx < positions->ncol; cx++) {
-              std::cout << positions->at(rx, cx) << " ";
-            }
-            std::cout << std::endl;
+            particle_group.print_particle(map_cell, rx);
             nprint("--------------------------------------------");
           }
         }

@@ -261,6 +261,26 @@ template <typename... T> inline void ParticleGroup::print(T... args) {
             << std::endl;
 }
 
+inline void ParticleGroup::print_particle(const int cell, const int layer) {
+  nprint("Particle info, cell:", cell, "layer:", layer);
+  auto lambda_print_dat = [&](auto sym, auto dat) {
+    std::cout << "\t" << sym.name << ": ";
+    auto data = dat->cell_dat.get_cell(cell);
+    auto ncomp = dat->ncomp;
+    for (int cx = 0; cx < ncomp; cx++) {
+      std::cout << data->at(cell, cx) << " ";
+    }
+    std::cout << std::endl;
+  };
+
+  for (auto d : this->particle_dats_int) {
+    lambda_print_dat(d.first, d.second);
+  }
+  for (auto d : this->particle_dats_real) {
+    lambda_print_dat(d.first, d.second);
+  }
+}
+
 /*
  * Perform global move operation. Uses particle positions to determine
  * global/neighbour MPI ranks and uses the global then local move methods (in

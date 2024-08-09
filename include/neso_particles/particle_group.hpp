@@ -783,6 +783,14 @@ public:
   template <typename... T> inline void print(T... args);
 
   /**
+   *  Print all particle data for a particle.
+   *
+   *  @param cell Cell of particle.
+   *  @param layer Layer of particle.
+   */
+  inline void print_particle(const int cell, const int layer);
+
+  /**
    *  Remove a ParticleDat from the ParticleGroup
    *
    *  @param sym Sym object that refers to a ParticleDat
