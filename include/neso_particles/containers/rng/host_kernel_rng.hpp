@@ -190,9 +190,6 @@ public:
   virtual inline void impl_post_loop_read(
       [[maybe_unused]] ParticleLoopImplementation::ParticleLoopGlobalInfo
           *global_info) override {
-    NESOASSERT(this->internal_state == 2,
-               "HostKernelRNG Unexpected state, post loop called but internal "
-               "state does not expect a loop to be running.");
     this->internal_state = 0;
   }
 };
