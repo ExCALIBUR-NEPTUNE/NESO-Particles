@@ -17,6 +17,10 @@ option(
   ON)
 option(NESO_PARTICLES_LEGACY_DEVICE_SELECTORS
        "Option to use SYCL 1.2 selectors if 2020 ones are not supported." OFF)
+option(
+  NESO_PARTICLES_DEVICE_AWARE_MPI
+  "Enable device aware MPI by default, i.e. pass device pointers to MPI rather than copying to the host."
+  OFF)
 
 # Create interface/Header only library
 add_library(NESO-Particles INTERFACE)
@@ -133,6 +137,12 @@ if(NESO_PARTICLES_LEGACY_DEVICE_SELECTORS)
   target_compile_definitions(NESO-Particles
                              INTERFACE NESO_PARTICLES_LEGACY_DEVICE_SELECTORS)
   message(STATUS "Using legacy SYCL device selectors")
+endif()
+
+if(NESO_PARTICLES_DEVICE_AWARE_MPI)
+  target_compile_definitions(NESO-Particles
+                             INTERFACE NESO_PARTICLES_DEVICE_AWARE_MPI)
+  message(STATUS "Using device aware MPI.")
 endif()
 
 # Get MPI
