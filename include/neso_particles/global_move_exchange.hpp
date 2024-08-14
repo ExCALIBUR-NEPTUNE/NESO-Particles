@@ -231,13 +231,11 @@ public:
 
     auto t0 = profile_timestamp();
 
-    // Get the packed particle data on the host
-    auto h_send_buffer = particle_packer.get_packed_data_on_host(
+    auto send_pointers = particle_packer.get_packed_pointers(
         this->num_remote_send_ranks, this->h_send_rank_npart.ptr);
+    auto recv_pointers =
+        particle_unpacker.get_recv_pointers(this->num_remote_recv_ranks);
 
-    auto h_send_offsets = particle_packer.h_send_offsets.ptr;
-    auto h_recv_buffer = particle_unpacker.h_recv_buffer.ptr;
-    auto h_recv_offsets = particle_unpacker.h_recv_offsets.ptr;
     const int num_bytes_per_particle = particle_packer.num_bytes_per_particle;
 
     NESOASSERT(particle_packer.num_bytes_per_particle ==
@@ -248,7 +246,7 @@ public:
     for (int rankx = 0; rankx < this->num_remote_recv_ranks; rankx++) {
 
       MPICHK(
-          MPI_Irecv(&h_recv_buffer[h_recv_offsets[rankx]],
+          MPI_Irecv(recv_pointers[rankx],
                     this->h_recv_rank_npart.ptr[rankx] * num_bytes_per_particle,
                     MPI_CHAR, this->h_recv_ranks.ptr[rankx], 43, this->comm,
                     &this->h_recv_requests.ptr[rankx]));
@@ -256,9 +254,8 @@ public:
 
     // non-blocking send of particle data
     for (int rankx = 0; rankx < this->num_remote_send_ranks; rankx++) {
-
       MPICHK(
-          MPI_Isend(&h_send_buffer[h_send_offsets[rankx]],
+          MPI_Isend(send_pointers[rankx],
                     this->h_send_rank_npart.ptr[rankx] * num_bytes_per_particle,
                     MPI_CHAR, this->h_send_ranks.ptr[rankx], 43, this->comm,
                     &this->h_send_requests.ptr[rankx]));
