@@ -268,7 +268,7 @@ inline void ParticleGroup::print_particle(const int cell, const int layer) {
     auto data = dat->cell_dat.get_cell(cell);
     auto ncomp = dat->ncomp;
     for (int cx = 0; cx < ncomp; cx++) {
-      std::cout << data->at(cell, cx) << " ";
+      std::cout << data->at(layer, cx) << " ";
     }
     std::cout << std::endl;
   };

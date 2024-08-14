@@ -715,7 +715,7 @@ TEST(VTK, VTKHDF) {
   MPICHK(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
   std::vector<VTK::UnstructuredCell> data(2);
   {
-    data.at(0).cell_type = 5;
+    data.at(0).cell_type = VTK::CellType::triangle;
     std::vector<double> points = {0.0, 0.0, static_cast<double>(rank),
                                   1.0, 0.0, static_cast<double>(rank),
                                   0.0, 1.0, static_cast<double>(rank)};
@@ -724,12 +724,13 @@ TEST(VTK, VTKHDF) {
         2.0 + rank,
         3.0 + rank,
     };
+    data.at(0).num_points = 3;
     data.at(0).points = points;
-    data.at(0).point_data = point_data;
+    data.at(0).point_data["value"] = point_data;
   }
 
   {
-    data.at(1).cell_type = 9;
+    data.at(1).cell_type = VTK::CellType::quadrilateral;
     std::vector<double> points = {1.0, 0.0, static_cast<double>(rank),
                                   0.0, 1.0, static_cast<double>(rank),
                                   1.0, 2.0, static_cast<double>(rank),
@@ -740,8 +741,9 @@ TEST(VTK, VTKHDF) {
         3.0 + rank,
         4.0 + rank,
     };
+    data.at(1).num_points = 4;
     data.at(1).points = points;
-    data.at(1).point_data = point_data;
+    data.at(1).point_data["value"] = point_data;
   }
 
   vtkhdf.write(data);

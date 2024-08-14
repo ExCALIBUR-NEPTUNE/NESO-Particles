@@ -76,7 +76,7 @@ ParticleGroupSharedPtr particle_loop_common(DM dm, const int N = 1093) {
   std::vector<std::vector<double>> positions;
   std::vector<int> cells;
 
-  uniform_within_dmplex_cells(mesh, npart_per_cell, positions, cells, rng_pos);
+  uniform_within_dmplex_cells(mesh, npart_per_cell, positions, cells, &rng_pos);
 
   const int N_actual = cells.size();
   auto velocities =

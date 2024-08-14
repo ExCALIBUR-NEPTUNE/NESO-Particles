@@ -4,8 +4,8 @@
 #include "../../compute_target.hpp"
 #include "../../containers/cell_dat_const.hpp"
 #include "../../containers/tuple.hpp"
-#include "../../particle_group.hpp"
 #include "../../particle_group_impl.hpp"
+#include "../../particle_io.hpp"
 #include "../../typedefs.hpp"
 #include <map>
 #include <stack>
@@ -523,6 +523,16 @@ public:
    * @returns true if points have been added to the mapper.
    */
   inline bool points_added() { return this->internal_points_added; }
+
+  /**
+   * TODO collective
+   */
+  inline void write_to_disk(std::string filename) {
+    H5Part h5part(filename, this->particle_group, Sym<REAL>("P"),
+                  Sym<INT>("CELL_ID"), Sym<INT>("ADDING_RANK_INDEX"));
+    h5part.write();
+    h5part.close();
+  }
 };
 
 typedef std::shared_ptr<QuadraturePointMapper> QuadraturePointMapperSharedPtr;
