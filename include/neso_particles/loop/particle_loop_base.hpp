@@ -5,27 +5,13 @@
 #include "access_descriptors.hpp"
 #include <memory>
 #include <optional>
+#include <type_traits>
 
 namespace NESO::Particles {
 class ParticleGroup;
 class ParticleSubGroup;
 
 namespace ParticleLoopImplementation {
-
-/**
- * The LoopParameter types define the type collected from a data structure
- * prior to calling the loop. The loop is responsible for computing the kernel
- * argument from the loop argument. e.g. in the ParticleDat case the
- * LoopParameter is the pointer type that points to the data for all cells,
- * layers and components.
- */
-template <typename T> struct LoopParameter { using type = void *; };
-
-/**
- * The KernelParameter types define the types passed to the kernel for each
- * data structure type for each access descriptor.
- */
-template <typename T> struct KernelParameter { using type = void; };
 
 /**
  * The description of the iteration set to pass to the objects used in the
@@ -45,6 +31,26 @@ struct ParticleLoopGlobalInfo {
   int bounding_cell;
   int loop_type_int;
 };
+
+/**
+ * The LoopParameter types define the type collected from a data structure
+ * prior to calling the loop. The loop is responsible for computing the kernel
+ * argument from the loop argument. e.g. in the ParticleDat case the
+ * LoopParameter is the pointer type that points to the data for all cells,
+ * layers and components.
+ */
+// template <typename T> struct LoopParameter { using type = void *; };
+template <typename T, typename U = std::true_type> struct LoopParameter {
+  using type = void *;
+};
+
+/**
+ * The KernelParameter types define the types passed to the kernel for each
+ * data structure type for each access descriptor.
+ */
+// template <typename T> struct KernelParameter { using type = void; };
+template <typename T, typename U = std::true_type>
+struct KernelParameter; // { using type = void; };
 
 /**
  * The description of the iteration index to pas to objects used in the loop.

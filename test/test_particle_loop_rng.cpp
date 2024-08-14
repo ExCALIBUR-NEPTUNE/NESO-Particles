@@ -87,7 +87,7 @@ TEST(ParticleLoopRNG, base) {
   auto seq_lambda = [&]() -> INT { return count++; };
 
   const int seq_ncomp = 2;
-  auto seq_kernel = host_kernel_rng<INT>(seq_lambda, seq_ncomp);
+  auto seq_kernel = host_per_particle_block_rng<INT>(seq_lambda, seq_ncomp);
 
   particle_loop(
       A,
@@ -125,7 +125,7 @@ TEST(ParticleLoopRNG, base_single_cell) {
   auto seq_lambda = [&]() -> INT { return count++; };
 
   const int seq_ncomp = 2;
-  auto seq_kernel = host_kernel_rng<INT>(seq_lambda, seq_ncomp);
+  auto seq_kernel = host_per_particle_block_rng<INT>(seq_lambda, seq_ncomp);
 
   particle_loop(
       A,
@@ -165,7 +165,7 @@ TEST(ParticleLoopRNG, zero_components) {
   INT count = 0;
   auto seq_lambda = [&]() -> INT { return count++; };
 
-  auto seq_kernel = host_kernel_rng<INT>(seq_lambda, 0);
+  auto seq_kernel = host_per_particle_block_rng<INT>(seq_lambda, 0);
 
   particle_loop(
       A, [=]([[maybe_unused]] auto INDEX, [[maybe_unused]] auto RNG) {},
@@ -196,7 +196,7 @@ TEST(ParticleLoopRNG, uniform) {
   auto rng_lambda = [&]() -> REAL { return rng_dist(rng_state); };
 
   const int rng_ncomp = 3;
-  auto rng_kernel = host_kernel_rng<REAL>(rng_lambda, rng_ncomp);
+  auto rng_kernel = host_per_particle_block_rng<REAL>(rng_lambda, rng_ncomp);
 
   particle_loop(
       A,
@@ -239,7 +239,7 @@ TEST(ParticleLoopRNG, uniform_sub_group) {
   auto rng_lambda = [&]() -> REAL { return rng_dist(rng_state); };
 
   const int rng_ncomp = 3;
-  auto rng_kernel = host_kernel_rng<REAL>(rng_lambda, rng_ncomp);
+  auto rng_kernel = host_per_particle_block_rng<REAL>(rng_lambda, rng_ncomp);
 
   auto aa = particle_sub_group(
       A, [=](auto ID) { return ID.at(0) % 2 == 0; },
@@ -297,6 +297,298 @@ TEST(ParticleLoopRNG, uniform_sub_group) {
       }
     }
   }
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}
+
+TEST(ParticleLoopRNG, uniform_atomic_block) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  const int cell_count = mesh->get_cell_count();
+  auto sycl_target = A->sycl_target;
+  const int rank = sycl_target->comm_pair.rank_parent;
+
+  auto zeroer = particle_loop(
+      A,
+      [=](auto V) {
+        for (int cx = 0; cx < 3; cx++) {
+          V.at(cx) = 0.0;
+        }
+      },
+      Access::write(Sym<REAL>("V")));
+  zeroer->execute();
+
+  std::mt19937 rng_state(52234234 + rank);
+  const REAL a = 10.0;
+  const REAL b = 20.0;
+  std::uniform_real_distribution<> rng_dist(a, b);
+  auto rng_lambda = [&]() -> REAL { return rng_dist(rng_state); };
+  const int rng_ncomp = 3;
+
+  // KernelRNG is the type common to all device rngs.
+  // AtomicBlockRNG is the type that has a buffer with an atomic index.
+  // REAL is the value type.
+  std::shared_ptr<KernelRNG<AtomicBlockRNG<REAL>>> rng_device_kernel =
+      host_atomic_block_kernel_rng<REAL>(rng_lambda, rng_ncomp);
+
+  particle_loop(
+      A,
+      [=](auto INDEX, Access::KernelRNG::Read<AtomicBlockRNG<REAL>> RNG,
+          auto V) {
+        for (int cx = 0; cx < rng_ncomp; cx++) {
+          V.at(cx) = RNG.at(INDEX, cx);
+        }
+      },
+      Access::read(ParticleLoopIndex{}), Access::read(rng_device_kernel),
+      Access::write(Sym<REAL>("V")))
+      ->execute();
+
+  ASSERT_TRUE(rng_device_kernel->valid_internal_state());
+
+  for (int cx = 0; cx < cell_count; cx++) {
+    auto V = A->get_cell(Sym<REAL>("V"), cx);
+    for (int rx = 0; rx < V->nrow; rx++) {
+      for (int vx = 0; vx < 3; vx++) {
+        ASSERT_TRUE((a <= V->at(rx, vx)) && (V->at(rx, vx) <= b));
+      }
+    }
+  }
+
+  auto cast_rng_device_kernel =
+      std::dynamic_pointer_cast<HostAtomicBlockKernelRNG<REAL>>(
+          rng_device_kernel);
+  ASSERT_TRUE(cast_rng_device_kernel != nullptr);
+  cast_rng_device_kernel->suppress_warnings = true;
+
+  particle_loop(
+      A,
+      [=](auto INDEX, auto RNG, auto V) {
+        for (int cx = 0; cx < rng_ncomp; cx++) {
+          V.at(cx) = RNG.at(INDEX, cx);
+        }
+        for (int cx = 0; cx < rng_ncomp; cx++) {
+          V.at(cx) = RNG.at(INDEX, cx);
+        }
+      },
+      Access::read(ParticleLoopIndex{}), Access::read(rng_device_kernel),
+      Access::write(Sym<REAL>("V")))
+      ->execute();
+
+  ASSERT_FALSE(rng_device_kernel->valid_internal_state());
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}
+
+TEST(ParticleLoopRNG, uniform_atomic_block_sampler) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  const int cell_count = mesh->get_cell_count();
+  auto sycl_target = A->sycl_target;
+  const int rank = sycl_target->comm_pair.rank_parent;
+
+  auto zeroer = particle_loop(
+      A,
+      [=](auto V) {
+        for (int cx = 0; cx < 3; cx++) {
+          V.at(cx) = 0.0;
+        }
+      },
+      Access::write(Sym<REAL>("V")));
+  zeroer->execute();
+
+  int count = 0;
+  auto rng_lambda = [&]() -> int { return count++; };
+  const int rng_ncomp = 8;
+  auto rng_device_kernel =
+      host_atomic_block_kernel_rng<REAL>(rng_lambda, rng_ncomp);
+
+  // prevent realloc downwards
+  rng_device_kernel->max_factor = 10000.0;
+
+  auto la = std::make_shared<LocalArray<int>>(sycl_target, 1024);
+
+  auto aa = particle_sub_group(
+      A, [=](auto ID) { return ID.at(0) == 0; }, Access::read(Sym<INT>("ID")));
+
+  if (aa->get_npart_local() > 0) {
+    ASSERT_EQ(aa->get_npart_local(), 1);
+
+    std::set<int> seen_values;
+    int sample_count = 0;
+
+    int num_values = 32;
+    rng_device_kernel->set_num_random_numbers(num_values);
+
+    auto lambda_loop = [&]() {
+      particle_loop(
+          aa,
+          [=](auto INDEX, auto RNG, auto LA) {
+            for (int ix = 0; ix < num_values; ix++) {
+              LA.at(ix) = RNG.at(INDEX, ix);
+            }
+          },
+          Access::read(ParticleLoopIndex{}), Access::read(rng_device_kernel),
+          Access::write(la))
+          ->execute();
+    };
+
+    //// Run the plain kernel
+    lambda_loop();
+    ASSERT_TRUE(rng_device_kernel->valid_internal_state());
+    auto hla = la->get();
+    sample_count += num_values;
+    for (int ix = 0; ix < num_values; ix++) {
+      seen_values.insert(hla.at(ix));
+    }
+    ASSERT_EQ(seen_values.size(), sample_count);
+
+    // rerun plain kernel
+    lambda_loop();
+    ASSERT_TRUE(rng_device_kernel->valid_internal_state());
+    hla = la->get();
+    sample_count += num_values;
+    for (int ix = 0; ix < num_values; ix++) {
+      seen_values.insert(hla.at(ix));
+    }
+    ASSERT_EQ(seen_values.size(), sample_count);
+
+    num_values = 4;
+    rng_device_kernel->set_num_random_numbers(num_values);
+    lambda_loop();
+    ASSERT_TRUE(rng_device_kernel->valid_internal_state());
+    hla = la->get();
+    sample_count += num_values;
+    for (int ix = 0; ix < num_values; ix++) {
+      seen_values.insert(hla.at(ix));
+    }
+    ASSERT_EQ(seen_values.size(), sample_count);
+
+    num_values = 2;
+    rng_device_kernel->set_num_random_numbers(num_values);
+
+    lambda_loop();
+    ASSERT_TRUE(rng_device_kernel->valid_internal_state());
+    hla = la->get();
+    sample_count += num_values;
+    for (int ix = 0; ix < num_values; ix++) {
+      seen_values.insert(hla.at(ix));
+    }
+    ASSERT_EQ(seen_values.size(), sample_count);
+
+    num_values = 4;
+    rng_device_kernel->set_num_random_numbers(num_values);
+
+    lambda_loop();
+    ASSERT_TRUE(rng_device_kernel->valid_internal_state());
+    hla = la->get();
+    sample_count += num_values;
+    for (int ix = 0; ix < num_values; ix++) {
+      seen_values.insert(hla.at(ix));
+    }
+    ASSERT_EQ(seen_values.size(), sample_count);
+
+    // loop where no values are used
+    particle_loop(
+        aa, [=](auto INDEX, auto RNG) {}, Access::read(ParticleLoopIndex{}),
+        Access::read(rng_device_kernel))
+        ->execute();
+
+    num_values = 8;
+    rng_device_kernel->set_num_random_numbers(num_values);
+    lambda_loop();
+
+    ASSERT_TRUE(rng_device_kernel->valid_internal_state());
+    hla = la->get();
+    sample_count += num_values;
+    for (int ix = 0; ix < num_values; ix++) {
+      seen_values.insert(hla.at(ix));
+    }
+    ASSERT_EQ(seen_values.size(), sample_count);
+  }
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}
+
+namespace {
+template <typename RNG_TYPE> struct RNGConsumer {
+
+  std::mt19937 rng_state;
+  const REAL a = 10.0;
+  const REAL b = 20.0;
+  std::uniform_real_distribution<> rng_dist;
+  std::shared_ptr<RNG_TYPE> rng;
+
+  RNGConsumer() { this->rng = std::make_shared<RNG_TYPE>(); }
+  inline void setup() {
+    this->rng_state = std::mt19937(52234234);
+    const REAL a = 10.0;
+    const REAL b = 20.0;
+    this->rng_dist = std::uniform_real_distribution<>(a, b);
+    auto rng_lambda = [&]() -> typename RNG_TYPE::RNGValueType {
+      return static_cast<typename RNG_TYPE::RNGValueType>(
+          this->rng_dist(this->rng_state));
+    };
+    this->rng = std::make_shared<RNG_TYPE>(rng_lambda, 3);
+  }
+
+  inline void execute(ParticleGroupSharedPtr particle_group) {
+    particle_loop(
+        particle_group,
+        [=](auto INDEX, auto V, typename RNG_TYPE::KernelType RNG) {
+          for (int cx = 0; cx < 3; cx++) {
+            V.at(cx) = RNG.at(INDEX, cx);
+          }
+        },
+        Access::read(ParticleLoopIndex{}), Access::write(Sym<REAL>("V")),
+        Access::read(this->rng))
+        ->execute();
+  }
+};
+} // namespace
+
+TEST(ParticleLoopRNG, type_casting) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  const int cell_count = mesh->get_cell_count();
+  auto sycl_target = A->sycl_target;
+  const int rank = sycl_target->comm_pair.rank_parent;
+
+  static_assert(
+      std::is_same<typename HostAtomicBlockKernelRNG<REAL>::RNGValueType,
+                   REAL>::value);
+  static_assert(
+      std::is_same<typename HostAtomicBlockKernelRNG<REAL>::SpecialisationType,
+                   AtomicBlockRNG<REAL>>::value);
+  static_assert(
+      std::is_same<typename HostAtomicBlockKernelRNG<REAL>::KernelType,
+                   Access::KernelRNG::Read<AtomicBlockRNG<REAL>>>::value);
+
+  static_assert(
+      std::is_same<typename HostPerParticleBlockRNG<int>::RNGValueType,
+                   int>::value);
+  static_assert(
+      std::is_same<typename HostPerParticleBlockRNG<int>::SpecialisationType,
+                   PerParticleBlockRNG<int>>::value);
+  static_assert(
+      std::is_same<typename HostPerParticleBlockRNG<int>::KernelType,
+                   Access::KernelRNG::Read<PerParticleBlockRNG<int>>>::value);
+
+  RNGConsumer<HostAtomicBlockKernelRNG<REAL>> rng_atomic;
+  rng_atomic.setup();
+  rng_atomic.execute(A);
+
+  RNGConsumer<HostPerParticleBlockRNG<int>> rng_block;
+  rng_block.setup();
+  rng_block.execute(A);
 
   A->free();
   sycl_target->free();
