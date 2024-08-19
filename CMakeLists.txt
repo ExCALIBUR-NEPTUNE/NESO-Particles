@@ -17,7 +17,7 @@ option(
   ON)
 option(NESO_PARTICLES_LEGACY_DEVICE_SELECTORS
        "Option to use SYCL 1.2 selectors if 2020 ones are not supported." OFF)
-option(NESO_PARTICLES_ENABLE_PETSC "Look for PETSc." ON)
+option(NESO_PARTICLES_ENABLE_PETSC "Look for PETSc." OFF)
 # Create interface/Header only library
 add_library(NESO-Particles INTERFACE)
 # Alias the name to the namespaces name. Can use in subdirectory or via Confiig
