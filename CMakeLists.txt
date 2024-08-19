@@ -17,7 +17,7 @@ option(
   ON)
 option(NESO_PARTICLES_LEGACY_DEVICE_SELECTORS
        "Option to use SYCL 1.2 selectors if 2020 ones are not supported." OFF)
-
+option(NESO_PARTICLES_ENABLE_PETSC "Look for PETSc." ON)
 # Create interface/Header only library
 add_library(NESO-Particles INTERFACE)
 # Alias the name to the namespaces name. Can use in subdirectory or via Confiig
@@ -195,26 +195,28 @@ endif()
 target_compile_definitions(NESO-Particles INTERFACE RESTRICT=${RESTRICT})
 
 # now look for PETSc
-find_package(PkgConfig)
-if(PKG_CONFIG_FOUND)
-  pkg_check_modules(PETSC PETSc)
-endif()
+if(NESO_PARTICLES_ENABLE_PETSC)
+  find_package(PkgConfig)
+  if(PKG_CONFIG_FOUND)
+    pkg_check_modules(PETSC PETSc)
+  endif()
 
-if(PETSC_FOUND)
-  message(STATUS "PETSc found")
-  # TODO CHECK AND CLEANUP
-  target_compile_definitions(NESO-Particles INTERFACE NESO_PARTICLES_PETSC
-                                                      ${PETSC_DEFINITIONS})
-  add_definitions(-DNESO_PARTICLES_PETSC ${PETSC_DEFINITIONS})
-  target_link_libraries(NESO-Particles INTERFACE ${PETSC_LINK_LIBRARIES})
-  target_include_directories(NESO-Particles INTERFACE ${PETSC_INCLUDE_DIRS})
-  message(STATUS PETSC_LINK_LIBRARIES ${PETSC_LINK_LIBRARIES})
-  message(STATUS PETSC_LDFLAGS ${PETSC_LDFLAGS})
-  message(STATUS PETSC_INCLUDE_DIRS ${PETSC_INCLUDE_DIRS})
-  message(STATUS PETSC_LIBRARY_DIRS ${PETSC_LIBRARY_DIRS})
-  message(STATUS PETSC_CFLAGS ${PETSC_CFLAGS})
-else()
-  message(STATUS "PETSc NOT found")
+  if(PETSC_FOUND)
+    message(STATUS "PETSc found")
+    # TODO CHECK AND CLEANUP
+    target_compile_definitions(NESO-Particles INTERFACE NESO_PARTICLES_PETSC
+                                                        ${PETSC_DEFINITIONS})
+    add_definitions(-DNESO_PARTICLES_PETSC ${PETSC_DEFINITIONS})
+    target_link_libraries(NESO-Particles INTERFACE ${PETSC_LINK_LIBRARIES})
+    target_include_directories(NESO-Particles INTERFACE ${PETSC_INCLUDE_DIRS})
+    message(STATUS PETSC_LINK_LIBRARIES ${PETSC_LINK_LIBRARIES})
+    message(STATUS PETSC_LDFLAGS ${PETSC_LDFLAGS})
+    message(STATUS PETSC_INCLUDE_DIRS ${PETSC_INCLUDE_DIRS})
+    message(STATUS PETSC_LIBRARY_DIRS ${PETSC_LIBRARY_DIRS})
+    message(STATUS PETSC_CFLAGS ${PETSC_CFLAGS})
+  else()
+    message(STATUS "PETSc NOT found")
+  endif()
 endif()
 
 # Find SYCL
