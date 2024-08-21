@@ -173,15 +173,20 @@ public:
 
     // collect the requested cells rank-wise
     std::map<int, std::vector<INT>> map_send_ranks_cells;
-    std::vector<int> send_ranks;
     for (const INT &cell : cells_set) {
       const int rank = mesh_hierarchy->get_owner(cell);
       if ((-1 < rank) && (rank < mpi_size)) {
-        send_ranks.push_back(rank);
         map_send_ranks_cells[rank].push_back(cell);
       } else {
         this->cells_gathered_no_owner.insert(cell);
       }
+    }
+
+    // Make the vector of ranks that should send to this rank
+    std::vector<int> send_ranks;
+    send_ranks.reserve(map_send_ranks_cells.size());
+    for (const auto &rank_data : map_send_ranks_cells) {
+      send_ranks.push_back(rank_data.first);
     }
 
     // allocate space to send the requested cells to the ranks that own the
