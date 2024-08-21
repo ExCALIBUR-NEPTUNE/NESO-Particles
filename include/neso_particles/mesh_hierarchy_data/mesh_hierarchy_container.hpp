@@ -99,6 +99,7 @@ protected:
   CommunicationEdgesCounter ece;
   std::map<int, SerialContainer<T>> map_cell_buffers;
   std::set<INT> cells_gathered;
+  std::set<INT> cells_gathered_no_owner;
 
   inline void generic_unpack(
       std::map<int, SerialContainer<MHCellBuffer>> &map_incoming_buffers) {
@@ -120,6 +121,7 @@ protected:
   }
 
 public:
+  /// The MeshHierarchy this data structure is on.
   std::shared_ptr<MeshHierarchy> mesh_hierarchy;
 
   /**
@@ -131,9 +133,15 @@ public:
    * @param[in, out] output Container to place objects in.
    */
   inline void get(const INT cell, std::vector<T> &output) {
-    NESOASSERT(this->map_cell_buffers.count(cell),
+    const bool gathered_with_data = this->cells_gathered.count(cell);
+    const bool gathered_with_no_data =
+        this->cells_gathered_no_owner.count(cell);
+    NESOASSERT(gathered_with_data || gathered_with_no_data,
                "Cannot get cell with gather has not been called for.");
-    this->map_cell_buffers.at(cell).get(output);
+    output.clear();
+    if (gathered_with_data) {
+      this->map_cell_buffers.at(cell).get(output);
+    }
   }
 
   /**
@@ -171,6 +179,8 @@ public:
       if ((-1 < rank) && (rank < mpi_size)) {
         send_ranks.push_back(rank);
         map_send_ranks_cells[rank].push_back(cell);
+      } else {
+        this->cells_gathered_no_owner.insert(cell);
       }
     }
 
@@ -276,17 +286,17 @@ public:
       const INT cell = item.first;
       // get the rank which owns the cell
       const int rank = mesh_hierarchy->get_owner(cell);
-      NESOASSERT((-1 < rank) && (rank < mpi_size),
-                 "No owner found for MeshHierarchy cell.");
-      // pack the original vector
-      SerialContainer<T> cell_contents(item.second);
-      std::vector<MHCellBuffer> tmp_cell;
-      tmp_cell.emplace_back(cell, cell_contents.buffer);
-      SerialContainer<MHCellBuffer> tmp_packed_cell(tmp_cell);
-      // append the data on the store for the owning rank
-      map_rank_buffers[rank].append(tmp_packed_cell);
-      // record this rank as one of interest
-      ranks_set.insert(rank);
+      if ((-1 < rank) && (rank < mpi_size)) {
+        // pack the original vector
+        SerialContainer<T> cell_contents(item.second);
+        std::vector<MHCellBuffer> tmp_cell;
+        tmp_cell.emplace_back(cell, cell_contents.buffer);
+        SerialContainer<MHCellBuffer> tmp_packed_cell(tmp_cell);
+        // append the data on the store for the owning rank
+        map_rank_buffers[rank].append(tmp_packed_cell);
+        // record this rank as one of interest
+        ranks_set.insert(rank);
+      }
     }
 
     // get ranks we will send to as a vector

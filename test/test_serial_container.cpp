@@ -382,3 +382,79 @@ TEST(MeshHierarchyData, gather_combine) {
   mhc.free();
   mesh_hierarchy->free();
 }
+
+TEST(MeshHierarchyData, empty) {
+
+  int size, rank;
+  MPICHK(MPI_Comm_size(MPI_COMM_WORLD, &size));
+  MPICHK(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
+
+  const int ndim = 2;
+  const int mesh_size = size;
+  std::vector<int> dims = {mesh_size, mesh_size};
+  std::vector<double> origin = {0.0, 0.0};
+  const double extent = 1.0;
+  const int subdivision_order = 0;
+  auto mesh_hierarchy = std::make_shared<MeshHierarchy>(
+      MPI_COMM_WORLD, ndim, dims, origin, extent, subdivision_order);
+
+  mesh_hierarchy->claim_initialise();
+  for (int rx = rank * size; rx < (rank + 1) * size; rx++) {
+    mesh_hierarchy->claim_cell(rx, 1);
+  }
+  mesh_hierarchy->claim_finalise();
+
+  for (int rx = rank * size; rx < (rank + 1) * size; rx++) {
+    const int owner = mesh_hierarchy->get_owner(rx);
+    ASSERT_EQ(owner, rank);
+  }
+
+  std::map<INT, std::vector<IntTuple>> sources;
+  MeshHierarchyContainer mhc(mesh_hierarchy, sources);
+
+  std::vector<INT> cells = {0};
+  mhc.gather(cells);
+
+  std::vector<IntTuple> tmp;
+  mhc.get(0, tmp);
+  ASSERT_EQ(tmp.size(), 0);
+
+  mhc.free();
+  mesh_hierarchy->free();
+}
+
+TEST(MeshHierarchyData, unclaimed) {
+
+  int size, rank;
+  MPICHK(MPI_Comm_size(MPI_COMM_WORLD, &size));
+  MPICHK(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
+
+  const int ndim = 2;
+  const int mesh_size = size;
+  std::vector<int> dims = {mesh_size, mesh_size};
+  std::vector<double> origin = {0.0, 0.0};
+  const double extent = 1.0;
+  const int subdivision_order = 0;
+  auto mesh_hierarchy = std::make_shared<MeshHierarchy>(
+      MPI_COMM_WORLD, ndim, dims, origin, extent, subdivision_order);
+
+  mesh_hierarchy->claim_initialise();
+  mesh_hierarchy->claim_cell(rank, 1);
+  mesh_hierarchy->claim_finalise();
+
+  const int owner = mesh_hierarchy->get_owner(rank);
+  ASSERT_EQ(owner, rank);
+
+  std::map<INT, std::vector<IntTuple>> sources;
+  MeshHierarchyContainer mhc(mesh_hierarchy, sources);
+
+  std::vector<INT> cells = {size + rank};
+  mhc.gather(cells);
+
+  std::vector<IntTuple> tmp;
+  mhc.get(size + rank, tmp);
+  ASSERT_EQ(tmp.size(), 0);
+
+  mhc.free();
+  mesh_hierarchy->free();
+}
