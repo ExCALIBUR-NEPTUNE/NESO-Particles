@@ -120,6 +120,26 @@ private:
     event_stack.wait();
   }
 
+  inline void print_particle(const int cell, const int layer) {
+    nprint("Particle info, cell:", cell, "layer:", layer);
+    auto lambda_print_dat = [&](auto sym, auto dat) {
+      std::cout << "\t" << sym.name << ": ";
+      auto data = dat->cell_dat.get_cell(cell);
+      auto ncomp = dat->ncomp;
+      for (int cx = 0; cx < ncomp; cx++) {
+        std::cout << data->at(layer, cx) << " ";
+      }
+      std::cout << std::endl;
+    };
+
+    for (auto d : this->particle_dats_int) {
+      lambda_print_dat(d.first, d.second);
+    }
+    for (auto d : this->particle_dats_real) {
+      lambda_print_dat(d.first, d.second);
+    }
+  }
+
 public:
   /// Disable (implicit) copies.
   CellMove(const CellMove &st) = delete;

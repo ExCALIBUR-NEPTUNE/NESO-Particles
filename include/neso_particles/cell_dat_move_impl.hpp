@@ -92,6 +92,20 @@ inline void CellMove::move() {
   this->sycl_target->profile_map.add_region(r);
   r = ProfileRegion("CellMove", "realloc");
 
+  if (this->ep_bad_cell_indices.get_flag()) {
+    for (int cx = 0; cx < k_ncell; cx++) {
+      auto CELLS = this->cell_id_dat->cell_dat.get_cell(cx);
+      const int nrow = CELLS->nrow;
+      for (int rx = 0; rx < nrow; rx++) {
+        const int cell_on_dat = CELLS->at(rx, 0);
+        const bool valid_cell = (cell_on_dat >= 0) && (cell_on_dat < k_ncell);
+        if (!valid_cell) {
+          this->print_particle(cx, rx);
+        }
+      }
+    }
+  }
+
   this->ep_bad_cell_indices.check_and_throw(
       "Particle held bad cell id (not in [0,..,N_cell - 1]).");
 

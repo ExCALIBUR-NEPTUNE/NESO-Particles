@@ -210,7 +210,6 @@ protected:
                 xa, ya, xb, yb, x0, y0, x1, y1, xi, yi, l0, tol);
 
             if (intersects && (l0 < current_distance)) {
-              // nprint("INTERSECTS!", xi, yi);
               P.at(0) = xi;
               P.at(1) = yi;
               C.at(0) = 1;
