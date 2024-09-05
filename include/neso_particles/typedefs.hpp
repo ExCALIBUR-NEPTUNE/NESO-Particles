@@ -268,7 +268,7 @@ inline std::string fixed_width_format(INT value) {
 }
 inline std::string fixed_width_format(REAL value) {
   char buffer[128];
-  const int err = snprintf(buffer, 128, "% f", value);
+  const int err = snprintf(buffer, 128, "% .6e", value);
   NESOASSERT(err >= 0 && err < 128, "Bad snprintf return code.");
   return std::string(buffer);
 }
