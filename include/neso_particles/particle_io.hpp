@@ -184,6 +184,20 @@ private:
     }
   }
 
+  /**
+   * Open the file if it is closed.
+   */
+  inline void open() {
+    if (this->is_closed) {
+      this->plist_id = H5Pcreate(H5P_FILE_ACCESS);
+      H5CHK(H5Pset_fapl_mpio(this->plist_id, this->comm_pair.comm_parent,
+                             MPI_INFO_NULL));
+      H5CHK(this->file_id =
+                H5Fopen(this->filename.c_str(), H5F_ACC_RDWR, this->plist_id));
+      this->is_closed = false;
+    }
+  }
+
 public:
   /// Disable (implicit) copies.
   H5Part(const H5Part &st) = delete;
@@ -219,12 +233,16 @@ public:
   };
 
   /**
-   *  Close the H5Part writer. Must be called. Must be called collectively on
-   *  the communicator.
+   *  Close the H5Part writer. Must be called before execution completes. Must
+   *  be called collectively on the communicator. Can optionally be called
+   *  after calling write to close the file such that if the simulation errors
+   *  the particle trajectory is readable.
    */
   inline void close() {
-    H5CHK(H5Fclose(this->file_id));
-    H5CHK(H5Pclose(this->plist_id));
+    if (!this->is_closed) {
+      H5CHK(H5Fclose(this->file_id));
+      H5CHK(H5Pclose(this->plist_id));
+    }
     this->is_closed = true;
   };
 
@@ -235,9 +253,14 @@ public:
 
   /**
    * Write the current particle data to the HDF5 file as a new time step. Must
-   * be called collectively on the communicator.
+   * be called collectively on the communicator. Will open the file if required.
+   *
+   * @param step_in Optionally set the step explicitly.
    */
   inline void write(INT step_in = -1) {
+    // open the file for writing if required.
+    this->open();
+
     if (step_in >= 0) {
       this->step = step_in;
     }
