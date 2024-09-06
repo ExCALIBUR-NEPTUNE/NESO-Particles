@@ -207,15 +207,19 @@ protected:
             const INT edge_id = data->d_int[edgex * 2 + 1];
 
             const bool intersects = line_segment_intersection_2d(
-                xa, ya, xb, yb, x0, y0, x1, y1, xi, yi, l0, tol);
+                x0, y0, x1, y1, xa, ya, xb, yb, xi, yi, l0, tol);
 
-            if (intersects && (l0 < current_distance)) {
+            const REAL xd = a[0] - xi;
+            const REAL yd = a[1] - yi;
+            const REAL d2 = xd * xd + yd * yd;
+
+            if (intersects && (d2 < current_distance)) {
               P.at(0) = xi;
               P.at(1) = yi;
               C.at(0) = 1;
               C.at(1) = group_id;
               C.at(2) = edge_id;
-              current_distance = l0;
+              current_distance = d2;
             }
           }
         }

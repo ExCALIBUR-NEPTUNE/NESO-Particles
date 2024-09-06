@@ -6,6 +6,28 @@
 
 namespace NESO::Particles {
 
+namespace Kernel {
+
+template <typename T, typename U> inline auto min(const T &x, const U &y) {
+  return KERNEL_MIN(x, y);
+}
+inline auto min(const REAL &x, const REAL &y) { return sycl::fmin(x, y); }
+template <typename T, typename U> inline auto max(const T &x, const U &y) {
+  return KERNEL_MIN(x, y);
+}
+inline auto max(const REAL &x, const REAL &y) { return sycl::fmax(x, y); }
+template <typename T> inline auto abs(const T &x) { return KERNEL_ABS(x); }
+inline auto abs(const REAL &x) { return sycl::fabs(x); }
+inline auto sqrt(const REAL &x) { return sycl::sqrt(x); }
+inline auto rsqrt(const REAL &x) { return sycl::rsqrt(x); }
+inline auto exp(const REAL &x) { return sycl::exp(x); }
+inline auto fmod(const REAL &x, const REAL &y) { return sycl::fmod(x, y); }
+inline auto fma(const REAL &x, const REAL &y, const REAL &z) {
+  return sycl::fma(x, y, z);
+}
+
+} // namespace Kernel
+
 /**
  * Compute the intersection point parameter (lambda0, lambda1) for the lines
  * [(xa, ya), (xb, yb)] and [(x0, y0), (x1, y1)].
@@ -89,8 +111,23 @@ inline bool line_segment_intersection_2d(const REAL &xa, const REAL &ya,
       yi = ya + l1 * (yb - ya);
       l0_out = l1;
     }
-    return ((0.0 - tol) <= l0) && (l0 <= (1.0 + tol)) && ((0 - tol) <= l1) &&
-           (l1 <= (1.0 + tol));
+
+    // This segment where the ends are padded with +- tol.
+    const bool in_bounds_ab =
+        ((0.0 - tol) <= l0_out) && (l0_out <= (1.0 + tol));
+
+    // This segment is the one where we want strict bounds.
+    const bool x_cond = (x0 < x1);
+    const REAL x_low = x_cond ? x0 : x1;
+    const REAL x_max = x_cond ? x1 : x0;
+    const bool y_cond = (y0 < y1);
+    const REAL y_low = y_cond ? y0 : y1;
+    const REAL y_max = y_cond ? y1 : y0;
+
+    const bool in_bounds_01 =
+        (x_low <= xi) && (xi <= x_max) && (y_low <= yi) && (yi <= y_max);
+
+    return in_bounds_ab && in_bounds_01;
   } else {
     return false;
   }
@@ -189,28 +226,6 @@ inline void naive_matrix_inverse<4>(const REAL *RESTRICT M, REAL *RESTRICT L) {
            M[1] * M[6] * M[8] + M[2] * M[4] * M[9] - M[2] * M[5] * M[8]) *
           inverse_factor;
 }
-
-namespace Kernel {
-
-template <typename T, typename U> inline auto min(const T &x, const U &y) {
-  return KERNEL_MIN(x, y);
-}
-inline auto min(const REAL &x, const REAL &y) { return sycl::fmin(x, y); }
-template <typename T, typename U> inline auto max(const T &x, const U &y) {
-  return KERNEL_MIN(x, y);
-}
-inline auto max(const REAL &x, const REAL &y) { return sycl::fmax(x, y); }
-template <typename T> inline auto abs(const T &x) { return KERNEL_ABS(x); }
-inline auto abs(const REAL &x) { return sycl::fabs(x); }
-inline auto sqrt(const REAL &x) { return sycl::sqrt(x); }
-inline auto rsqrt(const REAL &x) { return sycl::rsqrt(x); }
-inline auto exp(const REAL &x) { return sycl::exp(x); }
-inline auto fmod(const REAL &x, const REAL &y) { return sycl::fmod(x, y); }
-inline auto fma(const REAL &x, const REAL &y, const REAL &z) {
-  return sycl::fma(x, y, z);
-}
-
-} // namespace Kernel
 
 } // namespace NESO::Particles
 
