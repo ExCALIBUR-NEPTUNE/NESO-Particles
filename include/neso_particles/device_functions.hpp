@@ -113,21 +113,21 @@ inline bool line_segment_intersection_2d(const REAL &xa, const REAL &ya,
     }
 
     // This segment where the ends are padded with +- tol.
-    const bool in_bounds_ab =
+    const bool in_bounds_01 =
         ((0.0 - tol) <= l0_out) && (l0_out <= (1.0 + tol));
 
     // This segment is the one where we want strict bounds.
     const bool x_cond = (x0 < x1);
-    const REAL x_low = x_cond ? x0 : x1;
+    const REAL x_min = x_cond ? x0 : x1;
     const REAL x_max = x_cond ? x1 : x0;
     const bool y_cond = (y0 < y1);
-    const REAL y_low = y_cond ? y0 : y1;
+    const REAL y_min = y_cond ? y0 : y1;
     const REAL y_max = y_cond ? y1 : y0;
 
-    const bool in_bounds_01 =
-        (x_low <= xi) && (xi <= x_max) && (y_low <= yi) && (yi <= y_max);
+    const bool in_bounds_ab = (x_min - tol <= xi) && (xi <= x_max + tol) &&
+                              (y_min - tol <= yi) && (yi <= y_max + tol);
 
-    return in_bounds_ab && in_bounds_01;
+    return in_bounds_01 && in_bounds_ab;
   } else {
     return false;
   }
