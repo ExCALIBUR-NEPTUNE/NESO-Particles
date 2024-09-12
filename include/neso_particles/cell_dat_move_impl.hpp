@@ -104,10 +104,10 @@ inline void CellMove::move() {
         }
       }
     }
+    NESOASSERT(false, "Particle held bad cell id (not in [0,..,N_cell - 1]). "
+                      "Note N_cell is " +
+                          std::to_string(k_ncell) + ".");
   }
-
-  this->ep_bad_cell_indices.check_and_throw(
-      "Particle held bad cell id (not in [0,..,N_cell - 1]).");
 
   // Realloc the ParticleDat cells for the move
   if (this->ncell > 0) {
