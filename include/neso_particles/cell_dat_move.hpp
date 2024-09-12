@@ -17,6 +17,7 @@
 #include "profiling.hpp"
 #include "sycl_typedefs.hpp"
 #include "typedefs.hpp"
+#include <iomanip>
 
 namespace NESO::Particles {
 
@@ -122,6 +123,7 @@ private:
 
   inline void print_particle(const int cell, const int layer) {
     nprint("Particle info, cell:", cell, "layer:", layer);
+    std::cout << std::setprecision(18);
     auto lambda_print_dat = [&](auto sym, auto dat) {
       std::cout << "\t" << sym.name << ": ";
       auto data = dat->cell_dat.get_cell(cell);

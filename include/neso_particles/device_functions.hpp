@@ -25,6 +25,9 @@ inline auto fmod(const REAL &x, const REAL &y) { return sycl::fmod(x, y); }
 inline auto fma(const REAL &x, const REAL &y, const REAL &z) {
   return sycl::fma(x, y, z);
 }
+template <typename T> inline auto pow(const T x, const T y) {
+  return sycl::pow(x, y);
+}
 
 } // namespace Kernel
 
