@@ -8,7 +8,8 @@
 namespace NESO::Particles::ExternalCommon {
 
 /**
- * TODO
+ * Device copyable type for mapping indices in the internal ordering to the
+ * external ordering and vice versa.
  */
 struct DOFMapperDGDeviceMapper {
   int num_cells_local;
@@ -16,14 +17,22 @@ struct DOFMapperDGDeviceMapper {
   int *d_map_to_index;
 
   /**
-   * TODO
+   * @param cell Local index of cell to get DOF ordering for.
+   * @param dof Cell local index of DOF to get the external index of.
+   * @returns External index for cell and DOF.
    */
   inline int get(const int cell, const int dof) const {
     return this->d_map_to_index[cell * num_dofs_per_cell + dof];
   }
 
   /**
-   * TODO
+   * Copy DOF value from a buffer in the internal ordering to a buffer in the
+   * external ordering.
+   *
+   * @param[in] cell Cell containing DOF to copy.
+   * @param[in] dof Cell local DOF index for value to copy.
+   * @param[in] source Pointer to buffer containing all DOFs.
+   * @param[in, out] destination Pointer to destination buffer for all DOFS.
    */
   inline void copy_to_external(const int cell, const int dof,
                                const REAL *RESTRICT source,
@@ -34,7 +43,13 @@ struct DOFMapperDGDeviceMapper {
   }
 
   /**
-   * TODO
+   * Copy DOF value from a buffer containing DOFs in the external ordering to a
+   * buffer containing DOFs in the internal ordering.
+   *
+   * @param[in] cell Index of cell to copy DOF value for.
+   * @param[in] dof Cell local DOF index to copy.
+   * @param[in] source Pointer to buffer containing all DOFs.
+   * @param[in, out] destination Pointer to destination buffer for all DOFs.
    */
   inline void copy_from_external(const int cell, const int dof,
                                  const REAL *RESTRICT source,
@@ -46,7 +61,8 @@ struct DOFMapperDGDeviceMapper {
 };
 
 /**
- * TODO
+ * Holds DOF values in an internal representation on the device. DOF ordering on
+ * the device may be different to the host.
  */
 class DOFMapperDG {
 protected:
@@ -63,7 +79,12 @@ public:
   DOFMapperDG() = default;
 
   /**
-   * TODO
+   * Create a DOF mapper on a compute device for a given number of cells and a
+   * given number of DOFs per cell.
+   *
+   * @param sycl_target Compute device to store DOFs on.
+   * @param num_cells_local Number of cells to create a store for.
+   * @param num_dofs_per_cell Number of DOFs per cell.
    */
   DOFMapperDG(SYCLTargetSharedPtr sycl_target, const int num_cells_local,
               const int num_dofs_per_cell)
@@ -75,7 +96,11 @@ public:
   }
 
   /**
-   * TODO
+   * Retrieve the internal index for a given cell and DOF index.
+   *
+   * @param cell Index of the cell to index.
+   * @param dof Index of the DOF to index.
+   * @returns Linearised internal index in the store for the cell and DOF.
    */
   inline int index(const int cell, const int dof) const {
     NESOASSERT((0 <= cell) && (cell < this->num_cells_local),
@@ -86,7 +111,12 @@ public:
   }
 
   /**
-   * TODO
+   * Set the external linearised DOF index (global) for a given cell and DOF
+   * index (within the cell).
+   *
+   * @param cell The cell index to set the linearised global index for.
+   * @param dof The cell local index of the DOF to set the index for.
+   * @param index The global linearised index of the DOF.
    */
   inline void set(const int cell, const int dof, const int index) {
     this->map_to_index.at(this->index(cell, dof)) = index;
@@ -94,14 +124,19 @@ public:
   }
 
   /**
-   * TODO
+   * Retrieve the external index for a given cell and DOF index.
+   *
+   * @param cell Index of the cell to index.
+   * @param dof Index of the DOF to index.
+   * @returns Linearised external index in the store for the cell and DOF.
    */
   inline int get(const int cell, const int dof) const {
     return this->map_to_index.at(this->index(cell, dof));
   }
 
   /**
-   * TODO
+   * @returns A device copyable helper type for mapping between internal and
+   * external DOF orderings.
    */
   inline DOFMapperDGDeviceMapper get_device_mapper() {
     if (!this->device_valid) {
@@ -117,7 +152,14 @@ public:
   }
 
   /**
-   * TODO
+   * Copy DOF values from the DOFs stored in a CellDatConst, stored in the
+   * internal ordering, to an external buffer with DOFs in the external
+   * ordering.
+   *
+   * @param[in] cell_dat_const Source CellDatConst containing DOFs in the
+   * internal ordering.
+   * @param[in, out] h_external_dofs Output location to copy DOFs into.
+   * @param[in] es EventStack to push the copy operation onto.
    */
   inline void copy_to_external(CellDatConstSharedPtr<REAL> cell_dat_const,
                                REAL *h_external_dofs, EventStack &es) {
@@ -149,7 +191,12 @@ public:
   }
 
   /**
-   * TODO
+   *
+   * @param[in, out] cell_dat_const  Destination CellDatConst containing DOFs in
+   * the internal ordering.
+   * @param[in] h_external_dofs Source buffer containing DOFs in the external
+   * ordering.
+   * @param[in] es EventStack to push the copy operation onto.
    */
   inline void copy_from_external(CellDatConstSharedPtr<REAL> cell_dat_const,
                                  REAL *h_external_dofs, EventStack &es) {
