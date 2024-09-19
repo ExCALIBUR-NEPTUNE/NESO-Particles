@@ -5,11 +5,32 @@
 #include "access_descriptors.hpp"
 #include <memory>
 #include <optional>
+#include <type_traits>
 
 namespace NESO::Particles {
 class ParticleGroup;
+class ParticleSubGroup;
 
 namespace ParticleLoopImplementation {
+
+/**
+ * The description of the iteration set to pass to the objects used in the
+ * loop.
+ */
+struct ParticleLoopGlobalInfo {
+  // Underlying @ref ParticleGroup that created the iteration set.
+  ParticleGroup *particle_group;
+  // If the iteration set is actually a @ref ParticleSubGroup then this is a
+  // pointer to the sub group. Otherwise this member is a nullptr.
+  ParticleSubGroup *particle_sub_group;
+  INT *d_npart_cell_es;
+  INT *d_npart_cell_es_lb;
+  // The starting cell is only set for calls to create_loop_args.
+  int starting_cell;
+  // Last cell plus one. Only set for calls to create_loop_args.
+  int bounding_cell;
+  int loop_type_int;
+};
 
 /**
  * The LoopParameter types define the type collected from a data structure
@@ -18,26 +39,18 @@ namespace ParticleLoopImplementation {
  * LoopParameter is the pointer type that points to the data for all cells,
  * layers and components.
  */
-template <typename T> struct LoopParameter { using type = void *; };
+// template <typename T> struct LoopParameter { using type = void *; };
+template <typename T, typename U = std::true_type> struct LoopParameter {
+  using type = void *;
+};
 
 /**
  * The KernelParameter types define the types passed to the kernel for each
  * data structure type for each access descriptor.
  */
-template <typename T> struct KernelParameter { using type = void; };
-
-/**
- * The description of the iteration set to pass to the objects used in the
- * loop.
- */
-struct ParticleLoopGlobalInfo {
-  ParticleGroup *particle_group;
-  INT *d_npart_cell_es;
-  INT *d_npart_cell_es_lb;
-  // The starting cell is only set for calls to create_loop_args.
-  int starting_cell;
-  int loop_type_int;
-};
+// template <typename T> struct KernelParameter { using type = void; };
+template <typename T, typename U = std::true_type>
+struct KernelParameter; // { using type = void; };
 
 /**
  * The description of the iteration index to pas to objects used in the loop.
@@ -58,6 +71,11 @@ struct ParticleLoopIteration {
 /**
  * The functions to run for each argument to the kernel post loop completion.
  */
+/**
+ * Default pre loop execution function.
+ */
+template <typename T>
+inline void pre_loop(ParticleLoopGlobalInfo *global_info, T &arg) {}
 /**
  * Default post loop execution function.
  */

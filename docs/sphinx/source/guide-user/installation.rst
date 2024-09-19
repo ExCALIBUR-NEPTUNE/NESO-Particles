@@ -47,6 +47,7 @@ These downstream implementations should pass CMake variables or compilers at con
     cmake -DHIPSYCL_TARGETS=cuda-nvcxx .
 
 When a SYCL implementation is passed to NESO-Particles itself then it is used to build the tests.
+Please read the section :ref:`device-aware-mpi` for more information relating to device aware MPI.
 
 Installing
 ==========
@@ -59,7 +60,7 @@ To build NESO-Particles with tests:
     mkdir build
     cd  build
     # Choose a SYCL implementation to build tests with
-    cmake -DHIPSYCL_TARGETS=omp.library-only -DCMAKE_INSTALL_PREFIX=<install location> .
+    cmake -DHIPSYCL_TARGETS=omp.library-only -DCMAKE_INSTALL_PREFIX=<install location> ..
     make
     make install
 
@@ -81,6 +82,18 @@ Notes:
 
 #. Searching for and building against HDF5 can be disabled by passing ``-DNESO_PARTICLES_ENABLE_HDF5=OFF`` to CMake.
 #. If an installation is required without tests built or SYCL configured then CMake can be called with ``-DNESO_PARTICLES_ENABLE_TESTS=OFF -DNESO_PARTICLES_ENABLE_FIND_SYCL=OFF``. **Tests should always be ran before any notion of trust is formed of outputs**.
+
+
+.. _device-aware-mpi:
+
+Device Aware MPI
+================
+
+By default device aware MPI, i.e. passing device pointers to MPI, is disabled for compatibility. 
+Device aware MPI functionality can be enabled by default by passing ``-DNESO_PARTICLES_DEVICE_AWARE_MPI=ON`` to cmake.
+At runtime device aware MPI can be enabled by setting the environment variable ``NESO_PARTICLES_DEVICE_AWARE_MPI`` to ``ON`` alternatively at runtime this functionality can be disabled by setting the same environment variable to ``OFF``.
+The environment variable takes precedence over the cmake variable and in particular it is not required to enable device aware MPI at cmake time to later enable this functionality by using the environment variable.
+Note that when compiling for a CPU device it should always be safe to enable device aware MPI. 
 
 Known Issues and Workarounds
 ============================

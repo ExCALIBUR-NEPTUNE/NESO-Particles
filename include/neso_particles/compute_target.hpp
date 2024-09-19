@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <map>
 #include <mpi.h>
+#include <optional>
 #include <stack>
 #include <string>
 #include <vector>
@@ -78,6 +79,13 @@ public:
   /// Disable (implicit) copies.
   SYCLTarget &operator=(SYCLTarget const &a) = delete;
 
+// Add a define to use SYCL 1.2 selectors if 2020 ones are not supported
+#if (SYCL_LANGUAGE_VERSION == 202001) && defined(__INTEL_LLVM_COMPILER)
+#if (__INTEL_LLVM_COMPILER < 20230000)
+#define NESO_PARTICLES_LEGACY_DEVICE_SELECTORS
+#endif
+#endif
+
   /**
    * Create a new SYCLTarget using a flag to specifiy device type and a parent
    * MPI communicator.
@@ -93,20 +101,36 @@ public:
       : comm_pair(comm) {
     if (gpu_device > 0) {
       try {
+#ifdef NESO_PARTICLES_LEGACY_DEVICE_SELECTORS
         this->device = sycl::device{sycl::gpu_selector()};
+#else
+        this->device = sycl::device{sycl::gpu_selector_v};
+#endif
       } catch (sycl::exception const &e) {
         std::cout << "Cannot select a GPU\n" << e.what() << "\n";
         std::cout << "Using a CPU device\n";
+#ifdef NESO_PARTICLES_LEGACY_DEVICE_SELECTORS
         this->device = sycl::device{sycl::cpu_selector()};
+#else
+        this->device = sycl::device{sycl::cpu_selector_v};
+#endif
       }
     } else if (gpu_device < 0) {
+#ifdef NESO_PARTICLES_LEGACY_DEVICE_SELECTORS
       this->device = sycl::device{sycl::cpu_selector()};
+#else
+      this->device = sycl::device{sycl::cpu_selector_v};
+#endif
     } else {
 
       // Get the default device and platform as they are most likely to be the
       // desired device based on SYCL implementation/runtime/environment
       // variables.
+#ifdef NESO_PARTICLES_LEGACY_DEVICE_SELECTORS
       sycl::device default_device{sycl::default_selector()};
+#else
+      sycl::device default_device{sycl::default_selector_v};
+#endif
       auto default_platform = default_device.get_platform();
 
       // Get all devices from the default platform
@@ -333,9 +357,20 @@ public:
    * current allocation. Current contents is not copied to the new buffer.
    *
    * @param size Minimum number of elements this buffer should be able to hold.
+   * @param max_size_factor (Optional) Specify a ratio, if the underlying
+   * buffer is larger than the requested ammount times this ratio then free the
+   * buffer and reallocate.
    */
-  inline int realloc_no_copy(const std::size_t size) {
-    if (size > this->size) {
+  inline int
+  realloc_no_copy(const std::size_t size,
+                  const std::optional<REAL> max_size_factor = std::nullopt) {
+
+    const std::size_t max_size = std::max(
+        size, (std::size_t)(max_size_factor != std::nullopt
+                                ? max_size_factor.value() * ((REAL)size)
+                                : this->size));
+
+    if ((size > this->size) || (this->size > max_size)) {
       this->assert_allocated();
       this->free_wrapper(this->ptr);
       this->ptr = this->malloc_wrapper(size * sizeof(T));

@@ -66,6 +66,43 @@ auto apply(KERNEL kernel, Tuple<ARGS...> &args) {
       kernel, typename GenerateIntSequence<sizeof...(ARGS)>::type(), args);
 }
 
+template <std::size_t N, typename KERNEL, typename... ARGS>
+auto apply_truncated(KERNEL kernel, Tuple<ARGS...> &args) {
+  return apply_inner(kernel, typename GenerateIntSequence<N>::type(), args);
+}
+
+namespace {
+template <std::size_t INDEX, typename U, typename V>
+inline void assign_inner(U &tuple, V &value) {
+  get<INDEX>(tuple) = value;
+}
+
+template <std::size_t INDEX, typename U, typename V, typename... T>
+inline void assign_inner(U &tuple, V &value, T &&...args) {
+  get<INDEX>(tuple) = value;
+  assign_inner<INDEX + 1>(tuple, args...);
+}
+} // namespace
+
+template <typename... T> inline Tuple<T...> to_tuple(T... args) {
+  Tuple<T...> t;
+  assign_inner<0>(t, args...);
+  return t;
+}
+
+namespace {
+template <typename U> inline auto get_last_parameter_inner(U &&u) { return u; }
+
+template <typename U, typename... T>
+inline auto get_last_parameter_inner(U &&, T &&...args) {
+  return get_last_parameter_inner(args...);
+}
+} // namespace
+
+template <typename... T> inline auto get_last_arg(T &&...args) {
+  return get_last_parameter_inner(args...);
+}
+
 } // namespace NESO::Particles::Tuple
 
 #endif

@@ -38,8 +38,76 @@ protected:
     return parent;
   }
 
+  template <template <typename> typename T, typename U>
+  inline void check_sym_type(T<U> arg) {
+    static_assert(std::is_same<T<U>, Sym<U>>::value == true,
+                  "Filtering lambda arguments must be read access particle "
+                  "properties (Sym instances). Sym type check failed.");
+
+    // add this sym to the version checker signature
+    this->particle_dat_versions[arg] = 0;
+  }
+
+  template <typename T> inline void check_sym_type(SymVectorSharedPtr<T> sv) {
+    auto dats = sv->get_particle_dats();
+    for (auto &dx : dats) {
+      this->check_sym_type(dx->sym);
+    }
+  }
+
+  inline void check_sym_type([[maybe_unused]] ParticleLoopIndex &) {}
+
+  template <template <typename> typename T, typename U>
+  inline void check_read_access(T<U> arg) {
+    static_assert(std::is_same<T<U>, Access::Read<U>>::value == true,
+                  "Filtering lambda arguments must be read access particle "
+                  "properties (Sym instances). Read access check failed.");
+    check_sym_type(arg.obj);
+  }
+
+  inline void add_parent_dependencies(ParticleGroupSharedPtr parent) {}
+  inline void add_parent_dependencies(std::shared_ptr<ParticleSubGroup> parent);
+
+  SubGroupSelector() = default;
+
+  template <typename PARENT>
+  inline void internal_setup(std::shared_ptr<PARENT> parent) {
+    this->add_parent_dependencies(parent);
+    this->particle_group_version = 0;
+
+    auto sycl_target = particle_group->sycl_target;
+    const int cell_count = particle_group->domain->mesh->get_cell_count();
+    this->map_cell_to_particles =
+        std::make_shared<CellDat<INT>>(sycl_target, cell_count, 1);
+    this->dh_npart_cell =
+        std::make_shared<BufferDeviceHost<int>>(sycl_target, cell_count);
+    this->map_ptrs = LocalArray<int *>(sycl_target, 2);
+    this->d_npart_cell_es =
+        std::make_shared<BufferDevice<INT>>(sycl_target, cell_count);
+
+    this->loop_1 = particle_loop(
+        "sub_group_selector_1", parent,
+        [=](auto loop_index, auto k_map_cell_to_particles, auto k_map_ptrs) {
+          const INT particle_linear_index = loop_index.get_local_linear_index();
+          const int layer = k_map_ptrs.at(0)[particle_linear_index];
+          const bool required = layer > -1;
+          if (required) {
+            k_map_cell_to_particles.at(layer, 0) = loop_index.layer;
+          }
+        },
+        Access::read(ParticleLoopIndex{}),
+        Access::write(this->map_cell_to_particles),
+        Access::read(this->map_ptrs));
+  }
+
+  inline auto get_particle_group_sub_group_layers() {
+    return particle_group->d_sub_group_layers;
+  }
+
 public:
   ParticleGroupSharedPtr particle_group;
+  ParticleGroup::ParticleDatVersionTracker particle_dat_versions;
+  ParticleGroup::ParticleGroupVersion particle_group_version;
 
   struct SelectionT {
     int npart_local;
@@ -68,15 +136,8 @@ public:
   SubGroupSelector(std::shared_ptr<PARENT> parent, KERNEL kernel, ARGS... args)
       : particle_group(get_particle_group(parent)) {
 
-    auto sycl_target = particle_group->sycl_target;
-    const int cell_count = particle_group->domain->mesh->get_cell_count();
-    this->map_cell_to_particles =
-        std::make_shared<CellDat<INT>>(sycl_target, cell_count, 1);
-    this->dh_npart_cell =
-        std::make_shared<BufferDeviceHost<int>>(sycl_target, cell_count);
-    this->map_ptrs = LocalArray<int *>(sycl_target, 2);
-    this->d_npart_cell_es =
-        std::make_shared<BufferDevice<INT>>(sycl_target, cell_count);
+    (check_read_access(args), ...);
+    this->internal_setup(parent);
 
     this->loop_0 = particle_loop(
         "sub_group_selector_0", parent,
@@ -95,20 +156,6 @@ public:
         },
         Access::read(ParticleLoopIndex{}), Access::read(this->map_ptrs),
         args...);
-
-    this->loop_1 = particle_loop(
-        "sub_group_selector_1", parent,
-        [=](auto loop_index, auto k_map_cell_to_particles, auto k_map_ptrs) {
-          const INT particle_linear_index = loop_index.get_local_linear_index();
-          const int layer = k_map_ptrs.at(0)[particle_linear_index];
-          const bool required = layer > -1;
-          if (required) {
-            k_map_cell_to_particles.at(layer, 0) = loop_index.layer;
-          }
-        },
-        Access::read(ParticleLoopIndex{}),
-        Access::write(this->map_cell_to_particles),
-        Access::read(this->map_ptrs));
   }
 
   /**
@@ -117,8 +164,7 @@ public:
    *
    * @returns List of cells and layers of particles in the sub group.
    */
-  inline SelectionT get() {
-
+  virtual inline SelectionT get() {
     const int cell_count = this->particle_group->domain->mesh->get_cell_count();
     auto sycl_target = this->particle_group->sycl_target;
     auto pg_map_layers = particle_group->d_sub_group_layers;
@@ -165,10 +211,11 @@ public:
     s.d_npart_cell = d_npart_cell_ptr;
     s.d_npart_cell_es = d_npart_cell_es_ptr;
     s.d_map_cells_to_particles = this->map_cell_to_particles->device_ptr();
-
     return s;
   }
 };
+
+typedef std::shared_ptr<SubGroupSelector> SubGroupSelectorSharedPtr;
 
 } // namespace ParticleSubGroupImplementation
 
@@ -189,47 +236,16 @@ class ParticleSubGroup {
   template <typename KERNEL, typename... ARGS>
   friend class ParticleLoopSubGroup;
   friend class ParticleGroup;
+  friend class ParticleSubGroupImplementation::SubGroupSelector;
 
 protected:
   bool is_static;
   ParticleGroupSharedPtr particle_group;
-  ParticleSubGroupImplementation::SubGroupSelector selector;
+  ParticleSubGroupImplementation::SubGroupSelectorSharedPtr selector;
   ParticleSubGroupImplementation::SubGroupSelector::SelectionT selection;
 
   int npart_local;
-  ParticleGroup::ParticleDatVersionTracker particle_dat_versions;
   bool is_whole_particle_group;
-
-  template <template <typename> typename T, typename U>
-  inline void check_sym_type(T<U> arg) {
-    static_assert(std::is_same<T<U>, Sym<U>>::value == true,
-                  "Filtering lambda arguments must be read access particle "
-                  "properties (Sym instances). Sym type check failed.");
-
-    // add this sym to the version checker signature
-    this->particle_dat_versions[arg] = 0;
-  }
-
-  template <typename T> inline void check_sym_type(SymVectorSharedPtr<T> sv) {
-    auto dats = sv->get_particle_dats();
-    for (auto &dx : dats) {
-      this->check_sym_type(dx->sym);
-    }
-  }
-
-  inline void check_sym_type([[maybe_unused]] ParticleLoopIndex &) {}
-
-  template <template <typename> typename T, typename U>
-  inline void check_read_access(T<U> arg) {
-    static_assert(std::is_same<T<U>, Access::Read<U>>::value == true,
-                  "Filtering lambda arguments must be read access particle "
-                  "properties (Sym instances). Read access check failed.");
-    check_sym_type(arg.obj);
-  }
-
-  ParticleSubGroup(ParticleSubGroupImplementation::SubGroupSelector selector)
-      : particle_group(selector.particle_group), selector(selector),
-        is_whole_particle_group(false), is_static(false) {}
 
   /**
    * Get the cells and layers of the particles in the sub group (slow)
@@ -243,7 +259,7 @@ protected:
 
     INT index = 0;
     for (int cellx = 0; cellx < cell_count; cellx++) {
-      auto cell_data = this->selector.map_cell_to_particles->get_cell(cellx);
+      auto cell_data = this->selector->map_cell_to_particles->get_cell(cellx);
       const int nrow = cell_data->nrow;
       for (int rowx = 0; rowx < nrow; rowx++) {
         cells[index] = cellx;
@@ -261,22 +277,16 @@ protected:
     NESOASSERT(!this->is_whole_particle_group,
                "Explicitly creating the ParticleSubGroup when the sub-group is "
                "the entire ParticleGroup should never be required.");
-
-    this->selection = this->selector.get();
+    this->selection = this->selector->get();
     this->npart_local = this->selection.npart_local;
   }
 
   inline void create_and_update_cache() {
     create_inner();
-    this->particle_group->check_validation(this->particle_dat_versions);
-  }
-
-  inline void add_parent_dependencies(ParticleGroupSharedPtr parent) {}
-  inline void
-  add_parent_dependencies(std::shared_ptr<ParticleSubGroup> parent) {
-    for (const auto dep : parent->particle_dat_versions) {
-      this->particle_dat_versions[dep.first] = 0;
-    }
+    this->particle_group->check_validation(
+        this->selector->particle_dat_versions);
+    this->particle_group->check_validation(
+        this->selector->particle_group_version);
   }
 
 public:
@@ -306,11 +316,9 @@ public:
    */
   template <typename PARENT, typename KERNEL, typename... ARGS>
   ParticleSubGroup(std::shared_ptr<PARENT> parent, KERNEL kernel, ARGS... args)
-      : ParticleSubGroup(ParticleSubGroupImplementation::SubGroupSelector(
-            parent, kernel, args...)) {
-    (check_read_access(args), ...);
-    this->add_parent_dependencies(parent);
-  }
+      : ParticleSubGroup(
+            std::make_shared<ParticleSubGroupImplementation::SubGroupSelector>(
+                parent, kernel, args...)) {}
 
   /**
    * Create a ParticleSubGroup which is simply a reference/view into an entire
@@ -331,6 +339,17 @@ public:
       : ParticleSubGroup(particle_group, []() { return true; }) {
     this->is_whole_particle_group = true;
   }
+
+  /**
+   * Create a ParticleSubGroup directly from a SubGroupSelector. This allows
+   * specialsation of the selector via inheritance.
+   *
+   * @param selector Sub-class of SubGroupSelector.
+   */
+  ParticleSubGroup(
+      ParticleSubGroupImplementation::SubGroupSelectorSharedPtr selector)
+      : particle_group(selector->particle_group), selector(selector),
+        is_whole_particle_group(false), is_static(false) {}
 
   /**
    * Get and optionally set the static status of the ParticleSubGroup.
@@ -378,7 +397,7 @@ public:
   inline bool is_valid() {
     if (this->is_static) {
       return !this->particle_group->check_validation(
-          this->particle_dat_versions, false);
+          this->selector->particle_group_version, false);
     }
     return true;
   }
@@ -395,7 +414,12 @@ public:
       return false;
     }
 
-    if (this->particle_group->check_validation(this->particle_dat_versions)) {
+    const bool bool_dats = this->particle_group->check_validation(
+        this->selector->particle_dat_versions);
+    const bool bool_group = this->particle_group->check_validation(
+        this->selector->particle_group_version);
+
+    if (bool_dats || bool_group) {
       this->create_inner();
       return true;
     }
@@ -476,7 +500,7 @@ public:
                    "Layer index not in range.");
 
         const INT parent_layer =
-            this->selector.map_cell_to_particles->get_value(cellx, layerx, 0);
+            this->selector->map_cell_to_particles->get_value(cellx, layerx, 0);
         inner_layers.push_back(parent_layer);
       }
       return this->particle_group->get_particles(cells, inner_layers);
@@ -489,6 +513,15 @@ namespace ParticleSubGroupImplementation {
 inline ParticleGroupSharedPtr
 SubGroupSelector::get_particle_group(std::shared_ptr<ParticleSubGroup> parent) {
   return parent->get_particle_group();
+}
+
+inline void SubGroupSelector::add_parent_dependencies(
+    std::shared_ptr<ParticleSubGroup> parent) {
+  if (parent != nullptr) {
+    for (const auto dep : parent->selector->particle_dat_versions) {
+      this->particle_dat_versions[dep.first] = 0;
+    }
+  }
 }
 
 } // namespace ParticleSubGroupImplementation
@@ -696,9 +729,9 @@ public:
 
     auto &selection = this->particle_sub_group->selection;
     this->setup_subgroup_is(selection);
-
-    auto global_info = this->create_global_info();
-    global_info.starting_cell = (cell == std::nullopt) ? 0 : cell.value();
+    auto global_info = this->create_global_info(cell);
+    global_info.particle_sub_group = this->particle_sub_group.get();
+    this->apply_pre_loop(global_info);
 
     auto k_kernel = this->kernel;
     auto k_npart_cell_lb = this->d_npart_cell_lb;
@@ -813,6 +846,210 @@ inline void ParticleSubGroup::get_cells_layers(INT *d_cells, INT *d_layers) {
   } else {
     lambda_loop(std::shared_ptr<ParticleSubGroup>(this, [](auto x) {}));
   }
+}
+
+namespace ParticleSubGroupImplementation {
+
+/**
+ * ParticleSubGroup selector for a single cell.
+ */
+class CellSubGroupSelector : public SubGroupSelector {
+protected:
+  bool parent_is_whole_group;
+  int cell;
+  inline bool get_parent_is_whole_group(ParticleGroupSharedPtr) { return true; }
+  inline bool get_parent_is_whole_group(ParticleSubGroupSharedPtr parent) {
+    return parent->is_entire_particle_group();
+  }
+
+public:
+  template <typename PARENT>
+  CellSubGroupSelector(std::shared_ptr<PARENT> parent, const int cell)
+      : SubGroupSelector(), cell(cell) {
+
+    this->particle_group = get_particle_group(parent);
+
+    this->check_sym_type(this->particle_group->cell_id_dat->sym);
+    this->parent_is_whole_group = this->get_parent_is_whole_group(parent);
+    this->internal_setup(parent);
+    if (!this->parent_is_whole_group) {
+      this->loop_0 = particle_loop(
+          "sub_group_selector_0", parent,
+          [=](auto loop_index, auto k_map_ptrs) {
+            const INT particle_linear_index =
+                loop_index.get_local_linear_index();
+            sycl::atomic_ref<int, sycl::memory_order::relaxed,
+                             sycl::memory_scope::device>
+                element_atomic(k_map_ptrs.at(1)[loop_index.cell]);
+            const int layer = element_atomic.fetch_add(1);
+            k_map_ptrs.at(0)[particle_linear_index] = layer;
+          },
+          Access::read(ParticleLoopIndex{}), Access::read(this->map_ptrs));
+    }
+
+    const int cell_count = particle_group->domain->mesh->get_cell_count();
+    auto e0 = this->particle_group->sycl_target->queue.fill<INT>(
+        this->d_npart_cell_es->ptr, 0, cell_count);
+    auto e1 = this->particle_group->sycl_target->queue.fill<int>(
+        this->dh_npart_cell->d_buffer.ptr, 0, cell_count);
+    auto e2 = this->particle_group->sycl_target->queue.fill<int>(
+        this->dh_npart_cell->h_buffer.ptr, 0, cell_count);
+    e0.wait_and_throw();
+    e1.wait_and_throw();
+    e2.wait_and_throw();
+  }
+
+  virtual inline SelectionT get() override {
+    const int cell_count = this->particle_group->domain->mesh->get_cell_count();
+    auto sycl_target = this->particle_group->sycl_target;
+    auto pg_map_layers = this->get_particle_group_sub_group_layers();
+    const auto npart_local = this->particle_group->get_npart_local();
+    int *d_npart_cell_ptr = this->dh_npart_cell->d_buffer.ptr;
+    int *h_npart_cell_ptr = this->dh_npart_cell->h_buffer.ptr;
+
+    if (this->parent_is_whole_group) {
+      const auto total = this->particle_group->get_npart_cell(cell);
+      if (this->map_cell_to_particles->nrow.at(this->cell) < total) {
+        this->map_cell_to_particles->set_nrow(this->cell, total);
+      }
+      sycl::event e3;
+      if (cell < (cell_count - 1)) {
+        e3 = sycl_target->queue.memcpy(this->d_npart_cell_es->ptr + (cell + 1),
+                                       &total, sizeof(INT));
+      }
+      auto e1 =
+          sycl_target->queue.fill<int>(h_npart_cell_ptr + cell, (int)total, 1);
+      auto e2 =
+          sycl_target->queue.fill<int>(d_npart_cell_ptr + cell, (int)total, 1);
+
+      this->map_cell_to_particles->wait_set_nrow();
+
+      auto cell_data = this->map_cell_to_particles->get_cell(cell);
+      for (int rowx = 0; rowx < total; rowx++) {
+        cell_data->at(rowx, 0) = rowx;
+      }
+      this->map_cell_to_particles->set_cell(cell, cell_data);
+
+      e1.wait_and_throw();
+      e2.wait_and_throw();
+      e3.wait_and_throw();
+
+      SelectionT s;
+      s.npart_local = total;
+      s.ncell = cell_count;
+      s.h_npart_cell = h_npart_cell_ptr;
+      s.d_npart_cell = d_npart_cell_ptr;
+      s.d_npart_cell_es = this->d_npart_cell_es->ptr;
+      s.d_map_cells_to_particles = this->map_cell_to_particles->device_ptr();
+
+      return s;
+
+    } else {
+
+      pg_map_layers->realloc_no_copy(npart_local);
+      sycl_target->queue.fill<int>(d_npart_cell_ptr + cell, 0, 1)
+          .wait_and_throw();
+      std::vector<int *> tmp = {pg_map_layers->ptr, d_npart_cell_ptr};
+      this->map_ptrs.set(tmp);
+
+      this->loop_0->execute(this->cell);
+
+      this->dh_npart_cell->device_to_host();
+      const INT nrow_required = h_npart_cell_ptr[this->cell];
+      if (this->map_cell_to_particles->nrow.at(this->cell) < nrow_required) {
+        this->map_cell_to_particles->set_nrow(this->cell, nrow_required);
+      }
+      this->map_cell_to_particles->wait_set_nrow();
+
+      this->loop_1->submit(this->cell);
+
+      const INT total = nrow_required;
+      if (cell < (cell_count - 1)) {
+        sycl_target->queue
+            .memcpy(this->d_npart_cell_es->ptr + (cell + 1), &total,
+                    sizeof(INT))
+            .wait();
+      }
+
+      this->loop_1->wait();
+
+      SelectionT s;
+      s.npart_local = total;
+      s.ncell = cell_count;
+      s.h_npart_cell = h_npart_cell_ptr;
+      s.d_npart_cell = d_npart_cell_ptr;
+      s.d_npart_cell_es = this->d_npart_cell_es->ptr;
+      s.d_map_cells_to_particles = this->map_cell_to_particles->device_ptr();
+
+      return s;
+    }
+  }
+};
+
+} // namespace ParticleSubGroupImplementation
+
+/**
+ * Create a ParticleSubGroup that selects all particles int a particular cell.
+ *
+ * @param parent Parent ParticleGroup or ParticleSubGroup from which to form
+ * ParticleSubGroup.
+ * @param cell Local cell index to select all particles in.
+ * @param make_static Make the ParticleSubGroup static (default false).
+ */
+template <typename PARENT, typename INT_TYPE,
+          std::enable_if_t<std::is_integral<INT_TYPE>::value, bool> = true>
+inline ParticleSubGroupSharedPtr
+particle_sub_group(std::shared_ptr<PARENT> parent, const INT_TYPE cell,
+                   const bool make_static = false) {
+  auto selector = std::dynamic_pointer_cast<
+      ParticleSubGroupImplementation::SubGroupSelector>(
+      std::make_shared<ParticleSubGroupImplementation::CellSubGroupSelector>(
+          parent, cell));
+  auto group = std::make_shared<ParticleSubGroup>(selector);
+  group->static_status(make_static);
+  return group;
+}
+
+/**
+ * Create a ParticleSubGroup that selects all particles int a particular cell.
+ *
+ * @param parent Parent ParticleGroup or ParticleSubGroup from which to form
+ * ParticleSubGroup.
+ * @param cell Local cell index to select all particles in.
+ * @param make_static Make the ParticleSubGroup static (default false).
+ */
+template <typename PARENT>
+inline ParticleSubGroupSharedPtr
+particle_sub_group(std::shared_ptr<PARENT> parent, const int cell,
+                   const bool make_static = false) {
+  auto selector = std::dynamic_pointer_cast<
+      ParticleSubGroupImplementation::SubGroupSelector>(
+      std::make_shared<ParticleSubGroupImplementation::CellSubGroupSelector>(
+          parent, cell));
+  auto group = std::make_shared<ParticleSubGroup>(selector);
+  group->static_status(make_static);
+  return group;
+}
+
+/**
+ * Create a ParticleSubGroup that selects all particles int a particular cell.
+ *
+ * @param parent Parent ParticleGroup or ParticleSubGroup from which to form
+ * ParticleSubGroup.
+ * @param cell Local cell index to select all particles in.
+ * @param make_static Make the ParticleSubGroup static (default false).
+ */
+template <typename PARENT>
+inline ParticleSubGroupSharedPtr
+particle_sub_group(std::shared_ptr<PARENT> parent, const INT cell,
+                   const bool make_static = false) {
+  auto selector = std::dynamic_pointer_cast<
+      ParticleSubGroupImplementation::SubGroupSelector>(
+      std::make_shared<ParticleSubGroupImplementation::CellSubGroupSelector>(
+          parent, cell));
+  auto group = std::make_shared<ParticleSubGroup>(selector);
+  group->static_status(make_static);
+  return group;
 }
 
 } // namespace NESO::Particles

@@ -717,3 +717,150 @@ TEST(ParticleGroup, get_particles) {
   A->free();
   mesh->free();
 }
+
+TEST(ParticleGroup, structure_version) {
+
+  const int ndim = 2;
+  std::vector<int> dims(ndim);
+  dims[0] = 4;
+  dims[1] = 8;
+
+  const double cell_extent = 1.0;
+  const int subdivision_order = 2;
+  auto mesh = std::make_shared<CartesianHMesh>(MPI_COMM_WORLD, ndim, dims,
+                                               cell_extent, subdivision_order);
+
+  auto sycl_target =
+      std::make_shared<SYCLTarget>(GPU_SELECTOR, mesh->get_comm());
+
+  auto domain = std::make_shared<Domain>(mesh);
+
+  ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
+                             ParticleProp(Sym<REAL>("V"), 3),
+                             ParticleProp(Sym<INT>("CELL_ID"), 1, true),
+                             ParticleProp(Sym<INT>("ID"), 1)};
+
+  const int cell_count = domain->mesh->get_cell_count();
+  auto A = make_test_obj<ParticleGroup>(domain, particle_spec, sycl_target);
+
+  A->add_particle_dat(
+      ParticleDat(sycl_target, ParticleProp(Sym<REAL>("FOO"), 3), cell_count));
+
+  std::mt19937 rng_pos(52234234);
+  std::mt19937 rng_vel(52234231);
+
+  const int N = cell_count * 2 + 7;
+
+  auto positions =
+      uniform_within_extents(N, ndim, mesh->global_extents, rng_pos);
+  auto velocities =
+      NESO::Particles::normal_distribution(N, 3, 0.0, 1.0, rng_vel);
+
+  ParticleSet initial_distribution(N, particle_spec);
+
+  for (int px = 0; px < N; px++) {
+    for (int dimx = 0; dimx < ndim; dimx++) {
+      initial_distribution[Sym<REAL>("P")][px][dimx] = positions[dimx][px];
+    }
+    for (int dimx = 0; dimx < 3; dimx++) {
+      initial_distribution[Sym<REAL>("V")][px][dimx] = velocities[dimx][px];
+    }
+    initial_distribution[Sym<INT>("CELL_ID")][px][0] = px % (cell_count - 1);
+    initial_distribution[Sym<INT>("ID")][px][0] = px;
+  }
+
+  int64_t version = 0;
+  A->wrap_check_validation(version);
+  ASSERT_TRUE(version != 0);
+
+  A->add_particles_local(initial_distribution);
+  ASSERT_TRUE(A->wrap_check_validation(version));
+  ASSERT_FALSE(A->wrap_check_validation(version));
+
+  A->cell_move();
+  ASSERT_TRUE(A->wrap_check_validation(version));
+  ASSERT_FALSE(A->wrap_check_validation(version));
+
+  A->hybrid_move();
+  ASSERT_TRUE(A->wrap_check_validation(version));
+  ASSERT_FALSE(A->wrap_check_validation(version));
+
+  A->global_move();
+  ASSERT_TRUE(A->wrap_check_validation(version));
+  ASSERT_FALSE(A->wrap_check_validation(version));
+
+  A->local_move();
+  ASSERT_TRUE(A->wrap_check_validation(version));
+  ASSERT_FALSE(A->wrap_check_validation(version));
+
+  std::vector<INT> cells;
+  std::vector<INT> layers;
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    const int nrow = A->get_npart_cell(cellx);
+    if (nrow > 0) {
+      cells.push_back(cellx);
+      layers.push_back(0);
+      break;
+    }
+  }
+  if (cells.size() > 0) {
+    A->remove_particles(1, cells, layers);
+    ASSERT_TRUE(A->wrap_check_validation(version));
+    ASSERT_FALSE(A->wrap_check_validation(version));
+  }
+
+  cells.clear();
+  layers.clear();
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    const int nrow = A->get_npart_cell(cellx);
+    if (nrow > 0) {
+      cells.push_back(cellx);
+      layers.push_back(0);
+      break;
+    }
+  }
+  if (cells.size() > 0) {
+    auto d_cells = std::make_shared<BufferDevice<INT>>(sycl_target, cells);
+    auto d_layers = std::make_shared<BufferDevice<INT>>(sycl_target, layers);
+    A->remove_particles(1, d_cells->ptr, d_layers->ptr);
+    ASSERT_TRUE(A->wrap_check_validation(version));
+    ASSERT_FALSE(A->wrap_check_validation(version));
+  }
+
+  auto aa = particle_sub_group(
+      A, [=](auto ID) { return ID.at(0) % 2 == 0; },
+      Access::read(Sym<INT>("ID")));
+
+  A->add_particles_local(aa);
+  ASSERT_TRUE(A->wrap_check_validation(version));
+  ASSERT_FALSE(A->wrap_check_validation(version));
+
+  A->remove_particles(aa);
+  ASSERT_TRUE(A->wrap_check_validation(version));
+  ASSERT_FALSE(A->wrap_check_validation(version));
+
+  auto B = std::make_shared<ParticleGroup>(domain, particle_spec, sycl_target);
+  A->add_particles_local(B);
+  ASSERT_TRUE(A->wrap_check_validation(version));
+  ASSERT_FALSE(A->wrap_check_validation(version));
+
+  auto product_spec =
+      product_matrix_spec(ParticleSpec(ParticleProp(Sym<REAL>("P"), ndim)));
+  auto pm = std::make_shared<ProductMatrix>(sycl_target, product_spec);
+  pm->reset(1);
+  A->add_particles_local(pm);
+  ASSERT_TRUE(A->wrap_check_validation(version));
+  ASSERT_FALSE(A->wrap_check_validation(version));
+
+  A->clear();
+  ASSERT_TRUE(A->wrap_check_validation(version));
+  ASSERT_FALSE(A->wrap_check_validation(version));
+
+  ASSERT_TRUE(version > 12);
+
+  A->free();
+  B->free();
+  mesh->free();
+}

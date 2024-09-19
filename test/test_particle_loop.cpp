@@ -1,9 +1,4 @@
-#include <gtest/gtest.h>
-#include <neso_particles.hpp>
-#include <random>
-#include <type_traits>
-
-using namespace NESO::Particles;
+#include "include/test_neso_particles.hpp"
 
 namespace {
 
@@ -138,116 +133,6 @@ TEST(ParticleLoop, base) {
                              (*p2)[dimx][rowx]) < 1.0e-10);
       }
     }
-  }
-
-  A->free();
-  sycl_target->free();
-  mesh->free();
-}
-
-TEST(ParticleLoop, local_array) {
-  auto A = particle_loop_common();
-  auto domain = A->domain;
-  auto mesh = domain->mesh;
-  const int cell_count = mesh->get_cell_count();
-  auto sycl_target = A->sycl_target;
-
-  const int N = 3;
-  std::vector<REAL> d0(N);
-  std::iota(d0.begin(), d0.end(), 1);
-  LocalArray<REAL> l0(sycl_target, d0);
-
-  ParticleLoop pl(
-      A,
-      [=](Access::ParticleDat::Write<REAL> P2,
-          Access::LocalArray::Read<REAL> L0) {
-        for (int dx = 0; dx < ndim; dx++) {
-          P2[dx] = L0[dx];
-        }
-      },
-      Access::write(Sym<REAL>("P2")), Access::read(l0));
-
-  pl.execute();
-
-  int local_count = 0;
-  for (int cellx = 0; cellx < cell_count; cellx++) {
-    auto p2 = A->get_dat(Sym<REAL>("P2"))->cell_dat.get_cell(cellx);
-    const int nrow = p2->nrow;
-
-    // for each particle in the cell
-    for (int rowx = 0; rowx < nrow; rowx++) {
-      local_count++;
-      // for each dimension
-      for (int dimx = 0; dimx < ndim; dimx++) {
-        EXPECT_EQ((*p2)[dimx][rowx], d0[dimx]);
-      }
-    }
-  }
-
-  auto l0ptr = std::make_shared<LocalArray<REAL>>(sycl_target, d0);
-  auto plptr = particle_loop(
-      A,
-      [=](Access::ParticleDat::Write<REAL> P2,
-          Access::LocalArray::Read<REAL> L0) {
-        for (int dx = 0; dx < ndim; dx++) {
-          P2[dx] = L0[dx] * 2.0;
-        }
-      },
-      Access::write(Sym<REAL>("P2")), Access::read(l0ptr));
-
-  plptr->execute();
-
-  for (int cellx = 0; cellx < cell_count; cellx++) {
-    auto p2 = A->get_dat(Sym<REAL>("P2"))->cell_dat.get_cell(cellx);
-    const int nrow = p2->nrow;
-    // for each particle in the cell
-    for (int rowx = 0; rowx < nrow; rowx++) {
-      // for each dimension
-      for (int dimx = 0; dimx < ndim; dimx++) {
-        EXPECT_TRUE(std::abs((*p2)[dimx][rowx] - d0[dimx] * 2.0) < 1.0e-14);
-      }
-    }
-  }
-
-  std::vector<int> d1(3);
-  std::fill(d1.begin(), d1.end(), 0);
-  LocalArray<int> l1(sycl_target, d1);
-
-  ParticleLoop particle_loop_add(
-      A,
-      [=](Access::LocalArray::Add<int> L1) {
-        L1.fetch_add(0, 1);
-        L1.fetch_add(1, 2);
-        L1.fetch_add(2, 3);
-      },
-      Access::add(l1));
-
-  particle_loop_add.execute();
-  l1.get(d1);
-  EXPECT_EQ(d1[0], local_count);
-  EXPECT_EQ(d1[1], local_count * 2);
-  EXPECT_EQ(d1[2], local_count * 3);
-
-  // LocalArray write
-  const int num_write = A->get_npart_local();
-  std::vector<INT> h_law(num_write);
-  std::fill(h_law.begin(), h_law.end(), 0);
-  auto law = std::make_shared<LocalArray<INT>>(sycl_target, h_law);
-  auto law_index = std::make_shared<LocalArray<INT>>(sycl_target, 1);
-  law_index->fill(0);
-
-  auto law_loop = particle_loop(
-      A,
-      [=](auto la_index, auto la) {
-        const int index = la_index.fetch_add(0, 1);
-        la[index] = 1;
-      },
-      Access::add(law_index), Access::write(law));
-  law_loop->execute();
-
-  auto post_law = law->get();
-  for (int px = 0; px < num_write; px++) {
-    EXPECT_EQ(post_law.at(px), 1);
   }
 
   A->free();
@@ -708,9 +593,9 @@ TEST(ParticleLoop, cell_dat_const) {
   }
 
   inner_cell_dat_min_max<int>(sycl_target, A, cell_count);
-  inner_cell_dat_min_max<REAL>(sycl_target, A, cell_count);
   // Issues with atomic_max/atomic_min with adaptivecpp cuda-nvcxx
   // inner_cell_dat_min_max<INT>(sycl_target, A, cell_count);
+  // inner_cell_dat_min_max<REAL>(sycl_target, A, cell_count);
 
   A->free();
   sycl_target->free();
@@ -763,12 +648,15 @@ TEST(ParticleLoop, sym_vector) {
   auto domain = A->domain;
   auto mesh = domain->mesh;
   const int cell_count = mesh->get_cell_count();
-  auto si = SymVector<INT>(A, {Sym<INT>("ID"), Sym<INT>("CELL_ID")});
+
+  auto aa = particle_sub_group(A);
+
+  auto si = sym_vector(aa, {Sym<INT>("ID"), Sym<INT>("CELL_ID")});
   std::vector<Sym<REAL>> srv = {Sym<REAL>("V"), Sym<REAL>("P2")};
-  auto sr = std::make_shared<SymVector<REAL>>(A, srv);
+  auto sr = sym_vector(aa, srv);
 
   auto pl = particle_loop(
-      A,
+      aa,
       [=](auto index, auto dats_real, auto dats_int) {
         const INT cell = index.cell;
         const INT layer = index.layer;

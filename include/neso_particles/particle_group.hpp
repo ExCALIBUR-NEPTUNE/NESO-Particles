@@ -88,6 +88,7 @@ protected:
   // This type should be replaceable with typedef std::variant<Sym<INT>,
   // Sym<REAL>> ParticleDatVersion; But we see issues with nvc++.
   typedef ParticleDatVersionT ParticleDatVersion;
+  typedef int64_t ParticleGroupVersion;
   typedef std::map<ParticleDatVersion, int64_t> ParticleDatVersionTracker;
 
   int ncell;
@@ -217,7 +218,12 @@ protected:
   // members for moving particles between local cells
   CellMove cell_move_ctx;
 
+  // This member tracks the versions of the particle dat data
   std::map<ParticleDatVersion, std::tuple<int64_t, bool>> particle_dat_versions;
+  // This member tracks the versions of the particle dat structure, which is
+  // also the version of the particle group itself. Calls to methods which
+  // modify the number of cells or layers will increment this value.
+  ParticleGroupVersion particle_group_version;
 
   inline void invalidate_callback_inner(ParticleDatVersion sym,
                                         const int mode) {
@@ -307,6 +313,21 @@ protected:
     }
     return updated;
   }
+  inline bool check_validation(ParticleGroupVersion &to_check,
+                               const bool update_to_check = true) {
+    const bool updated = this->particle_group_version != to_check;
+    if (update_to_check && updated) {
+      to_check = this->particle_group_version;
+    }
+    return updated;
+  }
+  inline void invalidate_group_version() {
+    this->particle_group_version++;
+    // Ensure this value is never 0.
+    if (this->particle_group_version == 0) {
+      this->particle_group_version++;
+    }
+  }
 
   inline void recompute_npart_cell_es() {
     auto h_ptr_s = this->h_npart_cell.ptr;
@@ -377,7 +398,7 @@ public:
                         particle_dats_int),
         cell_move_ctx(sycl_target, this->ncell, layer_compressor,
                       particle_dats_real, particle_dats_int),
-        npart_local(0) {
+        npart_local(0), particle_group_version(1) {
 
     this->h_npart_cell.realloc_no_copy(this->ncell);
     this->d_npart_cell.realloc_no_copy(this->ncell);
@@ -735,6 +756,7 @@ public:
   inline void cell_move() {
     this->cell_move_ctx.move();
     this->set_npart_cell_from_dat();
+    this->invalidate_group_version();
   };
 
   /**
@@ -747,6 +769,7 @@ public:
     }
     buffer_memcpy(this->d_npart_cell, this->h_npart_cell).wait_and_throw();
     this->recompute_npart_cell_es();
+    this->invalidate_group_version();
   }
 
   /**

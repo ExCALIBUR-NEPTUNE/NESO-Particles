@@ -92,6 +92,7 @@ inline void ParticleGroup::add_particles_local(ParticleSet &particle_data) {
 
   es.wait();
   this->check_dats_and_group_agree();
+  this->invalidate_group_version();
 }
 
 inline void
@@ -104,6 +105,7 @@ inline void ParticleGroup::remove_particles(const int npart, T *usm_cells,
                                             T *usm_layers) {
   this->layer_compressor.remove_particles(npart, usm_cells, usm_layers);
   this->set_npart_cell_from_dat();
+  this->invalidate_group_version();
 }
 
 inline void ParticleGroup::remove_particles(const int npart,
@@ -166,6 +168,7 @@ inline void ParticleGroup::remove_particles(
 inline void ParticleGroup::global_move() {
   this->global_move_ctx.move();
   this->set_npart_cell_from_dat();
+  this->invalidate_group_version();
 }
 
 /*
@@ -176,11 +179,12 @@ inline void ParticleGroup::global_move() {
 inline void ParticleGroup::local_move() {
   this->local_move_ctx->move();
   this->set_npart_cell_from_dat();
+  this->invalidate_group_version();
 }
 
 inline std::string fixed_width_format(INT value) {
   char buffer[128];
-  const int err = snprintf(buffer, 128, "%ld", value);
+  const int err = snprintf(buffer, 128, "%lld", static_cast<long long>(value));
   NESOASSERT(err >= 0 && err < 128, "Bad snprintf return code.");
   return std::string(buffer);
 }
@@ -281,6 +285,7 @@ inline void ParticleGroup::hybrid_move() {
   sycl_target->profile_map.add_region(r_local);
 
   this->set_npart_cell_from_dat();
+  this->invalidate_group_version();
 }
 
 /**
@@ -303,6 +308,7 @@ inline void ParticleGroup::clear() {
   }
   es.wait();
   this->check_dats_and_group_agree();
+  this->invalidate_group_version();
 }
 
 inline void ParticleGroup::add_particles_local(
@@ -479,6 +485,7 @@ inline void ParticleGroup::add_particles_local(
   // wait for the copy kernels
   es.wait();
   this->check_dats_and_group_agree();
+  this->invalidate_group_version();
 }
 
 inline void ParticleGroup::add_particles_local(
@@ -529,6 +536,7 @@ inline void ParticleGroup::add_particles_local(
     es.push(dat.second->async_set_npart_cells(this->h_npart_cell));
   }
   es.wait();
+  this->invalidate_group_version();
 }
 
 inline void ParticleGroup::add_particles_local(
@@ -605,6 +613,7 @@ inline void ParticleGroup::add_particles_local(
 
     es.wait();
     this->check_dats_and_group_agree();
+    this->invalidate_group_version();
   }
 }
 
