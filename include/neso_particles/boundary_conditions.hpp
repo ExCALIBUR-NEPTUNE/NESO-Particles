@@ -71,7 +71,7 @@ public:
             const REAL tmp_extent = k_extents[dimx];
             const REAL n_extent_offset_real = n_extent_offset_int + 2;
             const REAL pos_fmod =
-                fmod(pos + n_extent_offset_real * tmp_extent, tmp_extent);
+                sycl::fmod(pos + n_extent_offset_real * tmp_extent, tmp_extent);
             P[dimx] = pos_fmod;
           }
         },
