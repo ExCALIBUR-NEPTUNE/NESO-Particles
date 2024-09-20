@@ -784,6 +784,7 @@ public:
    */
   inline void submit(const std::optional<int> cell = std::nullopt) override {
     auto t0 = profile_timestamp();
+    this->profiling_region_init();
 
     NESOASSERT(
         (!this->loop_running) || (cell != std::nullopt),

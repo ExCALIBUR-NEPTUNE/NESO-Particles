@@ -410,6 +410,17 @@ protected:
     std::apply(pre_loop_caller, this->args);
   }
 
+  ProfileRegion profile_region;
+
+  inline void profiling_region_init() {
+    this->profile_region = ProfileRegion(this->loop_type, this->name);
+  }
+
+  inline void profile_region_finalise() {
+    this->profile_region.end();
+    this->sycl_target->profile_map->add_region(this->profile_region);
+  }
+
 public:
   /// Disable (implicit) copies.
   ParticleLoop(const ParticleLoop &st) = delete;
@@ -502,6 +513,7 @@ public:
    *  @param cell Optional cell index to only launch the ParticleLoop over.
    */
   inline void submit(const std::optional<int> cell = std::nullopt) {
+    this->profiling_region_init();
 
     NESOASSERT(
         (!this->loop_running) || (cell != std::nullopt),
@@ -567,6 +579,7 @@ public:
     auto post_loop_caller = [&](auto... as) { (cast_wrapper(as), ...); };
     std::apply(post_loop_caller, this->args);
     this->loop_running = false;
+    this->profile_region_finalise();
   }
 
   /**
