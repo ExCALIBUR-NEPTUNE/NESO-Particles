@@ -418,7 +418,7 @@ protected:
 
   inline void profile_region_finalise() {
     this->profile_region.end();
-    this->sycl_target->profile_map->add_region(this->profile_region);
+    this->sycl_target->profile_map.add_region(this->profile_region);
   }
 
 public:
