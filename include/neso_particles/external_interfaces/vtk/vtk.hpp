@@ -38,11 +38,11 @@ struct UnstructuredCell {
   std::vector<double> points;
   /// Enum describing the shape type.
   CellType cell_type;
+  /// Map from a quantity name to a single value for the cell.
+  std::map<std::string, double> cell_data;
   /// Map from a quantity name to a vector of size num_points containing the
   /// values for each point in the order the vertices are described in the
   /// points array.
-  std::map<std::string, double> cell_data;
-  /// Map from a quantity name to a single value for the cell.
   std::map<std::string, std::vector<double>> point_data;
 };
 
