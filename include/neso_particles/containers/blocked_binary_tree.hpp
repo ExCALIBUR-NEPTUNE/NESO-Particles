@@ -38,7 +38,6 @@ struct BlockedBinaryNode {
     this->rhs = nullptr;
     for (int ix = 0; ix < WIDTH; ix++) {
       this->exists[ix] = false;
-      this->data[ix] = 0;
     }
   }
 

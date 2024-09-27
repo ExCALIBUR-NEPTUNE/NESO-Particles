@@ -15,7 +15,7 @@
 
 namespace NESO::Particles {
 
-const int mask = std::numeric_limits<int>::min();
+const int mask = std::numeric_limits<int>::lowest();
 
 /**
  * Structure to place a coarse mesh over an arbitrary shaped domain. Each cell
@@ -94,6 +94,31 @@ public:
   INT ncells_dim_fine;
   /// Global number of fine cells.
   INT ncells_global;
+
+  /**
+   * Prints information about the MeshHierarchy to stdout.
+   */
+  inline void print() {
+    nprint("-------------------------------------------------------------------"
+           "-------------");
+    nprint("                        MeshHierarchy Infomation");
+    nprint("ndim:", ndim);
+    std::cout << "dims: ";
+    for (int dx = 0; dx < ndim; dx++) {
+      std::cout << dims.at(dx) << " ";
+    }
+    std::cout << std::endl;
+    std::cout << "origin: ";
+    for (int dx = 0; dx < ndim; dx++) {
+      std::cout << origin.at(dx) << " ";
+    }
+    std::cout << std::endl;
+    nprint("subdivision_order:", subdivision_order);
+    nprint("cell_width_coarse:", cell_width_coarse);
+    nprint("cell_width_fine:", cell_width_fine);
+    nprint("-------------------------------------------------------------------"
+           "-------------");
+  }
 
   MeshHierarchy(){};
 

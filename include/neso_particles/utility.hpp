@@ -108,8 +108,7 @@ normal_distribution(const int N, const int ndim, const double mu,
  * mesh cell.
  * @param[in, out] positions Ouput particle positions indexed by dimension then
  * particle.
- * @param[in, out] cells Ouput particle cell ids indexed by dimension then
- * particle.
+ * @param[in, out] cells Ouput particle cell ids indexed by particle.
  * @param[in] rng_in Optional input RNG to use.
  */
 inline void uniform_within_cartesian_cells(

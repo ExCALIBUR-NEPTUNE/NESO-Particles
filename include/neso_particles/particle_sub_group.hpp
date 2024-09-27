@@ -506,6 +506,79 @@ public:
       return this->particle_group->get_particles(cells, inner_layers);
     }
   }
+
+  /**
+   *  Print particle data for all particles for the specified ParticleDats.
+   *
+   *  @param args Sym<REAL> or Sym<INT> instances that indicate which particle
+   *  data to print.
+   */
+  template <typename... T> inline void print(T... args) {
+    if (this->is_whole_particle_group) {
+      return this->particle_group->print(args...);
+    } else {
+      this->create_if_required();
+      SymStore print_spec(args...);
+
+      std::cout
+          << "==============================================================="
+             "================="
+          << std::endl;
+
+      const int cell_count =
+          this->particle_group->domain->mesh->get_cell_count();
+      for (int cellx = 0; cellx < cell_count; cellx++) {
+        auto cell_data = this->selector->map_cell_to_particles->get_cell(cellx);
+        const int nrow = cell_data->nrow;
+        if (nrow > 0) {
+          std::vector<CellData<REAL>> cell_data_real;
+          std::vector<CellData<INT>> cell_data_int;
+
+          for (auto &symx : print_spec.syms_real) {
+            auto cell_data = this->particle_group->particle_dats_real[symx]
+                                 ->cell_dat.get_cell(cellx);
+            cell_data_real.push_back(cell_data);
+          }
+          for (auto &symx : print_spec.syms_int) {
+            auto cell_data = this->particle_group->particle_dats_int[symx]
+                                 ->cell_dat.get_cell(cellx);
+            cell_data_int.push_back(cell_data);
+          }
+
+          std::cout << "------- " << cellx << " -------" << std::endl;
+          for (auto &symx : print_spec.syms_real) {
+            std::cout << "| " << symx.name << " ";
+          }
+          for (auto &symx : print_spec.syms_int) {
+            std::cout << "| " << symx.name << " ";
+          }
+          std::cout << "|" << std::endl;
+
+          for (int rx = 0; rx < nrow; rx++) {
+            const int rowx = cell_data->at(rx, 0);
+            for (auto &cx : cell_data_real) {
+              std::cout << "| ";
+              for (int colx = 0; colx < cx->ncol; colx++) {
+                std::cout << fixed_width_format((*cx)[colx][rowx]) << " ";
+              }
+            }
+            for (auto &cx : cell_data_int) {
+              std::cout << "| ";
+              for (int colx = 0; colx < cx->ncol; colx++) {
+                std::cout << fixed_width_format((*cx)[colx][rowx]) << " ";
+              }
+            }
+
+            std::cout << "|" << std::endl;
+          }
+        }
+      }
+      std::cout
+          << "==============================================================="
+             "================="
+          << std::endl;
+    }
+  }
 };
 
 namespace ParticleSubGroupImplementation {
@@ -711,6 +784,7 @@ public:
    */
   inline void submit(const std::optional<int> cell = std::nullopt) override {
     auto t0 = profile_timestamp();
+    this->profiling_region_init();
 
     NESOASSERT(
         (!this->loop_running) || (cell != std::nullopt),
@@ -1043,13 +1117,27 @@ template <typename PARENT>
 inline ParticleSubGroupSharedPtr
 particle_sub_group(std::shared_ptr<PARENT> parent, const INT cell,
                    const bool make_static = false) {
-  auto selector = std::dynamic_pointer_cast<
-      ParticleSubGroupImplementation::SubGroupSelector>(
-      std::make_shared<ParticleSubGroupImplementation::CellSubGroupSelector>(
-          parent, cell));
-  auto group = std::make_shared<ParticleSubGroup>(selector);
-  group->static_status(make_static);
-  return group;
+  return particle_sub_group(parent, static_cast<int>(cell), make_static);
+}
+
+/**
+ * Helper function to return the underlying ParticleGroup for a type.
+ *
+ * @param particle_sub_group ParticleSubGroup.
+ * @returns Underlying ParticleGroup.
+ */
+inline auto get_particle_group(ParticleSubGroupSharedPtr particle_sub_group) {
+  return particle_sub_group->get_particle_group();
+}
+
+/**
+ * Helper function to return the underlying ParticleGroup for a type.
+ *
+ * @param particle_group ParticleGroup.
+ * @returns Underlying ParticleGroup.
+ */
+inline auto get_particle_group(ParticleGroupSharedPtr particle_group) {
+  return particle_group;
 }
 
 } // namespace NESO::Particles

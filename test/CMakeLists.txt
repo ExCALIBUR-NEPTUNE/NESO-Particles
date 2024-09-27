@@ -24,14 +24,21 @@ set(TEST_SRCS
     ${TEST_DIR}/test_boundary_pbc.cpp
     ${TEST_DIR}/test_buffers.cpp
     ${TEST_DIR}/test_cell_dat.cpp
+    ${TEST_DIR}/test_communication.cpp
+    ${TEST_DIR}/test_device_functions.cpp
     ${TEST_DIR}/test_error_propagate.cpp
     ${TEST_DIR}/test_examples.cpp
+    ${TEST_DIR}/test_external_common.cpp
     ${TEST_DIR}/test_global_array.cpp
     ${TEST_DIR}/test_int_key_value_map.cpp
     ${TEST_DIR}/test_local_array.cpp
     ${TEST_DIR}/test_local_decomp_mesh.cpp
     ${TEST_DIR}/test_mesh_hierarchy.cpp
     ${TEST_DIR}/test_parallel_initialisation.cpp
+    ${TEST_DIR}/test_petsc_interface.cpp
+    ${TEST_DIR}/test_petsc_boundary_interface.cpp
+    ${TEST_DIR}/test_petsc_project_evaluate.cpp
+    ${TEST_DIR}/test_petsc_utility.cpp
     ${TEST_DIR}/test_particle_dat.cpp
     ${TEST_DIR}/test_particle_group_cell_move.cpp
     ${TEST_DIR}/test_particle_group.cpp
@@ -47,6 +54,7 @@ set(TEST_SRCS
     ${TEST_DIR}/test_particle_set.cpp
     ${TEST_DIR}/test_particle_sub_group.cpp
     ${TEST_DIR}/test_product_matrix.cpp
+    ${TEST_DIR}/test_serial_container.cpp
     ${TEST_DIR}/test_sycl_target.cpp
     ${TEST_DIR}/test_tuple.cpp
     ${TEST_DIR}/test_utility.cpp)
@@ -72,6 +80,8 @@ foreach(TEST ${TEST_SRCS})
   add_executable(${TEST_NAME} ${TEST_SOURCES})
   target_link_libraries(${TEST_NAME} PRIVATE NESO-Particles GTest::gtest)
   target_compile_definitions(${TEST_NAME} PRIVATE GPU_SELECTOR=0)
+  target_compile_definitions(
+    ${TEST_NAME} PRIVATE CMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX})
   # exclude from all so indiviual tests aren't built for install
   set_target_properties(${TEST_NAME} PROPERTIES EXCLUDE_FROM_ALL TRUE)
   # Make usre the dummy target depends on each tests
@@ -85,6 +95,8 @@ add_executable(${EXECUTABLE} ${TEST_MAIN} ${TEST_LIST})
 
 target_link_libraries(${EXECUTABLE} PRIVATE NESO-Particles GTest::gtest)
 target_compile_definitions(${EXECUTABLE} PRIVATE GPU_SELECTOR=0)
+target_compile_definitions(${EXECUTABLE}
+                           PRIVATE CMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX})
 
 # define the test executable as a sycl target
 add_sycl_to_target(TARGET ${EXECUTABLE} SOURCES ${TEST_MAIN} ${TEST_LIST})

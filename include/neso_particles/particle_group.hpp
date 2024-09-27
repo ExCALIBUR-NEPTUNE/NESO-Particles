@@ -754,6 +754,7 @@ public:
    *  Move particles between cells using the cell ids stored in the cell id dat.
    */
   inline void cell_move() {
+    this->domain->local_mapper->map_cells(*this);
     this->cell_move_ctx.move();
     this->set_npart_cell_from_dat();
     this->invalidate_group_version();
@@ -780,6 +781,14 @@ public:
    *  data to print.
    */
   template <typename... T> inline void print(T... args);
+
+  /**
+   *  Print all particle data for a particle.
+   *
+   *  @param cell Cell of particle.
+   *  @param layer Layer of particle.
+   */
+  inline void print_particle(const int cell, const int layer);
 
   /**
    *  Remove a ParticleDat from the ParticleGroup

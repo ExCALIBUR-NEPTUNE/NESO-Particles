@@ -166,6 +166,36 @@ inline void MeshHierarchyGlobalMap::execute() {
       })
       .wait_and_throw();
 
+  if (this->error_propagate.get_flag()) {
+    auto db_lookup_global_cells = this->d_lookup_global_cells.get();
+    auto db_lookup_local_cells = this->d_lookup_local_cells.get();
+    auto db_lookup_local_layers = this->d_lookup_local_layers.get();
+    for (int ix = 0; ix < npart_query; ix++) {
+      bool failed = false;
+      for (int dimx = 0; dimx < k_ndim; dimx++) {
+        failed =
+            failed ||
+            (db_lookup_global_cells.at((ix * k_ndim * 2) + dimx + k_ndim) < 0);
+      }
+      if (failed) {
+        const auto cell = db_lookup_local_cells.at(ix);
+        const auto layer = db_lookup_local_layers.at(ix);
+        auto P = position_dat->cell_dat.get_cell(cell);
+        auto ncol = P->ncol;
+        std::cout << "Failed to map position into a MeshHierarchy cell:"
+                  << std::endl;
+        std::cout << "\tPosition: ";
+        for (int cx = 0; cx < ncol; cx++) {
+          std::cout << P->at(layer, cx) << " ";
+        }
+        std::cout << std::endl;
+        std::cout << "\tcell: " << cell << std::endl;
+        std::cout << "\tlayer: " << layer << std::endl;
+      }
+    }
+    mesh_hierarchy->print();
+  }
+
   this->error_propagate.check_and_throw(
       "Could not bin into MeshHierarchy cell.");
 

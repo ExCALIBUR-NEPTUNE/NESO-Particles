@@ -29,8 +29,8 @@ template <typename T> class CellDatConst;
 namespace Access::CellDatConst {
 
 /**
- * Access:CellDatConst::Read<T> and Access:CellDatConst::Add<T> are the
- * kernel argument types for accessing CellDatConst data in a kernel.
+ * Access:CellDatConst::Read<T> is a kernel argument type for accessing
+ * CellDatConst data in a kernel.
  */
 template <typename T> struct Read {
   /// Pointer to underlying data for the array.
@@ -44,8 +44,21 @@ template <typename T> struct Read {
 };
 
 /**
- * Access:CellDatConst::Read<T> and Access:CellDatConst::Add<T> are the
- * kernel argument types for accessing CellDatConst data in a kernel.
+ * Access:CellDatConst::Write<T> is a kernel argument type for accessing
+ * CellDatConst data in a kernel.
+ */
+template <typename T> struct Write {
+  /// Pointer to underlying data for the array.
+  Write() = default;
+  T *ptr;
+  int nrow;
+  inline T &at(const int row, const int col) { return ptr[nrow * col + row]; }
+  inline T &operator[](const int component) { return ptr[component]; }
+};
+
+/**
+ * Access:CellDatConst::Add<T> is a kernel argument type for accessing
+ * CellDatConst data in a kernel.
  */
 template <typename T> struct Add {
   /// Pointer to underlying data for the array.
@@ -60,8 +73,8 @@ template <typename T> struct Add {
 };
 
 /**
- * Access:CellDatConst::Read<T> and Access:CellDatConst::Min<T> are the
- * kernel argument types for accessing CellDatConst data in a kernel.
+ * Access:CellDatConst::Min<T> is a kernel argument type for accessing
+ * CellDatConst data in a kernel.
  */
 template <typename T> struct Min {
   /// Pointer to underlying data for the array.
@@ -76,8 +89,8 @@ template <typename T> struct Min {
 };
 
 /**
- * Access:CellDatConst::Read<T> and Access:CellDatConst::Max<T> are the
- * kernel argument types for accessing CellDatConst data in a kernel.
+ * Access:CellDatConst::Max<T> is a kernel argument type for accessing
+ * CellDatConst data in a kernel.
  */
 template <typename T> struct Max {
   /// Pointer to underlying data for the array.
@@ -100,6 +113,12 @@ namespace ParticleLoopImplementation {
  */
 template <typename T> struct LoopParameter<Access::Read<CellDatConst<T>>> {
   using type = CellDatConstDeviceTypeConst<T>;
+};
+/**
+ *  Loop parameter for write access of a CellDatConst.
+ */
+template <typename T> struct LoopParameter<Access::Write<CellDatConst<T>>> {
+  using type = CellDatConstDeviceType<T>;
 };
 /**
  *  Loop parameter for add access of a CellDatConst.
@@ -125,6 +144,12 @@ template <typename T> struct LoopParameter<Access::Max<CellDatConst<T>>> {
  */
 template <typename T> struct KernelParameter<Access::Read<CellDatConst<T>>> {
   using type = Access::CellDatConst::Read<T>;
+};
+/**
+ *  KernelParameter type for write access to a CellDatConst.
+ */
+template <typename T> struct KernelParameter<Access::Write<CellDatConst<T>>> {
+  using type = Access::CellDatConst::Write<T>;
 };
 /**
  *  KernelParameter type for add access to a CellDatConst.
@@ -153,6 +178,17 @@ inline void create_kernel_arg(ParticleLoopIteration &iterationx,
                               CellDatConstDeviceTypeConst<T> &rhs,
                               Access::CellDatConst::Read<T> &lhs) {
   T const *ptr = rhs.ptr + iterationx.cellx * rhs.stride;
+  lhs.ptr = ptr;
+  lhs.nrow = rhs.nrow;
+}
+/**
+ *  Function to create the kernel argument for CellDatConst write access.
+ */
+template <typename T>
+inline void create_kernel_arg(ParticleLoopIteration &iterationx,
+                              CellDatConstDeviceType<T> &rhs,
+                              Access::CellDatConst::Write<T> &lhs) {
+  T *ptr = rhs.ptr + iterationx.cellx * rhs.stride;
   lhs.ptr = ptr;
   lhs.nrow = rhs.nrow;
 }
@@ -200,6 +236,15 @@ create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
   return a.obj->impl_get_const();
 }
 /**
+ * Method to compute access to a CellDatConst (write)
+ */
+template <typename T>
+inline CellDatConstDeviceType<T>
+create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
+                Access::Write<CellDatConst<T> *> &a) {
+  return a.obj->impl_get();
+}
+/**
  * Method to compute access to a CellDatConst (add)
  */
 template <typename T>
@@ -240,6 +285,10 @@ template <typename T> class CellDatConst {
   ParticleLoopImplementation::create_loop_arg<T>(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
       sycl::handler &cgh, Access::Read<CellDatConst<T> *> &a);
+  friend CellDatConstDeviceType<T>
+  ParticleLoopImplementation::create_loop_arg<T>(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      sycl::handler &cgh, Access::Write<CellDatConst<T> *> &a);
   friend CellDatConstDeviceType<T>
   ParticleLoopImplementation::create_loop_arg<T>(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
@@ -422,6 +471,9 @@ public:
         .wait_and_throw();
   }
 };
+
+template <typename T>
+using CellDatConstSharedPtr = std::shared_ptr<CellDatConst<T>>;
 
 } // namespace NESO::Particles
 

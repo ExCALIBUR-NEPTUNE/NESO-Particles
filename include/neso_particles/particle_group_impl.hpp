@@ -182,19 +182,6 @@ inline void ParticleGroup::local_move() {
   this->invalidate_group_version();
 }
 
-inline std::string fixed_width_format(INT value) {
-  char buffer[128];
-  const int err = snprintf(buffer, 128, "%lld", static_cast<long long>(value));
-  NESOASSERT(err >= 0 && err < 128, "Bad snprintf return code.");
-  return std::string(buffer);
-}
-inline std::string fixed_width_format(REAL value) {
-  char buffer[128];
-  const int err = snprintf(buffer, 128, "%f", value);
-  NESOASSERT(err >= 0 && err < 128, "Bad snprintf return code.");
-  return std::string(buffer);
-}
-
 template <typename... T> inline void ParticleGroup::print(T... args) {
 
   SymStore print_spec(args...);
@@ -259,6 +246,26 @@ template <typename... T> inline void ParticleGroup::print(T... args) {
   std::cout << "==============================================================="
                "================="
             << std::endl;
+}
+
+inline void ParticleGroup::print_particle(const int cell, const int layer) {
+  nprint("Particle info, cell:", cell, "layer:", layer);
+  auto lambda_print_dat = [&](auto sym, auto dat) {
+    std::cout << "\t" << sym.name << ": ";
+    auto data = dat->cell_dat.get_cell(cell);
+    auto ncomp = dat->ncomp;
+    for (int cx = 0; cx < ncomp; cx++) {
+      std::cout << data->at(layer, cx) << " ";
+    }
+    std::cout << std::endl;
+  };
+
+  for (auto d : this->particle_dats_int) {
+    lambda_print_dat(d.first, d.second);
+  }
+  for (auto d : this->particle_dats_real) {
+    lambda_print_dat(d.first, d.second);
+  }
 }
 
 /*

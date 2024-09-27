@@ -597,6 +597,24 @@ TEST(ParticleLoop, cell_dat_const) {
   // inner_cell_dat_min_max<INT>(sycl_target, A, cell_count);
   // inner_cell_dat_min_max<REAL>(sycl_target, A, cell_count);
 
+  particle_loop(
+      A,
+      [=](auto INDEX, auto G1) {
+        if (INDEX.layer == 0) {
+          G1.at(0, 0) = INDEX.cell;
+          G1[1] = INDEX.cell + 1;
+        }
+      },
+      Access::read(ParticleLoopIndex{}), Access::write(g1))
+      ->execute();
+
+  for (int cx = 0; cx < cell_count; cx++) {
+    if (A->get_npart_cell(cx) > 0) {
+      ASSERT_EQ(g1->get_value(cx, 0, 0), cx);
+      ASSERT_EQ(g1->get_value(cx, 1, 0), cx + 1);
+    }
+  }
+
   A->free();
   sycl_target->free();
   mesh->free();

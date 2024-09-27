@@ -53,7 +53,7 @@ inline void neso_particles_assert(const char *expr_str, bool expr,
                                   const char *file, int line, T &&msg) {
   if (!expr) {
     std::cerr << "NESO Particles Assertion error:\t" << msg << "\n"
-              << "Expected value:\t" << expr_str << "\n"
+              << "Expression evaluated:\t" << expr_str << "\n"
               << "Source location:\t\t" << file << ", line " << line << "\n";
 #ifdef NESO_PARTICLES_NO_MPI_ABORT
     std::abort();
@@ -175,6 +175,8 @@ template <typename... T> inline void nprint(T... args) {
   nprint_recurse(0, args...);
 }
 
+#define nprint_variable(x) nprint(std::string(#x) + ":", x)
+
 #ifndef NESO_PARTICLES_BLOCK_SIZE
 #define NESO_PARTICLES_BLOCK_SIZE 1024
 #endif
@@ -258,6 +260,18 @@ inline void initialise_mpi(int *argc, char ***argv) {
   test_provided_thread_level(provided_thread_level);
 }
 
+inline std::string fixed_width_format(INT value) {
+  char buffer[128];
+  const int err = snprintf(buffer, 128, "% lld", static_cast<long long>(value));
+  NESOASSERT(err >= 0 && err < 128, "Bad snprintf return code.");
+  return std::string(buffer);
+}
+inline std::string fixed_width_format(REAL value) {
+  char buffer[128];
+  const int err = snprintf(buffer, 128, "% .6e", value);
+  NESOASSERT(err >= 0 && err < 128, "Bad snprintf return code.");
+  return std::string(buffer);
+}
 // TODO Move MPI typedefs to right place when dmplex branch merged.
 
 /**
@@ -293,5 +307,13 @@ inline bool device_aware_mpi_enabled() {
 }
 
 } // namespace NESO::Particles
+
+// HDF5 includes if it exists.
+#ifdef NESO_PARTICLES_HDF5
+#include <hdf5.h>
+#ifndef H5CHK
+#define H5CHK(cmd) NESOASSERT((cmd) >= 0, "HDF5 ERROR");
+#endif
+#endif
 
 #endif

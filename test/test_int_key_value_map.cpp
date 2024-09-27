@@ -103,3 +103,60 @@ TEST(BlockedBinaryTree, binary_tree) {
 }
 
 TEST(BlockedBinaryTree, eight_block_tree) { tree_wrapper<8>(); }
+
+TEST(LookupTable, base) {
+  auto sycl_target = std::make_shared<SYCLTarget>(GPU_SELECTOR, MPI_COMM_WORLD);
+  const int N = 16;
+  auto lut = std::make_shared<LookupTable<int, double>>(sycl_target, N);
+  for (int ix = 0; ix < N; ix++) {
+    double value;
+    ASSERT_FALSE(lut->host_get(ix, &value));
+  }
+  for (int ix = 0; ix < N; ix++) {
+    const double value = 1.0 / (ix + 1);
+    lut->add(ix, value);
+  }
+  for (int ix = 0; ix < N; ix++) {
+    double value;
+    ASSERT_TRUE(lut->host_get(ix, &value));
+    ASSERT_NEAR(value, 1.0 / (ix + 1), 1.0e-14);
+  }
+  sycl_target->free();
+}
+
+TEST(LookupTable, device) {
+  auto sycl_target = std::make_shared<SYCLTarget>(GPU_SELECTOR, MPI_COMM_WORLD);
+  const int N = 16;
+  auto lut = std::make_shared<LookupTable<int, double>>(sycl_target, N);
+  for (int ix = 0; ix < N; ix++) {
+    const double value = 1.0 / (ix + 1);
+    lut->add(ix, value);
+  }
+
+  auto dh_exists = std::make_unique<BufferDeviceHost<int>>(sycl_target, N);
+  auto dh_values = std::make_unique<BufferDeviceHost<double>>(sycl_target, N);
+
+  auto k_exists = dh_exists->d_buffer.ptr;
+  auto k_values = dh_values->d_buffer.ptr;
+  auto k_root = lut->root;
+
+  sycl_target->queue
+      .submit([&](sycl::handler &cgh) {
+        cgh.parallel_for<>(sycl::range<1>(N), [=](sycl::id<1> idx) {
+          double value;
+          const bool e = k_root->get(static_cast<int>(idx), &value);
+          k_exists[idx] = e ? 1 : 0;
+          k_values[idx] = value;
+        });
+      })
+      .wait_and_throw();
+
+  dh_exists->device_to_host();
+  dh_values->device_to_host();
+
+  for (int ix = 0; ix < N; ix++) {
+    ASSERT_EQ(dh_exists->h_buffer.ptr[ix], 1);
+    ASSERT_NEAR(dh_values->h_buffer.ptr[ix], 1.0 / (ix + 1), 1.0e-14);
+  }
+  sycl_target->free();
+}
