@@ -13,8 +13,8 @@ inline void particle_loop_rng(
   std::normal_distribution<REAL> rng_dist(0, 1.0);
   auto rng_lambda = [&]() -> REAL { return rng_dist(rng_state); };
   
-  // Create a HostKernelRNG instance from the required distribution.
-  auto rng_kernel = host_kernel_rng<REAL>(rng_lambda, num_components);
+  // Create a PerParticleBlockRNG instance from the required distribution.
+  auto rng_kernel = host_per_particle_block_rng<REAL>(rng_lambda, num_components);
   
   // Create a ParticleLoop which samples the distribution num_components times
   // per particle.

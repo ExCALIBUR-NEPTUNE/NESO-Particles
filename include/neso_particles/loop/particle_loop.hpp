@@ -135,16 +135,16 @@ namespace ParticleLoopImplementation {
 /**
  * Catch all for args passed as shared ptrs
  */
-template <template <typename> typename T, typename U>
-struct LoopParameter<T<std::shared_ptr<U>>> {
-  using type = typename LoopParameter<T<U>>::type;
+template <template <typename> typename T, typename U, typename V>
+struct LoopParameter<T<std::shared_ptr<U>>, V> {
+  using type = typename LoopParameter<T<U>, V>::type;
 };
 /**
  * Catch all for args passed as shared ptrs
  */
-template <template <typename> typename T, typename U>
-struct KernelParameter<T<std::shared_ptr<U>>> {
-  using type = typename KernelParameter<T<U>>::type;
+template <template <typename> typename T, typename U, typename V>
+struct KernelParameter<T<std::shared_ptr<U>>, V> {
+  using type = typename KernelParameter<T<U>, V>::type;
 };
 
 } // namespace ParticleLoopImplementation
@@ -158,14 +158,15 @@ namespace {
  */
 template <class T>
 using loop_parameter_t =
-    typename ParticleLoopImplementation::LoopParameter<T>::type;
+    typename ParticleLoopImplementation::LoopParameter<T, std::true_type>::type;
 
 /**
  *  Function to map access descriptor and data structure type to kernel type.
  */
 template <class T>
 using kernel_parameter_t =
-    typename ParticleLoopImplementation::KernelParameter<T>::type;
+    typename ParticleLoopImplementation::KernelParameter<T,
+                                                         std::true_type>::type;
 
 } // namespace
 

@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.24)
 
 project(
   NESO-Particles
-  VERSION 0.0.1
+  VERSION 0.6.0
   LANGUAGES CXX C)
 
 include(GNUInstallDirs)
@@ -18,6 +18,11 @@ option(
 option(NESO_PARTICLES_LEGACY_DEVICE_SELECTORS
        "Option to use SYCL 1.2 selectors if 2020 ones are not supported." OFF)
 option(NESO_PARTICLES_ENABLE_PETSC "Look for PETSc." OFF)
+option(
+  NESO_PARTICLES_DEVICE_AWARE_MPI
+  "Enable device aware MPI by default, i.e. pass device pointers to MPI rather than copying to the host."
+  OFF)
+
 # Create interface/Header only library
 add_library(NESO-Particles INTERFACE)
 # Alias the name to the namespaces name. Can use in subdirectory or via Confiig
@@ -53,7 +58,9 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/nd_index.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/rng/rng.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/rng/kernel_rng.hpp
-    ${INCLUDE_DIR_NESO_PARTICLES}/containers/rng/host_kernel_rng.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/containers/rng/host_rng_common.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/containers/rng/host_per_particle_block_rng.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/containers/rng/host_atomic_block_kernel_rng.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/descendant_products.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/global_array.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/local_array.hpp
@@ -103,6 +110,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/access_descriptors.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_base.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_utility.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_index.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/pli_particle_dat.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_hierarchy.hpp
@@ -166,6 +174,12 @@ if(NESO_PARTICLES_LEGACY_DEVICE_SELECTORS)
   target_compile_definitions(NESO-Particles
                              INTERFACE NESO_PARTICLES_LEGACY_DEVICE_SELECTORS)
   message(STATUS "Using legacy SYCL device selectors")
+endif()
+
+if(NESO_PARTICLES_DEVICE_AWARE_MPI)
+  target_compile_definitions(NESO-Particles
+                             INTERFACE NESO_PARTICLES_DEVICE_AWARE_MPI)
+  message(STATUS "Using device aware MPI.")
 endif()
 
 # Get MPI

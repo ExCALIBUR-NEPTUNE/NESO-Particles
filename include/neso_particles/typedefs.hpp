@@ -272,6 +272,39 @@ inline std::string fixed_width_format(REAL value) {
   NESOASSERT(err >= 0 && err < 128, "Bad snprintf return code.");
   return std::string(buffer);
 }
+// TODO Move MPI typedefs to right place when dmplex branch merged.
+
+/**
+ * @returns True if device aware MPI is enabled.
+ */
+inline bool device_aware_mpi_enabled() {
+#ifdef NESO_PARTICLES_DEVICE_AWARE_MPI
+  constexpr bool enabled_cmake = true;
+#else
+  constexpr bool enabled_cmake = false;
+#endif
+  char *var_char;
+  const bool var_exists =
+      (var_char = std::getenv("NESO_PARTICLES_DEVICE_AWARE_MPI")) != nullptr;
+  bool enabled;
+  // If the env var exists then this sets if device MPI is enabled otherwise
+  // use the cmake default
+  if (var_exists) {
+    std::string var_string = var_char;
+    if ((var_string == "ON") || (var_string == "1")) {
+      enabled = true;
+    } else if ((var_string == "OFF") || (var_string == "0")) {
+      enabled = false;
+    } else {
+      NESOASSERT(false, "Bad value for NESO_PARTICLES_DEVICE_AWARE_MPI, "
+                        "expected ON, 1, OFF or 0. Value is: \"" +
+                            var_string + "\".");
+    }
+  } else {
+    enabled = enabled_cmake;
+  }
+  return enabled;
+}
 
 } // namespace NESO::Particles
 

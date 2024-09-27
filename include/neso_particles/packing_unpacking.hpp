@@ -27,6 +27,7 @@ private:
   BufferDeviceHost<INT *const *const *> dh_particle_dat_ptr_int;
   BufferDeviceHost<int> dh_particle_dat_ncomp_real;
   BufferDeviceHost<int> dh_particle_dat_ncomp_int;
+  bool device_aware_mpi_enabled;
 
   inline size_t particle_size(
       std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
@@ -79,6 +80,18 @@ private:
     e3.wait();
   }
 
+  /// Required length of the send buffer.
+  INT required_send_buffer_length;
+  /// Vector of pointers for packed cells on device.
+  BufferHost<char *> h_send_pointers;
+  /// CellDat used to pack the particles to be sent to each remote rank on the
+  // device.
+  CellDat<char> cell_dat;
+  /// Host buffer to copy packed data to before sending using MPI routines.
+  BufferHost<char> h_send_buffer;
+  /// Vector of offsets to index into the host send buffer.
+  BufferHost<INT> h_send_offsets;
+
 public:
   /// Disable (implicit) copies.
   ParticlePacker(const ParticlePacker &st) = delete;
@@ -87,15 +100,6 @@ public:
 
   /// Number of bytes required per particle packed.
   int num_bytes_per_particle;
-  /// CellDat used to pack the particles to be sent to each remote rank on the
-  // device.
-  CellDat<char> cell_dat;
-  /// Host buffer to copy packed data to before sending using MPI routines.
-  BufferHost<char> h_send_buffer;
-  /// Vector of offsets to index into the host send buffer.
-  BufferHost<INT> h_send_offsets;
-  /// Required length of the send buffer.
-  INT required_send_buffer_length;
   /// Compute device used by the instance.
   SYCLTargetSharedPtr sycl_target;
   ~ParticlePacker(){};
@@ -108,10 +112,12 @@ public:
       : sycl_target(sycl_target),
         cell_dat(sycl_target, sycl_target->comm_pair.size_parent, 1),
         h_send_buffer(sycl_target, 1), h_send_offsets(sycl_target, 1),
+        h_send_pointers(sycl_target, 1),
         dh_particle_dat_ptr_real(sycl_target, 1),
         dh_particle_dat_ptr_int(sycl_target, 1),
         dh_particle_dat_ncomp_real(sycl_target, 1),
-        dh_particle_dat_ncomp_int(sycl_target, 1){};
+        dh_particle_dat_ncomp_int(sycl_target, 1),
+        device_aware_mpi_enabled(NESO::Particles::device_aware_mpi_enabled()){};
 
   /**
    *  Reset the instance before packing particle data.
@@ -119,43 +125,45 @@ public:
   inline void reset() {}
 
   /**
-   * Get the packed particle data on the host such that it can be sent.
-   *
-   * @param num_remote_send_ranks Number of remote ranks involved in send.
-   * @param h_send_rank_npart_ptr Host accessible pointer holding the number of
-   * particles to be sent to each remote rank.
-   * @returns Pointer to host allocated buffer holding the packed particle data.
+   * @returns Array of size num_remote_send_ranks containing pointers to host
+   * or device memory depending on if device aware MPI is enabled.
    */
-  inline char *get_packed_data_on_host(const int num_remote_send_ranks,
-                                       const int *h_send_rank_npart_ptr) {
-    this->h_send_buffer.realloc_no_copy(this->required_send_buffer_length);
-    this->h_send_offsets.realloc_no_copy(num_remote_send_ranks);
+  inline char **get_packed_pointers(const int num_remote_send_ranks,
+                                    const int *h_send_rank_npart_ptr) {
+    this->h_send_pointers.realloc_no_copy(num_remote_send_ranks);
     NESOASSERT((this->cell_dat.ncells) >=
                    (this->sycl_target->comm_pair.size_parent),
                "Insuffient cells");
 
-    INT offset = 0;
-    std::stack<sycl::event> copy_events{};
-    for (int rankx = 0; rankx < num_remote_send_ranks; rankx++) {
-      const int npart_tmp = h_send_rank_npart_ptr[rankx];
-      const int nbytes_tmp = npart_tmp * this->num_bytes_per_particle;
-
-      auto device_ptr = this->cell_dat.col_device_ptr(rankx, 0);
-      if (nbytes_tmp > 0) {
-        copy_events.push(this->sycl_target->queue.memcpy(
-            &this->h_send_buffer.ptr[offset], device_ptr, nbytes_tmp));
+    if (this->device_aware_mpi_enabled) {
+      for (int rankx = 0; rankx < num_remote_send_ranks; rankx++) {
+        auto device_ptr = this->cell_dat.col_device_ptr(rankx, 0);
+        this->h_send_pointers.ptr[rankx] = device_ptr;
       }
-      this->h_send_offsets.ptr[rankx] = offset;
-      offset += nbytes_tmp;
-    }
+    } else {
+      this->h_send_buffer.realloc_no_copy(this->required_send_buffer_length);
+      INT offset = 0;
+      std::stack<sycl::event> copy_events{};
+      for (int rankx = 0; rankx < num_remote_send_ranks; rankx++) {
+        const int npart_tmp = h_send_rank_npart_ptr[rankx];
+        const int nbytes_tmp = npart_tmp * this->num_bytes_per_particle;
 
-    while (!copy_events.empty()) {
-      auto event = copy_events.top();
-      event.wait_and_throw();
-      copy_events.pop();
-    }
+        auto device_ptr = this->cell_dat.col_device_ptr(rankx, 0);
+        if (nbytes_tmp > 0) {
+          copy_events.push(this->sycl_target->queue.memcpy(
+              &this->h_send_buffer.ptr[offset], device_ptr, nbytes_tmp));
+        }
+        this->h_send_pointers.ptr[rankx] = &this->h_send_buffer.ptr[offset];
+        offset += nbytes_tmp;
+      }
 
-    return this->h_send_buffer.ptr;
+      while (!copy_events.empty()) {
+        auto event = copy_events.top();
+        event.wait_and_throw();
+        copy_events.pop();
+      }
+    }
+    return this->h_send_pointers.ptr;
   }
 
   /**
@@ -292,8 +300,9 @@ private:
   BufferDeviceHost<INT ***> dh_particle_dat_ptr_int;
   BufferDeviceHost<int> dh_particle_dat_ncomp_real;
   BufferDeviceHost<int> dh_particle_dat_ncomp_int;
-
   BufferDevice<char> d_recv_buffer;
+
+  bool device_aware_mpi_enabled;
 
   inline size_t particle_size(
       std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
@@ -350,23 +359,27 @@ private:
     this->sycl_target->profile_map.add_region(r);
   }
 
+  /// Pointers in which to recv data
+  BufferHost<char *> h_recv_pointers;
+  /// Host buffer to receive particle data into from MPI operations.
+  BufferHost<char> h_recv_buffer;
+  /// Offsets into the recv buffer for each remote rank that will send to this
+  // rank.
+  BufferHost<INT> h_recv_offsets;
+
 public:
   /// Disable (implicit) copies.
   ParticleUnpacker(const ParticleUnpacker &st) = delete;
   /// Disable (implicit) copies.
   ParticleUnpacker &operator=(ParticleUnpacker const &a) = delete;
 
-  /// Host buffer to receive particle data into from MPI operations.
-  BufferHost<char> h_recv_buffer;
-  /// Offsets into the recv buffer for each remote rank that will send to this
-  // rank.
-  BufferHost<INT> h_recv_offsets;
   /// Number of particles expected in the next/current recv operation.
   int npart_recv;
   /// Number of bytes per particle.
   int num_bytes_per_particle;
   /// Compute device used by the instance.
   SYCLTargetSharedPtr sycl_target;
+
   ~ParticleUnpacker(){};
 
   /**
@@ -380,7 +393,33 @@ public:
         dh_particle_dat_ptr_real(sycl_target, 1),
         dh_particle_dat_ptr_int(sycl_target, 1),
         dh_particle_dat_ncomp_real(sycl_target, 1),
-        dh_particle_dat_ncomp_int(sycl_target, 1){};
+        dh_particle_dat_ncomp_int(sycl_target, 1),
+        h_recv_pointers(sycl_target, 1),
+        device_aware_mpi_enabled(NESO::Particles::device_aware_mpi_enabled()){};
+
+  /**
+   * @returns Host or device pointers for locations in which to recv packed
+   * particles from each MPI rank.
+   */
+  char **get_recv_pointers(const int num_remote_recv_ranks) {
+    this->h_recv_pointers.realloc_no_copy(num_remote_recv_ranks);
+
+    if (this->device_aware_mpi_enabled) {
+      for (int rankx = 0; rankx < num_remote_recv_ranks; rankx++) {
+        const auto offset = this->h_recv_offsets.ptr[rankx];
+        auto ptr = &this->d_recv_buffer.ptr[offset];
+        this->h_recv_pointers.ptr[rankx] = ptr;
+      }
+    } else {
+      for (int rankx = 0; rankx < num_remote_recv_ranks; rankx++) {
+        const auto offset = this->h_recv_offsets.ptr[rankx];
+        auto ptr = &this->h_recv_buffer.ptr[offset];
+        this->h_recv_pointers.ptr[rankx] = ptr;
+      }
+    }
+
+    return this->h_recv_pointers.ptr;
+  }
 
   /**
    *  Reset the unpacker ready to unpack received particles.
@@ -413,8 +452,10 @@ public:
     }
 
     // realloc the recv buffer
-    this->h_recv_buffer.realloc_no_copy(this->npart_recv *
-                                        this->num_bytes_per_particle);
+    if (!this->device_aware_mpi_enabled) {
+      this->h_recv_buffer.realloc_no_copy(this->npart_recv *
+                                          this->num_bytes_per_particle);
+    }
     this->d_recv_buffer.realloc_no_copy(this->npart_recv *
                                         this->num_bytes_per_particle);
   }
@@ -438,7 +479,7 @@ public:
 
     const int cpysize = this->npart_recv * this->num_bytes_per_particle;
     sycl::event event_memcpy;
-    if (cpysize > 0) {
+    if ((cpysize > 0) && (!this->device_aware_mpi_enabled)) {
       event_memcpy = this->sycl_target->queue.memcpy(
           this->d_recv_buffer.ptr, this->h_recv_buffer.ptr, cpysize);
     }
@@ -489,7 +530,7 @@ public:
     sycl_target->profile_map.inc("ParticleUnpacker", "unpack_prepare", 1,
                                  profile_elapsed(t0, profile_timestamp()));
 
-    if (cpysize > 0) {
+    if ((cpysize > 0) && (!this->device_aware_mpi_enabled)) {
       event_memcpy.wait_and_throw();
     }
 
