@@ -22,8 +22,8 @@ ParticleGroupSharedPtr particle_loop_common(const int N = 1093) {
   auto domain = std::make_shared<Domain>(mesh, cart_local_mapper);
 
   ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
-                             ParticleProp(Sym<REAL>("V"), 3),
-                             ParticleProp(Sym<REAL>("P2"), ndim),
+                             ParticleProp(Sym<REAL>("V"), ndim),
+                             ParticleProp(Sym<REAL>("F"), ndim),
                              ParticleProp(Sym<INT>("CELL_ID"), 1, true),
                              ParticleProp(Sym<INT>("LOOP_INDEX"), 2),
                              ParticleProp(Sym<INT>("ID"), 1)};
@@ -42,15 +42,13 @@ ParticleGroupSharedPtr particle_loop_common(const int N = 1093) {
   auto positions =
       uniform_within_extents(N, ndim, mesh->global_extents, rng_pos);
   auto velocities =
-      NESO::Particles::normal_distribution(N, 3, 0.0, 1.0, rng_vel);
+      NESO::Particles::normal_distribution(N, 2, 0.0, 1.0, rng_vel);
 
   ParticleSet initial_distribution(N, particle_spec);
 
   for (int px = 0; px < N; px++) {
     for (int dimx = 0; dimx < ndim; dimx++) {
       initial_distribution[Sym<REAL>("P")][px][dimx] = positions[dimx][px];
-    }
-    for (int dimx = 0; dimx < 3; dimx++) {
       initial_distribution[Sym<REAL>("V")][px][dimx] = velocities[dimx][px];
     }
     initial_distribution[Sym<INT>("CELL_ID")][px][0] = 0;
@@ -145,8 +143,25 @@ public:
 };
 
 
+
+namespace NESO::Particles::Access {
+  template <typename ACCESS>
+  struct A {
+    ACCESS access;
+    A(ACCESS access) : access(access) {};
+  };
+
+  template <typename ACCESS>
+  struct B {
+    ACCESS access;
+    B(ACCESS access) : access(access) {};
+  };
+}
+
+
 template <typename GROUP_A_TYPE, typename GROUP_B_TYPE, typename KERNEL, typename... ARGS>
 class ParticlePairLoopCellWise : public ParticlePairLoopBase {};
+
 
 template <typename KERNEL, typename... ARGS>
 class ParticlePairLoopCellWise<ParticleGroup, ParticleGroup, KERNEL, ARGS...> : public ParticlePairLoopBase {
@@ -186,6 +201,7 @@ public:
 };
 
 
+
 template <typename GROUP_A_TYPE, typename GROUP_B_TYPE, typename KERNEL, typename... ARGS>
 [[nodiscard]] auto particle_pair_loop(
     std::shared_ptr<CellPairIterationSet> cell_pair_iteration_set,
@@ -205,24 +221,55 @@ template <typename GROUP_A_TYPE, typename GROUP_B_TYPE, typename KERNEL, typenam
 }
 
 
+
 TEST(ParticlePairLoop, base) {
-  auto A = particle_loop_common();
-  auto domain = A->domain;
+  auto particle_group = particle_loop_common();
+  auto domain = particle_group->domain;
   auto mesh = domain->mesh;
-  const int cell_count = mesh->get_cell_count();
-  auto sycl_target = A->sycl_target;
-
-  auto pair_loop = particle_pair_loop(
-    std::make_shared<CellSelfIterationSet>(A->domain),
-    A,
-    A,
-    [=](auto P){
-
+  const int ndim = mesh->get_ndim();
+  auto sycl_target = particle_group->sycl_target;
+  
+  auto reset_force_loop = particle_loop(
+    particle_group,
+    [=](auto F){
+      for(int dx=0 ; dx<ndim ; dx++){
+        F.at(dx) = 0.0;
+      }
     },
-    Access::read(Sym<REAL>("P"))
+    Access::write(Sym<REAL>("F"))
   );
 
-  A->free();
+  auto pair_loop = particle_pair_loop(
+    // A Hello world neighbour generation approach that would expose pairs of
+    // particles within the same cell as each other. Essentially the first
+    // argument of ParticlePairLoop specifies how pairs are formed.
+    std::make_shared<CellSelfIterationSet>(particle_group->domain),
+
+    particle_group, // ParticleGroup A
+    particle_group, // ParticleGroup B (same as A in this case)
+
+    // Kernel works identically to a ParticleLoop. If group A == group B then
+    // the user can assume that the pair loop never exposes a particle with
+    // itself.
+    [=](auto AP, auto BP, auto AF){
+      const REAL r0 = BP.at(0) - AP.at(0);
+      const REAL r1 = BP.at(1) - AP.at(1);
+      const REAL r2 = BP.at(2) - AP.at(2);
+      const REAL scaling = 1.0 / Kernel::sqrt(r0*r0 + r1*r1 + r2*r2);
+      AF.at(0) += scaling * r0;
+      AF.at(1) += scaling * r1;
+      AF.at(2) += scaling * r2;
+    },
+
+    Access::A(Access::read(Sym<REAL>("P"))), // Access::A indicates the argument is from group A
+    Access::B(Access::read(Sym<REAL>("P"))), // Access::B indicates the argument is from group B
+    Access::A(Access::write(Sym<REAL>("F")))
+  );
+
+  reset_force_loop->execute();
+  pair_loop->execute();
+
+  particle_group->free();
   sycl_target->free();
   mesh->free();
 }
