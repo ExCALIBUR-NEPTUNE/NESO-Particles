@@ -239,7 +239,7 @@ TEST(ParticlePairLoop, base) {
     Access::write(Sym<REAL>("F"))
   );
 
-  auto pair_loop = particle_pair_loop(
+  auto force_pair_loop = particle_pair_loop(
     // A Hello world neighbour generation approach that would expose pairs of
     // particles within the same cell as each other. Essentially the first
     // argument of ParticlePairLoop specifies how pairs are formed.
@@ -254,11 +254,9 @@ TEST(ParticlePairLoop, base) {
     [=](auto AP, auto BP, auto AF){
       const REAL r0 = BP.at(0) - AP.at(0);
       const REAL r1 = BP.at(1) - AP.at(1);
-      const REAL r2 = BP.at(2) - AP.at(2);
-      const REAL scaling = 1.0 / Kernel::sqrt(r0*r0 + r1*r1 + r2*r2);
+      const REAL scaling = 1.0 / Kernel::sqrt(r0*r0 + r1*r1);
       AF.at(0) += scaling * r0;
       AF.at(1) += scaling * r1;
-      AF.at(2) += scaling * r2;
     },
 
     Access::A(Access::read(Sym<REAL>("P"))), // Access::A indicates the argument is from group A
@@ -267,7 +265,7 @@ TEST(ParticlePairLoop, base) {
   );
 
   reset_force_loop->execute();
-  pair_loop->execute();
+  force_pair_loop->execute();
 
   particle_group->free();
   sycl_target->free();
