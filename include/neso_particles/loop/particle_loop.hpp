@@ -147,6 +147,27 @@ struct KernelParameter<T<std::shared_ptr<U>>, V> {
   using type = typename KernelParameter<T<U>, V>::type;
 };
 
+/**
+ * Method to compute access to a type wrapped in a shared_ptr.
+ */
+template <template <typename> typename T, typename U>
+inline auto create_loop_arg_cast(
+    ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+    sycl::handler &cgh, T<std::shared_ptr<U>> a) {
+  T<U *> c = {a.obj.get()};
+  return ParticleLoopImplementation::create_loop_arg(global_info, cgh, c);
+}
+/**
+ * Method to compute access to a type not wrapper in a shared_ptr
+ */
+template <template <typename> typename T, typename U>
+inline auto create_loop_arg_cast(
+    ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+    sycl::handler &cgh, T<U> a) {
+  T<U *> c = {&a.obj};
+  return ParticleLoopImplementation::create_loop_arg(global_info, cgh, c);
+}
+
 } // namespace ParticleLoopImplementation
 
 namespace {
@@ -179,26 +200,7 @@ template <typename KERNEL, typename... ARGS>
 class ParticleLoop : public ParticleLoopBase {
 
 protected:
-  /**
-   * Method to compute access to a type wrapped in a shared_ptr.
-   */
-  template <template <typename> typename T, typename U>
-  static inline auto create_loop_arg_cast(
-      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
-      sycl::handler &cgh, T<std::shared_ptr<U>> a) {
-    T<U *> c = {a.obj.get()};
-    return ParticleLoopImplementation::create_loop_arg(global_info, cgh, c);
-  }
-  /**
-   * Method to compute access to a type not wrapper in a shared_ptr
-   */
-  template <template <typename> typename T, typename U>
-  static inline auto create_loop_arg_cast(
-      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
-      sycl::handler &cgh, T<U> a) {
-    T<U *> c = {&a.obj};
-    return ParticleLoopImplementation::create_loop_arg(global_info, cgh, c);
-  }
+
 
   /*
    * -----------------------------------------------------------------
@@ -272,7 +274,8 @@ protected:
       sycl::handler &cgh, PARAM &loop_args) {
     if constexpr (INDEX < SIZE) {
       Tuple::get<INDEX>(loop_args) =
-          create_loop_arg_cast(global_info, cgh, std::get<INDEX>(this->args));
+          ParticleLoopImplementation::create_loop_arg_cast(
+            global_info, cgh, std::get<INDEX>(this->args));
       create_loop_args_inner<INDEX + 1, SIZE>(global_info, cgh, loop_args);
     }
   }

@@ -118,6 +118,25 @@ public:
 
 };
 
+namespace NESO::Particles::Access {
+  template <typename ACCESS>
+  struct A {
+    ACCESS access;
+    A() = default;
+    A(ACCESS access) : access(access) {};
+  };
+
+  template <typename ACCESS>
+  struct B {
+    ACCESS access;
+    B() = default;
+    B(ACCESS access) : access(access) {};
+  };
+
+  struct SpaceA {};
+  struct SpaceB {};
+  struct SpaceGlobal {};
+}
 
 
 class ParticlePairLoopBase {
@@ -142,34 +161,119 @@ public:
   virtual inline void wait() = 0;
 };
 
-
-
-namespace NESO::Particles::Access {
-  template <typename ACCESS>
-  struct A {
-    ACCESS access;
-    A(ACCESS access) : access(access) {};
-  };
-
-  template <typename ACCESS>
-  struct B {
-    ACCESS access;
-    B(ACCESS access) : access(access) {};
-  };
+namespace ParticlePairLoopImplementation {
+template<typename T>
+struct StripABGlobal{
+  using space_type = Access::SpaceGlobal;
+  using wrapped_type = T;
+};
+template<typename T>
+struct StripABGlobal<Access::A<T>>{
+  using space_type = Access::SpaceA;
+  using wrapped_type = T;
+};
+template<typename T>
+struct StripABGlobal<Access::B<T>>{
+  using space_type = Access::SpaceB;
+  using wrapped_type = T;
+};
 }
+
+template <typename KERNEL, typename... ARGS>
+class ParticlePairLoopGeneric : public ParticlePairLoopBase {
+protected:
+  KERNEL kernel;
+
+  ParticleGroupSharedPtr particle_group;
+  SYCLTargetSharedPtr sycl_target;
+  EventStack event_stack;
+
+  /// TODO describe what is happening with types more explicitly here.
+  /// The default constructor for the types initialises this tuple to sane
+  /// values. We only care about the types.
+  std::tuple<typename ParticlePairLoopImplementation::StripABGlobal<ARGS>::space_type ...> arg_spaces;
+  /// The arguments without the space decorators. These args are now in the
+  /// same format as for ParticleLoop.
+  std::tuple<typename ParticlePairLoopImplementation::StripABGlobal<ARGS>::wrapped_type ...> args;
+
+  /// Recursively assemble the tuple args.
+  template <size_t INDEX, typename U> inline void unpack_args(U a0) {
+    std::get<INDEX>(this->args) = a0;
+  }
+  template <size_t INDEX, typename U> inline void unpack_args(Access::A<U> a0) {
+    std::get<INDEX>(this->args) = a0.access;
+  }
+  template <size_t INDEX, typename U> inline void unpack_args(Access::B<U> a0) {
+    std::get<INDEX>(this->args) = a0.access;
+  }
+  template <size_t INDEX, typename U, typename... V>
+  inline void unpack_args(U a0, V... args) {
+    std::get<INDEX>(this->args) = a0;
+    this->unpack_args<INDEX + 1>(args...);
+  }
+  template <size_t INDEX, typename U, typename... V>
+  inline void unpack_args(Access::A<U> a0, V... args) {
+    std::get<INDEX>(this->args) = a0.access;
+    this->unpack_args<INDEX + 1>(args...);
+  }
+  template <size_t INDEX, typename U, typename... V>
+  inline void unpack_args(Access::B<U> a0, V... args) {
+    std::get<INDEX>(this->args) = a0.access;
+    this->unpack_args<INDEX + 1>(args...);
+  }
+
+  /// The types of the parameters for the outside loops.
+  using loop_parameter_type = Tuple::Tuple<loop_parameter_t<typename 
+    ParticlePairLoopImplementation::StripABGlobal<ARGS>::wrapped_type>...>;
+
+  /// Recursively assemble the outer loop arguments.
+  template <size_t INDEX, size_t SIZE, typename PARAM>
+  inline void create_loop_args_inner(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      sycl::handler &cgh, PARAM &loop_args) {
+    if constexpr (INDEX < SIZE) {
+      Tuple::get<INDEX>(loop_args) =
+          ParticleLoopImplementation::create_loop_arg_cast(
+            global_info, cgh, std::get<INDEX>(this->args));
+      create_loop_args_inner<INDEX + 1, SIZE>(global_info, cgh, loop_args);
+    }
+  }
+  inline void create_loop_args(
+      sycl::handler &cgh, loop_parameter_type &loop_args,
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info) {
+    create_loop_args_inner<0, sizeof...(ARGS)>(global_info, cgh, loop_args);
+  }
+
+
+  template<typename GROUP_TYPE>
+  ParticlePairLoopGeneric(
+    std::shared_ptr<GROUP_TYPE> particle_sub_group, 
+    KERNEL kernel, 
+    ARGS... args) : 
+    kernel(kernel) 
+  {
+    this->particle_group = get_particle_group(particle_sub_group);
+    this->sycl_target = this->particle_group->sycl_target;
+    this->unpack_args<0>(args...);
+  }
+
+public:
+  virtual inline void execute(const std::optional<int> cell = std::nullopt) override{
+    this->submit(cell);
+    this->wait();
+  }
+};
 
 
 template <typename GROUP_A_TYPE, typename GROUP_B_TYPE, typename KERNEL, typename... ARGS>
-class ParticlePairLoopCellWise : public ParticlePairLoopBase {};
+class ParticlePairLoopCellWise : public ParticlePairLoopGeneric<KERNEL, ARGS...> {};
 
 
 template <typename KERNEL, typename... ARGS>
-class ParticlePairLoopCellWise<ParticleGroup, ParticleGroup, KERNEL, ARGS...> : public ParticlePairLoopBase {
+class ParticlePairLoopCellWise<ParticleGroup, ParticleGroup, KERNEL, ARGS...> : public ParticlePairLoopGeneric<KERNEL, ARGS...> {
 protected:
   std::shared_ptr<CellPairIterationSet> cell_pair_iteration_set;
-  std::shared_ptr<ParticleGroup> group_a;
   std::shared_ptr<ParticleGroup> group_b;
-  KERNEL kernel;
   
 public:
 
@@ -180,22 +284,25 @@ public:
     KERNEL kernel,
     ARGS... args
   ) :
+    ParticlePairLoopGeneric<KERNEL, ARGS...>(group_a, kernel, args...),
     cell_pair_iteration_set(cell_pair_iteration_set),
-    group_a(group_a),
-    group_b(group_b),
-    kernel(kernel)
+    group_b(group_b)
   {
 
   }
 
-  virtual inline void execute(const std::optional<int> cell = std::nullopt) override{
-
-  }
   virtual inline void submit(const std::optional<int> cell = std::nullopt) override{
+    ParticleLoopImplementation::ParticleLoopGlobalInfo global_info; // TODO actually make this.
 
+    this->event_stack.push(
+        this->sycl_target->queue.submit([&](sycl::handler &cgh) {
+          typename ParticlePairLoopGeneric<KERNEL, ARGS...>::loop_parameter_type loop_args;
+          ParticlePairLoopGeneric<KERNEL, ARGS...>::create_loop_args(cgh, loop_args, &global_info);
+        }));
   }
-  virtual inline void wait() override{
 
+  virtual inline void wait() override {
+    this->event_stack.wait();
   }
 
 };
@@ -238,7 +345,11 @@ TEST(ParticlePairLoop, base) {
     },
     Access::write(Sym<REAL>("F"))
   );
+  
+  auto ga = std::make_shared<GlobalArray<REAL>>(sycl_target, 1, 0.0);
 
+
+  
   auto force_pair_loop = particle_pair_loop(
     // A Hello world neighbour generation approach that would expose pairs of
     // particles within the same cell as each other. Essentially the first
@@ -258,11 +369,39 @@ TEST(ParticlePairLoop, base) {
       AF.at(0) += scaling * r0;
       AF.at(1) += scaling * r1;
     },
-
     Access::A(Access::read(Sym<REAL>("P"))), // Access::A indicates the argument is from group A
     Access::B(Access::read(Sym<REAL>("P"))), // Access::B indicates the argument is from group B
     Access::A(Access::write(Sym<REAL>("F")))
   );
+
+  /*
+  auto force_pair_loop = particle_pair_loop(
+    // A Hello world neighbour generation approach that would expose pairs of
+    // particles within the same cell as each other. Essentially the first
+    // argument of ParticlePairLoop specifies how pairs are formed.
+    std::make_shared<CellSelfIterationSet>(particle_group->domain),
+
+    particle_group, // ParticleGroup A
+    particle_group, // ParticleGroup B (same as A in this case)
+
+    // Kernel works identically to a ParticleLoop. If group A == group B then
+    // the user can assume that the pair loop never exposes a particle with
+    // itself.
+    [=](auto GA, auto AP, auto AF, auto BP){
+      const REAL r0 = BP.at(0) - AP.at(0);
+      const REAL r1 = BP.at(1) - AP.at(1);
+      const REAL scaling = 1.0 / Kernel::sqrt(r0*r0 + r1*r1);
+      AF.at(0) += scaling * r0;
+      AF.at(1) += scaling * r1;
+    },
+    Access::add(ga),
+    Access::A(
+      Access::read(Sym<REAL>("P")),
+      Access::read(Sym<REAL>("F"))
+    ),
+    Access::B(Sym<REAL>("P"))
+  );
+  */
 
   reset_force_loop->execute();
   force_pair_loop->execute();
@@ -271,4 +410,5 @@ TEST(ParticlePairLoop, base) {
   sycl_target->free();
   mesh->free();
 }
+
 
