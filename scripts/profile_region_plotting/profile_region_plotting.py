@@ -91,7 +91,7 @@ if __name__ == "__main__":
                 dd["time_elapsed_plot"].append(time_end - time_start)
                 dd["time_elapsed"].append(time_end - time_start)
                 dd["colour"].append(
-                    px.colors.qualitative.Dark24[colour_mapper.get(name)]
+                    px.colors.qualitative.Dark24[colour_mapper.get(name) % 24]
                 )
 
     df = pd.DataFrame.from_dict(dd)

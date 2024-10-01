@@ -1,4 +1,6 @@
 #include <gtest/gtest.h>
+
+// #define NESO_PARTICLES_PROFILING_REGION
 #include <neso_particles.hpp>
 #include <random>
 #include <type_traits>
@@ -9,10 +11,11 @@ namespace {
 
 const int ndim = 2;
 
-ParticleGroupSharedPtr particle_loop_common(const int N = 1093) {
+ParticleGroupSharedPtr
+particle_loop_common(const int N = 1093, const int sx = 4, const int sy = 8) {
   std::vector<int> dims(ndim);
-  dims[0] = 4;
-  dims[1] = 8;
+  dims[0] = sx;
+  dims[1] = sy;
 
   const double cell_extent = 1.0;
   const int subdivision_order = 2;
@@ -115,4 +118,14 @@ TEST(Examples, particle_loop_base) {
   B->free();
   B->sycl_target->free();
   B->domain->mesh->free();
+}
+
+#include "example_sources/example_profile_regions.hpp"
+
+TEST(Examples, profile_region) {
+  auto A = particle_loop_common(1000, 8, 8);
+  profile_regions_example(A);
+  A->free();
+  A->sycl_target->free();
+  A->domain->mesh->free();
 }
