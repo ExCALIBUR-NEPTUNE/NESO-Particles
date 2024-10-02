@@ -263,7 +263,22 @@ make_quadrature_point_mapper_average(SYCLTargetSharedPtr sycl_target,
 }
 
 /**
+ * For a given input scalar valued function "func" sample particle positions in
+ * each cell to approximate the function cellwise. The function is evaluated at
+ * each vertex of the cell then the average of these vertex values is taken as
+ * the target particle density within the cell.
  *
+ * @param[in] sycl_target Compute device to use.
+ * @param[in] domain Domain based on a DMPlex mesh.
+ * @param[in] particle_weight Weight of each particle. Used to determine how
+ * many particles to sample in each cell to meet the function evaluation.
+ * @param[in] func Callable function with number of parameters equal to the
+ * number of dimensions.
+ * @param[in, out] positions On output contains the sampled particle positions.
+ * @param[in, out] cells On output contains the cells of the sampled positions.
+ * @param[in, out] rng_in RNG to use for sampling positions.
+ * @param[in] attempt_max Optionally specify a maximum number of attempts when
+ * sampling points.
  */
 template <std::size_t NDIM, typename T>
 inline std::array<int, 3> sample_points_for_distribution(
