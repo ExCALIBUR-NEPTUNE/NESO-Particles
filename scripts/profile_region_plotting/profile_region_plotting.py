@@ -47,6 +47,12 @@ if __name__ == "__main__":
         help="Specify the end time for region reading and plotting. By default the end of all regions will be used.",
     )
     parser.add_argument(
+        "-g",
+        "--group",
+        action="store_true",
+        help="Group regions by name in the y-direction. Only recomended with small numbers of input files.",
+    )
+    parser.add_argument(
         "json_files",
         nargs=argparse.REMAINDER,
         help="JSON files to parse and plot.",
@@ -104,6 +110,8 @@ if __name__ == "__main__":
         "time_elapsed": "Time Elapsed",
     }
 
+    barmode = "group" if args.group else "overlay"
+
     fig = px.bar(
         df,
         x="time_elapsed_plot",
@@ -119,9 +127,7 @@ if __name__ == "__main__":
             "colour": False,
         },
         color="name",
-        barmode="overlay",
-        # barmode="group",
-        # barmode="relative",
+        barmode=barmode,
         color_discrete_sequence=px.colors.qualitative.Dark24,
         hover_name="name",
         labels=labels,
