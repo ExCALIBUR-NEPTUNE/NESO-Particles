@@ -12,20 +12,8 @@ $ source profile_region_plotting_env/bin/activate
 # pip output omitted
 
 # Run the script
-$ python profile_region_plotting.py -h
-usage: profile_region_plotting.py [-h] [-s S] [-e E] ...
+$ python profile_region_plotting.py -s <start_time> -e <end_time> *.json
 
-Plot regions from NESO-Particles ProfileRegion. For example: python profile_region_plotting.py -s <start_time>
--e <end_time> *.json
-
-positional arguments:
-  json_files  JSON files to parse and plot.
-
-options:
-  -h, --help  show this help message and exit
-  -s S        Specify the start time for region reading and plotting. By Default the start of all regions will
-              be used.
-  -e E        Specify the end time for region reading and plotting. By default the end of all regions will be
-              used.
+# Run with -h for a complete set of options.
 ```
 
