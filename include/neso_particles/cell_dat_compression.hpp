@@ -118,10 +118,10 @@ public:
     auto r =
         ProfileRegion("LayerCompressor", "compute_remove_compress_indicies_a");
 
-    d_compress_cells_old.realloc_no_copy(npart);
-    d_compress_layers_old.realloc_no_copy(npart);
-    d_compress_layers_new.realloc_no_copy(npart);
-    d_compress_offsets.realloc_no_copy(npart);
+    this->d_compress_cells_old.realloc_no_copy(npart);
+    this->d_compress_layers_old.realloc_no_copy(npart);
+    this->d_compress_layers_new.realloc_no_copy(npart);
+    this->d_compress_offsets.realloc_no_copy(npart);
 
     NESOASSERT(this->d_npart_cell.size >= this->ncell,
                "Bad device_npart_cell length");
@@ -144,7 +144,7 @@ public:
     // Copy the current cell occupancies into device_npart_cell_ptr.
     this->sycl_target->queue
         .submit([&](sycl::handler &cgh) {
-          cgh.parallel_for<>(sycl::range<1>(static_cast<size_t>(ncell + 1)),
+          cgh.parallel_for<>(sycl::range<1>(static_cast<size_t>(ncell)),
                              [=](sycl::id<1> idx) {
                                device_npart_cell_ptr[idx] =
                                    static_cast<int>(k_npart_cell[idx]);
@@ -218,7 +218,7 @@ public:
     // We need to allocate space to find these particles but want to allocate
     // space sensibly in the case where the particle distribution is
     // non-uniform.
-    auto to_find_scan_ptr = d_to_find_exscan.ptr;
+    auto to_find_scan_ptr = this->d_to_find_exscan.ptr;
     joint_exclusive_scan(this->sycl_target, this->ncell + 1,
                          device_move_counters_ptr, to_find_scan_ptr)
         .wait_and_throw();
