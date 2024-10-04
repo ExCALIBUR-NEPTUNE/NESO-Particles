@@ -322,13 +322,10 @@ public:
               sycl::range<1>(static_cast<size_t>(this->compress_npart)),
               [=](sycl::id<1> idx) {
                 const auto cell = compress_cells_old_ptr[idx];
-                const auto layer = compress_layers_new_ptr[idx];
-
                 const auto offset = compress_layers_old_ptr[idx];
                 const auto cell_offset = to_find_scan_ptr[cell];
                 const auto lookup_index = cell_offset + offset;
                 const auto source_row = k_search_space[lookup_index];
-
                 compress_layers_old_ptr[idx] = source_row;
               });
         })
@@ -361,86 +358,82 @@ public:
     // note to refactorers that this call uses h_npart_cell
     this->compute_remove_compress_indicies(npart, usm_cells, usm_layers);
 
-    if (this->compress_npart > 0) {
-      auto r = ProfileRegion("LayerCompressor", "data_movement");
+    auto r = ProfileRegion("LayerCompressor", "data_movement");
 
-      auto compress_cells_old_ptr = this->d_compress_cells_old.ptr;
-      auto compress_layers_old_ptr = this->d_compress_layers_old.ptr;
-      auto compress_layers_new_ptr = this->d_compress_layers_new.ptr;
+    auto compress_cells_old_ptr = this->d_compress_cells_old.ptr;
+    auto compress_layers_old_ptr = this->d_compress_layers_old.ptr;
+    auto compress_layers_new_ptr = this->d_compress_layers_new.ptr;
 
-      auto t1 = profile_timestamp();
+    auto t1 = profile_timestamp();
 
-      // do this d->h copy once for all dats
-      if (this->d_npart_cell.size_bytes() > 0) {
-        this->event_stack.push(this->sycl_target->queue.memcpy(
-            this->h_npart_cell.ptr, this->d_npart_cell.ptr,
-            this->d_npart_cell.size_bytes()));
-      }
-
-      for (auto &dat : particle_dats_real) {
-        this->event_stack.push(dat.second->copy_particle_data(
-            this->compress_npart, compress_cells_old_ptr,
-            compress_cells_old_ptr, compress_layers_old_ptr,
-            compress_layers_new_ptr));
-        this->event_stack.push(
-            dat.second->set_npart_cells_device(this->d_npart_cell.ptr));
-      }
-      for (auto &dat : particle_dats_int) {
-        this->event_stack.push(dat.second->copy_particle_data(
-            this->compress_npart, compress_cells_old_ptr,
-            compress_cells_old_ptr, compress_layers_old_ptr,
-            compress_layers_new_ptr));
-        this->event_stack.push(
-            dat.second->set_npart_cells_device(this->d_npart_cell.ptr));
-      }
-
-      // the move and set_npart calls are async
-      this->event_stack.wait();
-
-      r.end();
-      this->sycl_target->profile_map.add_region(r);
-      sycl_target->profile_map.inc("LayerCompressor", "data_movement", 1,
-                                   profile_elapsed(t1, profile_timestamp()));
-
-      r = ProfileRegion("LayerCompressor", "dat_bookkeeping");
-
-      auto t2 = profile_timestamp();
-      for (auto &dat : particle_dats_real) {
-        dat.second->set_npart_cells_host(this->h_npart_cell.ptr);
-      }
-      for (auto &dat : particle_dats_int) {
-        dat.second->set_npart_cells_host(this->h_npart_cell.ptr);
-      }
-      sycl_target->profile_map.inc("LayerCompressor", "host_npart_setting", 1,
-                                   profile_elapsed(t2, profile_timestamp()));
-
-      auto t3 = profile_timestamp();
-      for (auto &dat : particle_dats_real) {
-        dat.second->trim_cell_dat_rows();
-      }
-      for (auto &dat : particle_dats_int) {
-        dat.second->trim_cell_dat_rows();
-      }
-      sycl_target->profile_map.inc("LayerCompressor", "dat_trimming", 1,
-                                   profile_elapsed(t3, profile_timestamp()));
-
-      auto t4 = profile_timestamp();
-      for (auto &dat : particle_dats_real) {
-        dat.second->cell_dat.wait_set_nrow();
-      }
-      for (auto &dat : particle_dats_int) {
-        dat.second->cell_dat.wait_set_nrow();
-      }
-
-      sycl_target->profile_map.inc("LayerCompressor", "dat_trimming_wait", 1,
-                                   profile_elapsed(t4, profile_timestamp()));
-
-      sycl_target->profile_map.inc("LayerCompressor", "remove_particles", 1,
-                                   profile_elapsed(t0, profile_timestamp()));
-
-      r.end();
-      this->sycl_target->profile_map.add_region(r);
+    // do this d->h copy once for all dats
+    if (this->d_npart_cell.size_bytes() > 0) {
+      this->event_stack.push(this->sycl_target->queue.memcpy(
+          this->h_npart_cell.ptr, this->d_npart_cell.ptr,
+          this->d_npart_cell.size_bytes()));
     }
+
+    for (auto &dat : particle_dats_real) {
+      this->event_stack.push(dat.second->copy_particle_data(
+          this->compress_npart, compress_cells_old_ptr, compress_cells_old_ptr,
+          compress_layers_old_ptr, compress_layers_new_ptr));
+      this->event_stack.push(
+          dat.second->set_npart_cells_device(this->d_npart_cell.ptr));
+    }
+    for (auto &dat : particle_dats_int) {
+      this->event_stack.push(dat.second->copy_particle_data(
+          this->compress_npart, compress_cells_old_ptr, compress_cells_old_ptr,
+          compress_layers_old_ptr, compress_layers_new_ptr));
+      this->event_stack.push(
+          dat.second->set_npart_cells_device(this->d_npart_cell.ptr));
+    }
+
+    // the move and set_npart calls are async
+    this->event_stack.wait();
+
+    r.end();
+    this->sycl_target->profile_map.add_region(r);
+    sycl_target->profile_map.inc("LayerCompressor", "data_movement", 1,
+                                 profile_elapsed(t1, profile_timestamp()));
+
+    r = ProfileRegion("LayerCompressor", "dat_bookkeeping");
+
+    auto t2 = profile_timestamp();
+    for (auto &dat : particle_dats_real) {
+      dat.second->set_npart_cells_host(this->h_npart_cell.ptr);
+    }
+    for (auto &dat : particle_dats_int) {
+      dat.second->set_npart_cells_host(this->h_npart_cell.ptr);
+    }
+    sycl_target->profile_map.inc("LayerCompressor", "host_npart_setting", 1,
+                                 profile_elapsed(t2, profile_timestamp()));
+
+    auto t3 = profile_timestamp();
+    for (auto &dat : particle_dats_real) {
+      dat.second->trim_cell_dat_rows();
+    }
+    for (auto &dat : particle_dats_int) {
+      dat.second->trim_cell_dat_rows();
+    }
+    sycl_target->profile_map.inc("LayerCompressor", "dat_trimming", 1,
+                                 profile_elapsed(t3, profile_timestamp()));
+
+    auto t4 = profile_timestamp();
+    for (auto &dat : particle_dats_real) {
+      dat.second->cell_dat.wait_set_nrow();
+    }
+    for (auto &dat : particle_dats_int) {
+      dat.second->cell_dat.wait_set_nrow();
+    }
+
+    sycl_target->profile_map.inc("LayerCompressor", "dat_trimming_wait", 1,
+                                 profile_elapsed(t4, profile_timestamp()));
+
+    sycl_target->profile_map.inc("LayerCompressor", "remove_particles", 1,
+                                 profile_elapsed(t0, profile_timestamp()));
+
+    r.end();
+    this->sycl_target->profile_map.add_region(r);
   }
 };
 
