@@ -118,11 +118,6 @@ public:
     auto r =
         ProfileRegion("LayerCompressor", "compute_remove_compress_indicies_a");
 
-    this->d_compress_cells_old.realloc_no_copy(npart);
-    this->d_compress_layers_old.realloc_no_copy(npart);
-    this->d_compress_layers_new.realloc_no_copy(npart);
-    this->d_compress_offsets.realloc_no_copy(npart);
-
     NESOASSERT(this->d_npart_cell.size >= this->ncell,
                "Bad device_npart_cell length");
 
@@ -134,9 +129,7 @@ public:
     auto device_npart_cell_ptr = this->d_npart_cell.ptr;
     auto device_move_counters_ptr = this->d_move_counters.ptr;
 
-    auto compress_cells_old_ptr = this->d_compress_cells_old.ptr;
-    auto compress_layers_old_ptr = this->d_compress_layers_old.ptr;
-    auto compress_layers_new_ptr = this->d_compress_layers_new.ptr;
+    this->d_compress_offsets.realloc_no_copy(npart);
     auto compress_offsets_ptr = this->d_compress_offsets.ptr;
 
     INT ***cell_ids_ptr = this->cell_id_dat->impl_get();
@@ -231,6 +224,13 @@ public:
     // Allocate the temporary space to be large enough to hold all the layer
     // indices.
     this->d_search_space.realloc_no_copy(this->compress_npart);
+
+    this->d_compress_cells_old.realloc_no_copy(this->compress_npart);
+    this->d_compress_layers_old.realloc_no_copy(this->compress_npart);
+    this->d_compress_layers_new.realloc_no_copy(this->compress_npart);
+    auto compress_cells_old_ptr = this->d_compress_cells_old.ptr;
+    auto compress_layers_old_ptr = this->d_compress_layers_old.ptr;
+    auto compress_layers_new_ptr = this->d_compress_layers_new.ptr;
 
     // Remove the indices which we do not need any more.
     this->sycl_target->queue
