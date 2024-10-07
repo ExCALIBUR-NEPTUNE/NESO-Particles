@@ -47,6 +47,7 @@ inline void DepartingIdentify::identify(const int rank_component) {
       k_send_counts_all_ranks[idx] = 0;
     });
   });
+
   // zero the number of ranks involved with send/recv
   this->sycl_target->queue.submit([&](sycl::handler &cgh) {
     cgh.single_task<>([=]() {
@@ -55,6 +56,10 @@ inline void DepartingIdentify::identify(const int rank_component) {
     });
   });
   sycl_target->queue.wait_and_throw();
+
+
+
+
   // loop over all particles - for leaving particles atomically compute the
   // packing layer by incrementing the send count for the report rank and
   // increment the counter for the number of remote ranks to send to

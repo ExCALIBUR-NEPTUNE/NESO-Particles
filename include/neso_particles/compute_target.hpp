@@ -739,6 +739,18 @@ public:
       this->stack.pop();
     }
   };
+
+  /**
+   *  Wait for all events held in the stack to complete before returning. Throw
+   *  if there is an error.
+   */
+  inline void wait_and_throw() {
+    while (!this->stack.empty()) {
+      this->stack.top().wait_and_throw();
+      this->stack.pop();
+    }
+  };
+
 };
 
 /**

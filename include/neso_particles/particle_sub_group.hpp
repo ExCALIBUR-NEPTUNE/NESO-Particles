@@ -812,12 +812,12 @@ public:
     auto k_map_cells_to_particles = selection.d_map_cells_to_particles;
 
     auto is = this->iteration_set->get(cell);
-    const int nbin = std::get<0>(is);
 
     this->sycl_target->profile_map.inc(
         "ParticleLoopSubGroup", "Init", 1,
         profile_elapsed(t0, profile_timestamp()));
-
+    /*
+    const int nbin = std::get<0>(is);
     for (int binx = 0; binx < nbin; binx++) {
       sycl::nd_range<2> ndr = std::get<1>(is).at(binx);
       const size_t cell_offset = std::get<2>(is).at(binx);
@@ -840,6 +840,63 @@ public:
                 iterationx.cellx = cellx;
                 iterationx.layerx = layerx;
                 iterationx.loop_layerx = loop_layerx;
+                create_kernel_args(iterationx, loop_args, kernel_args);
+                Tuple::apply(k_kernel, kernel_args);
+              }
+            });
+          }));
+    }
+    */
+
+    const int layer_offset = is.layer_offset;
+    const int bin_start = is.bin_start;
+    const int bin_end = is.bin_end;
+    const auto nd_ranges = is.nd_ranges;
+    const auto cell_offsets = is.cell_offsets;
+    // Is there an iteration set across all cells
+    if (layer_offset > 0) {
+      const auto cell_offset = cell_offsets.at(0);
+      this->event_stack.push(
+          this->sycl_target->queue.submit([&](sycl::handler &cgh) {
+            loop_parameter_type loop_args;
+            create_loop_args(cgh, loop_args, &global_info);
+            cgh.parallel_for<>(nd_ranges.at(0), [=](sycl::nd_item<2> idx) {
+              const size_t cellxs = idx.get_global_id(0) + cell_offset;
+              const size_t layerxs = idx.get_global_id(1);
+              const int cellx = static_cast<int>(cellxs);
+              const int loop_layerx = static_cast<int>(layerxs);
+              const int layerx = static_cast<int>(
+                  k_map_cells_to_particles[cellxs][0][layerxs]);
+              ParticleLoopImplementation::ParticleLoopIteration iterationx;
+              iterationx.cellx = cellx;
+              iterationx.layerx = layerx;
+              iterationx.loop_layerx = loop_layerx;
+              kernel_parameter_type kernel_args;
+              create_kernel_args(iterationx, loop_args, kernel_args);
+              Tuple::apply(k_kernel, kernel_args);
+            });
+          }));
+    }
+    // peel loops
+    for (int binx = bin_start; binx < bin_end; binx++) {
+      this->event_stack.push(
+          this->sycl_target->queue.submit([&](sycl::handler &cgh) {
+            loop_parameter_type loop_args;
+            create_loop_args(cgh, loop_args, &global_info);
+            const auto cell_offset = cell_offsets.at(binx);
+            cgh.parallel_for<>(nd_ranges.at(binx), [=](sycl::nd_item<2> idx) {
+              const size_t cellxs = idx.get_global_id(0) + cell_offset;
+              const size_t layerxs = idx.get_global_id(1) + layer_offset;
+              const int cellx = static_cast<int>(cellxs);
+              const int loop_layerx = static_cast<int>(layerxs);
+              ParticleLoopImplementation::ParticleLoopIteration iterationx;
+              if (loop_layerx < k_npart_cell_lb[cellx]) {
+                const int layerx = static_cast<int>(
+                    k_map_cells_to_particles[cellxs][0][layerxs]);
+                iterationx.cellx = cellx;
+                iterationx.layerx = layerx;
+                iterationx.loop_layerx = loop_layerx;
+                kernel_parameter_type kernel_args;
                 create_kernel_args(iterationx, loop_args, kernel_args);
                 Tuple::apply(k_kernel, kernel_args);
               }

@@ -50,7 +50,7 @@ private:
   std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int;
 
   EventStack event_stack;
-  std::shared_ptr<ParticleLoopImplementation::ParticleLoopIterationSet>
+  std::shared_ptr<ParticleLoopImplementation::ParticleLoopIterationSetNoBlock>
       iteration_set;
 
 public:
@@ -85,9 +85,9 @@ public:
         d_to_find_exscan(sycl_target, ncell + 1),
         particle_dats_real(particle_dats_real),
         particle_dats_int(particle_dats_int) {
-    this->iteration_set =
-        std::make_shared<ParticleLoopImplementation::ParticleLoopIterationSet>(
-            32, this->ncell, this->h_npart_cell.ptr);
+    this->iteration_set = std::make_shared<
+        ParticleLoopImplementation::ParticleLoopIterationSetNoBlock>(
+        32, this->ncell, this->h_npart_cell.ptr);
   }
 
   /**
@@ -314,6 +314,7 @@ public:
             });
           }));
     }
+
     this->event_stack.wait();
 
     this->sycl_target->queue
