@@ -755,7 +755,8 @@ public:
    */
   inline void cell_move() {
     this->domain->local_mapper->map_cells(*this);
-    this->cell_move_ctx.move();
+    // this->cell_move_ctx.move(); //TODO
+    this->cell_move_ctx.move_test();
     this->set_npart_cell_from_dat();
     this->invalidate_group_version();
   };

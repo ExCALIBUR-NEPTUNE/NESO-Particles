@@ -36,12 +36,19 @@ private:
 
   BufferHost<int> h_npart_cell;
   BufferDevice<int> d_npart_cell;
+  BufferDevice<int> d_npart_diff_cell;
+  BufferDeviceHost<int> dh_npart_exscan;
 
   // Buffers to store the old/new cells/layers
   BufferDevice<int> d_cells_old;
   BufferDevice<int> d_cells_new;
   BufferDevice<int> d_layers_old;
   BufferDevice<int> d_layers_new;
+
+  BufferDevice<int> d_ordered_cells_old;
+  BufferDevice<int> d_ordered_cells_new;
+  BufferDevice<int> d_ordered_layers_old;
+  BufferDevice<int> d_ordered_layers_new;
 
   // move count buffers;
   BufferHost<int> h_move_count;
@@ -170,13 +177,20 @@ public:
         layer_compressor(layer_compressor),
         particle_dats_real(particle_dats_real),
         particle_dats_int(particle_dats_int),
+        dh_npart_exscan(sycl_target, this->ncell + 1),
         h_npart_cell(sycl_target, this->ncell),
         d_npart_cell(sycl_target, this->ncell),
+        d_npart_diff_cell(sycl_target, this->ncell + 1),
         d_cells_old(sycl_target, this->ncell),
         d_cells_new(sycl_target, this->ncell),
         d_layers_old(sycl_target, this->ncell),
-        d_layers_new(sycl_target, this->ncell), h_move_count(sycl_target, 1),
-        d_move_count(sycl_target, 1), h_particle_dat_ptr_real(sycl_target, 1),
+        d_layers_new(sycl_target, this->ncell),
+        d_ordered_cells_old(sycl_target, this->ncell),
+        d_ordered_cells_new(sycl_target, this->ncell),
+        d_ordered_layers_old(sycl_target, this->ncell),
+        d_ordered_layers_new(sycl_target, this->ncell),
+        h_move_count(sycl_target, 1), d_move_count(sycl_target, 1),
+        h_particle_dat_ptr_real(sycl_target, 1),
         h_particle_dat_ptr_int(sycl_target, 1),
         h_particle_dat_ncomp_real(sycl_target, 1),
         h_particle_dat_ncomp_int(sycl_target, 1),
@@ -200,6 +214,7 @@ public:
    * the particles.
    */
   inline void move();
+  inline void move_test();
 };
 
 } // namespace NESO::Particles

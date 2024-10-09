@@ -735,7 +735,7 @@ public:
    */
   inline void wait() {
     while (!this->stack.empty()) {
-      this->stack.top().wait();
+      this->stack.top().wait_and_throw();
       this->stack.pop();
     }
   };
