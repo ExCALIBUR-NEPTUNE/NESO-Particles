@@ -358,8 +358,6 @@ public:
     // note to refactorers that this call uses h_npart_cell
     this->compute_remove_compress_indicies(npart, usm_cells, usm_layers);
 
-    auto r = ProfileRegion("LayerCompressor", "data_movement");
-
     auto compress_cells_old_ptr = this->d_compress_cells_old.ptr;
     auto compress_layers_old_ptr = this->d_compress_layers_old.ptr;
     auto compress_layers_new_ptr = this->d_compress_layers_new.ptr;
@@ -373,12 +371,16 @@ public:
           this->d_npart_cell.size_bytes()));
     }
 
+    auto r = ProfileRegion("LayerCompressor", "data_movement");
+
+    std::size_t num_bytes = 0;
     for (auto &dat : particle_dats_real) {
       this->event_stack.push(dat.second->copy_particle_data(
           this->compress_npart, compress_cells_old_ptr, compress_cells_old_ptr,
           compress_layers_old_ptr, compress_layers_new_ptr));
       this->event_stack.push(
           dat.second->set_npart_cells_device(this->d_npart_cell.ptr));
+      num_bytes += sizeof(REAL) * dat.second->ncomp;
     }
     for (auto &dat : particle_dats_int) {
       this->event_stack.push(dat.second->copy_particle_data(
@@ -386,8 +388,10 @@ public:
           compress_layers_old_ptr, compress_layers_new_ptr));
       this->event_stack.push(
           dat.second->set_npart_cells_device(this->d_npart_cell.ptr));
+      num_bytes += sizeof(INT) * dat.second->ncomp;
     }
 
+    r.num_bytes = num_bytes * this->compress_npart;
     // the move and set_npart calls are async
     this->event_stack.wait();
 
