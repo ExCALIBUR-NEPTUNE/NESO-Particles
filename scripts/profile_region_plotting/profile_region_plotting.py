@@ -76,6 +76,8 @@ if __name__ == "__main__":
         "time_elapsed_plot": [],
         "time_elapsed": [],
         "colour": [],
+        "bandwidth": [],
+        "flops": [],
     }
 
     colour_mapper = ColourMapper()
@@ -88,6 +90,14 @@ if __name__ == "__main__":
         for rx in data["regions"]:
             time_start = rx[2]
             time_end = rx[3]
+            level = 0
+            if len(rx) > 4:
+                level = rx[4]
+            num_bytes = 0
+            num_flops = 0
+            if len(rx) > 6:
+                num_bytes = rx[5]
+                num_flops = rx[6]
             if (time_start >= cutoff_start) and (time_end <= cutoff_end):
                 dd["rank"].append(rank)
                 name = rx[0] + ":" + rx[1]
@@ -95,10 +105,18 @@ if __name__ == "__main__":
                 dd["time_start"].append(time_start)
                 dd["time_end"].append(time_end)
                 dd["time_elapsed_plot"].append(time_end - time_start)
-                dd["time_elapsed"].append(time_end - time_start)
+                time_elapsed = time_end - time_start
+                dd["time_elapsed"].append(time_elapsed)
                 dd["colour"].append(
                     px.colors.qualitative.Dark24[colour_mapper.get(name) % 24]
                 )
+                bandwidth = 0.0
+                flops = 0.0
+                if time_elapsed > 0.0:
+                    bandwidth = num_bytes / (time_elapsed * 1.0E9)
+                    flops = num_flops / (time_elapsed * 1.0E9)
+                dd["bandwidth"].append(bandwidth)
+                dd["flops"].append(flops)
 
     df = pd.DataFrame.from_dict(dd)
     print(df)
@@ -108,6 +126,8 @@ if __name__ == "__main__":
         "time_start": "Start Time",
         "time_end": "End Time",
         "time_elapsed": "Time Elapsed",
+        "bandwidth": "GB/s",
+        "flops": "GFLOP/s",
     }
 
     barmode = "group" if args.group else "overlay"
@@ -124,6 +144,8 @@ if __name__ == "__main__":
             "time_end": True,
             "time_elapsed_plot": False,
             "time_elapsed": True,
+            "bandwidth": True,
+            "flops": True,
             "colour": False,
         },
         color="name",
