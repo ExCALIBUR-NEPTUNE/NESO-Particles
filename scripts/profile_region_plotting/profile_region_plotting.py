@@ -53,6 +53,11 @@ if __name__ == "__main__":
         help="Group regions by name in the y-direction. Only recomended with small numbers of input files.",
     )
     parser.add_argument(
+        "--metrics-only",
+        action="store_true",
+        help="Only compute metrics, do not try and plot.",
+    )
+    parser.add_argument(
         "json_files",
         nargs=argparse.REMAINDER,
         help="JSON files to parse and plot.",
@@ -78,11 +83,15 @@ if __name__ == "__main__":
         "colour": [],
         "bandwidth": [],
         "flops": [],
+        "num_bytes": [],
+        "num_flops": [],
     }
 
     colour_mapper = ColourMapper()
 
     print(f"Found {len(files)} source files.")
+
+    max_name_length = 0
 
     for fx in files:
         data = json.loads(open(fx).read())
@@ -102,6 +111,7 @@ if __name__ == "__main__":
                 dd["rank"].append(rank)
                 name = rx[0] + ":" + rx[1]
                 dd["name"].append(name)
+                max_name_length = max(max_name_length, len(name))
                 dd["time_start"].append(time_start)
                 dd["time_end"].append(time_end)
                 dd["time_elapsed_plot"].append(time_end - time_start)
@@ -113,46 +123,89 @@ if __name__ == "__main__":
                 bandwidth = 0.0
                 flops = 0.0
                 if time_elapsed > 0.0:
-                    bandwidth = num_bytes / (time_elapsed * 1.0E9)
-                    flops = num_flops / (time_elapsed * 1.0E9)
+                    bandwidth = num_bytes / (time_elapsed * 1.0e9)
+                    flops = num_flops / (time_elapsed * 1.0e9)
                 dd["bandwidth"].append(bandwidth)
                 dd["flops"].append(flops)
+                dd["num_bytes"].append(num_bytes)
+                dd["num_flops"].append(num_flops)
 
+    ranks = sorted(set(dd["rank"]))
     df = pd.DataFrame.from_dict(dd)
-    print(df)
+    dd = None
 
-    labels = {
-        "time_elapsed_plot": "Time",
-        "time_start": "Start Time",
-        "time_end": "End Time",
-        "time_elapsed": "Time Elapsed",
-        "bandwidth": "GB/s",
-        "flops": "GFLOP/s",
-    }
+    dd_metrics = {"name": [], "flops": [], "bandwidth": []}
 
-    barmode = "group" if args.group else "overlay"
+    for rank in ranks:
+        print(40 * "-", "Rank:", rank, 40 * "-")
+        df_rank = df[df["rank"] == rank]
+        keys = set(df_rank["name"])
+        for keyx in keys:
+            df_key = df_rank[df_rank["name"] == keyx].sum()
+            num_bytes = float(df_key["num_bytes"])
+            num_flops = float(df_key["num_flops"])
+            time_elapsed = float(df_key["time_elapsed"])
+            if ((num_bytes > 0.0) or (num_flops > 0.0)) and (
+                time_elapsed > 0.0
+            ):
+                bandwidth = num_bytes / (time_elapsed * 1.0e9)
+                flops = num_flops / (time_elapsed * 1.0e9)
+                name = keyx.ljust(max_name_length)
+                print(
+                    "{} {:12.2e} GFLOP/s {:12.2e} GB/s".format(
+                        name, flops, bandwidth
+                    )
+                )
+                dd_metrics["name"].append(name)
+                dd_metrics["flops"].append(flops)
+                dd_metrics["bandwidth"].append(bandwidth)
 
-    fig = px.bar(
-        df,
-        x="time_elapsed_plot",
-        base="time_start",
-        y="rank",
-        orientation="h",
-        hover_data={
-            "name": True,
-            "time_start": True,
-            "time_end": True,
-            "time_elapsed_plot": False,
-            "time_elapsed": True,
-            "bandwidth": True,
-            "flops": True,
-            "colour": False,
-        },
-        color="name",
-        barmode=barmode,
-        color_discrete_sequence=px.colors.qualitative.Dark24,
-        hover_name="name",
-        labels=labels,
-    )
+    names = set(dd_metrics["name"])
+    df_metrics = pd.DataFrame.from_dict(dd_metrics)
+    dd_metrics = None
 
-    fig.show()
+    print(40 * "=", "Totals", 41 * "=")
+    for name in names:
+        df_name = df_metrics[df_metrics["name"] == name].sum()
+        print(
+            "{} {:12.2e} GFLOP/s {:12.2e} GB/s".format(
+                name, df_name["flops"], df_name["bandwidth"]
+            )
+        )
+
+    if not args.metrics_only:
+        labels = {
+            "time_elapsed_plot": "Time",
+            "time_start": "Start Time",
+            "time_end": "End Time",
+            "time_elapsed": "Time Elapsed",
+            "bandwidth": "GB/s",
+            "flops": "GFLOP/s",
+        }
+
+        barmode = "group" if args.group else "overlay"
+
+        fig = px.bar(
+            df,
+            x="time_elapsed_plot",
+            base="time_start",
+            y="rank",
+            orientation="h",
+            hover_data={
+                "name": True,
+                "time_start": True,
+                "time_end": True,
+                "time_elapsed_plot": False,
+                "time_elapsed": True,
+                "bandwidth": True,
+                "flops": True,
+                "colour": False,
+            },
+            color="name",
+            barmode=barmode,
+            color_discrete_sequence=px.colors.qualitative.Dark24,
+            hover_name="name",
+            labels=labels,
+        )
+
+        fig.show()
