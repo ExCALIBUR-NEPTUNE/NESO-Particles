@@ -83,14 +83,13 @@ TEST(ParticleGroup, local_move_multiple) {
 
   const auto k_ndim = ndim;
   const auto k_dt = dt;
-  auto advect_loop = particle_loop(
-      A,
-      [=](auto k_V, auto k_P) {
-        for (int dimx = 0; dimx < k_ndim; dimx++) {
-          k_P.at(dimx) += k_V.at(dimx) * k_dt;
-        }
-      },
-      Access::read(Sym<REAL>("V")), Access::write(Sym<REAL>("P")));
+  auto advect_loop = particle_loop(A, Kernel::Kernel([=](auto k_V, auto k_P) {
+                                     for (int dimx = 0; dimx < k_ndim; dimx++) {
+                                       k_P.at(dimx) += k_V.at(dimx) * k_dt;
+                                     }
+                                   }),
+                                   Access::read(Sym<REAL>("V")),
+                                   Access::write(Sym<REAL>("P")));
 
   auto global_to_local_loop = particle_loop(
       A, [=](auto k_MPI_RANK) { k_MPI_RANK.at(1) = k_MPI_RANK.at(0); },

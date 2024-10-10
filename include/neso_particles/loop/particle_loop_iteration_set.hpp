@@ -24,6 +24,8 @@ struct ParticleLoopIterationSet {
   std::vector<sycl::nd_range<2>> iteration_set;
   /// Offsets to add to the cell index to map to the correct cell.
   std::vector<std::size_t> cell_offsets;
+  /// The size of the last iteration set computed
+  std::size_t iteration_set_size;
 
   /**
    *  Creates iteration set creator for a given set of cell particle counts.
@@ -54,6 +56,7 @@ struct ParticleLoopIterationSet {
 
     this->iteration_set.clear();
     this->cell_offsets.clear();
+    this->iteration_set_size = 0;
 
     if (cell == std::nullopt) {
       for (int binx = 0; binx < nbin; binx++) {
@@ -66,6 +69,7 @@ struct ParticleLoopIterationSet {
           const int cell_occ = h_npart_cell[cellx];
           cell_maxi = std::max(cell_maxi, cell_occ);
           cell_avg += cell_occ;
+          this->iteration_set_size += cell_occ;
         }
         cell_avg = (((REAL)cell_avg) / ((REAL)(end - start)));
         const size_t cell_local_size =
@@ -90,6 +94,8 @@ struct ParticleLoopIterationSet {
     } else {
       const int cellx = cell.value();
       const size_t cell_maxi = static_cast<size_t>(h_npart_cell[cellx]);
+
+      this->iteration_set_size = cell_maxi;
       const size_t cell_local_size =
           get_min_power_of_two((size_t)cell_maxi, local_size);
 

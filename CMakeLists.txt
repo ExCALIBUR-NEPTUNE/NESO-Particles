@@ -108,6 +108,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/local_mapping.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/local_move.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/access_descriptors.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/loop/kernel.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_base.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_utility.hpp

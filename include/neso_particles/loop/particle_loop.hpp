@@ -21,6 +21,7 @@
 #include "../particle_dat.hpp"
 #include "../particle_spec.hpp"
 #include "../sycl_typedefs.hpp"
+#include "kernel.hpp"
 #include "particle_loop_base.hpp"
 #include "particle_loop_index.hpp"
 #include "particle_loop_iteration_set.hpp"
@@ -314,6 +315,13 @@ protected:
     this->profile_region = ProfileRegion(this->loop_type, this->name);
   }
 
+  inline void profiling_region_metrics(const std::size_t size) {
+    this->profile_region.num_bytes =
+        size * ParticleLoopImplementation::get_kernel_num_bytes(this->kernel);
+    this->profile_region.num_flops =
+        size * ParticleLoopImplementation::get_kernel_num_flops(this->kernel);
+  }
+
   inline void profile_region_finalise() {
     this->profile_region.end();
     this->sycl_target->profile_map.add_region(this->profile_region);
@@ -427,7 +435,8 @@ public:
 
     auto k_npart_cell_lb = this->d_npart_cell_lb;
     auto is = this->iteration_set->get(cell, this->local_size);
-    auto k_kernel = this->kernel;
+    this->profiling_region_metrics(this->iteration_set->iteration_set_size);
+    auto k_kernel = ParticleLoopImplementation::get_kernel(this->kernel);
 
     const int nbin = std::get<0>(is);
     this->sycl_target->profile_map.inc(
