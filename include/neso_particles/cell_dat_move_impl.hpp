@@ -214,6 +214,10 @@ inline void CellMove::move() {
   sycl_target->profile_map.inc("CellMove", "cell_move", 1,
                                profile_elapsed(t1, profile_timestamp()));
 
+  this->sycl_target->profile_map.inc(
+    "CellMove", "move_time", move_count, profile_elapsed(t1, profile_timestamp()));
+  this->sycl_target->profile_map.set("CellMove", "num_bytes_per_particle", this->num_bytes_per_particle);
+
   auto t2 = profile_timestamp();
 
   // compress the data by removing the old rows
@@ -229,7 +233,7 @@ inline void CellMove::move() {
 // TODO make the actual call
 inline void CellMove::move_test() {
 
-  auto r = ProfileRegion("CellMove", "prepare");
+  auto r0 = ProfileRegion("CellMove", "prepare");
   auto mpi_rank_dat = this->particle_dats_int[Sym<INT>("NESO_MPI_RANK")];
   const INT npart_local = mpi_rank_dat->get_npart_local();
   const auto k_ncell = this->ncell;
@@ -259,8 +263,8 @@ inline void CellMove::move_test() {
       .wait_and_throw();
   e_mask.wait_and_throw();
 
-  r.end();
-  this->sycl_target->profile_map.add_region(r);
+  r0.end();
+  this->sycl_target->profile_map.add_region(r0);
 
   // detect out of bounds particles
   auto k_ep_indices = this->ep_bad_cell_indices.device_ptr();
@@ -335,7 +339,7 @@ inline void CellMove::move_test() {
         .wait_and_throw();
   }
 
-  r = ProfileRegion("CellMove", "realloc");
+  auto r1 = ProfileRegion("CellMove", "realloc");
   auto t0_realloc = profile_timestamp();
   for (auto &dat : particle_dats_real) {
     dat.second->realloc(this->h_npart_cell);
@@ -361,10 +365,10 @@ inline void CellMove::move_test() {
   }
   tmp_stack.wait();
 
-  r.end();
-  this->sycl_target->profile_map.add_region(r);
+  r1.end();
+  this->sycl_target->profile_map.add_region(r1);
 
-  r = ProfileRegion("CellMove", "index_bookkeeping");
+  auto r2 = ProfileRegion("CellMove", "index_bookkeeping");
   event_exsum.wait_and_throw();
 
   this->dh_npart_exscan.device_to_host();
@@ -408,10 +412,11 @@ inline void CellMove::move_test() {
 
   // Wait for all the fills and parallel_for we pushed onto the queue.
   tmp_stack.wait();
-  this->sycl_target->profile_map.add_region(r);
+  r2.end();
+  this->sycl_target->profile_map.add_region(r2);
 
   // we can now actually do the copy
-  r = ProfileRegion("CellMove", "move");
+  auto r3 = ProfileRegion("CellMove", "move");
   // get the pointers into the ParticleDats
   this->get_particle_dat_info();
   const int k_num_dats_real = this->num_dats_real;
@@ -421,6 +426,8 @@ inline void CellMove::move_test() {
   const auto k_particle_dat_ncomp_real = this->d_particle_dat_ncomp_real.ptr;
   const auto k_particle_dat_ncomp_int = this->d_particle_dat_ncomp_int.ptr;
 
+  auto t0 = profile_timestamp();
+/*
   tmp_stack.push(this->sycl_target->queue.submit([&](sycl::handler &cgh) {
     cgh.parallel_for<>(sycl::range<2>(k_num_dats_real, total_moving_particles),
                        [=](sycl::id<2> idx) {
@@ -466,15 +473,72 @@ inline void CellMove::move_test() {
                          }
                        });
   }));
+*/
+
+  tmp_stack.push(this->sycl_target->queue.submit([&](sycl::handler &cgh) {
+    cgh.parallel_for<>(sycl::range<1>(total_moving_particles),
+                       [=](sycl::id<1> idx) {
+                         const auto index = idx;
+
+                         const auto cell_old = k_ordered_cells_old[index];
+                         const auto cell_new = k_ordered_cells_new[index];
+                         const auto layer_old = k_ordered_layers_old[index];
+                         const auto layer_new = k_ordered_layers_new[index];
+
+                         for(int dx=0 ; dx<k_num_dats_real ; dx++){
+                         // loop over the ParticleDats and copy the data
+                         // for each real dat
+                         REAL ***dat_ptr = k_particle_dat_ptr_real[dx];
+                         const int ncomp = k_particle_dat_ncomp_real[dx];
+                         // for each component
+                         for (int cx = 0; cx < ncomp; cx++) {
+                           dat_ptr[cell_new][cx][layer_new] =
+                               dat_ptr[cell_old][cx][layer_old];
+                         }
+                         }
+                       });
+  }));
+
+  tmp_stack.push(this->sycl_target->queue.submit([&](sycl::handler &cgh) {
+    cgh.parallel_for<>(sycl::range<1>(total_moving_particles),
+                       [=](sycl::id<1> idx) {
+                         const auto index = idx;
+
+                         const auto cell_old = k_ordered_cells_old[index];
+                         const auto cell_new = k_ordered_cells_new[index];
+                         const auto layer_old = k_ordered_layers_old[index];
+                         const auto layer_new = k_ordered_layers_new[index];
+                        for(int dx=0 ; dx<k_num_dats_int ; dx++){
+                         // loop over the ParticleDats and copy the data
+                         // for each int dat
+                         INT ***dat_ptr = k_particle_dat_ptr_int[dx];
+                         const int ncomp = k_particle_dat_ncomp_int[dx];
+                         // for each component
+                         for (int cx = 0; cx < ncomp; cx++) {
+                           dat_ptr[cell_new][cx][layer_new] =
+                               dat_ptr[cell_old][cx][layer_old];
+                         }
+                         }
+                       });
+  }));
+
 
   tmp_stack.wait();
-  this->sycl_target->profile_map.add_region(r);
+  auto t1 = profile_timestamp();
+  
+  this->sycl_target->profile_map.inc(
+    "CellMove", "move_time", total_moving_particles, profile_elapsed(t0, t1));
+  this->sycl_target->profile_map.set("CellMove", "num_bytes_per_particle", this->num_bytes_per_particle);
+
+  r3.end();
+  this->sycl_target->profile_map.add_region(r3);
 
   // compress the data by removing the old rows
-  r = ProfileRegion("CellMove", "layer_compress");
+  auto r4 = ProfileRegion("CellMove", "layer_compress");
   this->layer_compressor.remove_particles(
       total_moving_particles, k_ordered_cells_old, k_ordered_layers_old);
-  this->sycl_target->profile_map.add_region(r);
+  r4.end();
+  this->sycl_target->profile_map.add_region(r4);
 }
 
 } // namespace NESO::Particles
