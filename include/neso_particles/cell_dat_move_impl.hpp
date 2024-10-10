@@ -469,6 +469,12 @@ inline void CellMove::move_test() {
 
   tmp_stack.wait();
   this->sycl_target->profile_map.add_region(r);
+
+  // compress the data by removing the old rows
+  r = ProfileRegion("CellMove", "layer_compress");
+  this->layer_compressor.remove_particles(
+      total_moving_particles, k_ordered_cells_old, k_ordered_layers_old);
+  this->sycl_target->profile_map.add_region(r);
 }
 
 } // namespace NESO::Particles
