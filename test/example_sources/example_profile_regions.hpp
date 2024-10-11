@@ -44,7 +44,7 @@ inline void profile_regions_example(
         P.at(1) += dt * V.at(1);
       },
       Kernel::Metadata(
-        Kernel::NumBytes(6),
+        Kernel::NumBytes(6 * sizeof(REAL)),
         Kernel::NumFLOP(4)
       )
     ),
