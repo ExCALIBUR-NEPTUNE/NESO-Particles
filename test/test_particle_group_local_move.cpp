@@ -92,7 +92,7 @@ TEST(ParticleGroup, local_move_multiple) {
             }
           },
           Kernel::Metadata(Kernel::NumBytes(k_ndim * 3),
-                           Kernel::NumFlops(k_ndim * 2))),
+                           Kernel::NumFLOP(k_ndim * 2))),
       Access::read(Sym<REAL>("V")), Access::write(Sym<REAL>("P")));
 
   auto global_to_local_loop = particle_loop(
