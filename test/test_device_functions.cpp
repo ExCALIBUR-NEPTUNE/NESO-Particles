@@ -158,3 +158,26 @@ TEST(DeviceFunctions, matrix_invert_4) {
     ASSERT_NEAR(L[ix], Lcorrect[ix], 1.0e-14);
   }
 }
+
+TEST(Kernel, metadata) {
+  {
+    Kernel::Metadata metadata;
+
+    EXPECT_EQ(metadata.num_bytes.value, 0);
+    EXPECT_EQ(metadata.num_flops.value, 0);
+  }
+
+  {
+    Kernel::Metadata metadata(Kernel::NumFLOP(256), Kernel::NumBytes(512));
+
+    EXPECT_EQ(metadata.num_bytes.value, 512);
+    EXPECT_EQ(metadata.num_flops.value, 256);
+  }
+
+  {
+    Kernel::Metadata metadata(Kernel::NumBytes(123), Kernel::NumFLOP(5612));
+
+    EXPECT_EQ(metadata.num_bytes.value, 123);
+    EXPECT_EQ(metadata.num_flops.value, 5612);
+  }
+}

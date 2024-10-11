@@ -21,18 +21,8 @@ inline void profile_regions_example(
   
   // Create some user written loops. The name of the loop is used in the
   // profiling.
-  const REAL dt = 0.001;
-  auto loop_advect = particle_loop(
-    "advect",
-    particle_group,
-    [=](auto P, auto V){
-      P.at(0) += dt * V.at(0);
-      P.at(1) += dt * V.at(1);
-    },
-    Access::write(Sym<REAL>("P")),
-    Access::read(Sym<REAL>("V"))
-  );
-
+  
+  // Example where the name "pbc" and the time taken is recorded.
   auto loop_pbc = particle_loop(
     "pbc",
     particle_group,
@@ -41,6 +31,25 @@ inline void profile_regions_example(
       P.at(1) = Kernel::fmod(P.at(1) + 8.0, 8.0);
     },
     Access::write(Sym<REAL>("P"))
+  );
+
+  // Example where the kernel can be combined with additional metadata.
+  const REAL dt = 0.001;
+  auto loop_advect = particle_loop(
+    "advect",
+    particle_group,
+    Kernel::Kernel(
+      [=](auto P, auto V){
+        P.at(0) += dt * V.at(0);
+        P.at(1) += dt * V.at(1);
+      },
+      Kernel::Metadata(
+        Kernel::NumBytes(6 * sizeof(REAL)),
+        Kernel::NumFLOP(4)
+      )
+    ),
+    Access::write(Sym<REAL>("P")),
+    Access::read(Sym<REAL>("V"))
   );
  
   // Enable recording of events and regions in the ProfileMap (default 
