@@ -85,11 +85,14 @@ TEST(ParticleGroup, local_move_multiple) {
   const auto k_dt = dt;
   auto advect_loop = particle_loop(
       A,
-      [=](auto k_V, auto k_P) {
-        for (int dimx = 0; dimx < k_ndim; dimx++) {
-          k_P.at(dimx) += k_V.at(dimx) * k_dt;
-        }
-      },
+      Kernel::Kernel(
+          [=](auto k_V, auto k_P) {
+            for (int dimx = 0; dimx < k_ndim; dimx++) {
+              k_P.at(dimx) += k_V.at(dimx) * k_dt;
+            }
+          },
+          Kernel::Metadata(Kernel::NumBytes(k_ndim * 3),
+                           Kernel::NumFLOP(k_ndim * 2))),
       Access::read(Sym<REAL>("V")), Access::write(Sym<REAL>("P")));
 
   auto global_to_local_loop = particle_loop(

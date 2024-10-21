@@ -209,6 +209,7 @@ inline void CellMove::move() {
       .wait_and_throw();
 
   r.end();
+  r.num_bytes = move_count * this->num_bytes_per_particle * 2;
   this->sycl_target->profile_map.add_region(r);
 
   sycl_target->profile_map.inc("CellMove", "cell_move", 1,

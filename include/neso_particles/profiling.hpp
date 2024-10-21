@@ -57,6 +57,8 @@ struct ProfileRegion {
   std::string key1;
   std::string key2;
   int level;
+  std::size_t num_bytes{0};
+  std::size_t num_flops{0};
 
   ProfileRegion() = default;
 
@@ -259,8 +261,10 @@ public:
       const auto e2 = profile_elapsed(this->time_start, rx.time_start);
       const auto e3 = profile_elapsed(this->time_start, rx.time_end);
       const auto e4 = rx.level;
+      const auto e5 = rx.num_bytes;
+      const auto e6 = rx.num_flops;
       fh << "[\"" << e0 << "\",\"" << e1 << "\"," << e2 << "," << e3 << ","
-         << e4 << "]";
+         << e4 << "," << e5 << "," << e6 << "]";
       ri++;
       fh << ((ri < num_regions) ? ",\n" : "\n");
     }

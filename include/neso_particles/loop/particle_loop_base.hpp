@@ -82,6 +82,35 @@ inline void pre_loop(ParticleLoopGlobalInfo *global_info, T &arg) {}
 template <typename T>
 inline void post_loop(ParticleLoopGlobalInfo *global_info, T &arg) {}
 
+/**
+ * Extract the kernel from an object for a ParticleLoop.
+ * @param kernel Device copyable callable type to use as kernel.
+ * @returns kernel.
+ */
+template <typename T> inline T &get_kernel(T &kernel) { return kernel; }
+
+/**
+ * Extract the number of bytes per kernel invocation from the kernel. No-op
+ * implementation for when kernel is a generic callable.
+ *
+ * @param kernel Device copyable callable type to use as kernel.
+ * @returns 0.
+ */
+template <typename T> inline std::size_t get_kernel_num_bytes(T &kernel) {
+  return 0;
+}
+
+/**
+ * Extract the number of flops per kernel invocation from the kernel. No-op
+ * implementation for when kernel is a generic callable.
+ *
+ * @param kernel Device copyable callable type to use as kernel.
+ * @returns 0.
+ */
+template <typename T> inline std::size_t get_kernel_num_flops(T &kernel) {
+  return 0;
+}
+
 } // namespace ParticleLoopImplementation
 
 /**

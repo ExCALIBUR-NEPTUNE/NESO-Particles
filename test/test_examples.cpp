@@ -12,7 +12,7 @@ namespace {
 const int ndim = 2;
 
 ParticleGroupSharedPtr
-particle_loop_common(const int N = 1093, const int sx = 4, const int sy = 8) {
+particle_loop_common(const int N = 10930, const int sx = 4, const int sy = 8) {
   std::vector<int> dims(ndim);
   dims[0] = sx;
   dims[1] = sy;
