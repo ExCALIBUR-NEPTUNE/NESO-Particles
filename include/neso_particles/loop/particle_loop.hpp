@@ -13,6 +13,7 @@
 #include "../containers/descendant_products.hpp"
 #include "../containers/global_array.hpp"
 #include "../containers/local_array.hpp"
+#include "../containers/local_memory.hpp"
 #include "../containers/nd_local_array.hpp"
 #include "../containers/product_matrix.hpp"
 #include "../containers/rng/kernel_rng.hpp"
@@ -272,6 +273,28 @@ protected:
 
   virtual inline int get_loop_type_int() { return 0; }
 
+  inline std::size_t get_local_size() {
+
+    // Loop over the args and add how many local bytes they each require.
+    std::size_t num_bytes = 0;
+    auto lambda_size_add = [&](auto argx) {
+      num_bytes +=
+          ParticleLoopImplementation::get_required_local_num_bytes(argx);
+    };
+    auto lambda_size = [&](auto... as) { (lambda_size_add(as), ...); };
+    std::apply(lambda_size, this->args);
+
+    // The amount of local space on the device and required number of local
+    // bytes gives an upper bound on local size.
+    std::size_t local_size = this->sycl_target->get_num_local_work_items(
+        num_bytes, this->local_size);
+
+    this->sycl_target->profile_map.set("ParticleLoop::" + this->name,
+                                       "local_size", local_size, 0.0);
+
+    return local_size;
+  }
+
   inline ParticleLoopImplementation::ParticleLoopGlobalInfo
   create_global_info(const std::optional<int> cell = std::nullopt) {
     ParticleLoopImplementation::ParticleLoopGlobalInfo global_info;
@@ -285,6 +308,7 @@ protected:
         (cell == std::nullopt) ? this->ncell : cell.value() + 1;
 
     global_info.loop_type_int = this->get_loop_type_int();
+    global_info.local_size = this->get_local_size();
     return global_info;
   }
 
@@ -434,7 +458,7 @@ public:
     this->apply_pre_loop(global_info);
 
     auto k_npart_cell_lb = this->d_npart_cell_lb;
-    auto is = this->iteration_set->get(cell, this->local_size);
+    auto is = this->iteration_set->get(cell, global_info.local_size);
     this->profiling_region_metrics(this->iteration_set->iteration_set_size);
     auto k_kernel = ParticleLoopImplementation::get_kernel(this->kernel);
 
@@ -458,7 +482,7 @@ public:
               const int layerx = static_cast<int>(layerxs);
               ParticleLoopImplementation::ParticleLoopIteration iterationx;
               if (layerx < k_npart_cell_lb[cellx]) {
-                // iterationx.index = index;
+                iterationx.local_sycl_index = idx.get_local_id(1);
                 iterationx.cellx = cellx;
                 iterationx.layerx = layerx;
                 iterationx.loop_layerx = layerx;

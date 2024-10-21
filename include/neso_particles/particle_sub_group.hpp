@@ -811,7 +811,7 @@ public:
     auto k_npart_cell_lb = this->d_npart_cell_lb;
     auto k_map_cells_to_particles = selection.d_map_cells_to_particles;
 
-    auto is = this->iteration_set->get(cell);
+    auto is = this->iteration_set->get(cell, global_info.local_size);
     this->profiling_region_metrics(this->iteration_set->iteration_set_size);
     const int nbin = std::get<0>(is);
 
@@ -837,7 +837,7 @@ public:
                 const int layerx = static_cast<int>(
                     k_map_cells_to_particles[cellxs][0][layerxs]);
                 kernel_parameter_type kernel_args;
-                // iterationx.index = index;
+                iterationx.local_sycl_index = idx.get_local_id(1);
                 iterationx.cellx = cellx;
                 iterationx.layerx = layerx;
                 iterationx.loop_layerx = loop_layerx;
