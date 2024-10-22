@@ -72,8 +72,8 @@ TEST(ParticleLoop, local_memory) {
   const int cell_count = mesh->get_cell_count();
   auto sycl_target = A->sycl_target;
 
-  LocalMemory local_mem_real(7 * sizeof(REAL));
-  auto local_mem_int = std::make_shared<LocalMemory>(3 * sizeof(INT));
+  LocalMemoryBlock local_mem_real(7 * sizeof(REAL));
+  auto local_mem_int = std::make_shared<LocalMemoryBlock>(3 * sizeof(INT));
 
   particle_loop(
       A,
