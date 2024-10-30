@@ -186,9 +186,10 @@ public:
    */
   ParticleDatT(SYCLTargetSharedPtr sycl_target, const Sym<T> sym, int ncomp,
                int ncell, bool positions = false)
-      : sycl_target(sycl_target), sym(sym), name(sym.name), ncomp(ncomp),
-        ncell(ncell), positions(positions),
-        cell_dat(CellDat<T>(sycl_target, ncell, ncomp)) {
+		: sym(sym), cell_dat(CellDat<T>(sycl_target, ncell, ncomp)), 
+		ncomp(ncomp), ncell(ncell),   
+		positions(positions),name(sym.name), sycl_target(sycl_target)
+	{
 
     this->cell_dat.add_write_callback(std::bind(
         &ParticleDatT<T>::write_callback_wrapper, this, std::placeholders::_1));
@@ -311,8 +312,9 @@ public:
    * @param d_layers_new Device pointer to an array of new layers.
    * @returns sycl::event to wait on for data copy.
    */
-  inline sycl::event copy_particle_data(const int npart, const INT *d_cells_old,
-                                        const INT *d_cells_new,
+  inline sycl::event copy_particle_data(const int npart, 
+										[[maybe_unused]] const INT *d_cells_old,
+                                        [[maybe_unused]] const INT *d_cells_new,
                                         const INT *d_layers_old,
                                         const INT *d_layers_new) {
     this->write_callback_wrapper(0);
@@ -450,7 +452,7 @@ public:
   inline sycl::event
   async_set_npart_cells(const BufferHost<U> &h_npart_cell_in) {
     this->write_callback_wrapper(0);
-    NESOASSERT(h_npart_cell_in.size >= this->ncell, "bad BufferHost size");
+    NESOASSERT(h_npart_cell_in.size >= static_cast<std::size_t>(this->ncell), "bad BufferHost size");
     for (int cellx = 0; cellx < this->ncell; cellx++) {
       this->h_npart_cell[cellx] = h_npart_cell_in.ptr[cellx];
     }
@@ -581,7 +583,7 @@ inline void ParticleDatT<T>::realloc(BufferShared<U> &npart_cell_new) {
 template <typename T>
 template <typename U>
 inline void ParticleDatT<T>::realloc(BufferHost<U> &npart_cell_new) {
-  NESOASSERT(npart_cell_new.size >= this->ncell, "Insufficent new cell counts");
+  NESOASSERT(npart_cell_new.size >= static_cast<std::size_t>(this->ncell), "Insufficent new cell counts");
   for (int cellx = 0; cellx < this->ncell; cellx++) {
     this->cell_dat.set_nrow_inner(cellx, npart_cell_new.ptr[cellx]);
   }
@@ -613,7 +615,7 @@ inline void ParticleDatT<T>::append_particle_data(
 
   this->write_callback_wrapper(0);
 
-  NESOASSERT(npart_new <= cells.size(), "incorrect number of cells");
+  NESOASSERT(static_cast<std::size_t>(npart_new) <= cells.size(), "incorrect number of cells");
 
   // using "this" in the kernel causes segfaults on the device so we make a
   // copy here.

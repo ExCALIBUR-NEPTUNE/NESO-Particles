@@ -25,7 +25,9 @@ private:
   /// ParticleDat storing Positions
   ParticleDatSharedPtr<REAL> &position_dat;
   /// ParticleDat storing cell ids
-  ParticleDatSharedPtr<INT> &cell_id_dat;
+	// Don't know why but clang will complain if I leave it in (unused variable)
+	// and complain if I remove it becasue it isn't in face unused ????
+  [[maybe_unused]] ParticleDatSharedPtr<INT> &cell_id_dat;
   /// ParticleDat storing MPI rank
   ParticleDatSharedPtr<INT> &mpi_rank_dat;
 

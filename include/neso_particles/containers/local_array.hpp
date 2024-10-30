@@ -112,7 +112,7 @@ template <typename T> struct KernelParameter<Access::Add<LocalArray<T>>> {
  *  Function to create the kernel argument for LocalArray read access.
  */
 template <typename T>
-inline void create_kernel_arg(ParticleLoopIteration &iterationx, T const *rhs,
+inline void create_kernel_arg([[maybe_unused]] ParticleLoopIteration &iterationx, T const *rhs,
                               Access::LocalArray::Read<T> &lhs) {
   lhs.ptr = rhs;
 }
@@ -120,7 +120,7 @@ inline void create_kernel_arg(ParticleLoopIteration &iterationx, T const *rhs,
  *  Function to create the kernel argument for LocalArray write access.
  */
 template <typename T>
-inline void create_kernel_arg(ParticleLoopIteration &iterationx, T *rhs,
+inline void create_kernel_arg([[maybe_unused]] ParticleLoopIteration &iterationx, T *rhs,
                               Access::LocalArray::Write<T> &lhs) {
   lhs.ptr = rhs;
 }
@@ -128,7 +128,7 @@ inline void create_kernel_arg(ParticleLoopIteration &iterationx, T *rhs,
  *  Function to create the kernel argument for LocalArray add access.
  */
 template <typename T>
-inline void create_kernel_arg(ParticleLoopIteration &iterationx, T *rhs,
+inline void create_kernel_arg([[maybe_unused]] ParticleLoopIteration &iterationx, T *rhs,
                               Access::LocalArray::Add<T> &lhs) {
   lhs.ptr = rhs;
 }
@@ -138,7 +138,7 @@ inline void create_kernel_arg(ParticleLoopIteration &iterationx, T *rhs,
  */
 template <typename T>
 inline LocalArrayImplGetConstT<T>
-create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
+create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,[[maybe_unused]]  sycl::handler &cgh,
                 Access::Read<LocalArray<T> *> &a) {
   return a.obj->impl_get_const();
 }
@@ -147,7 +147,7 @@ create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
  */
 template <typename T>
 inline LocalArrayImplGetT<T>
-create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
+create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,[[maybe_unused]]  sycl::handler &cgh,
                 Access::Write<LocalArray<T> *> &a) {
   return a.obj->impl_get();
 }
@@ -156,7 +156,7 @@ create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
  */
 template <typename T>
 inline LocalArrayImplGetT<T>
-create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
+create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,[[maybe_unused]]  sycl::handler &cgh,
                 Access::Add<LocalArray<T> *> &a) {
   return a.obj->impl_get();
 }
@@ -209,7 +209,7 @@ public:
    * Note that the copy operator creates shallow copies of the array.
    */
   LocalArray<T> &operator=(const LocalArray<T> &) = default;
-
+  LocalArray<T>(const LocalArray<T> &) = default;
   /**
    *  Create a new LocalArray on a compute target and given size.
    *

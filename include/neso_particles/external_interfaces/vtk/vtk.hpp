@@ -65,7 +65,7 @@ protected:
                    const int local_size, const int ncomp, hid_t out_datatype,
                    hid_t datatype, std::string name, std::vector<T> &data) {
 
-    NESOASSERT(local_size * ncomp == data.size(), "data size miss-match");
+    NESOASSERT(static_cast<std::size_t>(local_size) * ncomp == data.size(), "data size miss-match");
     // Create the memspace
     hsize_t dims_memspace[2] = {static_cast<hsize_t>(local_size),
                                 static_cast<hsize_t>(ncomp)};
@@ -249,7 +249,7 @@ public:
       const int num_points = ex.num_points;
       npoint_local += num_points;
       ncell_local++;
-      NESOASSERT(ex.points.size() == num_points * 3,
+      NESOASSERT(ex.points.size() == static_cast<size_t>(num_points) * 3,
                  "Incorrect number of coordinates, expected " +
                      std::to_string(num_points * 3) + " but found " +
                      std::to_string(ex.points.size()) + ".");
@@ -259,7 +259,7 @@ public:
       for (auto &name_data : ex.point_data) {
         auto &n = name_data.first;
         auto &d = name_data.second;
-        NESOASSERT(d.size() == num_points,
+        NESOASSERT(d.size() == static_cast<std::size_t>(num_points),
                    "Points data for " + n + " has wrong array length.");
         point_data[n].insert(point_data[n].end(), d.begin(), d.end());
       }
@@ -287,7 +287,7 @@ public:
     }
     MPICHK(MPI_Bcast(counts_global, 4, MPI_INT, this->size - 1, this->comm));
 
-    const int nconnectivity_local = counts_local[2];
+    //const int nconnectivity_local = counts_local[2];
     const int noffset_local = counts_local[3];
 
     const int point_offset = offsets_array[0];
@@ -300,7 +300,7 @@ public:
     const int nconnectivity_global = counts_global[2];
     const int noffset_global = counts_global[3];
 
-    NESOASSERT(offsets.size() == noffset_local, "offsets sizes miss-match");
+    NESOASSERT(offsets.size() == static_cast<std::size_t>(noffset_local), "offsets sizes miss-match");
 
     this->write_dataset_2d(this->root, npoint_global, point_offset,
                            npoint_local, 3, H5T_IEEE_F64LE, H5T_NATIVE_DOUBLE,

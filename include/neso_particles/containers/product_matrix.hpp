@@ -223,7 +223,7 @@ template <> struct KernelParameter<Access::Add<ProductMatrix>> {
 /**
  *  Function to create the kernel argument for ProductMatrix read access.
  */
-inline void create_kernel_arg(ParticleLoopIteration &iterationx,
+inline void create_kernel_arg([[maybe_unused]] ParticleLoopIteration &iterationx,
                               ProductMatrixGetConst &rhs,
                               Access::ProductMatrix::Read &lhs) {
   lhs.ptr_real = rhs.ptr_real;
@@ -236,7 +236,7 @@ inline void create_kernel_arg(ParticleLoopIteration &iterationx,
  *  Function to create the kernel argument for ProductMatrix write/add access.
  */
 template <typename T>
-inline void create_kernel_arg(ParticleLoopIteration &iterationx,
+inline void create_kernel_arg([[maybe_unused]] ParticleLoopIteration &iterationx,
                               ProductMatrixGet &rhs, T &lhs) {
   lhs.ptr_real = rhs.ptr_real;
   lhs.ptr_int = rhs.ptr_int;
@@ -464,6 +464,7 @@ public:
   int num_products;
   /// The specification of the products.
   std::shared_ptr<ProductMatrixSpec> spec;
+  virtual ~ProductMatrix() = default;
 
   ProductMatrix() = default;
 
@@ -576,23 +577,23 @@ namespace ParticleLoopImplementation {
  * Method to compute access to a ProductMatrix (read)
  */
 inline ProductMatrixGetConst
-create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
+create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,[[maybe_unused]]  sycl::handler &cgh,
                 Access::Read<ProductMatrix *> &a) {
   return a.obj->impl_get_const();
 }
 /**
  * Method to compute access to a ProductMatrix (write)
  */
-inline ProductMatrixGet create_loop_arg(ParticleLoopGlobalInfo *global_info,
-                                        sycl::handler &cgh,
+inline ProductMatrixGet create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
+                                        [[maybe_unused]] sycl::handler &cgh,
                                         Access::Write<ProductMatrix *> &a) {
   return a.obj->impl_get();
 }
 /**
  * Method to compute access to a ProductMatrix (add)
  */
-inline ProductMatrixGet create_loop_arg(ParticleLoopGlobalInfo *global_info,
-                                        sycl::handler &cgh,
+inline ProductMatrixGet create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
+                                        [[maybe_unused]] sycl::handler &cgh,
                                         Access::Add<ProductMatrix *> &a) {
   return a.obj->impl_get();
 }

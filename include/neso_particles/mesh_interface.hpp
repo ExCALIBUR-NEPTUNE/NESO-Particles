@@ -181,11 +181,11 @@ public:
    * @param stencil_width Width of the stencil, in number of cells, used to
    * determine MPI neighbours.
    */
-  CartesianHMesh(MPI_Comm comm, const int ndim, std::vector<int> &dims,
+  CartesianHMesh(MPI_Comm comm_, const int ndim, std::vector<int> &dims,
                  const double extent = 1.0, const int subdivision_order = 1,
                  const int stencil_width = 0)
-      : comm(comm), ndim(ndim), dims(dims),
-        subdivision_order(subdivision_order), stencil_width(stencil_width),
+      : comm(comm_), stencil_width(stencil_width), ndim(ndim), dims(dims),
+         subdivision_order(subdivision_order), 
         cell_width_coarse(extent),
         cell_width_fine(extent / ((double)std::pow(2, subdivision_order))),
         inverse_cell_width_coarse(1.0 / extent),
@@ -196,7 +196,8 @@ public:
         single_cell_mode(false) {
 
     // basic error checking of inputs
-    NESOASSERT(dims.size() >= ndim, "vector of dims too small");
+	NESOASSERT(ndim > 0,"ndim less than 1");
+    NESOASSERT(dims.size() >= static_cast<std::size_t>(ndim), "vector of dims too small");
     for (int dimx = 0; dimx < ndim; dimx++) {
       NESOASSERT(dims[dimx] > 0, "Dim size is <= 0 in a direction.");
     }

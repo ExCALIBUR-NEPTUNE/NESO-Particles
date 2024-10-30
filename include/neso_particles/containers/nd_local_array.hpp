@@ -123,7 +123,7 @@ struct LoopParameter<Access::Add<NDLocalArray<T, N>>> {
  */
 template <typename T, std::size_t N>
 inline Access::NDLocalArray::Read<T, N>
-create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
+create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,[[maybe_unused]]  sycl::handler &cgh,
                 Access::Read<NDLocalArray<T, N> *> &a) {
   return {a.obj->impl_get_const(), a.obj->index};
 }
@@ -133,7 +133,7 @@ create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
  */
 template <typename T, std::size_t N>
 inline Access::NDLocalArray::Write<T, N>
-create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
+create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,[[maybe_unused]]  sycl::handler &cgh,
                 Access::Write<NDLocalArray<T, N> *> &a) {
   return {a.obj->impl_get(), a.obj->index};
 }
@@ -143,7 +143,7 @@ create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
  */
 template <typename T, std::size_t N>
 inline Access::NDLocalArray::Add<T, N>
-create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
+create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,[[maybe_unused]]  sycl::handler &cgh,
                 Access::Add<NDLocalArray<T, N> *> &a) {
   return {a.obj->impl_get(), a.obj->index};
 }
@@ -152,7 +152,7 @@ create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
  *  Function to create the kernel argument for NDLocalArray read access.
  */
 template <typename T, std::size_t N>
-inline void create_kernel_arg(ParticleLoopIteration &iterationx,
+inline void create_kernel_arg([[maybe_unused]] ParticleLoopIteration &iterationx,
                               Access::NDLocalArray::Read<T, N> &rhs,
                               Access::NDLocalArray::Read<T, N> &lhs) {
   lhs = rhs;
@@ -161,7 +161,7 @@ inline void create_kernel_arg(ParticleLoopIteration &iterationx,
  *  Function to create the kernel argument for NDLocalArray write access.
  */
 template <typename T, std::size_t N>
-inline void create_kernel_arg(ParticleLoopIteration &iterationx,
+inline void create_kernel_arg([[maybe_unused]] ParticleLoopIteration &iterationx,
                               Access::NDLocalArray::Write<T, N> &rhs,
                               Access::NDLocalArray::Write<T, N> &lhs) {
   lhs = rhs;
@@ -170,7 +170,7 @@ inline void create_kernel_arg(ParticleLoopIteration &iterationx,
  *  Function to create the kernel argument for NDLocalArray add access.
  */
 template <typename T, std::size_t N>
-inline void create_kernel_arg(ParticleLoopIteration &iterationx,
+inline void create_kernel_arg([[maybe_unused]] ParticleLoopIteration &iterationx,
                               Access::NDLocalArray::Add<T, N> &rhs,
                               Access::NDLocalArray::Add<T, N> &lhs) {
   lhs = rhs;

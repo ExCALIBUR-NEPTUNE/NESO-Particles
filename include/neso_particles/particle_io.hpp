@@ -220,9 +220,13 @@ public:
    */
   template <typename... T>
   H5Part(std::string filename, ParticleGroupSharedPtr particle_group, T... args)
-      : filename(filename), particle_group(particle_group),
-        comm_pair(particle_group->sycl_target->comm_pair), sym_store(args...),
-        multi_dim_mode(false) {
+      : 
+		filename(filename),
+        comm_pair(particle_group->sycl_target->comm_pair),
+		sym_store(args...),
+		particle_group(particle_group),
+        multi_dim_mode(false) 
+	{
     this->plist_id = H5Pcreate(H5P_FILE_ACCESS);
     H5CHK(H5Pset_fapl_mpio(this->plist_id, this->comm_pair.comm_parent,
                            MPI_INFO_NULL));

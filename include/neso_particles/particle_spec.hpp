@@ -22,6 +22,7 @@ public:
 
   Sym() = default;
   Sym<U> &operator=(const Sym<U> &) = default;
+  Sym<U>(const Sym<U> & _) = default; 
 
   /**
    * Construct a new Sym object.

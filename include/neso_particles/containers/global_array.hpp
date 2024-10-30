@@ -92,7 +92,7 @@ template <typename T> struct KernelParameter<Access::Add<GlobalArray<T>>> {
  *  Function to create the kernel argument for GlobalArray read access.
  */
 template <typename T>
-inline void create_kernel_arg(ParticleLoopIteration &iterationx, T const *rhs,
+inline void create_kernel_arg([[maybe_unused]] ParticleLoopIteration &iterationx, T const *rhs,
                               Access::GlobalArray::Read<T> &lhs) {
   lhs.ptr = rhs;
 }
@@ -100,7 +100,7 @@ inline void create_kernel_arg(ParticleLoopIteration &iterationx, T const *rhs,
  *  Function to create the kernel argument for GlobalArray add access.
  */
 template <typename T>
-inline void create_kernel_arg(ParticleLoopIteration &iterationx, T *rhs,
+inline void create_kernel_arg([[maybe_unused]] ParticleLoopIteration &iterationx, T *rhs,
                               Access::GlobalArray::Add<T> &lhs) {
   lhs.ptr = rhs;
 }
@@ -109,7 +109,7 @@ inline void create_kernel_arg(ParticleLoopIteration &iterationx, T *rhs,
  * Post loop execution function for GlobalArray write.
  */
 template <typename T>
-inline void post_loop(ParticleLoopGlobalInfo *global_info,
+inline void post_loop([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
                       Access::Add<GlobalArray<T> *> &arg) {
   arg.obj->impl_post_loop_add();
 }
@@ -119,7 +119,7 @@ inline void post_loop(ParticleLoopGlobalInfo *global_info,
  */
 template <typename T>
 inline GlobalArrayImplGetConstT<T>
-create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
+create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,[[maybe_unused]]  sycl::handler &cgh,
                 Access::Read<GlobalArray<T> *> &a) {
   return a.obj->impl_get_const();
 }
@@ -128,7 +128,7 @@ create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
  */
 template <typename T>
 inline GlobalArrayImplGetT<T>
-create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
+create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,[[maybe_unused]]  sycl::handler &cgh,
                 Access::Add<GlobalArray<T> *> &a) {
   return a.obj->impl_get();
 }

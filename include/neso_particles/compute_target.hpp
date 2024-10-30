@@ -280,7 +280,8 @@ public:
     }
   }
 
-  inline void check_ptr(unsigned char *ptr_user, const size_t size_bytes) {
+  inline void check_ptr([[maybe_unused]] unsigned char *ptr_user, 
+						[[maybe_unused]] const size_t size_bytes) {
 
 #ifdef DEBUG_OOB_CHECK
     this->queue
@@ -329,7 +330,7 @@ protected:
   }
 
   BufferBase(SYCLTargetSharedPtr sycl_target, std::size_t size)
-      : sycl_target(sycl_target), size(size), ptr(nullptr) {}
+      : sycl_target(sycl_target),ptr(nullptr),size(size) {}
 
   inline void assert_allocated() {
     NESOASSERT(this->ptr != nullptr,
@@ -490,7 +491,7 @@ public:
     this->set(vec);
   }
 
-  ~BufferDevice() { this->generic_free(); }
+  virtual ~BufferDevice() { this->generic_free(); }
 };
 
 /**
@@ -502,7 +503,7 @@ protected:
     return static_cast<T *>(
         sycl::malloc_shared(num_bytes, this->sycl_target->queue));
   }
-  virtual inline void free_wrapper(T *ptr) override {
+  virtual inline void free_wrapper([[maybe_unused]] T *ptr) override {
     sycl::free(this->ptr, this->sycl_target->queue);
   }
 

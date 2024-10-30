@@ -38,7 +38,7 @@ inline void ParticleGroup::add_particles() {
                     "move or parallel advection initialisation.");
 };
 template <typename U>
-inline void ParticleGroup::add_particles(U particle_data) {
+inline void ParticleGroup::add_particles([[maybe_unused]] U particle_data) {
   NESOASSERT(false, "Not implemented yet - use add_particles_local and hybrid "
                     "move or parallel advection initialisation.");
 };
@@ -118,8 +118,8 @@ inline void ParticleGroup::remove_particles(const int npart,
   auto k_cells = this->d_remove_cells.ptr;
   auto k_layers = this->d_remove_layers.ptr;
 
-  NESOASSERT(cells.size() >= npart, "Bad cells length compared to npart");
-  NESOASSERT(layers.size() >= npart, "Bad layers length compared to npart");
+  NESOASSERT(cells.size() >= static_cast<std::size_t>(npart), "Bad cells length compared to npart");
+  NESOASSERT(layers.size() >= static_cast<std::size_t>(npart), "Bad layers length compared to npart");
 
   auto b_cells = sycl::buffer<INT>(cells.data(), sycl::range<1>(npart));
   auto b_layers = sycl::buffer<INT>(layers.data(), sycl::range<1>(npart));

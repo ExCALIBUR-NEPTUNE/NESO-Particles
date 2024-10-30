@@ -44,7 +44,9 @@ public:
   CartesianPeriodic(SYCLTargetSharedPtr sycl_target,
                     std::shared_ptr<CartesianHMesh> mesh,
                     ParticleDatSharedPtr<REAL> position_dat)
-      : mesh(mesh), sycl_target(sycl_target), d_extents(sycl_target, 3),
+      : d_extents(sycl_target, 3),
+		sycl_target(sycl_target), 
+        mesh(mesh), 
         position_dat(position_dat) {
 
     NESOASSERT(mesh->ndim <= 3, "bad mesh ndim");

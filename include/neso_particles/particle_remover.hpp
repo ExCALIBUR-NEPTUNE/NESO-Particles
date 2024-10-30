@@ -33,8 +33,9 @@ public:
    *  @param sycl_target SYCLTarget instance.
    */
   ParticleRemover(SYCLTargetSharedPtr sycl_target)
-      : sycl_target(sycl_target), dh_remove_count(sycl_target, 1),
-        d_remove_cells(sycl_target, 1), d_remove_layers(sycl_target, 1) {}
+      :  dh_remove_count(sycl_target, 1),
+        d_remove_cells(sycl_target, 1), d_remove_layers(sycl_target, 1), 
+		sycl_target(sycl_target){}
 
   /**
    * Remove particles from a ParticleGroup based on a value in a ParticleDat.

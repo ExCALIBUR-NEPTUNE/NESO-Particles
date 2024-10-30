@@ -75,12 +75,14 @@ struct ParticleLoopIteration {
  * Default pre loop execution function.
  */
 template <typename T>
-inline void pre_loop(ParticleLoopGlobalInfo *global_info, T &arg) {}
+inline void pre_loop([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
+                     [[maybe_unused]] T &arg) {}
 /**
  * Default post loop execution function.
  */
 template <typename T>
-inline void post_loop(ParticleLoopGlobalInfo *global_info, T &arg) {}
+inline void post_loop([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
+                      [[maybe_unused]] T &arg) {}
 
 } // namespace ParticleLoopImplementation
 

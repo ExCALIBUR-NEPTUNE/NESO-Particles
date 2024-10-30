@@ -49,7 +49,7 @@ public:
   LocalDecompositionHMesh(const int ndim, std::vector<double> origin,
                           std::vector<double> extents, const int cell_count,
                           MPI_Comm comm = MPI_COMM_WORLD)
-      : comm(comm), ndim(ndim), cell_count(cell_count) {
+      : ndim(ndim),  comm(comm), cell_count(cell_count) {
 
     std::vector<int> dims(this->ndim);
     for (int dimx = 0; dimx < this->ndim; dimx++) {

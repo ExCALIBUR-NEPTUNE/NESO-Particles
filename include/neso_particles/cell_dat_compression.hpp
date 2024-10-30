@@ -113,7 +113,7 @@ public:
     d_compress_layers_old.realloc_no_copy(npart);
     d_compress_layers_new.realloc_no_copy(npart);
 
-    NESOASSERT(this->d_npart_cell.size >= this->ncell,
+    NESOASSERT(this->d_npart_cell.size >= static_cast<std::size_t>(this->ncell),
                "Bad device_npart_cell length");
 
     const int ncell = this->ncell;

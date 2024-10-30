@@ -82,9 +82,11 @@ public:
    */
   CartesianCellBin(SYCLTargetSharedPtr sycl_target,
                    CartesianHMeshSharedPtr mesh)
-      : sycl_target(sycl_target), mesh(mesh), position_dat(nullptr),
-        cell_id_dat(nullptr), d_cell_counts(sycl_target, 3),
-        d_cell_starts(sycl_target, 3), d_cell_ends(sycl_target, 3) {
+	 :  d_cell_counts(sycl_target, 3),
+        d_cell_starts(sycl_target, 3), 
+		d_cell_ends(sycl_target, 3),
+        sycl_target(sycl_target), mesh(mesh), position_dat(nullptr),
+        cell_id_dat(nullptr) { 
 
     NESOASSERT(mesh->ndim <= 3, "bad mesh ndim");
     BufferHost<int> h_cell_counts(sycl_target, 3);
@@ -147,7 +149,7 @@ public:
    *  @param map_cell Cell to map.
    */
   inline void map_cells(ParticleGroup &particle_group,
-                        const int map_cell = -1) {
+                        [[maybe_unused]] const int map_cell = -1) {
     this->get_loop(particle_group.position_dat, particle_group.cell_id_dat)
         ->execute();
   }
