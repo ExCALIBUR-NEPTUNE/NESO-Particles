@@ -48,6 +48,7 @@ set(TEST_SRCS
     ${TEST_DIR}/test_particle_group_stencil_move.cpp
     ${TEST_DIR}/test_particle_h5part.cpp
     ${TEST_DIR}/test_particle_loop.cpp
+    ${TEST_DIR}/test_particle_loop_iteration_set.cpp
     ${TEST_DIR}/test_particle_loop_local_array.cpp
     ${TEST_DIR}/test_particle_loop_local_memory.cpp
     ${TEST_DIR}/test_particle_loop_rng.cpp

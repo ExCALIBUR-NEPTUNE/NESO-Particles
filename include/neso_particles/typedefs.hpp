@@ -131,8 +131,8 @@ inline std::vector<size_t> reverse_argsort(const std::vector<T> &array) {
 #define MAX(x, y) (((x) < (y)) ? (y) : (x))
 #define ABS(x) (((x) >= 0) ? (x) : (-(x)))
 template <typename T>
-void get_decomp_1d(const T N_compute_units, const T N_work_items,
-                   const T work_unit, T *rstart, T *rend) {
+inline void get_decomp_1d(const T N_compute_units, const T N_work_items,
+                          const T work_unit, T *rstart, T *rend) {
 
   const auto pq = std::div(N_work_items, N_compute_units);
   const T i = work_unit;
@@ -141,6 +141,23 @@ void get_decomp_1d(const T N_compute_units, const T N_work_items,
   const T n = (i < q) ? (p + 1) : p;
   const T start = (MIN(i, q) * (p + 1)) + ((i > q) ? (i - q) * p : 0);
   const T end = start + n;
+
+  *rstart = start;
+  *rend = end;
+}
+inline void get_decomp_1d(const std::size_t N_compute_units,
+                          const std::size_t N_work_items,
+                          const std::size_t work_unit, std::size_t *rstart,
+                          std::size_t *rend) {
+
+  const auto pq = std::div(static_cast<long long>(N_work_items),
+                           static_cast<long long>(N_compute_units));
+  const std::size_t i = work_unit;
+  const std::size_t p = static_cast<std::size_t>(pq.quot);
+  const std::size_t q = static_cast<std::size_t>(pq.rem);
+  const std::size_t n = (i < q) ? (p + 1) : p;
+  const std::size_t start = (MIN(i, q) * (p + 1)) + ((i > q) ? (i - q) * p : 0);
+  const std::size_t end = start + n;
 
   *rstart = start;
   *rend = end;
