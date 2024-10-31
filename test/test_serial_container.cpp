@@ -43,9 +43,9 @@ struct IntTuple : public SerialInterface {
   int rank_source;
   int rank_destination;
   int a;
-  
+
   virtual ~IntTuple() = default;
-  
+
   virtual inline std::size_t get_num_bytes() const override {
     return 3 * sizeof(int);
   }

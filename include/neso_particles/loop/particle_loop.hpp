@@ -347,7 +347,7 @@ public:
    */
   ParticleLoop(const std::string name, ParticleGroupSharedPtr particle_group,
                KERNEL kernel, ARGS... args)
-      : particle_group_shrptr(particle_group), kernel(kernel), name(name)  {
+      : particle_group_shrptr(particle_group), kernel(kernel), name(name) {
 
     this->sycl_target = particle_group->sycl_target;
     this->particle_group_ptr = this->particle_group_shrptr.get();
@@ -368,7 +368,7 @@ public:
    */
   ParticleLoop(ParticleGroupSharedPtr particle_group, KERNEL kernel,
                ARGS... args)
-      : ParticleLoop("unnamed_kernel", particle_group, kernel, args...){};
+      : ParticleLoop("unnamed_kernel", particle_group, kernel, args...) {};
 
   /**
    *  Create a ParticleLoop that executes a kernel for all particles in the
@@ -396,7 +396,7 @@ public:
     this->unpack_args<0>(args...);
     (check_is_sym_outer(args), ...);
   };
-  
+
   /**
    *  Create a ParticleLoop that executes a kernel for all particles in the
    * ParticleDat.

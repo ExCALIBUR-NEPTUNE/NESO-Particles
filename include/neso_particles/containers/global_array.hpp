@@ -92,16 +92,18 @@ template <typename T> struct KernelParameter<Access::Add<GlobalArray<T>>> {
  *  Function to create the kernel argument for GlobalArray read access.
  */
 template <typename T>
-inline void create_kernel_arg([[maybe_unused]] ParticleLoopIteration &iterationx, T const *rhs,
-                              Access::GlobalArray::Read<T> &lhs) {
+inline void
+create_kernel_arg([[maybe_unused]] ParticleLoopIteration &iterationx,
+                  T const *rhs, Access::GlobalArray::Read<T> &lhs) {
   lhs.ptr = rhs;
 }
 /**
  *  Function to create the kernel argument for GlobalArray add access.
  */
 template <typename T>
-inline void create_kernel_arg([[maybe_unused]] ParticleLoopIteration &iterationx, T *rhs,
-                              Access::GlobalArray::Add<T> &lhs) {
+inline void
+create_kernel_arg([[maybe_unused]] ParticleLoopIteration &iterationx, T *rhs,
+                  Access::GlobalArray::Add<T> &lhs) {
   lhs.ptr = rhs;
 }
 
@@ -119,7 +121,8 @@ inline void post_loop([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
  */
 template <typename T>
 inline GlobalArrayImplGetConstT<T>
-create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,[[maybe_unused]]  sycl::handler &cgh,
+create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
+                [[maybe_unused]] sycl::handler &cgh,
                 Access::Read<GlobalArray<T> *> &a) {
   return a.obj->impl_get_const();
 }
@@ -128,7 +131,8 @@ create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,[[maybe_unu
  */
 template <typename T>
 inline GlobalArrayImplGetT<T>
-create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,[[maybe_unused]]  sycl::handler &cgh,
+create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
+                [[maybe_unused]] sycl::handler &cgh,
                 Access::Add<GlobalArray<T> *> &a) {
   return a.obj->impl_get();
 }

@@ -31,7 +31,7 @@ public:
   /// Disable (implicit) copies.
   CartesianPeriodic &operator=(CartesianPeriodic const &a) = delete;
 
-  ~CartesianPeriodic(){};
+  ~CartesianPeriodic() {};
 
   /**
    * Construct instance to apply periodic boundary conditions to particles
@@ -44,9 +44,7 @@ public:
   CartesianPeriodic(SYCLTargetSharedPtr sycl_target,
                     std::shared_ptr<CartesianHMesh> mesh,
                     ParticleDatSharedPtr<REAL> position_dat)
-      : d_extents(sycl_target, 3),
-		sycl_target(sycl_target), 
-        mesh(mesh), 
+      : d_extents(sycl_target, 3), sycl_target(sycl_target), mesh(mesh),
         position_dat(position_dat) {
 
     NESOASSERT(mesh->ndim <= 3, "bad mesh ndim");
@@ -91,7 +89,7 @@ public:
   CartesianPeriodic(std::shared_ptr<CartesianHMesh> mesh,
                     ParticleGroupSharedPtr particle_group)
       : CartesianPeriodic(particle_group->sycl_target, mesh,
-                          particle_group->position_dat){
+                          particle_group->position_dat) {
 
         };
 

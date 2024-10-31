@@ -171,18 +171,15 @@ public:
            LayerCompressor &layer_compressor,
            std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
            std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int)
-      : ncell(ncell),
-        particle_dats_real(particle_dats_real),
+      : ncell(ncell), particle_dats_real(particle_dats_real),
         particle_dats_int(particle_dats_int),
         h_npart_cell(sycl_target, this->ncell),
         d_npart_cell(sycl_target, this->ncell),
         d_cells_old(sycl_target, this->ncell),
         d_cells_new(sycl_target, this->ncell),
         d_layers_old(sycl_target, this->ncell),
-        d_layers_new(sycl_target, this->ncell), 
-		h_move_count(sycl_target, 1),
-        d_move_count(sycl_target, 1), 
-		h_particle_dat_ptr_real(sycl_target, 1),
+        d_layers_new(sycl_target, this->ncell), h_move_count(sycl_target, 1),
+        d_move_count(sycl_target, 1), h_particle_dat_ptr_real(sycl_target, 1),
         h_particle_dat_ptr_int(sycl_target, 1),
         h_particle_dat_ncomp_real(sycl_target, 1),
         h_particle_dat_ncomp_int(sycl_target, 1),
@@ -190,9 +187,8 @@ public:
         d_particle_dat_ptr_int(sycl_target, 1),
         d_particle_dat_ncomp_real(sycl_target, 1),
         d_particle_dat_ncomp_int(sycl_target, 1),
-        layer_compressor(layer_compressor),
-        ep_bad_cell_indices(sycl_target),  
-		sycl_target(sycl_target){}
+        layer_compressor(layer_compressor), ep_bad_cell_indices(sycl_target),
+        sycl_target(sycl_target) {}
 
   /**
    * Set the ParticleDat to use as a source for cell ids.

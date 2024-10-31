@@ -94,20 +94,24 @@ inline void create_kernel_arg(ParticleLoopIteration &iterationx, T ***&rhs,
   lhs.cell = iterationx.cellx;
 }
 template <typename T>
-inline T *const *const *create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
-                                        [[maybe_unused]] sycl::handler &cgh,
-                                        Access::Read<CellDat<T> *> &a) {
+inline T *const *const *
+create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
+                [[maybe_unused]] sycl::handler &cgh,
+                Access::Read<CellDat<T> *> &a) {
   return a.obj->impl_get_const();
 }
 template <typename T>
-inline T ***create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
-                            [[maybe_unused]] sycl::handler &cgh,
-                            Access::Write<CellDat<T> *> &a) {
+inline T ***
+create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
+                [[maybe_unused]] sycl::handler &cgh,
+                Access::Write<CellDat<T> *> &a) {
   return a.obj->impl_get();
 }
 template <typename T>
-inline T ***create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
-                            [[maybe_unused]] sycl::handler &cgh, Access::Add<CellDat<T> *> &a) {
+inline T ***
+create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
+                [[maybe_unused]] sycl::handler &cgh,
+                Access::Add<CellDat<T> *> &a) {
   return a.obj->impl_get();
 }
 } // namespace ParticleLoopImplementation

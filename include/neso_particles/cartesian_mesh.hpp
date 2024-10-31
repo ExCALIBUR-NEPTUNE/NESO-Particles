@@ -308,7 +308,8 @@ public:
    *
    *  @param particle_group ParticleGroup.
    */
-  inline void particle_group_callback([[maybe_unused]] ParticleGroup &particle_group) override{};
+  inline void particle_group_callback(
+      [[maybe_unused]] ParticleGroup &particle_group) override {};
 };
 
 inline std::shared_ptr<CartesianHMeshLocalMapperT>

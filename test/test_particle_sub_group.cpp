@@ -186,7 +186,7 @@ inline bool check_selector(ParticleGroupSharedPtr particle_group,
                            std::vector<int> &layers) {
   bool status = true;
   auto s = selector->get();
-  
+
   auto lambda_check_eq = [&](auto a, auto b) { status = status && (a == b); };
   auto lambda_check_true = [&](const bool a) { status = status && a; };
 
@@ -209,8 +209,10 @@ inline bool check_selector(ParticleGroupSharedPtr particle_group,
       .wait_and_throw();
 
   for (int cx = 0; cx < s.ncell; cx++) {
-    lambda_check_eq(static_cast<std::size_t>(s.h_npart_cell[cx]), map_cells_layers[cx].size());
-    lambda_check_eq(static_cast<std::size_t>(tmp_int.at(cx)), map_cells_layers[cx].size());
+    lambda_check_eq(static_cast<std::size_t>(s.h_npart_cell[cx]),
+                    map_cells_layers[cx].size());
+    lambda_check_eq(static_cast<std::size_t>(tmp_int.at(cx)),
+                    map_cells_layers[cx].size());
   }
 
   std::vector<INT> tmp_INT(s.ncell);
@@ -504,14 +506,14 @@ TEST(ParticleSubGroup, creating) {
   }
 
   auto p0 = particle_loop(
-      A, [](auto /*ID*/, auto V) { V[0] += 0.0001; }, Access::read(Sym<INT>("ID")),
-      Access::write(Sym<REAL>("V")));
+      A, [](auto /*ID*/, auto V) { V[0] += 0.0001; },
+      Access::read(Sym<INT>("ID")), Access::write(Sym<REAL>("V")));
   p0->execute();
   EXPECT_FALSE(aa->create_if_required());
 
   auto p1 = particle_loop(
-      aa, [](auto /*ID*/, auto V) { V[0] += 0.0001; }, Access::read(Sym<INT>("ID")),
-      Access::write(Sym<REAL>("V")));
+      aa, [](auto /*ID*/, auto V) { V[0] += 0.0001; },
+      Access::read(Sym<INT>("ID")), Access::write(Sym<REAL>("V")));
   p1->execute();
   EXPECT_FALSE(aa->create_if_required());
 

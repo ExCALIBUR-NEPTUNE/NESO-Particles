@@ -77,9 +77,10 @@ create_loop_arg(ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
  * Create the kernel argument for a KernelRNG.
  */
 template <typename T>
-inline void create_kernel_arg([[maybe_unused]] ParticleLoopIteration &iterationx,
-                              Access::KernelRNG::Read<T> &rhs,
-                              Access::KernelRNG::Read<T> &lhs) {
+inline void
+create_kernel_arg([[maybe_unused]] ParticleLoopIteration &iterationx,
+                  Access::KernelRNG::Read<T> &rhs,
+                  Access::KernelRNG::Read<T> &lhs) {
   lhs = rhs;
 }
 

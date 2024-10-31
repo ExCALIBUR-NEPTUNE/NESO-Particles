@@ -389,19 +389,14 @@ public:
    */
   ParticleGroup(DomainSharedPtr domain, ParticleSpec &particle_spec,
                 SYCLTargetSharedPtr sycl_target)
-      : ncell(domain->mesh->get_cell_count()), 
-        npart_local(0), 
-		h_npart_cell(sycl_target, 1),
-        d_npart_cell(sycl_target, 1),
-		d_remove_cells(sycl_target, 1),
-        d_remove_layers(sycl_target, 1), 
+      : ncell(domain->mesh->get_cell_count()), npart_local(0),
+        h_npart_cell(sycl_target, 1), d_npart_cell(sycl_target, 1),
+        d_remove_cells(sycl_target, 1), d_remove_layers(sycl_target, 1),
         global_move_ctx(sycl_target, layer_compressor, particle_dats_real,
                         particle_dats_int),
         cell_move_ctx(sycl_target, this->ncell, layer_compressor,
                       particle_dats_real, particle_dats_int),
-		particle_group_version(1),
-        domain(domain),
-		sycl_target(sycl_target),
+        particle_group_version(1), domain(domain), sycl_target(sycl_target),
         layer_compressor(sycl_target, ncell, particle_dats_real,
                          particle_dats_int) {
 

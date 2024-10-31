@@ -195,8 +195,8 @@ public:
   std::function<T()> generation_function;
 
   HostAtomicBlockKernelRNG() : BlockKernelRNGBase<T>() {}
-  
- virtual ~HostAtomicBlockKernelRNG() = default; 
+
+  virtual ~HostAtomicBlockKernelRNG() = default;
 
   /**
    * Create a KernelRNG from a host function handle which returns values
@@ -213,10 +213,9 @@ public:
   template <typename FUNC_TYPE>
   HostAtomicBlockKernelRNG(FUNC_TYPE func, const int num_components,
                            const int block_size = 8192)
-      : BlockKernelRNGBase<T>(num_components, block_size),
-        internal_state(0),  num_random_numbers_override(-1), internal_state_is_valid(true), 
-		 suppress_warnings(false),generation_function(func) 
-        {
+      : BlockKernelRNGBase<T>(num_components, block_size), internal_state(0),
+        num_random_numbers_override(-1), internal_state_is_valid(true),
+        suppress_warnings(false), generation_function(func) {
     NESOASSERT(num_components >= 0, "Cannot have a RNG for " +
                                         std::to_string(num_components) +
                                         " components.");

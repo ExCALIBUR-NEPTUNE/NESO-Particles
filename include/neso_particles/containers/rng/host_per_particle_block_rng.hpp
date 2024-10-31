@@ -67,7 +67,7 @@ public:
   std::function<T()> generation_function;
 
   HostPerParticleBlockRNG() : BlockKernelRNGBase<T>() {}
-  
+
   virtual ~HostPerParticleBlockRNG() = default;
 
   /**
@@ -81,8 +81,8 @@ public:
   template <typename FUNC_TYPE>
   HostPerParticleBlockRNG(FUNC_TYPE func, const int num_components,
                           const int block_size = 8192)
-      : BlockKernelRNGBase<T>(num_components, block_size),
-        internal_state(0), generation_function(func) {
+      : BlockKernelRNGBase<T>(num_components, block_size), internal_state(0),
+        generation_function(func) {
     NESOASSERT(num_components >= 0, "Cannot have a RNG for " +
                                         std::to_string(num_components) +
                                         " components.");

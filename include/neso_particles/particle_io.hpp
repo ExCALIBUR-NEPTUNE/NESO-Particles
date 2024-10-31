@@ -220,13 +220,9 @@ public:
    */
   template <typename... T>
   H5Part(std::string filename, ParticleGroupSharedPtr particle_group, T... args)
-      : 
-		filename(filename),
-        comm_pair(particle_group->sycl_target->comm_pair),
-		sym_store(args...),
-		particle_group(particle_group),
-        multi_dim_mode(false) 
-	{
+      : filename(filename), comm_pair(particle_group->sycl_target->comm_pair),
+        sym_store(args...), particle_group(particle_group),
+        multi_dim_mode(false) {
     this->plist_id = H5Pcreate(H5P_FILE_ACCESS);
     H5CHK(H5Pset_fapl_mpio(this->plist_id, this->comm_pair.comm_parent,
                            MPI_INFO_NULL));
@@ -388,7 +384,7 @@ public:
    *  Close the H5Part writer. Must be called. Must be called collectively on
    *  the communicator.
    */
-  inline void close(){};
+  inline void close() {};
 
   /**
    *  Write ParticleDats as 2D arrays in the HDF5 file.
@@ -399,7 +395,7 @@ public:
    * Write the current particle data to the HDF5 file as a new time step. Must
    * be called collectively on the communicator.
    */
-  inline void write(INT step_in = -1){};
+  inline void write(INT step_in = -1) {};
 };
 
 #endif

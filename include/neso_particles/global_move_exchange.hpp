@@ -70,14 +70,10 @@ public:
    */
   GlobalMoveExchange(SYCLTargetSharedPtr sycl_target)
       : comm(sycl_target->comm_pair.comm_parent),
-		h_send_requests(sycl_target, 1),
-        h_recv_requests(sycl_target, 1), 
-		h_recv_status(sycl_target, 1),
-        h_send_ranks(sycl_target, 1),
-        h_recv_ranks(sycl_target, 1), 
-		h_send_rank_npart(sycl_target, 1),
-        h_recv_rank_npart(sycl_target, 1), 
-		sycl_target(sycl_target) {
+        h_send_requests(sycl_target, 1), h_recv_requests(sycl_target, 1),
+        h_recv_status(sycl_target, 1), h_send_ranks(sycl_target, 1),
+        h_recv_ranks(sycl_target, 1), h_send_rank_npart(sycl_target, 1),
+        h_recv_rank_npart(sycl_target, 1), sycl_target(sycl_target) {
     // Create a MPI_Win used to sum the number of remote ranks that will
     // send particles to this rank.
     MPICHK(MPI_Win_allocate(sizeof(int), sizeof(int), MPI_INFO_NULL, this->comm,
@@ -118,9 +114,11 @@ public:
     this->h_send_rank_npart.realloc_no_copy(h_send_rank_npart.size);
     this->num_remote_send_ranks = num_remote_send_ranks;
 
-    NESOASSERT(dh_send_ranks.size >= static_cast<std::size_t>(num_remote_send_ranks),
+    NESOASSERT(dh_send_ranks.size >=
+                   static_cast<std::size_t>(num_remote_send_ranks),
                "Buffer size does not match number of remote ranks.");
-    NESOASSERT(h_send_rank_npart.size >= static_cast<std::size_t>(num_remote_send_ranks),
+    NESOASSERT(h_send_rank_npart.size >=
+                   static_cast<std::size_t>(num_remote_send_ranks),
                "Buffer size does not match number of remote ranks.");
     for (int rx = 0; rx < num_remote_send_ranks; rx++) {
       const int rank_tmp = dh_send_ranks.h_buffer.ptr[rx];

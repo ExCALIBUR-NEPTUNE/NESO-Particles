@@ -492,8 +492,8 @@ TEST(ParticleLoopRNG, uniform_atomic_block_sampler) {
 
     // loop where no values are used
     particle_loop(
-        aa, [=](auto /*INDEX*/, auto /*RNG*/) {}, Access::read(ParticleLoopIndex{}),
-        Access::read(rng_device_kernel))
+        aa, [=](auto /*INDEX*/, auto /*RNG*/) {},
+        Access::read(ParticleLoopIndex{}), Access::read(rng_device_kernel))
         ->execute();
 
     num_values = 8;

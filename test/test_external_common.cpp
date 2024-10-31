@@ -622,13 +622,13 @@ TEST(ExternalCommon, cartesian_to_barycentric_quad) {
                                                   y3, x, y, l0, l1, l2, l3);
   };
 
-  [[maybe_unused]] auto lambda_wrap_call_collapsed = [&](const REAL x, const REAL y,
-                                        REAL *RESTRICT eta0,
-                                        REAL *RESTRICT eta1) {
-    ExternalCommon::quad_cartesian_to_collapsed(v0[0], v0[1], v1[0], v1[1],
-                                                v2[0], v2[1], v3[0], v3[1], x,
-                                                y, eta0, eta1);
-  };
+  [[maybe_unused]] auto lambda_wrap_call_collapsed =
+      [&](const REAL x, const REAL y, REAL *RESTRICT eta0,
+          REAL *RESTRICT eta1) {
+        ExternalCommon::quad_cartesian_to_collapsed(v0[0], v0[1], v1[0], v1[1],
+                                                    v2[0], v2[1], v3[0], v3[1],
+                                                    x, y, eta0, eta1);
+      };
 
   auto lambda_wrap_call = [&](const REAL x, const REAL y, REAL *RESTRICT l0,
                               REAL *RESTRICT l1, REAL *RESTRICT l2,

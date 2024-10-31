@@ -470,7 +470,7 @@ TEST(DescendantProducts, parents) {
   std::vector<INT> layers = dp->get_layers();
 
   const INT num_products = num_products_per_particle * npart_local;
-  ASSERT_TRUE(cells.size() >=  static_cast<std::size_t>(num_products));
+  ASSERT_TRUE(cells.size() >= static_cast<std::size_t>(num_products));
   ASSERT_TRUE(layers.size() >= static_cast<std::size_t>(num_products));
   for (INT px = 0; px < num_products; px++) {
     ASSERT_EQ(cells.at(px), -1);

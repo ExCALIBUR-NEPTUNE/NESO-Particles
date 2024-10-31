@@ -69,7 +69,7 @@ public:
   /// Disable (implicit) copies.
   CartesianCellBin &operator=(CartesianCellBin const &a) = delete;
 
-  ~CartesianCellBin(){};
+  ~CartesianCellBin() {};
 
   /**
    * Create instance to bin particles into cells of a CartesianHMesh.
@@ -82,11 +82,9 @@ public:
    */
   CartesianCellBin(SYCLTargetSharedPtr sycl_target,
                    CartesianHMeshSharedPtr mesh)
-	 :  d_cell_counts(sycl_target, 3),
-        d_cell_starts(sycl_target, 3), 
-		d_cell_ends(sycl_target, 3),
-        sycl_target(sycl_target), mesh(mesh), position_dat(nullptr),
-        cell_id_dat(nullptr) { 
+      : d_cell_counts(sycl_target, 3), d_cell_starts(sycl_target, 3),
+        d_cell_ends(sycl_target, 3), sycl_target(sycl_target), mesh(mesh),
+        position_dat(nullptr), cell_id_dat(nullptr) {
 
     NESOASSERT(mesh->ndim <= 3, "bad mesh ndim");
     BufferHost<int> h_cell_counts(sycl_target, 3);

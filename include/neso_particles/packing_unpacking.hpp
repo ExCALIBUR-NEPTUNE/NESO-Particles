@@ -102,24 +102,22 @@ public:
   int num_bytes_per_particle;
   /// Compute device used by the instance.
   SYCLTargetSharedPtr sycl_target;
-  ~ParticlePacker(){};
+  ~ParticlePacker() {};
   /**
    * Construct a particle packing object on a compute device.
    *
    * @param sycl_target SYCLTargetSharedPtr to use as compute device.
    */
   ParticlePacker(SYCLTargetSharedPtr sycl_target)
-      :
-		dh_particle_dat_ptr_real(sycl_target, 1),
-		dh_particle_dat_ptr_int(sycl_target, 1),
-		dh_particle_dat_ncomp_real(sycl_target, 1),
-		dh_particle_dat_ncomp_int(sycl_target, 1),
-		device_aware_mpi_enabled(NESO::Particles::device_aware_mpi_enabled()),
-		h_send_pointers(sycl_target, 1),
-		cell_dat(sycl_target, sycl_target->comm_pair.size_parent, 1),
-		h_send_buffer(sycl_target, 1), 
-		h_send_offsets(sycl_target, 1),
-		sycl_target(sycl_target) {}
+      : dh_particle_dat_ptr_real(sycl_target, 1),
+        dh_particle_dat_ptr_int(sycl_target, 1),
+        dh_particle_dat_ncomp_real(sycl_target, 1),
+        dh_particle_dat_ncomp_int(sycl_target, 1),
+        device_aware_mpi_enabled(NESO::Particles::device_aware_mpi_enabled()),
+        h_send_pointers(sycl_target, 1),
+        cell_dat(sycl_target, sycl_target->comm_pair.size_parent, 1),
+        h_send_buffer(sycl_target, 1), h_send_offsets(sycl_target, 1),
+        sycl_target(sycl_target) {}
   /**
    *  Reset the instance before packing particle data.
    */
@@ -381,7 +379,7 @@ public:
   /// Compute device used by the instance.
   SYCLTargetSharedPtr sycl_target;
 
-  ~ParticleUnpacker(){};
+  ~ParticleUnpacker() {};
 
   /**
    * Construct an unpacking object.
@@ -389,17 +387,14 @@ public:
    * @param sycl_target SYCLTargetSharedPtr to use as compute device.
    */
   ParticleUnpacker(SYCLTargetSharedPtr sycl_target)
-      : 
-		dh_particle_dat_ptr_real(sycl_target, 1),
+      : dh_particle_dat_ptr_real(sycl_target, 1),
         dh_particle_dat_ptr_int(sycl_target, 1),
         dh_particle_dat_ncomp_real(sycl_target, 1),
         dh_particle_dat_ncomp_int(sycl_target, 1),
-        d_recv_buffer(sycl_target, 1), 
+        d_recv_buffer(sycl_target, 1),
         device_aware_mpi_enabled(NESO::Particles::device_aware_mpi_enabled()),
-        h_recv_pointers(sycl_target, 1),
-		h_recv_buffer(sycl_target, 1), 
-		h_recv_offsets(sycl_target, 1),
-		sycl_target(sycl_target){};
+        h_recv_pointers(sycl_target, 1), h_recv_buffer(sycl_target, 1),
+        h_recv_offsets(sycl_target, 1), sycl_target(sycl_target) {};
 
   /**
    * @returns Host or device pointers for locations in which to recv packed

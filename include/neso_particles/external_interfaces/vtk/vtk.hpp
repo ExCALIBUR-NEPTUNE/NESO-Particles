@@ -65,7 +65,8 @@ protected:
                    const int local_size, const int ncomp, hid_t out_datatype,
                    hid_t datatype, std::string name, std::vector<T> &data) {
 
-    NESOASSERT(static_cast<std::size_t>(local_size) * ncomp == data.size(), "data size miss-match");
+    NESOASSERT(static_cast<std::size_t>(local_size) * ncomp == data.size(),
+               "data size miss-match");
     // Create the memspace
     hsize_t dims_memspace[2] = {static_cast<hsize_t>(local_size),
                                 static_cast<hsize_t>(ncomp)};
@@ -287,7 +288,7 @@ public:
     }
     MPICHK(MPI_Bcast(counts_global, 4, MPI_INT, this->size - 1, this->comm));
 
-    //const int nconnectivity_local = counts_local[2];
+    // const int nconnectivity_local = counts_local[2];
     const int noffset_local = counts_local[3];
 
     const int point_offset = offsets_array[0];
@@ -300,7 +301,8 @@ public:
     const int nconnectivity_global = counts_global[2];
     const int noffset_global = counts_global[3];
 
-    NESOASSERT(offsets.size() == static_cast<std::size_t>(noffset_local), "offsets sizes miss-match");
+    NESOASSERT(offsets.size() == static_cast<std::size_t>(noffset_local),
+               "offsets sizes miss-match");
 
     this->write_dataset_2d(this->root, npoint_global, point_offset,
                            npoint_local, 3, H5T_IEEE_F64LE, H5T_NATIVE_DOUBLE,
@@ -362,12 +364,12 @@ public:
 class VTKHDF {
 protected:
 public:
-  ~VTKHDF(){};
+  ~VTKHDF() {};
 
   /**
    * Close the HDF5 file. This must be called collectively on the communicator.
    */
-  inline void close(){};
+  inline void close() {};
 
   /**
    * Create a new VTKHDF file. Must be called collectively on the communicator.

@@ -65,7 +65,8 @@ protected:
     check_sym_type(arg.obj);
   }
 
-  inline void add_parent_dependencies([[maybe_unused]] ParticleGroupSharedPtr parent) {}
+  inline void
+  add_parent_dependencies([[maybe_unused]] ParticleGroupSharedPtr parent) {}
   inline void add_parent_dependencies(std::shared_ptr<ParticleSubGroup> parent);
 
   SubGroupSelector() = default;
@@ -158,7 +159,7 @@ public:
         args...);
   }
 
- virtual ~SubGroupSelector() = default;
+  virtual ~SubGroupSelector() = default;
   /**
    * Get two BufferDeviceHost objects that hold the cells and layers of the
    * particles which currently are selected by the selector kernel.
@@ -349,8 +350,8 @@ public:
    */
   ParticleSubGroup(
       ParticleSubGroupImplementation::SubGroupSelectorSharedPtr selector)
-      : is_static(false), particle_group(selector->particle_group), selector(selector),
-        is_whole_particle_group(false) {}
+      : is_static(false), particle_group(selector->particle_group),
+        selector(selector), is_whole_particle_group(false) {}
 
   /**
    * Get and optionally set the static status of the ParticleSubGroup.
@@ -920,7 +921,8 @@ inline void ParticleSubGroup::get_cells_layers(INT *d_cells, INT *d_layers) {
   if (this->is_entire_particle_group()) {
     lambda_loop(this->particle_group);
   } else {
-    lambda_loop(std::shared_ptr<ParticleSubGroup>(this, []([[maybe_unused]] auto x) {}));
+    lambda_loop(std::shared_ptr<ParticleSubGroup>(
+        this, []([[maybe_unused]] auto x) {}));
   }
 }
 

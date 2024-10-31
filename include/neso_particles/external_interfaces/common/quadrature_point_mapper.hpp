@@ -140,8 +140,7 @@ public:
   QuadraturePointMapper(SYCLTargetSharedPtr sycl_target, DomainSharedPtr domain)
       : ndim(domain->mesh->get_ndim()),
         rank(sycl_target->comm_pair.rank_parent),
-        size(sycl_target->comm_pair.size_parent), 
-		internal_points_added(false) ,
+        size(sycl_target->comm_pair.size_parent), internal_points_added(false),
         sycl_target(sycl_target), domain(domain) {
     NESOASSERT((0 < ndim) && (ndim < 4), "Bad number of dimensions.");
   }
@@ -371,7 +370,8 @@ public:
     this->owning_num_bytes.resize(this->owning_ranks.size());
 
     const auto num_entries = this->compute_num_bytes<int>(1);
-    NESOASSERT(static_cast<std::size_t>(num_entries.first) == adding_point_indices.size(),
+    NESOASSERT(static_cast<std::size_t>(num_entries.first) ==
+                   adding_point_indices.size(),
                "Num entries mismatch.");
     this->owning_point_indices = std::vector<int>(num_entries.second);
     this->compute_offsets<int>(1, adding_point_indices,
@@ -505,7 +505,8 @@ public:
   inline void set(const int ncomp, std::vector<REAL> &input) {
     auto sym = this->get_sym(ncomp);
     const int ncomp_local = this->npoint_local * ncomp;
-    NESOASSERT(input.size() >= static_cast<std::size_t>(ncomp_local), "Input vector is too small.");
+    NESOASSERT(input.size() >= static_cast<std::size_t>(ncomp_local),
+               "Input vector is too small.");
     this->make_contribs_buffers(ncomp_local, 0);
 
     auto k_local = this->d_local_contribs->ptr;
@@ -566,7 +567,9 @@ typedef std::shared_ptr<QuadraturePointMapper> QuadraturePointMapperSharedPtr;
 namespace {
 template <std::size_t N> struct InterpTupleType {};
 
-template <> struct InterpTupleType<1> { using type = Tuple::Tuple<REAL>; };
+template <> struct InterpTupleType<1> {
+  using type = Tuple::Tuple<REAL>;
+};
 template <> struct InterpTupleType<2> {
   using type = Tuple::Tuple<REAL, REAL>;
 };
