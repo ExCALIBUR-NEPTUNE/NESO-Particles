@@ -26,6 +26,7 @@ exclude_patterns = []
 html_theme = "pydata_sphinx_theme"
 html_static_path = ['_static']
 html_css_files = ["custom.css"]
+html_favicon = "_static/favicon.png"
 
 html_sidebars = {
     "**": ["globaltoc.html"]
@@ -36,7 +37,12 @@ html_theme_options = {
     "navbar_align": "left",
     "primary_sidebar_end": [],
     "navigation_depth": 0,
-    "show_nav_level": 3
+    "show_nav_level": 3,
+    "logo": {
+        "text": "",
+        "image_light": "neso_particles_logo_light_small.png",
+        "image_dark": "neso_particles_logo_dark_small.png",
+    },
 }
 
 import os

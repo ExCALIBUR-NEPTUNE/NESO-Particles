@@ -808,11 +808,12 @@ public:
     global_info.particle_sub_group = this->particle_sub_group.get();
     this->apply_pre_loop(global_info);
 
-    auto k_kernel = this->kernel;
+    auto k_kernel = ParticleLoopImplementation::get_kernel(this->kernel);
     auto k_npart_cell_lb = this->d_npart_cell_lb;
     auto k_map_cells_to_particles = selection.d_map_cells_to_particles;
 
     auto is = this->iteration_set->get(cell);
+    this->profiling_region_metrics(this->iteration_set->iteration_set_size);
     const int nbin = std::get<0>(is);
 
     this->sycl_target->profile_map.inc(

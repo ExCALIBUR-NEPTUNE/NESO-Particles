@@ -805,6 +805,38 @@ inline NDRangePeel1D get_nd_range_peel_1d(const std::size_t size,
                         sycl::range<1>(local_size))};
 }
 
+/**
+ * Compute the exclusive scan of an array using the SYCL group built-ins.
+ *
+ * @param[in] sycl_target Compute device to use.
+ * @param[in] N Number of elements.
+ * @param[in] d_src Device poitner to source values.
+ * @param[in, d_dst Device pointer to destination values.
+ * @returns Event to wait on for completion.
+ */
+template <typename T>
+[[nodiscard]] inline sycl::event
+joint_exclusive_scan(SYCLTargetSharedPtr sycl_target, std::size_t N, T *d_src,
+                     T *d_dst) {
+  const std::size_t group_size =
+      std::min(static_cast<std::size_t>(
+                   sycl_target->device
+                       .get_info<sycl::info::device::max_work_group_size>()),
+               static_cast<std::size_t>(N));
+  NESOASSERT(group_size >= 1, "Bad group size for exclusive_scan.");
+
+  return sycl_target->queue.submit([&](sycl::handler &cgh) {
+    cgh.parallel_for(sycl::nd_range<1>(sycl::range<1>(group_size),
+                                       sycl::range<1>(group_size)),
+                     [=](sycl::nd_item<1> it) {
+                       T *first = d_src;
+                       T *last = first + N;
+                       sycl::joint_exclusive_scan(it.get_group(), first, last,
+                                                  d_dst, sycl::plus<T>());
+                     });
+  });
+}
+
 } // namespace NESO::Particles
 
 #endif

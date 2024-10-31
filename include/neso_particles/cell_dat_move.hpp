@@ -67,6 +67,8 @@ private:
   // ErrorPropagate object to detect bad cell indices
   ErrorPropagate ep_bad_cell_indices;
 
+  std::size_t num_bytes_per_particle;
+
   inline void get_particle_dat_info() {
 
     this->num_dats_real = this->particle_dats_real.size();
@@ -81,17 +83,20 @@ private:
     this->d_particle_dat_ptr_int.realloc_no_copy(this->num_dats_int);
     this->d_particle_dat_ncomp_int.realloc_no_copy(this->num_dats_int);
 
+    this->num_bytes_per_particle = 0;
     int index = 0;
     for (auto &dat : this->particle_dats_real) {
       this->h_particle_dat_ptr_real.ptr[index] = dat.second->impl_get();
       this->h_particle_dat_ncomp_real.ptr[index] = dat.second->ncomp;
       index++;
+      this->num_bytes_per_particle += dat.second->ncomp * sizeof(REAL);
     }
     index = 0;
     for (auto &dat : particle_dats_int) {
       this->h_particle_dat_ptr_int.ptr[index] = dat.second->impl_get();
       this->h_particle_dat_ncomp_int.ptr[index] = dat.second->ncomp;
       index++;
+      this->num_bytes_per_particle += dat.second->ncomp * sizeof(INT);
     }
 
     // copy to the device

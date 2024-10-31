@@ -108,10 +108,12 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/local_mapping.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/local_move.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/access_descriptors.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/loop/kernel.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_base.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_utility.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_index.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_iteration_set.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/pli_particle_dat.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_hierarchy.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_hierarchy_data/mesh_hierarchy_container.hpp
