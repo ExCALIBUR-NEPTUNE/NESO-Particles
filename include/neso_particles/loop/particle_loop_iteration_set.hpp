@@ -2,6 +2,7 @@
 #define _NESO_PARTICLES_PARTICLE_LOOP_ITERATION_SET_HPP_
 
 #include "../compute_target.hpp"
+#include "../particle_dat.hpp"
 #include "../sycl_typedefs.hpp"
 #include "../typedefs.hpp"
 
@@ -157,6 +158,9 @@ struct ParticleLoopBlockHost {
         loop_iteration_set(loop_iteration_set) {}
 };
 
+/**
+ * Type to create iteration sets that implement a particle loop.
+ */
 class ParticleLoopBlockIterationSet {
 protected:
   /// SYCL device
@@ -194,6 +198,21 @@ public:
                                 int *h_npart_cell)
       : sycl_target(sycl_target), nbin(std::min(ncell, nbin)), ncell(ncell),
         h_npart_cell(h_npart_cell) {}
+
+  /**
+   *  Creates iteration set creator for a given set of cell particle counts.
+   *
+   *  @param particle_dat Specify an iteration set from a ParticleDat.
+   *  @param nbin Number of blocks of cells.
+   *  @param ncell Number of cells.
+   *  @param h_npart_cell Host accessible array of cell particle counts.
+   */
+  template <typename T>
+  ParticleLoopBlockIterationSet(ParticleDatSharedPtr<T> particle_dat,
+                                const std::size_t nbin)
+      : sycl_target(particle_dat->sycl_target),
+        nbin(std::min(particle_dat->ncell, nbin)), ncell(particle_dat->ncell),
+        h_npart_cell(particle_dat->h_npart_cell) {}
 
   /**
    * Get a complete iteration set for a particle loop for all cells.
