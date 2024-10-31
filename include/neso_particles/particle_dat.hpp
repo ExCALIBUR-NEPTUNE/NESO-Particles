@@ -312,8 +312,8 @@ public:
    * @returns sycl::event to wait on for data copy.
    */
   inline sycl::event copy_particle_data(const int npart,
-                                        [[maybe_unused]] const INT *d_cells_old,
-                                        [[maybe_unused]] const INT *d_cells_new,
+                                        const INT *d_cells_old,
+                                        const INT *d_cells_new,
                                         const INT *d_layers_old,
                                         const INT *d_layers_new) {
     this->write_callback_wrapper(0);
@@ -327,7 +327,7 @@ public:
             const INT cell_oldx = d_cells_old[idx];
             // remove particles currently masks of elements using -1
             if (cell_oldx > -1) {
-              const INT cell_newx = d_cells_old[idx];
+              const INT cell_newx = d_cells_new[idx];
               const INT layer_oldx = d_layers_old[idx];
               const INT layer_newx = d_layers_new[idx];
 

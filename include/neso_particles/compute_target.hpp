@@ -503,8 +503,8 @@ protected:
     return static_cast<T *>(
         sycl::malloc_shared(num_bytes, this->sycl_target->queue));
   }
-  virtual inline void free_wrapper([[maybe_unused]] T *ptr) override {
-    sycl::free(this->ptr, this->sycl_target->queue);
+  virtual inline void free_wrapper(T *ptr) override {
+    sycl::free(ptr, this->sycl_target->queue);
   }
 
 public:
