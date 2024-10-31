@@ -98,7 +98,7 @@ template <typename T> inline T &get_kernel(T &kernel) { return kernel; }
  * @param kernel Device copyable callable type to use as kernel.
  * @returns 0.
  */
-template <typename T> inline std::size_t get_kernel_num_bytes(T &kernel) {
+template <typename T> inline std::size_t get_kernel_num_bytes([[maybe_unused]] T &kernel) {
   return 0;
 }
 
@@ -109,7 +109,7 @@ template <typename T> inline std::size_t get_kernel_num_bytes(T &kernel) {
  * @param kernel Device copyable callable type to use as kernel.
  * @returns 0.
  */
-template <typename T> inline std::size_t get_kernel_num_flops(T &kernel) {
+template <typename T> inline std::size_t get_kernel_num_flops([[maybe_unused]] T &kernel) {
   return 0;
 }
 

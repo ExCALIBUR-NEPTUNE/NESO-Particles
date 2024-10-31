@@ -566,7 +566,7 @@ inline ParticleDatSharedPtr<T> ParticleDat(SYCLTargetSharedPtr sycl_target,
 
 template <typename T>
 inline void ParticleDatT<T>::realloc(std::vector<INT> &npart_cell_new) {
-  NESOASSERT(npart_cell_new.size() >= this->ncell,
+  NESOASSERT(npart_cell_new.size() >= static_cast<std::size_t>(this->ncell),
              "Insufficent new cell counts");
   for (int cellx = 0; cellx < this->ncell; cellx++) {
     this->cell_dat.set_nrow(cellx, npart_cell_new[cellx]);
@@ -575,7 +575,7 @@ inline void ParticleDatT<T>::realloc(std::vector<INT> &npart_cell_new) {
 template <typename T>
 template <typename U>
 inline void ParticleDatT<T>::realloc(BufferShared<U> &npart_cell_new) {
-  NESOASSERT(npart_cell_new.size >= this->ncell, "Insufficent new cell counts");
+  NESOASSERT(npart_cell_new.size >= static_cast<std::size_t>(this->ncell), "Insufficent new cell counts");
   for (int cellx = 0; cellx < this->ncell; cellx++) {
     this->cell_dat.set_nrow(cellx, npart_cell_new.ptr[cellx]);
   }

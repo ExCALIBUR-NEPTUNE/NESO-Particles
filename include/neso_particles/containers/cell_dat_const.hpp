@@ -365,8 +365,8 @@ public:
    */
   CellDatConst(SYCLTargetSharedPtr sycl_target, const int ncells,
                const int nrow, const int ncol)
-      : sycl_target(sycl_target), ncells(ncells), nrow(nrow), ncol(ncol),
-        stride(nrow * ncol) {
+      : stride(nrow * ncol), sycl_target(sycl_target), ncells(ncells), nrow(nrow), ncol(ncol)
+        {
     this->d_ptr =
         sycl::malloc_device<T>(ncells * nrow * ncol, sycl_target->queue);
     this->fill(0);

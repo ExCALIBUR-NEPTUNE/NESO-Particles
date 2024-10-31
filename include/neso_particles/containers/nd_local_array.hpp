@@ -255,7 +255,7 @@ public:
    * @returns Event to wait on before using new values in NDLocalArray.
    */
   inline sycl::event set_async(const std::vector<T> &data) {
-    NESOASSERT(data.size() == this->size, "Input data is incorrectly sized.");
+    NESOASSERT(data.size() == static_cast<std::size_t>(this->size), "Input data is incorrectly sized.");
     const std::size_t size_bytes = sizeof(T) * this->size;
     if (size_bytes) {
       auto copy_event = this->sycl_target->queue.memcpy(
@@ -283,7 +283,7 @@ public:
    * @returns Event to wait on before using new values in the std::vector.
    */
   inline sycl::event get_async(std::vector<T> &data) {
-    NESOASSERT(data.size() == this->size, "Input data is incorrectly sized.");
+    NESOASSERT(data.size() == static_cast<std::size_t>(this->size), "Input data is incorrectly sized.");
     const std::size_t size_bytes = sizeof(T) * this->size;
     if (size_bytes) {
       auto copy_event = this->sycl_target->queue.memcpy(

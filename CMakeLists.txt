@@ -28,6 +28,7 @@ add_library(NESO-Particles INTERFACE)
 # Alias the name to the namespaces name. Can use in subdirectory or via Confiig
 # files with namespace
 add_library(NESO-Particles::NESO-Particles ALIAS NESO-Particles)
+target_compile_options(NESO-Particles INTERFACE "-Werror;-Wpedantic;-Wall;-Wextra")
 
 # Set standard
 set_property(TARGET NESO-Particles PROPERTY CXX_STANDARD 17)

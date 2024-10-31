@@ -177,14 +177,12 @@ TEST(ParticleLoop, templated_kernel) {
 
   pl.execute();
 
-  int local_count = 0;
   for (int cellx = 0; cellx < cell_count; cellx++) {
     auto p2 = A->get_dat(Sym<REAL>("P2"))->cell_dat.get_cell(cellx);
     const int nrow = p2->nrow;
 
     // for each particle in the cell
     for (int rowx = 0; rowx < nrow; rowx++) {
-      local_count++;
       // for each dimension
       for (int dimx = 0; dimx < ndim; dimx++) {
         EXPECT_EQ((*p2)[dimx][rowx], d0[dimx]);
@@ -337,14 +335,12 @@ TEST(ParticleLoop, global_array) {
       Access::write(Sym<REAL>("P2")), Access::read(g0));
 
   pl.execute();
-  int local_count = 0;
   for (int cellx = 0; cellx < cell_count; cellx++) {
     auto p2 = A->get_dat(Sym<REAL>("P2"))->cell_dat.get_cell(cellx);
     const int nrow = p2->nrow;
 
     // for each particle in the cell
     for (int rowx = 0; rowx < nrow; rowx++) {
-      local_count++;
       // for each dimension
       for (int dimx = 0; dimx < ndim; dimx++) {
         EXPECT_EQ((*p2)[dimx][rowx], 53);
@@ -401,14 +397,12 @@ TEST(ParticleLoop, global_array_ptr) {
       Access::write(Sym<REAL>("P2")), Access::read(g0));
 
   pl.execute();
-  int local_count = 0;
   for (int cellx = 0; cellx < cell_count; cellx++) {
     auto p2 = A->get_dat(Sym<REAL>("P2"))->cell_dat.get_cell(cellx);
     const int nrow = p2->nrow;
 
     // for each particle in the cell
     for (int rowx = 0; rowx < nrow; rowx++) {
-      local_count++;
       // for each dimension
       for (int dimx = 0; dimx < ndim; dimx++) {
         EXPECT_EQ((*p2)[dimx][rowx], 53);

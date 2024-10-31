@@ -205,6 +205,7 @@ public:
    * Note that the copy operator creates shallow copies of the array.
    */
   GlobalArray<T> &operator=(const GlobalArray<T> &) = default;
+  GlobalArray<T>(const GlobalArray<T> &) = default;
 
   /**
    *  Create a new GlobalArray on a compute target and given size.

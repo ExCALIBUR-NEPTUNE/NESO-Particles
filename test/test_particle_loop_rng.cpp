@@ -159,7 +159,6 @@ TEST(ParticleLoopRNG, zero_components) {
   auto A = particle_loop_common();
   auto domain = A->domain;
   auto mesh = domain->mesh;
-  const int cell_count = mesh->get_cell_count();
   auto sycl_target = A->sycl_target;
 
   INT count = 0;
@@ -388,9 +387,7 @@ TEST(ParticleLoopRNG, uniform_atomic_block_sampler) {
   auto A = particle_loop_common();
   auto domain = A->domain;
   auto mesh = domain->mesh;
-  const int cell_count = mesh->get_cell_count();
   auto sycl_target = A->sycl_target;
-  const int rank = sycl_target->comm_pair.rank_parent;
 
   auto zeroer = particle_loop(
       A,
@@ -495,7 +492,7 @@ TEST(ParticleLoopRNG, uniform_atomic_block_sampler) {
 
     // loop where no values are used
     particle_loop(
-        aa, [=](auto INDEX, auto RNG) {}, Access::read(ParticleLoopIndex{}),
+        aa, [=](auto /*INDEX*/, auto /*RNG*/) {}, Access::read(ParticleLoopIndex{}),
         Access::read(rng_device_kernel))
         ->execute();
 
@@ -558,9 +555,7 @@ TEST(ParticleLoopRNG, type_casting) {
   auto A = particle_loop_common();
   auto domain = A->domain;
   auto mesh = domain->mesh;
-  const int cell_count = mesh->get_cell_count();
   auto sycl_target = A->sycl_target;
-  const int rank = sycl_target->comm_pair.rank_parent;
 
   static_assert(
       std::is_same<typename HostAtomicBlockKernelRNG<REAL>::RNGValueType,

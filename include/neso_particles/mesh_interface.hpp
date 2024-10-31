@@ -135,6 +135,8 @@ public:
   CartesianHMesh(const CartesianHMesh &st) = delete;
   /// Disable (implicit) copies.
   CartesianHMesh &operator=(CartesianHMesh const &a) = delete;
+ 
+  virtual ~CartesianHMesh() = default;
 
   /// Holds the first cell this rank owns in each dimension.
   int cell_starts[3] = {0, 0, 0};
