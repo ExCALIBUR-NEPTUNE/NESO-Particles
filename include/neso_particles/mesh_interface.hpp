@@ -121,7 +121,6 @@ typedef std::shared_ptr<HMesh> HMeshSharedPtr;
 class CartesianHMesh : public HMesh {
 private:
   int cell_count;
-  MPI_Comm comm;
   MPI_Comm comm_cart;
   int periods[3] = {1, 1, 1};
   int coords[3] = {0, 0, 0};
@@ -183,10 +182,10 @@ public:
    * @param stencil_width Width of the stencil, in number of cells, used to
    * determine MPI neighbours.
    */
-  CartesianHMesh(MPI_Comm comm_, const int ndim, std::vector<int> &dims,
+  CartesianHMesh(MPI_Comm comm, const int ndim, std::vector<int> &dims,
                  const double extent = 1.0, const int subdivision_order = 1,
                  const int stencil_width = 0)
-      : comm(comm_), stencil_width(stencil_width), ndim(ndim), dims(dims),
+      : stencil_width(stencil_width), ndim(ndim), dims(dims),
         subdivision_order(subdivision_order), cell_width_coarse(extent),
         cell_width_fine(extent / ((double)std::pow(2, subdivision_order))),
         inverse_cell_width_coarse(1.0 / extent),
