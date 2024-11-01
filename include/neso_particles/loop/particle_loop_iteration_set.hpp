@@ -120,15 +120,29 @@ struct ParticleLoopIterationSet {
 struct ParticleLoopBlockDevice {
   std::size_t offset_cell;
   std::size_t offset_layer;
+  int const *RESTRICT d_npart_cell;
 
   /**
    * Convert a sycl::nd_item<2> into a cell, layer pair.
+   * @param[in] idx SYCL nd_item for work item.
+   * @param[in, out] cell Cell for iteration.
+   * @param[in, out] layer Layer for iteration.
    */
   inline void get_cell_layer(const sycl::nd_item<2> &idx,
                              std::size_t *RESTRICT cell,
                              std::size_t *RESTRICT layer) const {
     *cell = idx.get_global_id(0) + this->offset_cell;
     *layer = idx.get_global_id(1) + this->offset_layer;
+  }
+
+  /**
+   * @param cell Cell for this work item, see get_cell_layer.
+   * @param layer Layer for this work item, see get_cell_layer.
+   * @returns True if work item should operate on particles.
+   */
+  inline bool work_item_required(const std::size_t cell,
+                                 const std::size_t layer) const {
+    return layer < this->d_npart_cell[cell];
   }
 
   ParticleLoopBlockDevice() = default;
@@ -171,6 +185,9 @@ protected:
   const std::size_t ncell;
   /// Host accessible pointer to the number of particles in each cell.
   int *h_npart_cell;
+  /// Device accessible pointer to the number of particles in each cell.
+  int *d_npart_cell;
+
   /// The last iteration set produced
   std::vector<ParticleLoopBlockHost> iteration_set;
 
@@ -181,7 +198,7 @@ protected:
     const std::size_t outer_size =
         static_cast<std::size_t>(div_mod.quot + (div_mod.rem == 0 ? 0 : 1)) *
         local_size;
-    return local_size;
+    return outer_size;
   }
 
 public:
@@ -192,12 +209,13 @@ public:
    *  @param nbin Number of blocks of cells.
    *  @param ncell Number of cells.
    *  @param h_npart_cell Host accessible array of cell particle counts.
+   *  @param d_npart_cell Device accessible array of cell particle counts.
    */
   ParticleLoopBlockIterationSet(SYCLTargetSharedPtr sycl_target,
                                 const std::size_t nbin, const std::size_t ncell,
-                                int *h_npart_cell)
+                                int *h_npart_cell, int *d_npart_cell)
       : sycl_target(sycl_target), nbin(std::min(ncell, nbin)), ncell(ncell),
-        h_npart_cell(h_npart_cell) {}
+        h_npart_cell(h_npart_cell), d_npart_cell(d_npart_cell) {}
 
   /**
    *  Creates iteration set creator for a given set of cell particle counts.
@@ -212,7 +230,8 @@ public:
                                 const std::size_t nbin)
       : sycl_target(particle_dat->sycl_target),
         nbin(std::min(particle_dat->ncell, nbin)), ncell(particle_dat->ncell),
-        h_npart_cell(particle_dat->h_npart_cell) {}
+        h_npart_cell(particle_dat->h_npart_cell),
+        d_npart_cell(particle_dat->d_npart_cell) {}
 
   /**
    * Get a complete iteration set for a particle loop for all cells.
@@ -238,7 +257,7 @@ public:
     min_occupancy /= local_size;
     min_occupancy *= local_size;
     if (min_occupancy > 0) {
-      ParticleLoopBlockDevice block_device{0, 0};
+      ParticleLoopBlockDevice block_device{0, 0, this->d_npart_cell};
       this->iteration_set.emplace_back(
           block_device, false,
           sycl::nd_range<2>(
@@ -262,7 +281,8 @@ public:
       if (cell_max_occ > 0) {
         const std::size_t global_range =
             this->get_global_size(cell_max_occ, local_size);
-        ParticleLoopBlockDevice block_device{start, min_occupancy};
+        ParticleLoopBlockDevice block_device{start, min_occupancy,
+                                             this->d_npart_cell};
         this->iteration_set.emplace_back(
             block_device, true,
             sycl::nd_range<2>(sycl::range<2>(bin_width, global_range),
@@ -290,7 +310,7 @@ public:
     const std::size_t global_range =
         this->get_global_size(this->h_npart_cell[cell], local_size);
 
-    ParticleLoopBlockDevice block_device{cell, 0};
+    ParticleLoopBlockDevice block_device{cell, 0, this->d_npart_cell};
 
     this->iteration_set.emplace_back(
         block_device, true,
