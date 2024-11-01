@@ -229,8 +229,8 @@ public:
   ParticleLoopBlockIterationSet(ParticleDatSharedPtr<T> particle_dat,
                                 const std::size_t nbin)
       : sycl_target(particle_dat->sycl_target),
-        nbin(std::min(particle_dat->ncell, nbin)), ncell(particle_dat->ncell),
-        h_npart_cell(particle_dat->h_npart_cell),
+        nbin(std::min(static_cast<std::size_t>(particle_dat->ncell), nbin)),
+        ncell(particle_dat->ncell), h_npart_cell(particle_dat->h_npart_cell),
         d_npart_cell(particle_dat->d_npart_cell) {}
 
   /**

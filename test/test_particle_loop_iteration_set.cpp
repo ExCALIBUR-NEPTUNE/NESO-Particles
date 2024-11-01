@@ -177,6 +177,47 @@ TEST(ParticleLoop, iteration_set) {
   const int cell_count = mesh->get_cell_count();
   auto sycl_target = A->sycl_target;
 
+  particle_loop(
+      A,
+      [=](auto INDEX, auto OUT_INT) {
+        OUT_INT.at(0) = INDEX.get_loop_linear_index();
+      },
+      Access::read(ParticleLoopIndex{}), Access::write(Sym<INT>("OUT_INT")))
+      ->execute();
+
+  ParticleLoopImplementation::ParticleLoopBlockIterationSet ish{A->mpi_rank_dat,
+                                                                16};
+
+  auto ptr = A->get_dat(Sym<INT>("OUT_INT"))->cell_dat.device_ptr();
+
+  EventStack es;
+  auto is = ish.get_all_cells();
+  for (auto &blockx : is) {
+    const auto block_device = blockx.block_device;
+    es.push(sycl_target->queue.submit([&](sycl::handler &cgh) {
+      cgh.parallel_for<>(blockx.loop_iteration_set, [=](sycl::nd_item<2> idx) {
+        std::size_t cell;
+        std::size_t layer;
+        block_device.get_cell_layer(idx, &cell, &layer);
+        if (block_device.work_item_required(cell, layer)) {
+          ptr[cell][1][layer] = ptr[cell][0][layer];
+        }
+      });
+    }));
+  }
+  es.wait();
+
+  ErrorPropagate ep(sycl_target);
+  auto k_ep = ep.device_ptr();
+  particle_loop(
+      A,
+      [=](auto OUT_INT) {
+        NESO_KERNEL_ASSERT(OUT_INT.at(0) == OUT_INT.at(1), k_ep);
+      },
+      Access::read(Sym<INT>("OUT_INT")))
+      ->execute();
+  ASSERT_FALSE(ep.get_flag());
+
   A->free();
   sycl_target->free();
   mesh->free();
