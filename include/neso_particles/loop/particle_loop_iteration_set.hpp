@@ -160,16 +160,19 @@ struct ParticleLoopBlockHost {
   /// Does the kernel need to check the loop bounds for the layers in each
   /// cell.
   bool layer_bounds_check_required{true};
+  /// The actual size of the local range used.
+  std::size_t local_size;
   /// The iteration set for the parallel loop
   sycl::nd_range<2> loop_iteration_set;
 
   ParticleLoopBlockHost(const ParticleLoopBlockHost &) = default;
   ParticleLoopBlockHost(ParticleLoopBlockDevice block_device,
                         const bool layer_bounds_check_required,
+                        const std::size_t local_size,
                         sycl::nd_range<2> loop_iteration_set)
       : block_device(block_device),
         layer_bounds_check_required(layer_bounds_check_required),
-        loop_iteration_set(loop_iteration_set) {}
+        local_size(local_size), loop_iteration_set(loop_iteration_set) {}
 };
 
 /**
@@ -259,7 +262,7 @@ public:
     if (min_occupancy > 0) {
       ParticleLoopBlockDevice block_device{0, 0, this->d_npart_cell};
       this->iteration_set.emplace_back(
-          block_device, false,
+          block_device, false, local_size,
           sycl::nd_range<2>(
               // min_occupancy is already a multiple of local_size by
               // construction.
@@ -284,7 +287,7 @@ public:
         ParticleLoopBlockDevice block_device{start, min_occupancy,
                                              this->d_npart_cell};
         this->iteration_set.emplace_back(
-            block_device, true,
+            block_device, true, local_size,
             sycl::nd_range<2>(sycl::range<2>(bin_width, global_range),
                               sycl::range<2>(1, local_size)));
       }
@@ -313,7 +316,7 @@ public:
     ParticleLoopBlockDevice block_device{cell, 0, this->d_npart_cell};
 
     this->iteration_set.emplace_back(
-        block_device, true,
+        block_device, true, local_size,
         sycl::nd_range<2>(sycl::range<2>(1, global_range),
                           sycl::range<2>(1, local_size)));
 
