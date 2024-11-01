@@ -131,6 +131,41 @@ TEST(ParticleLoop, iteration_set_base) {
   }
 
   // Test the all cell iteration set
+  {
+    std::set<std::array<std::size_t, 2>> set_test;
+    auto is = ish.get_all_cells(local_size);
+
+    for (auto &blockx : is) {
+      auto range_global = blockx.loop_iteration_set.get_global_range();
+      auto range_local = blockx.loop_iteration_set.get_local_range();
+      EXPECT_EQ(range_local.get(0), 1);
+      EXPECT_EQ(range_local.get(1), local_size);
+      const std::size_t cell_start = blockx.block_device.offset_cell;
+      const std::size_t cell_end = range_global.get(0) + cell_start;
+      const std::size_t layer_start = blockx.block_device.offset_layer;
+      const std::size_t layer_end = range_global.get(1) + layer_start;
+      for (std::size_t cell = cell_start; cell < cell_end; cell++) {
+        for (std::size_t layer = layer_start; layer < layer_end; layer++) {
+          if (blockx.layer_bounds_check_required) {
+            if (blockx.block_device.work_item_required(cell, layer)) {
+              set_test.insert({cell, layer});
+            }
+          } else {
+            set_test.insert({cell, layer});
+          }
+        }
+      }
+    }
+
+    std::set<std::array<std::size_t, 2>> set_correct;
+    for (std::size_t cell = 0; cell < Ncell; cell++) {
+      for (std::size_t layer = 0; layer < h_npart_cell.at(cell); layer++) {
+        set_correct.insert({cell, layer});
+      }
+    }
+    EXPECT_EQ(set_correct.size(), set_test.size());
+    EXPECT_EQ(set_correct, set_test);
+  }
 
   sycl_target->free();
 }
