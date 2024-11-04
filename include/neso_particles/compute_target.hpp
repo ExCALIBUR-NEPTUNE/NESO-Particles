@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "communication.hpp"
+#include "parameters.hpp"
 #include "profiling.hpp"
 #include "sycl_typedefs.hpp"
 #include "typedefs.hpp"

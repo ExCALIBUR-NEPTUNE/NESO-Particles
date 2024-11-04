@@ -125,6 +125,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_interface_local_decomp.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/packing_unpacking.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/parallel_initialisation.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/parameters.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_dat.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_group.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_group_impl.hpp

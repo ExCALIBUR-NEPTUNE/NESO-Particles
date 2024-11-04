@@ -292,6 +292,32 @@ inline std::string fixed_width_format(REAL value) {
 // TODO Move MPI typedefs to right place when dmplex branch merged.
 
 /**
+ * Helper function to retrive size_t values from environment variables.
+ *
+ * @param key Name of environment variable.
+ * @param default_value Default value to return if the key is not found.
+ * @returns Value from environment variable.
+ */
+inline std::size_t get_env_size_t(const std::string key,
+                                  std::size_t default_value) {
+  char *var_char;
+  const bool var_exists = (var_char = std::getenv(key.c_str())) != nullptr;
+  if (var_exists) {
+    try {
+      std::size_t value = static_cast<std::size_t>(std::stoi(var_char));
+      return value;
+    } catch (std::out_of_range const &ex) {
+      nprint("Could not read", key,
+             "and convert to int. Value of environment variable is:", var_char,
+             "Will return the default value of:", default_value);
+      return default_value;
+    }
+  } else {
+    return default_value;
+  }
+}
+
+/**
  * @returns True if device aware MPI is enabled.
  */
 inline bool device_aware_mpi_enabled() {
