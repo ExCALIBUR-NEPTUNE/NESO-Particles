@@ -79,7 +79,7 @@ TEST(ParticleLoop, iteration_set_base) {
                 [&]() { return dst(rng); });
 
   ParticleLoopImplementation::ParticleLoopBlockIterationSet ish{
-      sycl_target, Nbin, Ncell, h_npart_cell.data(), h_npart_cell.data()};
+      sycl_target, Ncell, h_npart_cell.data(), h_npart_cell.data()};
 
   // Test the single cell iteration set
   {
@@ -133,7 +133,7 @@ TEST(ParticleLoop, iteration_set_base) {
   // Test the all cell iteration set
   {
     std::set<std::array<std::size_t, 2>> set_test;
-    auto is = ish.get_all_cells(local_size);
+    auto is = ish.get_all_cells(Nbin, local_size);
 
     for (auto &blockx : is) {
       auto range_global = blockx.loop_iteration_set.get_global_range();
@@ -185,8 +185,8 @@ TEST(ParticleLoop, iteration_set) {
       Access::read(ParticleLoopIndex{}), Access::write(Sym<INT>("OUT_INT")))
       ->execute();
 
-  ParticleLoopImplementation::ParticleLoopBlockIterationSet ish{A->mpi_rank_dat,
-                                                                16};
+  ParticleLoopImplementation::ParticleLoopBlockIterationSet ish{
+      A->mpi_rank_dat};
 
   auto ptr = A->get_dat(Sym<INT>("OUT_INT"))->cell_dat.device_ptr();
 

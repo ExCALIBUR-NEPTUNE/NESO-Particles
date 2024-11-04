@@ -74,6 +74,8 @@ public:
   CommPair comm_pair;
   /// ProfileMap to log profiling data related to this SYCLTarget.
   ProfileMap profile_map;
+  /// Parameters for generic properties, e.g. loop local sizes.
+  std::shared_ptr<Parameters> parameters;
 
   /// Disable (implicit) copies.
   SYCLTarget(const SYCLTarget &st) = delete;
@@ -152,6 +154,15 @@ public:
       this->profile_map.set("SYCL", "DEVICE_INDEX", device_index);
       this->profile_map.set(
           "SYCL", this->device.get_info<sycl::info::device::name>(), 0);
+
+      // Setup the parameter store
+      this->parameters = std::make_shared<Parameters>();
+      this->parameters->set("LOOP_LOCAL_SIZE",
+                            std::make_shared<SizeTParameter>(get_env_size_t(
+                                "NESO_PARTICLES_LOOP_LOCAL_SIZE", 256)));
+      this->parameters->set(
+          "LOOP_NBIN", std::make_shared<SizeTParameter>(
+                           get_env_size_t("NESO_PARTICLES_LOOP_NBIN", 16)));
     }
 
     this->queue = sycl::queue(this->device);

@@ -732,9 +732,10 @@ protected:
     this->h_npart_cell_lb = selection.h_npart_cell;
     this->d_npart_cell_lb = selection.d_npart_cell;
     this->d_npart_cell_es_lb = selection.d_npart_cell_es;
-    this->iteration_set =
-        std::make_unique<ParticleLoopImplementation::ParticleLoopIterationSet>(
-            1, selection.ncell, this->h_npart_cell_lb);
+    this->iteration_set = std::make_unique<
+        ParticleLoopImplementation::ParticleLoopBlockIterationSet>(
+        this->sycl_target, selection.ncell, this->h_npart_cell_lb,
+        this->d_npart_cell_lb);
   }
 
 public:
@@ -808,43 +809,54 @@ public:
     this->apply_pre_loop(global_info);
 
     auto k_kernel = ParticleLoopImplementation::get_kernel(this->kernel);
-    auto k_npart_cell_lb = this->d_npart_cell_lb;
     auto k_map_cells_to_particles = selection.d_map_cells_to_particles;
 
-    auto is = this->iteration_set->get(cell, global_info.local_size);
     this->profiling_region_metrics(this->iteration_set->iteration_set_size);
-    const int nbin = std::get<0>(is);
 
+    auto &is = this->iteration_set->iteration_set;
+    if (cell != std::nullopt) {
+      // Num local bytes is already used to compute the local size
+      is = this->iteration_set->get_single_cell(cell.value(),
+                                                global_info.local_size, 0);
+    } else {
+      const std::size_t nbin = this->sycl_target->parameters
+                                   ->template get<SizeTParameter>("LOOP_NBIN")
+                                   ->value;
+      // Num local bytes is already used to compute the local size
+      is = this->iteration_set->get_all_cells(nbin, global_info.local_size, 0);
+    }
     this->sycl_target->profile_map.inc(
         "ParticleLoopSubGroup", "Init", 1,
         profile_elapsed(t0, profile_timestamp()));
 
-    for (int binx = 0; binx < nbin; binx++) {
-      sycl::nd_range<2> ndr = std::get<1>(is).at(binx);
-      const size_t cell_offset = std::get<2>(is).at(binx);
+    auto k_npart_cell_lb = this->d_npart_cell_lb;
+
+    for (auto &blockx : is) {
+      const auto block_device = blockx.block_device;
       this->event_stack.push(
           this->sycl_target->queue.submit([&](sycl::handler &cgh) {
             loop_parameter_type loop_args;
             create_loop_args(cgh, loop_args, &global_info);
-            cgh.parallel_for<>(ndr, [=](sycl::nd_item<2> idx) {
-              // const std::size_t index = idx.get_global_linear_id();
-              const size_t cellxs = idx.get_global_id(0) + cell_offset;
-              const size_t layerxs = idx.get_global_id(1);
-              const int cellx = static_cast<int>(cellxs);
-              const int loop_layerx = static_cast<int>(layerxs);
-              ParticleLoopImplementation::ParticleLoopIteration iterationx;
-              if (loop_layerx < k_npart_cell_lb[cellx]) {
-                const int layerx = static_cast<int>(
-                    k_map_cells_to_particles[cellxs][0][layerxs]);
-                kernel_parameter_type kernel_args;
-                iterationx.local_sycl_index = idx.get_local_id(1);
-                iterationx.cellx = cellx;
-                iterationx.layerx = layerx;
-                iterationx.loop_layerx = loop_layerx;
-                create_kernel_args(iterationx, loop_args, kernel_args);
-                Tuple::apply(k_kernel, kernel_args);
-              }
-            });
+            cgh.parallel_for<>(
+                blockx.loop_iteration_set, [=](sycl::nd_item<2> idx) {
+                  std::size_t loop_cell;
+                  std::size_t loop_layer;
+                  block_device.get_cell_layer(idx, &loop_cell, &loop_layer);
+                  const int loop_cellx = static_cast<int>(loop_cell);
+                  const int loop_layerx = static_cast<int>(loop_layer);
+                  ParticleLoopImplementation::ParticleLoopIteration iterationx;
+                  if (block_device.work_item_required(loop_cell, loop_layer)) {
+                    const int layer = static_cast<int>(
+                        k_map_cells_to_particles[loop_cell][0][loop_layer]);
+                    iterationx.local_sycl_index = idx.get_local_id(1);
+                    iterationx.cellx = loop_cellx;
+                    iterationx.layerx = layer;
+                    iterationx.loop_layerx = loop_layerx;
+                    kernel_parameter_type kernel_args;
+                    create_kernel_args(iterationx, loop_args, kernel_args);
+                    Tuple::apply(k_kernel, kernel_args);
+                  }
+                });
           }));
     }
   }
