@@ -74,6 +74,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/departing_particle_identification.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/departing_particle_identification_impl.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/device_functions.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/device_limits.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/domain.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/error_propagate.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/common/bounding_box.hpp

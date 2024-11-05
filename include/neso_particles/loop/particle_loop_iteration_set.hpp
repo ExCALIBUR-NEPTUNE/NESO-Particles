@@ -260,11 +260,11 @@ public:
       ParticleLoopBlockDevice block_device{0, 0, this->d_npart_cell};
       this->iteration_set.emplace_back(
           block_device, false, local_size,
-          sycl::nd_range<2>(
+          this->sycl_target->device_limits.validate_nd_range(sycl::nd_range<2>(
               // min_occupancy is already a multiple of local_size by
               // construction.
               sycl::range<2>(this->ncell, min_occupancy),
-              sycl::range<2>(1, local_size)));
+              sycl::range<2>(1, local_size))));
     }
     // Create the peel loops
     for (std::size_t binx = 0; binx < nbin; binx++) {
@@ -287,8 +287,9 @@ public:
                                              this->d_npart_cell};
         this->iteration_set.emplace_back(
             block_device, true, local_size,
-            sycl::nd_range<2>(sycl::range<2>(bin_width, global_range),
-                              sycl::range<2>(1, local_size)));
+            this->sycl_target->device_limits.validate_nd_range(
+                sycl::nd_range<2>(sycl::range<2>(bin_width, global_range),
+                                  sycl::range<2>(1, local_size))));
       }
     }
 
@@ -317,8 +318,8 @@ public:
 
     this->iteration_set.emplace_back(
         block_device, true, local_size,
-        sycl::nd_range<2>(sycl::range<2>(1, global_range),
-                          sycl::range<2>(1, local_size)));
+        this->sycl_target->device_limits.validate_nd_range(sycl::nd_range<2>(
+            sycl::range<2>(1, global_range), sycl::range<2>(1, local_size))));
 
     this->iteration_set_size = npart;
     return this->iteration_set;

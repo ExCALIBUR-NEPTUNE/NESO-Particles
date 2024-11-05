@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "communication.hpp"
+#include "device_limits.hpp"
 #include "parameters.hpp"
 #include "profiling.hpp"
 #include "sycl_typedefs.hpp"
@@ -76,6 +77,8 @@ public:
   ProfileMap profile_map;
   /// Parameters for generic properties, e.g. loop local sizes.
   std::shared_ptr<Parameters> parameters;
+  /// Interface to device limits validation
+  DeviceLimits device_limits;
 
   /// Disable (implicit) copies.
   SYCLTarget(const SYCLTarget &st) = delete;
@@ -148,6 +151,7 @@ public:
       const int num_devices = devices.size();
       const int device_index = local_rank % num_devices;
       this->device = devices[device_index];
+      this->device_limits = DeviceLimits(this->device);
 
       this->profile_map.set("MPI", "MPI_COMM_WORLD_rank_local", local_rank);
       this->profile_map.set("SYCL", "DEVICE_COUNT", num_devices);
@@ -199,6 +203,7 @@ public:
       std::cout << "Using " << this->device.get_info<sycl::info::device::name>()
                 << std::endl;
       std::cout << "Kernel type: " << NESO_PARTICLES_DEVICE_LABEL << std::endl;
+      this->device_limits.print();
     }
   }
 
