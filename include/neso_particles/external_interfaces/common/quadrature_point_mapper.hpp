@@ -460,7 +460,7 @@ public:
         Access::read(Sym<INT>("ADDING_RANK_INDEX")), Access::read(sym))
         ->execute();
 
-    if (output.size() != static_cast<size_t>(ncomp_local)) {
+    if (output.size() != static_cast<std::size_t>(ncomp_local)) {
       output.resize(ncomp_local);
     }
 
