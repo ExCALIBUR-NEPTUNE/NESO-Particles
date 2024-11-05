@@ -61,8 +61,8 @@ protected:
 
     MHCellBuffer() = default;
     MHCellBuffer(INT cell, std::vector<std::byte> &buffer)
-        : cell(cell), buffer(buffer){};
-
+        : cell(cell), buffer(buffer) {};
+    virtual ~MHCellBuffer() = default;
     virtual inline std::size_t get_num_bytes() const override {
       return sizeof(INT) + sizeof(std::size_t) + this->buffer.size();
     }
@@ -277,8 +277,8 @@ public:
    */
   MeshHierarchyContainer(std::shared_ptr<MeshHierarchy> mesh_hierarchy,
                          std::map<INT, std::vector<T>> &data)
-      : mesh_hierarchy(mesh_hierarchy), comm(mesh_hierarchy->comm),
-        ece(mesh_hierarchy->comm) {
+      : comm(mesh_hierarchy->comm), ece(mesh_hierarchy->comm),
+        mesh_hierarchy(mesh_hierarchy) {
 
     // map from rank to packed MHCellBuffers
     std::map<int, SerialContainer<MHCellBuffer>> map_rank_buffers;
@@ -346,6 +346,7 @@ public:
     generic_unpack(map_incoming_buffers);
   }
 
+  virtual ~MeshHierarchyContainer() = default;
   /**
    * Free the container.
    */

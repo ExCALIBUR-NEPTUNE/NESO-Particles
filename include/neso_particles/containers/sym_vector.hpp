@@ -98,7 +98,8 @@ template <typename T> struct KernelParameter<Access::Write<SymVector<T>>> {
  */
 template <typename T>
 inline SymVectorImplGetConstT<T>
-create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
+create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
+                [[maybe_unused]] sycl::handler &cgh,
                 Access::Read<SymVector<T> *> &a) {
   return a.obj->impl_get_const();
 }
@@ -106,9 +107,10 @@ create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
  * Method to compute access to a SymVector (write).
  */
 template <typename T>
-inline SymVectorImplGetT<T> create_loop_arg(ParticleLoopGlobalInfo *global_info,
-                                            sycl::handler &cgh,
-                                            Access::Write<SymVector<T> *> &a) {
+inline SymVectorImplGetT<T>
+create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
+                [[maybe_unused]] sycl::handler &cgh,
+                Access::Write<SymVector<T> *> &a) {
   return a.obj->impl_get();
 }
 

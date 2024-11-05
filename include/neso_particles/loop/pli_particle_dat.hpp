@@ -90,7 +90,8 @@ template <typename T> struct KernelParameter<Access::Write<ParticleDatT<T>>> {
  */
 template <typename T>
 inline ParticleDatImplGetConstT<T>
-create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
+create_loop_arg(ParticleLoopGlobalInfo *global_info,
+                [[maybe_unused]] sycl::handler &cgh,
                 Access::Read<Sym<T> *> &a) {
   auto sym = *a.obj;
   return global_info->particle_group->get_dat(sym)->impl_get_const();
@@ -100,7 +101,8 @@ create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
  */
 template <typename T>
 inline ParticleDatImplGetT<T>
-create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
+create_loop_arg(ParticleLoopGlobalInfo *global_info,
+                [[maybe_unused]] sycl::handler &cgh,
                 Access::Write<Sym<T> *> &a) {
   auto sym = *a.obj;
   return global_info->particle_group->get_dat(sym)->impl_get();
@@ -110,7 +112,8 @@ create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
  */
 template <typename T>
 inline ParticleDatImplGetConstT<T>
-create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
+create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
+                [[maybe_unused]] sycl::handler &cgh,
                 Access::Read<ParticleDatT<T> *> &a) {
   return a.obj->impl_get_const();
 }
@@ -119,7 +122,8 @@ create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
  */
 template <typename T>
 inline ParticleDatImplGetT<T>
-create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
+create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
+                [[maybe_unused]] sycl::handler &cgh,
                 Access::Write<ParticleDatT<T> *> &a) {
   return a.obj->impl_get();
 }

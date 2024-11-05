@@ -163,11 +163,11 @@ public:
                        const std::vector<int> &cell_counts)
       : sycl_target(sycl_target), ndim(ndim), origin(origin), extents(extents),
         cell_counts(cell_counts) {
-    NESOASSERT(origin.size() == ndim,
+    NESOASSERT(origin.size() == static_cast<std::size_t>(ndim),
                "Missmatch between origin.size and ndim.");
-    NESOASSERT(extents.size() == ndim,
+    NESOASSERT(extents.size() == static_cast<std::size_t>(ndim),
                "Missmatch between extents.size and ndim.");
-    NESOASSERT(cell_counts.size() == ndim,
+    NESOASSERT(cell_counts.size() == static_cast<std::size_t>(ndim),
                "Missmatch between cell_counts.size and ndim.");
 
     this->cell_widths = std::vector<REAL>(ndim);

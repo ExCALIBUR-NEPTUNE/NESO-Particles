@@ -286,7 +286,7 @@ inline bool device_aware_mpi_enabled() {
   char *var_char;
   const bool var_exists =
       (var_char = std::getenv("NESO_PARTICLES_DEVICE_AWARE_MPI")) != nullptr;
-  bool enabled;
+  bool enabled = false;
   // If the env var exists then this sets if device MPI is enabled otherwise
   // use the cmake default
   if (var_exists) {

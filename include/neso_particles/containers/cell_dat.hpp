@@ -94,20 +94,24 @@ inline void create_kernel_arg(ParticleLoopIteration &iterationx, T ***&rhs,
   lhs.cell = iterationx.cellx;
 }
 template <typename T>
-inline T *const *const *create_loop_arg(ParticleLoopGlobalInfo *global_info,
-                                        sycl::handler &cgh,
-                                        Access::Read<CellDat<T> *> &a) {
+inline T *const *const *
+create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
+                [[maybe_unused]] sycl::handler &cgh,
+                Access::Read<CellDat<T> *> &a) {
   return a.obj->impl_get_const();
 }
 template <typename T>
-inline T ***create_loop_arg(ParticleLoopGlobalInfo *global_info,
-                            sycl::handler &cgh,
-                            Access::Write<CellDat<T> *> &a) {
+inline T ***
+create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
+                [[maybe_unused]] sycl::handler &cgh,
+                Access::Write<CellDat<T> *> &a) {
   return a.obj->impl_get();
 }
 template <typename T>
-inline T ***create_loop_arg(ParticleLoopGlobalInfo *global_info,
-                            sycl::handler &cgh, Access::Add<CellDat<T> *> &a) {
+inline T ***
+create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
+                [[maybe_unused]] sycl::handler &cgh,
+                Access::Add<CellDat<T> *> &a) {
   return a.obj->impl_get();
 }
 } // namespace ParticleLoopImplementation
@@ -260,7 +264,7 @@ public:
    */
   inline CellDat(SYCLTargetSharedPtr sycl_target, const int ncells,
                  const int ncol)
-      : sycl_target(sycl_target), ncells(ncells), ncol(ncol), nrow_max(0) {
+      : nrow_max(0), sycl_target(sycl_target), ncells(ncells), ncol(ncol) {
 
     this->nrow = std::vector<INT>(ncells);
     this->d_ptr =

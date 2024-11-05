@@ -47,8 +47,8 @@ public:
    * @param particle_group ParticleGroup containing particle positions.
    * @param map_cell Optionally map a particular cell.
    */
-  virtual inline void map_cells(ParticleGroup &particle_group,
-                                const int map_cell = -1){};
+  virtual inline void map_cells([[maybe_unused]] ParticleGroup &particle_group,
+                                [[maybe_unused]] const int map_cell = -1) {};
 };
 
 typedef std::shared_ptr<LocalMapper> LocalMapperSharedPtr;
@@ -64,22 +64,24 @@ public:
   /// Disable (implicit) copies.
   DummyLocalMapperT &operator=(DummyLocalMapperT const &a) = delete;
 
-  ~DummyLocalMapperT(){};
+  virtual ~DummyLocalMapperT() {};
 
   /**
    *  No-op Constructor.
    */
-  DummyLocalMapperT(){};
+  DummyLocalMapperT() {};
 
   /**
    *  No-op implementation of map.
    */
-  inline void map(ParticleGroup &particle_group, const int map_cell = -1){};
+  inline void map([[maybe_unused]] ParticleGroup &particle_group,
+                  [[maybe_unused]] const int map_cell = -1) {};
 
   /**
    *  No-op implementation of callback.
    */
-  inline void particle_group_callback(ParticleGroup &particle_group){};
+  inline void
+  particle_group_callback([[maybe_unused]] ParticleGroup &particle_group) {};
 };
 
 inline std::shared_ptr<DummyLocalMapperT> DummyLocalMapper() {

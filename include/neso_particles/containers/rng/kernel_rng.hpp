@@ -69,7 +69,7 @@ template <
         bool> = true>
 inline Access::KernelRNG::Read<typename T::SpecialisationType>
 create_loop_arg(ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
-                sycl::handler &cgh, Access::Read<T *> &a) {
+                [[maybe_unused]] sycl::handler &cgh, Access::Read<T *> &a) {
   return a.obj->impl_get_const(global_info);
 }
 
@@ -77,9 +77,10 @@ create_loop_arg(ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
  * Create the kernel argument for a KernelRNG.
  */
 template <typename T>
-inline void create_kernel_arg(ParticleLoopIteration &iterationx,
-                              Access::KernelRNG::Read<T> &rhs,
-                              Access::KernelRNG::Read<T> &lhs) {
+inline void
+create_kernel_arg([[maybe_unused]] ParticleLoopIteration &iterationx,
+                  Access::KernelRNG::Read<T> &rhs,
+                  Access::KernelRNG::Read<T> &lhs) {
   lhs = rhs;
 }
 

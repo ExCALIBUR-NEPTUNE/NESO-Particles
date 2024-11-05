@@ -131,7 +131,7 @@ public:
    */
   inline void disable() { this->enabled = false; }
 
-  ~ProfileMap(){};
+  ~ProfileMap() {};
 
   /**
    * Construct a new empty instance.
@@ -231,7 +231,8 @@ public:
   /**
    * Write events and regions to JSON file.
    */
-  inline void write_events_json(std::string basename, const int rank) {
+  inline void write_events_json([[maybe_unused]] std::string basename,
+                                [[maybe_unused]] const int rank) {
 #ifdef NESO_PARTICLES_PROFILING_REGION
     basename += "." + std::to_string(rank) + ".json";
     std::ofstream fh;
