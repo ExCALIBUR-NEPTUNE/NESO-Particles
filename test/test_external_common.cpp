@@ -622,7 +622,6 @@ TEST(ExternalCommon, cartesian_to_barycentric_quad) {
                                                   y3, x, y, l0, l1, l2, l3);
   };
 
-
   auto lambda_wrap_call = [&](const REAL x, const REAL y, REAL *RESTRICT l0,
                               REAL *RESTRICT l1, REAL *RESTRICT l2,
                               REAL *RESTRICT l3) {

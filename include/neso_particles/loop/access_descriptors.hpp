@@ -8,7 +8,9 @@ namespace NESO::Particles::Access {
 /**
  * Generic base type for an access descriptor around an object of type T.
  */
-template <typename T> struct AccessGeneric { T obj; };
+template <typename T> struct AccessGeneric {
+  T obj;
+};
 
 /**
  *  Read access descriptor.

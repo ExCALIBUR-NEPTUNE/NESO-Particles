@@ -200,7 +200,7 @@ public:
    *  cells.
    */
   VTKMeshHierarchyCellsWriter(std::shared_ptr<MeshHierarchy> mesh_hierarchy)
-      : mesh_hierarchy(mesh_hierarchy), next_vert_index(0){};
+      : mesh_hierarchy(mesh_hierarchy), next_vert_index(0) {};
 
   /**
    *  Add a cell to the list of cells to be written to the output file.

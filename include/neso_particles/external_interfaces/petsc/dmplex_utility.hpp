@@ -45,10 +45,12 @@ inline int uniform_within_dmplex_cell(
   const int ndim = mesh->get_ndim();
 
   for (int dx = 0; dx < ndim; dx++) {
-    NESOASSERT(positions.at(dx).size() >= offset + npart,
+    NESOASSERT(positions.at(dx).size() >=
+                   static_cast<std::size_t>(offset + npart),
                "Positions vector is too small.");
   }
-  NESOASSERT(cells.size() >= offset + npart, "Cells vector is too small.");
+  NESOASSERT(cells.size() >= static_cast<std::size_t>(offset + npart),
+             "Cells vector is too small.");
 
   auto bounding_box = mesh->dmh->get_cell_bounding_box(cell);
   std::vector<std::uniform_real_distribution<double>> dists;

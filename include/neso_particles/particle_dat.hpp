@@ -311,8 +311,7 @@ public:
    * @param d_layers_new Device pointer to an array of new layers.
    * @returns sycl::event to wait on for data copy.
    */
-  inline sycl::event copy_particle_data(const int npart,
-                                        const INT *d_cells_old,
+  inline sycl::event copy_particle_data(const int npart, const INT *d_cells_old,
                                         const INT *d_cells_new,
                                         const INT *d_layers_old,
                                         const INT *d_layers_new) {

@@ -5,7 +5,7 @@ class CartesianHMeshLocalMapperTester : public CartesianHMeshLocalMapperT {
 public:
   CartesianHMeshLocalMapperTester(SYCLTargetSharedPtr sycl_target,
                                   CartesianHMeshSharedPtr mesh)
-      : CartesianHMeshLocalMapperT(sycl_target, mesh){};
+      : CartesianHMeshLocalMapperT(sycl_target, mesh) {};
 
   inline int get_cell_lookups(int dim, int cell) {
     if ((dim < 0) || (dim >= (this->ndim))) {

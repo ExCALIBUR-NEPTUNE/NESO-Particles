@@ -131,8 +131,6 @@ TEST(PETSC, dmplex_project_evaluate_qpm_vertex) {
 
   auto mesh =
       std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
-  const int ndim = mesh->get_ndim();
-  const int cell_count = mesh->get_cell_count();
   auto sycl_target =
       std::make_shared<SYCLTarget>(GPU_SELECTOR, mesh->get_comm());
   auto mapper =
@@ -275,9 +273,6 @@ TEST(PETSC, dmplex_evaluate_barycentric) {
 
   auto qpm =
       PetscInterface::make_quadrature_point_mapper_vertex(sycl_target, domain);
-
-  ErrorPropagate ep(sycl_target);
-  auto k_ep = ep.device_ptr();
 
   ParticleSpec particle_spec{
       ParticleProp(Sym<REAL>("P"), ndim, true), ParticleProp(Sym<REAL>("Q"), 1),
@@ -446,9 +441,6 @@ TEST(PETSC, dmplex_project_barycentric_dg) {
   auto qpm =
       PetscInterface::make_quadrature_point_mapper_vertex(sycl_target, domain);
 
-  ErrorPropagate ep(sycl_target);
-  auto k_ep = ep.device_ptr();
-
   ParticleSpec particle_spec{
       ParticleProp(Sym<REAL>("P"), ndim, true), ParticleProp(Sym<REAL>("Q"), 1),
       ParticleProp(Sym<REAL>("Q2"), 2), ParticleProp(Sym<REAL>("R"), 1),
@@ -564,9 +556,6 @@ TEST(PETSC, dmplex_project_barycentric_coeffs) {
 
   auto qpm =
       PetscInterface::make_quadrature_point_mapper_vertex(sycl_target, domain);
-
-  ErrorPropagate ep(sycl_target);
-  auto k_ep = ep.device_ptr();
 
   ParticleSpec particle_spec{
       ParticleProp(Sym<REAL>("P"), ndim, true), ParticleProp(Sym<REAL>("Q"), 1),

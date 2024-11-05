@@ -278,7 +278,6 @@ public:
     this->collect_cells();
 
     auto particle_group = this->get_particle_group(particles);
-    const auto k_ndim = particle_group->position_dat->ncomp;
     particle_loop(
         "BoundaryInteraction2D::find_intersections_0", particles,
         [=](auto C) { C.at(0) = -1; }, Access::write(this->boundary_label_sym))

@@ -295,7 +295,6 @@ protected:
             for (int cx = 0; cx < ncomp; cx++) {
               REAL tmp_accumulation = 0.0;
               for (int vx = 0; vx < num_vertices; vx++) {
-                const REAL lx = B.at(vx);
                 tmp_accumulation += B.at(vx) * SRC.at(cx, vx);
               }
               DST.at(cx) = iv * tmp_accumulation;
@@ -313,6 +312,7 @@ public:
   ExternalCommon::QuadraturePointMapperSharedPtr qpm;
   std::string function_space;
   int polynomial_order;
+  virtual ~DMPlexProjectEvaluateBarycentric() = default;
   DMPlexProjectEvaluateBarycentric() = default;
   inline const static Sym<REAL> sym_barycentric_coords =
       Sym<REAL>("NESO_PARTICLES_DMPLEX_PROJ_EVAL_BARY_COORDS");

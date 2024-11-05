@@ -319,6 +319,7 @@ TEST(PETScBoundary2D, collect_2d) {
 
   for (int edgex = 0; edgex < num_edges; edgex++) {
     const int group_id = h_int.at(edgex * ncomp_int + 0);
+    ASSERT_EQ(group_id, 1);
     const int facet_global_id = h_int.at(edgex * ncomp_int + 1);
     auto index = lambda_find_int(facet_global_id);
     ASSERT_TRUE(index > -1);
@@ -490,14 +491,11 @@ TEST(PETScBoundary2D, post_integrate) {
     // Check the boundary intersection is at the expected place
     particle_loop(
         sub_groups.at(correct_group),
-        [=](auto INDEX, auto CURR_POSITION, auto PREV_POSITION,
-            auto BOUNDARY_POSITION) {
+        [=](auto BOUNDARY_POSITION) {
           NESO_KERNEL_ASSERT(
               KERNEL_ABS(BOUNDARY_POSITION.at(component) - value) < 1.0e-14,
               k_ep);
         },
-        Access::read(ParticleLoopIndex{}), Access::read(Sym<REAL>("P")),
-        Access::read(b2d->previous_position_sym),
         Access::read(b2d->boundary_position_sym))
         ->execute();
     ASSERT_EQ(ep->get_flag(), 0);
@@ -781,7 +779,7 @@ TEST(PETScBoundary2D, reflection_truncated) {
   auto lambda_pre_advection = [&](auto aa) { b2d->pre_integration(aa); };
   auto lambda_find_partial_moves = [&](auto aa) {
     return static_particle_sub_group(
-        A, [=](auto TSP) { return TSP.at(0) < dt; },
+        aa, [=](auto TSP) { return TSP.at(0) < dt; },
         Access::read(Sym<REAL>("TSP")));
   };
   auto lambda_partial_moves_remaining = [&](auto aa) -> bool {
@@ -879,7 +877,7 @@ TEST(PETScBoundary2D, reflection_advection) {
     auto lambda_pre_advection = [&](auto aa) { b2d->pre_integration(aa); };
     auto lambda_find_partial_moves = [&](auto aa) {
       return static_particle_sub_group(
-          A, [=](auto TSP) { return TSP.at(0) < dt; },
+          aa, [=](auto TSP) { return TSP.at(0) < dt; },
           Access::read(Sym<REAL>("TSP")));
     };
     auto lambda_partial_moves_remaining = [&](auto aa) -> bool {
