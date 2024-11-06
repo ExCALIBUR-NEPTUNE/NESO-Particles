@@ -142,6 +142,22 @@ protected:
     T<U *> c = {&a.obj};
     ParticleLoopImplementation::pre_loop(global_info, c);
   }
+  /**
+   * Method to compute access to a type wrapped in a shared_ptr.
+   */
+  template <template <typename> typename T, typename U>
+  static inline std::size_t local_mem_loop_cast(T<std::shared_ptr<U>> a) {
+    T<U *> c = {a.obj.get()};
+    return ParticleLoopImplementation::get_required_local_num_bytes(c);
+  }
+  /**
+   * Method to compute access to a type not wrapper in a shared_ptr
+   */
+  template <template <typename> typename T, typename U>
+  static inline std::size_t local_mem_loop_cast(T<U> a) {
+    T<U *> c = {&a.obj};
+    return ParticleLoopImplementation::get_required_local_num_bytes(c);
+  }
 
   /*
    * =================================================================
@@ -267,8 +283,7 @@ protected:
     // Loop over the args and add how many local bytes they each require.
     std::size_t num_bytes = 0;
     auto lambda_size_add = [&](auto argx) {
-      num_bytes +=
-          ParticleLoopImplementation::get_required_local_num_bytes(argx);
+      num_bytes += this->local_mem_loop_cast(argx);
     };
     auto lambda_size = [&](auto... as) { (lambda_size_add(as), ...); };
     std::apply(lambda_size, this->args);

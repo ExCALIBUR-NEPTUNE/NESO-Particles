@@ -100,8 +100,8 @@ inline void create_kernel_arg(ParticleLoopIteration &iterationx,
  * Indicate that LocalMemoryBlock requires local memory.
  */
 inline std::size_t
-get_required_local_num_bytes([[maybe_unused]] LocalMemoryBlock &arg) {
-  return arg.size;
+get_required_local_num_bytes(Access::Write<LocalMemoryBlock *> &arg) {
+  return arg.obj->size;
 }
 
 } // namespace ParticleLoopImplementation
