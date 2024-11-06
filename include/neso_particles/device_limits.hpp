@@ -134,7 +134,7 @@ public:
 
     // Test the local range is valid.
     const auto range_local = is.get_local_range();
-    this->validate_range_global(range_local);
+    this->validate_range_local(range_local);
 
     // Test local range is a factor of global range
     for (int dx = 0; dx < N; dx++) {
