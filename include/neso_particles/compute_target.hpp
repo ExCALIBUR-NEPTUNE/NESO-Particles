@@ -11,6 +11,8 @@
 #include <vector>
 
 #include "communication.hpp"
+#include "device_limits.hpp"
+#include "parameters.hpp"
 #include "profiling.hpp"
 #include "sycl_typedefs.hpp"
 #include "typedefs.hpp"
@@ -73,6 +75,10 @@ public:
   CommPair comm_pair;
   /// ProfileMap to log profiling data related to this SYCLTarget.
   ProfileMap profile_map;
+  /// Parameters for generic properties, e.g. loop local sizes.
+  std::shared_ptr<Parameters> parameters;
+  /// Interface to device limits validation
+  DeviceLimits device_limits;
 
   /// Disable (implicit) copies.
   SYCLTarget(const SYCLTarget &st) = delete;
@@ -145,12 +151,22 @@ public:
       const int num_devices = devices.size();
       const int device_index = local_rank % num_devices;
       this->device = devices[device_index];
+      this->device_limits = DeviceLimits(this->device);
 
       this->profile_map.set("MPI", "MPI_COMM_WORLD_rank_local", local_rank);
       this->profile_map.set("SYCL", "DEVICE_COUNT", num_devices);
       this->profile_map.set("SYCL", "DEVICE_INDEX", device_index);
       this->profile_map.set(
           "SYCL", this->device.get_info<sycl::info::device::name>(), 0);
+
+      // Setup the parameter store
+      this->parameters = std::make_shared<Parameters>();
+      this->parameters->set("LOOP_LOCAL_SIZE",
+                            std::make_shared<SizeTParameter>(get_env_size_t(
+                                "NESO_PARTICLES_LOOP_LOCAL_SIZE", 256)));
+      this->parameters->set(
+          "LOOP_NBIN", std::make_shared<SizeTParameter>(
+                           get_env_size_t("NESO_PARTICLES_LOOP_NBIN", 16)));
     }
 
     this->queue = sycl::queue(this->device);
@@ -187,6 +203,7 @@ public:
       std::cout << "Using " << this->device.get_info<sycl::info::device::name>()
                 << std::endl;
       std::cout << "Kernel type: " << NESO_PARTICLES_DEVICE_LABEL << std::endl;
+      this->device_limits.print();
     }
   }
 
@@ -305,6 +322,45 @@ public:
     }
 
 #endif
+  }
+
+  /**
+   *  Get a number of local work items that should not exceed the maximum
+   *  available local memory on the device.
+   *
+   *  @param num_bytes Number of bytes requested per work item.
+   *  @param default_num Default number of work items.
+   *  @returns Number of work items.
+   */
+  inline std::size_t get_num_local_work_items(const std::size_t num_bytes,
+                                              const std::size_t default_num) {
+    if (num_bytes <= 0) {
+      return default_num;
+    } else {
+      sycl::device device = this->device;
+      auto local_mem_exists =
+          device.get_info<sycl::info::device::local_mem_type>() !=
+          sycl::info::local_mem_type::none;
+
+      NESOASSERT(local_mem_exists, "Local memory does not exist.");
+      auto local_mem_size =
+          device.get_info<sycl::info::device::local_mem_size>();
+
+      const std::size_t max_num_workitems = local_mem_size / num_bytes;
+      // find the max power of two that does not exceed the number of work
+      // items.
+      const std::size_t two_power = log2(max_num_workitems);
+      const std::size_t max_base_two_num_workitems = std::pow(2, two_power);
+
+      const std::size_t deduced_num_work_items =
+          std::min(default_num, max_base_two_num_workitems);
+      NESOASSERT((deduced_num_work_items > 0),
+                 "Deduced number of work items is not strictly positive.");
+
+      const std::size_t local_mem_bytes = deduced_num_work_items * num_bytes;
+      NESOASSERT(local_mem_size >= local_mem_bytes, "Not enough local memory");
+      return deduced_num_work_items;
+    }
   }
 };
 

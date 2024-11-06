@@ -1,6 +1,8 @@
 #ifndef _NESO_PARTICLES_PARTICLE_LOOP_ITERATION_SET_HPP_
 #define _NESO_PARTICLES_PARTICLE_LOOP_ITERATION_SET_HPP_
 
+#include "../compute_target.hpp"
+#include "../particle_dat.hpp"
 #include "../sycl_typedefs.hpp"
 #include "../typedefs.hpp"
 
@@ -109,6 +111,218 @@ struct ParticleLoopIterationSet {
       this->cell_offsets.push_back(static_cast<std::size_t>(cellx));
       return {1, this->iteration_set, this->cell_offsets};
     }
+  }
+};
+
+/**
+ * Type to simplify determining which cell and layer an nd_item is working on.
+ */
+struct ParticleLoopBlockDevice {
+  std::size_t offset_cell;
+  std::size_t offset_layer;
+  int const *RESTRICT d_npart_cell;
+
+  /**
+   * Convert a sycl::nd_item<2> into a cell, layer pair.
+   * @param[in] idx SYCL nd_item for work item.
+   * @param[in, out] cell Cell for iteration.
+   * @param[in, out] layer Layer for iteration.
+   */
+  inline void get_cell_layer(const sycl::nd_item<2> &idx,
+                             std::size_t *RESTRICT cell,
+                             std::size_t *RESTRICT layer) const {
+    *cell = idx.get_global_id(0) + this->offset_cell;
+    *layer = idx.get_global_id(1) + this->offset_layer;
+  }
+
+  /**
+   * @param cell Cell for this work item, see get_cell_layer.
+   * @param layer Layer for this work item, see get_cell_layer.
+   * @returns True if work item should operate on particles.
+   */
+  inline bool work_item_required(const std::size_t cell,
+                                 const std::size_t layer) const {
+    return layer < static_cast<std::size_t>(this->d_npart_cell[cell]);
+  }
+
+  ParticleLoopBlockDevice() = default;
+};
+static_assert(std::is_trivially_copyable<ParticleLoopBlockDevice>::value ==
+              true);
+
+/**
+ * Type to wrap the parallel_for iteration set specification and the device
+ * type which computes the particle cell and layer.
+ */
+struct ParticleLoopBlockHost {
+  /// Device copyable type that describes the loop bounds for the kernel.
+  ParticleLoopBlockDevice block_device;
+  /// Does the kernel need to check the loop bounds for the layers in each
+  /// cell.
+  bool layer_bounds_check_required{true};
+  /// The actual size of the local range used.
+  std::size_t local_size;
+  /// The iteration set for the parallel loop
+  sycl::nd_range<2> loop_iteration_set;
+
+  ParticleLoopBlockHost(const ParticleLoopBlockHost &) = default;
+  ParticleLoopBlockHost(ParticleLoopBlockDevice block_device,
+                        const bool layer_bounds_check_required,
+                        const std::size_t local_size,
+                        sycl::nd_range<2> loop_iteration_set)
+      : block_device(block_device),
+        layer_bounds_check_required(layer_bounds_check_required),
+        local_size(local_size), loop_iteration_set(loop_iteration_set) {}
+};
+
+/**
+ * Type to create iteration sets that implement a particle loop.
+ */
+class ParticleLoopBlockIterationSet {
+protected:
+  /// SYCL device
+  SYCLTargetSharedPtr sycl_target;
+  /// The number of cells.
+  const std::size_t ncell;
+  /// Host accessible pointer to the number of particles in each cell.
+  int *h_npart_cell;
+  /// Device accessible pointer to the number of particles in each cell.
+  int *d_npart_cell;
+
+  inline std::size_t get_global_size(const std::size_t N,
+                                     const std::size_t local_size) {
+    const auto div_mod =
+        std::div(static_cast<long long>(N), static_cast<long long>(local_size));
+    const std::size_t outer_size =
+        static_cast<std::size_t>(div_mod.quot + (div_mod.rem == 0 ? 0 : 1)) *
+        local_size;
+    return outer_size;
+  }
+
+public:
+  /// The last iteration set produced
+  std::vector<ParticleLoopBlockHost> iteration_set;
+  /// The size of the last iteration set computed
+  std::size_t iteration_set_size;
+
+  /**
+   *  Creates iteration set creator for a given set of cell particle counts.
+   *
+   *  @param sycl_target Compute device to use.
+   *  @param ncell Number of cells.
+   *  @param h_npart_cell Host accessible array of cell particle counts.
+   *  @param d_npart_cell Device accessible array of cell particle counts.
+   */
+  ParticleLoopBlockIterationSet(SYCLTargetSharedPtr sycl_target,
+                                const std::size_t ncell, int *h_npart_cell,
+                                int *d_npart_cell)
+      : sycl_target(sycl_target), ncell(ncell), h_npart_cell(h_npart_cell),
+        d_npart_cell(d_npart_cell) {}
+
+  /**
+   *  Creates iteration set creator for a given ParticleDat.
+   *
+   *  @param particle_dat Specify an iteration set from a ParticleDat.
+   */
+  template <typename T>
+  ParticleLoopBlockIterationSet(ParticleDatSharedPtr<T> particle_dat)
+      : sycl_target(particle_dat->sycl_target), ncell(particle_dat->ncell),
+        h_npart_cell(particle_dat->h_npart_cell),
+        d_npart_cell(particle_dat->d_npart_cell) {}
+
+  /**
+   * Get a complete iteration set for a particle loop for all cells.
+   *
+   * @param nbin Default number of bins to use for kernel launch.
+   * @param local_size Default local size to use for kernel launch.
+   * @param num_bytes_local Number of bytes required per particle.
+   */
+  inline std::vector<ParticleLoopBlockHost> &
+  get_all_cells(std::size_t nbin = 16, std::size_t local_size = 256,
+                const std::size_t num_bytes_local = 0) {
+    local_size = this->sycl_target->get_num_local_work_items(num_bytes_local,
+                                                             local_size);
+    nbin = std::min(nbin, this->ncell);
+    this->iteration_set.clear();
+
+    // Create an iteration block that covers all cells up to a multiple of the
+    // local size.
+    std::size_t min_occupancy = std::numeric_limits<std::size_t>::max();
+    for (std::size_t cellx = 0; cellx < this->ncell; cellx++) {
+      min_occupancy = std::min(
+          min_occupancy, static_cast<std::size_t>(this->h_npart_cell[cellx]));
+    }
+    // Truncate to a multiple of local size.
+    min_occupancy /= local_size;
+    min_occupancy *= local_size;
+    this->iteration_set_size = min_occupancy * this->ncell;
+    if (min_occupancy > 0) {
+      ParticleLoopBlockDevice block_device{0, 0, this->d_npart_cell};
+      this->iteration_set.emplace_back(
+          block_device, false, local_size,
+          this->sycl_target->device_limits.validate_nd_range(sycl::nd_range<2>(
+              // min_occupancy is already a multiple of local_size by
+              // construction.
+              sycl::range<2>(this->ncell, min_occupancy),
+              sycl::range<2>(1, local_size))));
+    }
+    // Create the peel loops
+    for (std::size_t binx = 0; binx < nbin; binx++) {
+      std::size_t start, end;
+      get_decomp_1d(nbin, ncell, binx, &start, &end);
+      const std::size_t bin_width = end - start;
+      std::size_t cell_max_occ = 0;
+      for (std::size_t cellx = start; cellx < end; cellx++) {
+        const std::size_t npart =
+            static_cast<std::size_t>(this->h_npart_cell[cellx]);
+        this->iteration_set_size += npart;
+        cell_max_occ = std::max(cell_max_occ, npart);
+      }
+      // Subtract of the block already completed as this is a peel loop.
+      cell_max_occ -= min_occupancy;
+      if (cell_max_occ > 0) {
+        const std::size_t global_range =
+            this->get_global_size(cell_max_occ, local_size);
+        ParticleLoopBlockDevice block_device{start, min_occupancy,
+                                             this->d_npart_cell};
+        this->iteration_set.emplace_back(
+            block_device, true, local_size,
+            this->sycl_target->device_limits.validate_nd_range(
+                sycl::nd_range<2>(sycl::range<2>(bin_width, global_range),
+                                  sycl::range<2>(1, local_size))));
+      }
+    }
+
+    return this->iteration_set;
+  }
+
+  /**
+   * Get an iteration set for a particle loop for a single cell.
+   *
+   * @param cell Produce an iteration set for a single cell.
+   * @param local_size Default local size to use for kernel launch.
+   * @param num_bytes_local Number of bytes required per particle.
+   */
+  inline std::vector<ParticleLoopBlockHost> &
+  get_single_cell(const std::size_t cell, std::size_t local_size = 256,
+                  const std::size_t num_bytes_local = 0) {
+    local_size = this->sycl_target->get_num_local_work_items(num_bytes_local,
+                                                             local_size);
+    this->iteration_set.clear();
+
+    const std::size_t npart =
+        static_cast<std::size_t>(this->h_npart_cell[cell]);
+    const std::size_t global_range = this->get_global_size(npart, local_size);
+
+    ParticleLoopBlockDevice block_device{cell, 0, this->d_npart_cell};
+
+    this->iteration_set.emplace_back(
+        block_device, true, local_size,
+        this->sycl_target->device_limits.validate_nd_range(sycl::nd_range<2>(
+            sycl::range<2>(1, global_range), sycl::range<2>(1, local_size))));
+
+    this->iteration_set_size = npart;
+    return this->iteration_set;
   }
 };
 

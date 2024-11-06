@@ -39,3 +39,19 @@ TEST(SYCLTarget, joint_exclusive_scan) {
 
   sycl_target->free();
 }
+
+TEST(SYCLTarget, parameters) {
+  const std::size_t local_size =
+      get_env_size_t("NESO_PARTICLES_LOOP_LOCAL_SIZE", 32);
+  const std::size_t nbin = get_env_size_t("NESO_PARTICLES_LOOP_NBIN", 4);
+
+  auto p_local_size = std::make_shared<SizeTParameter>(local_size);
+  auto p_nbin = std::make_shared<SizeTParameter>(nbin);
+
+  Parameters p;
+  p.set("LOOP_LOCAL_SIZE", p_local_size);
+  p.set("LOOP_NBIN", p_nbin);
+
+  EXPECT_EQ(p.get<SizeTParameter>("LOOP_LOCAL_SIZE")->value, local_size);
+  EXPECT_EQ(p.get<SizeTParameter>("LOOP_NBIN")->value, nbin);
+}

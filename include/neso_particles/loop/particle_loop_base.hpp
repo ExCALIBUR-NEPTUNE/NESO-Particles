@@ -30,6 +30,7 @@ struct ParticleLoopGlobalInfo {
   // Last cell plus one. Only set for calls to create_loop_args.
   int bounding_cell;
   int loop_type_int;
+  std::size_t local_size;
 };
 
 /**
@@ -56,8 +57,8 @@ struct KernelParameter; // { using type = void; };
  * The description of the iteration index to pas to objects used in the loop.
  */
 struct ParticleLoopIteration {
-  /// The overarching outer loop index.
-  size_t index;
+  /// The local index in the sycl nd range.
+  std::size_t local_sycl_index;
   /// The cell the particle resides in.
   int cellx;
   /// The layer (row) the particle resides in.
@@ -83,6 +84,13 @@ inline void pre_loop([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
 template <typename T>
 inline void post_loop([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
                       [[maybe_unused]] T &arg) {}
+/**
+ * Default function to determine how much local space a type needs per particle.
+ */
+template <typename T>
+inline std::size_t get_required_local_num_bytes([[maybe_unused]] T &arg) {
+  return 0;
+}
 
 /**
  * Extract the kernel from an object for a ParticleLoop.

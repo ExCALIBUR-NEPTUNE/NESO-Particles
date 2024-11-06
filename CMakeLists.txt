@@ -28,7 +28,6 @@ add_library(NESO-Particles INTERFACE)
 # Alias the name to the namespaces name. Can use in subdirectory or via Confiig
 # files with namespace
 add_library(NESO-Particles::NESO-Particles ALIAS NESO-Particles)
-target_compile_options(NESO-Particles INTERFACE "-Wpedantic;-Wall;-Wextra")
 
 # Set standard
 set_property(TARGET NESO-Particles PROPERTY CXX_STANDARD 17)
@@ -65,6 +64,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/descendant_products.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/global_array.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/local_array.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/containers/local_memory_block.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/lookup_table.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/nd_local_array.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/product_matrix.hpp
@@ -74,6 +74,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/departing_particle_identification.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/departing_particle_identification_impl.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/device_functions.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/device_limits.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/domain.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/error_propagate.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/common/bounding_box.hpp
@@ -125,6 +126,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_interface_local_decomp.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/packing_unpacking.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/parallel_initialisation.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/parameters.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_dat.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_group.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_group_impl.hpp
