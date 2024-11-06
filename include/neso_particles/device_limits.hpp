@@ -25,7 +25,6 @@ protected:
   }
 
   inline void setup_env() {
-    constexpr std::size_t max_size_t = std::numeric_limits<std::size_t>::max();
     auto current_limits = this->get_max_global_workgroup<3>();
     const std::size_t env_max_0 = get_env_size_t(
         "NESO_PARTICLES_DEVICE_LIMIT_GLOBAL_SIZE_S0", current_limits.get(2));

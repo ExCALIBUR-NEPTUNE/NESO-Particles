@@ -142,7 +142,7 @@ struct ParticleLoopBlockDevice {
    */
   inline bool work_item_required(const std::size_t cell,
                                  const std::size_t layer) const {
-    return layer < this->d_npart_cell[cell];
+    return layer < static_cast<std::size_t>(this->d_npart_cell[cell]);
   }
 
   ParticleLoopBlockDevice() = default;

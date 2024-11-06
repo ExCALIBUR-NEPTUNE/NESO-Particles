@@ -19,7 +19,6 @@ public:
   std::size_t size;
 
   LocalMemoryBlock() = default;
-  LocalMemoryBlock &operator=(const LocalMemoryBlock &) = default;
 
   /**
    * Constructor with specified number of bytes per particle.

@@ -831,8 +831,6 @@ public:
         "ParticleLoopSubGroup", "Init", 1,
         profile_elapsed(t0, profile_timestamp()));
 
-    auto k_npart_cell_lb = this->d_npart_cell_lb;
-
     for (auto &blockx : is) {
       const auto block_device = blockx.block_device;
       this->event_stack.push(

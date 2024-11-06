@@ -82,7 +82,8 @@ inline void pre_loop([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
  * Default post loop execution function.
  */
 template <typename T>
-inline void post_loop(ParticleLoopGlobalInfo *global_info, T &arg) {}
+inline void post_loop([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
+                      [[maybe_unused]] T &arg) {}
 /**
  * Default function to determine how much local space a type needs per particle.
  */

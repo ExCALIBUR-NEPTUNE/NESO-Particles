@@ -104,7 +104,8 @@ TEST(ParticleLoop, iteration_set_base) {
 
         if (ix == (nblocks - 1)) {
           EXPECT_TRUE(blockx.layer_bounds_check_required);
-          EXPECT_TRUE(offset_layer >= h_npart_cell.at(cellx));
+          EXPECT_TRUE(offset_layer >=
+                      static_cast<std::size_t>(h_npart_cell.at(cellx)));
         } else {
           EXPECT_FALSE(blockx.layer_bounds_check_required);
         }
@@ -121,8 +122,8 @@ TEST(ParticleLoop, iteration_set_base) {
       }
 
       std::set<std::size_t> set_correct;
-      for (std::size_t ix = 0; ix < h_npart_cell.at(cellx); ix++) {
-        set_correct.insert(ix);
+      for (int ix = 0; ix < h_npart_cell.at(cellx); ix++) {
+        set_correct.insert(static_cast<std::size_t>(ix));
       }
 
       EXPECT_EQ(set_correct.size(), set_test.size());
@@ -159,7 +160,8 @@ TEST(ParticleLoop, iteration_set_base) {
 
     std::set<std::array<std::size_t, 2>> set_correct;
     for (std::size_t cell = 0; cell < Ncell; cell++) {
-      for (std::size_t layer = 0; layer < h_npart_cell.at(cell); layer++) {
+      const auto npart_cell = static_cast<std::size_t>(h_npart_cell.at(cell));
+      for (std::size_t layer = 0; layer < npart_cell; layer++) {
         set_correct.insert({cell, layer});
       }
     }
@@ -174,7 +176,6 @@ TEST(ParticleLoop, iteration_set) {
   auto A = particle_loop_common();
   auto domain = A->domain;
   auto mesh = domain->mesh;
-  const int cell_count = mesh->get_cell_count();
   auto sycl_target = A->sycl_target;
 
   particle_loop(
