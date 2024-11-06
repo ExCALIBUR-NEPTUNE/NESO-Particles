@@ -281,6 +281,7 @@ public:
   DMPolytopeType cell_type;
   std::vector<std::byte> cell_representation;
 
+  virtual ~DMPlexCellSerialise() = default;
   DMPlexCellSerialise() = default;
 
   /**

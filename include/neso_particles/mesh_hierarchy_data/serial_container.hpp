@@ -96,7 +96,7 @@ public:
     buffer_ptr = this->buffer.data();
     auto outputs_ptr = outputs.data();
     while (buffer_ptr < buffer_end) {
-      std::size_t size = -1;
+      std::size_t size;
       std::memcpy(&size, buffer_ptr, sizeof(std::size_t));
       buffer_ptr += sizeof(std::size_t);
       outputs_ptr->deserialise(buffer_ptr, size);

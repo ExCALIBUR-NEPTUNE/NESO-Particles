@@ -231,7 +231,8 @@ inline void create_kernel_arg(ParticleLoopIteration &iterationx,
  */
 template <typename T>
 inline CellDatConstDeviceTypeConst<T>
-create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
+create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
+                [[maybe_unused]] sycl::handler &cgh,
                 Access::Read<CellDatConst<T> *> &a) {
   return a.obj->impl_get_const();
 }
@@ -240,7 +241,8 @@ create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
  */
 template <typename T>
 inline CellDatConstDeviceType<T>
-create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
+create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
+                [[maybe_unused]] sycl::handler &cgh,
                 Access::Write<CellDatConst<T> *> &a) {
   return a.obj->impl_get();
 }
@@ -249,7 +251,8 @@ create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
  */
 template <typename T>
 inline CellDatConstDeviceType<T>
-create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
+create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
+                [[maybe_unused]] sycl::handler &cgh,
                 Access::Add<CellDatConst<T> *> &a) {
   return a.obj->impl_get();
 }
@@ -258,7 +261,8 @@ create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
  */
 template <typename T>
 inline CellDatConstDeviceType<T>
-create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
+create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
+                [[maybe_unused]] sycl::handler &cgh,
                 Access::Min<CellDatConst<T> *> &a) {
   return a.obj->impl_get();
 }
@@ -267,7 +271,8 @@ create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
  */
 template <typename T>
 inline CellDatConstDeviceType<T>
-create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
+create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
+                [[maybe_unused]] sycl::handler &cgh,
                 Access::Max<CellDatConst<T> *> &a) {
   return a.obj->impl_get();
 }
@@ -365,8 +370,8 @@ public:
    */
   CellDatConst(SYCLTargetSharedPtr sycl_target, const int ncells,
                const int nrow, const int ncol)
-      : sycl_target(sycl_target), ncells(ncells), nrow(nrow), ncol(ncol),
-        stride(nrow * ncol) {
+      : stride(nrow * ncol), sycl_target(sycl_target), ncells(ncells),
+        nrow(nrow), ncol(ncol) {
     this->d_ptr =
         sycl::malloc_device<T>(ncells * nrow * ncol, sycl_target->queue);
     this->fill(0);

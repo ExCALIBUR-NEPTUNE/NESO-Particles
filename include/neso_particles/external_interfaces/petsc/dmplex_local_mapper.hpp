@@ -24,6 +24,7 @@ protected:
 public:
   SYCLTargetSharedPtr sycl_target;
   DMPlexInterfaceSharedPtr dmplex_interface;
+  virtual ~DMPlexLocalMapper() = default;
 
   /**
    * Create mappers for a DMPlex.

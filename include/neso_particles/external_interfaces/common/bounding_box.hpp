@@ -23,6 +23,7 @@ public:
     std::fill(this->bb.begin() + 3, this->bb.begin() + 6,
               std::numeric_limits<REAL>::lowest());
   }
+  virtual ~BoundingBox() = default;
 
   /**
    * Create a bounding box from a vector like:

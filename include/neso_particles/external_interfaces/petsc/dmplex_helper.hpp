@@ -398,7 +398,7 @@ public:
    * @param dm Input DMPlex to wrap.
    */
   DMPlexHelper(MPI_Comm comm, DM dm)
-      : comm(comm), dm(dm), bounding_box(nullptr), volume(-1.0) {
+      : volume(-1.0), bounding_box(nullptr), comm(comm), dm(dm) {
     DMPlexInterpolatedFlag interpolated;
     PETSCCHK(DMPlexIsInterpolated(this->dm, &interpolated));
     NESOASSERT(interpolated == DMPLEX_INTERPOLATED_FULL,
@@ -419,8 +419,10 @@ public:
       }
     }
 
-    NESOASSERT(ix == this->map_petsc_to_np.size(), "Size missmatch.");
-    NESOASSERT(ix == this->map_np_to_petsc.size(), "Size missmatch.");
+    NESOASSERT(static_cast<std::size_t>(ix) == this->map_petsc_to_np.size(),
+               "Size missmatch.");
+    NESOASSERT(static_cast<std::size_t>(ix) == this->map_np_to_petsc.size(),
+               "Size missmatch.");
     this->ncells = this->map_np_to_petsc.size();
     NESOASSERT(this->ncells, "A rank has zero cells.");
   }
@@ -627,7 +629,7 @@ public:
   inline void get_cell_vertex_average(const PetscInt cell,
                                       std::vector<REAL> &average) {
     this->check_valid_local_cell(cell);
-    NESOASSERT(average.size() == this->ndim,
+    NESOASSERT(average.size() == static_cast<std::size_t>(this->ndim),
                "Missmatch between vector size and number of dimensions");
 
     std::fill(average.begin(), average.end(), 0.0);
@@ -654,7 +656,7 @@ public:
    */
   inline int contains_point(std::vector<PetscScalar> &point) {
     const PetscInt ndim = this->ndim;
-    NESOASSERT(point.size() == ndim,
+    NESOASSERT(point.size() == static_cast<std::size_t>(ndim),
                "Miss-match in point size and mesh dimension.");
     Vec v;
     PETSCCHK(VecCreate(MPI_COMM_SELF, &v));
@@ -686,7 +688,7 @@ public:
   inline bool cell_contains_point(const PetscInt index,
                                   std::vector<PetscScalar> &point) {
     const PetscInt ndim = this->ndim;
-    NESOASSERT(point.size() == ndim,
+    NESOASSERT(point.size() == static_cast<std::size_t>(ndim),
                "Miss-match in point size and mesh dimension.");
     NESOASSERT(2 == ndim, "Only implemented in 2D.");
     this->check_valid_local_cell(index);
@@ -697,8 +699,6 @@ public:
 
     const PetscScalar *tmp;
     PetscScalar *vertices = nullptr;
-    PetscReal x = PetscRealPart(point[0]);
-    PetscReal y = PetscRealPart(point[1]);
     PetscInt num_crossings = 0, num_coords;
     PetscBool is_dg;
 

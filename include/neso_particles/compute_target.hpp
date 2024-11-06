@@ -297,7 +297,8 @@ public:
     }
   }
 
-  inline void check_ptr(unsigned char *ptr_user, const size_t size_bytes) {
+  inline void check_ptr([[maybe_unused]] unsigned char *ptr_user,
+                        [[maybe_unused]] const size_t size_bytes) {
 
 #ifdef DEBUG_OOB_CHECK
     this->queue
@@ -385,7 +386,7 @@ protected:
   }
 
   BufferBase(SYCLTargetSharedPtr sycl_target, std::size_t size)
-      : sycl_target(sycl_target), size(size), ptr(nullptr) {}
+      : sycl_target(sycl_target), ptr(nullptr), size(size) {}
 
   inline void assert_allocated() {
     NESOASSERT(this->ptr != nullptr,
@@ -546,7 +547,7 @@ public:
     this->set(vec);
   }
 
-  ~BufferDevice() { this->generic_free(); }
+  virtual ~BufferDevice() { this->generic_free(); }
 };
 
 /**
@@ -559,7 +560,7 @@ protected:
         sycl::malloc_shared(num_bytes, this->sycl_target->queue));
   }
   virtual inline void free_wrapper(T *ptr) override {
-    sycl::free(this->ptr, this->sycl_target->queue);
+    sycl::free(ptr, this->sycl_target->queue);
   }
 
 public:
@@ -662,7 +663,7 @@ public:
   /// Wrapped BufferHost.
   BufferHost<T> h_buffer;
 
-  ~BufferDeviceHost(){};
+  ~BufferDeviceHost() {};
 
   /**
    * Create a new BufferDeviceHost of the request size on the requested compute
@@ -674,7 +675,7 @@ public:
    */
   BufferDeviceHost(SYCLTargetSharedPtr sycl_target, size_t size)
       : sycl_target(sycl_target), size(size), d_buffer(sycl_target, size),
-        h_buffer(sycl_target, size){};
+        h_buffer(sycl_target, size) {};
 
   /**
    * Create a new BufferDeviceHost from a std::vector. Note, this does not
@@ -685,7 +686,7 @@ public:
    */
   BufferDeviceHost(SYCLTargetSharedPtr sycl_target, const std::vector<T> &vec)
       : sycl_target(sycl_target), size(vec.size()), d_buffer(sycl_target, vec),
-        h_buffer(sycl_target, vec){};
+        h_buffer(sycl_target, vec) {};
 
   /**
    * Get the size in bytes of the allocation on the host and device.
@@ -774,12 +775,12 @@ private:
   std::stack<sycl::event> stack;
 
 public:
-  ~EventStack(){};
+  ~EventStack() {};
 
   /**
    *  Create a new and empty stack of events.
    */
-  EventStack(){};
+  EventStack() {};
 
   /**
    *  Push a sycl::event onto the event stack.

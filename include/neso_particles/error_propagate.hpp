@@ -19,7 +19,7 @@ public:
   /// Disable (implicit) copies.
   ErrorPropagate &operator=(ErrorPropagate const &a) = delete;
 
-  ~ErrorPropagate(){};
+  ~ErrorPropagate() {};
 
   /**
    * Create a new instance to track assertions thrown in SYCL kernels.

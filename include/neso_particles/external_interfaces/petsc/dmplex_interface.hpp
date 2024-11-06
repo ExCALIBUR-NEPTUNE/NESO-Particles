@@ -216,7 +216,7 @@ public:
   std::map<PetscInt, std::tuple<int, PetscInt, PetscInt>>
       map_local_lid_remote_lid;
 
-  ~DMPlexInterface() {
+  virtual ~DMPlexInterface() {
     if (this->allocated == true) {
       nprint("DMPlexInterface::free() not called before destruction.");
     }
@@ -233,8 +233,8 @@ public:
    */
   DMPlexInterface(DM dm, const int subdivision_order_offset = 0,
                   MPI_Comm comm = MPI_COMM_WORLD)
-      : comm(comm), subdivision_order_offset(subdivision_order_offset),
-        allocated(true) {
+      : allocated(true), subdivision_order_offset(subdivision_order_offset),
+        comm(comm) {
 
     this->dmh = std::make_shared<DMPlexHelper>(comm, dm);
     this->cell_count = this->dmh->get_cell_count();

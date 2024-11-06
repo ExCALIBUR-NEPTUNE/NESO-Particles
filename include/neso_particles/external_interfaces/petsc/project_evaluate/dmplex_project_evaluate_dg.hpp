@@ -103,6 +103,7 @@ public:
   ExternalCommon::QuadraturePointMapperSharedPtr qpm;
   std::string function_space;
   int polynomial_order;
+  virtual ~DMPlexProjectEvaluateDG() = default;
   DMPlexProjectEvaluateDG() = default;
 
   /**

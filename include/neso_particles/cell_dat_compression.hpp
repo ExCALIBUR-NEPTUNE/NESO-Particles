@@ -118,7 +118,7 @@ public:
     auto r =
         ProfileRegion("LayerCompressor", "compute_remove_compress_indicies_a");
 
-    NESOASSERT(this->d_npart_cell.size >= this->ncell,
+    NESOASSERT(this->d_npart_cell.size >= static_cast<std::size_t>(this->ncell),
                "Bad device_npart_cell length");
 
     const int ncell = this->ncell;

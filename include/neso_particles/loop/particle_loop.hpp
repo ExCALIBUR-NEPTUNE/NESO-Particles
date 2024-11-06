@@ -263,7 +263,7 @@ protected:
   }
 
   template <template <typename> typename T, typename U>
-  inline void check_is_sym_inner(T<U> arg) {
+  inline void check_is_sym_inner([[maybe_unused]] T<U> arg) {
     static_assert(
         std::is_same<T<U>, Sym<U>>::value == false,
         "Sym based arguments cannot be passed to ParticleLoop with a "
@@ -364,6 +364,7 @@ public:
   ParticleLoop(const ParticleLoop &st) = delete;
   /// Disable (implicit) copies.
   ParticleLoop &operator=(ParticleLoop const &a) = delete;
+  virtual ~ParticleLoop() = default;
 
   /**
    *  Create a ParticleLoop that executes a kernel for all particles in the
@@ -378,7 +379,7 @@ public:
    */
   ParticleLoop(const std::string name, ParticleGroupSharedPtr particle_group,
                KERNEL kernel, ARGS... args)
-      : name(name), particle_group_shrptr(particle_group), kernel(kernel) {
+      : particle_group_shrptr(particle_group), kernel(kernel), name(name) {
 
     this->sycl_target = particle_group->sycl_target;
     this->particle_group_ptr = this->particle_group_shrptr.get();
@@ -399,7 +400,7 @@ public:
    */
   ParticleLoop(ParticleGroupSharedPtr particle_group, KERNEL kernel,
                ARGS... args)
-      : ParticleLoop("unnamed_kernel", particle_group, kernel, args...){};
+      : ParticleLoop("unnamed_kernel", particle_group, kernel, args...) {};
 
   /**
    *  Create a ParticleLoop that executes a kernel for all particles in the
@@ -416,7 +417,7 @@ public:
   ParticleLoop(const std::string name,
                ParticleDatSharedPtr<DAT_TYPE> particle_dat, KERNEL kernel,
                ARGS... args)
-      : name(name), kernel(kernel) {
+      : kernel(kernel), name(name) {
 
     this->sycl_target = particle_dat->sycl_target;
     this->particle_group_shrptr = nullptr;

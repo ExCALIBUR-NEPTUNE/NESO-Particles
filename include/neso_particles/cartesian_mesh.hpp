@@ -47,6 +47,7 @@ public:
   /// Disable (implicit) copies.
   CartesianHMeshLocalMapperT &
   operator=(CartesianHMeshLocalMapperT const &a) = delete;
+  virtual ~CartesianHMeshLocalMapperT() = default;
 
   /// CartesianHMesh on which the lookup is based.
   CartesianHMeshSharedPtr mesh;
@@ -307,7 +308,8 @@ public:
    *
    *  @param particle_group ParticleGroup.
    */
-  inline void particle_group_callback(ParticleGroup &particle_group) override{};
+  inline void particle_group_callback(
+      [[maybe_unused]] ParticleGroup &particle_group) override {};
 };
 
 inline std::shared_ptr<CartesianHMeshLocalMapperT>

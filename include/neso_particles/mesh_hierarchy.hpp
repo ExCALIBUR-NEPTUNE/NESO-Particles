@@ -120,7 +120,7 @@ public:
            "-------------");
   }
 
-  MeshHierarchy(){};
+  MeshHierarchy() {};
 
   /**
    *  Create a mesh hierarchy decomposed over the given MPI communicator with a
@@ -147,8 +147,11 @@ public:
                                 extent),
         ncells_coarse(reduce_mul(ndim, dims)),
         ncells_fine(std::pow(std::pow(2, subdivision_order), ndim)) {
-    NESOASSERT(dims.size() >= ndim, "vector of dims too small");
-    NESOASSERT(origin.size() >= ndim, "vector of origin too small");
+    NESOASSERT(ndim > 0, "ndim negative");
+    NESOASSERT(dims.size() >= static_cast<std::size_t>(ndim),
+               "vector of dims too small");
+    NESOASSERT(origin.size() >= static_cast<std::size_t>(ndim),
+               "vector of origin too small");
     for (int dimx = 0; dimx < ndim; dimx++) {
       NESOASSERT(dims[dimx] > 0, "Dim size is <= 0 in a direction.");
     }
@@ -174,7 +177,8 @@ public:
     int disp_unit_tmp;
     MPICHK(MPI_Win_shared_query(this->map_win, 0, &win_size_tmp, &disp_unit_tmp,
                                 (void *)&this->map))
-    NESOASSERT(ncells_global * sizeof(int) == win_size_tmp,
+    NESOASSERT(static_cast<MPI_Aint>(ncells_global * sizeof(int)) ==
+                   win_size_tmp,
                "Pointer to incorrect size.");
   };
 
