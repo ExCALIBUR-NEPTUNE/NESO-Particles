@@ -932,7 +932,8 @@ matrix_transpose(SYCLTargetSharedPtr sycl_target, const std::size_t num_rows,
     sycl::local_accessor<T, 1> local_memory(
         sycl::range<1>(local_size_row * local_size_col), cgh);
     cgh.parallel_for(
-        sycl::nd_range<2>(range_global, range_local),
+        sycl_target->device_limits.validate_nd_range(
+            sycl::nd_range<2>(range_global, range_local)),
         [=](sycl::nd_item<2> item) {
           const std::size_t read_rowx = item.get_global_id(0);
           const std::size_t read_colx = item.get_global_id(1);
@@ -940,11 +941,11 @@ matrix_transpose(SYCLTargetSharedPtr sycl_target, const std::size_t num_rows,
           const std::size_t local_read_rowx = item.get_local_id(0);
           const std::size_t local_read_colx = item.get_local_id(1);
 
-          const bool item_valid =
+          const bool read_item_valid =
               (read_rowx < num_rows) && (read_colx < num_cols);
 
           T value_read = 0.0;
-          if (item_valid) {
+          if (read_item_valid) {
             value_read = d_src[read_rowx * num_cols + read_colx];
           }
 
@@ -970,7 +971,10 @@ matrix_transpose(SYCLTargetSharedPtr sycl_target, const std::size_t num_rows,
           const std::size_t write_colx =
               group_row * local_size_row + local_write_colx;
 
-          if (item_valid) {
+          const bool write_item_valid =
+              (write_rowx < num_cols) && (write_colx < num_rows);
+
+          if (write_item_valid) {
             d_dst[write_rowx * num_rows + write_colx] = value_write;
           }
         });
