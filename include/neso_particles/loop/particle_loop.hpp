@@ -427,7 +427,7 @@ public:
     this->particle_dat_init = std::static_pointer_cast<void>(particle_dat);
     this->unpack_args<0>(args...);
     (check_is_sym_outer(args), ...);
-  };
+  }
 
   /**
    *  Create a ParticleLoop that executes a kernel for all particles in the
@@ -442,7 +442,7 @@ public:
   template <typename DAT_TYPE>
   ParticleLoop(ParticleDatSharedPtr<DAT_TYPE> particle_dat, KERNEL kernel,
                ARGS... args)
-      : ParticleLoop("unnamed_kernel", particle_dat, kernel, args...){};
+      : ParticleLoop("unnamed_kernel", particle_dat, kernel, args...) {}
 
   /**
    *  Launch the ParticleLoop and return. Must be called collectively over the

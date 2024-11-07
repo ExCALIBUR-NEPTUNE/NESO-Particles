@@ -230,7 +230,7 @@ public:
                               H5P_DEFAULT, this->plist_id);
     this->is_closed = false;
     this->step = 0;
-  };
+  }
 
   /**
    *  Close the H5Part writer. Must be called before execution completes. Must

@@ -103,15 +103,15 @@ protected:
   template <typename T>
   inline void realloc_dat_start(ParticleDatSharedPtr<T> &dat) {
     dat->realloc(this->h_npart_cell);
-  };
+  }
   template <typename T>
   inline void realloc_dat_wait(ParticleDatSharedPtr<T> &dat) {
     dat->wait_realloc();
-  };
+  }
   template <typename T> inline void realloc_dat(ParticleDatSharedPtr<T> &dat) {
     this->realloc_dat_start(dat);
     this->realloc_dat_wait(dat);
-  };
+  }
 
   inline void realloc_all_dats() {
     for (auto &dat : this->particle_dats_real) {
@@ -207,7 +207,7 @@ protected:
 
   template <typename T> inline void push_particle_spec(ParticleProp<T> prop) {
     this->particle_spec.push(prop);
-  };
+  }
 
   // members for mpi communication
   // global communication context
