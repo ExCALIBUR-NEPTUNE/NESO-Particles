@@ -172,6 +172,19 @@ inline T get_min_power_of_two(const T N_work_items, const size_t max_size) {
   return (T)std::min(std::max((INT)two_power_p1, (INT)4), (INT)max_size);
 }
 
+template <typename T> inline T get_prev_power_of_two(const T N_work_items) {
+  const int base_two_power =
+      static_cast<int>(std::log2(static_cast<double>(N_work_items)));
+  const int two_power_p1 = int(1) << base_two_power;
+  return (T)std::max((INT)two_power_p1, (INT)1);
+}
+
+[[nodiscard]] inline std::size_t get_next_multiple(std::size_t N,
+                                                   const std::size_t M) {
+  N = (N + (M - 1)) / M;
+  return N * M;
+}
+
 template <typename U> inline void nprint_recurse(int flag, U next) {
   if (flag) {
     std::cout << " ";

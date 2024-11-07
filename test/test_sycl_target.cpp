@@ -55,3 +55,48 @@ TEST(SYCLTarget, parameters) {
   EXPECT_EQ(p.get<SizeTParameter>("LOOP_LOCAL_SIZE")->value, local_size);
   EXPECT_EQ(p.get<SizeTParameter>("LOOP_NBIN")->value, nbin);
 }
+
+TEST(SYCLTarget, matrix_transpose) {
+
+  auto lambda_transpose = [](const std::size_t num_rows,
+                             const std::size_t num_cols, auto &h_src,
+                             auto &h_dst) {
+    for (std::size_t rowx = 0; rowx < num_rows; rowx++) {
+      for (std::size_t colx = 0; colx < num_cols; colx++) {
+        h_dst.at(colx * num_rows + rowx) = h_src.at(rowx * num_cols + colx);
+      }
+    }
+  };
+
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+  {
+    std::vector<int> h_src_simple = {0, 1, 2, 3, 4, 5, 6, 7};
+    std::vector<int> h_dst_correct = {0, 4, 1, 5, 2, 6, 3, 7};
+    std::vector<int> h_dst_to_test(8);
+    lambda_transpose(2, 4, h_src_simple, h_dst_to_test);
+    ASSERT_EQ(h_dst_correct, h_dst_to_test);
+
+    BufferDevice<int> d_src(sycl_target, h_src_simple);
+    BufferDevice<int> d_dst(sycl_target, h_src_simple);
+
+    matrix_transpose(sycl_target, 2, 4, d_src.ptr, d_dst.ptr).wait_and_throw();
+    std::fill(h_dst_to_test.begin(), h_dst_to_test.end(), 0);
+    d_dst.get(h_dst_to_test);
+    ASSERT_EQ(h_dst_correct, h_dst_to_test);
+  }
+
+  {
+    const std::size_t num_rows = 7919;
+    const std::size_t num_cols = 1483;
+    std::vector<REAL> h_src(num_rows * num_cols);
+    std::vector<REAL> h_correct(num_rows * num_cols);
+    std::iota(h_src.begin(), h_src.end(), 1.0);
+    lambda_transpose(num_rows, num_cols, h_src, h_correct);
+    BufferDevice<REAL> d_src(sycl_target, h_src);
+    BufferDevice<REAL> d_dst(sycl_target, h_src);
+    matrix_transpose(sycl_target, num_rows, num_cols, d_src.ptr, d_dst.ptr)
+        .wait_and_throw();
+    auto h_to_test = d_dst.get();
+    ASSERT_EQ(h_correct, h_to_test);
+  }
+}

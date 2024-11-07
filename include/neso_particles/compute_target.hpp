@@ -893,6 +893,90 @@ joint_exclusive_scan(SYCLTargetSharedPtr sycl_target, std::size_t N, T *d_src,
   });
 }
 
+/**
+ * Compute the transpose of a matrix stored in row major format. Assumes that
+ * the matrix might be very non-square.
+ *
+ * @param[in] sycl_target Compute device to use.
+ * @param[in] num_rows Number of rows.
+ * @param[in] num_cols Number of columns.
+ * @param[in] d_src Device pointer to input matrix.
+ * @param[in, out] d_dst Device pointer to output matrix.
+ * @returns Event to wait on for completion.
+ */
+template <typename T>
+[[nodiscard]] inline sycl::event
+matrix_transpose(SYCLTargetSharedPtr sycl_target, const std::size_t num_rows,
+                 const std::size_t num_cols, const T *RESTRICT const d_src,
+                 T *RESTRICT d_dst) {
+  if ((num_rows == 1) || (num_cols == 1)) {
+    return sycl::event();
+  }
+  const std::size_t num_bytes_per_item = sizeof(T);
+  std::size_t local_size =
+      sycl_target->parameters->get<SizeTParameter>("LOOP_LOCAL_SIZE")->value;
+  local_size =
+      sycl_target->get_num_local_work_items(num_bytes_per_item, local_size);
+  local_size = std::sqrt(local_size);
+
+  const std::size_t local_size_row =
+      get_prev_power_of_two(std::min(num_rows, local_size));
+  const std::size_t local_size_col =
+      get_prev_power_of_two(std::min(num_cols, local_size));
+
+  sycl::range<2> range_local(local_size_row, local_size_col);
+  sycl::range<2> range_global(get_next_multiple(num_rows, local_size_row),
+                              get_next_multiple(num_cols, local_size_col));
+
+  return sycl_target->queue.submit([&](sycl::handler &cgh) {
+    sycl::local_accessor<T, 1> local_memory(
+        sycl::range<1>(local_size_row * local_size_col), cgh);
+    cgh.parallel_for(
+        sycl::nd_range<2>(range_global, range_local),
+        [=](sycl::nd_item<2> item) {
+          const std::size_t read_rowx = item.get_global_id(0);
+          const std::size_t read_colx = item.get_global_id(1);
+
+          const std::size_t local_read_rowx = item.get_local_id(0);
+          const std::size_t local_read_colx = item.get_local_id(1);
+
+          const bool item_valid =
+              (read_rowx < num_rows) && (read_colx < num_cols);
+
+          T value_read = 0.0;
+          if (item_valid) {
+            value_read = d_src[read_rowx * num_cols + read_colx];
+          }
+
+          // This might have shared memory bank conflicts on GPUs
+          local_memory[local_read_rowx * local_size_col + local_read_colx] =
+              value_read;
+          item.barrier(sycl::access::fence_space::local_space);
+
+          const std::size_t local_write_rowx =
+              item.get_local_linear_id() / local_size_row;
+          const std::size_t local_write_colx =
+              item.get_local_linear_id() % local_size_row;
+
+          // This might have shared memory bank conflicts on GPUs
+          const T value_write = local_memory[local_write_colx * local_size_col +
+                                             local_write_rowx];
+
+          // compute write index
+          const std::size_t group_row = item.get_group(0);
+          const std::size_t group_col = item.get_group(1);
+          const std::size_t write_rowx =
+              group_col * local_size_col + local_write_rowx;
+          const std::size_t write_colx =
+              group_row * local_size_row + local_write_colx;
+
+          if (item_valid) {
+            d_dst[write_rowx * num_rows + write_colx] = value_write;
+          }
+        });
+  });
+}
+
 } // namespace NESO::Particles
 
 #endif
