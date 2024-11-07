@@ -6,26 +6,38 @@
 
 namespace NESO::Particles {
 
-class DeviceLimits {
-protected:
+namespace Private {
+
+struct WorkGroupLimits {
   sycl::range<1> max_global_workgroup_1;
   sycl::range<2> max_global_workgroup_2;
   sycl::range<3> max_global_workgroup_3;
+};
 
-  template <int N> inline sycl::range<N> get_max_global_workgroup();
+template <int N>
+inline sycl::range<N> get_max_global_workgroup(WorkGroupLimits &wgl);
 
-  template <> inline sycl::range<1> get_max_global_workgroup() {
-    return this->max_global_workgroup_1;
-  }
-  template <> inline sycl::range<2> get_max_global_workgroup() {
-    return this->max_global_workgroup_2;
-  }
-  template <> inline sycl::range<3> get_max_global_workgroup() {
-    return this->max_global_workgroup_3;
-  }
+template <>
+inline sycl::range<1> get_max_global_workgroup(WorkGroupLimits &wgl) {
+  return wgl.max_global_workgroup_1;
+}
+template <>
+inline sycl::range<2> get_max_global_workgroup(WorkGroupLimits &wgl) {
+  return wgl.max_global_workgroup_2;
+}
+template <>
+inline sycl::range<3> get_max_global_workgroup(WorkGroupLimits &wgl) {
+  return wgl.max_global_workgroup_3;
+}
+
+} // namespace Private
+
+class DeviceLimits {
+protected:
+  Private::WorkGroupLimits wgl;
 
   inline void setup_env() {
-    auto current_limits = this->get_max_global_workgroup<3>();
+    auto current_limits = Private::get_max_global_workgroup<3>(wgl);
     const std::size_t env_max_0 = get_env_size_t(
         "NESO_PARTICLES_DEVICE_LIMIT_GLOBAL_SIZE_S0", current_limits.get(2));
     const std::size_t env_max_1 = get_env_size_t(
@@ -33,24 +45,24 @@ protected:
     const std::size_t env_max_2 = get_env_size_t(
         "NESO_PARTICLES_DEVICE_LIMIT_GLOBAL_SIZE_S2", current_limits.get(0));
 
-    this->max_global_workgroup_1 = sycl::range<1>(env_max_0);
-    this->max_global_workgroup_2 = sycl::range<2>(env_max_1, env_max_0);
-    this->max_global_workgroup_3 =
+    this->wgl.max_global_workgroup_1 = sycl::range<1>(env_max_0);
+    this->wgl.max_global_workgroup_2 = sycl::range<2>(env_max_1, env_max_0);
+    this->wgl.max_global_workgroup_3 =
         sycl::range<3>(env_max_2, env_max_1, env_max_0);
   }
 
   inline void setup_generic() {
     constexpr std::size_t max_size_t = std::numeric_limits<std::size_t>::max();
-    this->max_global_workgroup_1 = sycl::range<1>(max_size_t);
-    this->max_global_workgroup_2 = sycl::range<2>(max_size_t, max_size_t);
-    this->max_global_workgroup_3 =
+    this->wgl.max_global_workgroup_1 = sycl::range<1>(max_size_t);
+    this->wgl.max_global_workgroup_2 = sycl::range<2>(max_size_t, max_size_t);
+    this->wgl.max_global_workgroup_3 =
         sycl::range<3>(max_size_t, max_size_t, max_size_t);
   }
 
   inline void setup_nvidia() {
-    this->max_global_workgroup_1 = sycl::range<1>(2147483647);
-    this->max_global_workgroup_2 = sycl::range<2>(65535, 2147483647);
-    this->max_global_workgroup_3 = sycl::range<3>(65535, 65535, 2147483647);
+    this->wgl.max_global_workgroup_1 = sycl::range<1>(2147483647);
+    this->wgl.max_global_workgroup_2 = sycl::range<2>(65535, 2147483647);
+    this->wgl.max_global_workgroup_3 = sycl::range<3>(65535, 65535, 2147483647);
   }
 
 public:
@@ -68,11 +80,11 @@ public:
 
   inline void print() {
     nprint("Using global workgroup limits:");
-    auto d1 = this->get_max_global_workgroup<1>();
+    auto d1 = Private::get_max_global_workgroup<1>(wgl);
     nprint("1D:", d1.get(0));
-    auto d2 = this->get_max_global_workgroup<2>();
+    auto d2 = Private::get_max_global_workgroup<2>(wgl);
     nprint("2D:", d2.get(0), d2.get(1));
-    auto d3 = this->get_max_global_workgroup<3>();
+    auto d3 = Private::get_max_global_workgroup<3>(wgl);
     nprint("3D:", d3.get(0), d3.get(1), d3.get(2));
   }
 
@@ -85,7 +97,8 @@ public:
   template <int N>
   inline sycl::range<N>
   validate_range_global(const sycl::range<N> &range_global) {
-    sycl::range<N> max_global_workgroup = this->get_max_global_workgroup<N>();
+    sycl::range<N> max_global_workgroup =
+        Private::get_max_global_workgroup<N>(wgl);
     for (int dx = 0; dx < N; dx++) {
       if (max_global_workgroup.get(dx)) {
         NESOASSERT(

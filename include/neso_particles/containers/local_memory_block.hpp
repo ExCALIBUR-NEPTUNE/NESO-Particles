@@ -25,9 +25,7 @@ public:
    *
    * @param size Number of bytes required per particle.
    */
-  LocalMemoryBlock(const std::size_t size) : size(size) {
-    NESOASSERT(size >= 0, "Invalid local size passed.");
-  }
+  LocalMemoryBlock(const std::size_t size) : size(size) {}
 
   /**
    * Set the local memory required to a new number of bytes.
