@@ -160,7 +160,7 @@ if __name__ == "__main__":
                 dd_metrics["flops"].append(flops)
                 dd_metrics["bandwidth"].append(bandwidth)
 
-    names = set(dd_metrics["name"])
+    names = sorted(set(dd_metrics["name"]))
     df_metrics = pd.DataFrame.from_dict(dd_metrics)
     dd_metrics = None
 

@@ -109,7 +109,7 @@ TEST(LookupTable, base) {
   const int N = 16;
   auto lut = std::make_shared<LookupTable<int, double>>(sycl_target, N);
   for (int ix = 0; ix < N; ix++) {
-    double value;
+    double value = 0.0;
     ASSERT_FALSE(lut->host_get(ix, &value));
   }
   for (int ix = 0; ix < N; ix++) {
@@ -117,7 +117,7 @@ TEST(LookupTable, base) {
     lut->add(ix, value);
   }
   for (int ix = 0; ix < N; ix++) {
-    double value;
+    double value = 0.0;
     ASSERT_TRUE(lut->host_get(ix, &value));
     ASSERT_NEAR(value, 1.0 / (ix + 1), 1.0e-14);
   }
@@ -143,7 +143,7 @@ TEST(LookupTable, device) {
   sycl_target->queue
       .submit([&](sycl::handler &cgh) {
         cgh.parallel_for<>(sycl::range<1>(N), [=](sycl::id<1> idx) {
-          double value;
+          double value = 0.0;
           const bool e = k_root->get(static_cast<int>(idx), &value);
           k_exists[idx] = e ? 1 : 0;
           k_values[idx] = value;

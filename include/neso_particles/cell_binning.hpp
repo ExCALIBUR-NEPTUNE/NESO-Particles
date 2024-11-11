@@ -40,7 +40,7 @@ protected:
     return particle_loop(
         "CartesianCellBin", position_dat,
         [=](auto positions, auto cell_id) {
-          int cell_tmps[3];
+          int cell_tmps[3] = {0, 0, 0};
 
           for (int dimx = 0; dimx < k_ndim; dimx++) {
             const REAL pos =
