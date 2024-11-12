@@ -207,5 +207,6 @@ if __name__ == "__main__":
             hover_name="name",
             labels=labels,
         )
+        fig.update_traces(width=0.8)
 
         fig.show()
