@@ -121,6 +121,7 @@ struct ParticleLoopBlockDevice {
   std::size_t offset_cell;
   std::size_t offset_layer;
   int const *RESTRICT d_npart_cell;
+  std::size_t stride;
 
   /**
    * Convert a sycl::nd_item<2> into a cell, layer pair.
@@ -138,11 +139,52 @@ struct ParticleLoopBlockDevice {
   /**
    * @param cell Cell for this work item, see get_cell_layer.
    * @param layer Layer for this work item, see get_cell_layer.
-   * @returns True if work item should operate on particles.
+   * @returns True if work item should operate on particles. Valid when stride
+   * == 1.
    */
   inline bool work_item_required(const std::size_t cell,
                                  const std::size_t layer) const {
     return layer < static_cast<std::size_t>(this->d_npart_cell[cell]);
+  }
+
+  /**
+   * Convert a sycl::nd_item<2> into a cell, layer pair for the first particle.
+   * @param[in] idx SYCL nd_item for work item.
+   * @param[in, out] cell Cell for iteration.
+   * @param[in, out] layer Layer for iteration.
+   */
+  inline void stride_get_cell_layer(const sycl::nd_item<2> &idx,
+                                    std::size_t *RESTRICT cell,
+                                    std::size_t *RESTRICT layer) const {
+    *cell = idx.get_global_id(0) + this->offset_cell;
+    *layer = idx.get_global_id(1) + this->offset_layer;
+  }
+
+  /**
+   * @param cell Cell for this work item, see get_cell_layer.
+   * @param layer Layer for this work item, see get_cell_layer.
+   * @returns True if work item should operate on particles. Valid when stride
+   * != 1.
+   */
+  inline bool stride_work_item_required(const std::size_t cell,
+                                        const std::size_t layer) const {
+    return (layer * stride) <
+           static_cast<std::size_t>(this->d_npart_cell[cell]);
+  }
+
+  /**
+   * @param cell Cell for this work item, see get_cell_layer.
+   * @param layer Layer for this work item, see get_cell_layer.
+   * @returns Local index of last workitem which can touch particle data plus
+   * one.
+   */
+  inline std::size_t stride_local_index_bound(const std::size_t cell,
+                                              const std::size_t layer) {
+    const std::size_t last_index =
+        sycl::min((layer + 1) * stride,
+                  static_cast<std::size_t>(this->d_npart_cell[cell])) -
+        layer * stride;
+    return last_index;
   }
 
   ParticleLoopBlockDevice() = default;
@@ -236,10 +278,12 @@ public:
    * @param nbin Default number of bins to use for kernel launch.
    * @param local_size Default local size to use for kernel launch.
    * @param num_bytes_local Number of bytes required per particle.
+   * @param stride Number of particles each work item will process, default 1.
    */
   inline std::vector<ParticleLoopBlockHost> &
   get_all_cells(std::size_t nbin = 16, std::size_t local_size = 256,
-                const std::size_t num_bytes_local = 0) {
+                const std::size_t num_bytes_local = 0,
+                const std::size_t stride = 1) {
     local_size = this->sycl_target->get_num_local_work_items(num_bytes_local,
                                                              local_size);
     nbin = std::min(nbin, this->ncell);
@@ -257,7 +301,7 @@ public:
     min_occupancy *= local_size;
     this->iteration_set_size = min_occupancy * this->ncell;
     if (min_occupancy > 0) {
-      ParticleLoopBlockDevice block_device{0, 0, this->d_npart_cell};
+      ParticleLoopBlockDevice block_device{0, 0, this->d_npart_cell, stride};
       this->iteration_set.emplace_back(
           block_device, false, local_size,
           this->sycl_target->device_limits.validate_nd_range(sycl::nd_range<2>(
@@ -284,7 +328,7 @@ public:
         const std::size_t global_range =
             this->get_global_size(cell_max_occ, local_size);
         ParticleLoopBlockDevice block_device{start, min_occupancy,
-                                             this->d_npart_cell};
+                                             this->d_npart_cell, stride};
         this->iteration_set.emplace_back(
             block_device, true, local_size,
             this->sycl_target->device_limits.validate_nd_range(
@@ -302,19 +346,24 @@ public:
    * @param cell Produce an iteration set for a single cell.
    * @param local_size Default local size to use for kernel launch.
    * @param num_bytes_local Number of bytes required per particle.
+   * @param stride Number of particles each work item will process, default 1.
    */
   inline std::vector<ParticleLoopBlockHost> &
   get_single_cell(const std::size_t cell, std::size_t local_size = 256,
-                  const std::size_t num_bytes_local = 0) {
+                  const std::size_t num_bytes_local = 0,
+                  const std::size_t stride = 1) {
     local_size = this->sycl_target->get_num_local_work_items(num_bytes_local,
                                                              local_size);
+    local_size /= stride;
+    NESOASSERT(local_size > 0, "Cannot deduce a local size.");
     this->iteration_set.clear();
 
     const std::size_t npart =
         static_cast<std::size_t>(this->h_npart_cell[cell]);
-    const std::size_t global_range = this->get_global_size(npart, local_size);
+    const std::size_t global_range = this->get_global_size(
+        get_next_multiple(npart, stride) / stride, local_size);
 
-    ParticleLoopBlockDevice block_device{cell, 0, this->d_npart_cell};
+    ParticleLoopBlockDevice block_device{cell, 0, this->d_npart_cell, stride};
 
     this->iteration_set.emplace_back(
         block_device, true, local_size,
