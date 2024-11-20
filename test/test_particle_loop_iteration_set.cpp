@@ -226,7 +226,6 @@ TEST(ParticleLoop, iteration_set) {
 
 TEST(ParticleLoop, iteration_set_base_stride) {
   auto sycl_target = std::make_shared<SYCLTarget>(GPU_SELECTOR, MPI_COMM_WORLD);
-  const std::size_t Nbin = 16;
   const std::size_t Ncell = 197;
   const std::size_t local_size = 32;
   const std::size_t Nmin = 65;
@@ -298,4 +297,71 @@ TEST(ParticleLoop, iteration_set_base_stride) {
   }
 
   sycl_target->free();
+}
+
+TEST(ParticleLoop, iteration_set_stride_single_cell) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  auto sycl_target = A->sycl_target;
+  const std::size_t stride = 3;
+  const std::size_t local_size =
+      sycl_target->parameters->template get<SizeTParameter>("LOOP_LOCAL_SIZE")
+          ->value;
+
+  particle_loop(
+      A,
+      [=](auto INDEX, auto OUT_INT) {
+        OUT_INT.at(0) = INDEX.get_loop_linear_index();
+      },
+      Access::read(ParticleLoopIndex{}), Access::write(Sym<INT>("OUT_INT")))
+      ->execute();
+
+  ParticleLoopImplementation::ParticleLoopBlockIterationSet ish{
+      A->mpi_rank_dat};
+
+  auto ptr = A->get_dat(Sym<INT>("OUT_INT"))->cell_dat.device_ptr();
+
+  EventStack es;
+  const std::size_t cell_count = mesh->get_cell_count();
+  for (std::size_t cellx = 0; cellx < cell_count; cellx++) {
+    auto is = ish.get_single_cell(cellx, local_size, 0, stride);
+    for (auto &blockx : is) {
+      const auto block_device = blockx.block_device;
+      es.push(sycl_target->queue.submit([&](sycl::handler &cgh) {
+        cgh.parallel_for<>(
+            blockx.loop_iteration_set, [=](sycl::nd_item<2> idx) {
+              std::size_t cell;
+              std::size_t block;
+              block_device.stride_get_cell_block(idx, &cell, &block);
+              if (block_device.stride_work_item_required(cell, block)) {
+                const std::size_t layer_start = block * stride;
+                const std::size_t layer_end =
+                    layer_start +
+                    block_device.stride_local_index_bound(cell, block);
+                for (std::size_t layer = layer_start; layer < layer_end;
+                     layer++) {
+                  ptr[cell][1][layer] = ptr[cell][0][layer];
+                }
+              }
+            });
+      }));
+    }
+  }
+  es.wait();
+
+  ErrorPropagate ep(sycl_target);
+  auto k_ep = ep.device_ptr();
+  particle_loop(
+      A,
+      [=](auto OUT_INT) {
+        NESO_KERNEL_ASSERT(OUT_INT.at(0) == OUT_INT.at(1), k_ep);
+      },
+      Access::read(Sym<INT>("OUT_INT")))
+      ->execute();
+  ASSERT_FALSE(ep.get_flag());
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
 }

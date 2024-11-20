@@ -148,42 +148,42 @@ struct ParticleLoopBlockDevice {
   }
 
   /**
-   * Convert a sycl::nd_item<2> into a cell, layer pair for the first particle.
+   * Convert a sycl::nd_item<2> into a cell, block pair for the first particle.
    * @param[in] idx SYCL nd_item for work item.
    * @param[in, out] cell Cell for iteration.
-   * @param[in, out] layer Layer for iteration.
+   * @param[in, out] block Block for iteration.
    */
-  inline void stride_get_cell_layer(const sycl::nd_item<2> &idx,
+  inline void stride_get_cell_block(const sycl::nd_item<2> &idx,
                                     std::size_t *RESTRICT cell,
-                                    std::size_t *RESTRICT layer) const {
+                                    std::size_t *RESTRICT block) const {
     *cell = idx.get_global_id(0) + this->offset_cell;
-    *layer = idx.get_global_id(1) + this->offset_layer;
+    *block = idx.get_global_id(1) + this->offset_layer;
   }
 
   /**
-   * @param cell Cell for this work item, see get_cell_layer.
-   * @param layer Layer for this work item, see get_cell_layer.
+   * @param cell Cell for this work item, see stride_get_cell_block.
+   * @param block Block for this work item, see stride_get_cell_block.
    * @returns True if work item should operate on particles. Valid when stride
    * != 1.
    */
   inline bool stride_work_item_required(const std::size_t cell,
-                                        const std::size_t layer) const {
-    return (layer * stride) <
+                                        const std::size_t block) const {
+    return (block * stride) <
            static_cast<std::size_t>(this->d_npart_cell[cell]);
   }
 
   /**
-   * @param cell Cell for this work item, see get_cell_layer.
-   * @param layer Layer for this work item, see get_cell_layer.
+   * @param cell Cell for this work item, see stride_get_cell_block.
+   * @param block Block for this work item, see stride_get_cell_block.
    * @returns Local index of last workitem which can touch particle data plus
    * one.
    */
   inline std::size_t stride_local_index_bound(const std::size_t cell,
-                                              const std::size_t layer) {
+                                              const std::size_t block) const {
     const std::size_t last_index =
-        sycl::min((layer + 1) * stride,
+        sycl::min((block + 1) * stride,
                   static_cast<std::size_t>(this->d_npart_cell[cell])) -
-        layer * stride;
+        block * stride;
     return last_index;
   }
 
