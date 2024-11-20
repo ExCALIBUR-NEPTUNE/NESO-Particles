@@ -60,6 +60,11 @@ ParticleGroupSharedPtr particle_loop_common(const int N = 1093) {
   ccb->execute();
   A->cell_move();
 
+  auto aa = particle_sub_group(
+      A, [=](auto ID) { return ID.at(0) == 0; },
+      Access::read(Sym<INT>("CELL_ID")));
+  A->remove_particles(aa);
+
   return A;
 }
 
@@ -226,6 +231,7 @@ TEST(ParticleLoop, iteration_set) {
 
 TEST(ParticleLoop, iteration_set_base_stride) {
   auto sycl_target = std::make_shared<SYCLTarget>(GPU_SELECTOR, MPI_COMM_WORLD);
+  const std::size_t Nbin = 13;
   const std::size_t Ncell = 197;
   const std::size_t local_size = 32;
   const std::size_t Nmin = 65;
@@ -295,6 +301,45 @@ TEST(ParticleLoop, iteration_set_base_stride) {
       EXPECT_EQ(set_correct, set_test);
     }
   }
+  // test all cell iteration set
+  {
+    std::set<std::array<std::size_t, 2>> set_test;
+    auto is = ish.get_all_cells(Nbin, local_size, 0, stride);
+
+    for (auto &blockx : is) {
+      auto range_global = blockx.loop_iteration_set.get_global_range();
+      auto range_local = blockx.loop_iteration_set.get_local_range();
+      EXPECT_EQ(range_local.get(0), 1);
+      EXPECT_EQ(range_local.get(1), local_size / stride);
+      const std::size_t cell_start = blockx.block_device.offset_cell;
+      const std::size_t cell_end = range_global.get(0) + cell_start;
+      const std::size_t block_start = blockx.block_device.offset_layer;
+      const std::size_t block_end = range_global.get(1) + block_start;
+      for (std::size_t cell = cell_start; cell < cell_end; cell++) {
+        for (std::size_t block = block_start; block < block_end; block++) {
+          if (blockx.block_device.stride_work_item_required(cell, block)) {
+            const auto bound =
+                blockx.block_device.stride_local_index_bound(cell, block);
+            const std::size_t layer_start = block * stride;
+            const std::size_t layer_end = layer_start + bound;
+            for (std::size_t layer = layer_start; layer < layer_end; layer++) {
+              set_test.insert({cell, layer});
+            }
+          }
+        }
+      }
+    }
+
+    std::set<std::array<std::size_t, 2>> set_correct;
+    for (std::size_t cell = 0; cell < Ncell; cell++) {
+      const auto npart_cell = static_cast<std::size_t>(h_npart_cell.at(cell));
+      for (std::size_t layer = 0; layer < npart_cell; layer++) {
+        set_correct.insert({cell, layer});
+      }
+    }
+    EXPECT_EQ(set_correct.size(), set_test.size());
+    EXPECT_EQ(set_correct, set_test);
+  }
 
   sycl_target->free();
 }
@@ -347,6 +392,68 @@ TEST(ParticleLoop, iteration_set_stride_single_cell) {
             });
       }));
     }
+  }
+  es.wait();
+
+  ErrorPropagate ep(sycl_target);
+  auto k_ep = ep.device_ptr();
+  particle_loop(
+      A,
+      [=](auto OUT_INT) {
+        NESO_KERNEL_ASSERT(OUT_INT.at(0) == OUT_INT.at(1), k_ep);
+      },
+      Access::read(Sym<INT>("OUT_INT")))
+      ->execute();
+  ASSERT_FALSE(ep.get_flag());
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}
+
+TEST(ParticleLoop, iteration_set_stride_all_cells) {
+  const std::size_t Nbin = 16;
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  auto sycl_target = A->sycl_target;
+  const std::size_t stride = 3;
+  const std::size_t local_size =
+      sycl_target->parameters->template get<SizeTParameter>("LOOP_LOCAL_SIZE")
+          ->value;
+
+  particle_loop(
+      A,
+      [=](auto INDEX, auto OUT_INT) {
+        OUT_INT.at(0) = INDEX.get_loop_linear_index();
+      },
+      Access::read(ParticleLoopIndex{}), Access::write(Sym<INT>("OUT_INT")))
+      ->execute();
+
+  ParticleLoopImplementation::ParticleLoopBlockIterationSet ish{
+      A->mpi_rank_dat};
+
+  auto ptr = A->get_dat(Sym<INT>("OUT_INT"))->cell_dat.device_ptr();
+
+  EventStack es;
+  auto is = ish.get_all_cells(Nbin, local_size, 0, stride);
+  for (auto &blockx : is) {
+    const auto block_device = blockx.block_device;
+    es.push(sycl_target->queue.submit([&](sycl::handler &cgh) {
+      cgh.parallel_for<>(blockx.loop_iteration_set, [=](sycl::nd_item<2> idx) {
+        std::size_t cell;
+        std::size_t block;
+        block_device.stride_get_cell_block(idx, &cell, &block);
+        if (block_device.stride_work_item_required(cell, block)) {
+          const std::size_t layer_start = block * stride;
+          const std::size_t layer_end =
+              layer_start + block_device.stride_local_index_bound(cell, block);
+          for (std::size_t layer = layer_start; layer < layer_end; layer++) {
+            ptr[cell][1][layer] = ptr[cell][0][layer];
+          }
+        }
+      });
+    }));
   }
   es.wait();
 

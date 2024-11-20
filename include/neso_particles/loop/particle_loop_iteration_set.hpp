@@ -286,6 +286,7 @@ public:
                 const std::size_t stride = 1) {
     local_size = this->sycl_target->get_num_local_work_items(num_bytes_local,
                                                              local_size);
+    local_size /= stride;
     nbin = std::min(nbin, this->ncell);
     this->iteration_set.clear();
 
@@ -296,18 +297,18 @@ public:
       min_occupancy = std::min(
           min_occupancy, static_cast<std::size_t>(this->h_npart_cell[cellx]));
     }
-    // Truncate to a multiple of local size.
-    min_occupancy /= local_size;
-    min_occupancy *= local_size;
+    // Truncate to a multiple of local size and stride.
+    min_occupancy /= (local_size * stride);
+    min_occupancy *= (local_size * stride);
     this->iteration_set_size = min_occupancy * this->ncell;
     if (min_occupancy > 0) {
       ParticleLoopBlockDevice block_device{0, 0, this->d_npart_cell, stride};
       this->iteration_set.emplace_back(
           block_device, false, local_size,
           this->sycl_target->device_limits.validate_nd_range(sycl::nd_range<2>(
-              // min_occupancy is already a multiple of local_size by
+              // min_occupancy is already a multiple of local_size and stride by
               // construction.
-              sycl::range<2>(this->ncell, min_occupancy),
+              sycl::range<2>(this->ncell, min_occupancy / stride),
               sycl::range<2>(1, local_size))));
     }
     // Create the peel loops
@@ -325,9 +326,9 @@ public:
       // Subtract of the block already completed as this is a peel loop.
       cell_max_occ -= min_occupancy;
       if (cell_max_occ > 0) {
-        const std::size_t global_range =
-            this->get_global_size(cell_max_occ, local_size);
-        ParticleLoopBlockDevice block_device{start, min_occupancy,
+        const std::size_t global_range = this->get_global_size(
+            get_next_multiple(cell_max_occ, stride) / stride, local_size);
+        ParticleLoopBlockDevice block_device{start, min_occupancy / stride,
                                              this->d_npart_cell, stride};
         this->iteration_set.emplace_back(
             block_device, true, local_size,
