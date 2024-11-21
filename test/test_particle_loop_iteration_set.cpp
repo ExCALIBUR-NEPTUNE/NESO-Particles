@@ -70,13 +70,28 @@ ParticleGroupSharedPtr particle_loop_common(const int N = 1093) {
 
 } // namespace
 
-TEST(ParticleLoop, iteration_set_base) {
+class ParticleLoopLocalMem : public testing::TestWithParam<std::size_t> {};
+TEST_P(ParticleLoopLocalMem, iteration_set_base) {
   auto sycl_target = std::make_shared<SYCLTarget>(GPU_SELECTOR, MPI_COMM_WORLD);
   const std::size_t Nbin = 16;
   const std::size_t Ncell = 197;
   const std::size_t local_size = 32;
   const std::size_t Nmin = 65;
   const std::size_t Nmax = 1023;
+
+  // Some of the SYCL implementations claim to have an extremely large local
+  // memory limit by default that we cannot reasonably test, e.g.
+  // 18446744073709551615 bytes.
+  std::size_t local_mem_required = GetParam();
+  std::size_t default_limit = 8 * local_mem_required + 3;
+  std::size_t existing_limit = sycl_target->device_limits.local_mem_size;
+  if (existing_limit < default_limit) {
+    local_mem_required = existing_limit / 2;
+  } else {
+    sycl_target->device_limits.local_mem_size = default_limit;
+  }
+  const std::size_t local_mem_limit = sycl_target->device_limits.local_mem_size;
+
   std::uniform_int_distribution<std::size_t> dst(Nmin, Nmax);
   std::mt19937 rng(5223423);
   std::vector<int> h_npart_cell(Ncell);
@@ -89,7 +104,7 @@ TEST(ParticleLoop, iteration_set_base) {
   // Test the single cell iteration set
   {
     for (std::size_t cellx = 0; cellx < Ncell; cellx++) {
-      auto is = ish.get_single_cell(cellx, local_size);
+      auto is = ish.get_single_cell(cellx, local_size, local_mem_required);
       const auto nblocks = is.size();
 
       std::size_t offset_layer = 0;
@@ -103,8 +118,15 @@ TEST(ParticleLoop, iteration_set_base) {
         auto range_local = blockx.loop_iteration_set.get_local_range();
         ASSERT_EQ(range_global.get(0), 1);
         ASSERT_EQ(range_local.get(0), 1);
-        ASSERT_EQ(range_local.get(1), local_size);
-        ASSERT_EQ(range_global.get(1) % local_size, 0);
+
+        if (local_mem_required == 0) {
+          ASSERT_EQ(range_local.get(1), local_size);
+        } else {
+          ASSERT_TRUE(range_local.get(1) * local_mem_required <=
+                      local_mem_limit);
+        }
+
+        ASSERT_EQ(range_global.get(1) % range_local.get(1), 0);
         offset_layer += range_global.get(1);
 
         if (ix == (nblocks - 1)) {
@@ -139,13 +161,20 @@ TEST(ParticleLoop, iteration_set_base) {
   // Test the all cell iteration set
   {
     std::set<std::array<std::size_t, 2>> set_test;
-    auto is = ish.get_all_cells(Nbin, local_size);
+    auto is = ish.get_all_cells(Nbin, local_size, local_mem_required);
 
     for (auto &blockx : is) {
       auto range_global = blockx.loop_iteration_set.get_global_range();
       auto range_local = blockx.loop_iteration_set.get_local_range();
       EXPECT_EQ(range_local.get(0), 1);
-      EXPECT_EQ(range_local.get(1), local_size);
+
+      if (local_mem_required == 0) {
+        EXPECT_EQ(range_local.get(1), local_size);
+      } else {
+        ASSERT_TRUE(range_local.get(1) * local_mem_required <= local_mem_limit);
+      }
+      ASSERT_EQ(range_global.get(1) % range_local.get(1), 0);
+
       const std::size_t cell_start = blockx.block_device.offset_cell;
       const std::size_t cell_end = range_global.get(0) + cell_start;
       const std::size_t layer_start = blockx.block_device.offset_layer;
@@ -229,7 +258,7 @@ TEST(ParticleLoop, iteration_set) {
   mesh->free();
 }
 
-TEST(ParticleLoop, iteration_set_base_stride) {
+TEST_P(ParticleLoopLocalMem, iteration_set_base_stride) {
   auto sycl_target = std::make_shared<SYCLTarget>(GPU_SELECTOR, MPI_COMM_WORLD);
   const std::size_t Nbin = 13;
   const std::size_t Ncell = 197;
@@ -243,13 +272,27 @@ TEST(ParticleLoop, iteration_set_base_stride) {
   std::generate(h_npart_cell.begin(), h_npart_cell.end(),
                 [&]() { return dst(rng); });
 
+  // Some of the SYCL implementations claim to have an extremely large local
+  // memory limit by default that we cannot reasonably test, e.g.
+  // 18446744073709551615 bytes.
+  std::size_t local_mem_required = GetParam();
+  std::size_t default_limit = 8 * local_mem_required + 3;
+  std::size_t existing_limit = sycl_target->device_limits.local_mem_size;
+  if (existing_limit < default_limit) {
+    local_mem_required = existing_limit / 2;
+  } else {
+    sycl_target->device_limits.local_mem_size = default_limit;
+  }
+  const std::size_t local_mem_limit = sycl_target->device_limits.local_mem_size;
+
   ParticleLoopImplementation::ParticleLoopBlockIterationSet ish{
       sycl_target, Ncell, h_npart_cell.data(), h_npart_cell.data()};
 
   // Test the single cell iteration set
   {
     for (std::size_t cellx = 0; cellx < Ncell; cellx++) {
-      auto is = ish.get_single_cell(cellx, local_size, 0, stride);
+      auto is =
+          ish.get_single_cell(cellx, local_size, local_mem_required, stride);
       const auto nblocks = is.size();
 
       std::size_t offset_layer = 0;
@@ -263,7 +306,14 @@ TEST(ParticleLoop, iteration_set_base_stride) {
         auto range_local = blockx.loop_iteration_set.get_local_range();
         ASSERT_EQ(range_global.get(0), 1);
         ASSERT_EQ(range_local.get(0), 1);
-        ASSERT_EQ(range_local.get(1), local_size / stride);
+        if (local_mem_required == 0) {
+          EXPECT_EQ(range_local.get(1), local_size / stride);
+        } else {
+          ASSERT_TRUE(range_local.get(1) * local_mem_required * stride <=
+                      local_mem_limit);
+        }
+        ASSERT_EQ(range_global.get(1) % range_local.get(1), 0);
+
         ASSERT_TRUE(range_global.get(1) * stride >=
                     static_cast<std::size_t>(h_npart_cell.at(cellx)));
         offset_layer += range_global.get(1);
@@ -304,13 +354,21 @@ TEST(ParticleLoop, iteration_set_base_stride) {
   // test all cell iteration set
   {
     std::set<std::array<std::size_t, 2>> set_test;
-    auto is = ish.get_all_cells(Nbin, local_size, 0, stride);
+    auto is = ish.get_all_cells(Nbin, local_size, local_mem_required, stride);
 
     for (auto &blockx : is) {
       auto range_global = blockx.loop_iteration_set.get_global_range();
       auto range_local = blockx.loop_iteration_set.get_local_range();
       EXPECT_EQ(range_local.get(0), 1);
-      EXPECT_EQ(range_local.get(1), local_size / stride);
+
+      if (local_mem_required == 0) {
+        EXPECT_EQ(range_local.get(1), local_size / stride);
+      } else {
+        ASSERT_TRUE(range_local.get(1) * local_mem_required * stride <=
+                    local_mem_limit);
+      }
+      ASSERT_EQ(range_global.get(1) % range_local.get(1), 0);
+
       const std::size_t cell_start = blockx.block_device.offset_cell;
       const std::size_t cell_end = range_global.get(0) + cell_start;
       const std::size_t block_start = blockx.block_device.offset_layer;
@@ -472,3 +530,5 @@ TEST(ParticleLoop, iteration_set_stride_all_cells) {
   sycl_target->free();
   mesh->free();
 }
+
+INSTANTIATE_TEST_SUITE_P(init, ParticleLoopLocalMem, testing::Values(0, 8));

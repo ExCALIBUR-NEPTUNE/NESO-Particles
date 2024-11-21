@@ -337,15 +337,7 @@ public:
     if (num_bytes <= 0) {
       return default_num;
     } else {
-      sycl::device device = this->device;
-      auto local_mem_exists =
-          device.get_info<sycl::info::device::local_mem_type>() !=
-          sycl::info::local_mem_type::none;
-
-      NESOASSERT(local_mem_exists, "Local memory does not exist.");
-      auto local_mem_size =
-          device.get_info<sycl::info::device::local_mem_size>();
-
+      const std::size_t local_mem_size = this->device_limits.local_mem_size;
       const std::size_t max_num_workitems = local_mem_size / num_bytes;
       // find the max power of two that does not exceed the number of work
       // items.
