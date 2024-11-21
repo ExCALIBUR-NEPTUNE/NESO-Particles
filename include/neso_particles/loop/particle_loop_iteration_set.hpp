@@ -241,6 +241,25 @@ protected:
     return outer_size;
   }
 
+  inline std::size_t
+  get_local_size(std::size_t local_size,
+                 const std::size_t num_bytes_local, // this is per particle
+                 const std::size_t stride) {
+    const std::size_t local_mem_size =
+        this->sycl_target->device_limits.local_mem_size;
+    const std::size_t num_bytes_per_block = stride * num_bytes_local;
+    NESOASSERT(num_bytes_per_block <= local_mem_size,
+               "Impossible to create a local range for this stride and local "
+               "memory size.");
+    const std::size_t max_num_blocks_per_workgroup =
+        (num_bytes_local == 0) ? local_size
+                               : local_mem_size / num_bytes_per_block;
+    local_size = get_prev_power_of_two(max_num_blocks_per_workgroup);
+    NESOASSERT(local_size * stride * num_bytes_local <= local_mem_size,
+               "Failure to determine a local size for iteration set.");
+    return local_size;
+  }
+
 public:
   /// The last iteration set produced
   std::vector<ParticleLoopBlockHost> iteration_set;
@@ -284,9 +303,8 @@ public:
   get_all_cells(std::size_t nbin = 16, std::size_t local_size = 256,
                 const std::size_t num_bytes_local = 0,
                 const std::size_t stride = 1) {
-    local_size = this->sycl_target->get_num_local_work_items(num_bytes_local,
-                                                             local_size);
-    local_size /= stride;
+
+    local_size = this->get_local_size(local_size, num_bytes_local, stride);
     nbin = std::min(nbin, this->ncell);
     this->iteration_set.clear();
 
@@ -353,10 +371,8 @@ public:
   get_single_cell(const std::size_t cell, std::size_t local_size = 256,
                   const std::size_t num_bytes_local = 0,
                   const std::size_t stride = 1) {
-    local_size = this->sycl_target->get_num_local_work_items(num_bytes_local,
-                                                             local_size);
-    local_size /= stride;
-    NESOASSERT(local_size > 0, "Cannot deduce a local size.");
+
+    local_size = this->get_local_size(local_size, num_bytes_local, stride);
     this->iteration_set.clear();
 
     const std::size_t npart =

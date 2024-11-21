@@ -307,7 +307,7 @@ TEST_P(ParticleLoopLocalMem, iteration_set_base_stride) {
         ASSERT_EQ(range_global.get(0), 1);
         ASSERT_EQ(range_local.get(0), 1);
         if (local_mem_required == 0) {
-          EXPECT_EQ(range_local.get(1), local_size / stride);
+          EXPECT_EQ(range_local.get(1), local_size);
         } else {
           ASSERT_TRUE(range_local.get(1) * local_mem_required * stride <=
                       local_mem_limit);
@@ -362,7 +362,7 @@ TEST_P(ParticleLoopLocalMem, iteration_set_base_stride) {
       EXPECT_EQ(range_local.get(0), 1);
 
       if (local_mem_required == 0) {
-        EXPECT_EQ(range_local.get(1), local_size / stride);
+        EXPECT_EQ(range_local.get(1), local_size);
       } else {
         ASSERT_TRUE(range_local.get(1) * local_mem_required * stride <=
                     local_mem_limit);
