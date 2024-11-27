@@ -92,13 +92,11 @@ foreach(TEST ${TEST_SRCS})
   add_sycl_to_target(TARGET ${TEST_NAME} SOURCES ${TEST_SOURCES})
   gtest_add_tests(TARGET ${TEST_NAME})
 
-  set_target_properties(${TEST_NAME} 
-    PROPERTIES
-        CXX_STANDARD 17
-        CXX_STANDARD_REQUIRED ON
-        CXX_EXTENSIONS OFF
-    )
-
+  set_target_properties(
+    ${TEST_NAME}
+    PROPERTIES CXX_STANDARD 17
+               CXX_STANDARD_REQUIRED ON
+               CXX_EXTENSIONS OFF)
 
 endforeach()
 
@@ -111,13 +109,11 @@ target_compile_definitions(${EXECUTABLE}
                            PRIVATE CMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX})
 target_compile_options(${EXECUTABLE} PRIVATE "-Wpedantic;-Wall;-Wextra")
 
-set_target_properties(${EXECUTABLE} 
-    PROPERTIES
-        CXX_STANDARD 17
-        CXX_STANDARD_REQUIRED ON
-        CXX_EXTENSIONS OFF
-    )
-
+set_target_properties(
+  ${EXECUTABLE}
+  PROPERTIES CXX_STANDARD 17
+             CXX_STANDARD_REQUIRED ON
+             CXX_EXTENSIONS OFF)
 
 # define the test executable as a sycl target
 add_sycl_to_target(TARGET ${EXECUTABLE} SOURCES ${TEST_MAIN} ${TEST_LIST})

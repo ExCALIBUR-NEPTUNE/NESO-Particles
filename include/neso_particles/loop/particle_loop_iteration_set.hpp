@@ -253,7 +253,8 @@ protected:
     const std::size_t max_num_blocks_per_workgroup =
         (num_bytes_local == 0) ? local_size
                                : local_mem_size / num_bytes_per_block;
-    local_size = std::min(get_prev_power_of_two(max_num_blocks_per_workgroup), local_size);
+    local_size = std::min(get_prev_power_of_two(max_num_blocks_per_workgroup),
+                          local_size);
     NESOASSERT(local_size * stride * num_bytes_local <= local_mem_size,
                "Failure to determine a local size for iteration set.");
     return local_size;

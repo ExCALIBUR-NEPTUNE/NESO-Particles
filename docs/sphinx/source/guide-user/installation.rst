@@ -49,6 +49,12 @@ These downstream implementations should pass CMake variables or compilers at con
 When a SYCL implementation is passed to NESO-Particles itself then it is used to build the tests.
 Please read the section :ref:`device-aware-mpi` for more information relating to device aware MPI.
 
+CXX Standard
+------------
+
+Although we explicitly set C++17 as the required C++ version on the NESO-Particles interface target, CMake may not pass this requirement down onto targets using NESO-Particles.
+Downstream projects may need to explicitly set the required C++ standard to C++17.
+
 Installing
 ==========
 
