@@ -207,7 +207,6 @@ struct ParticleLoopBlockHost {
   /// The iteration set for the parallel loop
   sycl::nd_range<2> loop_iteration_set;
 
-  ParticleLoopBlockHost(const ParticleLoopBlockHost &) = default;
   ParticleLoopBlockHost(ParticleLoopBlockDevice block_device,
                         const bool layer_bounds_check_required,
                         const std::size_t local_size,
