@@ -10,6 +10,7 @@ using namespace MeshHierarchyData;
 namespace {
 
 struct EmptySerialise : public SerialInterface {
+  virtual ~EmptySerialise() = default;
   virtual inline std::size_t get_num_bytes() const override { return 0; }
   virtual inline void
   serialise([[maybe_unused]] std::byte *buffer,
