@@ -815,7 +815,8 @@ TEST(PETScBoundary2D, reflection_truncated) {
 
 TEST(PETScBoundary2D, reflection_advection) {
   PETSCCHK(PetscInitializeNoArguments());
-  const std::string mesh_file = get_test_resource("mesh_ring/mesh_ring.msh");
+  std::string mesh_file;
+  GET_TEST_RESOURCE(mesh_file, "mesh_ring/mesh_ring.msh");
   if (mesh_file.size()) {
 
     DM dm;
