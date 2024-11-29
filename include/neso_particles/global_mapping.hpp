@@ -68,7 +68,7 @@ public:
   /// Disable (implicit) copies.
   MeshHierarchyGlobalMap &operator=(MeshHierarchyGlobalMap const &a) = delete;
 
-  ~MeshHierarchyGlobalMap() {};
+  ~MeshHierarchyGlobalMap(){};
 
   /**
    * Construct a new global mapping instance for MeshHierarchy.
@@ -91,7 +91,7 @@ public:
         d_lookup_ranks(sycl_target, 1), d_lookup_local_cells(sycl_target, 1),
         d_lookup_local_layers(sycl_target, 1), h_origin(sycl_target, 3),
         d_origin(sycl_target, 3), h_dims(sycl_target, 3),
-        d_dims(sycl_target, 3), error_propagate(sycl_target) {};
+        d_dims(sycl_target, 3), error_propagate(sycl_target){};
 
   /**
    * For each particle that does not have a non-negative MPI rank determined as

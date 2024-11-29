@@ -655,7 +655,7 @@ public:
   /// Wrapped BufferHost.
   BufferHost<T> h_buffer;
 
-  ~BufferDeviceHost() {};
+  ~BufferDeviceHost(){};
 
   /**
    * Create a new BufferDeviceHost of the request size on the requested compute
@@ -667,7 +667,7 @@ public:
    */
   BufferDeviceHost(SYCLTargetSharedPtr sycl_target, size_t size)
       : sycl_target(sycl_target), size(size), d_buffer(sycl_target, size),
-        h_buffer(sycl_target, size) {};
+        h_buffer(sycl_target, size){};
 
   /**
    * Create a new BufferDeviceHost from a std::vector. Note, this does not
@@ -678,7 +678,7 @@ public:
    */
   BufferDeviceHost(SYCLTargetSharedPtr sycl_target, const std::vector<T> &vec)
       : sycl_target(sycl_target), size(vec.size()), d_buffer(sycl_target, vec),
-        h_buffer(sycl_target, vec) {};
+        h_buffer(sycl_target, vec){};
 
   /**
    * Get the size in bytes of the allocation on the host and device.
@@ -767,12 +767,12 @@ private:
   std::stack<sycl::event> stack;
 
 public:
-  ~EventStack() {};
+  ~EventStack(){};
 
   /**
    *  Create a new and empty stack of events.
    */
-  EventStack() {};
+  EventStack(){};
 
   /**
    *  Push a sycl::event onto the event stack.

@@ -114,9 +114,9 @@ TEST(PETScBoundary2D, constructor_2d) {
   PetscReal lower[3] = {0.0, 0.0, 0.0};
   PetscReal upper[3] = {mesh_size * h, mesh_size * h, mesh_size * h};
 
-  PETSCCHK(DMPlexCreateBoxMesh(PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces,
-                               lower, upper,
-                               /* periodicity */ NULL, PETSC_TRUE, &dm));
+  PETSCCHK(NPPETScAPI::NP_DMPlexCreateBoxMesh(
+      PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces, lower, upper,
+      /* periodicity */ NULL, PETSC_TRUE, &dm));
 
   PetscInterface::generic_distribute(&dm);
   auto mesh =
@@ -239,9 +239,9 @@ TEST(PETScBoundary2D, collect_2d) {
   PetscReal lower[3] = {0.0, 0.0, 0.0};
   PetscReal upper[3] = {mesh_size * h, mesh_size * h, mesh_size * h};
 
-  PETSCCHK(DMPlexCreateBoxMesh(PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces,
-                               lower, upper,
-                               /* periodicity */ NULL, PETSC_TRUE, &dm));
+  PETSCCHK(NPPETScAPI::NP_DMPlexCreateBoxMesh(
+      PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces, lower, upper,
+      /* periodicity */ NULL, PETSC_TRUE, &dm));
 
   PetscInterface::generic_distribute(&dm);
   auto mesh =
@@ -357,9 +357,9 @@ TEST(PETScBoundary2D, pre_integrate) {
   PetscReal lower[3] = {0.0, 0.0, 0.0};
   PetscReal upper[3] = {mesh_size * h, mesh_size * h, mesh_size * h};
 
-  PETSCCHK(DMPlexCreateBoxMesh(PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces,
-                               lower, upper,
-                               /* periodicity */ NULL, PETSC_TRUE, &dm));
+  PETSCCHK(NPPETScAPI::NP_DMPlexCreateBoxMesh(
+      PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces, lower, upper,
+      /* periodicity */ NULL, PETSC_TRUE, &dm));
   PetscInterface::generic_distribute(&dm);
   auto A = particle_loop_common(dm, 128);
   auto mesh = std::dynamic_pointer_cast<PetscInterface::DMPlexInterface>(
@@ -407,9 +407,9 @@ TEST(PETScBoundary2D, post_integrate) {
   PetscReal lower[3] = {0.0, 0.0, 0.0};
   PetscReal upper[3] = {mesh_size * h, mesh_size * h, mesh_size * h};
 
-  PETSCCHK(DMPlexCreateBoxMesh(PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces,
-                               lower, upper,
-                               /* periodicity */ NULL, PETSC_TRUE, &dm));
+  PETSCCHK(NPPETScAPI::NP_DMPlexCreateBoxMesh(
+      PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces, lower, upper,
+      /* periodicity */ NULL, PETSC_TRUE, &dm));
   PetscInterface::generic_distribute(&dm);
   auto A = particle_loop_common(dm, mesh_size * mesh_size * npart_per_cell);
   auto mesh = std::dynamic_pointer_cast<PetscInterface::DMPlexInterface>(
@@ -550,9 +550,9 @@ TEST(PETScBoundary2D, corners) {
   PetscReal lower[3] = {0.0, 0.0, 0.0};
   PetscReal upper[3] = {mesh_size * h, mesh_size * h, mesh_size * h};
 
-  PETSCCHK(DMPlexCreateBoxMesh(PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces,
-                               lower, upper,
-                               /* periodicity */ NULL, PETSC_TRUE, &dm));
+  PETSCCHK(NPPETScAPI::NP_DMPlexCreateBoxMesh(
+      PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces, lower, upper,
+      /* periodicity */ NULL, PETSC_TRUE, &dm));
   PetscInterface::generic_distribute(&dm);
   auto mesh =
       std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
@@ -666,9 +666,9 @@ TEST(PETScBoundary2D, reflection_truncated) {
   PetscReal lower[3] = {0.0, 0.0, 0.0};
   PetscReal upper[3] = {mesh_size * h, mesh_size * h, mesh_size * h};
 
-  PETSCCHK(DMPlexCreateBoxMesh(PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces,
-                               lower, upper,
-                               /* periodicity */ NULL, PETSC_TRUE, &dm));
+  PETSCCHK(NPPETScAPI::NP_DMPlexCreateBoxMesh(
+      PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces, lower, upper,
+      /* periodicity */ NULL, PETSC_TRUE, &dm));
   PetscInterface::generic_distribute(&dm);
   auto A = particle_loop_common(dm, 1024);
   auto mesh = std::dynamic_pointer_cast<PetscInterface::DMPlexInterface>(

@@ -62,7 +62,7 @@ public:
   /// Number of remote ranks this rank could receive from.
   int num_remote_recv_ranks;
 
-  ~LocalMove() {};
+  ~LocalMove(){};
 
   /**
    *  Construct a new instance to move particles between neighbouring MPI

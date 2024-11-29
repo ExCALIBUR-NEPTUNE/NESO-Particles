@@ -39,8 +39,8 @@ public:
   /// Size of the intra shared memory communicator.
   int size_intra;
 
-  ~CommPair() {};
-  CommPair() {};
+  ~CommPair(){};
+  CommPair(){};
 
   /**
    * Create a new set of inter and intra shared memory region communicators

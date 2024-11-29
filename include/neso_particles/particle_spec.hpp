@@ -186,8 +186,8 @@ public:
     this->erase(pp, location);
   }
 
-  ParticleSpec() {};
-  ~ParticleSpec() {};
+  ParticleSpec(){};
+  ~ParticleSpec(){};
 };
 
 /**
@@ -220,8 +220,8 @@ public:
    */
   template <typename... T> SymStore(T... args) { this->push(args...); }
 
-  SymStore() {};
-  ~SymStore() {};
+  SymStore(){};
+  ~SymStore(){};
 };
 
 } // namespace NESO::Particles

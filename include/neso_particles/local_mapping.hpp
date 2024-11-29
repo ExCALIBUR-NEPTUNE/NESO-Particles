@@ -64,12 +64,12 @@ public:
   /// Disable (implicit) copies.
   DummyLocalMapperT &operator=(DummyLocalMapperT const &a) = delete;
 
-  virtual ~DummyLocalMapperT() {};
+  virtual ~DummyLocalMapperT(){};
 
   /**
    *  No-op Constructor.
    */
-  DummyLocalMapperT() {};
+  DummyLocalMapperT(){};
 
   /**
    *  No-op implementation of map.

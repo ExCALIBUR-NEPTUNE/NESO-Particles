@@ -364,7 +364,7 @@ public:
 class VTKHDF {
 protected:
 public:
-  ~VTKHDF() {};
+  ~VTKHDF(){};
 
   /**
    * Close the HDF5 file. This must be called collectively on the communicator.

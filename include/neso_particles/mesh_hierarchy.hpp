@@ -120,7 +120,7 @@ public:
            "-------------");
   }
 
-  MeshHierarchy() {};
+  MeshHierarchy(){};
 
   /**
    *  Create a mesh hierarchy decomposed over the given MPI communicator with a

@@ -69,7 +69,7 @@ public:
   /// Disable (implicit) copies.
   CartesianCellBin &operator=(CartesianCellBin const &a) = delete;
 
-  ~CartesianCellBin() {};
+  ~CartesianCellBin(){};
 
   /**
    * Create instance to bin particles into cells of a CartesianHMesh.

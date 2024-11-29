@@ -16,10 +16,11 @@ TEST_P(PETSC_NDIM, init) {
   const int mesh_size = (ndim == 2) ? 32 : 16;
   PetscInt faces[3] = {mesh_size, mesh_size, mesh_size};
 
-  PETSCCHK(DMPlexCreateBoxMesh(PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces,
-                               /* lower */ NULL,
-                               /* upper */ NULL,
-                               /* periodicity */ NULL, PETSC_TRUE, &dm));
+  PETSCCHK(NPPETScAPI::NP_DMPlexCreateBoxMesh(
+      PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces,
+      /* lower */ NULL,
+      /* upper */ NULL,
+      /* periodicity */ NULL, PETSC_TRUE, &dm));
   PetscInterface::generic_distribute(&dm);
   auto mesh =
       std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
@@ -396,10 +397,11 @@ TEST_P(PETSC_NDIM, dm_local_mapping) {
   const int mesh_size = (ndim == 2) ? 31 : 17;
   PetscInt faces[3] = {mesh_size, mesh_size, mesh_size};
 
-  PETSCCHK(DMPlexCreateBoxMesh(PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces,
-                               /* lower */ NULL,
-                               /* upper */ NULL,
-                               /* periodicity */ NULL, PETSC_TRUE, &dm));
+  PETSCCHK(NPPETScAPI::NP_DMPlexCreateBoxMesh(
+      PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces,
+      /* lower */ NULL,
+      /* upper */ NULL,
+      /* periodicity */ NULL, PETSC_TRUE, &dm));
 
   PetscInterface::generic_distribute(&dm);
 
@@ -465,10 +467,11 @@ TEST_P(PETSC_NDIM, dm_cart_advection) {
   const int mesh_size = (ndim == 2) ? 7 : 17;
   PetscInt faces[3] = {mesh_size, mesh_size, mesh_size};
 
-  PETSCCHK(DMPlexCreateBoxMesh(PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces,
-                               /* lower */ NULL,
-                               /* upper */ NULL,
-                               /* periodicity */ NULL, PETSC_TRUE, &dm));
+  PETSCCHK(NPPETScAPI::NP_DMPlexCreateBoxMesh(
+      PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces,
+      /* lower */ NULL,
+      /* upper */ NULL,
+      /* periodicity */ NULL, PETSC_TRUE, &dm));
 
   PetscInterface::generic_distribute(&dm);
 
@@ -556,10 +559,11 @@ TEST_P(PETSC_HALO_OVERLAP, dm_halos) {
   const int mesh_size = (ndim == 2) ? 31 : 17;
   PetscInt faces[3] = {mesh_size, mesh_size, mesh_size};
 
-  PETSCCHK(DMPlexCreateBoxMesh(PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces,
-                               /* lower */ NULL,
-                               /* upper */ NULL,
-                               /* periodicity */ NULL, PETSC_TRUE, &dm));
+  PETSCCHK(NPPETScAPI::NP_DMPlexCreateBoxMesh(
+      PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces,
+      /* lower */ NULL,
+      /* upper */ NULL,
+      /* periodicity */ NULL, PETSC_TRUE, &dm));
 
   PetscInt overlap = GetParam();
   PetscInterface::generic_distribute(&dm, MPI_COMM_WORLD, overlap);

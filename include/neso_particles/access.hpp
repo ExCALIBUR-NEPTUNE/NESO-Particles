@@ -26,7 +26,7 @@ public:
    *  @param rowx Row to access.
    */
   ColumnMajorColumnAccessor(T<U> &base, const int &stride, const int &rowx)
-      : base(base), stride(stride), rowx(rowx) {};
+      : base(base), stride(stride), rowx(rowx){};
 
   /**
    * Access element at column, row is provided in the constructor.
@@ -57,7 +57,7 @@ public:
    *  @param stride Number of rows in the 2D object.
    */
   ColumnMajorRowAccessor(T<U> &base, const int &stride)
-      : base(base), stride(stride) {};
+      : base(base), stride(stride){};
 
   /**
    * Returns a ColumnMajorColumnAccessor instance which defines a subscript
@@ -91,7 +91,7 @@ public:
    */
   RawPointerColumnMajorColumnAccessor(T *d_ptr, const int stride,
                                       const int rowx)
-      : d_ptr(d_ptr), stride(stride), rowx(rowx) {};
+      : d_ptr(d_ptr), stride(stride), rowx(rowx){};
 
   /**
    * Access element at column, row is provided in the constructor.
@@ -121,7 +121,7 @@ public:
    *  @param stride Number of rows in the 2D object.
    */
   RawPointerColumnMajorRowAccessor(T *d_ptr, const int stride)
-      : d_ptr(d_ptr), stride(stride) {};
+      : d_ptr(d_ptr), stride(stride){};
 
   /**
    * Returns a RawPointerColumnMajorColumnAccessor instance which defines a

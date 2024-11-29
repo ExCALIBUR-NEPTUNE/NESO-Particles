@@ -7,6 +7,7 @@
 #include "dmplex_local_mapper.hpp"
 #include "dmplex_project_evaluate.hpp"
 #include "dmplex_utility.hpp"
+#include "petsc_api_redirection.hpp"
 #include "petsc_common.hpp"
 #include "petsc_utility.hpp"
 #endif

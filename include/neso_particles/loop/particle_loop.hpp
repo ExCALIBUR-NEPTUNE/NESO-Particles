@@ -400,7 +400,7 @@ public:
    */
   ParticleLoop(ParticleGroupSharedPtr particle_group, KERNEL kernel,
                ARGS... args)
-      : ParticleLoop("unnamed_kernel", particle_group, kernel, args...) {};
+      : ParticleLoop("unnamed_kernel", particle_group, kernel, args...){};
 
   /**
    *  Create a ParticleLoop that executes a kernel for all particles in the

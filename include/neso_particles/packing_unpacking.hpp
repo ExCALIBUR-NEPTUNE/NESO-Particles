@@ -102,7 +102,7 @@ public:
   int num_bytes_per_particle;
   /// Compute device used by the instance.
   SYCLTargetSharedPtr sycl_target;
-  ~ParticlePacker() {};
+  ~ParticlePacker(){};
   /**
    * Construct a particle packing object on a compute device.
    *
@@ -379,7 +379,7 @@ public:
   /// Compute device used by the instance.
   SYCLTargetSharedPtr sycl_target;
 
-  ~ParticleUnpacker() {};
+  ~ParticleUnpacker(){};
 
   /**
    * Construct an unpacking object.
@@ -394,7 +394,7 @@ public:
         d_recv_buffer(sycl_target, 1),
         device_aware_mpi_enabled(NESO::Particles::device_aware_mpi_enabled()),
         h_recv_pointers(sycl_target, 1), h_recv_buffer(sycl_target, 1),
-        h_recv_offsets(sycl_target, 1), sycl_target(sycl_target) {};
+        h_recv_offsets(sycl_target, 1), sycl_target(sycl_target){};
 
   /**
    * @returns Host or device pointers for locations in which to recv packed

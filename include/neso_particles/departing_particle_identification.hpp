@@ -50,7 +50,7 @@ public:
   /// ParticleDat containing MPI ranks.
   ParticleDatSharedPtr<INT> mpi_rank_dat;
 
-  ~DepartingIdentify() {};
+  ~DepartingIdentify(){};
 
   /**
    * Create a new instance of this class.
@@ -65,7 +65,7 @@ public:
         dh_send_rank_map(sycl_target, sycl_target->comm_pair.size_parent),
         d_pack_cells(sycl_target, 1), d_pack_layers_src(sycl_target, 1),
         d_pack_layers_dst(sycl_target, 1), dh_num_ranks_send(sycl_target, 1),
-        dh_num_particle_send(sycl_target, 1) {};
+        dh_num_particle_send(sycl_target, 1){};
 
   /**
    * Set the ParticleDat that contains particle MPI ranks.

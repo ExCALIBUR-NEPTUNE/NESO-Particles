@@ -61,7 +61,7 @@ protected:
 
     MHCellBuffer() = default;
     MHCellBuffer(INT cell, std::vector<std::byte> &buffer)
-        : cell(cell), buffer(buffer) {};
+        : cell(cell), buffer(buffer){};
     virtual ~MHCellBuffer() = default;
     virtual inline std::size_t get_num_bytes() const override {
       return sizeof(INT) + sizeof(std::size_t) + this->buffer.size();
