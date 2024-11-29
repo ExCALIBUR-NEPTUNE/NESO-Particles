@@ -464,7 +464,7 @@ TEST_P(PETSC_NDIM, dm_cart_advection) {
   DM dm;
 
   PetscInt ndim = GetParam();
-  const int mesh_size = (ndim == 2) ? 7 : 17;
+  const int mesh_size = 17;
   PetscInt faces[3] = {mesh_size, mesh_size, mesh_size};
 
   PETSCCHK(NPPETScAPI::NP_DMPlexCreateBoxMesh(
