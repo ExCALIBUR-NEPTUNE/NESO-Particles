@@ -246,15 +246,15 @@ public:
           const int overlay_cell =
               k_overlay_mapper.get_linear_cell_index(cell_tuple);
           // Get the number of candidate cells
-          int num_candidates;
+          int num_candidates = 0;
           k_map_sizes->get(overlay_cell, &num_candidates);
-          int *candidates;
+          int *candidates = nullptr;
           k_map_candidates->get(overlay_cell, &candidates);
           // loop over candidates and test if point in cell
           for (int cx = 0; cx < num_candidates; cx++) {
             const int candidate = candidates[cx];
             // Get the cell data for this candidate cell
-            Implementation2DLinear::Linear2DData const *cell_data;
+            Implementation2DLinear::Linear2DData const *cell_data = nullptr;
             k_cell_data->get(candidate, &cell_data);
             // Test if point in candidate cell
             int num_crossings = 0;
