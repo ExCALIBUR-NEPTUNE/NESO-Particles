@@ -6,7 +6,7 @@ Dependencies
 ============
 
 * CMake 3.24+.
-* SYCL 2020 with USM support: Tested with hipsycl 0.9.4 or Intel DPCPP 2022.1.0.
+* SYCL 2020 with USM support: Tested with hipsycl 0.9.4 or Intel DPCPP 2024.1.0.
 * MPI 3.0: Tested with MPICH 4.0 or IntelMPI 2021.6. See known issues for Ubuntu 22.03 mpich.
 * HDF5 (parallel): (optional see CMake variable ``NESO_PARTICLES_ENABLE_HDF5``) If particle trajectories are required - will execute without.
 
@@ -48,6 +48,12 @@ These downstream implementations should pass CMake variables or compilers at con
 
 When a SYCL implementation is passed to NESO-Particles itself then it is used to build the tests.
 Please read the section :ref:`device-aware-mpi` for more information relating to device aware MPI.
+
+CXX Standard
+------------
+
+Although we explicitly set C++17 as the required C++ version on the NESO-Particles interface target, CMake may not pass this requirement down onto targets using NESO-Particles.
+Downstream projects may need to explicitly set the required C++ standard to C++17.
 
 Installing
 ==========

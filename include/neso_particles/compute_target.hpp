@@ -11,6 +11,8 @@
 #include <vector>
 
 #include "communication.hpp"
+#include "device_limits.hpp"
+#include "parameters.hpp"
 #include "profiling.hpp"
 #include "sycl_typedefs.hpp"
 #include "typedefs.hpp"
@@ -73,6 +75,10 @@ public:
   CommPair comm_pair;
   /// ProfileMap to log profiling data related to this SYCLTarget.
   ProfileMap profile_map;
+  /// Parameters for generic properties, e.g. loop local sizes.
+  std::shared_ptr<Parameters> parameters;
+  /// Interface to device limits validation
+  DeviceLimits device_limits;
 
   /// Disable (implicit) copies.
   SYCLTarget(const SYCLTarget &st) = delete;
@@ -145,12 +151,22 @@ public:
       const int num_devices = devices.size();
       const int device_index = local_rank % num_devices;
       this->device = devices[device_index];
+      this->device_limits = DeviceLimits(this->device);
 
       this->profile_map.set("MPI", "MPI_COMM_WORLD_rank_local", local_rank);
       this->profile_map.set("SYCL", "DEVICE_COUNT", num_devices);
       this->profile_map.set("SYCL", "DEVICE_INDEX", device_index);
       this->profile_map.set(
           "SYCL", this->device.get_info<sycl::info::device::name>(), 0);
+
+      // Setup the parameter store
+      this->parameters = std::make_shared<Parameters>();
+      this->parameters->set("LOOP_LOCAL_SIZE",
+                            std::make_shared<SizeTParameter>(get_env_size_t(
+                                "NESO_PARTICLES_LOOP_LOCAL_SIZE", 256)));
+      this->parameters->set(
+          "LOOP_NBIN", std::make_shared<SizeTParameter>(
+                           get_env_size_t("NESO_PARTICLES_LOOP_NBIN", 16)));
     }
 
     this->queue = sycl::queue(this->device);
@@ -187,6 +203,7 @@ public:
       std::cout << "Using " << this->device.get_info<sycl::info::device::name>()
                 << std::endl;
       std::cout << "Kernel type: " << NESO_PARTICLES_DEVICE_LABEL << std::endl;
+      this->device_limits.print();
     }
   }
 
@@ -280,7 +297,8 @@ public:
     }
   }
 
-  inline void check_ptr(unsigned char *ptr_user, const size_t size_bytes) {
+  inline void check_ptr([[maybe_unused]] unsigned char *ptr_user,
+                        [[maybe_unused]] const size_t size_bytes) {
 
 #ifdef DEBUG_OOB_CHECK
     this->queue
@@ -304,6 +322,37 @@ public:
     }
 
 #endif
+  }
+
+  /**
+   *  Get a number of local work items that should not exceed the maximum
+   *  available local memory on the device.
+   *
+   *  @param num_bytes Number of bytes requested per work item.
+   *  @param default_num Default number of work items.
+   *  @returns Number of work items.
+   */
+  inline std::size_t get_num_local_work_items(const std::size_t num_bytes,
+                                              const std::size_t default_num) {
+    if (num_bytes <= 0) {
+      return default_num;
+    } else {
+      const std::size_t local_mem_size = this->device_limits.local_mem_size;
+      const std::size_t max_num_workitems = local_mem_size / num_bytes;
+      // find the max power of two that does not exceed the number of work
+      // items.
+      const std::size_t two_power = log2(max_num_workitems);
+      const std::size_t max_base_two_num_workitems = std::pow(2, two_power);
+
+      const std::size_t deduced_num_work_items =
+          std::min(default_num, max_base_two_num_workitems);
+      NESOASSERT((deduced_num_work_items > 0),
+                 "Deduced number of work items is not strictly positive.");
+
+      const std::size_t local_mem_bytes = deduced_num_work_items * num_bytes;
+      NESOASSERT(local_mem_size >= local_mem_bytes, "Not enough local memory");
+      return deduced_num_work_items;
+    }
   }
 };
 
@@ -329,7 +378,7 @@ protected:
   }
 
   BufferBase(SYCLTargetSharedPtr sycl_target, std::size_t size)
-      : sycl_target(sycl_target), size(size), ptr(nullptr) {}
+      : sycl_target(sycl_target), ptr(nullptr), size(size) {}
 
   inline void assert_allocated() {
     NESOASSERT(this->ptr != nullptr,
@@ -490,7 +539,7 @@ public:
     this->set(vec);
   }
 
-  ~BufferDevice() { this->generic_free(); }
+  virtual ~BufferDevice() { this->generic_free(); }
 };
 
 /**
@@ -503,7 +552,7 @@ protected:
         sycl::malloc_shared(num_bytes, this->sycl_target->queue));
   }
   virtual inline void free_wrapper(T *ptr) override {
-    sycl::free(this->ptr, this->sycl_target->queue);
+    sycl::free(ptr, this->sycl_target->queue);
   }
 
 public:
@@ -802,6 +851,126 @@ inline NDRangePeel1D get_nd_range_peel_1d(const std::size_t size,
       peel_exists, offset,
       sycl::nd_range<1>(sycl::range<1>(outer_size_peel),
                         sycl::range<1>(local_size))};
+}
+
+/**
+ * Compute the exclusive scan of an array using the SYCL group built-ins.
+ *
+ * @param[in] sycl_target Compute device to use.
+ * @param[in] N Number of elements.
+ * @param[in] d_src Device poitner to source values.
+ * @param[in, d_dst Device pointer to destination values.
+ * @returns Event to wait on for completion.
+ */
+template <typename T>
+[[nodiscard]] inline sycl::event
+joint_exclusive_scan(SYCLTargetSharedPtr sycl_target, std::size_t N, T *d_src,
+                     T *d_dst) {
+  const std::size_t group_size =
+      std::min(static_cast<std::size_t>(
+                   sycl_target->device
+                       .get_info<sycl::info::device::max_work_group_size>()),
+               static_cast<std::size_t>(N));
+  NESOASSERT(group_size >= 1, "Bad group size for exclusive_scan.");
+
+  return sycl_target->queue.submit([&](sycl::handler &cgh) {
+    cgh.parallel_for(sycl::nd_range<1>(sycl::range<1>(group_size),
+                                       sycl::range<1>(group_size)),
+                     [=](sycl::nd_item<1> it) {
+                       T *first = d_src;
+                       T *last = first + N;
+                       sycl::joint_exclusive_scan(it.get_group(), first, last,
+                                                  d_dst, sycl::plus<T>());
+                     });
+  });
+}
+
+/**
+ * Compute the transpose of a matrix stored in row major format. Assumes that
+ * the matrix might be very non-square.
+ *
+ * @param[in] sycl_target Compute device to use.
+ * @param[in] num_rows Number of rows.
+ * @param[in] num_cols Number of columns.
+ * @param[in] d_src Device pointer to input matrix.
+ * @param[in, out] d_dst Device pointer to output matrix.
+ * @returns Event to wait on for completion.
+ */
+template <typename T>
+[[nodiscard]] inline sycl::event
+matrix_transpose(SYCLTargetSharedPtr sycl_target, const std::size_t num_rows,
+                 const std::size_t num_cols, const T *RESTRICT const d_src,
+                 T *RESTRICT d_dst) {
+  if ((num_rows == 1) || (num_cols == 1)) {
+    return sycl::event();
+  }
+  const std::size_t num_bytes_per_item = sizeof(T);
+  std::size_t local_size =
+      sycl_target->parameters->get<SizeTParameter>("LOOP_LOCAL_SIZE")->value;
+  local_size =
+      sycl_target->get_num_local_work_items(num_bytes_per_item, local_size);
+  local_size = std::sqrt(local_size);
+
+  const std::size_t local_size_row =
+      get_prev_power_of_two(std::min(num_rows, local_size));
+  const std::size_t local_size_col =
+      get_prev_power_of_two(std::min(num_cols, local_size));
+
+  sycl::range<2> range_local(local_size_row, local_size_col);
+  sycl::range<2> range_global(get_next_multiple(num_rows, local_size_row),
+                              get_next_multiple(num_cols, local_size_col));
+
+  return sycl_target->queue.submit([&](sycl::handler &cgh) {
+    sycl::local_accessor<T, 1> local_memory(
+        sycl::range<1>(local_size_row * local_size_col), cgh);
+    cgh.parallel_for(
+        sycl_target->device_limits.validate_nd_range(
+            sycl::nd_range<2>(range_global, range_local)),
+        [=](sycl::nd_item<2> item) {
+          const std::size_t read_rowx = item.get_global_id(0);
+          const std::size_t read_colx = item.get_global_id(1);
+
+          const std::size_t local_read_rowx = item.get_local_id(0);
+          const std::size_t local_read_colx = item.get_local_id(1);
+
+          const bool read_item_valid =
+              (read_rowx < num_rows) && (read_colx < num_cols);
+
+          T value_read = 0.0;
+          if (read_item_valid) {
+            value_read = d_src[read_rowx * num_cols + read_colx];
+          }
+
+          // This might have shared memory bank conflicts on GPUs
+          local_memory[local_read_rowx * local_size_col + local_read_colx] =
+              value_read;
+          item.barrier(sycl::access::fence_space::local_space);
+
+          const std::size_t local_write_rowx =
+              item.get_local_linear_id() / local_size_row;
+          const std::size_t local_write_colx =
+              item.get_local_linear_id() % local_size_row;
+
+          // This might have shared memory bank conflicts on GPUs
+          const T value_write = local_memory[local_write_colx * local_size_col +
+                                             local_write_rowx];
+
+          // compute write index
+          const std::size_t group_row = item.get_group(0);
+          const std::size_t group_col = item.get_group(1);
+          const std::size_t write_rowx =
+              group_col * local_size_col + local_write_rowx;
+          const std::size_t write_colx =
+              group_row * local_size_row + local_write_colx;
+
+          const bool write_item_valid =
+              (write_rowx < num_cols) && (write_colx < num_rows);
+
+          if (write_item_valid) {
+            d_dst[write_rowx * num_rows + write_colx] = value_write;
+          }
+        });
+  });
 }
 
 } // namespace NESO::Particles

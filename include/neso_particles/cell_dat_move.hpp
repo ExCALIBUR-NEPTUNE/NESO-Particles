@@ -17,6 +17,7 @@
 #include "profiling.hpp"
 #include "sycl_typedefs.hpp"
 #include "typedefs.hpp"
+#include <iomanip>
 
 namespace NESO::Particles {
 
@@ -66,6 +67,8 @@ private:
   // ErrorPropagate object to detect bad cell indices
   ErrorPropagate ep_bad_cell_indices;
 
+  std::size_t num_bytes_per_particle;
+
   inline void get_particle_dat_info() {
 
     this->num_dats_real = this->particle_dats_real.size();
@@ -80,17 +83,20 @@ private:
     this->d_particle_dat_ptr_int.realloc_no_copy(this->num_dats_int);
     this->d_particle_dat_ncomp_int.realloc_no_copy(this->num_dats_int);
 
+    this->num_bytes_per_particle = 0;
     int index = 0;
     for (auto &dat : this->particle_dats_real) {
       this->h_particle_dat_ptr_real.ptr[index] = dat.second->impl_get();
       this->h_particle_dat_ncomp_real.ptr[index] = dat.second->ncomp;
       index++;
+      this->num_bytes_per_particle += dat.second->ncomp * sizeof(REAL);
     }
     index = 0;
     for (auto &dat : particle_dats_int) {
       this->h_particle_dat_ptr_int.ptr[index] = dat.second->impl_get();
       this->h_particle_dat_ncomp_int.ptr[index] = dat.second->ncomp;
       index++;
+      this->num_bytes_per_particle += dat.second->ncomp * sizeof(INT);
     }
 
     // copy to the device
@@ -120,6 +126,27 @@ private:
     event_stack.wait();
   }
 
+  inline void print_particle(const int cell, const int layer) {
+    nprint("Particle info, cell:", cell, "layer:", layer);
+    std::cout << std::setprecision(18);
+    auto lambda_print_dat = [&](auto sym, auto dat) {
+      std::cout << "\t" << sym.name << ": ";
+      auto data = dat->cell_dat.get_cell(cell);
+      auto ncomp = dat->ncomp;
+      for (int cx = 0; cx < ncomp; cx++) {
+        std::cout << data->at(layer, cx) << " ";
+      }
+      std::cout << std::endl;
+    };
+
+    for (auto d : this->particle_dats_int) {
+      lambda_print_dat(d.first, d.second);
+    }
+    for (auto d : this->particle_dats_real) {
+      lambda_print_dat(d.first, d.second);
+    }
+  }
+
 public:
   /// Disable (implicit) copies.
   CellMove(const CellMove &st) = delete;
@@ -144,9 +171,7 @@ public:
            LayerCompressor &layer_compressor,
            std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
            std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int)
-      : ncell(ncell), sycl_target(sycl_target),
-        layer_compressor(layer_compressor),
-        particle_dats_real(particle_dats_real),
+      : ncell(ncell), particle_dats_real(particle_dats_real),
         particle_dats_int(particle_dats_int),
         h_npart_cell(sycl_target, this->ncell),
         d_npart_cell(sycl_target, this->ncell),
@@ -162,7 +187,8 @@ public:
         d_particle_dat_ptr_int(sycl_target, 1),
         d_particle_dat_ncomp_real(sycl_target, 1),
         d_particle_dat_ncomp_int(sycl_target, 1),
-        ep_bad_cell_indices(sycl_target) {}
+        layer_compressor(layer_compressor), ep_bad_cell_indices(sycl_target),
+        sycl_target(sycl_target) {}
 
   /**
    * Set the ParticleDat to use as a source for cell ids.

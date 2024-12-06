@@ -51,6 +51,7 @@ struct ParticleDatVersionT {
   }
   ParticleDatVersionT() { this->index = -1; }
   ParticleDatVersionT &operator=(const ParticleDatVersionT &) = default;
+  ParticleDatVersionT(const ParticleDatVersionT &) = default;
   ParticleDatVersionT &operator=(const Sym<INT> &s) {
     this->si = s;
     this->index = 0;
@@ -102,15 +103,15 @@ protected:
   template <typename T>
   inline void realloc_dat_start(ParticleDatSharedPtr<T> &dat) {
     dat->realloc(this->h_npart_cell);
-  };
+  }
   template <typename T>
   inline void realloc_dat_wait(ParticleDatSharedPtr<T> &dat) {
     dat->wait_realloc();
-  };
+  }
   template <typename T> inline void realloc_dat(ParticleDatSharedPtr<T> &dat) {
     this->realloc_dat_start(dat);
     this->realloc_dat_wait(dat);
-  };
+  }
 
   inline void realloc_all_dats() {
     for (auto &dat : this->particle_dats_real) {
@@ -206,7 +207,7 @@ protected:
 
   template <typename T> inline void push_particle_spec(ParticleProp<T> prop) {
     this->particle_spec.push(prop);
-  };
+  }
 
   // members for mpi communication
   // global communication context
@@ -388,17 +389,16 @@ public:
    */
   ParticleGroup(DomainSharedPtr domain, ParticleSpec &particle_spec,
                 SYCLTargetSharedPtr sycl_target)
-      : domain(domain), sycl_target(sycl_target),
-        ncell(domain->mesh->get_cell_count()), d_remove_cells(sycl_target, 1),
-        d_remove_layers(sycl_target, 1), h_npart_cell(sycl_target, 1),
-        d_npart_cell(sycl_target, 1),
-        layer_compressor(sycl_target, ncell, particle_dats_real,
-                         particle_dats_int),
+      : ncell(domain->mesh->get_cell_count()), npart_local(0),
+        h_npart_cell(sycl_target, 1), d_npart_cell(sycl_target, 1),
+        d_remove_cells(sycl_target, 1), d_remove_layers(sycl_target, 1),
         global_move_ctx(sycl_target, layer_compressor, particle_dats_real,
                         particle_dats_int),
         cell_move_ctx(sycl_target, this->ncell, layer_compressor,
                       particle_dats_real, particle_dats_int),
-        npart_local(0), particle_group_version(1) {
+        particle_group_version(1), domain(domain), sycl_target(sycl_target),
+        layer_compressor(sycl_target, ncell, particle_dats_real,
+                         particle_dats_int) {
 
     this->h_npart_cell.realloc_no_copy(this->ncell);
     this->d_npart_cell.realloc_no_copy(this->ncell);
@@ -754,6 +754,7 @@ public:
    *  Move particles between cells using the cell ids stored in the cell id dat.
    */
   inline void cell_move() {
+    this->domain->local_mapper->map_cells(*this);
     this->cell_move_ctx.move();
     this->set_npart_cell_from_dat();
     this->invalidate_group_version();
@@ -780,6 +781,14 @@ public:
    *  data to print.
    */
   template <typename... T> inline void print(T... args);
+
+  /**
+   *  Print all particle data for a particle.
+   *
+   *  @param cell Cell of particle.
+   *  @param layer Layer of particle.
+   */
+  inline void print_particle(const int cell, const int layer);
 
   /**
    *  Remove a ParticleDat from the ParticleGroup

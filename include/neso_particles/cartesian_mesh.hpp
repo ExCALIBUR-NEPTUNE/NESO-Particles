@@ -4,6 +4,7 @@
 #include <memory>
 #include <mpi.h>
 
+#include "cell_binning.hpp"
 #include "compute_target.hpp"
 #include "local_mapping.hpp"
 #include "loop/particle_loop.hpp"
@@ -37,6 +38,8 @@ protected:
   std::unique_ptr<BufferDeviceHost<int>> dh_dims;
   // Cell counts of the underlying mesh.
   std::unique_ptr<BufferDeviceHost<int>> dh_cell_counts;
+  // Cell binning for cell move
+  std::unique_ptr<CartesianCellBin> cart_cell_bin;
 
 public:
   /// Disable (implicit) copies.
@@ -44,6 +47,7 @@ public:
   /// Disable (implicit) copies.
   CartesianHMeshLocalMapperT &
   operator=(CartesianHMeshLocalMapperT const &a) = delete;
+  virtual ~CartesianHMeshLocalMapperT() = default;
 
   /// CartesianHMesh on which the lookup is based.
   CartesianHMeshSharedPtr mesh;
@@ -224,6 +228,8 @@ public:
         }
       }
     }
+    this->cart_cell_bin =
+        std::make_unique<CartesianCellBin>(this->sycl_target, this->mesh);
   };
 
   /**
@@ -232,7 +238,8 @@ public:
    *
    *  @param particle_group ParticleGroup to use.
    */
-  inline void map(ParticleGroup &particle_group, const int map_cell = -1) {
+  inline void map(ParticleGroup &particle_group,
+                  const int map_cell = -1) override {
     auto r = ProfileRegion("CartesianHMeshLocalMapper", "map");
 
     ParticleDatSharedPtr<REAL> &position_dat = particle_group.position_dat;
@@ -285,11 +292,24 @@ public:
   };
 
   /**
+   *  Map positions to owning cells. Positions should be within the domain
+   *  prior to calling map, i.e. particles should be within the domain extents.
+   *
+   *  @param particle_group ParticleGroup to use.
+   *  @param map_cell Cell to map.
+   */
+  inline void map_cells(ParticleGroup &particle_group,
+                        const int map_cell = -1) override {
+    this->cart_cell_bin->map_cells(particle_group, map_cell);
+  }
+
+  /**
    *  No-op implementation of callback.
    *
    *  @param particle_group ParticleGroup.
    */
-  inline void particle_group_callback(ParticleGroup &particle_group){};
+  inline void particle_group_callback(
+      [[maybe_unused]] ParticleGroup &particle_group) override {};
 };
 
 inline std::shared_ptr<CartesianHMeshLocalMapperT>

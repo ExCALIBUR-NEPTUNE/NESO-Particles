@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.24)
 
 project(
   NESO-Particles
-  VERSION 0.6.0
+  VERSION 0.7.0
   LANGUAGES CXX C)
 
 include(GNUInstallDirs)
@@ -17,6 +17,7 @@ option(
   ON)
 option(NESO_PARTICLES_LEGACY_DEVICE_SELECTORS
        "Option to use SYCL 1.2 selectors if 2020 ones are not supported." OFF)
+option(NESO_PARTICLES_ENABLE_PETSC "Look for PETSc." OFF)
 option(
   NESO_PARTICLES_DEVICE_AWARE_MPI
   "Enable device aware MPI by default, i.e. pass device pointers to MPI rather than copying to the host."
@@ -45,6 +46,10 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/cell_dat_move.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cell_dat_move_impl.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/communication.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/communication/comm_pair.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/communication/communication_edges_counter.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/communication/communication_typedefs.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/communication/communication_utility.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/compute_target.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/blocked_binary_tree.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/cell_dat.hpp
@@ -59,6 +64,8 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/descendant_products.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/global_array.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/local_array.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/containers/local_memory_block.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/containers/lookup_table.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/nd_local_array.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/product_matrix.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/sym_vector.hpp
@@ -66,8 +73,37 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/tuple.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/departing_particle_identification.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/departing_particle_identification_impl.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/device_functions.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/device_limits.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/domain.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/error_propagate.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/common/bounding_box.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/common/common.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/common/coordinate_mapping.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/common/local_claim.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/common/overlay_cartesian_mesh.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/common/dof_mapper_dg.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/common/quadrature_point_mapper.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/boundary_interaction/boundary_reflection.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/boundary_interaction/boundary_interaction.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/boundary_interaction/boundary_interaction_2d.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/boundary_interaction/boundary_interaction_common.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/dmplex_cell_serialise.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/dmplex_helper.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/dmplex_interface.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/dmplex_local_mapper.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/dmplex_project_evaluate.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/dmplex_utility.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/petsc_api_redirection.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/particle_cell_mapping/dmplex_2d_mapper.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/particle_cell_mapping/dmplex_host_mapper.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/petsc_common.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/petsc_utility.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/petsc_interface.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/project_evaluate/dmplex_project_evaluate_base.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/project_evaluate/dmplex_project_evaluate_barycentric.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/project_evaluate/dmplex_project_evaluate_dg.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/vtk/vtk.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/global_mapping.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/global_mapping_impl.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/global_move.hpp
@@ -75,16 +111,23 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/local_mapping.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/local_move.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/access_descriptors.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/loop/kernel.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_base.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_utility.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_index.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_iteration_set.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/pli_particle_dat.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_hierarchy.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/mesh_hierarchy_data/mesh_hierarchy_container.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/mesh_hierarchy_data/mesh_hierarchy_data.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/mesh_hierarchy_data/serial_container.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/mesh_hierarchy_data/serial_interface.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_interface.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_interface_local_decomp.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/packing_unpacking.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/parallel_initialisation.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/parameters.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_dat.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_group.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_group_impl.hpp
@@ -165,6 +208,34 @@ if(NESO_PARTICLES_ENABLE_HDF5)
     set(NESO_PARTICLES_USING_HDF5 TRUE)
   else()
     message("HDF5 NOT found")
+  endif()
+endif()
+
+# set the restrict keyword
+target_compile_definitions(NESO-Particles INTERFACE RESTRICT=${RESTRICT})
+
+# now look for PETSc
+if(NESO_PARTICLES_ENABLE_PETSC)
+  find_package(PkgConfig)
+  if(PKG_CONFIG_FOUND)
+    pkg_check_modules(PETSC PETSc)
+  endif()
+
+  if(PETSC_FOUND)
+    message(STATUS "PETSc found")
+    # TODO CHECK AND CLEANUP
+    target_compile_definitions(NESO-Particles INTERFACE NESO_PARTICLES_PETSC
+                                                        ${PETSC_DEFINITIONS})
+    add_definitions(-DNESO_PARTICLES_PETSC ${PETSC_DEFINITIONS})
+    target_link_libraries(NESO-Particles INTERFACE ${PETSC_LINK_LIBRARIES})
+    target_include_directories(NESO-Particles INTERFACE ${PETSC_INCLUDE_DIRS})
+    message(STATUS PETSC_LINK_LIBRARIES ${PETSC_LINK_LIBRARIES})
+    message(STATUS PETSC_LDFLAGS ${PETSC_LDFLAGS})
+    message(STATUS PETSC_INCLUDE_DIRS ${PETSC_INCLUDE_DIRS})
+    message(STATUS PETSC_LIBRARY_DIRS ${PETSC_LIBRARY_DIRS})
+    message(STATUS PETSC_CFLAGS ${PETSC_CFLAGS})
+  else()
+    message(STATUS "PETSc NOT found")
   endif()
 endif()
 

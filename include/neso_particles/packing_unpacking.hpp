@@ -109,16 +109,15 @@ public:
    * @param sycl_target SYCLTargetSharedPtr to use as compute device.
    */
   ParticlePacker(SYCLTargetSharedPtr sycl_target)
-      : sycl_target(sycl_target),
-        cell_dat(sycl_target, sycl_target->comm_pair.size_parent, 1),
-        h_send_buffer(sycl_target, 1), h_send_offsets(sycl_target, 1),
-        h_send_pointers(sycl_target, 1),
-        dh_particle_dat_ptr_real(sycl_target, 1),
+      : dh_particle_dat_ptr_real(sycl_target, 1),
         dh_particle_dat_ptr_int(sycl_target, 1),
         dh_particle_dat_ncomp_real(sycl_target, 1),
         dh_particle_dat_ncomp_int(sycl_target, 1),
-        device_aware_mpi_enabled(NESO::Particles::device_aware_mpi_enabled()){};
-
+        device_aware_mpi_enabled(NESO::Particles::device_aware_mpi_enabled()),
+        h_send_pointers(sycl_target, 1),
+        cell_dat(sycl_target, sycl_target->comm_pair.size_parent, 1),
+        h_send_buffer(sycl_target, 1), h_send_offsets(sycl_target, 1),
+        sycl_target(sycl_target) {}
   /**
    *  Reset the instance before packing particle data.
    */
@@ -388,14 +387,14 @@ public:
    * @param sycl_target SYCLTargetSharedPtr to use as compute device.
    */
   ParticleUnpacker(SYCLTargetSharedPtr sycl_target)
-      : sycl_target(sycl_target), h_recv_buffer(sycl_target, 1),
-        h_recv_offsets(sycl_target, 1), d_recv_buffer(sycl_target, 1),
-        dh_particle_dat_ptr_real(sycl_target, 1),
+      : dh_particle_dat_ptr_real(sycl_target, 1),
         dh_particle_dat_ptr_int(sycl_target, 1),
         dh_particle_dat_ncomp_real(sycl_target, 1),
         dh_particle_dat_ncomp_int(sycl_target, 1),
-        h_recv_pointers(sycl_target, 1),
-        device_aware_mpi_enabled(NESO::Particles::device_aware_mpi_enabled()){};
+        d_recv_buffer(sycl_target, 1),
+        device_aware_mpi_enabled(NESO::Particles::device_aware_mpi_enabled()),
+        h_recv_pointers(sycl_target, 1), h_recv_buffer(sycl_target, 1),
+        h_recv_offsets(sycl_target, 1), sycl_target(sycl_target){};
 
   /**
    * @returns Host or device pointers for locations in which to recv packed

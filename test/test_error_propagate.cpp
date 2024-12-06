@@ -60,10 +60,11 @@ TEST(ErrorPropagate, flag) {
 
   sycl_target->queue
       .submit([&](sycl::handler &cgh) {
-        cgh.parallel_for<>(sycl::range<1>(8), [=](sycl::id<1> idx) {
-          // throw an error
-          NESO_KERNEL_ASSERT(false, k_ep);
-        });
+        cgh.parallel_for<>(sycl::range<1>(8),
+                           [=]([[maybe_unused]] sycl::id<1> idx) {
+                             // throw an error
+                             NESO_KERNEL_ASSERT(false, k_ep);
+                           });
       })
       .wait_and_throw();
 

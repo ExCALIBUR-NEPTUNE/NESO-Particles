@@ -9,7 +9,6 @@
 #include <mpi.h>
 #include <string>
 
-#include "sycl_typedefs.hpp"
 #include "typedefs.hpp"
 
 namespace NESO::Particles {
@@ -58,6 +57,10 @@ struct ProfileRegion {
   std::string key1;
   std::string key2;
   int level;
+  std::size_t num_bytes{0};
+  std::size_t num_flops{0};
+
+  ProfileRegion() = default;
 
 #ifdef NESO_PARTICLES_PROFILING_REGION
   /**
@@ -115,6 +118,19 @@ public:
   // Main data structure for storing regions.
   std::list<ProfileRegion> regions;
 
+  // Is recording of events enabled?
+  bool enabled{false};
+
+  /**
+   * Enable recording of events and regions.
+   */
+  inline void enable() { this->enabled = true; }
+
+  /**
+   * Disable recording of events and regions.
+   */
+  inline void disable() { this->enabled = false; }
+
   ~ProfileMap(){};
 
   /**
@@ -132,8 +148,10 @@ public:
    */
   inline void set(const std::string key1, const std::string key2,
                   const int64_t value_integral, const double value_real = 0.0) {
-    this->profile[key1][key2].value_integral = value_integral;
-    this->profile[key1][key2].value_real = value_real;
+    if (this->enabled) {
+      this->profile[key1][key2].value_integral = value_integral;
+      this->profile[key1][key2].value_real = value_real;
+    }
   };
 
   /**
@@ -147,8 +165,10 @@ public:
    */
   inline void inc(const std::string key1, const std::string key2,
                   const int64_t value_integral, const double value_real = 0.0) {
-    this->profile[key1][key2].value_integral += value_integral;
-    this->profile[key1][key2].value_real += value_real;
+    if (this->enabled) {
+      this->profile[key1][key2].value_integral += value_integral;
+      this->profile[key1][key2].value_real += value_real;
+    }
   };
 
   /**
@@ -179,8 +199,10 @@ public:
    * @param key2 Second key for the entry.
    */
   inline void event(const std::string key1, const std::string key2) {
-    auto t = profile_timestamp();
-    this->events.emplace_back(key1, key2, t);
+    if (this->enabled) {
+      auto t = profile_timestamp();
+      this->events.emplace_back(key1, key2, t);
+    }
   }
 
   /**
@@ -190,7 +212,9 @@ public:
    */
   inline void add_region([[maybe_unused]] ProfileRegion &profile_region) {
 #ifdef NESO_PARTICLES_PROFILING_REGION
-    this->regions.push_back(profile_region);
+    if (this->enabled) {
+      this->regions.push_back(profile_region);
+    }
 #endif
   }
 
@@ -207,7 +231,8 @@ public:
   /**
    * Write events and regions to JSON file.
    */
-  inline void write_events_json(std::string basename, const int rank) {
+  inline void write_events_json([[maybe_unused]] std::string basename,
+                                [[maybe_unused]] const int rank) {
 #ifdef NESO_PARTICLES_PROFILING_REGION
     basename += "." + std::to_string(rank) + ".json";
     std::ofstream fh;
@@ -215,8 +240,7 @@ public:
     const int num_events = this->events.size();
     fh << "{\n";
     fh << "\"rank\":" << rank << ",\n";
-    fh << "\"events\":"
-       << "[\n";
+    fh << "\"events\":" << "[\n";
     int ei = 0;
     for (const auto &ex : this->events) {
       const auto e0 = std::get<0>(ex);
@@ -237,8 +261,10 @@ public:
       const auto e2 = profile_elapsed(this->time_start, rx.time_start);
       const auto e3 = profile_elapsed(this->time_start, rx.time_end);
       const auto e4 = rx.level;
+      const auto e5 = rx.num_bytes;
+      const auto e6 = rx.num_flops;
       fh << "[\"" << e0 << "\",\"" << e1 << "\"," << e2 << "," << e3 << ","
-         << e4 << "]";
+         << e4 << "," << e5 << "," << e6 << "]";
       ri++;
       fh << ((ri < num_regions) ? ",\n" : "\n");
     }

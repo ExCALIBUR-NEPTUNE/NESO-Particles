@@ -26,7 +26,7 @@ public:
   MPI_Comm comm;
   /// Underlying MeshHierarchy instance.
   std::shared_ptr<MeshHierarchy> mesh_hierarchy;
-  /// Number of cells, i.e. Number of Nektar++ elements on this rank.
+  /// Number of cells.
   int cell_count;
   /// Global origin of domain.
   std::array<double, 3> global_origin;
@@ -49,7 +49,7 @@ public:
   LocalDecompositionHMesh(const int ndim, std::vector<double> origin,
                           std::vector<double> extents, const int cell_count,
                           MPI_Comm comm = MPI_COMM_WORLD)
-      : comm(comm), ndim(ndim), cell_count(cell_count) {
+      : ndim(ndim), comm(comm), cell_count(cell_count) {
 
     std::vector<int> dims(this->ndim);
     for (int dimx = 0; dimx < this->ndim; dimx++) {
@@ -91,7 +91,7 @@ public:
   };
   /**
    * Get the total number of cells in the mesh on this MPI rank, i.e. the
-   * number of Nektar++ elements on this MPI rank.
+   * number of mesh elements on this MPI rank.
    *
    * @returns Total number of mesh cells on this MPI rank.
    */

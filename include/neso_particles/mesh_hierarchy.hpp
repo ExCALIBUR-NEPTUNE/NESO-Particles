@@ -15,7 +15,7 @@
 
 namespace NESO::Particles {
 
-const int mask = std::numeric_limits<int>::min();
+const int mask = std::numeric_limits<int>::lowest();
 
 /**
  * Structure to place a coarse mesh over an arbitrary shaped domain. Each cell
@@ -95,6 +95,31 @@ public:
   /// Global number of fine cells.
   INT ncells_global;
 
+  /**
+   * Prints information about the MeshHierarchy to stdout.
+   */
+  inline void print() {
+    nprint("-------------------------------------------------------------------"
+           "-------------");
+    nprint("                        MeshHierarchy Infomation");
+    nprint("ndim:", ndim);
+    std::cout << "dims: ";
+    for (int dx = 0; dx < ndim; dx++) {
+      std::cout << dims.at(dx) << " ";
+    }
+    std::cout << std::endl;
+    std::cout << "origin: ";
+    for (int dx = 0; dx < ndim; dx++) {
+      std::cout << origin.at(dx) << " ";
+    }
+    std::cout << std::endl;
+    nprint("subdivision_order:", subdivision_order);
+    nprint("cell_width_coarse:", cell_width_coarse);
+    nprint("cell_width_fine:", cell_width_fine);
+    nprint("-------------------------------------------------------------------"
+           "-------------");
+  }
+
   MeshHierarchy(){};
 
   /**
@@ -122,8 +147,11 @@ public:
                                 extent),
         ncells_coarse(reduce_mul(ndim, dims)),
         ncells_fine(std::pow(std::pow(2, subdivision_order), ndim)) {
-    NESOASSERT(dims.size() >= ndim, "vector of dims too small");
-    NESOASSERT(origin.size() >= ndim, "vector of origin too small");
+    NESOASSERT(ndim > 0, "ndim negative");
+    NESOASSERT(dims.size() >= static_cast<std::size_t>(ndim),
+               "vector of dims too small");
+    NESOASSERT(origin.size() >= static_cast<std::size_t>(ndim),
+               "vector of origin too small");
     for (int dimx = 0; dimx < ndim; dimx++) {
       NESOASSERT(dims[dimx] > 0, "Dim size is <= 0 in a direction.");
     }
@@ -149,7 +177,8 @@ public:
     int disp_unit_tmp;
     MPICHK(MPI_Win_shared_query(this->map_win, 0, &win_size_tmp, &disp_unit_tmp,
                                 (void *)&this->map))
-    NESOASSERT(ncells_global * sizeof(int) == win_size_tmp,
+    NESOASSERT(static_cast<MPI_Aint>(ncells_global * sizeof(int)) ==
+                   win_size_tmp,
                "Pointer to incorrect size.");
   };
 

@@ -49,7 +49,7 @@ public:
    */
   inline INT size() const {
     INT s = this->shape[0];
-    for (int ix = 1; ix < N; ix++) {
+    for (std::size_t ix = 1; ix < N; ix++) {
       s *= this->shape[ix];
     }
     return s;

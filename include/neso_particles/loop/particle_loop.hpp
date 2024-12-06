@@ -13,6 +13,7 @@
 #include "../containers/descendant_products.hpp"
 #include "../containers/global_array.hpp"
 #include "../containers/local_array.hpp"
+#include "../containers/local_memory_block.hpp"
 #include "../containers/nd_local_array.hpp"
 #include "../containers/product_matrix.hpp"
 #include "../containers/rng/kernel_rng.hpp"
@@ -21,113 +22,11 @@
 #include "../particle_dat.hpp"
 #include "../particle_spec.hpp"
 #include "../sycl_typedefs.hpp"
+#include "kernel.hpp"
 #include "particle_loop_base.hpp"
 #include "particle_loop_index.hpp"
+#include "particle_loop_iteration_set.hpp"
 #include "pli_particle_dat.hpp"
-
-namespace NESO::Particles::ParticleLoopImplementation {
-
-/**
- * For a set of cells containing particles create several sycl::nd_range
- * instances which cover the iteration space of all particles. This exists to
- * create an iteration set over all particles which is blocked, to reduce the
- * number of kernel launches, and reasonably robust to non-uniform.
- */
-struct ParticleLoopIterationSet {
-
-  /// The number of blocks of cells.
-  const int nbin;
-  /// The number of cells.
-  const int ncell;
-  /// Host accessible pointer to the number of particles in each cell.
-  int *h_npart_cell;
-  /// Container to store the sycl::nd_ranges.
-  std::vector<sycl::nd_range<2>> iteration_set;
-  /// Offsets to add to the cell index to map to the correct cell.
-  std::vector<std::size_t> cell_offsets;
-
-  /**
-   *  Creates iteration set creator for a given set of cell particle counts.
-   *
-   *  @param nbin Number of blocks of cells.
-   *  @param ncell Number of cells.
-   *  @param h_npart_cell Host accessible array of cell particle counts.
-   */
-  ParticleLoopIterationSet(const int nbin, const int ncell, int *h_npart_cell)
-      : nbin(std::min(ncell, nbin)), ncell(ncell), h_npart_cell(h_npart_cell) {
-    this->iteration_set.reserve(nbin);
-    this->cell_offsets.reserve(nbin);
-  }
-
-  /**
-   *  Create and return an iteration set which is formed as nbin
-   *  sycl::nd_ranges.
-   *
-   *  @param cell If set iteration set will only cover this cell.
-   *  @param local_size Optional size of SYCL work groups.
-   *  @returns Tuple containing: Number of bins, sycl::nd_ranges, cell index
-   *  offsets.
-   */
-  inline std::tuple<int, std::vector<sycl::nd_range<2>> &,
-                    std::vector<std::size_t> &>
-  get(const std::optional<int> cell = std::nullopt,
-      const size_t local_size = 256) {
-
-    this->iteration_set.clear();
-    this->cell_offsets.clear();
-
-    if (cell == std::nullopt) {
-      for (int binx = 0; binx < nbin; binx++) {
-        int start, end;
-        get_decomp_1d(nbin, ncell, binx, &start, &end);
-        const int bin_width = end - start;
-        int cell_maxi = 0;
-        int cell_avg = 0;
-        for (int cellx = start; cellx < end; cellx++) {
-          const int cell_occ = h_npart_cell[cellx];
-          cell_maxi = std::max(cell_maxi, cell_occ);
-          cell_avg += cell_occ;
-        }
-        cell_avg = (((REAL)cell_avg) / ((REAL)(end - start)));
-        const size_t cell_local_size =
-            get_min_power_of_two((size_t)cell_avg, local_size);
-        const auto div_mod = std::div(static_cast<long long>(cell_maxi),
-                                      static_cast<long long>(cell_local_size));
-        const std::size_t outer_size =
-            static_cast<std::size_t>(div_mod.quot +
-                                     (div_mod.rem == 0 ? 0 : 1)) *
-            cell_local_size;
-
-        if (cell_maxi > 0) {
-          this->iteration_set.emplace_back(
-              sycl::nd_range<2>(sycl::range<2>(bin_width, outer_size),
-                                sycl::range<2>(1, cell_local_size)));
-          this->cell_offsets.push_back(static_cast<std::size_t>(start));
-        }
-      }
-
-      return {this->iteration_set.size(), this->iteration_set,
-              this->cell_offsets};
-    } else {
-      const int cellx = cell.value();
-      const size_t cell_maxi = static_cast<size_t>(h_npart_cell[cellx]);
-      const size_t cell_local_size =
-          get_min_power_of_two((size_t)cell_maxi, local_size);
-
-      const auto div_mod = std::div(static_cast<long long>(cell_maxi),
-                                    static_cast<long long>(cell_local_size));
-      const std::size_t outer_size =
-          static_cast<std::size_t>(div_mod.quot + (div_mod.rem == 0 ? 0 : 1)) *
-          cell_local_size;
-      this->iteration_set.emplace_back(sycl::nd_range<2>(
-          sycl::range<2>(1, outer_size), sycl::range<2>(1, cell_local_size)));
-      this->cell_offsets.push_back(static_cast<std::size_t>(cellx));
-      return {1, this->iteration_set, this->cell_offsets};
-    }
-  }
-};
-
-} // namespace NESO::Particles::ParticleLoopImplementation
 
 namespace NESO::Particles {
 
@@ -243,6 +142,22 @@ protected:
     T<U *> c = {&a.obj};
     ParticleLoopImplementation::pre_loop(global_info, c);
   }
+  /**
+   * Method to compute access to a type wrapped in a shared_ptr.
+   */
+  template <template <typename> typename T, typename U>
+  static inline std::size_t local_mem_loop_cast(T<std::shared_ptr<U>> a) {
+    T<U *> c = {a.obj.get()};
+    return ParticleLoopImplementation::get_required_local_num_bytes(c);
+  }
+  /**
+   * Method to compute access to a type not wrapper in a shared_ptr
+   */
+  template <template <typename> typename T, typename U>
+  static inline std::size_t local_mem_loop_cast(T<U> a) {
+    T<U *> c = {&a.obj};
+    return ParticleLoopImplementation::get_required_local_num_bytes(c);
+  }
 
   /*
    * =================================================================
@@ -316,7 +231,7 @@ protected:
   /// ParticleDat.
   std::shared_ptr<void> particle_dat_init;
   KERNEL kernel;
-  std::unique_ptr<ParticleLoopImplementation::ParticleLoopIterationSet>
+  std::unique_ptr<ParticleLoopImplementation::ParticleLoopBlockIterationSet>
       iteration_set;
   std::string loop_type;
   std::string name;
@@ -333,7 +248,6 @@ protected:
   // point of view.
   INT *d_npart_cell_es_lb;
   int ncell;
-  size_t local_size;
 
   template <typename T>
   inline void init_from_particle_dat(ParticleDatSharedPtr<T> particle_dat) {
@@ -343,23 +257,13 @@ protected:
     this->d_npart_cell_lb = this->d_npart_cell;
     this->d_npart_cell_es = particle_dat->get_d_npart_cell_es();
     this->d_npart_cell_es_lb = this->d_npart_cell_es;
-
-    int nbin = 16;
-    if (const char *env_nbin = std::getenv("NESO_PARTICLES_LOOP_NBIN")) {
-      nbin = std::stoi(env_nbin);
-    }
-    this->local_size = 256;
-    if (const char *env_ls = std::getenv("NESO_PARTICLES_LOOP_LOCAL_SIZE")) {
-      this->local_size = std::stoi(env_ls);
-    }
-
-    this->iteration_set =
-        std::make_unique<ParticleLoopImplementation::ParticleLoopIterationSet>(
-            nbin, ncell, this->h_npart_cell_lb);
+    this->iteration_set = std::make_unique<
+        ParticleLoopImplementation::ParticleLoopBlockIterationSet>(
+        particle_dat);
   }
 
   template <template <typename> typename T, typename U>
-  inline void check_is_sym_inner(T<U> arg) {
+  inline void check_is_sym_inner([[maybe_unused]] T<U> arg) {
     static_assert(
         std::is_same<T<U>, Sym<U>>::value == false,
         "Sym based arguments cannot be passed to ParticleLoop with a "
@@ -374,6 +278,31 @@ protected:
 
   virtual inline int get_loop_type_int() { return 0; }
 
+  inline std::size_t get_local_size() {
+
+    // Loop over the args and add how many local bytes they each require.
+    std::size_t num_bytes = 0;
+    auto lambda_size_add = [&](auto argx) {
+      num_bytes += this->local_mem_loop_cast(argx);
+    };
+    auto lambda_size = [&](auto... as) { (lambda_size_add(as), ...); };
+    std::apply(lambda_size, this->args);
+
+    // The amount of local space on the device and required number of local
+    // bytes gives an upper bound on local size.
+    std::size_t local_size =
+        this->sycl_target->parameters
+            ->template get<SizeTParameter>("LOOP_LOCAL_SIZE")
+            ->value;
+    local_size =
+        this->sycl_target->get_num_local_work_items(num_bytes, local_size);
+
+    this->sycl_target->profile_map.set("ParticleLoop::" + this->name,
+                                       "local_size", local_size, 0.0);
+
+    return local_size;
+  }
+
   inline ParticleLoopImplementation::ParticleLoopGlobalInfo
   create_global_info(const std::optional<int> cell = std::nullopt) {
     ParticleLoopImplementation::ParticleLoopGlobalInfo global_info;
@@ -387,6 +316,7 @@ protected:
         (cell == std::nullopt) ? this->ncell : cell.value() + 1;
 
     global_info.loop_type_int = this->get_loop_type_int();
+    global_info.local_size = this->get_local_size();
     return global_info;
   }
 
@@ -411,11 +341,30 @@ protected:
     std::apply(pre_loop_caller, this->args);
   }
 
+  ProfileRegion profile_region;
+
+  inline void profiling_region_init() {
+    this->profile_region = ProfileRegion(this->loop_type, this->name);
+  }
+
+  inline void profiling_region_metrics(const std::size_t size) {
+    this->profile_region.num_bytes =
+        size * ParticleLoopImplementation::get_kernel_num_bytes(this->kernel);
+    this->profile_region.num_flops =
+        size * ParticleLoopImplementation::get_kernel_num_flops(this->kernel);
+  }
+
+  inline void profile_region_finalise() {
+    this->profile_region.end();
+    this->sycl_target->profile_map.add_region(this->profile_region);
+  }
+
 public:
   /// Disable (implicit) copies.
   ParticleLoop(const ParticleLoop &st) = delete;
   /// Disable (implicit) copies.
   ParticleLoop &operator=(ParticleLoop const &a) = delete;
+  virtual ~ParticleLoop() = default;
 
   /**
    *  Create a ParticleLoop that executes a kernel for all particles in the
@@ -430,7 +379,7 @@ public:
    */
   ParticleLoop(const std::string name, ParticleGroupSharedPtr particle_group,
                KERNEL kernel, ARGS... args)
-      : name(name), particle_group_shrptr(particle_group), kernel(kernel) {
+      : particle_group_shrptr(particle_group), kernel(kernel), name(name) {
 
     this->sycl_target = particle_group->sycl_target;
     this->particle_group_ptr = this->particle_group_shrptr.get();
@@ -468,7 +417,7 @@ public:
   ParticleLoop(const std::string name,
                ParticleDatSharedPtr<DAT_TYPE> particle_dat, KERNEL kernel,
                ARGS... args)
-      : name(name), kernel(kernel) {
+      : kernel(kernel), name(name) {
 
     this->sycl_target = particle_dat->sycl_target;
     this->particle_group_shrptr = nullptr;
@@ -478,7 +427,7 @@ public:
     this->particle_dat_init = std::static_pointer_cast<void>(particle_dat);
     this->unpack_args<0>(args...);
     (check_is_sym_outer(args), ...);
-  };
+  }
 
   /**
    *  Create a ParticleLoop that executes a kernel for all particles in the
@@ -493,7 +442,7 @@ public:
   template <typename DAT_TYPE>
   ParticleLoop(ParticleDatSharedPtr<DAT_TYPE> particle_dat, KERNEL kernel,
                ARGS... args)
-      : ParticleLoop("unnamed_kernel", particle_dat, kernel, args...){};
+      : ParticleLoop("unnamed_kernel", particle_dat, kernel, args...) {}
 
   /**
    *  Launch the ParticleLoop and return. Must be called collectively over the
@@ -503,6 +452,7 @@ public:
    *  @param cell Optional cell index to only launch the ParticleLoop over.
    */
   inline void submit(const std::optional<int> cell = std::nullopt) {
+    this->profiling_region_init();
 
     NESOASSERT(
         (!this->loop_running) || (cell != std::nullopt),
@@ -516,31 +466,38 @@ public:
     auto global_info = this->create_global_info(cell);
     this->apply_pre_loop(global_info);
 
-    auto k_npart_cell_lb = this->d_npart_cell_lb;
-    auto is = this->iteration_set->get(cell, this->local_size);
-    auto k_kernel = this->kernel;
-
-    const int nbin = std::get<0>(is);
+    auto &is = this->iteration_set->iteration_set;
+    if (cell != std::nullopt) {
+      // Num local bytes is already used to compute the local size
+      is = this->iteration_set->get_single_cell(cell.value(),
+                                                global_info.local_size, 0);
+    } else {
+      const std::size_t nbin = this->sycl_target->parameters
+                                   ->template get<SizeTParameter>("LOOP_NBIN")
+                                   ->value;
+      // Num local bytes is already used to compute the local size
+      is = this->iteration_set->get_all_cells(nbin, global_info.local_size, 0);
+    }
+    this->profiling_region_metrics(this->iteration_set->iteration_set_size);
+    auto k_kernel = ParticleLoopImplementation::get_kernel(this->kernel);
     this->sycl_target->profile_map.inc(
         "ParticleLoop", "Init", 1, profile_elapsed(t0, profile_timestamp()));
 
-    for (int binx = 0; binx < nbin; binx++) {
-
-      sycl::nd_range<2> ndr = std::get<1>(is).at(binx);
-      const size_t cell_offset = std::get<2>(is).at(binx);
-      this->event_stack.push(
-          this->sycl_target->queue.submit([&](sycl::handler &cgh) {
-            loop_parameter_type loop_args;
-            create_loop_args(cgh, loop_args, &global_info);
-            cgh.parallel_for<>(ndr, [=](sycl::nd_item<2> idx) {
-              // const std::size_t index = idx.get_global_linear_id();
-              const size_t cellxs = idx.get_global_id(0) + cell_offset;
-              const size_t layerxs = idx.get_global_id(1);
-              const int cellx = static_cast<int>(cellxs);
-              const int layerx = static_cast<int>(layerxs);
+    for (auto &blockx : is) {
+      const auto block_device = blockx.block_device;
+      this->event_stack.push(sycl_target->queue.submit([&](sycl::handler &cgh) {
+        loop_parameter_type loop_args;
+        create_loop_args(cgh, loop_args, &global_info);
+        cgh.parallel_for<>(
+            blockx.loop_iteration_set, [=](sycl::nd_item<2> idx) {
+              std::size_t cell;
+              std::size_t layer;
+              block_device.get_cell_layer(idx, &cell, &layer);
+              const int cellx = static_cast<int>(cell);
+              const int layerx = static_cast<int>(layer);
               ParticleLoopImplementation::ParticleLoopIteration iterationx;
-              if (layerx < k_npart_cell_lb[cellx]) {
-                // iterationx.index = index;
+              if (block_device.work_item_required(cell, layer)) {
+                iterationx.local_sycl_index = idx.get_local_id(1);
                 iterationx.cellx = cellx;
                 iterationx.layerx = layerx;
                 iterationx.loop_layerx = layerx;
@@ -549,7 +506,7 @@ public:
                 Tuple::apply(k_kernel, kernel_args);
               }
             });
-          }));
+      }));
     }
   }
 
@@ -568,6 +525,7 @@ public:
     auto post_loop_caller = [&](auto... as) { (cast_wrapper(as), ...); };
     std::apply(post_loop_caller, this->args);
     this->loop_running = false;
+    this->profile_region_finalise();
   }
 
   /**

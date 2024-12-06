@@ -9,14 +9,9 @@
 #include <cstring>
 #include <mpi.h>
 #include <string>
-#ifdef NESO_PARTICLES_HDF5
-#include <hdf5.h>
-#endif
 
 namespace NESO::Particles {
 #ifdef NESO_PARTICLES_HDF5
-
-#define H5CHK(cmd) NESOASSERT((cmd) >= 0, "HDF5 ERROR");
 
 class H5Part {
 
@@ -39,6 +34,7 @@ private:
     for (auto &sym : this->sym_store.syms_int) {
       max_ncomp = MAX(max_ncomp, (*this->particle_group)[sym]->ncomp);
     }
+    max_ncomp = MAX(max_ncomp, this->particle_group->position_dat->ncomp);
     size_t size_el = MAX(sizeof(double), sizeof(long long));
     return static_cast<size_t>(max_ncomp) * size_el;
   };
@@ -188,6 +184,20 @@ private:
     }
   }
 
+  /**
+   * Open the file if it is closed.
+   */
+  inline void open() {
+    if (this->is_closed) {
+      this->plist_id = H5Pcreate(H5P_FILE_ACCESS);
+      H5CHK(H5Pset_fapl_mpio(this->plist_id, this->comm_pair.comm_parent,
+                             MPI_INFO_NULL));
+      H5CHK(this->file_id =
+                H5Fopen(this->filename.c_str(), H5F_ACC_RDWR, this->plist_id));
+      this->is_closed = false;
+    }
+  }
+
 public:
   /// Disable (implicit) copies.
   H5Part(const H5Part &st) = delete;
@@ -210,8 +220,8 @@ public:
    */
   template <typename... T>
   H5Part(std::string filename, ParticleGroupSharedPtr particle_group, T... args)
-      : filename(filename), particle_group(particle_group),
-        comm_pair(particle_group->sycl_target->comm_pair), sym_store(args...),
+      : filename(filename), comm_pair(particle_group->sycl_target->comm_pair),
+        sym_store(args...), particle_group(particle_group),
         multi_dim_mode(false) {
     this->plist_id = H5Pcreate(H5P_FILE_ACCESS);
     H5CHK(H5Pset_fapl_mpio(this->plist_id, this->comm_pair.comm_parent,
@@ -220,15 +230,19 @@ public:
                               H5P_DEFAULT, this->plist_id);
     this->is_closed = false;
     this->step = 0;
-  };
+  }
 
   /**
-   *  Close the H5Part writer. Must be called. Must be called collectively on
-   *  the communicator.
+   *  Close the H5Part writer. Must be called before execution completes. Must
+   *  be called collectively on the communicator. Can optionally be called
+   *  after calling write to close the file such that if the simulation errors
+   *  the particle trajectory is readable.
    */
   inline void close() {
-    H5CHK(H5Fclose(this->file_id));
-    H5CHK(H5Pclose(this->plist_id));
+    if (!this->is_closed) {
+      H5CHK(H5Fclose(this->file_id));
+      H5CHK(H5Pclose(this->plist_id));
+    }
     this->is_closed = true;
   };
 
@@ -239,9 +253,14 @@ public:
 
   /**
    * Write the current particle data to the HDF5 file as a new time step. Must
-   * be called collectively on the communicator.
+   * be called collectively on the communicator. Will open the file if required.
+   *
+   * @param step_in Optionally set the step explicitly.
    */
   inline void write(INT step_in = -1) {
+    // open the file for writing if required.
+    this->open();
+
     if (step_in >= 0) {
       this->step = step_in;
     }
@@ -365,7 +384,7 @@ public:
    *  Close the H5Part writer. Must be called. Must be called collectively on
    *  the communicator.
    */
-  inline void close(){};
+  inline void close() {};
 
   /**
    *  Write ParticleDats as 2D arrays in the HDF5 file.
@@ -376,7 +395,7 @@ public:
    * Write the current particle data to the HDF5 file as a new time step. Must
    * be called collectively on the communicator.
    */
-  inline void write(INT step_in = -1){};
+  inline void write(INT step_in = -1) {};
 };
 
 #endif

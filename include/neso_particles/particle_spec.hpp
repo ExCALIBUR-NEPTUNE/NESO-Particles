@@ -22,6 +22,7 @@ public:
 
   Sym() = default;
   Sym<U> &operator=(const Sym<U> &) = default;
+  Sym<U>(const Sym<U> &_) = default;
 
   /**
    * Construct a new Sym object.
@@ -116,7 +117,7 @@ public:
    *
    *  @param args ParticleSpec is called with a set of ParticleProp arguments.
    */
-  template <typename... T> ParticleSpec(T... args) { this->push(args...); };
+  template <typename... T> ParticleSpec(T... args) { this->push(args...); }
 
   /**
    * Create a particle specification from a vector of REAL properties and a
@@ -217,7 +218,7 @@ public:
    *
    *  @param args Passed arguments should be Sym<REAL> or Sym<INT>.
    */
-  template <typename... T> SymStore(T... args) { this->push(args...); };
+  template <typename... T> SymStore(T... args) { this->push(args...); }
 
   SymStore(){};
   ~SymStore(){};

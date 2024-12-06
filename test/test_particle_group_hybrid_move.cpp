@@ -72,7 +72,6 @@ TEST_P(ParticleGroupHybridMove, multiple) {
   }
 
   CartesianPeriodic pbc(sycl_target, mesh, A->position_dat);
-  CartesianCellBin ccb(sycl_target, mesh, A->position_dat, A->cell_id_dat);
 
   reset_mpi_ranks(A->mpi_rank_dat);
 
@@ -171,7 +170,6 @@ TEST_P(ParticleGroupHybridMove, multiple) {
       A->test_internal_state();
     }
 
-    ccb.execute();
     A->cell_move();
 
     lambda_test();

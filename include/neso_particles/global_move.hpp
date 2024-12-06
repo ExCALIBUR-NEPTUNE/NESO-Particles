@@ -61,12 +61,11 @@ public:
       SYCLTargetSharedPtr sycl_target, LayerCompressor &layer_compressor,
       std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
       std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int)
-      : sycl_target(sycl_target), departing_identify(sycl_target),
-        layer_compressor(layer_compressor),
-        particle_dats_real(particle_dats_real),
+      : particle_dats_real(particle_dats_real),
         particle_dats_int(particle_dats_int), particle_packer(sycl_target),
         particle_unpacker(sycl_target), global_move_exchange(sycl_target),
-        dh_send_rank_npart(sycl_target, 1){};
+        departing_identify(sycl_target), layer_compressor(layer_compressor),
+        dh_send_rank_npart(sycl_target, 1), sycl_target(sycl_target){};
 
   /**
    *  Set the ParticleDat to use for MPI ranks.

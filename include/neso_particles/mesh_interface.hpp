@@ -121,7 +121,6 @@ typedef std::shared_ptr<HMesh> HMeshSharedPtr;
 class CartesianHMesh : public HMesh {
 private:
   int cell_count;
-  MPI_Comm comm;
   MPI_Comm comm_cart;
   int periods[3] = {1, 1, 1};
   int coords[3] = {0, 0, 0};
@@ -135,6 +134,8 @@ public:
   CartesianHMesh(const CartesianHMesh &st) = delete;
   /// Disable (implicit) copies.
   CartesianHMesh &operator=(CartesianHMesh const &a) = delete;
+
+  virtual ~CartesianHMesh() = default;
 
   /// Holds the first cell this rank owns in each dimension.
   int cell_starts[3] = {0, 0, 0};
@@ -184,9 +185,8 @@ public:
   CartesianHMesh(MPI_Comm comm, const int ndim, std::vector<int> &dims,
                  const double extent = 1.0, const int subdivision_order = 1,
                  const int stencil_width = 0)
-      : comm(comm), ndim(ndim), dims(dims),
-        subdivision_order(subdivision_order), stencil_width(stencil_width),
-        cell_width_coarse(extent),
+      : stencil_width(stencil_width), ndim(ndim), dims(dims),
+        subdivision_order(subdivision_order), cell_width_coarse(extent),
         cell_width_fine(extent / ((double)std::pow(2, subdivision_order))),
         inverse_cell_width_coarse(1.0 / extent),
         inverse_cell_width_fine(((double)std::pow(2, subdivision_order)) /
@@ -196,7 +196,9 @@ public:
         single_cell_mode(false) {
 
     // basic error checking of inputs
-    NESOASSERT(dims.size() >= ndim, "vector of dims too small");
+    NESOASSERT(ndim > 0, "ndim less than 1");
+    NESOASSERT(dims.size() >= static_cast<std::size_t>(ndim),
+               "vector of dims too small");
     for (int dimx = 0; dimx < ndim; dimx++) {
       NESOASSERT(dims[dimx] > 0, "Dim size is <= 0 in a direction.");
     }

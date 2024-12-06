@@ -98,7 +98,8 @@ template <> struct LoopParameter<Access::Read<ParticleLoopIndex>> {
  */
 inline ParticleLoopIndexKernelT
 create_loop_arg(ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
-                sycl::handler &cgh, Access::Read<ParticleLoopIndex *> &a) {
+                [[maybe_unused]] sycl::handler &cgh,
+                [[maybe_unused]] Access::Read<ParticleLoopIndex *> &a) {
   NESOASSERT(global_info->loop_type_int == 0 || global_info->loop_type_int == 1,
              "Unknown loop type for ParticleLoopIndex.");
   ParticleLoopIndexKernelT tmp;

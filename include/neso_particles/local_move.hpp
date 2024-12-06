@@ -82,12 +82,12 @@ public:
             std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
             std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int,
             const int nranks = 0, const int *ranks = nullptr)
-      : sycl_target(sycl_target), layer_compressor(layer_compressor),
-        particle_dats_real(particle_dats_real),
+      : sycl_target(sycl_target), particle_dats_real(particle_dats_real),
         particle_dats_int(particle_dats_int), particle_packer(sycl_target),
-        particle_unpacker(sycl_target), h_send_ranks(sycl_target, 1),
-        h_recv_ranks(sycl_target, 1), h_send_requests(sycl_target, 1),
-        h_recv_requests(sycl_target, 1), h_status(sycl_target, 1),
+        particle_unpacker(sycl_target), layer_compressor(layer_compressor),
+        h_send_ranks(sycl_target, 1), h_recv_ranks(sycl_target, 1),
+        h_send_requests(sycl_target, 1), h_recv_requests(sycl_target, 1),
+        h_status(sycl_target, 1),
         dh_send_rank_map(sycl_target, sycl_target->comm_pair.size_parent),
         h_send_rank_npart(sycl_target, 1), h_recv_rank_npart(sycl_target, 1),
         departing_identify(sycl_target) {

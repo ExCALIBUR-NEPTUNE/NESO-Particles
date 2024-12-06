@@ -38,7 +38,7 @@ inline void ParticleGroup::add_particles() {
                     "move or parallel advection initialisation.");
 };
 template <typename U>
-inline void ParticleGroup::add_particles(U particle_data) {
+inline void ParticleGroup::add_particles([[maybe_unused]] U particle_data) {
   NESOASSERT(false, "Not implemented yet - use add_particles_local and hybrid "
                     "move or parallel advection initialisation.");
 };
@@ -118,8 +118,10 @@ inline void ParticleGroup::remove_particles(const int npart,
   auto k_cells = this->d_remove_cells.ptr;
   auto k_layers = this->d_remove_layers.ptr;
 
-  NESOASSERT(cells.size() >= npart, "Bad cells length compared to npart");
-  NESOASSERT(layers.size() >= npart, "Bad layers length compared to npart");
+  NESOASSERT(cells.size() >= static_cast<std::size_t>(npart),
+             "Bad cells length compared to npart");
+  NESOASSERT(layers.size() >= static_cast<std::size_t>(npart),
+             "Bad layers length compared to npart");
 
   auto b_cells = sycl::buffer<INT>(cells.data(), sycl::range<1>(npart));
   auto b_layers = sycl::buffer<INT>(layers.data(), sycl::range<1>(npart));
@@ -180,19 +182,6 @@ inline void ParticleGroup::local_move() {
   this->local_move_ctx->move();
   this->set_npart_cell_from_dat();
   this->invalidate_group_version();
-}
-
-inline std::string fixed_width_format(INT value) {
-  char buffer[128];
-  const int err = snprintf(buffer, 128, "%lld", static_cast<long long>(value));
-  NESOASSERT(err >= 0 && err < 128, "Bad snprintf return code.");
-  return std::string(buffer);
-}
-inline std::string fixed_width_format(REAL value) {
-  char buffer[128];
-  const int err = snprintf(buffer, 128, "%f", value);
-  NESOASSERT(err >= 0 && err < 128, "Bad snprintf return code.");
-  return std::string(buffer);
 }
 
 template <typename... T> inline void ParticleGroup::print(T... args) {
@@ -259,6 +248,26 @@ template <typename... T> inline void ParticleGroup::print(T... args) {
   std::cout << "==============================================================="
                "================="
             << std::endl;
+}
+
+inline void ParticleGroup::print_particle(const int cell, const int layer) {
+  nprint("Particle info, cell:", cell, "layer:", layer);
+  auto lambda_print_dat = [&](auto sym, auto dat) {
+    std::cout << "\t" << sym.name << ": ";
+    auto data = dat->cell_dat.get_cell(cell);
+    auto ncomp = dat->ncomp;
+    for (int cx = 0; cx < ncomp; cx++) {
+      std::cout << data->at(layer, cx) << " ";
+    }
+    std::cout << std::endl;
+  };
+
+  for (auto d : this->particle_dats_int) {
+    lambda_print_dat(d.first, d.second);
+  }
+  for (auto d : this->particle_dats_real) {
+    lambda_print_dat(d.first, d.second);
+  }
 }
 
 /*

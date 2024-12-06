@@ -12,7 +12,7 @@
 
 namespace NESO::Particles {
 
-static inline int reduce_mul(const int nel, std::vector<int> &values) {
+inline int reduce_mul(const int nel, std::vector<int> &values) {
   int v = 1;
   for (int ex = 0; ex < nel; ex++) {
     v *= values[ex];
@@ -53,7 +53,7 @@ inline void neso_particles_assert(const char *expr_str, bool expr,
                                   const char *file, int line, T &&msg) {
   if (!expr) {
     std::cerr << "NESO Particles Assertion error:\t" << msg << "\n"
-              << "Expected value:\t" << expr_str << "\n"
+              << "Expression evaluated:\t" << expr_str << "\n"
               << "Source location:\t\t" << file << ", line " << line << "\n";
 #ifdef NESO_PARTICLES_NO_MPI_ABORT
     std::abort();
@@ -131,8 +131,8 @@ inline std::vector<size_t> reverse_argsort(const std::vector<T> &array) {
 #define MAX(x, y) (((x) < (y)) ? (y) : (x))
 #define ABS(x) (((x) >= 0) ? (x) : (-(x)))
 template <typename T>
-void get_decomp_1d(const T N_compute_units, const T N_work_items,
-                   const T work_unit, T *rstart, T *rend) {
+inline void get_decomp_1d(const T N_compute_units, const T N_work_items,
+                          const T work_unit, T *rstart, T *rend) {
 
   const auto pq = std::div(N_work_items, N_compute_units);
   const T i = work_unit;
@@ -145,6 +145,23 @@ void get_decomp_1d(const T N_compute_units, const T N_work_items,
   *rstart = start;
   *rend = end;
 }
+inline void get_decomp_1d(const std::size_t N_compute_units,
+                          const std::size_t N_work_items,
+                          const std::size_t work_unit, std::size_t *rstart,
+                          std::size_t *rend) {
+
+  const auto pq = std::div(static_cast<long long>(N_work_items),
+                           static_cast<long long>(N_compute_units));
+  const std::size_t i = work_unit;
+  const std::size_t p = static_cast<std::size_t>(pq.quot);
+  const std::size_t q = static_cast<std::size_t>(pq.rem);
+  const std::size_t n = (i < q) ? (p + 1) : p;
+  const std::size_t start = (MIN(i, q) * (p + 1)) + ((i > q) ? (i - q) * p : 0);
+  const std::size_t end = start + n;
+
+  *rstart = start;
+  *rend = end;
+}
 
 template <typename T>
 inline T get_min_power_of_two(const T N_work_items, const size_t max_size) {
@@ -153,6 +170,19 @@ inline T get_min_power_of_two(const T N_work_items, const size_t max_size) {
   const int base_two_power_p1 = base_two_power + 1;
   const int two_power_p1 = int(1) << base_two_power_p1;
   return (T)std::min(std::max((INT)two_power_p1, (INT)4), (INT)max_size);
+}
+
+template <typename T> inline T get_prev_power_of_two(const T N_work_items) {
+  const int base_two_power =
+      static_cast<int>(std::log2(static_cast<double>(N_work_items)));
+  const int two_power_p1 = int(1) << base_two_power;
+  return (T)std::max((INT)two_power_p1, (INT)1);
+}
+
+[[nodiscard]] inline std::size_t get_next_multiple(std::size_t N,
+                                                   const std::size_t M) {
+  N = (N + (M - 1)) / M;
+  return N * M;
 }
 
 template <typename U> inline void nprint_recurse(int flag, U next) {
@@ -175,6 +205,8 @@ template <typename... T> inline void nprint(T... args) {
   nprint_recurse(0, args...);
 }
 
+#define nprint_variable(x) nprint(std::string(#x) + ":", x)
+
 #ifndef NESO_PARTICLES_BLOCK_SIZE
 #define NESO_PARTICLES_BLOCK_SIZE 1024
 #endif
@@ -183,13 +215,6 @@ template <typename... T> inline void nprint(T... args) {
 
 #define NESO_PARTICLES_DEVICE_LABEL "CPU"
 #define NESO_PARTICLES_ITER_CELLS 1
-
-//#define NESO_PARTICLES_KERNEL_START                                            \
-//  const int neso_npart = pl_npart_cell[idx];                                   \
-//  for (int neso_layer = 0; neso_layer < neso_npart; neso_layer++) {
-// #define NESO_PARTICLES_KERNEL_END }
-// #define NESO_PARTICLES_KERNEL_CELL idx
-// #define NESO_PARTICLES_KERNEL_LAYER neso_layer
 
 #define NESO_PARTICLES_KERNEL_START                                            \
   const int neso_cell = (((INT)idx) / pl_stride);                              \
@@ -258,7 +283,45 @@ inline void initialise_mpi(int *argc, char ***argv) {
   test_provided_thread_level(provided_thread_level);
 }
 
+inline std::string fixed_width_format(INT value) {
+  char buffer[128];
+  const int err = snprintf(buffer, 128, "% lld", static_cast<long long>(value));
+  NESOASSERT(err >= 0 && err < 128, "Bad snprintf return code.");
+  return std::string(buffer);
+}
+inline std::string fixed_width_format(REAL value) {
+  char buffer[128];
+  const int err = snprintf(buffer, 128, "% .6e", value);
+  NESOASSERT(err >= 0 && err < 128, "Bad snprintf return code.");
+  return std::string(buffer);
+}
 // TODO Move MPI typedefs to right place when dmplex branch merged.
+
+/**
+ * Helper function to retrive size_t values from environment variables.
+ *
+ * @param key Name of environment variable.
+ * @param default_value Default value to return if the key is not found.
+ * @returns Value from environment variable.
+ */
+inline std::size_t get_env_size_t(const std::string key,
+                                  std::size_t default_value) {
+  char *var_char;
+  const bool var_exists = (var_char = std::getenv(key.c_str())) != nullptr;
+  if (var_exists) {
+    try {
+      std::size_t value = static_cast<std::size_t>(std::stoi(var_char));
+      return value;
+    } catch (std::out_of_range const &ex) {
+      nprint("Could not read", key,
+             "and convert to int. Value of environment variable is:", var_char,
+             "Will return the default value of:", default_value);
+      return default_value;
+    }
+  } else {
+    return default_value;
+  }
+}
 
 /**
  * @returns True if device aware MPI is enabled.
@@ -272,7 +335,7 @@ inline bool device_aware_mpi_enabled() {
   char *var_char;
   const bool var_exists =
       (var_char = std::getenv("NESO_PARTICLES_DEVICE_AWARE_MPI")) != nullptr;
-  bool enabled;
+  bool enabled = false;
   // If the env var exists then this sets if device MPI is enabled otherwise
   // use the cmake default
   if (var_exists) {
@@ -293,5 +356,13 @@ inline bool device_aware_mpi_enabled() {
 }
 
 } // namespace NESO::Particles
+
+// HDF5 includes if it exists.
+#ifdef NESO_PARTICLES_HDF5
+#include <hdf5.h>
+#ifndef H5CHK
+#define H5CHK(cmd) NESOASSERT((cmd) >= 0, "HDF5 ERROR");
+#endif
+#endif
 
 #endif

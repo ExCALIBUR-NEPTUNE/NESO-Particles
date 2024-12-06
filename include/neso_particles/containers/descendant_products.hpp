@@ -109,9 +109,10 @@ template <> struct KernelParameter<Access::Write<DescendantProducts>> {
 /**
  *  Function to create the kernel argument for DescendantProducts write access.
  */
-inline void create_kernel_arg(ParticleLoopIteration &iterationx,
-                              DescendantProductsGet &rhs,
-                              Access::DescendantProducts::Write &lhs) {
+inline void
+create_kernel_arg([[maybe_unused]] ParticleLoopIteration &iterationx,
+                  DescendantProductsGet &rhs,
+                  Access::DescendantProducts::Write &lhs) {
   lhs.ptr_real = rhs.product_matrix_get.ptr_real;
   lhs.ptr_int = rhs.product_matrix_get.ptr_int;
   lhs.offsets_real = rhs.product_matrix_get.offsets_real;
@@ -210,7 +211,8 @@ namespace ParticleLoopImplementation {
  * Method to compute access to a DescendantProducts (write)
  */
 inline DescendantProductsGet
-create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
+create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
+                [[maybe_unused]] sycl::handler &cgh,
                 Access::Write<DescendantProducts *> &a) {
   return a.obj->impl_get();
 }
