@@ -428,6 +428,10 @@ public:
           this->tuple_to_linear_global(indices + (qx * this->ndim * 2));
       const int rank = get_owner(linear_index);
       ranks[qx] = rank;
+      if (Debug::enabled(Debug::MOVEMENT_LEVEL)) {
+        nprint("MeshHierarchy::get_owners:", "qx:", qx,
+               "linear_index:", linear_index, "rank:", rank);
+      }
     }
   };
 };

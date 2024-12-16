@@ -120,6 +120,21 @@ inline void DepartingIdentify::identify(const int rank_component) {
   e3.wait();
   e4.wait();
 
+  if (Debug::enabled(Debug::MOVEMENT_LEVEL)) {
+    nprint("DepartingIdentify::identify: component:", rank_component);
+    const auto num_ranks = this->dh_num_ranks_send.h_buffer.ptr[0];
+    for (int rank = 0; rank < num_ranks; rank++) {
+      nprint("\t index:", rank,
+             "rank:", this->dh_send_ranks.h_buffer.ptr[rank]);
+    }
+
+    auto source_cells = this->d_pack_cells.get();
+    auto source_layers = this->d_pack_layers_src.get();
+    for (int px = 0; px < this->dh_num_particle_send.h_buffer.ptr[0]; px++) {
+      nprint("\t particle:", px, "cell:", source_cells.at(px),
+             "layer:", source_layers.at(px));
+    }
+  }
   sycl_target->profile_map.inc("DepartingIdentify", "identify", 1,
                                profile_elapsed(t0, profile_timestamp()));
 }

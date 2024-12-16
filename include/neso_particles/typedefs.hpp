@@ -323,6 +323,34 @@ inline std::size_t get_env_size_t(const std::string key,
   }
 }
 
+namespace Debug {
+constexpr static inline std::size_t MOVEMENT_LEVEL = 2;
+
+/**
+ * @returns the debug level from NESO_PARTICLES_DEBUG_LEVEL.
+ */
+#ifdef NDEBUG
+constexpr
+#endif
+    inline std::size_t
+    get_level() {
+#ifdef NDEBUG
+  return 0;
+#else
+  return get_env_size_t("NESO_PARTICLES_DEBUG_LEVEL", 0);
+#endif
+}
+
+/**
+ * @param threshold
+ * @returns True if debug level greater than threshold.
+ */
+inline std::size_t enabled(const std::size_t threshold) {
+  return get_level() > threshold;
+}
+
+} // namespace Debug
+
 /**
  * @returns True if device aware MPI is enabled.
  */

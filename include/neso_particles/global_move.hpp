@@ -151,6 +151,13 @@ public:
         num_remote_send_ranks, dh_send_ranks,
         this->dh_send_rank_npart.h_buffer);
 
+    if (Debug::enabled(Debug::MOVEMENT_LEVEL)) {
+      nprint("GlobalMove::move::send_ranks:");
+      for (int rank = 0; rank < num_remote_send_ranks; rank++) {
+        nprint("\t", rank, dh_send_ranks.h_buffer.ptr[rank]);
+      }
+    }
+
     sycl_target->profile_map.inc("GlobalMove", "move_stage_f", 1,
                                  profile_elapsed(t0, profile_timestamp()));
 
