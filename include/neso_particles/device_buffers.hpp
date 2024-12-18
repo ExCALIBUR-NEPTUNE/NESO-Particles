@@ -24,8 +24,10 @@ protected:
     this->ptr = nullptr;
   }
 
-  BufferBase(SYCLTargetSharedPtr sycl_target, std::size_t size)
-      : sycl_target(sycl_target), ptr(nullptr), size(size) {}
+  BufferBase(SYCLTargetSharedPtr sycl_target, std::size_t size,
+             std::size_t alignment)
+      : sycl_target(sycl_target), ptr(nullptr), size(size),
+        alignment(alignment) {}
 
   inline void assert_allocated() {
     NESOASSERT(this->ptr != nullptr,
@@ -39,6 +41,10 @@ public:
   T *ptr;
   /// Number of elements allocated.
   std::size_t size;
+  /// Alignment of buffer. Alignment of 0 implies malloc is called without
+  /// specifying alignment which defaults to the alignment rules of
+  /// malloc_device/host/shared rather than the aligned variants.
+  std::size_t alignment{0};
 
   /**
    * Get the size of the allocation in bytes.
@@ -151,7 +157,8 @@ public:
 template <typename T> class BufferDevice : public BufferBase<T> {
 protected:
   virtual inline T *malloc_wrapper(const std::size_t num_bytes) override {
-    return static_cast<T *>(this->sycl_target->malloc_device(num_bytes));
+    return static_cast<T *>(
+        this->sycl_target->malloc_device(num_bytes, this->alignment));
   }
   virtual inline void free_wrapper(T *ptr) override {
     this->sycl_target->free(ptr);
@@ -168,10 +175,35 @@ public:
    *
    * @param sycl_target SYCLTargetSharedPtr to use as compute device.
    * @param size Number of elements.
+   * @param alignment Alignment of buffer in bytes.
    */
-  BufferDevice(SYCLTargetSharedPtr &sycl_target, size_t size)
-      : BufferBase<T>(sycl_target, size) {
+  BufferDevice(SYCLTargetSharedPtr &sycl_target, std::size_t size,
+               std::size_t alignment)
+      : BufferBase<T>(sycl_target, size, alignment) {
     this->generic_init();
+  }
+
+  /**
+   * Create a new BufferDevice of a given number of elements.
+   *
+   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
+   * @param size Number of elements.
+   */
+  BufferDevice(SYCLTargetSharedPtr &sycl_target, std::size_t size)
+      : BufferDevice<T>(sycl_target, size, 0) {}
+
+  /**
+   * Create a new BufferDevice from a std::vector. Note, this does not operate
+   * like a sycl::buffer and is a copy of the source vector.
+   *
+   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
+   * @param vec Input vector to copy data from.
+   * @param alignment Alignment of buffer in bytes.
+   */
+  BufferDevice(SYCLTargetSharedPtr sycl_target, const std::vector<T> &vec,
+               std::size_t alignment)
+      : BufferDevice(sycl_target, vec.size(), alignment) {
+    this->set(vec);
   }
 
   /**
@@ -182,9 +214,7 @@ public:
    * @param vec Input vector to copy data from.
    */
   BufferDevice(SYCLTargetSharedPtr sycl_target, const std::vector<T> &vec)
-      : BufferDevice(sycl_target, vec.size()) {
-    this->set(vec);
-  }
+      : BufferDevice(sycl_target, vec, 0) {}
 
   virtual ~BufferDevice() { this->generic_free(); }
 };
@@ -196,7 +226,7 @@ template <typename T> class BufferShared : public BufferBase<T> {
 protected:
   virtual inline T *malloc_wrapper(const std::size_t num_bytes) override {
     return static_cast<T *>(
-        sycl::malloc_shared(num_bytes, this->sycl_target->queue));
+        this->sycl_target->malloc_shared(num_bytes, this->alignment));
   }
   virtual inline void free_wrapper(T *ptr) override {
     sycl::free(ptr, this->sycl_target->queue);
@@ -209,14 +239,39 @@ public:
   BufferShared &operator=(BufferShared const &a) = delete;
 
   /**
-   * Create a new DeviceShared of a given number of elements.
+   * Create a new BufferShared of a given number of elements.
+   *
+   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
+   * @param size Number of elements.
+   * @param alignment Alignment of buffer in bytes.
+   */
+  BufferShared(SYCLTargetSharedPtr &sycl_target, std::size_t size,
+               std::size_t alignment)
+      : BufferBase<T>(sycl_target, size, alignment) {
+    this->generic_init();
+  }
+
+  /**
+   * Create a new BufferShared of a given number of elements.
    *
    * @param sycl_target SYCLTargetSharedPtr to use as compute device.
    * @param size Number of elements.
    */
-  BufferShared(SYCLTargetSharedPtr sycl_target, size_t size)
-      : BufferBase<T>(sycl_target, size) {
-    this->generic_init();
+  BufferShared(SYCLTargetSharedPtr &sycl_target, std::size_t size)
+      : BufferShared<T>(sycl_target, size, 0) {}
+
+  /**
+   * Create a new BufferShared from a std::vector. Note, this does not operate
+   * like a sycl::buffer and is a copy of the source vector.
+   *
+   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
+   * @param vec Input vector to copy data from.
+   * @param alignment Alignment of buffer in bytes.
+   */
+  BufferShared(SYCLTargetSharedPtr sycl_target, const std::vector<T> &vec,
+               std::size_t alignment)
+      : BufferShared(sycl_target, vec.size(), alignment) {
+    this->set(vec);
   }
 
   /**
@@ -227,9 +282,7 @@ public:
    * @param vec Input vector to copy data from.
    */
   BufferShared(SYCLTargetSharedPtr sycl_target, const std::vector<T> &vec)
-      : BufferShared(sycl_target, vec.size()) {
-    this->set(vec);
-  }
+      : BufferShared(sycl_target, vec, 0) {}
 
   ~BufferShared() { this->generic_free(); }
 };
@@ -240,7 +293,8 @@ public:
 template <typename T> class BufferHost : public BufferBase<T> {
 protected:
   virtual inline T *malloc_wrapper(const std::size_t num_bytes) override {
-    return static_cast<T *>(this->sycl_target->malloc_host(num_bytes));
+    return static_cast<T *>(
+        this->sycl_target->malloc_host(num_bytes, this->alignment));
   }
   virtual inline void free_wrapper(T *ptr) override {
     this->sycl_target->free(ptr);
@@ -257,10 +311,35 @@ public:
    *
    * @param sycl_target SYCLTargetSharedPtr to use as compute device.
    * @param size Number of elements.
+   * @param alignment Alignment of buffer in bytes.
    */
-  BufferHost(SYCLTargetSharedPtr sycl_target, size_t size)
-      : BufferBase<T>(sycl_target, size) {
+  BufferHost(SYCLTargetSharedPtr &sycl_target, std::size_t size,
+             std::size_t alignment)
+      : BufferBase<T>(sycl_target, size, alignment) {
     this->generic_init();
+  }
+
+  /**
+   * Create a new BufferHost of a given number of elements.
+   *
+   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
+   * @param size Number of elements.
+   */
+  BufferHost(SYCLTargetSharedPtr &sycl_target, std::size_t size)
+      : BufferHost<T>(sycl_target, size, 0) {}
+
+  /**
+   * Create a new BufferHost from a std::vector. Note, this does not operate
+   * like a sycl::buffer and is a copy of the source vector.
+   *
+   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
+   * @param vec Input vector to copy data from.
+   * @param alignment Alignment of buffer in bytes.
+   */
+  BufferHost(SYCLTargetSharedPtr sycl_target, const std::vector<T> &vec,
+             std::size_t alignment)
+      : BufferHost(sycl_target, vec.size(), alignment) {
+    this->set(vec);
   }
 
   /**
@@ -271,9 +350,7 @@ public:
    * @param vec Input vector to copy data from.
    */
   BufferHost(SYCLTargetSharedPtr sycl_target, const std::vector<T> &vec)
-      : BufferHost(sycl_target, vec.size()) {
-    this->set(vec);
-  }
+      : BufferHost(sycl_target, vec, 0) {}
 
   ~BufferHost() { this->generic_free(); }
 };
@@ -295,7 +372,7 @@ public:
   /// Compute device used by the instance.
   SYCLTargetSharedPtr sycl_target;
   /// Size of the allocation on device and host.
-  size_t size;
+  std::size_t size;
 
   /// Wrapped BufferDevice.
   BufferDevice<T> d_buffer;
@@ -311,10 +388,38 @@ public:
    * @param sycl_target SYCLTargetSharedPtr to use as compute device.
    * @param size Number of elements to initially allocate on the device and
    * host.
+   * @param alignment Alignment of buffers in bytes.
    */
-  BufferDeviceHost(SYCLTargetSharedPtr sycl_target, size_t size)
-      : sycl_target(sycl_target), size(size), d_buffer(sycl_target, size),
-        h_buffer(sycl_target, size){};
+  BufferDeviceHost(SYCLTargetSharedPtr sycl_target, std::size_t size,
+                   std::size_t alignment)
+      : sycl_target(sycl_target), size(size),
+        d_buffer(sycl_target, size, alignment),
+        h_buffer(sycl_target, size, alignment){};
+
+  /**
+   * Create a new BufferDeviceHost from a std::vector. Note, this does not
+   * operate like a sycl::buffer and is a copy of the source vector.
+   *
+   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
+   * @param vec Input vector to copy data from.
+   * @param alignment Alignment of buffers in bytes.
+   */
+  BufferDeviceHost(SYCLTargetSharedPtr sycl_target, const std::vector<T> &vec,
+                   std::size_t alignment)
+      : sycl_target(sycl_target), size(vec.size()),
+        d_buffer(sycl_target, vec, alignment),
+        h_buffer(sycl_target, vec, alignment){};
+
+  /**
+   * Create a new BufferDeviceHost of the request size on the requested compute
+   * target.
+   *
+   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
+   * @param size Number of elements to initially allocate on the device and
+   * host.
+   */
+  BufferDeviceHost(SYCLTargetSharedPtr sycl_target, std::size_t size)
+      : BufferDeviceHost(sycl_target, size, 0) {}
 
   /**
    * Create a new BufferDeviceHost from a std::vector. Note, this does not
@@ -324,15 +429,14 @@ public:
    * @param vec Input vector to copy data from.
    */
   BufferDeviceHost(SYCLTargetSharedPtr sycl_target, const std::vector<T> &vec)
-      : sycl_target(sycl_target), size(vec.size()), d_buffer(sycl_target, vec),
-        h_buffer(sycl_target, vec){};
+      : BufferDeviceHost(sycl_target, vec, 0) {}
 
   /**
    * Get the size in bytes of the allocation on the host and device.
    *
    * @returns Number of bytes allocated on the host and device.
    */
-  inline size_t size_bytes() { return this->size * sizeof(T); }
+  inline std::size_t size_bytes() { return this->size * sizeof(T); }
 
   /**
    * Reallocate both the device and host buffers to hold at least the requested
@@ -342,7 +446,7 @@ public:
    *
    * @param size Minimum number of elements this buffer should be able to hold.
    */
-  inline int realloc_no_copy(const size_t size) {
+  inline int realloc_no_copy(const std::size_t size) {
     this->d_buffer.realloc_no_copy(size);
     this->h_buffer.realloc_no_copy(size);
     this->size = size;

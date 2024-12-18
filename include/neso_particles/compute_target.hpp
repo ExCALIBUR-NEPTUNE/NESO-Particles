@@ -56,7 +56,7 @@ inline int get_local_mpi_rank(MPI_Comm comm, int default_rank = -1) {
  */
 class SYCLTarget {
 private:
-  std::map<unsigned char *, size_t> ptr_map;
+  std::map<unsigned char *, std::size_t> ptr_map;
 
 #ifdef DEBUG_OOB_CHECK
   std::array<unsigned char, DEBUG_OOB_WIDTH> ptr_bit_mask;
@@ -216,15 +216,27 @@ public:
    * Allocate memory on device using sycl::malloc_device.
    *
    * @param size_bytes Number of bytes to allocate.
+   * @param align_bytes Optional alignment, default 0 calls malloc_device
+   * instead of aligned_alloc_device.
    */
-  inline void *malloc_device(size_t size_bytes) {
+  inline void *malloc_device(const std::size_t size_bytes,
+                             const std::size_t align_bytes = 0) {
+
+    auto lambda_alloc = [&](const std::size_t b) -> void * {
+      if (align_bytes) {
+        return sycl::aligned_alloc_device(
+            align_bytes, get_next_multiple(b, align_bytes), this->queue);
+      } else {
+        return sycl::malloc_device(b, this->queue);
+      }
+    };
 
 #ifndef DEBUG_OOB_CHECK
-    return sycl::malloc_device(size_bytes, this->queue);
+    return lambda_alloc(size_bytes);
 #else
-
-    unsigned char *ptr = (unsigned char *)sycl::malloc_device(
+    unsigned char *ptr = (unsigned char *)lambda_alloc(
         size_bytes + 2 * DEBUG_OOB_WIDTH, this->queue);
+
     unsigned char *ptr_user = ptr + DEBUG_OOB_WIDTH;
     this->ptr_map[ptr_user] = size_bytes;
     NESOASSERT(ptr != nullptr, "pad pointer from malloc_device");
@@ -237,7 +249,46 @@ public:
         .wait();
 
     return (void *)ptr_user;
-    // return ptr;
+#endif
+  }
+
+  /**
+   * Allocate memory in USM shared memory using sycl::malloc_shared.
+   *
+   * @param size_bytes Number of bytes to allocate.
+   * @param align_bytes Optional alignment, default 0 calls malloc_shared
+   * instead of aligned_alloc_shared.
+   */
+  inline void *malloc_shared(const std::size_t size_bytes,
+                             const std::size_t align_bytes = 0) {
+
+    auto lambda_alloc = [&](const std::size_t b) -> void * {
+      if (align_bytes) {
+        return sycl::aligned_alloc_shared(
+            align_bytes, get_next_multiple(b, align_bytes), this->queue);
+      } else {
+        return sycl::malloc_shared(b, this->queue);
+      }
+    };
+
+#ifndef DEBUG_OOB_CHECK
+    return lambda_alloc(size_bytes);
+#else
+    unsigned char *ptr = (unsigned char *)lambda_alloc(
+        size_bytes + 2 * DEBUG_OOB_WIDTH, this->queue);
+
+    unsigned char *ptr_user = ptr + DEBUG_OOB_WIDTH;
+    this->ptr_map[ptr_user] = size_bytes;
+    NESOASSERT(ptr != nullptr, "pad pointer from malloc_shared");
+
+    this->queue.memcpy(ptr, this->ptr_bit_mask.data(), DEBUG_OOB_WIDTH).wait();
+
+    this->queue
+        .memcpy(ptr_user + size_bytes, this->ptr_bit_mask.data(),
+                DEBUG_OOB_WIDTH)
+        .wait();
+
+    return (void *)ptr_user;
 #endif
   }
 
@@ -245,14 +296,26 @@ public:
    * Allocate memory on the host using sycl::malloc_host.
    *
    * @param size_bytes Number of bytes to allocate.
+   * @param align_bytes Optional alignment, default 0 calls malloc_host instead
+   * of aligned_alloc_host.
    */
-  inline void *malloc_host(size_t size_bytes) {
+  inline void *malloc_host(const std::size_t size_bytes,
+                           const std::size_t align_bytes = 0) {
 
+    auto lambda_alloc = [&](const std::size_t b) -> void * {
+      if (align_bytes) {
+        auto ptr = sycl::aligned_alloc_host(
+            align_bytes, get_next_multiple(b, align_bytes), this->queue);
+        return ptr;
+      } else {
+        return sycl::malloc_host(b, this->queue);
+      }
+    };
 #ifndef DEBUG_OOB_CHECK
-    return sycl::malloc_host(size_bytes, this->queue);
+    return lambda_alloc(size_bytes);
 #else
 
-    unsigned char *ptr = (unsigned char *)sycl::malloc_host(
+    unsigned char *ptr = (unsigned char *)lambda_alloc(
         size_bytes + 2 * DEBUG_OOB_WIDTH, this->queue);
     unsigned char *ptr_user = ptr + DEBUG_OOB_WIDTH;
     this->ptr_map[ptr_user] = size_bytes;
@@ -298,7 +361,7 @@ public:
   }
 
   inline void check_ptr([[maybe_unused]] unsigned char *ptr_user,
-                        [[maybe_unused]] const size_t size_bytes) {
+                        [[maybe_unused]] const std::size_t size_bytes) {
 
 #ifdef DEBUG_OOB_CHECK
     this->queue
@@ -418,7 +481,7 @@ struct NDRangePeel1D {
   /// Bool to indicate if there is a peel loop.
   const bool peel_exists;
   /// Offset to apply to peel loop indices.
-  const size_t offset;
+  const std::size_t offset;
   /// Peel loop description. Indicies from the loop should have offset added to
   /// compute the global index. This loop should be masked by a conditional for
   /// the original loop bounds.
@@ -444,7 +507,7 @@ inline NDRangePeel1D get_nd_range_peel_1d(const std::size_t size,
       static_cast<std::size_t>(div_mod.quot) * local_size;
   const bool peel_exists = !(div_mod.rem == 0);
   const std::size_t outer_size_peel = (peel_exists ? 1 : 0) * local_size;
-  const size_t offset = outer_size;
+  const std::size_t offset = outer_size;
 
   return NDRangePeel1D{
       sycl::nd_range<1>(sycl::range<1>(outer_size), sycl::range<1>(local_size)),
@@ -571,6 +634,18 @@ matrix_transpose(SYCLTargetSharedPtr sycl_target, const std::size_t num_rows,
           }
         });
   });
+}
+
+/**
+ * @param ptr Pointer to align to alignment.
+ * @param alignment Power of two to align to.
+ * @returns Aligned pointer.
+ */
+template <typename T>
+constexpr inline T *cast_align_pointer(void *ptr, const std::size_t alignment) {
+  std::size_t ptr_int = reinterpret_cast<std::size_t>(ptr);
+  ptr_int = (ptr_int + (alignment - 1)) & -alignment;
+  return reinterpret_cast<T *>(ptr_int);
 }
 
 } // namespace NESO::Particles
