@@ -2,6 +2,7 @@
 #define _NESO_PARTICLES_PARTICLE_LOOP_BASE_H_
 
 #include "../compute_target.hpp"
+#include "../device_buffers.hpp"
 #include "access_descriptors.hpp"
 #include <memory>
 #include <optional>
