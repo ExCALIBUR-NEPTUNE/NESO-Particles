@@ -309,6 +309,108 @@ inline void triangle_barycentric_to_cartesian(const REAL x1, const REAL y1,
   *y = Kernel::fma(l1, y1, l2 * y2) + l3 * y3;
 };
 
+/**
+ * Given a torus with major radius R convert the coordinate for a point
+ * specified in (x,y,z) Cartesian coordinates to a torus cylindrical coordinate
+ * system (r, theta, phi). In this notation:
+ *
+ *    z          /----\
+ *    ^         /   /  \  In the (z, R) plane, radius "r", angle "theta"
+ *    |        |   *----| relative to a.
+ *    |         \  a   /
+ *    |     R    \----/
+ *    * ---------->
+ *    ^
+ *    |
+ *  (0,0,0) In Cartesian.
+ *
+ *  @param[in] R Major radius of torus.
+ *  @param[in] x Cartesian coordinate, x component.
+ *  @param[in] y Cartesian coordinate, y component.
+ *  @param[in] z Cartesian coordinate, z component.
+ *  @param[in, out] r Torus cylindrical coordinate, radius in poloidal plane
+ * from centre (a).
+ *  @param[in, out] theta Torus cylindrical coordinate, angle in poloidal plane
+ * from centre (a).
+ *  @param[in, out] phi Torus cylindrical coordinate, toroidal angle relative to
+ * origin (Cartesian (0,0,0)).
+ */
+inline void cartesian_to_torus_cylindrical(const REAL R, const REAL x,
+                                           const REAL y, const REAL z, REAL *r,
+                                           REAL *theta, REAL *phi) {
+  *phi = Kernel::atan2(y, x);
+
+  const REAL plane_radius2 = x * x + y * y;
+  const REAL inverse_plane_radius = Kernel::rsqrt(plane_radius2);
+  const REAL x_normalised = x * inverse_plane_radius;
+  const REAL y_normalised = y * inverse_plane_radius;
+
+  // Origin in poloidal plane is at (R, phi) = Cartesian (R * cos(theta), R *
+  // sin(theta)))
+  //                                         = Cartesian (R * x_normalised, R *
+  //                                         y_normalised)
+  const REAL po_x = R * x_normalised;
+  const REAL po_y = R * y_normalised;
+  const REAL px = x - po_x;
+  const REAL py = y - po_y;
+
+  // (px, py, z) . (x_normalised, y_normalised, 0) =
+  //    px * x_normalised + py * y_normalised
+  const REAL xplane = px * x_normalised + py * y_normalised;
+  const REAL yplane = z;
+
+  *r = Kernel::sqrt(px * px + py * py + z * z);
+  *theta = Kernel::atan2(yplane, xplane);
+}
+
+/**
+ * Given a torus with major radius R convert the coordinate for a point
+ * specified in torus cylindrical coordinate system (r, theta, phi) to Cartesian
+ * coordinates (x,y,z). In this notation:
+ *
+ *    z          /----\
+ *    ^         /   /  \  In the (z, R) plane, radius "r", angle "theta"
+ *    |        |   *----| relative to a.
+ *    |         \  a   /
+ *    |     R    \----/
+ *    * ---------->
+ *    ^
+ *    |
+ *  (0,0,0) In Cartesian.
+ *
+ *  @param[in] R Major radius of torus.
+ *  @param[in] r Torus cylindrical coordinate, radius in poloidal plane
+ * from centre (a).
+ *  @param[in] theta Torus cylindrical coordinate, angle in poloidal plane
+ * from centre (a).
+ *  @param[in] phi Torus cylindrical coordinate, toroidal angle relative to
+ * origin (Cartesian (0,0,0)).
+ *  @param[in, out] x Cartesian coordinate, x component.
+ *  @param[in, out] y Cartesian coordinate, y component.
+ *  @param[in, out] z Cartesian coordinate, z component.
+ *
+ */
+inline void torus_cylindrical_to_cartesian(const REAL R, const REAL r,
+                                           const REAL theta, const REAL phi,
+                                           REAL *x, REAL *y, REAL *z) {
+
+  REAL costheta;
+  const REAL sintheta = Kernel::sincos(theta, &costheta);
+
+  *z = r * sintheta;
+
+  REAL cosphi;
+  const REAL sinphi = Kernel::sincos(phi, &cosphi);
+
+  // The vector (planex/length, planey/length, 0) = (cos(phi), sin(phi), 0)
+  // forms the "x" vector in the poloidol plane.
+  const REAL planex = R * cosphi;
+  const REAL planey = R * sinphi;
+
+  *x = planex + r * costheta * cosphi;
+  *y = planey + r * costheta * sinphi;
+}
+
 } // namespace NESO::Particles::ExternalCommon
 
 #endif
