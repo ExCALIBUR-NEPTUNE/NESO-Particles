@@ -330,14 +330,14 @@ inline void triangle_barycentric_to_cartesian(const REAL x1, const REAL y1,
  *  @param[in] z Cartesian coordinate, z component.
  *  @param[in, out] r Torus cylindrical coordinate, radius in poloidal plane
  * from centre (a).
- *  @param[in, out] theta Torus cylindrical coordinate, angle in poloidal plane
- * from centre (a).
  *  @param[in, out] phi Torus cylindrical coordinate, toroidal angle relative to
  * origin (Cartesian (0,0,0)).
+ *  @param[in, out] theta Torus cylindrical coordinate, angle in poloidal plane
+ * from centre (a).
  */
 inline void cartesian_to_torus_cylindrical(const REAL R, const REAL x,
                                            const REAL y, const REAL z, REAL *r,
-                                           REAL *theta, REAL *phi) {
+                                           REAL *phi, REAL *theta) {
   *phi = Kernel::atan2(y, x);
 
   const REAL plane_radius2 = x * x + y * y;
@@ -381,17 +381,17 @@ inline void cartesian_to_torus_cylindrical(const REAL R, const REAL x,
  *  @param[in] R Major radius of torus.
  *  @param[in] r Torus cylindrical coordinate, radius in poloidal plane
  * from centre (a).
- *  @param[in] theta Torus cylindrical coordinate, angle in poloidal plane
- * from centre (a).
  *  @param[in] phi Torus cylindrical coordinate, toroidal angle relative to
  * origin (Cartesian (0,0,0)).
+ *  @param[in] theta Torus cylindrical coordinate, angle in poloidal plane
+ * from centre (a).
  *  @param[in, out] x Cartesian coordinate, x component.
  *  @param[in, out] y Cartesian coordinate, y component.
  *  @param[in, out] z Cartesian coordinate, z component.
  *
  */
 inline void torus_cylindrical_to_cartesian(const REAL R, const REAL r,
-                                           const REAL theta, const REAL phi,
+                                           const REAL phi, const REAL theta,
                                            REAL *x, REAL *y, REAL *z) {
 
   REAL costheta;

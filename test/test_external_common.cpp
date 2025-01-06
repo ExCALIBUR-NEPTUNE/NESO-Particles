@@ -748,8 +748,8 @@ TEST(ExternalCommon, cartesian_to_torus_cylindrical) {
   auto lambda_test = [&](const REAL R, const REAL x, const REAL y, const REAL z,
                          const REAL cr, const REAL ctheta, const REAL cphi) {
     REAL r, theta, phi;
-    ExternalCommon::cartesian_to_torus_cylindrical(R, x, y, z, &r, &theta,
-                                                   &phi);
+    ExternalCommon::cartesian_to_torus_cylindrical(R, x, y, z, &r, &phi,
+                                                   &theta);
 
     const REAL two_pi = 2 * test_pi;
     const REAL theta_err = std::fmod((theta - ctheta) + 2.0 * two_pi, two_pi);
@@ -759,7 +759,7 @@ TEST(ExternalCommon, cartesian_to_torus_cylindrical) {
     ASSERT_NEAR(phi_err, 0.0, 1.0e-12);
 
     REAL tx, ty, tz;
-    ExternalCommon::torus_cylindrical_to_cartesian(R, r, theta, phi, &tx, &ty,
+    ExternalCommon::torus_cylindrical_to_cartesian(R, r, phi, theta, &tx, &ty,
                                                    &tz);
 
     ASSERT_NEAR(x, tx, 1.0e-12);
@@ -791,9 +791,9 @@ TEST(ExternalCommon, cartesian_to_torus_cylindrical) {
     const REAL y = rng_y(rng);
     const REAL z = rng_z(rng);
     REAL r, theta, phi, tx, ty, tz;
-    ExternalCommon::cartesian_to_torus_cylindrical(R, x, y, z, &r, &theta,
-                                                   &phi);
-    ExternalCommon::torus_cylindrical_to_cartesian(R, r, theta, phi, &tx, &ty,
+    ExternalCommon::cartesian_to_torus_cylindrical(R, x, y, z, &r, &phi,
+                                                   &theta);
+    ExternalCommon::torus_cylindrical_to_cartesian(R, r, phi, theta, &tx, &ty,
                                                    &tz);
     ASSERT_NEAR(x, tx, 1.0e-12);
     ASSERT_NEAR(y, ty, 1.0e-12);
