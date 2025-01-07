@@ -259,16 +259,19 @@ public:
    *  @param npart_new Number of new particles to add.
    *  @param new_data_exists Indicate if there is new data to copy of if the
    *  data should be initialised with zeros.
-   *  @param cells Cell indices of the new particles.
-   *  @param layers Layer (row) indices of the new particles.
-   *  @param data Particle data to copy into the ParticleDat.
+   *  @param h_cells Cell indices of the new particles on the host.
+   *  @param d_cells Cell indices of the new particles on the device.
+   *  @param d_layers Layer (row) indices of the new particles on the device.
+   *  @param d_data Particle data to copy into the ParticleDat on the device.
    *  @param es EventStack to push events onto.
    */
-  inline void append_particle_data(const int npart_new,
-                                   const bool new_data_exists,
-                                   std::vector<INT> &cells,
-                                   std::vector<INT> &layers,
-                                   std::vector<T> &data, EventStack &es);
+  inline void
+  append_particle_data(const int npart_new, const bool new_data_exists,
+                       std::vector<INT> &h_cells,
+                       const std::shared_ptr<BufferDevice<INT>> d_cells,
+                       const std::shared_ptr<BufferDevice<INT>> d_layers,
+                       const std::shared_ptr<BufferDevice<T>> d_data,
+                       EventStack &es);
 
   /**
    *  Realloc the underlying CellDat such that the indicated new number of
@@ -607,8 +610,10 @@ template <typename T> inline void ParticleDatT<T>::trim_cell_dat_rows() {
  */
 template <typename T>
 inline void ParticleDatT<T>::append_particle_data(
-    const int npart_new, const bool new_data_exists, std::vector<INT> &cells,
-    std::vector<INT> &layers, std::vector<T> &data, EventStack &es) {
+    const int npart_new, const bool new_data_exists, std::vector<INT> &h_cells,
+    const std::shared_ptr<BufferDevice<INT>> d_cells,
+    const std::shared_ptr<BufferDevice<INT>> d_layers,
+    const std::shared_ptr<BufferDevice<T>> d_data, EventStack &es) {
 
   if (npart_new == 0) {
     return;
@@ -616,46 +621,36 @@ inline void ParticleDatT<T>::append_particle_data(
 
   this->write_callback_wrapper(0);
 
-  NESOASSERT(static_cast<std::size_t>(npart_new) <= cells.size(),
+  NESOASSERT(static_cast<std::size_t>(npart_new) <= d_cells->size,
              "incorrect number of cells");
 
   // using "this" in the kernel causes segfaults on the device so we make a
   // copy here.
-  const size_t size_npart_new = static_cast<size_t>(npart_new);
   const int ncomp = this->ncomp;
   T ***d_cell_dat_ptr = this->impl_get();
 
-  sycl::buffer<INT, 1> b_cells(cells.data(), sycl::range<1>{size_npart_new});
-  sycl::buffer<INT, 1> b_layers(layers.data(), sycl::range<1>{size_npart_new});
+  const INT *k_cells = d_cells->ptr;
+  const INT *k_layers = d_layers->ptr;
 
   // If data is supplied copy the data otherwise zero the components.
   if (new_data_exists) {
-    sycl::buffer<T, 1> b_data(data.data(),
-                              sycl::range<1>{size_npart_new * this->ncomp});
+    // The new data
+    const T *k_data = d_data->ptr;
     es.push(this->sycl_target->queue.submit([&](sycl::handler &cgh) {
-      // The cell counts on this dat
-      auto a_cells = b_cells.get_access<sycl::access::mode::read>(cgh);
-      auto a_layers = b_layers.get_access<sycl::access::mode::read>(cgh);
-      // The new data
-      auto a_data = b_data.template get_access<sycl::access::mode::read>(cgh);
       cgh.parallel_for<>(sycl::range<1>(npart_new), [=](sycl::id<1> idx) {
-        const INT cellx = a_cells[idx];
-        const INT layerx = a_layers[idx];
+        const INT cellx = k_cells[idx];
+        const INT layerx = k_layers[idx];
         // copy the data into the dat.
         for (int cx = 0; cx < ncomp; cx++) {
-          d_cell_dat_ptr[cellx][cx][layerx] = a_data[cx * npart_new + idx];
+          d_cell_dat_ptr[cellx][cx][layerx] = k_data[cx * npart_new + idx];
         }
       });
     }));
   } else {
     es.push(this->sycl_target->queue.submit([&](sycl::handler &cgh) {
-      // The cell counts on this dat
-      auto a_cells = b_cells.get_access<sycl::access::mode::read>(cgh);
-      auto a_layers = b_layers.get_access<sycl::access::mode::read>(cgh);
-
       cgh.parallel_for<>(sycl::range<1>(npart_new), [=](sycl::id<1> idx) {
-        const INT cellx = a_cells[idx];
-        const INT layerx = a_layers[idx];
+        const INT cellx = k_cells[idx];
+        const INT layerx = k_layers[idx];
         // zero the new components in the dat
         for (int cx = 0; cx < ncomp; cx++) {
           d_cell_dat_ptr[cellx][cx][layerx] = ((T)0);
@@ -665,7 +660,7 @@ inline void ParticleDatT<T>::append_particle_data(
   }
 
   for (int px = 0; px < npart_new; px++) {
-    auto cellx = cells[px];
+    auto cellx = h_cells[px];
     this->h_npart_cell[cellx]++;
   }
   es.push(this->async_npart_host_to_device());
