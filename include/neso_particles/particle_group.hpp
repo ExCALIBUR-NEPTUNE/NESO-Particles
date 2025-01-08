@@ -30,7 +30,8 @@ class DescendantProducts;
 class ParticleSubGroup;
 namespace ParticleSubGroupImplementation {
 class SubGroupSelector;
-}
+class SubGroupSelectorBase;
+} // namespace ParticleSubGroupImplementation
 
 /**
  * Type to replace std::variant<Sym<INT>, Sym<REAL>> as the version tracking
@@ -83,6 +84,7 @@ struct ParticleDatVersionT {
  */
 class ParticleGroup {
   friend class ParticleSubGroupImplementation::SubGroupSelector;
+  friend class ParticleSubGroupImplementation::SubGroupSelectorBase;
   friend class ParticleSubGroup;
 
 protected:
