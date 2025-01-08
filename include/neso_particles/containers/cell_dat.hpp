@@ -242,9 +242,7 @@ public:
   /// Number of rows currently allocated for each cell.
   std::vector<INT> nrow_alloc;
   ~CellDat() {
-    for (int cellx = 0; cellx < ncells; cellx++) {
-      this->sycl_target->free(this->h_ptr_cells[cellx]);
-    }
+    this->sycl_target->free(this->h_ptr_cells.at(0));
     // for (int colx = 0; colx < ncells * this->ncol; colx++) {
     for (int cellx = 0; cellx < ncells; cellx++) {
       if (this->h_ptr_cols[cellx * this->ncol] != NULL) {
@@ -273,11 +271,14 @@ public:
     this->h_ptr_cols = std::vector<T *>(ncells * ncol);
     this->nrow_alloc = std::vector<INT>(ncells);
 
+    T **cols_base_ptr =
+        (T **)this->sycl_target->malloc_device(ncells * ncol * sizeof(T *));
+
     for (int cellx = 0; cellx < ncells; cellx++) {
       this->nrow_alloc[cellx] = 0;
       this->nrow[cellx] = 0;
-      this->h_ptr_cells[cellx] =
-          (T **)this->sycl_target->malloc_device(ncol * sizeof(T *));
+      this->h_ptr_cells[cellx] = cols_base_ptr;
+      cols_base_ptr += ncol;
       for (int colx = 0; colx < ncol; colx++) {
         this->h_ptr_cols[cellx * ncol + colx] = NULL;
       }
