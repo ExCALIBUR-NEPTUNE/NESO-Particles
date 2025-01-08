@@ -1,13 +1,10 @@
 #ifndef _PARTICLE_SUB_GROUP_H_
 #define _PARTICLE_SUB_GROUP_H_
-#include "compute_target.hpp"
-#include "loop/particle_loop.hpp"
-#include "particle_group.hpp"
-#include "typedefs.hpp"
+#include "../compute_target.hpp"
+#include "../loop/particle_loop.hpp"
+#include "../particle_group.hpp"
+#include "../typedefs.hpp"
 #include <map>
-#include <numeric>
-#include <random>
-#include <tuple>
 #include <type_traits>
 
 namespace NESO::Particles {

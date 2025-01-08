@@ -1,7 +1,7 @@
 #ifndef _NESO_PARTICLES_SYM_VECTOR_IMPL_H_
 #define _NESO_PARTICLES_SYM_VECTOR_IMPL_H_
 
-#include "../particle_sub_group.hpp"
+#include "../particle_sub_group/particle_sub_group.hpp"
 #include "sym_vector.hpp"
 
 namespace NESO::Particles {

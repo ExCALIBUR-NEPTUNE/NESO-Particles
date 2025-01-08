@@ -1,6 +1,6 @@
 #ifndef _NESO_PARTICLES_PARTICLE_LOOP_UTILITY_H_
 #define _NESO_PARTICLES_PARTICLE_LOOP_UTILITY_H_
-#include "../particle_sub_group.hpp"
+#include "../particle_sub_group/particle_sub_group.hpp"
 #include "particle_loop.hpp"
 
 namespace NESO::Particles {

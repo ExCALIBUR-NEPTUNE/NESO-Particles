@@ -3,7 +3,7 @@
 
 #include "../../../containers/blocked_binary_tree.hpp"
 #include "../../../loop/particle_loop.hpp"
-#include "../../../particle_sub_group.hpp"
+#include "../../../particle_sub_group/particle_sub_group.hpp"
 #include "../dmplex_interface.hpp"
 #include <map>
 #include <memory>

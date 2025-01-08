@@ -4,7 +4,7 @@
 #include "containers/descendant_products.hpp"
 #include "global_mapping.hpp"
 #include "particle_group.hpp"
-#include "particle_sub_group.hpp"
+#include "particle_sub_group/particle_sub_group.hpp"
 
 namespace NESO::Particles {
 

@@ -136,7 +136,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_remover.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_set.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_spec.hpp
-    ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/particle_sub_group.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/profiling.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/sycl_typedefs.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/typedefs.hpp
