@@ -8,6 +8,7 @@
 #include "project_evaluate/dmplex_project_evaluate_barycentric.hpp"
 #include "project_evaluate/dmplex_project_evaluate_dg.hpp"
 #include <petscviewerhdf5.h>
+#include <random>
 #include <string>
 
 namespace NESO::Particles::PetscInterface {
