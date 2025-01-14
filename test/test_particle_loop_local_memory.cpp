@@ -72,16 +72,16 @@ TEST(ParticleLoop, local_memory) {
   const int cell_count = mesh->get_cell_count();
   auto sycl_target = A->sycl_target;
 
-  LocalMemoryBlock local_mem_real(7 * sizeof(REAL));
-  auto local_mem_int = std::make_shared<LocalMemoryBlock>(3 * sizeof(INT));
+  LocalMemoryBlock<REAL> local_mem_real(7);
+  auto local_mem_int = std::make_shared<LocalMemoryBlock<INT>>(3);
 
   particle_loop(
       A,
       [=](auto INDEX, auto ID, auto OUT_REAL, auto OUT_INT, auto LM_REAL,
           auto LM_INT) {
         const auto index = INDEX.get_local_linear_index();
-        REAL *ptr_real = static_cast<REAL *>(LM_REAL.data());
-        INT *ptr_int = static_cast<INT *>(LM_INT.data());
+        REAL *ptr_real = LM_REAL.data();
+        INT *ptr_int = LM_INT.data();
         {
           for (int cx = 0; cx < 7; cx++) {
             ptr_real[cx] = index * 7 + cx;
