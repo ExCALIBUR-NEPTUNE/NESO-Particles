@@ -76,7 +76,8 @@ public:
     if (!this->in_cache(syms)) {
       std::vector<ParticleDatImplGetT<T>> ptrs(n);
       for (std::size_t ix = 0; ix < n; ix++) {
-        ptrs[ix] = this->particle_dats_map->at(syms[ix])->impl_get();
+        // Use d_ptr to avoid side effects from impl_get
+        ptrs[ix] = this->particle_dats_map->at(syms[ix])->cell_dat.d_ptr;
       }
       this->map_syms_ptrs[syms] =
           std::make_unique<BufferDevice<ParticleDatImplGetT<T>>>(
@@ -85,7 +86,8 @@ public:
     if (!this->in_const_cache(syms)) {
       std::vector<ParticleDatImplGetConstT<T>> ptrs(n);
       for (std::size_t ix = 0; ix < n; ix++) {
-        ptrs[ix] = this->particle_dats_map->at(syms[ix])->impl_get_const();
+        // Use d_ptr to avoid side effects from impl_get_const
+        ptrs[ix] = this->particle_dats_map->at(syms[ix])->cell_dat.d_ptr;
       }
       this->map_syms_const_ptrs[syms] =
           std::make_unique<BufferDevice<ParticleDatImplGetConstT<T>>>(

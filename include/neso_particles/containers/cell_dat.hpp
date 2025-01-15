@@ -116,6 +116,8 @@ create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
 }
 } // namespace ParticleLoopImplementation
 
+template <typename T> class SymVectorPointerCache;
+
 /**
  * Store data on each cell where the number of columns required per cell is
  * constant but the number of rows is variable. Data is stored in a column
@@ -126,6 +128,8 @@ template <typename T> class CellDat {
   template <typename KERNEL, typename... ARGS> friend class ParticleLoop;
   template <typename U> friend class ParticleDatT;
   friend class ParticlePacker;
+  friend class SymVectorPointerCache<INT>;
+  friend class SymVectorPointerCache<REAL>;
 
   friend T ***ParticleLoopImplementation::create_loop_arg<T>(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
@@ -138,6 +142,8 @@ template <typename T> class CellDat {
       sycl::handler &cgh, Access::Read<CellDat<T> *> &a);
 
 private:
+  // If the lifespan of this member changes then SymVectorPointerCache also
+  // needs updating.
   T ***d_ptr;
   std::vector<T **> h_ptr_cells;
   std::vector<T *> h_ptr_cols;
@@ -265,6 +271,8 @@ public:
       : nrow_max(0), sycl_target(sycl_target), ncells(ncells), ncol(ncol) {
 
     this->nrow = std::vector<INT>(ncells);
+    // If the lifespan of this member changes then SymVectorPointerCache also
+    // needs updating.
     this->d_ptr =
         (T ***)this->sycl_target->malloc_device(ncells * sizeof(T **));
     this->h_ptr_cells = std::vector<T **>(ncells);
