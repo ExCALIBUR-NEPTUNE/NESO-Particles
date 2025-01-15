@@ -87,6 +87,8 @@ class ParticleGroup {
   friend class ParticleSubGroupImplementation::SubGroupSelector;
   friend class ParticleSubGroupImplementation::SubGroupSelectorBase;
   friend class ParticleSubGroup;
+  friend class SymVector<REAL>;
+  friend class SymVector<INT>;
 
 protected:
   // This type should be replaceable with typedef std::variant<Sym<INT>,
@@ -289,6 +291,10 @@ protected:
   /// across all subgroups to avoid exessive memory usage/realloc
   std::shared_ptr<BufferDevice<int>> d_sub_group_layers;
 
+  /// Cached pointers for SymVector to use.
+  std::shared_ptr<SymVectorPointerCacheDispatch>
+      sym_vector_pointer_cache_dispatch;
+
   /**
    * Returns true if the passed version is behind and can be updated. By
    * default updates the passed version.
@@ -402,6 +408,11 @@ public:
         particle_group_version(1), domain(domain), sycl_target(sycl_target),
         layer_compressor(sycl_target, ncell, particle_dats_real,
                          particle_dats_int) {
+
+    this->sym_vector_pointer_cache_dispatch =
+        std::make_shared<SymVectorPointerCacheDispatch>(
+            this->sycl_target, &this->particle_dats_int,
+            &this->particle_dats_real);
 
     this->h_npart_cell.realloc_no_copy(this->ncell);
     this->d_npart_cell.realloc_no_copy(this->ncell);

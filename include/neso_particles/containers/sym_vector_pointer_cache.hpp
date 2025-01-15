@@ -67,11 +67,11 @@ public:
   }
 
   /**
-   * Get the device pointers that correspond to the ParticleDats requested.
+   * Create the cache entry for a vector of Syms.
    *
-   * @param syms Syms to get ParticleDats for.
+   * @param syms Syms to create entry for.
    */
-  inline ParticleDatImplGetT<T> *get(std::vector<Sym<T>> &syms) {
+  inline void create(std::vector<Sym<T>> &syms) {
     const std::size_t n = syms.size();
     if (!this->in_cache(syms)) {
       std::vector<ParticleDatImplGetT<T>> ptrs(n);
@@ -81,15 +81,32 @@ public:
       this->map_syms_ptrs[syms] =
           std::make_unique<BufferDevice<ParticleDatImplGetT<T>>>(
               this->sycl_target, ptrs);
-    } else {
-      // This ensures that impl_get is called on the dat incase that has
-      // additional effects.
+    }
+    if (!this->in_const_cache(syms)) {
+      std::vector<ParticleDatImplGetConstT<T>> ptrs(n);
       for (std::size_t ix = 0; ix < n; ix++) {
-        this->particle_dats_map->at(syms[ix])->impl_get();
+        ptrs[ix] = this->particle_dats_map->at(syms[ix])->impl_get_const();
       }
+      this->map_syms_const_ptrs[syms] =
+          std::make_unique<BufferDevice<ParticleDatImplGetConstT<T>>>(
+              this->sycl_target, ptrs);
+    }
+  }
+
+  /**
+   * Get the device pointers that correspond to the ParticleDats requested.
+   *
+   * @param syms Syms to get ParticleDats for.
+   */
+  inline ParticleDatImplGetT<T> *get(std::vector<Sym<T>> &syms) {
+    // This ensures that impl_get is called on the dat incase that has
+    // additional effects.
+    const std::size_t n = syms.size();
+    for (std::size_t ix = 0; ix < n; ix++) {
+      this->particle_dats_map->at(syms[ix])->impl_get();
     }
 
-    return this->map_syms_ptrs[syms]->ptr;
+    return this->map_syms_ptrs.at(syms)->ptr;
   }
 
   /**
@@ -99,25 +116,14 @@ public:
    * @param syms Syms to get ParticleDats for.
    */
   inline ParticleDatImplGetConstT<T> *get_const(std::vector<Sym<T>> &syms) {
-
+    // This ensures that impl_get is called on the dat incase that has
+    // additional effects.
     const std::size_t n = syms.size();
-    if (!this->in_const_cache(syms)) {
-      std::vector<ParticleDatImplGetConstT<T>> ptrs(n);
-      for (std::size_t ix = 0; ix < n; ix++) {
-        ptrs[ix] = this->particle_dats_map->at(syms[ix])->impl_get_const();
-      }
-      this->map_syms_const_ptrs[syms] =
-          std::make_unique<BufferDevice<ParticleDatImplGetConstT<T>>>(
-              this->sycl_target, ptrs);
-    } else {
-      // This ensures that impl_get is called on the dat incase that has
-      // additional effects.
-      for (std::size_t ix = 0; ix < n; ix++) {
-        this->particle_dats_map->at(syms[ix])->impl_get_const();
-      }
+    for (std::size_t ix = 0; ix < n; ix++) {
+      this->particle_dats_map->at(syms[ix])->impl_get_const();
     }
 
-    return this->map_syms_const_ptrs[syms]->ptr;
+    return this->map_syms_const_ptrs.at(syms)->ptr;
   }
 };
 

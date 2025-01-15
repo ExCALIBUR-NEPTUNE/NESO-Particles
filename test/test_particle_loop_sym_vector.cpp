@@ -82,6 +82,7 @@ TEST(ParticleLoop, sym_vector_pointer_cache) {
 
   {
     auto lambda_test_const_pointers = [&](auto syms, auto &cache) {
+      cache.create(syms);
       auto to_test_ptrs = cache.get_const(syms);
       ErrorPropagate ep(sycl_target);
       auto k_ep = ep.device_ptr();
@@ -101,6 +102,7 @@ TEST(ParticleLoop, sym_vector_pointer_cache) {
     };
 
     auto lambda_test_pointers = [&](auto syms, auto &cache) {
+      cache.create(syms);
       auto to_test_ptrs = cache.get(syms);
       ErrorPropagate ep(sycl_target);
       auto k_ep = ep.device_ptr();
@@ -125,7 +127,7 @@ TEST(ParticleLoop, sym_vector_pointer_cache) {
       EXPECT_FALSE(cache_int.in_const_cache(syms));
       lambda_test_pointers(syms, cache_int);
       EXPECT_TRUE(cache_int.in_cache(syms));
-      EXPECT_FALSE(cache_int.in_const_cache(syms));
+      EXPECT_TRUE(cache_int.in_const_cache(syms));
     }
     {
       auto syms = std::vector({Sym<INT>("ID"), Sym<INT>("CELL_ID")});
@@ -133,7 +135,7 @@ TEST(ParticleLoop, sym_vector_pointer_cache) {
       EXPECT_FALSE(cache_int.in_const_cache(syms));
       lambda_test_pointers(syms, cache_int);
       EXPECT_TRUE(cache_int.in_cache(syms));
-      EXPECT_FALSE(cache_int.in_const_cache(syms));
+      EXPECT_TRUE(cache_int.in_const_cache(syms));
     }
     cache_int.reset();
     {
@@ -142,7 +144,7 @@ TEST(ParticleLoop, sym_vector_pointer_cache) {
       EXPECT_FALSE(cache_int.in_const_cache(syms));
       lambda_test_pointers(syms, cache_int);
       EXPECT_TRUE(cache_int.in_cache(syms));
-      EXPECT_FALSE(cache_int.in_const_cache(syms));
+      EXPECT_TRUE(cache_int.in_const_cache(syms));
     }
     {
       auto syms =
@@ -151,13 +153,13 @@ TEST(ParticleLoop, sym_vector_pointer_cache) {
       EXPECT_FALSE(cache_real.in_const_cache(syms));
       lambda_test_pointers(syms, cache_real);
       EXPECT_TRUE(cache_real.in_cache(syms));
-      EXPECT_FALSE(cache_real.in_const_cache(syms));
+      EXPECT_TRUE(cache_real.in_const_cache(syms));
     }
     {
       auto syms =
           std::vector({Sym<REAL>("P"), Sym<REAL>("V"), Sym<REAL>("P2")});
       EXPECT_TRUE(cache_real.in_cache(syms));
-      EXPECT_FALSE(cache_real.in_const_cache(syms));
+      EXPECT_TRUE(cache_real.in_const_cache(syms));
       lambda_test_const_pointers(syms, cache_real);
       EXPECT_TRUE(cache_real.in_cache(syms));
       EXPECT_TRUE(cache_real.in_const_cache(syms));
@@ -169,6 +171,7 @@ TEST(ParticleLoop, sym_vector_pointer_cache) {
 
   {
     auto lambda_test_const_pointers = [&](auto syms) {
+      dispatcher.create(syms);
       auto to_test_ptrs = dispatcher.get_const(syms);
       ErrorPropagate ep(sycl_target);
       auto k_ep = ep.device_ptr();
@@ -188,6 +191,7 @@ TEST(ParticleLoop, sym_vector_pointer_cache) {
     };
 
     auto lambda_test_pointers = [&](auto syms) {
+      dispatcher.create(syms);
       auto to_test_ptrs = dispatcher.get(syms);
       ErrorPropagate ep(sycl_target);
       auto k_ep = ep.device_ptr();
@@ -212,7 +216,7 @@ TEST(ParticleLoop, sym_vector_pointer_cache) {
       EXPECT_FALSE(dispatcher.cache_int.in_const_cache(syms));
       lambda_test_pointers(syms);
       EXPECT_TRUE(dispatcher.cache_int.in_cache(syms));
-      EXPECT_FALSE(dispatcher.cache_int.in_const_cache(syms));
+      EXPECT_TRUE(dispatcher.cache_int.in_const_cache(syms));
     }
     {
       auto syms = std::vector({Sym<INT>("ID"), Sym<INT>("CELL_ID")});
@@ -220,7 +224,7 @@ TEST(ParticleLoop, sym_vector_pointer_cache) {
       EXPECT_FALSE(dispatcher.cache_int.in_const_cache(syms));
       lambda_test_pointers(syms);
       EXPECT_TRUE(dispatcher.cache_int.in_cache(syms));
-      EXPECT_FALSE(dispatcher.cache_int.in_const_cache(syms));
+      EXPECT_TRUE(dispatcher.cache_int.in_const_cache(syms));
     }
     dispatcher.cache_int.reset();
     {
@@ -229,7 +233,7 @@ TEST(ParticleLoop, sym_vector_pointer_cache) {
       EXPECT_FALSE(dispatcher.cache_int.in_const_cache(syms));
       lambda_test_pointers(syms);
       EXPECT_TRUE(dispatcher.cache_int.in_cache(syms));
-      EXPECT_FALSE(dispatcher.cache_int.in_const_cache(syms));
+      EXPECT_TRUE(dispatcher.cache_int.in_const_cache(syms));
     }
     {
       auto syms =
@@ -238,13 +242,13 @@ TEST(ParticleLoop, sym_vector_pointer_cache) {
       EXPECT_FALSE(dispatcher.cache_real.in_const_cache(syms));
       lambda_test_pointers(syms);
       EXPECT_TRUE(dispatcher.cache_real.in_cache(syms));
-      EXPECT_FALSE(dispatcher.cache_real.in_const_cache(syms));
+      EXPECT_TRUE(dispatcher.cache_real.in_const_cache(syms));
     }
     {
       auto syms =
           std::vector({Sym<REAL>("P"), Sym<REAL>("V"), Sym<REAL>("P2")});
       EXPECT_TRUE(dispatcher.cache_real.in_cache(syms));
-      EXPECT_FALSE(dispatcher.cache_real.in_const_cache(syms));
+      EXPECT_TRUE(dispatcher.cache_real.in_const_cache(syms));
       lambda_test_const_pointers(syms);
       EXPECT_TRUE(dispatcher.cache_real.in_cache(syms));
       EXPECT_TRUE(dispatcher.cache_real.in_const_cache(syms));

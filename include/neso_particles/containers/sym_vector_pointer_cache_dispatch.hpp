@@ -37,6 +37,24 @@ public:
         cache_real(sycl_target, particle_dats_map_real) {}
 
   /**
+   * Create the cache entry for a vector of Syms.
+   *
+   * @param syms Vector of Syms to create entry for.
+   */
+  inline void create(std::vector<Sym<INT>> &syms) {
+    this->cache_int.create(syms);
+  }
+
+  /**
+   * Create the cache entry for a vector of Syms.
+   *
+   * @param syms Vector of Syms to create entry for.
+   */
+  inline void create(std::vector<Sym<REAL>> &syms) {
+    this->cache_real.create(syms);
+  }
+
+  /**
    * Get the device pointers that correspond to the ParticleDats requested.
    *
    * @param syms Syms to get ParticleDats for.
