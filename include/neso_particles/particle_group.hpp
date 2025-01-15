@@ -13,6 +13,7 @@
 #include "cell_dat_move.hpp"
 #include "compute_target.hpp"
 #include "containers/product_matrix.hpp"
+#include "containers/sym_vector_pointer_cache.hpp"
 #include "domain.hpp"
 #include "global_mapping.hpp"
 #include "global_move.hpp"

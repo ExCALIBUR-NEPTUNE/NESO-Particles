@@ -52,6 +52,7 @@ set(TEST_SRCS
     ${TEST_DIR}/test_particle_loop_local_array.cpp
     ${TEST_DIR}/test_particle_loop_local_memory.cpp
     ${TEST_DIR}/test_particle_loop_rng.cpp
+    ${TEST_DIR}/test_particle_loop_sym_vector.cpp
     ${TEST_DIR}/test_particle_remover.cpp
     ${TEST_DIR}/test_particle_set.cpp
     ${TEST_DIR}/test_particle_sub_group.cpp
