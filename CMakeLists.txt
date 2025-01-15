@@ -71,6 +71,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/sym_vector.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/sym_vector_impl.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/sym_vector_pointer_cache.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/containers/sym_vector_pointer_cache_dispatch.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/tuple.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/departing_particle_identification.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/departing_particle_identification_impl.hpp

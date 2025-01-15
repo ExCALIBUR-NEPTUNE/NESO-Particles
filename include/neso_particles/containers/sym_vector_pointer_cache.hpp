@@ -27,6 +27,9 @@ protected:
       map_syms_const_ptrs;
 
 public:
+  SymVectorPointerCache<T> &
+  operator=(const SymVectorPointerCache<T> &) = delete;
+
   /**
    * Reset the container and empty the cache.
    */

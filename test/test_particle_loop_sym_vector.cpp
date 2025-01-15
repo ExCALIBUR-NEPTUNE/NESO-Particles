@@ -80,84 +80,175 @@ TEST(ParticleLoop, sym_vector_pointer_cache) {
   SymVectorPointerCache cache_real(sycl_target, &A->particle_dats_real);
   SymVectorPointerCache cache_int(sycl_target, &A->particle_dats_int);
 
-  auto lambda_test_const_pointers = [&](auto syms, auto &cache) {
-    auto to_test_ptrs = cache.get_const(syms);
-    ErrorPropagate ep(sycl_target);
-    auto k_ep = ep.device_ptr();
-    const std::size_t n = syms.size();
-
-    particle_loop(
-        A,
-        [=](auto sym_vector) {
-          for (std::size_t ix = 0; ix < n; ix++) {
-            NESO_KERNEL_ASSERT(sym_vector.ptr[ix] == to_test_ptrs[ix], k_ep);
-          }
-        },
-        Access::read(sym_vector(A, syms)))
-        ->execute(0);
-
-    EXPECT_FALSE(ep.get_flag());
-  };
-
-  auto lambda_test_pointers = [&](auto syms, auto &cache) {
-    auto to_test_ptrs = cache.get(syms);
-    ErrorPropagate ep(sycl_target);
-    auto k_ep = ep.device_ptr();
-    const std::size_t n = syms.size();
-
-    particle_loop(
-        A,
-        [=](auto sym_vector) {
-          for (std::size_t ix = 0; ix < n; ix++) {
-            NESO_KERNEL_ASSERT(sym_vector.ptr[ix] == to_test_ptrs[ix], k_ep);
-          }
-        },
-        Access::write(sym_vector(A, syms)))
-        ->execute(0);
-
-    EXPECT_FALSE(ep.get_flag());
-  };
-
   {
-    auto syms = std::vector({Sym<INT>("CELL_ID"), Sym<INT>("ID")});
-    EXPECT_FALSE(cache_int.in_cache(syms));
-    EXPECT_FALSE(cache_int.in_const_cache(syms));
-    lambda_test_pointers(syms, cache_int);
-    EXPECT_TRUE(cache_int.in_cache(syms));
-    EXPECT_FALSE(cache_int.in_const_cache(syms));
+    auto lambda_test_const_pointers = [&](auto syms, auto &cache) {
+      auto to_test_ptrs = cache.get_const(syms);
+      ErrorPropagate ep(sycl_target);
+      auto k_ep = ep.device_ptr();
+      const std::size_t n = syms.size();
+
+      particle_loop(
+          A,
+          [=](auto sym_vector) {
+            for (std::size_t ix = 0; ix < n; ix++) {
+              NESO_KERNEL_ASSERT(sym_vector.ptr[ix] == to_test_ptrs[ix], k_ep);
+            }
+          },
+          Access::read(sym_vector(A, syms)))
+          ->execute(0);
+
+      EXPECT_FALSE(ep.get_flag());
+    };
+
+    auto lambda_test_pointers = [&](auto syms, auto &cache) {
+      auto to_test_ptrs = cache.get(syms);
+      ErrorPropagate ep(sycl_target);
+      auto k_ep = ep.device_ptr();
+      const std::size_t n = syms.size();
+
+      particle_loop(
+          A,
+          [=](auto sym_vector) {
+            for (std::size_t ix = 0; ix < n; ix++) {
+              NESO_KERNEL_ASSERT(sym_vector.ptr[ix] == to_test_ptrs[ix], k_ep);
+            }
+          },
+          Access::write(sym_vector(A, syms)))
+          ->execute(0);
+
+      EXPECT_FALSE(ep.get_flag());
+    };
+
+    {
+      auto syms = std::vector({Sym<INT>("CELL_ID"), Sym<INT>("ID")});
+      EXPECT_FALSE(cache_int.in_cache(syms));
+      EXPECT_FALSE(cache_int.in_const_cache(syms));
+      lambda_test_pointers(syms, cache_int);
+      EXPECT_TRUE(cache_int.in_cache(syms));
+      EXPECT_FALSE(cache_int.in_const_cache(syms));
+    }
+    {
+      auto syms = std::vector({Sym<INT>("ID"), Sym<INT>("CELL_ID")});
+      EXPECT_FALSE(cache_int.in_cache(syms));
+      EXPECT_FALSE(cache_int.in_const_cache(syms));
+      lambda_test_pointers(syms, cache_int);
+      EXPECT_TRUE(cache_int.in_cache(syms));
+      EXPECT_FALSE(cache_int.in_const_cache(syms));
+    }
+    cache_int.reset();
+    {
+      auto syms = std::vector({Sym<INT>("ID"), Sym<INT>("CELL_ID")});
+      EXPECT_FALSE(cache_int.in_cache(syms));
+      EXPECT_FALSE(cache_int.in_const_cache(syms));
+      lambda_test_pointers(syms, cache_int);
+      EXPECT_TRUE(cache_int.in_cache(syms));
+      EXPECT_FALSE(cache_int.in_const_cache(syms));
+    }
+    {
+      auto syms =
+          std::vector({Sym<REAL>("P"), Sym<REAL>("V"), Sym<REAL>("P2")});
+      EXPECT_FALSE(cache_real.in_cache(syms));
+      EXPECT_FALSE(cache_real.in_const_cache(syms));
+      lambda_test_pointers(syms, cache_real);
+      EXPECT_TRUE(cache_real.in_cache(syms));
+      EXPECT_FALSE(cache_real.in_const_cache(syms));
+    }
+    {
+      auto syms =
+          std::vector({Sym<REAL>("P"), Sym<REAL>("V"), Sym<REAL>("P2")});
+      EXPECT_TRUE(cache_real.in_cache(syms));
+      EXPECT_FALSE(cache_real.in_const_cache(syms));
+      lambda_test_const_pointers(syms, cache_real);
+      EXPECT_TRUE(cache_real.in_cache(syms));
+      EXPECT_TRUE(cache_real.in_const_cache(syms));
+    }
   }
+
+  SymVectorPointerCacheDispatch dispatcher(sycl_target, &A->particle_dats_int,
+                                           &A->particle_dats_real);
+
   {
-    auto syms = std::vector({Sym<INT>("ID"), Sym<INT>("CELL_ID")});
-    EXPECT_FALSE(cache_int.in_cache(syms));
-    EXPECT_FALSE(cache_int.in_const_cache(syms));
-    lambda_test_pointers(syms, cache_int);
-    EXPECT_TRUE(cache_int.in_cache(syms));
-    EXPECT_FALSE(cache_int.in_const_cache(syms));
-  }
-  cache_int.reset();
-  {
-    auto syms = std::vector({Sym<INT>("ID"), Sym<INT>("CELL_ID")});
-    EXPECT_FALSE(cache_int.in_cache(syms));
-    EXPECT_FALSE(cache_int.in_const_cache(syms));
-    lambda_test_pointers(syms, cache_int);
-    EXPECT_TRUE(cache_int.in_cache(syms));
-    EXPECT_FALSE(cache_int.in_const_cache(syms));
-  }
-  {
-    auto syms = std::vector({Sym<REAL>("P"), Sym<REAL>("V"), Sym<REAL>("P2")});
-    EXPECT_FALSE(cache_real.in_cache(syms));
-    EXPECT_FALSE(cache_real.in_const_cache(syms));
-    lambda_test_pointers(syms, cache_real);
-    EXPECT_TRUE(cache_real.in_cache(syms));
-    EXPECT_FALSE(cache_real.in_const_cache(syms));
-  }
-  {
-    auto syms = std::vector({Sym<REAL>("P"), Sym<REAL>("V"), Sym<REAL>("P2")});
-    EXPECT_TRUE(cache_real.in_cache(syms));
-    EXPECT_FALSE(cache_real.in_const_cache(syms));
-    lambda_test_const_pointers(syms, cache_real);
-    EXPECT_TRUE(cache_real.in_cache(syms));
-    EXPECT_TRUE(cache_real.in_const_cache(syms));
+    auto lambda_test_const_pointers = [&](auto syms) {
+      auto to_test_ptrs = dispatcher.get_const(syms);
+      ErrorPropagate ep(sycl_target);
+      auto k_ep = ep.device_ptr();
+      const std::size_t n = syms.size();
+
+      particle_loop(
+          A,
+          [=](auto sym_vector) {
+            for (std::size_t ix = 0; ix < n; ix++) {
+              NESO_KERNEL_ASSERT(sym_vector.ptr[ix] == to_test_ptrs[ix], k_ep);
+            }
+          },
+          Access::read(sym_vector(A, syms)))
+          ->execute(0);
+
+      EXPECT_FALSE(ep.get_flag());
+    };
+
+    auto lambda_test_pointers = [&](auto syms) {
+      auto to_test_ptrs = dispatcher.get(syms);
+      ErrorPropagate ep(sycl_target);
+      auto k_ep = ep.device_ptr();
+      const std::size_t n = syms.size();
+
+      particle_loop(
+          A,
+          [=](auto sym_vector) {
+            for (std::size_t ix = 0; ix < n; ix++) {
+              NESO_KERNEL_ASSERT(sym_vector.ptr[ix] == to_test_ptrs[ix], k_ep);
+            }
+          },
+          Access::write(sym_vector(A, syms)))
+          ->execute(0);
+
+      EXPECT_FALSE(ep.get_flag());
+    };
+
+    {
+      auto syms = std::vector({Sym<INT>("CELL_ID"), Sym<INT>("ID")});
+      EXPECT_FALSE(dispatcher.cache_int.in_cache(syms));
+      EXPECT_FALSE(dispatcher.cache_int.in_const_cache(syms));
+      lambda_test_pointers(syms);
+      EXPECT_TRUE(dispatcher.cache_int.in_cache(syms));
+      EXPECT_FALSE(dispatcher.cache_int.in_const_cache(syms));
+    }
+    {
+      auto syms = std::vector({Sym<INT>("ID"), Sym<INT>("CELL_ID")});
+      EXPECT_FALSE(dispatcher.cache_int.in_cache(syms));
+      EXPECT_FALSE(dispatcher.cache_int.in_const_cache(syms));
+      lambda_test_pointers(syms);
+      EXPECT_TRUE(dispatcher.cache_int.in_cache(syms));
+      EXPECT_FALSE(dispatcher.cache_int.in_const_cache(syms));
+    }
+    dispatcher.cache_int.reset();
+    {
+      auto syms = std::vector({Sym<INT>("ID"), Sym<INT>("CELL_ID")});
+      EXPECT_FALSE(dispatcher.cache_int.in_cache(syms));
+      EXPECT_FALSE(dispatcher.cache_int.in_const_cache(syms));
+      lambda_test_pointers(syms);
+      EXPECT_TRUE(dispatcher.cache_int.in_cache(syms));
+      EXPECT_FALSE(dispatcher.cache_int.in_const_cache(syms));
+    }
+    {
+      auto syms =
+          std::vector({Sym<REAL>("P"), Sym<REAL>("V"), Sym<REAL>("P2")});
+      EXPECT_FALSE(dispatcher.cache_real.in_cache(syms));
+      EXPECT_FALSE(dispatcher.cache_real.in_const_cache(syms));
+      lambda_test_pointers(syms);
+      EXPECT_TRUE(dispatcher.cache_real.in_cache(syms));
+      EXPECT_FALSE(dispatcher.cache_real.in_const_cache(syms));
+    }
+    {
+      auto syms =
+          std::vector({Sym<REAL>("P"), Sym<REAL>("V"), Sym<REAL>("P2")});
+      EXPECT_TRUE(dispatcher.cache_real.in_cache(syms));
+      EXPECT_FALSE(dispatcher.cache_real.in_const_cache(syms));
+      lambda_test_const_pointers(syms);
+      EXPECT_TRUE(dispatcher.cache_real.in_cache(syms));
+      EXPECT_TRUE(dispatcher.cache_real.in_const_cache(syms));
+    }
   }
 
   A->free();
