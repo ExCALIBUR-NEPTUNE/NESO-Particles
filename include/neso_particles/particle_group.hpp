@@ -13,6 +13,7 @@
 #include "cell_dat_move.hpp"
 #include "compute_target.hpp"
 #include "containers/product_matrix.hpp"
+#include "containers/resource_stack.hpp"
 #include "containers/sym_vector_pointer_cache_dispatch.hpp"
 #include "domain.hpp"
 #include "global_mapping.hpp"
@@ -22,6 +23,7 @@
 #include "particle_dat.hpp"
 #include "particle_set.hpp"
 #include "particle_spec.hpp"
+#include "particle_sub_group/sub_group_selector_resource_stack_interface.hpp"
 #include "profiling.hpp"
 #include "sycl_typedefs.hpp"
 #include "typedefs.hpp"
@@ -291,6 +293,11 @@ protected:
   /// across all subgroups to avoid exessive memory usage/realloc
   std::shared_ptr<BufferDevice<int>> d_sub_group_layers;
 
+  /// This is a ResourceStack instance to speed-up creation and destruction of
+  /// ParticleSubGroups.
+  std::shared_ptr<ResourceStack<SubGroupSelectorResource>>
+      resource_stack_sub_group_resource;
+
   /// Cached pointers for SymVector to use.
   std::shared_ptr<SymVectorPointerCacheDispatch>
       sym_vector_pointer_cache_dispatch;
@@ -408,6 +415,11 @@ public:
         particle_group_version(1), domain(domain), sycl_target(sycl_target),
         layer_compressor(sycl_target, ncell, particle_dats_real,
                          particle_dats_int) {
+
+    this->resource_stack_sub_group_resource =
+        std::make_shared<ResourceStack<SubGroupSelectorResource>>(
+            std::make_shared<SubGroupSelectorResourceStackInterface>(
+                this->sycl_target, this->ncell));
 
     this->sym_vector_pointer_cache_dispatch =
         std::make_shared<SymVectorPointerCacheDispatch>(

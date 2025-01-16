@@ -4,6 +4,7 @@
 #include "../compute_target.hpp"
 #include "../containers/cell_dat.hpp"
 #include "../particle_group.hpp"
+#include "../particle_sub_group/sub_group_selector_resource_stack_interface.hpp"
 
 namespace NESO::Particles {
 class ParticleSubGroup;
@@ -15,6 +16,7 @@ class SubGroupSelectorBase {
 
 protected:
   std::shared_ptr<CellDat<INT>> map_cell_to_particles;
+  SubGroupSelectorResourceSharedPtr sub_group_selector_resource;
 
   // Methods to extract the parent ParticleGroup
   inline ParticleGroupSharedPtr
@@ -32,10 +34,15 @@ protected:
 
   // setup the properties on this base class
   inline void internal_setup_base() {
-    auto sycl_target = particle_group->sycl_target;
-    const int cell_count = particle_group->domain->mesh->get_cell_count();
+    NESOASSERT(this->sub_group_selector_resource == nullptr,
+               "Sub-group resource is already allocated somehow.");
+    NESOASSERT(this->map_cell_to_particles == nullptr,
+               "map_cell_to_particles is not nullptr somehow.");
+
+    this->sub_group_selector_resource =
+        this->particle_group->resource_stack_sub_group_resource->get();
     this->map_cell_to_particles =
-        std::make_shared<CellDat<INT>>(sycl_target, cell_count, 1);
+        this->sub_group_selector_resource->map_cell_to_particles;
   }
 
 public:
@@ -56,7 +63,13 @@ public:
     INT ***d_map_cells_to_particles;
   };
 
-  virtual ~SubGroupSelectorBase() = default;
+  virtual ~SubGroupSelectorBase() {
+    if (this->sub_group_selector_resource != nullptr) {
+      this->map_cell_to_particles = nullptr;
+      this->particle_group->resource_stack_sub_group_resource->restore(
+          this->sub_group_selector_resource);
+    }
+  }
   SubGroupSelectorBase() = default;
 
   virtual inline SelectionT get() = 0;
