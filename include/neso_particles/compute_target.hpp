@@ -169,7 +169,12 @@ public:
                            get_env_size_t("NESO_PARTICLES_LOOP_NBIN", 16)));
     }
 
-    this->queue = sycl::queue(this->device);
+    if (get_env_size_t("NESO_PARTICLES_IN_ORDER_QUEUE", 0)) {
+      this->queue =
+          sycl::queue(this->device, {sycl::property::queue::in_order{}});
+    } else {
+      this->queue = sycl::queue(this->device);
+    }
     this->comm = comm;
 
     this->profile_map.set("MPI", "MPI_COMM_WORLD_rank",
@@ -203,6 +208,7 @@ public:
       std::cout << "Using " << this->device.get_info<sycl::info::device::name>()
                 << std::endl;
       std::cout << "Kernel type: " << NESO_PARTICLES_DEVICE_LABEL << std::endl;
+      std::cout << "In order queue: " << this->queue.is_in_order() << std::endl;
       this->device_limits.print();
     }
   }
