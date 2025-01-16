@@ -317,14 +317,10 @@ public:
    * wait_set_nrow should be called before using the dat.
    */
   inline void set_nrow(const INT cell, const INT nrow_required) {
-    auto t0 = profile_timestamp();
     NESOASSERT(cell >= 0, "Cell index is negative");
     NESOASSERT(cell < this->ncells, "Cell index is >= ncells");
     NESOASSERT(nrow_required >= 0, "Requested number of rows is negative");
     set_nrow_inner(cell, nrow_required);
-
-    sycl_target->profile_map.inc("CellDat", "set_nrow", 1,
-                                 -profile_elapsed(t0, profile_timestamp()));
   }
 
   /**
