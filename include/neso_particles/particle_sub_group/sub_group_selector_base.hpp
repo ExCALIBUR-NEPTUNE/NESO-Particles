@@ -3,6 +3,7 @@
 
 #include "../compute_target.hpp"
 #include "../containers/cell_dat.hpp"
+#include "../containers/local_array.hpp"
 #include "../particle_group.hpp"
 #include "../particle_sub_group/sub_group_selector_resource_stack_interface.hpp"
 
@@ -16,6 +17,10 @@ class SubGroupSelectorBase {
 
 protected:
   std::shared_ptr<CellDat<INT>> map_cell_to_particles;
+  std::shared_ptr<BufferDeviceHost<int>> dh_npart_cell;
+  std::shared_ptr<LocalArray<int *>> map_ptrs;
+  std::shared_ptr<BufferDevice<INT>> d_npart_cell_es;
+
   SubGroupSelectorResourceSharedPtr sub_group_selector_resource;
 
   // Methods to extract the parent ParticleGroup
@@ -43,6 +48,9 @@ protected:
         this->particle_group->resource_stack_sub_group_resource->get();
     this->map_cell_to_particles =
         this->sub_group_selector_resource->map_cell_to_particles;
+    this->dh_npart_cell = this->sub_group_selector_resource->dh_npart_cell;
+    this->map_ptrs = this->sub_group_selector_resource->map_ptrs;
+    this->d_npart_cell_es = this->sub_group_selector_resource->d_npart_cell_es;
   }
 
 public:
@@ -66,6 +74,9 @@ public:
   virtual ~SubGroupSelectorBase() {
     if (this->sub_group_selector_resource != nullptr) {
       this->map_cell_to_particles = nullptr;
+      this->dh_npart_cell = nullptr;
+      this->map_ptrs = nullptr;
+      this->d_npart_cell_es = nullptr;
       this->particle_group->resource_stack_sub_group_resource->restore(
           this->sub_group_selector_resource);
     }

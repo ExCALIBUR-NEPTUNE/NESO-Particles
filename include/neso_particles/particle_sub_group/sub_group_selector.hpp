@@ -19,9 +19,6 @@ class SubGroupSelector : public SubGroupSelectorBase {
   friend class NESO::Particles::ParticleSubGroup;
 
 protected:
-  std::shared_ptr<BufferDeviceHost<int>> dh_npart_cell;
-  LocalArray<int *> map_ptrs;
-  std::shared_ptr<BufferDevice<INT>> d_npart_cell_es;
   ParticleLoopSharedPtr loop_0;
   ParticleLoopSharedPtr loop_1;
 
@@ -59,15 +56,6 @@ protected:
     this->internal_setup_base();
     this->add_parent_dependencies(parent);
     this->particle_group_version = 0;
-
-    auto sycl_target = particle_group->sycl_target;
-    const int cell_count = particle_group->domain->mesh->get_cell_count();
-
-    this->dh_npart_cell =
-        std::make_shared<BufferDeviceHost<int>>(sycl_target, cell_count);
-    this->map_ptrs = LocalArray<int *>(sycl_target, 2);
-    this->d_npart_cell_es =
-        std::make_shared<BufferDevice<INT>>(sycl_target, cell_count);
 
     this->loop_1 = particle_loop(
         "sub_group_selector_1", parent,
@@ -146,7 +134,7 @@ public:
     sycl_target->queue.fill<int>(d_npart_cell_ptr, 0, cell_count)
         .wait_and_throw();
     std::vector<int *> tmp = {pg_map_layers->ptr, d_npart_cell_ptr};
-    this->map_ptrs.set(tmp);
+    this->map_ptrs->set(tmp);
 
     this->loop_0->execute();
 

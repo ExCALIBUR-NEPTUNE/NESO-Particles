@@ -3,6 +3,7 @@
 
 #include "../compute_target.hpp"
 #include "../containers/cell_dat.hpp"
+#include "../containers/local_array.hpp"
 #include "../containers/resource_stack_interface.hpp"
 #include "../typedefs.hpp"
 
@@ -13,12 +14,20 @@ namespace NESO::Particles {
  */
 struct SubGroupSelectorResource {
   std::shared_ptr<CellDat<INT>> map_cell_to_particles;
+  std::shared_ptr<BufferDeviceHost<int>> dh_npart_cell;
+  std::shared_ptr<LocalArray<int *>> map_ptrs;
+  std::shared_ptr<BufferDevice<INT>> d_npart_cell_es;
 
   ~SubGroupSelectorResource() = default;
   SubGroupSelectorResource() = default;
 
-  SubGroupSelectorResource(std::shared_ptr<CellDat<INT>> map_cell_to_particles)
-      : map_cell_to_particles(map_cell_to_particles) {}
+  SubGroupSelectorResource(std::shared_ptr<CellDat<INT>> map_cell_to_particles,
+                           std::shared_ptr<BufferDeviceHost<int>> dh_npart_cell,
+                           std::shared_ptr<LocalArray<int *>> map_ptrs,
+                           std::shared_ptr<BufferDevice<INT>> d_npart_cell_es)
+      : map_cell_to_particles(map_cell_to_particles),
+        dh_npart_cell(dh_npart_cell), map_ptrs(map_ptrs),
+        d_npart_cell_es(d_npart_cell_es) {}
 
   /**
    * Sets the number of rows in the map_cell_to_particles to 0.
@@ -55,7 +64,11 @@ struct SubGroupSelectorResourceStackInterface
 
   virtual inline SubGroupSelectorResourceSharedPtr construct() override {
     return std::make_shared<SubGroupSelectorResource>(
-        std::make_shared<CellDat<INT>>(this->sycl_target, this->ncells, 1));
+        std::make_shared<CellDat<INT>>(this->sycl_target, this->ncells, 1),
+        std::make_shared<BufferDeviceHost<int>>(this->sycl_target,
+                                                this->ncells),
+        std::make_shared<LocalArray<int *>>(this->sycl_target, 2),
+        std::make_shared<BufferDevice<INT>>(this->sycl_target, this->ncells));
   }
 
   virtual inline void

@@ -108,7 +108,7 @@ public:
       sycl_target->queue.fill<int>(d_npart_cell_ptr + cell, 0, 1)
           .wait_and_throw();
       std::vector<int *> tmp = {pg_map_layers->ptr, d_npart_cell_ptr};
-      this->map_ptrs.set(tmp);
+      this->map_ptrs->set(tmp);
 
       this->loop_0->execute(this->cell);
 
