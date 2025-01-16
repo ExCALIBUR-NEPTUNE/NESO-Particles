@@ -17,6 +17,7 @@
 #include "neso_particles/containers/nd_index.hpp"
 #include "neso_particles/containers/nd_local_array.hpp"
 #include "neso_particles/containers/product_matrix.hpp"
+#include "neso_particles/containers/resource_stack.hpp"
 #include "neso_particles/containers/rng/rng.hpp"
 #include "neso_particles/containers/sym_vector.hpp"
 #include "neso_particles/containers/sym_vector_impl.hpp"

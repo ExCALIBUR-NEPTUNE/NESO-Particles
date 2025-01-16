@@ -68,6 +68,8 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/lookup_table.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/nd_local_array.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/product_matrix.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/containers/resource_stack.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/containers/resource_stack_interface.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/sym_vector.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/sym_vector_impl.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/sym_vector_pointer_cache.hpp

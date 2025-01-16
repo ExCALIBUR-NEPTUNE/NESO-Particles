@@ -57,6 +57,7 @@ set(TEST_SRCS
     ${TEST_DIR}/test_particle_set.cpp
     ${TEST_DIR}/test_particle_sub_group.cpp
     ${TEST_DIR}/test_product_matrix.cpp
+    ${TEST_DIR}/test_resource_stack.cpp
     ${TEST_DIR}/test_serial_container.cpp
     ${TEST_DIR}/test_sycl_target.cpp
     ${TEST_DIR}/test_tuple.cpp
