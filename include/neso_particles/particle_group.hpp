@@ -79,6 +79,9 @@ struct ParticleDatVersionT {
       return this->index < v.index;
     }
   }
+  std::string get_sym_name() const {
+    return index ? this->sr.name : this->si.name;
+  }
 };
 
 /**
@@ -317,6 +320,13 @@ protected:
       const auto local_entry = this->particle_dat_versions.at(key);
       const int64_t local_value = std::get<0>(local_entry);
       const bool local_bool = std::get<1>(local_entry);
+      if ((this->debug_sub_group_indent >= 4) &&
+          ((local_value != to_check_value) || (local_bool))) {
+        std::cout << std::string(this->debug_sub_group_indent, ' ')
+                  << "Sym name: " << key.get_sym_name()
+                  << " version_update: " << (local_value != to_check_value)
+                  << " always_update: " << local_bool << std::endl;
+      }
       // If a local count is different to the count on the to_check then an
       // updated is required on the object that holds to check.
       if (local_value != to_check_value) {
@@ -347,6 +357,9 @@ protected:
       this->particle_group_version++;
     }
   }
+  // Are we printing debug information about when sub groups are recreated.
+  std::size_t debug_sub_group_create{0};
+  std::size_t debug_sub_group_indent{0};
 
   inline void recompute_npart_cell_es() {
     auto h_ptr_s = this->h_npart_cell.ptr;
@@ -417,6 +430,9 @@ public:
         particle_group_version(1), domain(domain), sycl_target(sycl_target),
         layer_compressor(sycl_target, ncell, particle_dats_real,
                          particle_dats_int) {
+
+    this->debug_sub_group_create =
+        get_env_size_t("NESO_PARTICLES_DEBUG_SUB_GROUPS", 0);
 
     this->resource_stack_sub_group_resource =
         std::make_shared<ResourceStack<SubGroupSelectorResource>>(
