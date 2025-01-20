@@ -136,7 +136,7 @@ protected:
   }
 
   inline void check_dats_and_group_agree() {
-#ifdef NDEBUG
+#ifndef NDEBUG
     for (auto &dat : particle_dats_real) {
       for (int cellx = 0; cellx < this->ncell; cellx++) {
         NESOASSERT(dat.second->h_npart_cell[cellx] ==
