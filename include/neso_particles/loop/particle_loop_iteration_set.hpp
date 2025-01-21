@@ -390,6 +390,51 @@ public:
     this->iteration_set_size = npart;
     return this->iteration_set;
   }
+
+  /**
+   * Get an iteration set for a range of cells.
+   *
+   * @param cell_start Starting cell.
+   * @param cell_end Bounding cell (last cell to visit +1).
+   * @param local_size Default local size to use for kernel launch.
+   * @param num_bytes_local Number of bytes required per particle.
+   * @param stride Number of particles each work item will process, default 1.
+   */
+  inline std::vector<ParticleLoopBlockHost> &
+  get_range_cell(const std::size_t cell_start, const std::size_t cell_end,
+                 std::size_t local_size = 256,
+                 const std::size_t num_bytes_local = 0,
+                 const std::size_t stride = 1) {
+    if (cell_end == (cell_start + 1)) {
+      return this->get_single_cell(cell_start, local_size, num_bytes_local,
+                                   stride);
+    }
+
+    local_size = this->get_local_size(local_size, num_bytes_local, stride);
+    this->iteration_set.clear();
+
+    std::size_t npart_max = 0;
+    std::size_t npart = 0;
+    for (std::size_t cellx = cell_start; cellx < cell_end; cellx++) {
+      const std::size_t npart_tmp =
+          static_cast<std::size_t>(this->h_npart_cell[cellx]);
+      npart += npart_tmp;
+      npart_max = std::max(npart_tmp, npart_max);
+    }
+    const std::size_t global_range = this->get_global_size(
+        get_next_multiple(npart_max, stride) / stride, local_size);
+
+    ParticleLoopBlockDevice block_device{cell_start, 0, this->d_npart_cell,
+                                         stride};
+    this->iteration_set.emplace_back(
+        block_device, true, local_size,
+        this->sycl_target->device_limits.validate_nd_range(sycl::nd_range<2>(
+            sycl::range<2>(cell_end - cell_start, global_range),
+            sycl::range<2>(1, local_size))));
+
+    this->iteration_set_size = npart;
+    return this->iteration_set;
+  }
 };
 
 } // namespace NESO::Particles::ParticleLoopImplementation

@@ -24,6 +24,8 @@ struct ParticleLoopGlobalInfo {
   // If the iteration set is actually a @ref ParticleSubGroup then this is a
   // pointer to the sub group. Otherwise this member is a nullptr.
   ParticleSubGroup *particle_sub_group;
+  // Is the loop over all cells
+  bool all_cells;
   INT *d_npart_cell_es;
   INT *d_npart_cell_es_lb;
   // The starting cell is only set for calls to create_loop_args.
@@ -133,17 +135,38 @@ inline std::size_t get_kernel_num_flops([[maybe_unused]] T &kernel) {
 class ParticleLoopBase {
 public:
   /**
-   *  Execute the particle loop and block until completion. Must be called
-   *  Collectively on the communicator.
+   *  Execute the ParticleLoop and block until execution is complete. Must be
+   *  called collectively on the MPI communicator associated with the
+   *  SYCLTarget this loop is over.
+   *
+   *  execute() Launches the ParticleLoop over all cells.
+   *  execute(i) Launches the ParticleLoop over cell i.
+   *  execute(i, i+4) Launches the ParticleLoop over cells i, i+1, i+2, i+3.
+   *  Note cell_end itself is not visited.
+   *
+   *  @param cell_start Optional starting cell to launch the ParticleLoop over.
+   *  @param cell_end Optional ending cell to launch the ParticleLoop over.
    */
-  virtual inline void execute(const std::optional<int> cell = std::nullopt) = 0;
+  virtual inline void
+  execute(const std::optional<int> cell_start = std::nullopt,
+          const std::optional<int> cell_end = std::nullopt) = 0;
 
   /**
    *  Launch the ParticleLoop and return. Must be called collectively over the
    *  MPI communicator of the ParticleGroup. Loop execution is complete when
    *  the corresponding call to wait returns.
+   *
+   *  submit() Launches the ParticleLoop over all cells.
+   *  submit(i) Launches the ParticleLoop over cell i.
+   *  submit(i, i+4) Launches the ParticleLoop over cells i, i+1, i+2, i+3.
+   *  Note cell_end itself is not visited.
+   *
+   *  @param cell_start Optional starting cell to launch the ParticleLoop over.
+   *  @param cell_end Optional ending cell to launch the ParticleLoop over.
    */
-  virtual inline void submit(const std::optional<int> cell = std::nullopt) = 0;
+  virtual inline void
+  submit(const std::optional<int> cell_start = std::nullopt,
+         const std::optional<int> cell_end = std::nullopt) = 0;
 
   /**
    * Wait for loop execution to complete. On completion perform post-loop

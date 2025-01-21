@@ -79,14 +79,24 @@ public:
    *  MPI communicator of the ParticleGroup. Loop execution is complete when
    *  the corresponding call to wait returns.
    *
-   *  @param cell Argument for api compatibility.
+   *  submit() Launches the ParticleLoop over all cells.
+   *  submit(i) Launches the ParticleLoop over cell i.
+   *  submit(i, i+4) Launches the ParticleLoop over cells i, i+1, i+2, i+3.
+   *  Note cell_end itself is not visited.
+   *
+   *  @param cell_start Optional starting cell to launch the ParticleLoop over.
+   *  @param cell_end Optional ending cell to launch the ParticleLoop over.
    */
-  inline void submit(const std::optional<int> cell = std::nullopt) override {
+  virtual inline void
+  submit(const std::optional<int> cell_start = std::nullopt,
+         const std::optional<int> cell_end = std::nullopt) override {
     auto t0 = profile_timestamp();
     this->profiling_region_init();
 
+    // If the loop is called cell wise asynchronously then the call over cell i
+    // could trigger a rebuild on cell i+1
     NESOASSERT(
-        (!this->loop_running) || (cell != std::nullopt),
+        (!this->loop_running) || (cell_start != std::nullopt),
         "ParticleLoop::submit called - but the loop is already submitted.");
 
     // If the loop is called cell wise asynchronously then the call over cell i
@@ -96,13 +106,18 @@ public:
     }
     this->loop_running = true;
 
-    if (this->iteration_set_is_empty(cell)) {
+    int cell_start_v, cell_end_v;
+    const bool all_cells = this->determine_iteration_set(
+        cell_start, cell_end, &cell_start_v, &cell_end_v);
+
+    if (this->iteration_set_is_empty(cell_start, cell_end)) {
       return;
     }
 
     auto &selection = this->particle_sub_group->selection;
     this->setup_subgroup_is(selection);
-    auto global_info = this->create_global_info(cell);
+
+    auto global_info = this->create_global_info(cell_start, cell_end);
     global_info.particle_sub_group = this->particle_sub_group.get();
     this->apply_pre_loop(global_info);
 
@@ -112,17 +127,18 @@ public:
     this->profiling_region_metrics(this->iteration_set->iteration_set_size);
 
     auto &is = this->iteration_set->iteration_set;
-    if (cell != std::nullopt) {
-      // Num local bytes is already used to compute the local size
-      is = this->iteration_set->get_single_cell(cell.value(),
-                                                global_info.local_size, 0);
-    } else {
+    if (all_cells) {
       const std::size_t nbin = this->sycl_target->parameters
                                    ->template get<SizeTParameter>("LOOP_NBIN")
                                    ->value;
       // Num local bytes is already used to compute the local size
       is = this->iteration_set->get_all_cells(nbin, global_info.local_size, 0);
+    } else {
+      // Num local bytes is already used to compute the local size
+      is = this->iteration_set->get_range_cell(cell_start_v, cell_end_v,
+                                               global_info.local_size, 0);
     }
+
     this->sycl_target->profile_map.inc(
         "ParticleLoopSubGroup", "Init", 1,
         profile_elapsed(t0, profile_timestamp()));
