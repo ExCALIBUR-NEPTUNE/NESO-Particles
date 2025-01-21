@@ -406,9 +406,8 @@ public:
   /// Layer compression instance for dats when particles are removed from cells.
   LayerCompressor layer_compressor;
 
-  /// Explicitly free a ParticleGroup without relying on out-of-scope
-  // destructor calls.
-  inline void free() { this->global_move_ctx.free(); }
+  /// Used to be required to be called. Kept to not break API.
+  inline void free() {}
 
   /**
    * Construct a new ParticleGroup.
@@ -423,8 +422,10 @@ public:
       : ncell(domain->mesh->get_cell_count()), npart_local(0),
         h_npart_cell(sycl_target, 1), d_npart_cell(sycl_target, 1),
         d_remove_cells(sycl_target, 1), d_remove_layers(sycl_target, 1),
-        global_move_ctx(sycl_target, layer_compressor, particle_dats_real,
-                        particle_dats_int),
+        global_move_ctx(
+            sycl_target,
+            domain->mesh->get_mesh_hierarchy()->global_move_communication,
+            layer_compressor, particle_dats_real, particle_dats_int),
         cell_move_ctx(sycl_target, this->ncell, layer_compressor,
                       particle_dats_real, particle_dats_int),
         particle_group_version(1), domain(domain), sycl_target(sycl_target),

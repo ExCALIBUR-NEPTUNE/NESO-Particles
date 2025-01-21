@@ -1,6 +1,7 @@
 #ifndef _NESO_PARTICLES_HIERARCHY
 #define _NESO_PARTICLES_HIERARCHY
 #include "communication.hpp"
+#include "communication/global_move_communication.hpp"
 #include "compute_target.hpp"
 #include "device_buffers.hpp"
 #include "profiling.hpp"
@@ -69,6 +70,9 @@ public:
   MPI_Comm comm;
   /// CommPair instance that contains the inter and intra communicators.
   CommPair comm_pair;
+  /// The container for MPI objects required for global particle movement.
+  GlobalMoveCommunicationSharedPtr global_move_communication;
+
   /// Number of mesh dimensions (1,2 or 3).
   int ndim;
   /// Number of coarse cells in each dimension.
@@ -140,7 +144,10 @@ public:
   MeshHierarchy(MPI_Comm comm, const int ndim, std::vector<int> dims,
                 std::vector<double> origin, const double extent = 1.0,
                 const int subdivision_order = 1)
-      : comm(comm), comm_pair(comm), ndim(ndim), dims(dims), origin(origin),
+      : comm(comm), comm_pair(comm),
+        global_move_communication(
+            std::make_shared<GlobalMoveCommunication>(comm)),
+        ndim(ndim), dims(dims), origin(origin),
         subdivision_order(subdivision_order), cell_width_coarse(extent),
         cell_width_fine(extent / ((double)std::pow(2, subdivision_order))),
         inverse_cell_width_coarse(1.0 / extent),
@@ -188,13 +195,14 @@ public:
    *  collectively on the communicator.
    */
   inline void free() {
-    if (map_allocated) {
+    if (this->map_allocated) {
       MPICHK(MPI_Win_free(&this->map_win))
       this->map = NULL;
       this->map_base = NULL;
-      map_allocated = false;
+      this->map_allocated = false;
     }
-    comm_pair.free();
+    this->comm_pair.free();
+    this->global_move_communication->free();
   }
 
   /**

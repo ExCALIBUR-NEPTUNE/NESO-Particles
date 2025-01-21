@@ -50,6 +50,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/communication/communication_edges_counter.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/communication/communication_typedefs.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/communication/communication_utility.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/communication/global_move_communication.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/compute_target.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/blocked_binary_tree.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/cell_dat.hpp
