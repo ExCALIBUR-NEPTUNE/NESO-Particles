@@ -128,13 +128,14 @@ public:
     const int cell_count = this->particle_group->domain->mesh->get_cell_count();
     auto sycl_target = this->particle_group->sycl_target;
     auto pg_map_layers = particle_group->d_sub_group_layers;
+    int *d_npart_cell_ptr = this->dh_npart_cell->d_buffer.ptr;
+    auto e0 = sycl_target->queue.fill<int>(d_npart_cell_ptr, 0, cell_count);
     const auto npart_local = this->particle_group->get_npart_local();
     pg_map_layers->realloc_no_copy(npart_local);
-    int *d_npart_cell_ptr = this->dh_npart_cell->d_buffer.ptr;
-    sycl_target->queue.fill<int>(d_npart_cell_ptr, 0, cell_count)
-        .wait_and_throw();
+
     std::vector<int *> tmp = {pg_map_layers->ptr, d_npart_cell_ptr};
     this->map_ptrs->set(tmp);
+    e0.wait_and_throw();
 
     this->loop_0->execute();
 
