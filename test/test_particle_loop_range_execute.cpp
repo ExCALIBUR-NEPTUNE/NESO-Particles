@@ -179,3 +179,55 @@ TEST(ParticleLoop, range_execute_loop_index) {
   sycl_target->free();
   mesh->free();
 }
+
+TEST(ParticleLoop, get_loop_npart) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  const int cell_count = mesh->get_cell_count();
+  auto sycl_target = A->sycl_target;
+
+  auto aa = particle_sub_group(
+      A, [=](auto ID) { return ID.at(0) % 2 == 0; },
+      Access::read(Sym<INT>("ID")));
+  aa->create_if_required();
+
+  ParticleLoopImplementation::ParticleLoopGlobalInfo global_info;
+  auto lambda_test = [&](auto iteration_set, auto global_info) {
+    int npart = 0;
+    for (int cellx = global_info.starting_cell;
+         cellx < global_info.bounding_cell; cellx++) {
+      const auto tmp = iteration_set->get_npart_cell(cellx);
+      npart += tmp;
+    }
+    EXPECT_EQ(npart, get_loop_npart(&global_info));
+  };
+
+  for (int range_size : {1, 3, 4, 7, 8}) {
+
+    global_info.all_cells = false;
+    global_info.starting_cell = std::max(0, cell_count - range_size);
+    global_info.bounding_cell =
+        std::min(cell_count, global_info.starting_cell + range_size);
+    global_info.particle_group = A.get();
+    global_info.particle_sub_group = nullptr;
+
+    lambda_test(A, global_info);
+    global_info.particle_sub_group = aa.get();
+    lambda_test(aa, global_info);
+  }
+
+  global_info.all_cells = true;
+  global_info.starting_cell = 0;
+  global_info.bounding_cell = cell_count;
+  global_info.particle_group = A.get();
+  global_info.particle_sub_group = nullptr;
+
+  lambda_test(A, global_info);
+  global_info.particle_sub_group = aa.get();
+  lambda_test(aa, global_info);
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}
