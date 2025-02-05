@@ -122,7 +122,7 @@ inline void create_kernel_arg(ParticleLoopIteration &iterationx,
                               T *const *const **rhs,
                               Access::SymVector::Read<T> &lhs) {
   lhs.cell = iterationx.cellx;
-  lhs.layer = iterationx.loop_layerx;
+  lhs.layer = iterationx.layerx;
   lhs.ptr = rhs;
 }
 /**
@@ -132,7 +132,7 @@ template <typename T>
 inline void create_kernel_arg(ParticleLoopIteration &iterationx, T ****rhs,
                               Access::SymVector::Write<T> &lhs) {
   lhs.cell = iterationx.cellx;
-  lhs.layer = iterationx.loop_layerx;
+  lhs.layer = iterationx.layerx;
   lhs.ptr = rhs;
 }
 
