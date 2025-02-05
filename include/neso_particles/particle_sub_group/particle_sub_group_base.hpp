@@ -360,6 +360,13 @@ public:
       this->create_if_required();
       SymStore print_spec(args...);
 
+      for (auto &symx : print_spec.syms_real) {
+        NESOASSERT(this->particle_group->contains_dat(symx), "Sym not found.");
+      }
+      for (auto &symx : print_spec.syms_int) {
+        NESOASSERT(this->particle_group->contains_dat(symx), "Sym not found.");
+      }
+
       std::cout
           << "==============================================================="
              "================="
@@ -369,19 +376,17 @@ public:
           this->particle_group->domain->mesh->get_cell_count();
       for (int cellx = 0; cellx < cell_count; cellx++) {
         auto cell_data = this->selector->map_cell_to_particles->get_cell(cellx);
-        const int nrow = cell_data->nrow;
+        const int nrow = this->selection.h_npart_cell[cellx];
         if (nrow > 0) {
           std::vector<CellData<REAL>> cell_data_real;
           std::vector<CellData<INT>> cell_data_int;
 
           for (auto &symx : print_spec.syms_real) {
-            auto cell_data = this->particle_group->particle_dats_real[symx]
-                                 ->cell_dat.get_cell(cellx);
+            auto cell_data = this->particle_group->get_cell(symx, cellx);
             cell_data_real.push_back(cell_data);
           }
           for (auto &symx : print_spec.syms_int) {
-            auto cell_data = this->particle_group->particle_dats_int[symx]
-                                 ->cell_dat.get_cell(cellx);
+            auto cell_data = this->particle_group->get_cell(symx, cellx);
             cell_data_int.push_back(cell_data);
           }
 
