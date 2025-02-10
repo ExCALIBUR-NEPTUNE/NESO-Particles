@@ -208,6 +208,12 @@ private:
     this->syms_int.push_back(pp);
     this->push(std::forward<T>(args)...);
   }
+  template <typename... T> void push(std::vector<Sym<REAL>> &pp) {
+    this->syms_real.insert(this->syms_real.end(), pp.begin(), pp.end());
+  }
+  template <typename... T> void push(std::vector<Sym<INT>> &pp) {
+    this->syms_int.insert(this->syms_int.end(), pp.begin(), pp.end());
+  }
   template <typename... T> void push(std::vector<Sym<REAL>> &pp, T &&...args) {
     this->syms_real.insert(this->syms_real.end(), pp.begin(), pp.end());
     this->push(std::forward<T>(args)...);
