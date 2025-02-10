@@ -205,9 +205,9 @@ inline void ParticleGroup::local_move() {
   this->invalidate_group_version();
 }
 
-template <typename... T> inline void ParticleGroup::print(T... args) {
+template <typename... T> inline void ParticleGroup::print(T &&...args) {
 
-  SymStore print_spec(args...);
+  SymStore print_spec(std::forward<args>...);
 
   std::cout << "==============================================================="
                "================="

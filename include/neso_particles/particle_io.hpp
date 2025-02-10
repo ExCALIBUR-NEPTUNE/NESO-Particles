@@ -219,9 +219,10 @@ public:
    *  indicating which ParticleDats are to be written.
    */
   template <typename... T>
-  H5Part(std::string filename, ParticleGroupSharedPtr particle_group, T... args)
+  H5Part(std::string filename, ParticleGroupSharedPtr particle_group,
+         T &&...args)
       : filename(filename), comm_pair(particle_group->sycl_target->comm_pair),
-        sym_store(args...), particle_group(particle_group),
+        sym_store(std::forward<T>(args)...), particle_group(particle_group),
         multi_dim_mode(false) {
     this->plist_id = H5Pcreate(H5P_FILE_ACCESS);
     H5CHK(H5Pset_fapl_mpio(this->plist_id, this->comm_pair.comm_parent,

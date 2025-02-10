@@ -195,16 +195,26 @@ public:
  */
 class SymStore {
 private:
-  template <typename... T> void push(T... args) { this->push(args...); }
+  template <typename... T> void push(T &&...args) {
+    this->push(std::forward<T>(args)...);
+  }
   void push(Sym<REAL> pp) { this->syms_real.push_back(pp); }
   void push(Sym<INT> pp) { this->syms_int.push_back(pp); }
-  template <typename... T> void push(Sym<REAL> pp, T... args) {
+  template <typename... T> void push(Sym<REAL> pp, T &&...args) {
     this->syms_real.push_back(pp);
-    this->push(args...);
+    this->push(std::forward<T>(args)...);
   }
-  template <typename... T> void push(Sym<INT> pp, T... args) {
+  template <typename... T> void push(Sym<INT> pp, T &&...args) {
     this->syms_int.push_back(pp);
-    this->push(args...);
+    this->push(std::forward<T>(args)...);
+  }
+  template <typename... T> void push(std::vector<Sym<REAL>> &pp, T &&...args) {
+    this->syms_real.insert(this->syms_real.end(), pp.begin(), pp.end());
+    this->push(std::forward<T>(args)...);
+  }
+  template <typename... T> void push(std::vector<Sym<INT>> &pp, T &&...args) {
+    this->syms_int.insert(this->syms_int.end(), pp.begin(), pp.end());
+    this->push(std::forward<T>(args)...);
   }
 
 public:
@@ -216,9 +226,12 @@ public:
    *  Constructor for SymStore should be called with a list of arguments which
    *  are Sym instances.
    *
-   *  @param args Passed arguments should be Sym<REAL> or Sym<INT>.
+   *  @param args Passed arguments should be Sym<REAL>, std::vector<Sym<REAL>>,
+   * Sym<INT> or std::vector<Sym<INT>>.
    */
-  template <typename... T> SymStore(T... args) { this->push(args...); }
+  template <typename... T> SymStore(T &&...args) {
+    this->push(std::forward<T>(args)...);
+  };
 
   SymStore(){};
   ~SymStore(){};

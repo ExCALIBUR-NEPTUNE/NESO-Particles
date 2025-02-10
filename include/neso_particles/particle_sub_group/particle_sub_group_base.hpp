@@ -353,12 +353,12 @@ public:
    *  @param args Sym<REAL> or Sym<INT> instances that indicate which particle
    *  data to print.
    */
-  template <typename... T> inline void print(T... args) {
+  template <typename... T> inline void print(T &&...args) {
     if (this->is_whole_particle_group) {
-      return this->particle_group->print(args...);
+      return this->particle_group->print(std::forward<T>(args)...);
     } else {
       this->create_if_required();
-      SymStore print_spec(args...);
+      SymStore print_spec(std::forward<T>(args)...);
 
       for (auto &symx : print_spec.syms_real) {
         NESOASSERT(this->particle_group->contains_dat(symx), "Sym not found.");
