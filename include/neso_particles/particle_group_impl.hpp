@@ -207,7 +207,7 @@ inline void ParticleGroup::local_move() {
 
 template <typename... T> inline void ParticleGroup::print(T &&...args) {
 
-  SymStore print_spec(std::forward<args>...);
+  SymStore print_spec(std::forward<T>(args)...);
 
   std::cout << "==============================================================="
                "================="
