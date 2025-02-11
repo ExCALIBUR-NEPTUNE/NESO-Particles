@@ -825,7 +825,7 @@ public:
    *  @param args Sym<REAL> or Sym<INT> instances that indicate which particle
    *  data to print.
    */
-  template <typename... T> inline void print(T... args);
+  template <typename... T> inline void print(T &&...args);
 
   /**
    *  Print all particle data for a particle.
