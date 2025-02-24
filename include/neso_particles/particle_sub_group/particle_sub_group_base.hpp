@@ -29,7 +29,7 @@ protected:
   bool is_static;
   ParticleGroupSharedPtr particle_group;
   ParticleSubGroupImplementation::SubGroupSelectorBaseSharedPtr selector;
-  ParticleSubGroupImplementation::SubGroupSelectorBase::SelectionT selection;
+  ParticleSubGroupImplementation::Selection selection;
 
   int npart_local;
   bool is_whole_particle_group;
@@ -345,6 +345,17 @@ public:
       }
       return this->particle_group->get_particles(cells, inner_layers);
     }
+  }
+
+  /**
+   * Get a reference to the current selection. This is an advanced method. It is
+   * likely that the downstream code is required to call create_if_required
+   * directly before calling this method.
+   *
+   * @returns Reference to the current selection of this instance.
+   */
+  const ParticleSubGroupImplementation::Selection &get_selection() const {
+    return this->selection;
   }
 
   /**

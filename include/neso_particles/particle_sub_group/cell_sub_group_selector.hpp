@@ -57,7 +57,7 @@ public:
     e2.wait_and_throw();
   }
 
-  virtual inline SelectionT get() override {
+  virtual inline Selection get() override {
     const int cell_count = this->particle_group->domain->mesh->get_cell_count();
     auto sycl_target = this->particle_group->sycl_target;
     auto pg_map_layers = this->get_particle_group_sub_group_layers();
@@ -92,13 +92,13 @@ public:
       e2.wait_and_throw();
       e3.wait_and_throw();
 
-      SelectionT s;
+      Selection s;
       s.npart_local = total;
       s.ncell = cell_count;
       s.h_npart_cell = h_npart_cell_ptr;
       s.d_npart_cell = d_npart_cell_ptr;
       s.d_npart_cell_es = this->d_npart_cell_es->ptr;
-      s.d_map_cells_to_particles = this->map_cell_to_particles->device_ptr();
+      s.d_map_cells_to_particles = {this->map_cell_to_particles->device_ptr()};
 
       return s;
 
@@ -131,13 +131,13 @@ public:
 
       this->loop_1->wait();
 
-      SelectionT s;
+      Selection s;
       s.npart_local = total;
       s.ncell = cell_count;
       s.h_npart_cell = h_npart_cell_ptr;
       s.d_npart_cell = d_npart_cell_ptr;
       s.d_npart_cell_es = this->d_npart_cell_es->ptr;
-      s.d_map_cells_to_particles = this->map_cell_to_particles->device_ptr();
+      s.d_map_cells_to_particles = {this->map_cell_to_particles->device_ptr()};
 
       return s;
     }

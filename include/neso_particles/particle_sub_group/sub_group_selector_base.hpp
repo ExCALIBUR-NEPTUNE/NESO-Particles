@@ -12,6 +12,44 @@ class ParticleSubGroup;
 
 namespace ParticleSubGroupImplementation {
 
+/**
+ * Device copyable type to map from loop cell and loop layer to the actual layer
+ * of the particle.
+ */
+struct MapLoopLayerToLayer {
+  /// This member is public but is not part of any API that should be used
+  /// outside of NP - use map_loop_layer_to_layer instead.
+  INT const *RESTRICT const *RESTRICT const *RESTRICT map_ptr;
+
+  /**
+   * For a loop cell and loop layer return the layer of the particle.
+   *
+   * @param loop_cell Cell containing particle in the selection.
+   * @param loop_layer Layer of the particle in the selection.
+   * @returns Layer of the particle in the cell.
+   */
+  template <typename T>
+  inline INT map_loop_layer_to_layer(const T loop_cell,
+                                     const T loop_layer) const {
+    return this->map_ptr[loop_cell][0][loop_layer];
+  }
+};
+
+/**
+ * Host type that describes a selection of particles.
+ */
+struct Selection {
+  int npart_local;
+  int ncell;
+  int *h_npart_cell;
+  int *d_npart_cell;
+  INT *d_npart_cell_es;
+  MapLoopLayerToLayer d_map_cells_to_particles;
+};
+
+/**
+ * Base class for creating sub groups.
+ */
 class SubGroupSelectorBase {
   friend class NESO::Particles::ParticleSubGroup;
 
@@ -61,16 +99,6 @@ public:
   // ParticleGroup version tracking.
   ParticleGroup::ParticleGroupVersion particle_group_version;
 
-  // The type that describes a selection of particles.
-  struct SelectionT {
-    int npart_local;
-    int ncell;
-    int *h_npart_cell;
-    int *d_npart_cell;
-    INT *d_npart_cell_es;
-    INT ***d_map_cells_to_particles;
-  };
-
   virtual ~SubGroupSelectorBase() {
     if (this->sub_group_selector_resource != nullptr) {
       this->map_cell_to_particles = nullptr;
@@ -83,7 +111,7 @@ public:
   }
   SubGroupSelectorBase() = default;
 
-  virtual inline SelectionT get() = 0;
+  virtual inline Selection get() = 0;
 
   template <typename PARENT>
   SubGroupSelectorBase(std::shared_ptr<PARENT> parent)

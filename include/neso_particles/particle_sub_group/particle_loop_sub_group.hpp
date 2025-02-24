@@ -24,9 +24,8 @@ protected:
 
   virtual inline int get_loop_type_int() override { return 1; }
 
-  inline void setup_subgroup_is(
-      ParticleSubGroupImplementation::SubGroupSelectorBase::SelectionT
-          &selection) {
+  inline void
+  setup_subgroup_is(ParticleSubGroupImplementation::Selection &selection) {
     this->h_npart_cell_lb = selection.h_npart_cell;
     this->d_npart_cell_lb = selection.d_npart_cell;
     this->d_npart_cell_es_lb = selection.d_npart_cell_es;
@@ -114,7 +113,7 @@ public:
       return;
     }
 
-    auto &selection = this->particle_sub_group->selection;
+    auto selection = this->particle_sub_group->get_selection();
     this->setup_subgroup_is(selection);
 
     auto global_info = this->create_global_info(cell_start, cell_end);
@@ -159,7 +158,8 @@ public:
                   ParticleLoopImplementation::ParticleLoopIteration iterationx;
                   if (block_device.work_item_required(loop_cell, loop_layer)) {
                     const int layer = static_cast<int>(
-                        k_map_cells_to_particles[loop_cell][0][loop_layer]);
+                        k_map_cells_to_particles.map_loop_layer_to_layer(
+                            loop_cell, loop_layer));
                     iterationx.local_sycl_index = idx.get_local_id(1);
                     iterationx.cellx = loop_cellx;
                     iterationx.layerx = layer;

@@ -124,7 +124,7 @@ public:
    *
    * @returns List of cells and layers of particles in the sub group.
    */
-  virtual inline SelectionT get() override {
+  virtual inline Selection get() override {
     const int cell_count = this->particle_group->domain->mesh->get_cell_count();
     auto sycl_target = this->particle_group->sycl_target;
     auto pg_map_layers = particle_group->d_sub_group_layers;
@@ -165,13 +165,13 @@ public:
 
     this->loop_1->wait();
 
-    SelectionT s;
+    Selection s;
     s.npart_local = total;
     s.ncell = cell_count;
     s.h_npart_cell = h_npart_cell_ptr;
     s.d_npart_cell = d_npart_cell_ptr;
     s.d_npart_cell_es = d_npart_cell_es_ptr;
-    s.d_map_cells_to_particles = this->map_cell_to_particles->device_ptr();
+    s.d_map_cells_to_particles = {this->map_cell_to_particles->device_ptr()};
     return s;
   }
 };
