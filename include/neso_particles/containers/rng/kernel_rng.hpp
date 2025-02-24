@@ -29,13 +29,28 @@ template <typename T> struct Read {
   /**
    * Access the RNG data for this particle.
    *
+   * @param[in] particle_index Particle index to access.
+   * @param[in] component RNG component to access.
+   * @param[in, out] valid_sample On return this bool is set to true if the
+   * returned sample is good (i.e. RNG is in a valid state).
+   * @returns Constant reference to RNG data.
+   */
+  inline auto at(const Access::LoopIndex::Read &particle_index,
+                 const int component, bool *valid_sample) {
+    return this->data.at(particle_index, component, valid_sample);
+  }
+
+  /**
+   * Access the RNG data for this particle.
+   *
    * @param particle_index Particle index to access.
    * @param component RNG component to access.
    * @returns Constant reference to RNG data.
    */
   inline auto at(const Access::LoopIndex::Read &particle_index,
                  const int component) {
-    return this->data.at(particle_index, component);
+    bool valid_sample = false;
+    return this->at(particle_index, component, &valid_sample);
   }
 };
 
