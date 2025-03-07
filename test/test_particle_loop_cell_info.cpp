@@ -133,3 +133,35 @@ TEST(ParticleLoop, cell_info_npart) {
   sycl_target->free();
   mesh->free();
 }
+
+TEST(ParticleLoop, cell_info_npart_sub_group) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  auto sycl_target = A->sycl_target;
+  const int cell_count = mesh->get_cell_count();
+
+  auto aa = particle_sub_group(
+      A, [=](auto ID) { return ID.at(0) % 2 == 0; },
+      Access::read(Sym<INT>("ID")));
+  EXPECT_TRUE(aa->create_if_required());
+  EXPECT_FALSE(aa->create_if_required());
+
+  auto bb = particle_sub_group(
+      aa, [=](auto cell_info_npart) { return cell_info_npart.get() > 10; },
+      Access::read(CellInfoNPart{}));
+
+  EXPECT_TRUE(bb->create_if_required());
+  EXPECT_FALSE(bb->create_if_required());
+
+  A->clear();
+  EXPECT_TRUE(bb->create_if_required());
+  EXPECT_FALSE(bb->create_if_required());
+  for (int cx = 0; cx < cell_count; cx++) {
+    EXPECT_EQ(bb->get_npart_cell(cx), 0);
+  }
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}

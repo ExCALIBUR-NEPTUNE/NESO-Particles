@@ -85,6 +85,7 @@ particle_loop_common(const int N = 10930, const int sx = 4, const int sy = 8) {
 #include "example_sources/example_particle_loop_0.hpp"
 #include "example_sources/example_particle_loop_0_nc.hpp"
 #include "example_sources/example_particle_loop_cell_dat_const.hpp"
+#include "example_sources/example_particle_loop_cell_info_npart.hpp"
 #include "example_sources/example_particle_loop_global_array.hpp"
 #include "example_sources/example_particle_loop_index.hpp"
 #include "example_sources/example_particle_loop_local_array.hpp"
@@ -93,7 +94,6 @@ particle_loop_common(const int N = 10930, const int sx = 4, const int sy = 8) {
 #include "example_sources/example_particle_loop_sym_vector.hpp"
 #include "example_sources/example_particle_sub_group_creation.hpp"
 #include "example_sources/example_particle_sub_group_loop.hpp"
-#include "example_sources/example_particle_loop_cell_info_npart.hpp"
 
 TEST(Examples, particle_loop_base) {
   auto A = particle_loop_common();

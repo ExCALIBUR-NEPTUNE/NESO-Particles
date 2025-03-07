@@ -3,6 +3,7 @@
 
 #include "../containers/local_array.hpp"
 #include "../containers/sym_vector.hpp"
+#include "../loop/cell_info_npart.hpp"
 #include "../loop/particle_loop_base.hpp"
 #include "../loop/particle_loop_index.hpp"
 #include "sub_group_selector_base.hpp"
@@ -40,6 +41,7 @@ protected:
   }
 
   inline void check_sym_type([[maybe_unused]] ParticleLoopIndex &) {}
+  inline void check_sym_type([[maybe_unused]] CellInfoNPart &) {}
 
   template <template <typename> typename T, typename U>
   inline void check_read_access(T<U> arg) {
@@ -82,7 +84,7 @@ public:
    * must be a lambda which returns true for particles which are in the sub
    * group and false for particles which are not in the sub group. The
    * arguments for the selector kernel must be read access Syms, i.e.
-   * Access::read(Sym<T>("name")).
+   * Access::read(Sym<T>("name")), ParticleLoopIndex or CellInfoNPart.
    *
    * @param parent Parent ParticleGroup or ParticleSubGroup from which to form
    * ParticleSubGroup.
