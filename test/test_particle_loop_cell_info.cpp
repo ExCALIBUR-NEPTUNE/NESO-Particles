@@ -77,12 +77,12 @@ TEST(ParticleLoop, cell_info_npart) {
   auto mesh = domain->mesh;
   auto sycl_target = A->sycl_target;
   const int cell_count = mesh->get_cell_count();
-  std::vector<int> correct(cell_count);
-  auto la_to_test = std::make_shared<LocalArray<int>>(sycl_target, cell_count);
+  std::vector<INT> correct(cell_count);
+  auto la_to_test = std::make_shared<LocalArray<INT>>(sycl_target, cell_count);
 
   {
     for (int cx = 0; cx < cell_count; cx++) {
-      correct.at(cx) = A->get_npart_cell(cx);
+      correct.at(cx) = static_cast<INT>(A->get_npart_cell(cx));
     }
     la_to_test->fill(0);
     particle_loop(
@@ -108,7 +108,7 @@ TEST(ParticleLoop, cell_info_npart) {
         A, [=](auto ID) { return ID.at(0) % 2 == 0; },
         Access::read(Sym<INT>("ID")));
     for (int cx = 0; cx < cell_count; cx++) {
-      correct.at(cx) = aa->get_npart_cell(cx);
+      correct.at(cx) = static_cast<INT>(aa->get_npart_cell(cx));
     }
     la_to_test->fill(0);
     particle_loop(
