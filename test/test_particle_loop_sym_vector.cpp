@@ -256,6 +256,7 @@ TEST(ParticleLoop, sym_vector_pointer_cache) {
   }
 
   A->free();
+  sycl_target->free();
   mesh->free();
 }
 
@@ -297,7 +298,9 @@ TEST(ParticleLoop, sym_vector) {
     }
   }
 
+  auto sycl_target = A->sycl_target;
   A->free();
+  sycl_target->free();
   mesh->free();
 }
 
@@ -364,6 +367,8 @@ TEST(ParticleLoop, sub_group_sym_vector) {
     }
   }
 
+  auto sycl_target = A->sycl_target;
   A->free();
+  sycl_target->free();
   mesh->free();
 }

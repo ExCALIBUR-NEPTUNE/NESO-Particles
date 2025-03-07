@@ -237,7 +237,7 @@ public:
    */
   template <typename... T> SymStore(T &&...args) {
     this->push(std::forward<T>(args)...);
-  };
+  }
 
   SymStore(){};
   ~SymStore(){};
