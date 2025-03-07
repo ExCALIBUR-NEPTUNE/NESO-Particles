@@ -93,6 +93,7 @@ particle_loop_common(const int N = 10930, const int sx = 4, const int sy = 8) {
 #include "example_sources/example_particle_loop_sym_vector.hpp"
 #include "example_sources/example_particle_sub_group_creation.hpp"
 #include "example_sources/example_particle_sub_group_loop.hpp"
+#include "example_sources/example_particle_loop_cell_info_npart.hpp"
 
 TEST(Examples, particle_loop_base) {
   auto A = particle_loop_common();
@@ -108,6 +109,7 @@ TEST(Examples, particle_loop_base) {
   sym_vector_example(A);
   advection_example_loop_index(A);
   particle_loop_rng(A);
+  particle_loop_example_cell_info_npart(A);
 
   auto B = particle_loop_common(5);
   descendant_products_example(B);

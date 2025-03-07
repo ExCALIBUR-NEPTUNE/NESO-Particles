@@ -227,6 +227,23 @@ This data structure is read-only.
      - Access::ParticleLoopIndex::Read
      - Indices accessed via .cell, .layer, .get_local_linear_index and .get_loop_linear_index.
 
+CellInfoNPart
+~~~~~~~~~~~~~
+As it is useful to know how many particles are in each cell, e.g. cell wise averages, hence we provide a kernel type that efficiently gives the cell occupancy for the loop iteration set.
+
+.. literalinclude:: ../example_sources/example_particle_loop_cell_info_npart.hpp
+   :language: cpp
+   :caption: Particle loop example where the cell occupancy for the iteration set is accessed. 
+
+.. list-table:: CellInfoNPart Access
+   :header-rows: 1
+
+   * - Access Descriptors
+     - Kernel Types
+     - Notes
+   * - Read
+     - Access::CellInfoNPart::Read
+     - Returns the number of particles in the cell for the iteration set with .get().
 
 KernelRNG
 ~~~~~~~~~
