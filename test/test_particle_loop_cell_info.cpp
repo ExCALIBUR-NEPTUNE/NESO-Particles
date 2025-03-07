@@ -77,30 +77,56 @@ TEST(ParticleLoop, cell_info_npart) {
   auto mesh = domain->mesh;
   auto sycl_target = A->sycl_target;
   const int cell_count = mesh->get_cell_count();
-
   std::vector<int> correct(cell_count);
-  for (int cx = 0; cx < cell_count; cx++) {
-    correct.at(cx) = A->get_npart_cell(cx);
+  auto la_to_test = std::make_shared<LocalArray<int>>(sycl_target, cell_count);
+
+  {
+    for (int cx = 0; cx < cell_count; cx++) {
+      correct.at(cx) = A->get_npart_cell(cx);
+    }
+    la_to_test->fill(0);
+    particle_loop(
+        A,
+        [=](auto INDEX, auto CELL_INFO_NPART, auto LA) {
+          // Is this the first particle in the cell?
+          if (INDEX.loop_layer == 0) {
+            LA.at(INDEX.cell) = CELL_INFO_NPART.get();
+          }
+        },
+        Access::read(ParticleLoopIndex{}), Access::read(CellInfoNPart{}),
+        Access::write(la_to_test))
+        ->execute();
+
+    auto h_to_test = la_to_test->get();
+    for (int cx = 0; cx < cell_count; cx++) {
+      EXPECT_EQ(h_to_test.at(cx), correct.at(cx));
+    }
   }
 
-  auto la_to_test = std::make_shared<LocalArray<int>>(sycl_target, cell_count);
-  la_to_test->fill(0);
+  {
+    auto aa = particle_sub_group(
+        A, [=](auto ID) { return ID.at(0) % 2 == 0; },
+        Access::read(Sym<INT>("ID")));
+    for (int cx = 0; cx < cell_count; cx++) {
+      correct.at(cx) = aa->get_npart_cell(cx);
+    }
+    la_to_test->fill(0);
+    particle_loop(
+        aa,
+        [=](auto INDEX, auto CELL_INFO_NPART, auto LA) {
+          // Is this the first particle in the cell?
+          if (INDEX.loop_layer == 0) {
+            LA.at(INDEX.cell) = CELL_INFO_NPART.get();
+          }
+        },
+        Access::read(ParticleLoopIndex{}), Access::read(CellInfoNPart{}),
+        Access::write(la_to_test))
+        ->execute();
 
-  particle_loop(
-      A,
-      [=](auto INDEX, auto CELL_INFO_NPART, auto LA) {
-        // Is this the first particle in the cell?
-        if (INDEX.loop_layer == 0) {
-          LA.at(INDEX.cell) = CELL_INFO_NPART.get();
-        }
-      },
-      Access::read(ParticleLoopIndex{}), Access::read(CellInfoNPart{}),
-      Access::write(la_to_test))
-      ->execute();
-
-  auto h_to_test = la_to_test->get();
-  for (int cx = 0; cx < cell_count; cx++) {
-    EXPECT_EQ(h_to_test.at(cx), correct.at(cx));
+    auto h_to_test = la_to_test->get();
+    for (int cx = 0; cx < cell_count; cx++) {
+      EXPECT_EQ(h_to_test.at(cx), correct.at(cx));
+    }
   }
 
   A->free();

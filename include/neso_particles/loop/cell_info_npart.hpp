@@ -38,7 +38,7 @@ namespace ParticleLoopImplementation {
  * Device copyable host loop type for CellInfoNPart.
  */
 struct CellInfoNPartKernelT {
-  int const *d_npart_cell;
+  int const *d_npart_cell_lb;
 };
 
 /**
@@ -64,7 +64,7 @@ create_loop_arg(ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
                 [[maybe_unused]] Access::Read<CellInfoNPart *> &a) {
   NESOASSERT(global_info->loop_type_int == 0 || global_info->loop_type_int == 1,
              "Unknown loop type for CellInfoNPart.");
-  return {global_info->d_npart_cell};
+  return {global_info->d_npart_cell_lb};
 }
 
 /**
@@ -73,7 +73,7 @@ create_loop_arg(ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
 inline void create_kernel_arg(ParticleLoopIteration &iterationx,
                               CellInfoNPartKernelT &rhs,
                               Access::CellInfoNPart::Read &lhs) {
-  lhs.npart_cell = static_cast<INT>(rhs.d_npart_cell[iterationx.cellx]);
+  lhs.npart_cell = static_cast<INT>(rhs.d_npart_cell_lb[iterationx.cellx]);
 }
 
 } // namespace ParticleLoopImplementation

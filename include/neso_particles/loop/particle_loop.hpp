@@ -315,7 +315,7 @@ protected:
     ParticleLoopImplementation::ParticleLoopGlobalInfo global_info;
     global_info.particle_group = this->particle_group_ptr;
     global_info.particle_sub_group = nullptr;
-    global_info.d_npart_cell = this->d_npart_cell;
+    global_info.d_npart_cell_lb = this->d_npart_cell_lb;
     global_info.d_npart_cell_es = this->d_npart_cell_es;
     global_info.d_npart_cell_es_lb = this->d_npart_cell_es_lb;
     global_info.all_cells = all_cells;

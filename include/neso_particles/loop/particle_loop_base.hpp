@@ -26,7 +26,7 @@ struct ParticleLoopGlobalInfo {
   ParticleSubGroup *particle_sub_group;
   // Is the loop over all cells
   bool all_cells;
-  int *d_npart_cell;
+  int *d_npart_cell_lb;
   INT *d_npart_cell_es;
   INT *d_npart_cell_es_lb;
   // The starting cell is only set for calls to create_loop_args.
