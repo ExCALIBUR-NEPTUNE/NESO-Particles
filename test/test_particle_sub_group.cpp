@@ -1297,6 +1297,7 @@ TEST(ParticleSubGroup, get_particles) {
   }
 
   A->free();
+  sycl_target->free();
   mesh->free();
 }
 
@@ -1452,5 +1453,17 @@ TEST(ParticleSubGroup, single_cell_base) {
   }
 
   A->free();
+  sycl_target->free();
+  mesh->free();
+}
+
+TEST(ParticleSubGroup, range_cell_base) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  auto sycl_target = A->sycl_target;
+
+  A->free();
+  sycl_target->free();
   mesh->free();
 }

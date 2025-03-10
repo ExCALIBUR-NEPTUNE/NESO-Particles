@@ -147,7 +147,7 @@ particle_sub_group(std::shared_ptr<PARENT> parent, const INT_TYPE cell,
 }
 
 /**
- * Create a ParticleSubGroup that selects all particles int a particular cell.
+ * Create a ParticleSubGroup that selects all particles in a particular cell.
  *
  * @param parent Parent ParticleGroup or ParticleSubGroup from which to form
  * ParticleSubGroup.
@@ -162,6 +162,28 @@ particle_sub_group(std::shared_ptr<PARENT> parent, const int cell,
       ParticleSubGroupImplementation::SubGroupSelector>(
       std::make_shared<ParticleSubGroupImplementation::CellSubGroupSelector>(
           parent, cell));
+  auto group = std::make_shared<ParticleSubGroup>(selector);
+  group->static_status(make_static);
+  return group;
+}
+
+/**
+ * Create a ParticleSubGroup that selects all particles in a range of cells.
+ *
+ * @param parent Parent ParticleGroup or ParticleSubGroup from which to form
+ * ParticleSubGroup.
+ * @param cell_start Local cell index to use as the starting cell for a range.
+ * @param cell_end Local cell index to use as the end cell for a range.
+ * @param make_static Make the ParticleSubGroup static (default false).
+ */
+template <typename PARENT>
+inline ParticleSubGroupSharedPtr
+particle_sub_group(std::shared_ptr<PARENT> parent, const int cell_start,
+                   const int cell_end, const bool make_static = false) {
+  auto selector = std::dynamic_pointer_cast<
+      ParticleSubGroupImplementation::SubGroupSelector>(
+      std::make_shared<ParticleSubGroupImplementation::CellSubGroupSelector>(
+          parent, cell_start, cell_end));
   auto group = std::make_shared<ParticleSubGroup>(selector);
   group->static_status(make_static);
   return group;

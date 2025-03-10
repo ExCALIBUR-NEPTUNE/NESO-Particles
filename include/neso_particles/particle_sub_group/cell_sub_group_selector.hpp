@@ -9,7 +9,7 @@ namespace NESO::Particles {
 namespace ParticleSubGroupImplementation {
 
 /**
- * ParticleSubGroup selector for a single cell.
+ * ParticleSubGroup selector for a single cell or range of cells.
  */
 class CellSubGroupSelector : public SubGroupSelector {
 protected:
