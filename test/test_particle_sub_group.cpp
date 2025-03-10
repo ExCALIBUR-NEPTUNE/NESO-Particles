@@ -1485,7 +1485,8 @@ TEST(ParticleSubGroup, range_cell_base) {
                                const int cell_end) {
     auto aa = particle_sub_group(parent, cell_start, cell_end);
     particle_loop(
-        aa, [=](auto TEST) { TEST.at(0) = 1; }, Access::write(Sym<INT>("TEST")))
+        parent, [=](auto TEST) { TEST.at(0) = 1; },
+        Access::write(Sym<INT>("TEST")))
         ->execute();
 
     particle_loop(
