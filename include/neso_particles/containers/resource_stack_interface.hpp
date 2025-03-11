@@ -6,6 +6,16 @@
 namespace NESO::Particles {
 
 /**
+ * This base class allows ResourceStack instances of different resources to be
+ * held in a generic container. This generic container can be freed by calling
+ * free on all the entries.
+ */
+struct ResourceStackBase {
+  virtual ~ResourceStackBase() = default;
+  virtual inline void free() = 0;
+};
+
+/**
  * Interface definition for types that create/destroy/cleanup resources stored
  * in a ResourceStack.
  */

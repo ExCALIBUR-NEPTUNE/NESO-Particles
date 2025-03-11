@@ -9,6 +9,8 @@ namespace NESO::Particles {
 // ParticleLoop as a friend class.
 template <typename KERNEL, typename... ARGS> class ParticleLoop;
 template <typename T> class ParticleDatT;
+template <typename T> class CellDatConst;
+template <typename T> class CellDat;
 
 /**
  * Container for the data within a single cell stored on the host. Data is
@@ -16,6 +18,10 @@ template <typename T> class ParticleDatT;
  * ParticleDat for a single cell and exists as a 2D data structure.
  */
 template <typename T> class CellDataT {
+
+  friend class CellDatConst<T>;
+  friend class CellDat<T>;
+
 private:
   // std::format is C++20.......
   std::string format(INT value) {
