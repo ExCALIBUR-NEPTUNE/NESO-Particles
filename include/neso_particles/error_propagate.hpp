@@ -80,6 +80,19 @@ public:
     neso_error_atomic.fetch_add(1);                                            \
   }
 
+using ErrorPropagateSharedPtr = std::shared_ptr<ErrorPropagate>;
+
+/**
+ * Helper function to create an ErrorPropagate instance.
+ *
+ * @param sycl_target SYCLTarget to use.
+ * @returns New ErrorPropagate object.
+ */
+inline ErrorPropagateSharedPtr
+error_propagate(SYCLTargetSharedPtr sycl_target) {
+  return std::make_shared<ErrorPropagate>(sycl_target);
+}
+
 } // namespace NESO::Particles
 
 #endif
