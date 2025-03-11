@@ -83,7 +83,7 @@ private:
 
       for (int cx = 0; cx < ncomp; cx++) {
         this->memcpy_dat(pack_buffer.ptr + cx * component_stride + pack_offset,
-                         cell_dat->data[cx].data(), cell_dat->nrow);
+                         cell_dat->get_column_ptr(cx), cell_dat->nrow);
       }
       pack_offset += sizeof(T) * cell_dat->nrow;
     }
@@ -131,7 +131,7 @@ private:
         for (int colx = 0; colx < cell_dat->ncol; colx++) {
           this->memcpy_dat(pack_buffer.ptr +
                                (pack_offset + rowx * ncomp + colx) * sizeof(T),
-                           cell_dat->data[colx].data() + rowx, 1);
+                           cell_dat->get_column_ptr(colx) + rowx, 1);
         }
       }
       pack_offset += cell_dat->nrow * cell_dat->ncol;

@@ -9,8 +9,6 @@ namespace NESO::Particles {
 // ParticleLoop as a friend class.
 template <typename KERNEL, typename... ARGS> class ParticleLoop;
 template <typename T> class ParticleDatT;
-template <typename T> class CellDatConst;
-template <typename T> class CellDat;
 
 /**
  * Container for the data within a single cell stored on the host. Data is
@@ -18,9 +16,6 @@ template <typename T> class CellDat;
  * ParticleDat for a single cell and exists as a 2D data structure.
  */
 template <typename T> class CellDataT {
-
-  friend class CellDatConst<T>;
-  friend class CellDat<T>;
 
 private:
   // std::format is C++20.......
@@ -40,6 +35,9 @@ private:
   std::string format(char value) { return std::string(1, value); }
   SYCLTargetSharedPtr sycl_target;
 
+  /// 2D data column major.
+  std::vector<T> data;
+
 public:
   /// Disable (implicit) copies.
   CellDataT(const CellDataT &st) = delete;
@@ -50,8 +48,15 @@ public:
   const int nrow;
   /// Number of columns in the 2D data structure.
   const int ncol;
-  /// 2D data.
-  std::vector<std::vector<T>> data;
+
+  /**
+   * @param col Column to get host pointer for.
+   * @returns Host pointer to start of column.
+   */
+  inline T *get_column_ptr(const int col) {
+    NESOASSERT((0 <= col) && (col <= this->ncol), "Bad col index passed");
+    return this->data.data() + col * this->nrow;
+  }
 
   /**
    * Create a new, empty and uninitialised container for 2D data of the
@@ -64,17 +69,14 @@ public:
   inline CellDataT(SYCLTargetSharedPtr sycl_target, const int nrow,
                    const int ncol)
       : sycl_target(sycl_target), nrow(nrow), ncol(ncol) {
-    this->data = std::vector<std::vector<T>>(ncol);
-    for (int colx = 0; colx < ncol; colx++) {
-      this->data[colx] = std::vector<T>(nrow);
-    }
+    this->data.resize(nrow * ncol);
   }
 
   /**
    *  Subscript operator for cell data. Data should be indexed by column then
    * row. e.g. CellData cell_data; T value = *cell_data[col][row];
    */
-  inline std::vector<T> &operator[](int col) { return this->data[col]; }
+  inline T *operator[](int col) { return this->data.data() + this->nrow * col; }
 
   /**
    *  Access data with more standard (row, column) indexing.
@@ -83,7 +85,9 @@ public:
    *  @param col Column to access.
    *  @returns reference to accessed element.
    */
-  inline T &at(const int row, const int col) { return data[col][row]; }
+  inline T &at(const int row, const int col) {
+    return data[col * this->nrow + row];
+  }
 
   /**
    *  Print the contents of the CellDataT instance.
@@ -92,7 +96,7 @@ public:
 
     for (int rowx = 0; rowx < nrow; rowx++) {
       for (int colx = 0; colx < ncol; colx++) {
-        std::cout << this->format(this->data[colx][rowx]) << " ";
+        std::cout << this->format(this->at(rowx, colx)) << " ";
       }
       std::cout << std::endl;
     }
