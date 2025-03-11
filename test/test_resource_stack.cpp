@@ -123,5 +123,41 @@ TEST(ResourceStack, resource_stack_map) {
   EXPECT_EQ(*d0, 3.14);
   resource_stack_map->get<ResourceStack<double>>(B{})->restore(d0);
 
+  auto B_stack2 = get_resource_stack<double, ResourceStackInterfaceDouble>(
+      resource_stack_map, B{}, 3.14);
+
+  EXPECT_EQ(B_stack2.get(), B_stack.get());
+
+  d0 = get_resource<double, ResourceStackInterfaceDouble>(resource_stack_map,
+                                                          B{}, 3.14);
+  EXPECT_EQ(*d0, 3.14);
+  restore_resource(resource_stack_map, B{}, d0);
+
   resource_stack_map->free();
+}
+
+TEST(ResourceStack, resource_stack_buffer_device_host) {
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+  {
+    auto tmp_buffer =
+        get_resource<BufferDeviceHost<REAL>,
+                     ResourceStackInterfaceBufferDeviceHost<REAL>>(
+            sycl_target->resource_stack_map,
+            ResourceStackKeyBufferDeviceHost<REAL>{}, sycl_target);
+    tmp_buffer->realloc_no_copy(128);
+    restore_resource(sycl_target->resource_stack_map,
+                     ResourceStackKeyBufferDeviceHost<REAL>{}, tmp_buffer);
+  }
+
+  {
+    auto tmp_buffer =
+        get_resource<BufferDeviceHost<REAL>,
+                     ResourceStackInterfaceBufferDeviceHost<REAL>>(
+            sycl_target->resource_stack_map,
+            ResourceStackKeyBufferDeviceHost<REAL>{}, sycl_target);
+    EXPECT_EQ(tmp_buffer->size, 128);
+    restore_resource(sycl_target->resource_stack_map,
+                     ResourceStackKeyBufferDeviceHost<REAL>{}, tmp_buffer);
+  }
+  sycl_target->free();
 }

@@ -508,5 +508,37 @@ template <template <typename> typename D, template <typename> typename S,
   NESOASSERT(dst.size == src.size, "Buffers have different sizes.");
   return dst.sycl_target->queue.memcpy(dst.ptr, src.ptr, dst.size * sizeof(T));
 }
+
+/**
+ * ResourceStackInterface for BufferDeviceHost.
+ */
+template <typename T>
+struct ResourceStackInterfaceBufferDeviceHost
+    : ResourceStackInterface<BufferDeviceHost<T>> {
+
+  SYCLTargetSharedPtr sycl_target;
+  ResourceStackInterfaceBufferDeviceHost(SYCLTargetSharedPtr sycl_target)
+      : sycl_target(sycl_target) {}
+
+  virtual inline std::shared_ptr<BufferDeviceHost<T>> construct() override {
+    return std::make_shared<BufferDeviceHost<T>>(this->sycl_target, 64);
+  }
+
+  virtual inline void free([[maybe_unused]] std::shared_ptr<BufferDeviceHost<T>>
+                               &resource) override {
+    // These buffers are freed by their destructors hence we don't need to do
+    // anything here.
+  }
+
+  virtual inline void
+  clean([[maybe_unused]] std::shared_ptr<BufferDeviceHost<T>> &resource)
+      override {}
+};
+
+/**
+ * ResourceStackMap key for ResourceStackInterfaceBufferDeviceHost.
+ */
+template <typename T> struct ResourceStackKeyBufferDeviceHost {};
+
 } // namespace NESO::Particles
 #endif

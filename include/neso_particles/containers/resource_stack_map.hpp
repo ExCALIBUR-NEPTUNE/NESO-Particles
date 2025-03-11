@@ -106,8 +106,10 @@ public:
   template <typename T, typename U> inline std::shared_ptr<T> get(const U u) {
     NESOASSERT(this->exists(u),
                "Attempt to retrieve a ResourceStack that does not exist.");
-    auto ptr =
-        std::dynamic_pointer_cast<T>(this->map_to_resources.at(typeid(u)));
+
+    auto ptr_map = this->map_to_resources.at(typeid(u));
+    NESOASSERT(ptr_map != nullptr, "Map pointer is already NULL.");
+    auto ptr = std::dynamic_pointer_cast<T>(ptr_map);
     NESOASSERT(ptr != nullptr, "Could not cast to ResourceStack.");
     return ptr;
   }
@@ -125,6 +127,62 @@ template <typename T, typename U, typename... ARGS>
 inline std::shared_ptr<ResourceStack<T>> create_resource_stack(ARGS &&...args) {
   auto tmp_interface = std::make_shared<U>(std::forward<ARGS...>(args)...);
   return std::make_shared<ResourceStack<T>>(tmp_interface);
+}
+
+/**
+ * Helper function to get a ResourceStack from a ResourceStackMap or create one
+ * if needed with the supplied arguments.
+ * T is the type of the underlying resource, i.e. ResourceStack<T>.
+ * U is the type of the interface.
+ * V is the ResourceStackMap key type.
+ *
+ * @param resource_stack_map ResourceStackMap to index into.
+ * @param key Type key for resource stack.
+ * @param args Arguments to pass to resource stack interface constructor.
+ * @returns A ResourceStack.
+ */
+template <typename T, typename U, typename V, typename... ARGS>
+inline std::shared_ptr<ResourceStack<T>>
+get_resource_stack(std::shared_ptr<ResourceStackMap> resource_stack_map, V key,
+                   ARGS &&...args) {
+  if (!resource_stack_map->exists(key)) {
+    resource_stack_map->set(key, create_resource_stack<T, U>(args...));
+  }
+  return resource_stack_map->get<ResourceStack<T>>(key);
+}
+
+/**
+ * Helper function to get a resource from a ResourceStackMap.
+ * T is the type of the underlying resource, i.e. ResourceStack<T>.
+ * U is the type of the interface.
+ * V is the ResourceStackMap key type.
+ *
+ * @param resource_stack_map ResourceStackMap to index into.
+ * @param key Type key for resource stack.
+ * @param args Arguments to pass to resource stack interface constructor.
+ * @returns A std::shared_ptr to a resource.
+ */
+template <typename T, typename U, typename V, typename... ARGS>
+inline std::shared_ptr<T>
+get_resource(std::shared_ptr<ResourceStackMap> resource_stack_map, V key,
+             ARGS &&...args) {
+  return get_resource_stack<T, U>(resource_stack_map, key, args...)->get();
+}
+
+/**
+ * Helper function to restore a resource.
+ * T is the type of the underlying resource, i.e. ResourceStack<T>.
+ * U is the type of the interface.
+ *
+ * @param resource_stack_map ResourceStackMap to index into.
+ * @param key Type key for resource stack.
+ * @param resource Resource to restore.
+ */
+template <typename V, typename T>
+inline void
+restore_resource(std::shared_ptr<ResourceStackMap> resource_stack_map, V key,
+                 std::shared_ptr<T> &resource) {
+  resource_stack_map->get<ResourceStack<T>>(key)->restore(resource);
 }
 
 } // namespace NESO::Particles
