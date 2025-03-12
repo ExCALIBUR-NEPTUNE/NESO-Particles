@@ -77,10 +77,6 @@ protected:
         Access::read(this->map_ptrs));
   }
 
-  inline auto get_particle_group_sub_group_layers() {
-    return particle_group->d_sub_group_layers;
-  }
-
 public:
   /**
    * Create a selector based on a kernel and arguments. The selector kernel
@@ -132,7 +128,11 @@ public:
   virtual inline Selection get() override {
     const int cell_count = this->particle_group->domain->mesh->get_cell_count();
     auto sycl_target = this->particle_group->sycl_target;
-    auto pg_map_layers = particle_group->d_sub_group_layers;
+
+    auto pg_map_layers = get_resource<BufferDevice<int>,
+                                      ResourceStackInterfaceBufferDevice<int>>(
+        sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<int>{},
+        sycl_target);
 
     INT *h_npart_cell_es_ptr = this->h_npart_cell_es->ptr;
     INT *d_npart_cell_es_ptr = this->d_npart_cell_es->ptr;
@@ -170,6 +170,9 @@ public:
         .wait_and_throw();
 
     this->loop_1->wait();
+
+    restore_resource(sycl_target->resource_stack_map,
+                     ResourceStackKeyBufferDevice<int>{}, pg_map_layers);
 
     Selection s;
     s.npart_local = running_total;

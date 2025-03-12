@@ -536,9 +536,39 @@ struct ResourceStackInterfaceBufferDeviceHost
 };
 
 /**
+ * ResourceStackInterface for BufferDevice.
+ */
+template <typename T>
+struct ResourceStackInterfaceBufferDevice
+    : ResourceStackInterface<BufferDevice<T>> {
+
+  SYCLTargetSharedPtr sycl_target;
+  ResourceStackInterfaceBufferDevice(SYCLTargetSharedPtr sycl_target)
+      : sycl_target(sycl_target) {}
+
+  virtual inline std::shared_ptr<BufferDevice<T>> construct() override {
+    return std::make_shared<BufferDevice<T>>(this->sycl_target, 64);
+  }
+
+  virtual inline void
+  free([[maybe_unused]] std::shared_ptr<BufferDevice<T>> &resource) override {
+    // These buffers are freed by their destructors hence we don't need to do
+    // anything here.
+  }
+
+  virtual inline void
+  clean([[maybe_unused]] std::shared_ptr<BufferDevice<T>> &resource) override {}
+};
+
+/**
  * ResourceStackMap key for ResourceStackInterfaceBufferDeviceHost.
  */
 template <typename T> struct ResourceStackKeyBufferDeviceHost {};
+
+/**
+ * ResourceStackMap key for ResourceStackInterfaceBufferDevice.
+ */
+template <typename T> struct ResourceStackKeyBufferDevice {};
 
 } // namespace NESO::Particles
 #endif

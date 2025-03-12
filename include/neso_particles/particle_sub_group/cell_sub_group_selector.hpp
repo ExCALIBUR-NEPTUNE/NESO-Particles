@@ -89,7 +89,6 @@ public:
   virtual inline Selection get() override {
     const int cell_count = this->particle_group->domain->mesh->get_cell_count();
     auto sycl_target = this->particle_group->sycl_target;
-    auto pg_map_layers = this->get_particle_group_sub_group_layers();
 
     INT *h_npart_cell_es_ptr = this->h_npart_cell_es->ptr;
     INT *d_npart_cell_es_ptr = this->d_npart_cell_es->ptr;
@@ -152,7 +151,13 @@ public:
 
     } else {
 
+      auto pg_map_layers =
+          get_resource<BufferDevice<int>,
+                       ResourceStackInterfaceBufferDevice<int>>(
+              sycl_target->resource_stack_map,
+              ResourceStackKeyBufferDevice<int>{}, sycl_target);
       pg_map_layers->realloc_no_copy(npart_local);
+
       sycl_target->queue.fill<int>(d_npart_cell_ptr, 0, cell_count)
           .wait_and_throw();
       std::vector<int *> tmp = {pg_map_layers->ptr, d_npart_cell_ptr};
@@ -197,6 +202,9 @@ public:
       this->loop_1->wait();
 
       es.wait();
+      restore_resource(sycl_target->resource_stack_map,
+                       ResourceStackKeyBufferDevice<int>{}, pg_map_layers);
+
       Selection s;
       s.npart_local = es_tmp;
       s.ncell = cell_count;
