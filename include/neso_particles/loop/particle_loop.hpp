@@ -308,7 +308,8 @@ protected:
   create_global_info(const std::optional<int> cell_start = std::nullopt,
                      const std::optional<int> cell_end = std::nullopt) {
 
-    int cell_start_v, cell_end_v;
+    int cell_start_v = -1;
+    int cell_end_v = -1;
     const bool all_cells = this->determine_iteration_set(
         cell_start, cell_end, &cell_start_v, &cell_end_v);
 
@@ -353,7 +354,8 @@ protected:
   inline bool iteration_set_is_empty(const std::optional<int> cell_start,
                                      const std::optional<int> cell_end) {
 
-    int cell_start_v, cell_end_v;
+    int cell_start_v = -1;
+    int cell_end_v = -1;
     const bool all_cells = this->determine_iteration_set(
         cell_start, cell_end, &cell_start_v, &cell_end_v);
 
@@ -507,7 +509,8 @@ public:
         "ParticleLoop::submit called - but the loop is already submitted.");
     this->loop_running = true;
 
-    int cell_start_v, cell_end_v;
+    int cell_start_v = -1;
+    int cell_end_v = -1;
     const bool all_cells = this->determine_iteration_set(
         cell_start, cell_end, &cell_start_v, &cell_end_v);
 
