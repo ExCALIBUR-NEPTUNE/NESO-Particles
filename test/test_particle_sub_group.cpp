@@ -162,10 +162,6 @@ struct TestSubGroupSelector
   template <typename... T>
   TestSubGroupSelector(T... args)
       : ParticleSubGroupImplementation::SubGroupSelector(args...) {}
-
-  inline std::shared_ptr<CellDat<INT>> get_map() {
-    return this->map_cell_to_particles;
-  }
 };
 
 struct TestCellSubGroupSelector
@@ -174,10 +170,6 @@ struct TestCellSubGroupSelector
   template <typename... T>
   TestCellSubGroupSelector(T... args)
       : ParticleSubGroupImplementation::CellSubGroupSelector(args...) {}
-
-  inline std::shared_ptr<CellDat<INT>> get_map() {
-    return this->map_cell_to_particles;
-  }
 };
 
 template <typename T>
@@ -226,14 +218,16 @@ inline bool check_selector(ParticleGroupSharedPtr particle_group,
     total += s.h_npart_cell[cx];
   }
 
-  auto map_device = selector->get_map();
-
+  auto map_device =
+      ParticleSubGroupImplementation::get_host_map_cells_to_particles(
+          sycl_target, s);
   for (int cx = 0; cx < s.ncell; cx++) {
     const int nrow = s.h_npart_cell[cx];
-    lambda_check_true(map_device->nrow.at(cx) >= nrow);
+    lambda_check_true(map_device.at(cx).size() ==
+                      static_cast<std::size_t>(nrow));
     std::set<int> in_map;
     for (int rx = 0; rx < nrow; rx++) {
-      in_map.insert(map_device->get_value(cx, rx, 0));
+      in_map.insert(map_device.at(cx).at(rx));
     }
     lambda_check_eq(in_map, map_cells_layers.at(cx));
   }

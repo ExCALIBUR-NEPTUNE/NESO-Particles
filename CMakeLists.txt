@@ -146,6 +146,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/particle_sub_group.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/particle_sub_group_base.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/particle_sub_group_base_impl.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/sub_group_particle_map.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/sub_group_selector.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/sub_group_selector_base.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/sub_group_selector_base_impl.hpp

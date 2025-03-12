@@ -352,7 +352,7 @@ public:
   BufferHost(SYCLTargetSharedPtr sycl_target, const std::vector<T> &vec)
       : BufferHost(sycl_target, vec, 0) {}
 
-  ~BufferHost() { this->generic_free(); }
+  virtual ~BufferHost() { this->generic_free(); }
 };
 
 /**

@@ -62,15 +62,18 @@ protected:
     this->loop_1 = particle_loop(
         "sub_group_selector_1", parent,
         [=](auto loop_index, auto k_map_cell_to_particles, auto k_map_ptrs) {
+          INT **base_map_cell_to_particles = k_map_cell_to_particles.at(0);
           const INT particle_linear_index = loop_index.get_local_linear_index();
           const int layer = k_map_ptrs.at(0)[particle_linear_index];
           const bool required = layer > -1;
           if (required) {
-            k_map_cell_to_particles.at(layer, 0) = loop_index.layer;
+            INT *base_map_for_cell =
+                base_map_cell_to_particles[loop_index.cell];
+            base_map_for_cell[layer] = loop_index.layer;
           }
         },
         Access::read(ParticleLoopIndex{}),
-        Access::write(this->map_cell_to_particles),
+        Access::write(this->map_cell_to_particles_ptrs),
         Access::read(this->map_ptrs));
   }
 
@@ -130,7 +133,12 @@ public:
     const int cell_count = this->particle_group->domain->mesh->get_cell_count();
     auto sycl_target = this->particle_group->sycl_target;
     auto pg_map_layers = particle_group->d_sub_group_layers;
+
+    INT *h_npart_cell_es_ptr = this->h_npart_cell_es->ptr;
+    INT *d_npart_cell_es_ptr = this->d_npart_cell_es->ptr;
+    int *h_npart_cell_ptr = this->dh_npart_cell->h_buffer.ptr;
     int *d_npart_cell_ptr = this->dh_npart_cell->d_buffer.ptr;
+
     auto e0 = sycl_target->queue.fill<int>(d_npart_cell_ptr, 0, cell_count);
     const auto npart_local = this->particle_group->get_npart_local();
     pg_map_layers->realloc_no_copy(npart_local);
@@ -140,40 +148,36 @@ public:
     e0.wait_and_throw();
 
     this->loop_0->execute();
-
     this->dh_npart_cell->device_to_host();
-    int *h_npart_cell_ptr = this->dh_npart_cell->h_buffer.ptr;
-    for (int cellx = 0; cellx < cell_count; cellx++) {
-      const INT nrow_required = h_npart_cell_ptr[cellx];
-      if (this->map_cell_to_particles->nrow.at(cellx) < nrow_required) {
-        this->map_cell_to_particles->set_nrow(cellx, nrow_required);
-      }
-    }
-    this->map_cell_to_particles->wait_set_nrow();
 
+    INT running_total = 0;
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      const INT npart_cell = h_npart_cell_ptr[cellx];
+      h_npart_cell_es_ptr[cellx] = running_total;
+      running_total += npart_cell;
+    }
+
+    this->sub_group_particle_map->create(0, cell_count, h_npart_cell_ptr,
+                                         h_npart_cell_es_ptr);
+    auto d_cell_starts_ptr = this->sub_group_particle_map->d_cell_starts->ptr;
+
+    this->map_cell_to_particles_ptrs->set({d_cell_starts_ptr});
     this->loop_1->submit();
 
-    std::vector<INT> h_npart_cell_es(cell_count);
-    INT total = 0;
-    for (int cellx = 0; cellx < cell_count; cellx++) {
-      h_npart_cell_es[cellx] = total;
-      total += h_npart_cell_ptr[cellx];
-    }
-    INT *d_npart_cell_es_ptr = this->d_npart_cell_es->ptr;
     sycl_target->queue
-        .memcpy(d_npart_cell_es_ptr, h_npart_cell_es.data(),
+        .memcpy(d_npart_cell_es_ptr, h_npart_cell_es_ptr,
                 cell_count * sizeof(INT))
-        .wait();
+        .wait_and_throw();
 
     this->loop_1->wait();
 
     Selection s;
-    s.npart_local = total;
+    s.npart_local = running_total;
     s.ncell = cell_count;
     s.h_npart_cell = h_npart_cell_ptr;
     s.d_npart_cell = d_npart_cell_ptr;
     s.d_npart_cell_es = d_npart_cell_es_ptr;
-    s.d_map_cells_to_particles = {this->map_cell_to_particles->device_ptr()};
+    s.d_map_cells_to_particles = {d_cell_starts_ptr};
     return s;
   }
 };
