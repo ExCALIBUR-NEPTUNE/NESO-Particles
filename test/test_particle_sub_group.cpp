@@ -1478,15 +1478,45 @@ TEST(ParticleSubGroup, range_cell_base) {
   auto lambda_test_range = [&](auto parent, const int cell_start,
                                const int cell_end) {
     auto aa = particle_sub_group(parent, cell_start, cell_end);
+
     particle_loop(
-        parent, [=](auto TEST) { TEST.at(0) = 1; },
+        parent,
+        [=](auto INDEX, auto TEST) {
+          TEST.at(0) = INDEX.get_loop_linear_index();
+          TEST.at(1) = INDEX.get_local_linear_index();
+        },
+        Access::read(ParticleLoopIndex{}), Access::write(Sym<INT>("TEST")))
+        ->execute();
+
+    std::set<INT> correct_loop_linear_index;
+    std::set<INT> to_test_loop_linear_index;
+    INT correct_local_linear_index = 0;
+    INT correct_counter = 0;
+    for (int cx = 0; cx < cell_count; cx++) {
+      auto TEST = A->get_cell(Sym<INT>("TEST"), cx);
+      auto ID = A->get_cell(Sym<INT>("ID"), cx);
+      const int nrow = TEST->nrow;
+      for (int rx = 0; rx < nrow; rx++) {
+        if (TEST->at(rx, 0) >= 0) {
+          ASSERT_EQ(correct_local_linear_index, TEST->at(rx, 1));
+          correct_loop_linear_index.insert(correct_counter++);
+          to_test_loop_linear_index.insert(TEST->at(rx, 0));
+        }
+        correct_local_linear_index++;
+      }
+      ASSERT_EQ(correct_loop_linear_index, to_test_loop_linear_index);
+      correct_loop_linear_index.clear();
+      to_test_loop_linear_index.clear();
+    }
+    particle_loop(
+        parent, [=](auto TEST) { TEST.at(1) = -1; },
         Access::write(Sym<INT>("TEST")))
         ->execute();
 
     particle_loop(
         A,
         [=](auto INDEX, auto TEST) {
-          if (TEST.at(0) == 1) {
+          if (TEST.at(0) >= 0) {
             TEST.at(1) = INDEX.cell;
             TEST.at(2) = INDEX.layer;
             TEST.at(5) = INDEX.get_local_linear_index();
@@ -1510,7 +1540,7 @@ TEST(ParticleSubGroup, range_cell_base) {
         A,
         [=](auto TEST) {
           // Is the particle in the parent group
-          if (TEST.at(0) == 1) {
+          if (TEST.at(0) >= 0) {
             NESO_KERNEL_ASSERT(TEST.at(1) == TEST.at(3), k_ep);
             NESO_KERNEL_ASSERT(TEST.at(2) == TEST.at(4), k_ep);
             NESO_KERNEL_ASSERT(TEST.at(5) == TEST.at(6), k_ep);
@@ -1524,16 +1554,19 @@ TEST(ParticleSubGroup, range_cell_base) {
         ->execute();
     ASSERT_FALSE(ep->get_flag());
 
-    INT correct_loop_linear_index = 0;
+    correct_counter = 0;
     for (int cx = cell_start; cx < cell_end; cx++) {
       auto TEST = A->get_cell(Sym<INT>("TEST"), cx);
       const int nrow = TEST->nrow;
       for (int rx = 0; rx < nrow; rx++) {
-        if (TEST->at(rx, 0) == 1) {
-          ASSERT_EQ(correct_loop_linear_index, TEST->at(rx, 7));
-          correct_loop_linear_index++;
+        if (TEST->at(rx, 0) >= 0) {
+          correct_loop_linear_index.insert(correct_counter++);
+          to_test_loop_linear_index.insert(TEST->at(rx, 7));
         }
       }
+      ASSERT_EQ(correct_loop_linear_index, to_test_loop_linear_index);
+      correct_loop_linear_index.clear();
+      to_test_loop_linear_index.clear();
     }
   };
 
