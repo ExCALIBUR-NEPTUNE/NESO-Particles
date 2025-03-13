@@ -393,7 +393,7 @@ public:
     if (this->nrow[cell] > 0) {
       for (int colx = 0; colx < this->ncol; colx++) {
         this->sycl_target->queue.memcpy(
-            cell_data->data[colx].data(),
+            cell_data->get_column_ptr(colx),
             this->h_ptr_cols[cell * this->ncol + colx],
             this->nrow[cell] * sizeof(T));
       }
@@ -458,7 +458,7 @@ public:
     if (this->nrow[cell] > 0) {
       for (int colx = 0; colx < this->ncol; colx++) {
         event_stack.push(this->sycl_target->queue.memcpy(
-            cell_data.data[colx].data(),
+            cell_data.get_column_ptr(colx),
             this->h_ptr_cols[cell * this->ncol + colx],
             this->nrow[cell] * sizeof(T)));
       }
@@ -490,7 +490,7 @@ public:
 
         this->sycl_target->queue.memcpy(
             this->h_ptr_cols[cell * this->ncol + colx],
-            cell_data->data[colx].data(), this->nrow[cell] * sizeof(T));
+            cell_data->get_column_ptr(colx), this->nrow[cell] * sizeof(T));
       }
       this->sycl_target->queue.wait();
     }
@@ -522,7 +522,7 @@ public:
 
         event_stack.push(this->sycl_target->queue.memcpy(
             this->h_ptr_cols[cell * this->ncol + colx],
-            cell_data.data[colx].data(), this->nrow[cell] * sizeof(T)));
+            cell_data.get_column_ptr(colx), this->nrow[cell] * sizeof(T)));
       }
     }
 

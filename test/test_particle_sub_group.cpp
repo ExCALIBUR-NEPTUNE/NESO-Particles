@@ -162,10 +162,6 @@ struct TestSubGroupSelector
   template <typename... T>
   TestSubGroupSelector(T... args)
       : ParticleSubGroupImplementation::SubGroupSelector(args...) {}
-
-  inline std::shared_ptr<CellDat<INT>> get_map() {
-    return this->map_cell_to_particles;
-  }
 };
 
 struct TestCellSubGroupSelector
@@ -174,10 +170,6 @@ struct TestCellSubGroupSelector
   template <typename... T>
   TestCellSubGroupSelector(T... args)
       : ParticleSubGroupImplementation::CellSubGroupSelector(args...) {}
-
-  inline std::shared_ptr<CellDat<INT>> get_map() {
-    return this->map_cell_to_particles;
-  }
 };
 
 template <typename T>
@@ -226,14 +218,16 @@ inline bool check_selector(ParticleGroupSharedPtr particle_group,
     total += s.h_npart_cell[cx];
   }
 
-  auto map_device = selector->get_map();
-
+  auto map_device =
+      ParticleSubGroupImplementation::get_host_map_cells_to_particles(
+          sycl_target, s);
   for (int cx = 0; cx < s.ncell; cx++) {
     const int nrow = s.h_npart_cell[cx];
-    lambda_check_true(map_device->nrow.at(cx) >= nrow);
+    lambda_check_true(map_device.at(cx).size() ==
+                      static_cast<std::size_t>(nrow));
     std::set<int> in_map;
     for (int rx = 0; rx < nrow; rx++) {
-      in_map.insert(map_device->get_value(cx, rx, 0));
+      in_map.insert(map_device.at(cx).at(rx));
     }
     lambda_check_eq(in_map, map_cells_layers.at(cx));
   }
@@ -1484,15 +1478,45 @@ TEST(ParticleSubGroup, range_cell_base) {
   auto lambda_test_range = [&](auto parent, const int cell_start,
                                const int cell_end) {
     auto aa = particle_sub_group(parent, cell_start, cell_end);
+
     particle_loop(
-        parent, [=](auto TEST) { TEST.at(0) = 1; },
+        parent,
+        [=](auto INDEX, auto TEST) {
+          TEST.at(0) = INDEX.get_loop_linear_index();
+          TEST.at(1) = INDEX.get_local_linear_index();
+        },
+        Access::read(ParticleLoopIndex{}), Access::write(Sym<INT>("TEST")))
+        ->execute();
+
+    std::set<INT> correct_loop_linear_index;
+    std::set<INT> to_test_loop_linear_index;
+    INT correct_local_linear_index = 0;
+    INT correct_counter = 0;
+    for (int cx = 0; cx < cell_count; cx++) {
+      auto TEST = A->get_cell(Sym<INT>("TEST"), cx);
+      auto ID = A->get_cell(Sym<INT>("ID"), cx);
+      const int nrow = TEST->nrow;
+      for (int rx = 0; rx < nrow; rx++) {
+        if (TEST->at(rx, 0) >= 0) {
+          ASSERT_EQ(correct_local_linear_index, TEST->at(rx, 1));
+          correct_loop_linear_index.insert(correct_counter++);
+          to_test_loop_linear_index.insert(TEST->at(rx, 0));
+        }
+        correct_local_linear_index++;
+      }
+      ASSERT_EQ(correct_loop_linear_index, to_test_loop_linear_index);
+      correct_loop_linear_index.clear();
+      to_test_loop_linear_index.clear();
+    }
+    particle_loop(
+        parent, [=](auto TEST) { TEST.at(1) = -1; },
         Access::write(Sym<INT>("TEST")))
         ->execute();
 
     particle_loop(
         A,
         [=](auto INDEX, auto TEST) {
-          if (TEST.at(0) == 1) {
+          if (TEST.at(0) >= 0) {
             TEST.at(1) = INDEX.cell;
             TEST.at(2) = INDEX.layer;
             TEST.at(5) = INDEX.get_local_linear_index();
@@ -1516,7 +1540,7 @@ TEST(ParticleSubGroup, range_cell_base) {
         A,
         [=](auto TEST) {
           // Is the particle in the parent group
-          if (TEST.at(0) == 1) {
+          if (TEST.at(0) >= 0) {
             NESO_KERNEL_ASSERT(TEST.at(1) == TEST.at(3), k_ep);
             NESO_KERNEL_ASSERT(TEST.at(2) == TEST.at(4), k_ep);
             NESO_KERNEL_ASSERT(TEST.at(5) == TEST.at(6), k_ep);
@@ -1530,16 +1554,19 @@ TEST(ParticleSubGroup, range_cell_base) {
         ->execute();
     ASSERT_FALSE(ep->get_flag());
 
-    INT correct_loop_linear_index = 0;
+    correct_counter = 0;
     for (int cx = cell_start; cx < cell_end; cx++) {
       auto TEST = A->get_cell(Sym<INT>("TEST"), cx);
       const int nrow = TEST->nrow;
       for (int rx = 0; rx < nrow; rx++) {
-        if (TEST->at(rx, 0) == 1) {
-          ASSERT_EQ(correct_loop_linear_index, TEST->at(rx, 7));
-          correct_loop_linear_index++;
+        if (TEST->at(rx, 0) >= 0) {
+          correct_loop_linear_index.insert(correct_counter++);
+          to_test_loop_linear_index.insert(TEST->at(rx, 7));
         }
       }
+      ASSERT_EQ(correct_loop_linear_index, to_test_loop_linear_index);
+      correct_loop_linear_index.clear();
+      to_test_loop_linear_index.clear();
     }
   };
 

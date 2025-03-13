@@ -6,6 +6,7 @@
 #include "../containers/local_array.hpp"
 #include "../particle_group.hpp"
 #include "../particle_sub_group/sub_group_selector_resource_stack_interface.hpp"
+#include "sub_group_particle_map.hpp"
 
 namespace NESO::Particles {
 class ParticleSubGroup;
@@ -17,9 +18,11 @@ namespace ParticleSubGroupImplementation {
  * of the particle.
  */
 struct MapLoopLayerToLayer {
+
   /// This member is public but is not part of any API that should be used
   /// outside of NP - use map_loop_layer_to_layer instead.
-  INT const *RESTRICT const *RESTRICT const *RESTRICT map_ptr;
+  // INT const *RESTRICT const *RESTRICT map_ptr;
+  INT **map_ptr;
 
   /**
    * For a loop cell and loop layer return the layer of the particle.
@@ -31,7 +34,7 @@ struct MapLoopLayerToLayer {
   template <typename T>
   inline INT map_loop_layer_to_layer(const T loop_cell,
                                      const T loop_layer) const {
-    return this->map_ptr[loop_cell][0][loop_layer];
+    return this->map_ptr[loop_cell][loop_layer];
   }
 };
 
@@ -48,16 +51,44 @@ struct Selection {
 };
 
 /**
+ * Helper function to get the selection map on the host (for testing only).
+ *
+ * @param selection Selection to get a host representaton of.
+ * @returns Indexable [cell][layer] map.
+ */
+inline std::vector<std::vector<INT>>
+get_host_map_cells_to_particles(SYCLTargetSharedPtr sycl_target,
+                                const Selection &selection) {
+  const int cell_count = selection.ncell;
+  std::vector<std::vector<INT>> return_map(cell_count);
+  std::vector<INT *> d_map_ptrs(cell_count);
+
+  sycl_target->queue
+      .memcpy(d_map_ptrs.data(), selection.d_map_cells_to_particles.map_ptr,
+              cell_count * sizeof(INT *))
+      .wait_and_throw();
+
+  EventStack es;
+  for (int cx = 0; cx < cell_count; cx++) {
+    return_map.at(cx) = std::vector<INT>(selection.h_npart_cell[cx]);
+    es.push(
+        sycl_target->queue.memcpy(return_map.at(cx).data(), d_map_ptrs.at(cx),
+                                  selection.h_npart_cell[cx] * sizeof(INT)));
+  }
+  es.wait();
+  return return_map;
+}
+
+/**
  * Base class for creating sub groups.
  */
 class SubGroupSelectorBase {
   friend class NESO::Particles::ParticleSubGroup;
 
 protected:
-  std::shared_ptr<CellDat<INT>> map_cell_to_particles;
-  std::shared_ptr<BufferDeviceHost<int>> dh_npart_cell;
   std::shared_ptr<LocalArray<int *>> map_ptrs;
-  std::shared_ptr<BufferDevice<INT>> d_npart_cell_es;
+  std::shared_ptr<LocalArray<INT **>> map_cell_to_particles_ptrs;
+  std::shared_ptr<SubGroupParticleMap> sub_group_particle_map;
 
   SubGroupSelectorResourceSharedPtr sub_group_selector_resource;
 
@@ -79,16 +110,14 @@ protected:
   inline void internal_setup_base() {
     NESOASSERT(this->sub_group_selector_resource == nullptr,
                "Sub-group resource is already allocated somehow.");
-    NESOASSERT(this->map_cell_to_particles == nullptr,
-               "map_cell_to_particles is not nullptr somehow.");
 
     this->sub_group_selector_resource =
         this->particle_group->resource_stack_sub_group_resource->get();
-    this->map_cell_to_particles =
-        this->sub_group_selector_resource->map_cell_to_particles;
-    this->dh_npart_cell = this->sub_group_selector_resource->dh_npart_cell;
     this->map_ptrs = this->sub_group_selector_resource->map_ptrs;
-    this->d_npart_cell_es = this->sub_group_selector_resource->d_npart_cell_es;
+    this->map_cell_to_particles_ptrs =
+        this->sub_group_selector_resource->map_cell_to_particles_ptrs;
+    this->sub_group_particle_map =
+        this->sub_group_selector_resource->sub_group_particle_map;
   }
 
 public:
@@ -101,10 +130,9 @@ public:
 
   virtual ~SubGroupSelectorBase() {
     if (this->sub_group_selector_resource != nullptr) {
-      this->map_cell_to_particles = nullptr;
-      this->dh_npart_cell = nullptr;
       this->map_ptrs = nullptr;
-      this->d_npart_cell_es = nullptr;
+      this->map_cell_to_particles_ptrs = nullptr;
+      this->sub_group_particle_map = nullptr;
       this->particle_group->resource_stack_sub_group_resource->restore(
           this->sub_group_selector_resource);
     }

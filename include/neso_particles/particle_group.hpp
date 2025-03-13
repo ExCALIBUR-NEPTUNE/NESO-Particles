@@ -293,11 +293,6 @@ protected:
   /// each cell.
   std::shared_ptr<BufferDeviceHost<INT>> dh_npart_cell_es;
 
-  /// The sub group creation requires get_npart_local temporary space and we
-  /// create this space here on the parent subgroup such that it is shared
-  /// across all subgroups to avoid exessive memory usage/realloc
-  std::shared_ptr<BufferDevice<int>> d_sub_group_layers;
-
   /// This is a ResourceStack instance to speed-up creation and destruction of
   /// ParticleSubGroups.
   std::shared_ptr<ResourceStack<SubGroupSelectorResource>>
@@ -487,8 +482,6 @@ public:
     // call the callback on the local mapper to complete the setup of that
     // object
     this->domain->local_mapper->particle_group_callback(*this);
-    this->d_sub_group_layers =
-        std::make_shared<BufferDevice<int>>(sycl_target, 1);
   }
   ~ParticleGroup() {}
 

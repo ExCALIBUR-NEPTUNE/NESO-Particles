@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "communication.hpp"
+#include "containers/resource_stack_map.hpp"
 #include "device_limits.hpp"
 #include "parameters.hpp"
 #include "profiling.hpp"
@@ -79,6 +80,8 @@ public:
   std::shared_ptr<Parameters> parameters;
   /// Interface to device limits validation
   DeviceLimits device_limits;
+  /// A ResourceStackMap that is available to downstream types.
+  std::shared_ptr<ResourceStackMap> resource_stack_map;
 
   /// Disable (implicit) copies.
   SYCLTarget(const SYCLTarget &st) = delete;
@@ -104,7 +107,8 @@ public:
    * devices to MPI ranks.
    */
   SYCLTarget(const int gpu_device, MPI_Comm comm, int local_rank = -1)
-      : comm_pair(comm) {
+      : comm_pair(comm),
+        resource_stack_map(std::make_shared<ResourceStackMap>()) {
     if (gpu_device > 0) {
       try {
 #ifdef NESO_PARTICLES_LEGACY_DEVICE_SELECTORS
@@ -216,7 +220,10 @@ public:
   /**
    * Free the SYCLTarget and underlying CommPair.
    */
-  inline void free() { comm_pair.free(); }
+  inline void free() {
+    this->resource_stack_map->free();
+    this->comm_pair.free();
+  }
 
   /**
    * Allocate memory on device using sycl::malloc_device.

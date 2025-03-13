@@ -101,7 +101,7 @@ TEST(ParticleDat, test_particle_dat_append_1) {
     for (int rowx = 0; rowx < cell_data->nrow; rowx++) {
       int row = -1;
       for (int rx = 0; rx < N; rx++) {
-        if (data0[rx] == cell_data->data[0][rowx]) {
+        if (data0[rx] == cell_data->at(rowx, 0)) {
           row = rx;
           break;
         }
@@ -109,7 +109,7 @@ TEST(ParticleDat, test_particle_dat_append_1) {
       ASSERT_TRUE(row >= 0);
 
       for (int cx = 0; cx < ncomp; cx++) {
-        ASSERT_EQ(cell_data->data[cx][rowx], data0[N * cx + row]);
+        ASSERT_EQ(cell_data->at(rowx, cx), data0[N * cx + row]);
       }
 
       ASSERT_EQ(cellx, cells0[row]);

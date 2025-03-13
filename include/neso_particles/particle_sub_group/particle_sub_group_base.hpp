@@ -44,13 +44,15 @@ protected:
     layers.resize(this->npart_local);
     const int cell_count = this->particle_group->domain->mesh->get_cell_count();
 
+    auto map_cells_to_particles = get_host_map_cells_to_particles(
+        this->particle_group->sycl_target, this->selection);
+
     INT index = 0;
     for (int cellx = 0; cellx < cell_count; cellx++) {
-      auto cell_data = this->selector->map_cell_to_particles->get_cell(cellx);
-      const int nrow = cell_data->nrow;
+      const int nrow = map_cells_to_particles.at(cellx).size();
       for (int rowx = 0; rowx < nrow; rowx++) {
         cells[index] = cellx;
-        const int layerx = cell_data->at(rowx, 0);
+        const int layerx = map_cells_to_particles.at(cellx).at(rowx);
         layers[index] = layerx;
         index++;
       }
@@ -326,23 +328,62 @@ public:
       this->create_if_required();
       NESOASSERT(cells.size() == layers.size(),
                  "Cells and layers vectors have different sizes.");
-      const int num_particles = cells.size();
-      std::vector<INT> inner_layers;
-      inner_layers.reserve(num_particles);
+
+      auto sycl_target = this->particle_group->sycl_target;
+      auto tmp_buffer =
+          get_resource<BufferDeviceHost<INT>,
+                       ResourceStackInterfaceBufferDeviceHost<INT>>(
+              sycl_target->resource_stack_map,
+              ResourceStackKeyBufferDeviceHost<INT>{}, sycl_target);
+
+      const std::size_t num_particles = cells.size();
+      tmp_buffer->realloc_no_copy(num_particles * 3);
+
+      INT *d_cells = tmp_buffer->d_buffer.ptr;
+      INT *d_layers = d_cells + num_particles;
+      INT *d_inner_layers = d_layers + num_particles;
+
+      EventStack es;
+      es.push(sycl_target->queue.memcpy(d_cells, cells.data(),
+                                        num_particles * sizeof(INT)));
+      es.push(sycl_target->queue.memcpy(d_layers, layers.data(),
+                                        num_particles * sizeof(INT)));
+
       const INT num_cells =
           this->particle_group->domain->mesh->get_cell_count();
-      for (int px = 0; px < num_particles; px++) {
+      for (std::size_t px = 0; px < num_particles; px++) {
         const INT cellx = cells.at(px);
         NESOASSERT((cellx > -1) && (cellx < num_cells),
                    "Cell index not in range.");
         const INT layerx = layers.at(px);
         NESOASSERT((layerx > -1) && (layerx < this->get_npart_cell(cellx)),
                    "Layer index not in range.");
-
-        const INT parent_layer =
-            this->selector->map_cell_to_particles->get_value(cellx, layerx, 0);
-        inner_layers.push_back(parent_layer);
       }
+
+      es.wait();
+
+      auto k_map_cells_to_particles = this->selection.d_map_cells_to_particles;
+
+      auto e0 = sycl_target->queue.submit([&](sycl::handler &cgh) {
+        cgh.parallel_for<>(sycl::range<1>(num_particles), [=](sycl::id<1> idx) {
+          const INT cell = d_cells[idx];
+          const INT layer = d_layers[idx];
+          const INT inner_layer =
+              k_map_cells_to_particles.map_loop_layer_to_layer(cell, layer);
+          d_inner_layers[idx] = inner_layer;
+        });
+      });
+
+      std::vector<INT> inner_layers(num_particles);
+      e0.wait_and_throw();
+      sycl_target->queue
+          .memcpy(inner_layers.data(), d_inner_layers,
+                  num_particles * sizeof(INT))
+          .wait_and_throw();
+
+      restore_resource(sycl_target->resource_stack_map,
+                       ResourceStackKeyBufferDeviceHost<INT>{}, tmp_buffer);
+
       return this->particle_group->get_particles(cells, inner_layers);
     }
   }
@@ -385,9 +426,14 @@ public:
 
       const int cell_count =
           this->particle_group->domain->mesh->get_cell_count();
+
+      auto map_cell_to_particles =
+          ParticleSubGroupImplementation::get_host_map_cells_to_particles(
+              this->particle_group->sycl_target, this->selection);
+
       for (int cellx = 0; cellx < cell_count; cellx++) {
-        auto cell_data = this->selector->map_cell_to_particles->get_cell(cellx);
-        const int nrow = this->selection.h_npart_cell[cellx];
+        const int nrow =
+            static_cast<int>(map_cell_to_particles.at(cellx).size());
         if (nrow > 0) {
           std::vector<CellData<REAL>> cell_data_real;
           std::vector<CellData<INT>> cell_data_int;
@@ -411,7 +457,7 @@ public:
           std::cout << "|" << std::endl;
 
           for (int rx = 0; rx < nrow; rx++) {
-            const int rowx = cell_data->at(rx, 0);
+            const int rowx = map_cell_to_particles.at(cellx).at(rx);
             for (auto &cx : cell_data_real) {
               std::cout << "| ";
               for (int colx = 0; colx < cx->ncol; colx++) {

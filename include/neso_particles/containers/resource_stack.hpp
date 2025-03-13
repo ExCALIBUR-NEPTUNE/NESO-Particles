@@ -17,7 +17,7 @@ namespace NESO::Particles {
  * Exactly how objects are created/destroyed/cleaned is described by an instance
  * of the ResourceStackInterface class.
  */
-template <typename T> class ResourceStack {
+template <typename T> class ResourceStack : public ResourceStackBase {
 protected:
   std::shared_ptr<ResourceStackInterface<T>> resource_stack_interface;
   std::size_t num_managed_objects;
@@ -32,7 +32,7 @@ public:
    * The destructor will attempt to call the free method for the contained
    * objects.
    */
-  ~ResourceStack() { this->free(); }
+  virtual ~ResourceStack() override { this->free(); }
 
   /// The underlying stack that represents the pool of objects.
   std::stack<std::shared_ptr<T>> stack;
@@ -105,7 +105,7 @@ public:
    * Call the free method of the ResourceStackInterface on all objects then
    * discard them.
    */
-  inline void free() {
+  virtual inline void free() override {
     NESOASSERT(this->stack.size() == this->num_managed_objects,
                "There are managed objects which have been reserved with .get "
                "that have not been restored with .restore.");
