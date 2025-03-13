@@ -103,10 +103,6 @@ public:
     const int range_cell_count = this->cell_end - this->cell_start;
 
     if (this->parent_is_whole_group) {
-      for (int cell = 0; cell < cell_start; cell++) {
-        h_npart_cell_ptr[cell] = 0;
-        h_npart_cell_es_ptr[cell] = 0;
-      }
       INT es_tmp = 0;
       INT max_occ = 0;
       for (int cell = cell_start; cell < cell_end; cell++) {
@@ -117,7 +113,6 @@ public:
         es_tmp += total;
       }
       for (int cell = cell_end; cell < cell_count; cell++) {
-        h_npart_cell_ptr[cell] = 0;
         h_npart_cell_es_ptr[cell] = es_tmp;
       }
 
@@ -125,8 +120,9 @@ public:
       es.push(sycl_target->queue.memcpy(
           d_npart_cell_es_ptr, h_npart_cell_es_ptr, sizeof(INT) * cell_count));
 
-      es.push(sycl_target->queue.memcpy(d_npart_cell_ptr, h_npart_cell_ptr,
-                                        cell_count * sizeof(int)));
+      es.push(sycl_target->queue.memcpy(d_npart_cell_ptr + cell_start,
+                                        h_npart_cell_ptr + cell_start,
+                                        range_cell_count * sizeof(int)));
 
       this->sub_group_particle_map->create(
           cell_start, cell_end, h_npart_cell_ptr, h_npart_cell_es_ptr);
@@ -162,7 +158,8 @@ public:
               ResourceStackKeyBufferDevice<int>{}, sycl_target);
       pg_map_layers->realloc_no_copy(npart_local);
 
-      sycl_target->queue.fill<int>(d_npart_cell_ptr, 0, cell_count)
+      sycl_target->queue
+          .fill<int>(d_npart_cell_ptr + cell_start, 0, range_cell_count)
           .wait_and_throw();
       std::vector<int *> tmp = {pg_map_layers->ptr, d_npart_cell_ptr};
       this->map_ptrs->set(tmp);
@@ -174,12 +171,10 @@ public:
       }
 
       sycl_target->queue
-          .memcpy(h_npart_cell_ptr, d_npart_cell_ptr, cell_count * sizeof(int))
+          .memcpy(h_npart_cell_ptr + cell_start, d_npart_cell_ptr + cell_start,
+                  range_cell_count * sizeof(int))
           .wait_and_throw();
 
-      for (int cell = 0; cell < cell_start; cell++) {
-        h_npart_cell_es_ptr[cell] = 0;
-      }
       INT es_tmp = 0;
       for (int cell = cell_start; cell < cell_end; cell++) {
         const INT nrow_required = static_cast<INT>(h_npart_cell_ptr[cell]);
