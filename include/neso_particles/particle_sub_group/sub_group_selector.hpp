@@ -134,10 +134,9 @@ public:
         sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<int>{},
         sycl_target);
 
-    INT *h_npart_cell_es_ptr = this->h_npart_cell_es->ptr;
-    INT *d_npart_cell_es_ptr = this->d_npart_cell_es->ptr;
-    int *h_npart_cell_ptr = this->dh_npart_cell->h_buffer.ptr;
-    int *d_npart_cell_ptr = this->dh_npart_cell->d_buffer.ptr;
+    auto [h_npart_cell_ptr, d_npart_cell_ptr, h_npart_cell_es_ptr,
+          d_npart_cell_es_ptr] =
+        this->sub_group_particle_map->get_helper_ptrs();
 
     auto e0 = sycl_target->queue.fill<int>(d_npart_cell_ptr, 0, cell_count);
     const auto npart_local = this->particle_group->get_npart_local();
@@ -148,7 +147,9 @@ public:
     e0.wait_and_throw();
 
     this->loop_0->execute();
-    this->dh_npart_cell->device_to_host();
+    sycl_target->queue
+        .memcpy(h_npart_cell_ptr, d_npart_cell_ptr, cell_count * sizeof(int))
+        .wait_and_throw();
 
     INT running_total = 0;
     for (int cellx = 0; cellx < cell_count; cellx++) {

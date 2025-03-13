@@ -20,20 +20,41 @@ struct SubGroupParticleMap {
   std::shared_ptr<BufferDevice<INT *>> d_cell_starts;
   // The actual map stored in a single array.
   std::shared_ptr<BufferDevice<INT>> d_layer_map;
-
+  // The cell start and end that were passed to create.
   int cell_start, cell_end;
+
+  // Helper buffers that the user will need to create the Selection and map.
+  // These buffers will not be modified internally.
+  std::shared_ptr<BufferDeviceHost<int>> dh_npart_cell;
+  std::shared_ptr<BufferDeviceHost<INT>> dh_npart_cell_es;
+
+  /**
+   * @returns the host and device pointers for dh_npart_cell and
+   * dh_npart_cell_es.
+   */
+  inline std::tuple<int *, int *, INT *, INT *> get_helper_ptrs() {
+    return {this->dh_npart_cell->h_buffer.ptr,
+            this->dh_npart_cell->d_buffer.ptr,
+            this->dh_npart_cell_es->h_buffer.ptr,
+            this->dh_npart_cell_es->d_buffer.ptr};
+  }
 
   /**
    * @param cell_count The number of cells to create a map for.
    */
   SubGroupParticleMap(SYCLTargetSharedPtr sycl_target, const int cell_count)
-      : sycl_target(sycl_target), cell_count(cell_count) {
+      : sycl_target(sycl_target), cell_count(cell_count), cell_start(-1),
+        cell_end(-1) {
     this->h_cell_starts =
         std::make_shared<BufferHost<INT *>>(sycl_target, cell_count);
     this->d_cell_starts =
         std::make_shared<BufferDevice<INT *>>(sycl_target, cell_count);
     this->d_layer_map =
         std::make_shared<BufferDevice<INT>>(sycl_target, cell_count);
+    this->dh_npart_cell =
+        std::make_shared<BufferDeviceHost<int>>(sycl_target, cell_count);
+    this->dh_npart_cell_es =
+        std::make_shared<BufferDeviceHost<INT>>(sycl_target, cell_count);
   }
 
   /**

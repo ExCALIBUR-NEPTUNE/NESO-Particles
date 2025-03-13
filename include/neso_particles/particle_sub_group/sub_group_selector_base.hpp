@@ -86,11 +86,8 @@ class SubGroupSelectorBase {
   friend class NESO::Particles::ParticleSubGroup;
 
 protected:
-  std::shared_ptr<BufferDeviceHost<int>> dh_npart_cell;
   std::shared_ptr<LocalArray<int *>> map_ptrs;
   std::shared_ptr<LocalArray<INT **>> map_cell_to_particles_ptrs;
-  std::shared_ptr<BufferHost<INT>> h_npart_cell_es;
-  std::shared_ptr<BufferDevice<INT>> d_npart_cell_es;
   std::shared_ptr<SubGroupParticleMap> sub_group_particle_map;
 
   SubGroupSelectorResourceSharedPtr sub_group_selector_resource;
@@ -116,12 +113,9 @@ protected:
 
     this->sub_group_selector_resource =
         this->particle_group->resource_stack_sub_group_resource->get();
-    this->dh_npart_cell = this->sub_group_selector_resource->dh_npart_cell;
     this->map_ptrs = this->sub_group_selector_resource->map_ptrs;
     this->map_cell_to_particles_ptrs =
         this->sub_group_selector_resource->map_cell_to_particles_ptrs;
-    this->h_npart_cell_es = this->sub_group_selector_resource->h_npart_cell_es;
-    this->d_npart_cell_es = this->sub_group_selector_resource->d_npart_cell_es;
     this->sub_group_particle_map =
         this->sub_group_selector_resource->sub_group_particle_map;
   }
@@ -136,11 +130,8 @@ public:
 
   virtual ~SubGroupSelectorBase() {
     if (this->sub_group_selector_resource != nullptr) {
-      this->dh_npart_cell = nullptr;
       this->map_ptrs = nullptr;
       this->map_cell_to_particles_ptrs = nullptr;
-      this->h_npart_cell_es = nullptr;
-      this->d_npart_cell_es = nullptr;
       this->sub_group_particle_map = nullptr;
       this->particle_group->resource_stack_sub_group_resource->restore(
           this->sub_group_selector_resource);

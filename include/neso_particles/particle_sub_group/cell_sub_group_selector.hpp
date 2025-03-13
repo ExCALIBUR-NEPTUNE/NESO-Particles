@@ -60,15 +60,20 @@ public:
           Access::read(ParticleLoopIndex{}), Access::read(this->map_ptrs));
     }
 
-    auto e0 = this->particle_group->sycl_target->queue.fill<INT>(
-        this->d_npart_cell_es->ptr, 0, cell_count);
-    auto e1 = this->particle_group->sycl_target->queue.fill<int>(
-        this->dh_npart_cell->d_buffer.ptr, 0, cell_count);
-    auto e2 = this->particle_group->sycl_target->queue.fill<int>(
-        this->dh_npart_cell->h_buffer.ptr, 0, cell_count);
+    auto [h_npart_cell_ptr, d_npart_cell_ptr, h_npart_cell_es_ptr,
+          d_npart_cell_es_ptr] =
+        this->sub_group_particle_map->get_helper_ptrs();
+
+    auto sycl_target = this->particle_group->sycl_target;
+    auto e0 = sycl_target->queue.fill<INT>(h_npart_cell_es_ptr, 0, cell_count);
+    auto e1 = sycl_target->queue.fill<INT>(d_npart_cell_es_ptr, 0, cell_count);
+    auto e2 = sycl_target->queue.fill<int>(h_npart_cell_ptr, 0, cell_count);
+    auto e3 = sycl_target->queue.fill<int>(d_npart_cell_ptr, 0, cell_count);
+
     e0.wait_and_throw();
     e1.wait_and_throw();
     e2.wait_and_throw();
+    e3.wait_and_throw();
   }
 
   /**
@@ -90,10 +95,9 @@ public:
     const int cell_count = this->particle_group->domain->mesh->get_cell_count();
     auto sycl_target = this->particle_group->sycl_target;
 
-    INT *h_npart_cell_es_ptr = this->h_npart_cell_es->ptr;
-    INT *d_npart_cell_es_ptr = this->d_npart_cell_es->ptr;
-    int *h_npart_cell_ptr = this->dh_npart_cell->h_buffer.ptr;
-    int *d_npart_cell_ptr = this->dh_npart_cell->d_buffer.ptr;
+    auto [h_npart_cell_ptr, d_npart_cell_ptr, h_npart_cell_es_ptr,
+          d_npart_cell_es_ptr] =
+        this->sub_group_particle_map->get_helper_ptrs();
 
     const auto npart_local = this->particle_group->get_npart_local();
     const int range_cell_count = this->cell_end - this->cell_start;
@@ -169,7 +173,9 @@ public:
         this->loop_0->execute(this->cell_start, this->cell_end);
       }
 
-      this->dh_npart_cell->device_to_host();
+      sycl_target->queue
+          .memcpy(h_npart_cell_ptr, d_npart_cell_ptr, cell_count * sizeof(int))
+          .wait_and_throw();
 
       for (int cell = 0; cell < cell_start; cell++) {
         h_npart_cell_es_ptr[cell] = 0;

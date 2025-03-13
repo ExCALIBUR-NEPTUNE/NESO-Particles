@@ -13,26 +13,19 @@ namespace NESO::Particles {
  * This is the type that wraps instances that sub-group selectors require.
  */
 struct SubGroupSelectorResource {
-  std::shared_ptr<BufferDeviceHost<int>> dh_npart_cell;
   std::shared_ptr<LocalArray<int *>> map_ptrs;
   std::shared_ptr<LocalArray<INT **>> map_cell_to_particles_ptrs;
-  std::shared_ptr<BufferHost<INT>> h_npart_cell_es;
-  std::shared_ptr<BufferDevice<INT>> d_npart_cell_es;
   std::shared_ptr<SubGroupParticleMap> sub_group_particle_map;
 
   ~SubGroupSelectorResource() = default;
   SubGroupSelectorResource() = default;
 
   SubGroupSelectorResource(
-      std::shared_ptr<BufferDeviceHost<int>> dh_npart_cell,
       std::shared_ptr<LocalArray<int *>> map_ptrs,
       std::shared_ptr<LocalArray<INT **>> map_cell_to_particles_ptrs,
-      std::shared_ptr<BufferHost<INT>> h_npart_cell_es,
-      std::shared_ptr<BufferDevice<INT>> d_npart_cell_es,
       std::shared_ptr<SubGroupParticleMap> sub_group_particle_map)
-      : dh_npart_cell(dh_npart_cell), map_ptrs(map_ptrs),
+      : map_ptrs(map_ptrs),
         map_cell_to_particles_ptrs(map_cell_to_particles_ptrs),
-        h_npart_cell_es(h_npart_cell_es), d_npart_cell_es(d_npart_cell_es),
         sub_group_particle_map(sub_group_particle_map) {}
 
   /**
@@ -62,12 +55,8 @@ struct SubGroupSelectorResourceStackInterface
 
   virtual inline SubGroupSelectorResourceSharedPtr construct() override {
     return std::make_shared<SubGroupSelectorResource>(
-        std::make_shared<BufferDeviceHost<int>>(this->sycl_target,
-                                                this->ncells),
         std::make_shared<LocalArray<int *>>(this->sycl_target, 2),
         std::make_shared<LocalArray<INT **>>(this->sycl_target, 1),
-        std::make_shared<BufferHost<INT>>(this->sycl_target, this->ncells),
-        std::make_shared<BufferDevice<INT>>(this->sycl_target, this->ncells),
         std::make_shared<SubGroupParticleMap>(this->sycl_target, this->ncells));
   }
 
