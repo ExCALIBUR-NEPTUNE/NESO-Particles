@@ -305,34 +305,57 @@ public:
                 const std::size_t stride = 1) {
 
     local_size = this->get_local_size(local_size, num_bytes_local, stride);
-    nbin = std::min(nbin, this->ncell);
     this->iteration_set.clear();
+
+    // The first cell the iteration set actually needs to touch.
+    std::size_t cell_start = static_cast<std::size_t>(this->ncell);
+    // The last cell + 1 the iteration set actually needs to touch.
+    std::size_t cell_end = static_cast<std::size_t>(0);
+    // Compute the range of cells this loop actually needs to visit.
+    for (std::size_t cellx = 0; cellx < this->ncell; cellx++) {
+      const std::size_t occupancy =
+          static_cast<std::size_t>(this->h_npart_cell[cellx]);
+      if (occupancy) {
+        cell_start = std::min(cell_start, cellx);
+        cell_end = std::max(cell_end, cellx + 1);
+      }
+    }
 
     // Create an iteration block that covers all cells up to a multiple of the
     // local size.
     std::size_t min_occupancy = std::numeric_limits<std::size_t>::max();
-    for (std::size_t cellx = 0; cellx < this->ncell; cellx++) {
-      min_occupancy = std::min(
-          min_occupancy, static_cast<std::size_t>(this->h_npart_cell[cellx]));
+    for (std::size_t cellx = cell_start; cellx < cell_end; cellx++) {
+      const std::size_t occupancy =
+          static_cast<std::size_t>(this->h_npart_cell[cellx]);
+      min_occupancy = std::min(min_occupancy, occupancy);
     }
+    const std::size_t range_cell_count = cell_end - cell_start;
+    if (range_cell_count == 0) {
+      return this->iteration_set;
+    }
+    nbin = std::min(nbin, range_cell_count);
+
     // Truncate to a multiple of local size and stride.
     min_occupancy /= (local_size * stride);
     min_occupancy *= (local_size * stride);
-    this->iteration_set_size = min_occupancy * this->ncell;
+    this->iteration_set_size = min_occupancy * range_cell_count;
     if (min_occupancy > 0) {
-      ParticleLoopBlockDevice block_device{0, 0, this->d_npart_cell, stride};
+      ParticleLoopBlockDevice block_device{cell_start, 0, this->d_npart_cell,
+                                           stride};
       this->iteration_set.emplace_back(
           block_device, false, local_size,
           this->sycl_target->device_limits.validate_nd_range(sycl::nd_range<2>(
               // min_occupancy is already a multiple of local_size and stride by
               // construction.
-              sycl::range<2>(this->ncell, min_occupancy / stride),
+              sycl::range<2>(range_cell_count, min_occupancy / stride),
               sycl::range<2>(1, local_size))));
     }
     // Create the peel loops
     for (std::size_t binx = 0; binx < nbin; binx++) {
       std::size_t start, end;
-      get_decomp_1d(nbin, ncell, binx, &start, &end);
+      get_decomp_1d(nbin, range_cell_count, binx, &start, &end);
+      start += cell_start;
+      end += cell_start;
       const std::size_t bin_width = end - start;
       std::size_t cell_max_occ = 0;
       for (std::size_t cellx = start; cellx < end; cellx++) {
