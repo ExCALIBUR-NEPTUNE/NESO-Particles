@@ -170,7 +170,7 @@ public:
                                 "NESO_PARTICLES_LOOP_LOCAL_SIZE", 256)));
       this->parameters->set(
           "LOOP_NBIN", std::make_shared<SizeTParameter>(
-                           get_env_size_t("NESO_PARTICLES_LOOP_NBIN", 16)));
+                           get_env_size_t("NESO_PARTICLES_LOOP_NBIN", 4)));
     }
 
     if (get_env_size_t("NESO_PARTICLES_IN_ORDER_QUEUE", 0)) {
