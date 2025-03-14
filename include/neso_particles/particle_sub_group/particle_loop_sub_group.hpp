@@ -144,32 +144,59 @@ public:
 
     for (auto &blockx : is) {
       const auto block_device = blockx.block_device;
-      this->event_stack.push(
-          this->sycl_target->queue.submit([&](sycl::handler &cgh) {
-            loop_parameter_type loop_args;
-            create_loop_args(cgh, loop_args, &global_info);
-            cgh.parallel_for<>(
-                blockx.loop_iteration_set, [=](sycl::nd_item<2> idx) {
-                  std::size_t loop_cell;
-                  std::size_t loop_layer;
-                  block_device.get_cell_layer(idx, &loop_cell, &loop_layer);
-                  const int loop_cellx = static_cast<int>(loop_cell);
-                  const int loop_layerx = static_cast<int>(loop_layer);
-                  ParticleLoopImplementation::ParticleLoopIteration iterationx;
-                  if (block_device.work_item_required(loop_cell, loop_layer)) {
-                    const int layer = static_cast<int>(
-                        k_map_cells_to_particles.map_loop_layer_to_layer(
-                            loop_cell, loop_layer));
-                    iterationx.local_sycl_index = idx.get_local_id(1);
-                    iterationx.cellx = loop_cellx;
-                    iterationx.layerx = layer;
-                    iterationx.loop_layerx = loop_layerx;
-                    kernel_parameter_type kernel_args;
-                    create_kernel_args(iterationx, loop_args, kernel_args);
-                    Tuple::apply(k_kernel, kernel_args);
-                  }
-                });
-          }));
+      if (blockx.layer_bounds_check_required) {
+        this->event_stack.push(
+            this->sycl_target->queue.submit([&](sycl::handler &cgh) {
+              loop_parameter_type loop_args;
+              create_loop_args(cgh, loop_args, &global_info);
+              cgh.parallel_for<>(blockx.loop_iteration_set, [=](sycl::nd_item<2>
+                                                                    idx) {
+                std::size_t loop_cell;
+                std::size_t loop_layer;
+                block_device.get_cell_layer(idx, &loop_cell, &loop_layer);
+                const int loop_cellx = static_cast<int>(loop_cell);
+                const int loop_layerx = static_cast<int>(loop_layer);
+                ParticleLoopImplementation::ParticleLoopIteration iterationx;
+                if (block_device.work_item_required(loop_cell, loop_layer)) {
+                  const int layer = static_cast<int>(
+                      k_map_cells_to_particles.map_loop_layer_to_layer(
+                          loop_cell, loop_layer));
+                  iterationx.local_sycl_index = idx.get_local_id(1);
+                  iterationx.cellx = loop_cellx;
+                  iterationx.layerx = layer;
+                  iterationx.loop_layerx = loop_layerx;
+                  kernel_parameter_type kernel_args;
+                  create_kernel_args(iterationx, loop_args, kernel_args);
+                  Tuple::apply(k_kernel, kernel_args);
+                }
+              });
+            }));
+      } else {
+        this->event_stack.push(
+            this->sycl_target->queue.submit([&](sycl::handler &cgh) {
+              loop_parameter_type loop_args;
+              create_loop_args(cgh, loop_args, &global_info);
+              cgh.parallel_for<>(blockx.loop_iteration_set, [=](sycl::nd_item<2>
+                                                                    idx) {
+                std::size_t loop_cell;
+                std::size_t loop_layer;
+                block_device.get_cell_layer(idx, &loop_cell, &loop_layer);
+                const int loop_cellx = static_cast<int>(loop_cell);
+                const int loop_layerx = static_cast<int>(loop_layer);
+                ParticleLoopImplementation::ParticleLoopIteration iterationx;
+                const int layer = static_cast<int>(
+                    k_map_cells_to_particles.map_loop_layer_to_layer(
+                        loop_cell, loop_layer));
+                iterationx.local_sycl_index = idx.get_local_id(1);
+                iterationx.cellx = loop_cellx;
+                iterationx.layerx = layer;
+                iterationx.loop_layerx = loop_layerx;
+                kernel_parameter_type kernel_args;
+                create_kernel_args(iterationx, loop_args, kernel_args);
+                Tuple::apply(k_kernel, kernel_args);
+              });
+            }));
+      }
     }
   }
 };

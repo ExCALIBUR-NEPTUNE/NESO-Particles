@@ -129,12 +129,24 @@ TEST_P(ParticleLoopLocalMem, iteration_set_base) {
         ASSERT_EQ(range_global.get(1) % range_local.get(1), 0);
         offset_layer += range_global.get(1);
 
-        if (ix == (nblocks - 1)) {
+        if (static_cast<std::size_t>(h_npart_cell.at(cellx)) < local_size) {
+          ASSERT_EQ(nblocks, 1);
           EXPECT_TRUE(blockx.layer_bounds_check_required);
+        } else if (static_cast<std::size_t>(h_npart_cell.at(cellx)) %
+                       local_size ==
+                   0) {
+          ASSERT_FALSE(blockx.layer_bounds_check_required);
+          ASSERT_EQ(nblocks, 1);
+        } else {
+          if (ix == 0) {
+            ASSERT_FALSE(blockx.layer_bounds_check_required);
+          } else {
+            ASSERT_TRUE(blockx.layer_bounds_check_required);
+          }
+        }
+        if (ix == (nblocks - 1)) {
           EXPECT_TRUE(offset_layer >=
                       static_cast<std::size_t>(h_npart_cell.at(cellx)));
-        } else {
-          EXPECT_FALSE(blockx.layer_bounds_check_required);
         }
 
         EXPECT_EQ(blockx.block_device.d_npart_cell[cellx],
@@ -312,18 +324,31 @@ TEST_P(ParticleLoopLocalMem, iteration_set_base_stride) {
           ASSERT_TRUE(range_local.get(1) * local_mem_required * stride <=
                       local_mem_limit);
         }
+        const std::size_t local_size_actual = range_local.get(1);
         ASSERT_EQ(range_global.get(1) % range_local.get(1), 0);
 
-        ASSERT_TRUE(range_global.get(1) * stride >=
-                    static_cast<std::size_t>(h_npart_cell.at(cellx)));
+        if (nblocks == 1) {
+          ASSERT_TRUE(range_global.get(1) * stride >=
+                      static_cast<std::size_t>(h_npart_cell.at(cellx)));
+        }
+
         offset_layer += range_global.get(1);
 
-        if (ix == (nblocks - 1)) {
+        if (static_cast<std::size_t>(h_npart_cell.at(cellx)) <
+            local_size_actual * stride) {
+          ASSERT_EQ(nblocks, 1);
           EXPECT_TRUE(blockx.layer_bounds_check_required);
-          EXPECT_TRUE(offset_layer * stride >=
-                      static_cast<std::size_t>(h_npart_cell.at(cellx)));
+        } else if (static_cast<std::size_t>(h_npart_cell.at(cellx)) %
+                       (local_size_actual * stride) ==
+                   0) {
+          ASSERT_FALSE(blockx.layer_bounds_check_required);
+          ASSERT_EQ(nblocks, 1);
         } else {
-          EXPECT_FALSE(blockx.layer_bounds_check_required);
+          if (ix == 0) {
+            ASSERT_FALSE(blockx.layer_bounds_check_required);
+          } else {
+            ASSERT_TRUE(blockx.layer_bounds_check_required);
+          }
         }
 
         EXPECT_EQ(blockx.block_device.d_npart_cell[cellx],
@@ -341,6 +366,9 @@ TEST_P(ParticleLoopLocalMem, iteration_set_base_stride) {
           }
         }
       }
+
+      ASSERT_TRUE(offset_layer * stride >=
+                  static_cast<std::size_t>(h_npart_cell.at(cellx)));
 
       std::set<std::size_t> set_correct;
       for (int ix = 0; ix < h_npart_cell.at(cellx); ix++) {
