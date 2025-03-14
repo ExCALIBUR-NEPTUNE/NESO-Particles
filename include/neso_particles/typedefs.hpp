@@ -393,4 +393,14 @@ inline bool device_aware_mpi_enabled() {
 #endif
 #endif
 
+// Is this compiler one we do not want to compile two sets of particle loops
+// for?
+#ifndef NESO_PARTICLES_DISABLE_SINGLE_COMPILED_LOOP
+#ifdef __NVCOMPILER
+#ifndef NESO_PARTICLES_SINGLE_COMPILED_LOOP
+#define NESO_PARTICLES_SINGLE_COMPILED_LOOP
+#endif
+#endif
+#endif
+
 #endif

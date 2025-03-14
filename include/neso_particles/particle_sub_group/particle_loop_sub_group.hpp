@@ -144,7 +144,8 @@ public:
 
     for (auto &blockx : is) {
       const auto block_device = blockx.block_device;
-      if (blockx.layer_bounds_check_required) {
+
+      auto lambda_dispatch = [&]() {
         this->event_stack.push(
             this->sycl_target->queue.submit([&](sycl::handler &cgh) {
               loop_parameter_type loop_args;
@@ -171,6 +172,13 @@ public:
                 }
               });
             }));
+      };
+
+#ifdef NESO_PARTICLES_SINGLE_COMPILED_LOOP
+      lambda_dispatch();
+#else
+      if (blockx.layer_bounds_check_required) {
+        lambda_dispatch();
       } else {
         this->event_stack.push(
             this->sycl_target->queue.submit([&](sycl::handler &cgh) {
@@ -197,6 +205,7 @@ public:
               });
             }));
       }
+#endif
     }
   }
 };

@@ -208,11 +208,19 @@ public:
    * Print information to stdout about the current SYCL device (on MPI rank 0).
    */
   inline void print_device_info() {
+#ifdef NESO_PARTICLES_SINGLE_COMPILED_LOOP
+    constexpr int single_compiled_loop = 1;
+#else
+    constexpr int single_compiled_loop = 0;
+#endif
+
     if (this->comm_pair.rank_parent == 0) {
       std::cout << "Using " << this->device.get_info<sycl::info::device::name>()
                 << std::endl;
       std::cout << "Kernel type: " << NESO_PARTICLES_DEVICE_LABEL << std::endl;
       std::cout << "In order queue: " << this->queue.is_in_order() << std::endl;
+      std::cout << "Single compiled ParticleLoop: " << single_compiled_loop
+                << std::endl;
       this->device_limits.print();
     }
   }
