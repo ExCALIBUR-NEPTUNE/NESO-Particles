@@ -1570,47 +1570,53 @@ TEST(ParticleSubGroup, range_cell_base) {
     }
   };
 
-  loop_reset->execute();
-  lambda_test_range(A, 0, cell_count);
-  loop_reset->execute();
-  lambda_test_range(A, 0, 1);
-  loop_reset->execute();
-  lambda_test_range(A, cell_count - 1, cell_count);
-
-  if (cell_count > 4) {
+  auto lambda_run = [&]() {
     loop_reset->execute();
-    lambda_test_range(A, cell_count - 3, cell_count);
+    lambda_test_range(A, 0, cell_count);
     loop_reset->execute();
-    lambda_test_range(A, 1, 3);
-  }
-
-  auto Aeven = particle_sub_group(
-      A, [=](auto ID) { return ID.at(0) % 2 == 0; },
-      Access::read(Sym<INT>("ID")));
-
-  loop_reset->execute();
-  lambda_test_range(Aeven, 0, cell_count);
-
-  loop_reset->execute();
-  lambda_test_range(Aeven, 0, 1);
-
-  loop_reset->execute();
-  lambda_test_range(Aeven, cell_count - 1, cell_count);
-
-  if (cell_count > 4) {
+    lambda_test_range(A, 0, 1);
     loop_reset->execute();
-    lambda_test_range(Aeven, cell_count - 3, cell_count);
+    lambda_test_range(A, cell_count - 1, cell_count);
+
+    if (cell_count > 4) {
+      loop_reset->execute();
+      lambda_test_range(A, cell_count - 3, cell_count);
+      loop_reset->execute();
+      lambda_test_range(A, 1, 3);
+    }
+
+    auto Aeven = particle_sub_group(
+        A, [=](auto ID) { return ID.at(0) % 2 == 0; },
+        Access::read(Sym<INT>("ID")));
+
     loop_reset->execute();
-    lambda_test_range(Aeven, 1, 3);
-  }
+    lambda_test_range(Aeven, 0, cell_count);
 
-  // empty set
-  loop_reset->execute();
-  lambda_test_range(A, 0, 0);
+    loop_reset->execute();
+    lambda_test_range(Aeven, 0, 1);
 
-  // empty set
-  loop_reset->execute();
-  lambda_test_range(Aeven, 0, 0);
+    loop_reset->execute();
+    lambda_test_range(Aeven, cell_count - 1, cell_count);
+
+    if (cell_count > 4) {
+      loop_reset->execute();
+      lambda_test_range(Aeven, cell_count - 3, cell_count);
+      loop_reset->execute();
+      lambda_test_range(Aeven, 1, 3);
+    }
+
+    // empty set
+    loop_reset->execute();
+    lambda_test_range(A, 0, 0);
+
+    // empty set
+    loop_reset->execute();
+    lambda_test_range(Aeven, 0, 0);
+  };
+
+  lambda_run();
+  A->clear();
+  lambda_run();
 
   A->free();
   sycl_target->free();

@@ -66,6 +66,9 @@ public:
   inline int
   realloc_no_copy(const std::size_t size,
                   const std::optional<REAL> max_size_factor = std::nullopt) {
+    if (size == 0) {
+      return this->size;
+    }
 
     const std::size_t max_size = std::max(
         size, (std::size_t)(max_size_factor != std::nullopt

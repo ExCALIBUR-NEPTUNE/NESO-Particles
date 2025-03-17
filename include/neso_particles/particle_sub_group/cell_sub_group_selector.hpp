@@ -120,9 +120,11 @@ public:
       es.push(sycl_target->queue.memcpy(
           d_npart_cell_es_ptr, h_npart_cell_es_ptr, sizeof(INT) * cell_count));
 
-      es.push(sycl_target->queue.memcpy(d_npart_cell_ptr + cell_start,
-                                        h_npart_cell_ptr + cell_start,
-                                        range_cell_count * sizeof(int)));
+      if (range_cell_count > 0) {
+        es.push(sycl_target->queue.memcpy(d_npart_cell_ptr + cell_start,
+                                          h_npart_cell_ptr + cell_start,
+                                          range_cell_count * sizeof(int)));
+      }
 
       this->sub_group_particle_map->create(
           cell_start, cell_end, h_npart_cell_ptr, h_npart_cell_es_ptr);
@@ -132,8 +134,10 @@ public:
 
       for (int cell = cell_start; cell < cell_end; cell++) {
         const int npart = h_npart_cell_ptr[cell];
-        es.push(sycl_target->queue.memcpy(h_cell_starts_ptr[cell],
-                                          layers.data(), sizeof(INT) * npart));
+        if (npart > 0) {
+          es.push(sycl_target->queue.memcpy(
+              h_cell_starts_ptr[cell], layers.data(), sizeof(INT) * npart));
+        }
       }
 
       es.wait();
@@ -158,9 +162,11 @@ public:
               ResourceStackKeyBufferDevice<int>{}, sycl_target);
       pg_map_layers->realloc_no_copy(npart_local);
 
-      sycl_target->queue
-          .fill<int>(d_npart_cell_ptr + cell_start, 0, range_cell_count)
-          .wait_and_throw();
+      if (range_cell_count > 0) {
+        sycl_target->queue
+            .fill<int>(d_npart_cell_ptr + cell_start, 0, range_cell_count)
+            .wait_and_throw();
+      }
       std::vector<int *> tmp = {pg_map_layers->ptr, d_npart_cell_ptr};
       this->map_ptrs->set(tmp);
 
@@ -170,10 +176,13 @@ public:
         this->loop_0->execute(this->cell_start, this->cell_end);
       }
 
-      sycl_target->queue
-          .memcpy(h_npart_cell_ptr + cell_start, d_npart_cell_ptr + cell_start,
-                  range_cell_count * sizeof(int))
-          .wait_and_throw();
+      if (range_cell_count > 0) {
+        sycl_target->queue
+            .memcpy(h_npart_cell_ptr + cell_start,
+                    d_npart_cell_ptr + cell_start,
+                    range_cell_count * sizeof(int))
+            .wait_and_throw();
+      }
 
       INT es_tmp = 0;
       for (int cell = cell_start; cell < cell_end; cell++) {
