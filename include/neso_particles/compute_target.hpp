@@ -253,9 +253,7 @@ public:
     };
 
 #ifndef DEBUG_OOB_CHECK
-    auto ptr = lambda_alloc(size_bytes);
-    this->queue.wait_and_throw();
-    return ptr;
+    return lambda_alloc(size_bytes);
 #else
     unsigned char *ptr = (unsigned char *)lambda_alloc(
         size_bytes + 2 * DEBUG_OOB_WIDTH, this->queue);
