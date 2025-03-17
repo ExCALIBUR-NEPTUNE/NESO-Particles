@@ -42,6 +42,8 @@ public:
                "Bad cell_start passed.");
     NESOASSERT((cell_end > -1) && (cell_end <= cell_count),
                "Bad cell_end passed.");
+    NESOASSERT(cell_start <= cell_end, "cell_start > cell_end is invalid");
+
     this->check_sym_type(this->particle_group->cell_id_dat->sym);
     this->parent_is_whole_group = this->get_parent_is_whole_group(parent);
     this->internal_setup(parent);
