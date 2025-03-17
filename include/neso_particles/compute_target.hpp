@@ -64,6 +64,38 @@ private:
   std::array<unsigned char, DEBUG_OOB_WIDTH> ptr_bit_tmp;
 #endif
 
+  int num_devices{0};
+  int device_index{-1};
+  int local_rank{-1};
+
+  inline void print_info_inner() {
+#ifdef NESO_PARTICLES_SINGLE_COMPILED_LOOP
+    constexpr int single_compiled_loop = 1;
+#else
+    constexpr int single_compiled_loop = 0;
+#endif
+    std::cout << "Using " << this->device.get_info<sycl::info::device::name>()
+              << std::endl;
+    std::cout << "Kernel type: " << NESO_PARTICLES_DEVICE_LABEL << std::endl;
+    std::cout << "In order queue: " << this->queue.is_in_order() << std::endl;
+    std::cout << "Single compiled ParticleLoop: " << single_compiled_loop
+              << std::endl;
+    std::cout << "MPI comm size: " << this->comm_pair.size_parent << std::endl;
+    std::cout << "MPI comm rank: " << this->comm_pair.rank_parent << std::endl;
+    std::cout << "MPI inter-comm size: " << this->comm_pair.size_inter
+              << std::endl;
+    std::cout << "MPI inter-comm rank: " << this->comm_pair.rank_inter
+              << std::endl;
+    std::cout << "MPI intra-comm size: " << this->comm_pair.size_intra
+              << std::endl;
+    std::cout << "MPI intra-comm rank: " << this->comm_pair.rank_intra
+              << std::endl;
+    std::cout << "MPI local rank: " << this->local_rank << std::endl;
+    std::cout << "SYCL device count: " << this->num_devices << std::endl;
+    std::cout << "SYCL device index: " << this->device_index << std::endl;
+    this->device_limits.print();
+  }
+
 public:
   /// SYCL device in use.
   sycl::device device;
@@ -107,7 +139,7 @@ public:
    * devices to MPI ranks.
    */
   SYCLTarget(const int gpu_device, MPI_Comm comm, int local_rank = -1)
-      : comm_pair(comm),
+      : local_rank(local_rank), comm_pair(comm),
         resource_stack_map(std::make_shared<ResourceStackMap>()) {
     if (gpu_device > 0) {
       try {
@@ -147,19 +179,20 @@ public:
       auto devices = default_platform.get_devices();
 
       // determine the local rank to use for round robin device assignment.
-      if (local_rank < 0) {
-        local_rank = get_local_mpi_rank(comm, this->comm_pair.rank_intra);
+      if (this->local_rank < 0) {
+        this->local_rank = get_local_mpi_rank(comm, this->comm_pair.rank_intra);
       }
 
       // round robin assign devices to local MPI ranks.
-      const int num_devices = devices.size();
-      const int device_index = local_rank % num_devices;
-      this->device = devices[device_index];
+      this->num_devices = devices.size();
+      this->device_index = this->local_rank % this->num_devices;
+      this->device = devices[this->device_index];
       this->device_limits = DeviceLimits(this->device);
 
-      this->profile_map.set("MPI", "MPI_COMM_WORLD_rank_local", local_rank);
-      this->profile_map.set("SYCL", "DEVICE_COUNT", num_devices);
-      this->profile_map.set("SYCL", "DEVICE_INDEX", device_index);
+      this->profile_map.set("MPI", "MPI_COMM_WORLD_rank_local",
+                            this->local_rank);
+      this->profile_map.set("SYCL", "DEVICE_COUNT", this->num_devices);
+      this->profile_map.set("SYCL", "DEVICE_INDEX", this->device_index);
       this->profile_map.set(
           "SYCL", this->device.get_info<sycl::info::device::name>(), 0);
 
@@ -186,6 +219,10 @@ public:
     this->profile_map.set("MPI", "MPI_COMM_WORLD_size",
                           this->comm_pair.size_parent);
 
+    if (get_env_size_t("NESO_PARTICLES_VERBOSE_DEVICE", 0)) {
+      this->print_world_device_info();
+    }
+
 #ifdef DEBUG_OOB_CHECK
     for (int cx = 0; cx < DEBUG_OOB_WIDTH; cx++) {
       this->ptr_bit_mask[cx] = static_cast<unsigned char>(255);
@@ -208,21 +245,35 @@ public:
    * Print information to stdout about the current SYCL device (on MPI rank 0).
    */
   inline void print_device_info() {
-#ifdef NESO_PARTICLES_SINGLE_COMPILED_LOOP
-    constexpr int single_compiled_loop = 1;
-#else
-    constexpr int single_compiled_loop = 0;
-#endif
-
     if (this->comm_pair.rank_parent == 0) {
-      std::cout << "Using " << this->device.get_info<sycl::info::device::name>()
-                << std::endl;
-      std::cout << "Kernel type: " << NESO_PARTICLES_DEVICE_LABEL << std::endl;
-      std::cout << "In order queue: " << this->queue.is_in_order() << std::endl;
-      std::cout << "Single compiled ParticleLoop: " << single_compiled_loop
-                << std::endl;
-      this->device_limits.print();
+      this->print_info_inner();
     }
+  }
+
+  /**
+   * Print information to stdout from all ranks. Collective on the communicator.
+   */
+  inline void print_world_device_info() {
+    int size = this->comm_pair.size_parent;
+    int rank = this->comm_pair.rank_parent;
+    for (int rx = 0; rx < size; rx++) {
+      if (rx == rank) {
+        std::cout << "---------------------------------------------------------"
+                     "-----------------------"
+                  << std::endl;
+        this->print_info_inner();
+      }
+      std::cout << std::flush;
+      MPI_Barrier(this->comm);
+    }
+    if (!rank) {
+      std::cout << "-----------------------------------------------------------"
+                   "---------------------"
+                << std::endl
+                << std::flush;
+    }
+    std::cout << std::flush;
+    MPI_Barrier(this->comm);
   }
 
   /**
