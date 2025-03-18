@@ -407,15 +407,12 @@ public:
   inline CellData<T> get_cell(const int cell) {
     auto cell_data = std::make_shared<CellDataT<T>>(this->sycl_target,
                                                     this->nrow, this->ncol);
-    if (this->nrow > 0) {
-      EventStack se;
-      for (int colx = 0; colx < this->ncol; colx++) {
-        se.push(this->sycl_target->queue.memcpy(
-            cell_data->data[colx].data(),
-            &this->d_ptr[cell * this->stride + colx * this->nrow],
-            this->nrow * sizeof(T)));
-      }
-      se.wait();
+    if (this->nrow > 0 && this->ncol > 0) {
+      this->sycl_target->queue
+          .memcpy(cell_data->get_column_ptr(0),
+                  &this->d_ptr[cell * this->stride],
+                  this->nrow * this->ncol * sizeof(T))
+          .wait_and_throw();
     }
     return cell_data;
   }
@@ -431,15 +428,95 @@ public:
     NESOASSERT(cell_data->ncol >= this->ncol,
                "CellData as insuffient column count.");
 
-    if (this->nrow > 0) {
-      EventStack se;
-      for (int colx = 0; colx < this->ncol; colx++) {
-        se.push(this->sycl_target->queue.memcpy(
-            &this->d_ptr[cell * this->stride + colx * this->nrow],
-            cell_data->data[colx].data(), this->nrow * sizeof(T)));
-      }
-      se.wait();
+    if (this->nrow > 0 && this->ncol > 0) {
+      this->sycl_target->queue
+          .memcpy(&this->d_ptr[cell * this->stride],
+                  cell_data->get_column_ptr(0),
+                  this->nrow * this->ncol * sizeof(T))
+          .wait_and_throw();
     }
+  }
+
+  /**
+   * Get the cell data for all cells.
+   *
+   * @returns CellData instances for all cells.
+   */
+  inline std::vector<CellData<T>> get_all_cells() {
+    const auto num_elements = this->stride * this->ncells;
+
+    auto tmp_buffer = get_resource<BufferDeviceHost<T>,
+                                   ResourceStackInterfaceBufferDeviceHost<T>>(
+        sycl_target->resource_stack_map, ResourceStackKeyBufferDeviceHost<T>{},
+        sycl_target);
+    tmp_buffer->realloc_no_copy(num_elements);
+    auto ptr = tmp_buffer->h_buffer.ptr;
+
+    sycl::event copy_event;
+
+    if (this->stride > 0) {
+      // start the copy into the host temporary
+      copy_event = this->sycl_target->queue.memcpy(ptr, this->d_ptr,
+                                                   num_elements * sizeof(T));
+    }
+    // create the buffers to return
+    std::vector<CellData<T>> return_vector;
+    return_vector.reserve(this->ncells);
+    for (int cellx = 0; cellx < this->ncells; cellx++) {
+      return_vector.push_back(std::make_shared<CellDataT<T>>(
+          this->sycl_target, this->nrow, this->ncol));
+    }
+    //
+    //// wait for the copy event from the device
+    copy_event.wait_and_throw();
+    //
+    if (this->stride > 0) {
+      for (int cellx = 0; cellx < this->ncells; cellx++) {
+        auto inner_ptr = return_vector[cellx]->get_column_ptr(0);
+        std::memcpy(inner_ptr, ptr + this->stride * cellx,
+                    this->stride * sizeof(T));
+      }
+    }
+
+    restore_resource(sycl_target->resource_stack_map,
+                     ResourceStackKeyBufferDeviceHost<T>{}, tmp_buffer);
+    return return_vector;
+  }
+
+  /**
+   * Set the cell data for all cells.
+   *
+   * @param cell_data Vector of CellData instances each of size nrow, ncol.
+   */
+  inline void set_all_cells(const std::vector<CellData<T>> &cell_data) {
+    auto tmp_buffer = get_resource<BufferDeviceHost<T>,
+                                   ResourceStackInterfaceBufferDeviceHost<T>>(
+        sycl_target->resource_stack_map, ResourceStackKeyBufferDeviceHost<T>{},
+        sycl_target);
+
+    const auto num_elements = this->stride * this->ncells;
+    tmp_buffer->realloc_no_copy(num_elements);
+    auto ptr = tmp_buffer->h_buffer.ptr;
+
+    NESOASSERT(cell_data.size() == static_cast<std::size_t>(this->ncells),
+               "Bad length of cell_data.");
+
+    for (int cellx = 0; cellx < this->ncells; cellx++) {
+      NESOASSERT(cell_data[cellx]->nrow == this->nrow, "Bad number of rows.");
+      NESOASSERT(cell_data[cellx]->ncol == this->ncol,
+                 "Bad number of columns.");
+
+      std::memcpy(ptr + this->stride * cellx,
+                  cell_data[cellx]->get_column_ptr(0),
+                  this->stride * sizeof(T));
+    }
+
+    this->sycl_target->queue.memcpy(this->d_ptr, ptr, num_elements * sizeof(T))
+        .wait_and_throw();
+
+    restore_resource(sycl_target->resource_stack_map,
+                     ResourceStackKeyBufferDeviceHost<T>{}, tmp_buffer);
+    NESOASSERT(tmp_buffer == nullptr, "Expected nullptr.");
   }
 
   /**

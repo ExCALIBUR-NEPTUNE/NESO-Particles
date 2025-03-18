@@ -323,6 +323,34 @@ inline std::size_t get_env_size_t(const std::string key,
   }
 }
 
+namespace Debug {
+constexpr static inline std::size_t MOVEMENT_LEVEL = 2;
+
+/**
+ * @returns the debug level from NESO_PARTICLES_DEBUG_LEVEL.
+ */
+#ifdef NDEBUG
+constexpr
+#endif
+    inline std::size_t
+    get_level() {
+#ifdef NDEBUG
+  return 0;
+#else
+  return get_env_size_t("NESO_PARTICLES_DEBUG_LEVEL", 0);
+#endif
+}
+
+/**
+ * @param threshold
+ * @returns True if debug level greater than threshold.
+ */
+inline std::size_t enabled(const std::size_t threshold) {
+  return get_level() > threshold;
+}
+
+} // namespace Debug
+
 /**
  * @returns True if device aware MPI is enabled.
  */
@@ -362,6 +390,16 @@ inline bool device_aware_mpi_enabled() {
 #include <hdf5.h>
 #ifndef H5CHK
 #define H5CHK(cmd) NESOASSERT((cmd) >= 0, "HDF5 ERROR");
+#endif
+#endif
+
+// Is this compiler one we do not want to compile two sets of particle loops
+// for?
+#ifndef NESO_PARTICLES_DISABLE_SINGLE_COMPILED_LOOP
+#ifdef __NVCOMPILER
+#ifndef NESO_PARTICLES_SINGLE_COMPILED_LOOP
+#define NESO_PARTICLES_SINGLE_COMPILED_LOOP
+#endif
 #endif
 #endif
 

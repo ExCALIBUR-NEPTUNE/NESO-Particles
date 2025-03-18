@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "communication.hpp"
+#include "containers/resource_stack_map.hpp"
 #include "device_limits.hpp"
 #include "parameters.hpp"
 #include "profiling.hpp"
@@ -56,12 +57,44 @@ inline int get_local_mpi_rank(MPI_Comm comm, int default_rank = -1) {
  */
 class SYCLTarget {
 private:
-  std::map<unsigned char *, size_t> ptr_map;
+  std::map<unsigned char *, std::size_t> ptr_map;
 
 #ifdef DEBUG_OOB_CHECK
   std::array<unsigned char, DEBUG_OOB_WIDTH> ptr_bit_mask;
   std::array<unsigned char, DEBUG_OOB_WIDTH> ptr_bit_tmp;
 #endif
+
+  int num_devices{0};
+  int device_index{-1};
+  int local_rank{-1};
+
+  inline void print_info_inner() {
+#ifdef NESO_PARTICLES_SINGLE_COMPILED_LOOP
+    constexpr int single_compiled_loop = 1;
+#else
+    constexpr int single_compiled_loop = 0;
+#endif
+    std::cout << "Using " << this->device.get_info<sycl::info::device::name>()
+              << std::endl;
+    std::cout << "Kernel type: " << NESO_PARTICLES_DEVICE_LABEL << std::endl;
+    std::cout << "In order queue: " << this->queue.is_in_order() << std::endl;
+    std::cout << "Single compiled ParticleLoop: " << single_compiled_loop
+              << std::endl;
+    std::cout << "MPI comm size: " << this->comm_pair.size_parent << std::endl;
+    std::cout << "MPI comm rank: " << this->comm_pair.rank_parent << std::endl;
+    std::cout << "MPI inter-comm size: " << this->comm_pair.size_inter
+              << std::endl;
+    std::cout << "MPI inter-comm rank: " << this->comm_pair.rank_inter
+              << std::endl;
+    std::cout << "MPI intra-comm size: " << this->comm_pair.size_intra
+              << std::endl;
+    std::cout << "MPI intra-comm rank: " << this->comm_pair.rank_intra
+              << std::endl;
+    std::cout << "MPI local rank: " << this->local_rank << std::endl;
+    std::cout << "SYCL device count: " << this->num_devices << std::endl;
+    std::cout << "SYCL device index: " << this->device_index << std::endl;
+    this->device_limits.print();
+  }
 
 public:
   /// SYCL device in use.
@@ -79,6 +112,8 @@ public:
   std::shared_ptr<Parameters> parameters;
   /// Interface to device limits validation
   DeviceLimits device_limits;
+  /// A ResourceStackMap that is available to downstream types.
+  std::shared_ptr<ResourceStackMap> resource_stack_map;
 
   /// Disable (implicit) copies.
   SYCLTarget(const SYCLTarget &st) = delete;
@@ -104,7 +139,8 @@ public:
    * devices to MPI ranks.
    */
   SYCLTarget(const int gpu_device, MPI_Comm comm, int local_rank = -1)
-      : comm_pair(comm) {
+      : local_rank(local_rank), comm_pair(comm),
+        resource_stack_map(std::make_shared<ResourceStackMap>()) {
     if (gpu_device > 0) {
       try {
 #ifdef NESO_PARTICLES_LEGACY_DEVICE_SELECTORS
@@ -143,19 +179,20 @@ public:
       auto devices = default_platform.get_devices();
 
       // determine the local rank to use for round robin device assignment.
-      if (local_rank < 0) {
-        local_rank = get_local_mpi_rank(comm, this->comm_pair.rank_intra);
+      if (this->local_rank < 0) {
+        this->local_rank = get_local_mpi_rank(comm, this->comm_pair.rank_intra);
       }
 
       // round robin assign devices to local MPI ranks.
-      const int num_devices = devices.size();
-      const int device_index = local_rank % num_devices;
-      this->device = devices[device_index];
+      this->num_devices = devices.size();
+      this->device_index = this->local_rank % this->num_devices;
+      this->device = devices[this->device_index];
       this->device_limits = DeviceLimits(this->device);
 
-      this->profile_map.set("MPI", "MPI_COMM_WORLD_rank_local", local_rank);
-      this->profile_map.set("SYCL", "DEVICE_COUNT", num_devices);
-      this->profile_map.set("SYCL", "DEVICE_INDEX", device_index);
+      this->profile_map.set("MPI", "MPI_COMM_WORLD_rank_local",
+                            this->local_rank);
+      this->profile_map.set("SYCL", "DEVICE_COUNT", this->num_devices);
+      this->profile_map.set("SYCL", "DEVICE_INDEX", this->device_index);
       this->profile_map.set(
           "SYCL", this->device.get_info<sycl::info::device::name>(), 0);
 
@@ -164,18 +201,27 @@ public:
       this->parameters->set("LOOP_LOCAL_SIZE",
                             std::make_shared<SizeTParameter>(get_env_size_t(
                                 "NESO_PARTICLES_LOOP_LOCAL_SIZE", 256)));
-      this->parameters->set(
-          "LOOP_NBIN", std::make_shared<SizeTParameter>(
-                           get_env_size_t("NESO_PARTICLES_LOOP_NBIN", 16)));
+      this->parameters->set("LOOP_NBIN",
+                            std::make_shared<SizeTParameter>(
+                                get_env_size_t("NESO_PARTICLES_LOOP_NBIN", 4)));
     }
 
-    this->queue = sycl::queue(this->device);
+    if (get_env_size_t("NESO_PARTICLES_IN_ORDER_QUEUE", 0)) {
+      this->queue =
+          sycl::queue(this->device, {sycl::property::queue::in_order{}});
+    } else {
+      this->queue = sycl::queue(this->device);
+    }
     this->comm = comm;
 
     this->profile_map.set("MPI", "MPI_COMM_WORLD_rank",
                           this->comm_pair.rank_parent);
     this->profile_map.set("MPI", "MPI_COMM_WORLD_size",
                           this->comm_pair.size_parent);
+
+    if (get_env_size_t("NESO_PARTICLES_VERBOSE_DEVICE", 0)) {
+      this->print_world_device_info();
+    }
 
 #ifdef DEBUG_OOB_CHECK
     for (int cx = 0; cx < DEBUG_OOB_WIDTH; cx++) {
@@ -200,31 +246,69 @@ public:
    */
   inline void print_device_info() {
     if (this->comm_pair.rank_parent == 0) {
-      std::cout << "Using " << this->device.get_info<sycl::info::device::name>()
-                << std::endl;
-      std::cout << "Kernel type: " << NESO_PARTICLES_DEVICE_LABEL << std::endl;
-      this->device_limits.print();
+      this->print_info_inner();
     }
+  }
+
+  /**
+   * Print information to stdout from all ranks. Collective on the communicator.
+   */
+  inline void print_world_device_info() {
+    int size = this->comm_pair.size_parent;
+    int rank = this->comm_pair.rank_parent;
+    for (int rx = 0; rx < size; rx++) {
+      if (rx == rank) {
+        std::cout << "---------------------------------------------------------"
+                     "-----------------------"
+                  << std::endl;
+        this->print_info_inner();
+      }
+      std::cout << std::flush;
+      MPI_Barrier(this->comm);
+    }
+    if (!rank) {
+      std::cout << "-----------------------------------------------------------"
+                   "---------------------"
+                << std::endl
+                << std::flush;
+    }
+    std::cout << std::flush;
+    MPI_Barrier(this->comm);
   }
 
   /**
    * Free the SYCLTarget and underlying CommPair.
    */
-  inline void free() { comm_pair.free(); }
+  inline void free() {
+    this->resource_stack_map->free();
+    this->comm_pair.free();
+  }
 
   /**
    * Allocate memory on device using sycl::malloc_device.
    *
    * @param size_bytes Number of bytes to allocate.
+   * @param align_bytes Optional alignment, default 0 calls malloc_device
+   * instead of aligned_alloc_device.
    */
-  inline void *malloc_device(size_t size_bytes) {
+  inline void *malloc_device(const std::size_t size_bytes,
+                             const std::size_t align_bytes = 0) {
+
+    auto lambda_alloc = [&](const std::size_t b) -> void * {
+      if (align_bytes) {
+        return sycl::aligned_alloc_device(
+            align_bytes, get_next_multiple(b, align_bytes), this->queue);
+      } else {
+        return sycl::malloc_device(b, this->queue);
+      }
+    };
 
 #ifndef DEBUG_OOB_CHECK
-    return sycl::malloc_device(size_bytes, this->queue);
+    return lambda_alloc(size_bytes);
 #else
-
-    unsigned char *ptr = (unsigned char *)sycl::malloc_device(
+    unsigned char *ptr = (unsigned char *)lambda_alloc(
         size_bytes + 2 * DEBUG_OOB_WIDTH, this->queue);
+
     unsigned char *ptr_user = ptr + DEBUG_OOB_WIDTH;
     this->ptr_map[ptr_user] = size_bytes;
     NESOASSERT(ptr != nullptr, "pad pointer from malloc_device");
@@ -237,7 +321,46 @@ public:
         .wait();
 
     return (void *)ptr_user;
-    // return ptr;
+#endif
+  }
+
+  /**
+   * Allocate memory in USM shared memory using sycl::malloc_shared.
+   *
+   * @param size_bytes Number of bytes to allocate.
+   * @param align_bytes Optional alignment, default 0 calls malloc_shared
+   * instead of aligned_alloc_shared.
+   */
+  inline void *malloc_shared(const std::size_t size_bytes,
+                             const std::size_t align_bytes = 0) {
+
+    auto lambda_alloc = [&](const std::size_t b) -> void * {
+      if (align_bytes) {
+        return sycl::aligned_alloc_shared(
+            align_bytes, get_next_multiple(b, align_bytes), this->queue);
+      } else {
+        return sycl::malloc_shared(b, this->queue);
+      }
+    };
+
+#ifndef DEBUG_OOB_CHECK
+    return lambda_alloc(size_bytes);
+#else
+    unsigned char *ptr = (unsigned char *)lambda_alloc(
+        size_bytes + 2 * DEBUG_OOB_WIDTH, this->queue);
+
+    unsigned char *ptr_user = ptr + DEBUG_OOB_WIDTH;
+    this->ptr_map[ptr_user] = size_bytes;
+    NESOASSERT(ptr != nullptr, "pad pointer from malloc_shared");
+
+    this->queue.memcpy(ptr, this->ptr_bit_mask.data(), DEBUG_OOB_WIDTH).wait();
+
+    this->queue
+        .memcpy(ptr_user + size_bytes, this->ptr_bit_mask.data(),
+                DEBUG_OOB_WIDTH)
+        .wait();
+
+    return (void *)ptr_user;
 #endif
   }
 
@@ -245,14 +368,26 @@ public:
    * Allocate memory on the host using sycl::malloc_host.
    *
    * @param size_bytes Number of bytes to allocate.
+   * @param align_bytes Optional alignment, default 0 calls malloc_host instead
+   * of aligned_alloc_host.
    */
-  inline void *malloc_host(size_t size_bytes) {
+  inline void *malloc_host(const std::size_t size_bytes,
+                           const std::size_t align_bytes = 0) {
 
+    auto lambda_alloc = [&](const std::size_t b) -> void * {
+      if (align_bytes) {
+        auto ptr = sycl::aligned_alloc_host(
+            align_bytes, get_next_multiple(b, align_bytes), this->queue);
+        return ptr;
+      } else {
+        return sycl::malloc_host(b, this->queue);
+      }
+    };
 #ifndef DEBUG_OOB_CHECK
-    return sycl::malloc_host(size_bytes, this->queue);
+    return lambda_alloc(size_bytes);
 #else
 
-    unsigned char *ptr = (unsigned char *)sycl::malloc_host(
+    unsigned char *ptr = (unsigned char *)lambda_alloc(
         size_bytes + 2 * DEBUG_OOB_WIDTH, this->queue);
     unsigned char *ptr_user = ptr + DEBUG_OOB_WIDTH;
     this->ptr_map[ptr_user] = size_bytes;
@@ -298,7 +433,7 @@ public:
   }
 
   inline void check_ptr([[maybe_unused]] unsigned char *ptr_user,
-                        [[maybe_unused]] const size_t size_bytes) {
+                        [[maybe_unused]] const std::size_t size_bytes) {
 
 #ifdef DEBUG_OOB_CHECK
     this->queue
@@ -357,406 +492,6 @@ public:
 };
 
 typedef std::shared_ptr<SYCLTarget> SYCLTargetSharedPtr;
-
-template <typename T> class BufferBase {
-protected:
-  virtual inline T *malloc_wrapper(const std::size_t num_bytes) = 0;
-  virtual inline void free_wrapper(T *ptr) = 0;
-
-  inline void generic_init() {
-    NESOASSERT(this->ptr == nullptr, "Buffer is already allocated.");
-    if (this->size > 0) {
-      this->ptr = this->malloc_wrapper(this->size * sizeof(T));
-      NESOASSERT(this->ptr != nullptr, "generic_init set nullptr.");
-    }
-  }
-  inline void generic_free() {
-    if (this->ptr != nullptr) {
-      this->free_wrapper(this->ptr);
-    }
-    this->ptr = nullptr;
-  }
-
-  BufferBase(SYCLTargetSharedPtr sycl_target, std::size_t size)
-      : sycl_target(sycl_target), ptr(nullptr), size(size) {}
-
-  inline void assert_allocated() {
-    NESOASSERT(this->ptr != nullptr,
-               "Allocated buffer required but pointer is nullptr.");
-  }
-
-public:
-  /// Compute device used by the instance.
-  SYCLTargetSharedPtr sycl_target;
-  /// SYCL USM pointer to data.
-  T *ptr;
-  /// Number of elements allocated.
-  std::size_t size;
-
-  /**
-   * Get the size of the allocation in bytes.
-   *
-   * @returns size of buffer in bytes.
-   */
-  inline std::size_t size_bytes() { return this->size * sizeof(T); }
-
-  /**
-   * Reallocate the buffer to hold at least the requested number of elements.
-   * May or may not reduce the buffer size if called with a size less than the
-   * current allocation. Current contents is not copied to the new buffer.
-   *
-   * @param size Minimum number of elements this buffer should be able to hold.
-   * @param max_size_factor (Optional) Specify a ratio, if the underlying
-   * buffer is larger than the requested ammount times this ratio then free the
-   * buffer and reallocate.
-   */
-  inline int
-  realloc_no_copy(const std::size_t size,
-                  const std::optional<REAL> max_size_factor = std::nullopt) {
-
-    const std::size_t max_size = std::max(
-        size, (std::size_t)(max_size_factor != std::nullopt
-                                ? max_size_factor.value() * ((REAL)size)
-                                : this->size));
-
-    if ((size > this->size) || (this->size > max_size)) {
-      this->assert_allocated();
-      this->free_wrapper(this->ptr);
-      this->ptr = this->malloc_wrapper(size * sizeof(T));
-      this->size = size;
-    }
-    return this->size;
-  }
-
-  /**
-   * Asynchronously set the values in the buffer to those in a std::vector.
-   *
-   * @param data Input vector to copy values from.
-   * @returns Event to wait on before using new values in the buffer.
-   */
-  inline sycl::event set_async(const std::vector<T> &data) {
-    NESOASSERT(data.size() == this->size, "Input data is incorrectly sized.");
-    const std::size_t size_bytes = sizeof(T) * this->size;
-    if (size_bytes) {
-      NESOASSERT(this->ptr != nullptr, "Internal pointer is not allocated.");
-      this->assert_allocated();
-      auto copy_event =
-          sycl_target->queue.memcpy(this->ptr, data.data(), size_bytes);
-      return copy_event;
-    } else {
-      return sycl::event();
-    }
-  }
-
-  /**
-   * Set the values in the buffer to those in a std::vector. Blocks until
-   * the copy is complete.
-   *
-   * @param data Input vector to copy values from.
-   */
-  inline void set(const std::vector<T> &data) {
-    this->set_async(data).wait_and_throw();
-  }
-
-  /**
-   * Asynchronously get the values in the buffer into a std::vector.
-   *
-   * @param[in, out] data Input vector to copy values from buffer into.
-   * @returns Event to wait on before using new values in the std::vector.
-   */
-  inline sycl::event get_async(std::vector<T> &data) {
-    NESOASSERT(data.size() == this->size, "Input data is incorrectly sized.");
-    const std::size_t size_bytes = sizeof(T) * this->size;
-    if (size_bytes) {
-      auto copy_event =
-          sycl_target->queue.memcpy(data.data(), this->ptr, size_bytes);
-      return copy_event;
-    } else {
-      return sycl::event();
-    }
-  }
-
-  /**
-   * Get the values in the buffer into a std::vector. Blocks until copy is
-   * complete.
-   *
-   * @param[in, out] data Input vector to copy values from buffer into.
-   */
-  inline void get(std::vector<T> &data) {
-    this->get_async(data).wait_and_throw();
-  }
-
-  /**
-   * Get the values in the buffer into a std::vector.
-   *
-   * @returns std::vector of values in the buffer.
-   */
-  inline std::vector<T> get() {
-    std::vector<T> data(this->size);
-    this->get(data);
-    return data;
-  }
-};
-
-/**
- * Container around USM device allocated memory that can be resized.
- */
-template <typename T> class BufferDevice : public BufferBase<T> {
-protected:
-  virtual inline T *malloc_wrapper(const std::size_t num_bytes) override {
-    return static_cast<T *>(this->sycl_target->malloc_device(num_bytes));
-  }
-  virtual inline void free_wrapper(T *ptr) override {
-    this->sycl_target->free(ptr);
-  }
-
-public:
-  /// Disable (implicit) copies.
-  BufferDevice(const BufferDevice &st) = delete;
-  /// Disable (implicit) copies.
-  BufferDevice &operator=(BufferDevice const &a) = delete;
-
-  /**
-   * Create a new BufferDevice of a given number of elements.
-   *
-   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
-   * @param size Number of elements.
-   */
-  BufferDevice(SYCLTargetSharedPtr &sycl_target, size_t size)
-      : BufferBase<T>(sycl_target, size) {
-    this->generic_init();
-  }
-
-  /**
-   * Create a new BufferDevice from a std::vector. Note, this does not operate
-   * like a sycl::buffer and is a copy of the source vector.
-   *
-   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
-   * @param vec Input vector to copy data from.
-   */
-  BufferDevice(SYCLTargetSharedPtr sycl_target, const std::vector<T> &vec)
-      : BufferDevice(sycl_target, vec.size()) {
-    this->set(vec);
-  }
-
-  virtual ~BufferDevice() { this->generic_free(); }
-};
-
-/**
- * Container around USM shared allocated memory that can be resized.
- */
-template <typename T> class BufferShared : public BufferBase<T> {
-protected:
-  virtual inline T *malloc_wrapper(const std::size_t num_bytes) override {
-    return static_cast<T *>(
-        sycl::malloc_shared(num_bytes, this->sycl_target->queue));
-  }
-  virtual inline void free_wrapper(T *ptr) override {
-    sycl::free(ptr, this->sycl_target->queue);
-  }
-
-public:
-  /// Disable (implicit) copies.
-  BufferShared(const BufferShared &st) = delete;
-  /// Disable (implicit) copies.
-  BufferShared &operator=(BufferShared const &a) = delete;
-
-  /**
-   * Create a new DeviceShared of a given number of elements.
-   *
-   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
-   * @param size Number of elements.
-   */
-  BufferShared(SYCLTargetSharedPtr sycl_target, size_t size)
-      : BufferBase<T>(sycl_target, size) {
-    this->generic_init();
-  }
-
-  /**
-   * Create a new BufferShared from a std::vector. Note, this does not operate
-   * like a sycl::buffer and is a copy of the source vector.
-   *
-   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
-   * @param vec Input vector to copy data from.
-   */
-  BufferShared(SYCLTargetSharedPtr sycl_target, const std::vector<T> &vec)
-      : BufferShared(sycl_target, vec.size()) {
-    this->set(vec);
-  }
-
-  ~BufferShared() { this->generic_free(); }
-};
-
-/**
- * Container around USM host allocated memory that can be resized.
- */
-template <typename T> class BufferHost : public BufferBase<T> {
-protected:
-  virtual inline T *malloc_wrapper(const std::size_t num_bytes) override {
-    return static_cast<T *>(this->sycl_target->malloc_host(num_bytes));
-  }
-  virtual inline void free_wrapper(T *ptr) override {
-    this->sycl_target->free(ptr);
-  }
-
-public:
-  /// Disable (implicit) copies.
-  BufferHost(const BufferHost &st) = delete;
-  /// Disable (implicit) copies.
-  BufferHost &operator=(BufferHost const &a) = delete;
-
-  /**
-   * Create a new BufferHost of a given number of elements.
-   *
-   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
-   * @param size Number of elements.
-   */
-  BufferHost(SYCLTargetSharedPtr sycl_target, size_t size)
-      : BufferBase<T>(sycl_target, size) {
-    this->generic_init();
-  }
-
-  /**
-   * Create a new BufferHost from a std::vector. Note, this does not operate
-   * like a sycl::buffer and is a copy of the source vector.
-   *
-   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
-   * @param vec Input vector to copy data from.
-   */
-  BufferHost(SYCLTargetSharedPtr sycl_target, const std::vector<T> &vec)
-      : BufferHost(sycl_target, vec.size()) {
-    this->set(vec);
-  }
-
-  ~BufferHost() { this->generic_free(); }
-};
-
-/**
- * Wrapper around a BufferDevice and a BufferHost to store data on the device
- * and the host. To be used as an alternative to BufferShared where the
- * programmer wants to explicitly handle when data is copied between the device
- * and the host.
- */
-template <typename T> class BufferDeviceHost {
-private:
-public:
-  /// Disable (implicit) copies.
-  BufferDeviceHost(const BufferDeviceHost &st) = delete;
-  /// Disable (implicit) copies.
-  BufferDeviceHost &operator=(BufferDeviceHost const &a) = delete;
-
-  /// Compute device used by the instance.
-  SYCLTargetSharedPtr sycl_target;
-  /// Size of the allocation on device and host.
-  size_t size;
-
-  /// Wrapped BufferDevice.
-  BufferDevice<T> d_buffer;
-  /// Wrapped BufferHost.
-  BufferHost<T> h_buffer;
-
-  ~BufferDeviceHost(){};
-
-  /**
-   * Create a new BufferDeviceHost of the request size on the requested compute
-   * target.
-   *
-   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
-   * @param size Number of elements to initially allocate on the device and
-   * host.
-   */
-  BufferDeviceHost(SYCLTargetSharedPtr sycl_target, size_t size)
-      : sycl_target(sycl_target), size(size), d_buffer(sycl_target, size),
-        h_buffer(sycl_target, size){};
-
-  /**
-   * Create a new BufferDeviceHost from a std::vector. Note, this does not
-   * operate like a sycl::buffer and is a copy of the source vector.
-   *
-   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
-   * @param vec Input vector to copy data from.
-   */
-  BufferDeviceHost(SYCLTargetSharedPtr sycl_target, const std::vector<T> &vec)
-      : sycl_target(sycl_target), size(vec.size()), d_buffer(sycl_target, vec),
-        h_buffer(sycl_target, vec){};
-
-  /**
-   * Get the size in bytes of the allocation on the host and device.
-   *
-   * @returns Number of bytes allocated on the host and device.
-   */
-  inline size_t size_bytes() { return this->size * sizeof(T); }
-
-  /**
-   * Reallocate both the device and host buffers to hold at least the requested
-   * number of elements. May or may not reduce the buffer size if called with a
-   * size less than the current allocation. Current contents is not copied to
-   * the new buffer.
-   *
-   * @param size Minimum number of elements this buffer should be able to hold.
-   */
-  inline int realloc_no_copy(const size_t size) {
-    this->d_buffer.realloc_no_copy(size);
-    this->h_buffer.realloc_no_copy(size);
-    this->size = size;
-    return this->size;
-  }
-
-  /**
-   * Copy the contents of the host buffer to the device buffer.
-   */
-  inline void host_to_device() {
-    if (this->size_bytes() > 0) {
-      this->sycl_target->queue
-          .memcpy(this->d_buffer.ptr, this->h_buffer.ptr, this->size_bytes())
-          .wait();
-    }
-  }
-  /**
-   * Copy the contents of the device buffer to the host buffer.
-   */
-  inline void device_to_host() {
-    if (this->size_bytes() > 0) {
-      this->sycl_target->queue
-          .memcpy(this->h_buffer.ptr, this->d_buffer.ptr, this->size_bytes())
-          .wait();
-    }
-  }
-  /**
-   * Start an asynchronous copy of the host data to the device buffer.
-   *
-   * @returns sycl::event to wait on for completion of data movement.
-   */
-  inline sycl::event async_host_to_device() {
-    NESOASSERT(this->size_bytes() > 0, "Zero sized copy issued.");
-    return this->sycl_target->queue.memcpy(
-        this->d_buffer.ptr, this->h_buffer.ptr, this->size_bytes());
-  }
-  /**
-   * Start an asynchronous copy of the device data to the host buffer.
-   *
-   * @returns sycl::event to wait on for completion of data movement.
-   */
-  inline sycl::event async_device_to_host() {
-    NESOASSERT(this->size_bytes() > 0, "Zero sized copy issued.");
-    return this->sycl_target->queue.memcpy(
-        this->h_buffer.ptr, this->d_buffer.ptr, this->size_bytes());
-  }
-};
-
-/**
- * Copy the contents of a buffer, e.g. BufferDevice, BufferHost, into another
- * buffer.
- *
- * @param dst Destination buffer.
- * @param src Source buffer.
- */
-template <template <typename> typename D, template <typename> typename S,
-          typename T>
-[[nodiscard]] inline sycl::event buffer_memcpy(D<T> &dst, S<T> &src) {
-  NESOASSERT(dst.size == src.size, "Buffers have different sizes.");
-  return dst.sycl_target->queue.memcpy(dst.ptr, src.ptr, dst.size * sizeof(T));
-}
 
 /**
  * Helper class to hold a collection of sycl::event instances which can be
@@ -818,7 +553,7 @@ struct NDRangePeel1D {
   /// Bool to indicate if there is a peel loop.
   const bool peel_exists;
   /// Offset to apply to peel loop indices.
-  const size_t offset;
+  const std::size_t offset;
   /// Peel loop description. Indicies from the loop should have offset added to
   /// compute the global index. This loop should be masked by a conditional for
   /// the original loop bounds.
@@ -844,7 +579,7 @@ inline NDRangePeel1D get_nd_range_peel_1d(const std::size_t size,
       static_cast<std::size_t>(div_mod.quot) * local_size;
   const bool peel_exists = !(div_mod.rem == 0);
   const std::size_t outer_size_peel = (peel_exists ? 1 : 0) * local_size;
-  const size_t offset = outer_size;
+  const std::size_t offset = outer_size;
 
   return NDRangePeel1D{
       sycl::nd_range<1>(sycl::range<1>(outer_size), sycl::range<1>(local_size)),
@@ -971,6 +706,18 @@ matrix_transpose(SYCLTargetSharedPtr sycl_target, const std::size_t num_rows,
           }
         });
   });
+}
+
+/**
+ * @param ptr Pointer to align to alignment.
+ * @param alignment Power of two to align to.
+ * @returns Aligned pointer.
+ */
+template <typename T>
+constexpr inline T *cast_align_pointer(void *ptr, const std::size_t alignment) {
+  std::size_t ptr_int = reinterpret_cast<std::size_t>(ptr);
+  ptr_int = (ptr_int + (alignment - 1)) & -alignment;
+  return reinterpret_cast<T *>(ptr_int);
 }
 
 } // namespace NESO::Particles

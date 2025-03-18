@@ -116,6 +116,8 @@ create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
 }
 } // namespace ParticleLoopImplementation
 
+template <typename T> class SymVectorPointerCache;
+
 /**
  * Store data on each cell where the number of columns required per cell is
  * constant but the number of rows is variable. Data is stored in a column
@@ -126,6 +128,8 @@ template <typename T> class CellDat {
   template <typename KERNEL, typename... ARGS> friend class ParticleLoop;
   template <typename U> friend class ParticleDatT;
   friend class ParticlePacker;
+  friend class SymVectorPointerCache<INT>;
+  friend class SymVectorPointerCache<REAL>;
 
   friend T ***ParticleLoopImplementation::create_loop_arg<T>(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
@@ -138,6 +142,8 @@ template <typename T> class CellDat {
       sycl::handler &cgh, Access::Read<CellDat<T> *> &a);
 
 private:
+  // If the lifespan of this member changes then SymVectorPointerCache also
+  // needs updating.
   T ***d_ptr;
   std::vector<T **> h_ptr_cells;
   std::vector<T *> h_ptr_cols;
@@ -242,9 +248,7 @@ public:
   /// Number of rows currently allocated for each cell.
   std::vector<INT> nrow_alloc;
   ~CellDat() {
-    for (int cellx = 0; cellx < ncells; cellx++) {
-      this->sycl_target->free(this->h_ptr_cells[cellx]);
-    }
+    this->sycl_target->free(this->h_ptr_cells.at(0));
     // for (int colx = 0; colx < ncells * this->ncol; colx++) {
     for (int cellx = 0; cellx < ncells; cellx++) {
       if (this->h_ptr_cols[cellx * this->ncol] != NULL) {
@@ -267,17 +271,22 @@ public:
       : nrow_max(0), sycl_target(sycl_target), ncells(ncells), ncol(ncol) {
 
     this->nrow = std::vector<INT>(ncells);
+    // If the lifespan of this member changes then SymVectorPointerCache also
+    // needs updating.
     this->d_ptr =
         (T ***)this->sycl_target->malloc_device(ncells * sizeof(T **));
     this->h_ptr_cells = std::vector<T **>(ncells);
     this->h_ptr_cols = std::vector<T *>(ncells * ncol);
     this->nrow_alloc = std::vector<INT>(ncells);
 
+    T **cols_base_ptr =
+        (T **)this->sycl_target->malloc_device(ncells * ncol * sizeof(T *));
+
     for (int cellx = 0; cellx < ncells; cellx++) {
       this->nrow_alloc[cellx] = 0;
       this->nrow[cellx] = 0;
-      this->h_ptr_cells[cellx] =
-          (T **)this->sycl_target->malloc_device(ncol * sizeof(T *));
+      this->h_ptr_cells[cellx] = cols_base_ptr;
+      cols_base_ptr += ncol;
       for (int colx = 0; colx < ncol; colx++) {
         this->h_ptr_cols[cellx * ncol + colx] = NULL;
       }
@@ -308,14 +317,12 @@ public:
    * wait_set_nrow should be called before using the dat.
    */
   inline void set_nrow(const INT cell, const INT nrow_required) {
-    auto t0 = profile_timestamp();
+#ifndef NDEBUG
     NESOASSERT(cell >= 0, "Cell index is negative");
     NESOASSERT(cell < this->ncells, "Cell index is >= ncells");
     NESOASSERT(nrow_required >= 0, "Requested number of rows is negative");
+#endif
     set_nrow_inner(cell, nrow_required);
-
-    sycl_target->profile_map.inc("CellDat", "set_nrow", 1,
-                                 -profile_elapsed(t0, profile_timestamp()));
   }
 
   /**
@@ -386,7 +393,7 @@ public:
     if (this->nrow[cell] > 0) {
       for (int colx = 0; colx < this->ncol; colx++) {
         this->sycl_target->queue.memcpy(
-            cell_data->data[colx].data(),
+            cell_data->get_column_ptr(colx),
             this->h_ptr_cols[cell * this->ncol + colx],
             this->nrow[cell] * sizeof(T));
       }
@@ -451,7 +458,7 @@ public:
     if (this->nrow[cell] > 0) {
       for (int colx = 0; colx < this->ncol; colx++) {
         event_stack.push(this->sycl_target->queue.memcpy(
-            cell_data.data[colx].data(),
+            cell_data.get_column_ptr(colx),
             this->h_ptr_cols[cell * this->ncol + colx],
             this->nrow[cell] * sizeof(T)));
       }
@@ -483,7 +490,7 @@ public:
 
         this->sycl_target->queue.memcpy(
             this->h_ptr_cols[cell * this->ncol + colx],
-            cell_data->data[colx].data(), this->nrow[cell] * sizeof(T));
+            cell_data->get_column_ptr(colx), this->nrow[cell] * sizeof(T));
       }
       this->sycl_target->queue.wait();
     }
@@ -515,7 +522,7 @@ public:
 
         event_stack.push(this->sycl_target->queue.memcpy(
             this->h_ptr_cols[cell * this->ncol + colx],
-            cell_data.data[colx].data(), this->nrow[cell] * sizeof(T)));
+            cell_data.get_column_ptr(colx), this->nrow[cell] * sizeof(T)));
       }
     }
 

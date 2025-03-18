@@ -28,6 +28,40 @@ inline auto fma(const REAL &x, const REAL &y, const REAL &z) {
 template <typename T> inline auto pow(const T x, const T y) {
   return sycl::pow(x, y);
 }
+template <typename T> inline auto atan2(const T y, const T x) {
+  return sycl::atan2(y, x);
+}
+template <typename T> inline auto rsqrt(const T x) { return sycl::rsqrt(x); }
+template <typename T> inline auto sin(const T x) { return sycl::sin(x); }
+template <typename T> inline auto cos(const T x) { return sycl::cos(x); }
+template <typename T> inline auto tan(const T x) { return sycl::tan(x); }
+
+namespace Private {
+// ACPP does not seem to define a sycl::sincos(REAL, REAL*)
+template <class, class = void> struct sincos_exists_for_t : std::false_type {};
+
+template <class T>
+struct sincos_exists_for_t<T, std::void_t<decltype(sycl::sincos(
+                                  std::declval<T>(), std::declval<T *>))>>
+    : std::true_type {};
+} // namespace Private
+template <typename T,
+          std::enable_if_t<
+              std::is_same<typename Private::sincos_exists_for_t<T>::type,
+                           std::true_type>::value,
+              bool> = true>
+inline auto sincos(const T x, T *cosval) {
+  return sycl::sincos(x, cosval);
+}
+template <typename T,
+          std::enable_if_t<
+              !std::is_same<typename Private::sincos_exists_for_t<T>::type,
+                            std::true_type>::value,
+              bool> = true>
+inline auto sincos(const T x, T *cosval) {
+  *cosval = sycl::cos(x);
+  return sycl::sin(x);
+}
 
 } // namespace Kernel
 

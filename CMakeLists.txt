@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.24)
 
 project(
   NESO-Particles
-  VERSION 0.7.0
+  VERSION 0.8.0
   LANGUAGES CXX C)
 
 include(GNUInstallDirs)
@@ -50,6 +50,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/communication/communication_edges_counter.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/communication/communication_typedefs.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/communication/communication_utility.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/communication/global_move_communication.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/compute_target.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/blocked_binary_tree.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/cell_dat.hpp
@@ -68,11 +69,17 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/lookup_table.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/nd_local_array.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/product_matrix.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/containers/resource_stack.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/containers/resource_stack_interface.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/containers/resource_stack_map.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/sym_vector.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/sym_vector_impl.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/containers/sym_vector_pointer_cache.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/containers/sym_vector_pointer_cache_dispatch.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/tuple.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/departing_particle_identification.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/departing_particle_identification_impl.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/device_buffers.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/device_functions.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/device_limits.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/domain.hpp
@@ -111,6 +118,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/local_mapping.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/local_move.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/access_descriptors.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/loop/cell_info_npart.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/kernel.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_base.hpp
@@ -135,7 +143,16 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_remover.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_set.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_spec.hpp
-    ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/particle_sub_group.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/particle_sub_group_base.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/particle_sub_group_base_impl.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/sub_group_particle_map.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/sub_group_selector.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/sub_group_selector_base.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/sub_group_selector_base_impl.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/sub_group_selector_resource_stack_interface.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/particle_loop_sub_group.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/cell_sub_group_selector.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/profiling.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/sycl_typedefs.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/typedefs.hpp

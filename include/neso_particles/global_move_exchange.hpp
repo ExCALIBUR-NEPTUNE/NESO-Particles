@@ -4,6 +4,7 @@
 #include <mpi.h>
 
 #include "communication.hpp"
+#include "communication/global_move_communication.hpp"
 #include "compute_target.hpp"
 #include "packing_unpacking.hpp"
 #include "profiling.hpp"
@@ -21,15 +22,12 @@ class GlobalMoveExchange {
 
 private:
   MPI_Comm comm;
-  MPI_Win recv_win;
-  int *recv_win_data;
-  MPI_Request mpi_request;
+  GlobalMoveCommunicationSharedPtr global_move_communication;
 
+  MPI_Request mpi_request;
   BufferHost<MPI_Request> h_send_requests;
   BufferHost<MPI_Request> h_recv_requests;
   BufferHost<MPI_Status> h_recv_status;
-
-  bool recv_win_allocated;
 
 public:
   /// Disable (implicit) copies.
@@ -53,33 +51,23 @@ public:
   /// Compute device used by the instance.
   SYCLTargetSharedPtr sycl_target;
 
-  /// Explicitly free a ParticleGroup without relying on out-of-scope
-  // destructor calls.
-  inline void free() {
-    if (this->recv_win_allocated) {
-      MPICHK(MPI_Win_free(&this->recv_win));
-      this->recv_win_allocated = false;
-    }
-  };
-  ~GlobalMoveExchange() { this->free(); };
+  ~GlobalMoveExchange() = default;
 
   /**
    * Construct a new instance to exchange particle counts and data.
    *
    * @param sycl_target SYCLTargetSharedPtr to use as compute device.
+   * @param global_move_communication GlobalMoveCommunication instance to use
+   * for communication.
    */
-  GlobalMoveExchange(SYCLTargetSharedPtr sycl_target)
+  GlobalMoveExchange(SYCLTargetSharedPtr sycl_target,
+                     GlobalMoveCommunicationSharedPtr global_move_communication)
       : comm(sycl_target->comm_pair.comm_parent),
+        global_move_communication(global_move_communication),
         h_send_requests(sycl_target, 1), h_recv_requests(sycl_target, 1),
         h_recv_status(sycl_target, 1), h_send_ranks(sycl_target, 1),
         h_recv_ranks(sycl_target, 1), h_send_rank_npart(sycl_target, 1),
-        h_recv_rank_npart(sycl_target, 1), sycl_target(sycl_target) {
-    // Create a MPI_Win used to sum the number of remote ranks that will
-    // send particles to this rank.
-    MPICHK(MPI_Win_allocate(sizeof(int), sizeof(int), MPI_INFO_NULL, this->comm,
-                            &this->recv_win_data, &this->recv_win));
-    this->recv_win_allocated = true;
-  };
+        h_recv_rank_npart(sycl_target, 1), sycl_target(sycl_target){};
 
   /**
    * Initialise the start of a new epoch where global communication is
@@ -90,9 +78,8 @@ public:
     // copy the entries from the shared buffer to the host buffer to prevent
     // implicit copies back and forwards if this exchange is ran async with
     // the packing.
-    recv_win_data[0] = 0;
+    this->global_move_communication->recv_win_data[0] = 0;
     MPICHK(MPI_Ibarrier(this->comm, &this->mpi_request));
-    // MPICHK(MPI_Barrier(this->comm));
   }
 
   /**
@@ -145,10 +132,12 @@ public:
     auto t0_rma = profile_timestamp();
     for (int rankx = 0; rankx < this->num_remote_send_ranks; rankx++) {
       const int rank = this->h_send_ranks.ptr[rankx];
-      MPICHK(MPI_Win_lock(MPI_LOCK_SHARED, rank, 0, this->recv_win));
+      MPICHK(MPI_Win_lock(MPI_LOCK_SHARED, rank, 0,
+                          this->global_move_communication->recv_win));
       MPICHK(MPI_Get_accumulate(one, 1, MPI_INT, recv, 1, MPI_INT, rank, 0, 1,
-                                MPI_INT, MPI_SUM, this->recv_win));
-      MPICHK(MPI_Win_unlock(rank, this->recv_win));
+                                MPI_INT, MPI_SUM,
+                                this->global_move_communication->recv_win));
+      MPICHK(MPI_Win_unlock(rank, this->global_move_communication->recv_win));
     }
     sycl_target->profile_map.inc("GlobalMoveExchange", "RMA", 1,
                                  profile_elapsed(t0_rma, profile_timestamp()));
@@ -173,7 +162,8 @@ public:
     sycl_target->profile_map.inc(
         "GlobalMoveExchange", "barrier_wait_npart_exchange_finalise", 1,
         profile_elapsed(t0_npart, profile_timestamp()));
-    this->num_remote_recv_ranks = this->recv_win_data[0];
+    this->num_remote_recv_ranks =
+        this->global_move_communication->recv_win_data[0];
 
     // send particle counts for ranks this ranks will send to and recv counts
     // from the num_remote_ranks this rank will recv from.

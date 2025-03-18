@@ -83,7 +83,7 @@ private:
 
       for (int cx = 0; cx < ncomp; cx++) {
         this->memcpy_dat(pack_buffer.ptr + cx * component_stride + pack_offset,
-                         cell_dat->data[cx].data(), cell_dat->nrow);
+                         cell_dat->get_column_ptr(cx), cell_dat->nrow);
       }
       pack_offset += sizeof(T) * cell_dat->nrow;
     }
@@ -131,7 +131,7 @@ private:
         for (int colx = 0; colx < cell_dat->ncol; colx++) {
           this->memcpy_dat(pack_buffer.ptr +
                                (pack_offset + rowx * ncomp + colx) * sizeof(T),
-                           cell_dat->data[colx].data() + rowx, 1);
+                           cell_dat->get_column_ptr(colx) + rowx, 1);
         }
       }
       pack_offset += cell_dat->nrow * cell_dat->ncol;
@@ -219,9 +219,10 @@ public:
    *  indicating which ParticleDats are to be written.
    */
   template <typename... T>
-  H5Part(std::string filename, ParticleGroupSharedPtr particle_group, T... args)
+  H5Part(std::string filename, ParticleGroupSharedPtr particle_group,
+         T &&...args)
       : filename(filename), comm_pair(particle_group->sycl_target->comm_pair),
-        sym_store(args...), particle_group(particle_group),
+        sym_store(std::forward<T>(args)...), particle_group(particle_group),
         multi_dim_mode(false) {
     this->plist_id = H5Pcreate(H5P_FILE_ACCESS);
     H5CHK(H5Pset_fapl_mpio(this->plist_id, this->comm_pair.comm_parent,

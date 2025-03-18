@@ -41,13 +41,16 @@ template <typename T> struct PerParticleBlockRNG {
   /**
    * Access the RNG data for this particle.
    *
-   * @param particle_index Particle index to access.
-   * @param component RNG component to access.
+   * @param[in] particle_index Particle index to access.
+   * @param[out] component RNG component to access.
+   * @param[in, out] valid_sample On return this bool is set to true if the
+   * returned sample is good (i.e. RNG is in a valid state).
    * @returns Constant reference to RNG data.
    */
   inline const T &at(const Access::LoopIndex::Read &particle_index,
-                     const int component) const {
+                     const int component, bool *valid_sample) const {
     const auto index = particle_index.get_loop_linear_index();
+    *valid_sample = true;
     return at(index, component);
   }
 };

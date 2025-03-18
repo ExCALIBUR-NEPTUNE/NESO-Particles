@@ -740,3 +740,63 @@ TEST(VTK, VTKHDF) {
   vtkhdf.write(data);
   vtkhdf.close();
 }
+
+TEST(ExternalCommon, cartesian_to_torus_cylindrical) {
+
+  const REAL test_pi = 3.14159265358979323846;
+
+  auto lambda_test = [&](const REAL R, const REAL x, const REAL y, const REAL z,
+                         const REAL cr, const REAL ctheta, const REAL cphi) {
+    REAL r, theta, phi;
+    ExternalCommon::cartesian_to_torus_cylindrical(R, x, y, z, &r, &phi,
+                                                   &theta);
+
+    const REAL two_pi = 2 * test_pi;
+    const REAL theta_err = std::fmod((theta - ctheta) + 2.0 * two_pi, two_pi);
+    const REAL phi_err = std::fmod((phi - cphi) + 2.0 * two_pi, two_pi);
+    ASSERT_NEAR(r, cr, 1.0e-12);
+    ASSERT_NEAR(theta_err, 0.0, 1.0e-12);
+    ASSERT_NEAR(phi_err, 0.0, 1.0e-12);
+
+    REAL tx, ty, tz;
+    ExternalCommon::torus_cylindrical_to_cartesian(R, r, phi, theta, &tx, &ty,
+                                                   &tz);
+
+    ASSERT_NEAR(x, tx, 1.0e-12);
+    ASSERT_NEAR(y, ty, 1.0e-12);
+    ASSERT_NEAR(z, tz, 1.0e-12);
+  };
+
+  lambda_test(1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+  lambda_test(2.0, 3.0, 0.0, 0.0, 1.0, 0.0, 0.0);
+  lambda_test(2.0, 2.0, 0.0, 1.2, 1.2, 0.5 * test_pi, 0.0);
+  lambda_test(2.0, 0.8, 0.0, 0.0, 1.2, -test_pi, 0.0);
+  lambda_test(2.0, 2.0, 0.0, -8.0, 8.0, -0.5 * test_pi, 0.0);
+  lambda_test(2.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.5 * test_pi);
+  lambda_test(2.0, 0.0, 3.0, 0.0, 1.0, 0.0, 0.5 * test_pi);
+  lambda_test(2.0, 0.0, 2.0, 1.2, 1.2, 0.5 * test_pi, 0.5 * test_pi);
+  lambda_test(2.0, 0.0, -2.0, -1.2, 1.2, -0.5 * test_pi, -0.5 * test_pi);
+  lambda_test(2.0, -4.0, 0.0, -1.2, Kernel::sqrt(2.0 * 2.0 + 1.2 * 1.2),
+              Kernel::atan2(-1.2, 2.0), test_pi);
+
+  std::mt19937 rng(52234421);
+  std::normal_distribution<REAL> rng_R(0.2, 4.1);
+  std::normal_distribution<REAL> rng_x(-3.0, 4.0);
+  std::normal_distribution<REAL> rng_y(-3.0, 4.0);
+  std::normal_distribution<REAL> rng_z(-3.0, 4.0);
+  // fuzzing cartesian to torus cyl
+  for (int testx = 0; testx < 100; testx++) {
+    const REAL R = rng_R(rng);
+    const REAL x = rng_x(rng);
+    const REAL y = rng_y(rng);
+    const REAL z = rng_z(rng);
+    REAL r, theta, phi, tx, ty, tz;
+    ExternalCommon::cartesian_to_torus_cylindrical(R, x, y, z, &r, &phi,
+                                                   &theta);
+    ExternalCommon::torus_cylindrical_to_cartesian(R, r, phi, theta, &tx, &ty,
+                                                   &tz);
+    ASSERT_NEAR(x, tx, 1.0e-12);
+    ASSERT_NEAR(y, ty, 1.0e-12);
+    ASSERT_NEAR(z, tz, 1.0e-12);
+  }
+}

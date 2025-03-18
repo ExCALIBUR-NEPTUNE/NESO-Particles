@@ -40,9 +40,9 @@ TEST(CellDat, test_cell_dat_const_1) {
     for (int rowx = 0; rowx < nrow; rowx++) {
       for (int colx = 0; colx < ncol; colx++) {
         // check data returned from dat using user interface
-        ASSERT_TRUE(cell_data->data[colx][rowx] == ++index);
+        ASSERT_TRUE(cell_data->at(rowx, colx) == ++index);
         // change the data
-        cell_data->data[colx][rowx] = 2 * cell_data->data[colx][rowx];
+        cell_data->at(rowx, colx) = 2 * cell_data->at(rowx, colx);
       }
     }
     // write the changed data back to the celldat through the user interface
@@ -97,7 +97,7 @@ TEST(CellDat, test_cell_dat_REAL_1) {
 
     for (int rowx = 0; rowx < nrow; rowx++) {
       for (int colx = 0; colx < ncol; colx++) {
-        cd->data[colx][rowx] = ++index;
+        cd->at(rowx, colx) = ++index;
       }
     }
 
@@ -129,7 +129,7 @@ TEST(CellDat, test_cell_dat_REAL_1) {
 
     for (int rowx = 0; rowx < nrow0; rowx++) {
       for (int colx = 0; colx < ncol; colx++) {
-        ASSERT_TRUE(cd->data[colx][rowx] == ++index);
+        ASSERT_TRUE(cd->at(rowx, colx) == ++index);
       }
     }
   }
@@ -167,7 +167,7 @@ TEST(CellDat, test_cell_dat_INT_1) {
 
     for (int rowx = 0; rowx < nrow; rowx++) {
       for (int colx = 0; colx < ncol; colx++) {
-        cd->data[colx][rowx] = ++index;
+        cd->at(rowx, colx) = ++index;
       }
     }
 
@@ -199,7 +199,7 @@ TEST(CellDat, test_cell_dat_INT_1) {
 
     for (int rowx = 0; rowx < nrow0; rowx++) {
       for (int colx = 0; colx < ncol; colx++) {
-        ASSERT_TRUE(cd->data[colx][rowx] == ++index);
+        ASSERT_TRUE(cd->at(rowx, colx) == ++index);
       }
     }
   }
@@ -281,6 +281,76 @@ TEST(CellDatConst, get_set_value) {
       }
     }
   }
+  index = 0;
+  for (int cx = 0; cx < cell_count; cx++) {
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      for (int colx = 0; colx < ncol; colx++) {
+        index++;
+        const INT to_test = cdc->get_value(cx, rowx, colx);
+        ASSERT_EQ(to_test, index);
+      }
+    }
+  }
+}
+
+TEST(CellDatConst, get_all_cells) {
+
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+  const int cell_count = 4;
+  const int nrow = 3;
+  const int ncol = 2;
+
+  auto cdc =
+      std::make_shared<CellDatConst<INT>>(sycl_target, cell_count, nrow, ncol);
+
+  INT index = 0;
+  for (int cx = 0; cx < cell_count; cx++) {
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      for (int colx = 0; colx < ncol; colx++) {
+        index++;
+        cdc->set_value(cx, rowx, colx, index);
+      }
+    }
+  }
+
+  auto all_values = cdc->get_all_cells();
+
+  index = 0;
+  for (int cx = 0; cx < cell_count; cx++) {
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      for (int colx = 0; colx < ncol; colx++) {
+        index++;
+        const INT to_test = all_values.at(cx)->at(rowx, colx);
+        ASSERT_EQ(to_test, index);
+      }
+    }
+  }
+}
+
+TEST(CellDatConst, set_all_cells) {
+
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+  const int cell_count = 4;
+  const int nrow = 3;
+  const int ncol = 2;
+
+  auto cdc =
+      std::make_shared<CellDatConst<INT>>(sycl_target, cell_count, nrow, ncol);
+
+  auto all_values = cdc->get_all_cells();
+
+  INT index = 0;
+  for (int cx = 0; cx < cell_count; cx++) {
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      for (int colx = 0; colx < ncol; colx++) {
+        index++;
+        all_values.at(cx)->at(rowx, colx) = index;
+      }
+    }
+  }
+
+  cdc->set_all_cells(all_values);
+
   index = 0;
   for (int cx = 0; cx < cell_count; cx++) {
     for (int rowx = 0; rowx < nrow; rowx++) {

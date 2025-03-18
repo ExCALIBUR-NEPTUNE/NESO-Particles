@@ -51,9 +51,14 @@ TEST(ParticleDat, test_particle_dat_append_1) {
     ASSERT_TRUE(A->cell_dat.nrow[cellx] >= counts[cellx]);
   }
   EventStack es;
-  A->append_particle_data(N, false, cells0, layers0, data0, es);
-  // the append is async
-  es.wait();
+  {
+    auto d_cells = std::make_shared<BufferDevice<INT>>(sycl_target, cells0);
+    auto d_layers = std::make_shared<BufferDevice<INT>>(sycl_target, layers0);
+    auto d_data = std::make_shared<BufferDevice<INT>>(sycl_target, data0);
+    A->append_particle_data(N, false, cells0, d_cells, d_layers, d_data, es);
+    // the append is async
+    es.wait();
+  }
 
   for (int cellx = 0; cellx < cell_count; cellx++) {
     ASSERT_TRUE(A->h_npart_cell[cellx] == counts[cellx]);
@@ -78,9 +83,14 @@ TEST(ParticleDat, test_particle_dat_append_1) {
     ASSERT_TRUE(A->cell_dat.nrow[cellx] >= counts[cellx]);
   }
 
-  A->append_particle_data(N, true, cells0, layers0, data0, es);
-  // the append is async
-  es.wait();
+  {
+    auto d_cells = std::make_shared<BufferDevice<INT>>(sycl_target, cells0);
+    auto d_layers = std::make_shared<BufferDevice<INT>>(sycl_target, layers0);
+    auto d_data = std::make_shared<BufferDevice<INT>>(sycl_target, data0);
+    A->append_particle_data(N, true, cells0, d_cells, d_layers, d_data, es);
+    // the append is async
+    es.wait();
+  }
 
   for (int cellx = 0; cellx < cell_count; cellx++) {
 
@@ -91,7 +101,7 @@ TEST(ParticleDat, test_particle_dat_append_1) {
     for (int rowx = 0; rowx < cell_data->nrow; rowx++) {
       int row = -1;
       for (int rx = 0; rx < N; rx++) {
-        if (data0[rx] == cell_data->data[0][rowx]) {
+        if (data0[rx] == cell_data->at(rowx, 0)) {
           row = rx;
           break;
         }
@@ -99,7 +109,7 @@ TEST(ParticleDat, test_particle_dat_append_1) {
       ASSERT_TRUE(row >= 0);
 
       for (int cx = 0; cx < ncomp; cx++) {
-        ASSERT_EQ(cell_data->data[cx][rowx], data0[N * cx + row]);
+        ASSERT_EQ(cell_data->at(rowx, cx), data0[N * cx + row]);
       }
 
       ASSERT_EQ(cellx, cells0[row]);

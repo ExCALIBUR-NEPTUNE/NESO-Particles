@@ -122,7 +122,7 @@ inline void create_kernel_arg(ParticleLoopIteration &iterationx,
                               T *const *const **rhs,
                               Access::SymVector::Read<T> &lhs) {
   lhs.cell = iterationx.cellx;
-  lhs.layer = iterationx.loop_layerx;
+  lhs.layer = iterationx.layerx;
   lhs.ptr = rhs;
 }
 /**
@@ -132,7 +132,7 @@ template <typename T>
 inline void create_kernel_arg(ParticleLoopIteration &iterationx, T ****rhs,
                               Access::SymVector::Write<T> &lhs) {
   lhs.cell = iterationx.cellx;
-  lhs.layer = iterationx.loop_layerx;
+  lhs.layer = iterationx.layerx;
   lhs.ptr = rhs;
 }
 
@@ -154,39 +154,22 @@ template <typename T> class SymVector {
       sycl::handler &cgh, Access::Write<SymVector<T> *> &a);
 
 protected:
+  ParticleGroupSharedPtr particle_group;
+  std::vector<Sym<T>> syms;
   /// The ParticleDats referenced by the SymVector.
   std::vector<ParticleDatSharedPtr<T>> dats;
-  std::shared_ptr<BufferDeviceHost<T ***>> dh_root_ptrs;
-  std::shared_ptr<BufferDeviceHost<T *const *const *>> dh_root_const_ptrs;
-  inline void create(SYCLTargetSharedPtr sycl_target) {
-    const int num_dats = this->dats.size();
-    this->dh_root_ptrs =
-        std::make_shared<BufferDeviceHost<T ***>>(sycl_target, num_dats);
-    this->dh_root_const_ptrs =
-        std::make_shared<BufferDeviceHost<T *const *const *>>(sycl_target,
-                                                              num_dats);
-    for (int dx = 0; dx < num_dats; dx++) {
-      this->dh_root_ptrs->h_buffer.ptr[dx] = this->dats.at(dx)->impl_get();
-      this->dh_root_const_ptrs->h_buffer.ptr[dx] =
-          this->dats.at(dx)->impl_get_const();
-    }
-    this->dh_root_ptrs->host_to_device();
-    this->dh_root_const_ptrs->host_to_device();
-  }
 
   inline SymVectorImplGetT<T> impl_get() {
-    const int num_dats = this->dats.size();
-    for (int dx = 0; dx < num_dats; dx++) {
-      this->dats.at(dx)->impl_get();
-    }
-    return this->dh_root_ptrs->d_buffer.ptr;
+    return this->particle_group->sym_vector_pointer_cache_dispatch->get(
+        this->syms);
   }
   inline SymVectorImplGetConstT<T> impl_get_const() {
-    const int num_dats = this->dats.size();
-    for (int dx = 0; dx < num_dats; dx++) {
-      this->dats.at(dx)->impl_get_const();
-    }
-    return this->dh_root_const_ptrs->d_buffer.ptr;
+    return this->particle_group->sym_vector_pointer_cache_dispatch->get_const(
+        this->syms);
+  }
+
+  inline void create() {
+    this->particle_group->sym_vector_pointer_cache_dispatch->create(this->syms);
   }
 
 public:
@@ -199,13 +182,9 @@ public:
    * @param particle_group ParticleGroup to use.
    * @param syms Vector of Syms to use from particle_group.
    */
-  SymVector(ParticleGroupSharedPtr particle_group, std::vector<Sym<T>> syms) {
-    this->dats.clear();
-    this->dats.reserve(syms.size());
-    for (auto &sx : syms) {
-      this->dats.push_back(particle_group->get_dat(sx));
-    }
-    this->create(particle_group->sycl_target);
+  SymVector(ParticleGroupSharedPtr particle_group, std::vector<Sym<T>> syms)
+      : particle_group(particle_group), syms(syms) {
+    this->create();
   }
 
   /**
@@ -218,19 +197,21 @@ public:
    * @param syms Syms to use from particle_group.
    */
   SymVector(ParticleGroupSharedPtr particle_group,
-            std::initializer_list<Sym<T>> syms) {
-    this->dats.clear();
-    this->dats.reserve(syms.size());
-    for (auto &sx : syms) {
-      this->dats.push_back(particle_group->get_dat(sx));
-    }
-    this->create(particle_group->sycl_target);
+            std::initializer_list<Sym<T>> syms)
+      : particle_group(particle_group), syms(syms) {
+    this->create();
   }
 
   /**
    * @returns The ParticleDats that form the SymVector.
    */
   inline std::vector<ParticleDatSharedPtr<T>> const &get_particle_dats() {
+    if (this->syms.size() != this->dats.size()) {
+      for (auto &sx : this->syms) {
+        this->dats.push_back(this->particle_group->get_dat(sx));
+      }
+    }
+
     return this->dats;
   }
 };

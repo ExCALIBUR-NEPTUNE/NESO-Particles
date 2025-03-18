@@ -649,7 +649,7 @@ TEST(PETSC, dmplex_project_barycentric_coeffs) {
                                              {0.0, 0.0, 0.0, 0.0}};
 
     for (int px = 0; px < num_particles; px++) {
-      REAL l[4];
+      REAL l[4] = {0.0, 0.0, 0.0, 0.0};
       const REAL x = P->at(px, 0);
       const REAL y = P->at(px, 1);
       lambda_weights(num_vertices, vertices, x, y, &l[0], &l[1], &l[2], &l[3]);

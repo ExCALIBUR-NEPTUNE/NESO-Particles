@@ -13,6 +13,8 @@
 #include "cell_dat_move.hpp"
 #include "compute_target.hpp"
 #include "containers/product_matrix.hpp"
+#include "containers/resource_stack.hpp"
+#include "containers/sym_vector_pointer_cache_dispatch.hpp"
 #include "domain.hpp"
 #include "global_mapping.hpp"
 #include "global_move.hpp"
@@ -21,6 +23,7 @@
 #include "particle_dat.hpp"
 #include "particle_set.hpp"
 #include "particle_spec.hpp"
+#include "particle_sub_group/sub_group_selector_resource_stack_interface.hpp"
 #include "profiling.hpp"
 #include "sycl_typedefs.hpp"
 #include "typedefs.hpp"
@@ -30,7 +33,8 @@ class DescendantProducts;
 class ParticleSubGroup;
 namespace ParticleSubGroupImplementation {
 class SubGroupSelector;
-}
+class SubGroupSelectorBase;
+} // namespace ParticleSubGroupImplementation
 
 /**
  * Type to replace std::variant<Sym<INT>, Sym<REAL>> as the version tracking
@@ -75,6 +79,9 @@ struct ParticleDatVersionT {
       return this->index < v.index;
     }
   }
+  std::string get_sym_name() const {
+    return index ? this->sr.name : this->si.name;
+  }
 };
 
 /**
@@ -83,7 +90,10 @@ struct ParticleDatVersionT {
  */
 class ParticleGroup {
   friend class ParticleSubGroupImplementation::SubGroupSelector;
+  friend class ParticleSubGroupImplementation::SubGroupSelectorBase;
   friend class ParticleSubGroup;
+  friend class SymVector<REAL>;
+  friend class SymVector<INT>;
 
 protected:
   // This type should be replaceable with typedef std::variant<Sym<INT>,
@@ -129,6 +139,7 @@ protected:
   }
 
   inline void check_dats_and_group_agree() {
+#ifndef NDEBUG
     for (auto &dat : particle_dats_real) {
       for (int cellx = 0; cellx < this->ncell; cellx++) {
         NESOASSERT(dat.second->h_npart_cell[cellx] ==
@@ -143,6 +154,7 @@ protected:
                    "Bad cell count");
       }
     }
+#endif
   }
 
   template <typename T>
@@ -281,10 +293,14 @@ protected:
   /// each cell.
   std::shared_ptr<BufferDeviceHost<INT>> dh_npart_cell_es;
 
-  /// The sub group creation requires get_npart_local temporary space and we
-  /// create this space here on the parent subgroup such that it is shared
-  /// across all subgroups to avoid exessive memory usage/realloc
-  std::shared_ptr<BufferDevice<int>> d_sub_group_layers;
+  /// This is a ResourceStack instance to speed-up creation and destruction of
+  /// ParticleSubGroups.
+  std::shared_ptr<ResourceStack<SubGroupSelectorResource>>
+      resource_stack_sub_group_resource;
+
+  /// Cached pointers for SymVector to use.
+  std::shared_ptr<SymVectorPointerCacheDispatch>
+      sym_vector_pointer_cache_dispatch;
 
   /**
    * Returns true if the passed version is behind and can be updated. By
@@ -299,6 +315,13 @@ protected:
       const auto local_entry = this->particle_dat_versions.at(key);
       const int64_t local_value = std::get<0>(local_entry);
       const bool local_bool = std::get<1>(local_entry);
+      if ((this->debug_sub_group_indent >= 4) &&
+          ((local_value != to_check_value) || (local_bool))) {
+        std::cout << std::string(this->debug_sub_group_indent, ' ')
+                  << "Sym name: " << key.get_sym_name()
+                  << " version_update: " << (local_value != to_check_value)
+                  << " always_update: " << local_bool << std::endl;
+      }
       // If a local count is different to the count on the to_check then an
       // updated is required on the object that holds to check.
       if (local_value != to_check_value) {
@@ -329,6 +352,9 @@ protected:
       this->particle_group_version++;
     }
   }
+  // Are we printing debug information about when sub groups are recreated.
+  std::size_t debug_sub_group_create{0};
+  std::size_t debug_sub_group_indent{0};
 
   inline void recompute_npart_cell_es() {
     auto h_ptr_s = this->h_npart_cell.ptr;
@@ -375,9 +401,8 @@ public:
   /// Layer compression instance for dats when particles are removed from cells.
   LayerCompressor layer_compressor;
 
-  /// Explicitly free a ParticleGroup without relying on out-of-scope
-  // destructor calls.
-  inline void free() { this->global_move_ctx.free(); }
+  /// Used to be required to be called. Kept to not break API.
+  inline void free() {}
 
   /**
    * Construct a new ParticleGroup.
@@ -392,13 +417,28 @@ public:
       : ncell(domain->mesh->get_cell_count()), npart_local(0),
         h_npart_cell(sycl_target, 1), d_npart_cell(sycl_target, 1),
         d_remove_cells(sycl_target, 1), d_remove_layers(sycl_target, 1),
-        global_move_ctx(sycl_target, layer_compressor, particle_dats_real,
-                        particle_dats_int),
+        global_move_ctx(
+            sycl_target,
+            domain->mesh->get_mesh_hierarchy()->global_move_communication,
+            layer_compressor, particle_dats_real, particle_dats_int),
         cell_move_ctx(sycl_target, this->ncell, layer_compressor,
                       particle_dats_real, particle_dats_int),
         particle_group_version(1), domain(domain), sycl_target(sycl_target),
         layer_compressor(sycl_target, ncell, particle_dats_real,
                          particle_dats_int) {
+
+    this->debug_sub_group_create =
+        get_env_size_t("NESO_PARTICLES_DEBUG_SUB_GROUPS", 0);
+
+    this->resource_stack_sub_group_resource =
+        std::make_shared<ResourceStack<SubGroupSelectorResource>>(
+            std::make_shared<SubGroupSelectorResourceStackInterface>(
+                this->sycl_target, this->ncell));
+
+    this->sym_vector_pointer_cache_dispatch =
+        std::make_shared<SymVectorPointerCacheDispatch>(
+            this->sycl_target, &this->particle_dats_int,
+            &this->particle_dats_real);
 
     this->h_npart_cell.realloc_no_copy(this->ncell);
     this->d_npart_cell.realloc_no_copy(this->ncell);
@@ -442,8 +482,6 @@ public:
     // call the callback on the local mapper to complete the setup of that
     // object
     this->domain->local_mapper->particle_group_callback(*this);
-    this->d_sub_group_layers =
-        std::make_shared<BufferDevice<int>>(sycl_target, 1);
   }
   ~ParticleGroup() {}
 
@@ -780,7 +818,7 @@ public:
    *  @param args Sym<REAL> or Sym<INT> instances that indicate which particle
    *  data to print.
    */
-  template <typename... T> inline void print(T... args);
+  template <typename... T> inline void print(T &&...args);
 
   /**
    *  Print all particle data for a particle.

@@ -22,6 +22,7 @@
 #include "../particle_dat.hpp"
 #include "../particle_spec.hpp"
 #include "../sycl_typedefs.hpp"
+#include "cell_info_npart.hpp"
 #include "kernel.hpp"
 #include "particle_loop_base.hpp"
 #include "particle_loop_index.hpp"
@@ -304,29 +305,70 @@ protected:
   }
 
   inline ParticleLoopImplementation::ParticleLoopGlobalInfo
-  create_global_info(const std::optional<int> cell = std::nullopt) {
+  create_global_info(const std::optional<int> cell_start = std::nullopt,
+                     const std::optional<int> cell_end = std::nullopt) {
+
+    int cell_start_v = -1;
+    int cell_end_v = -1;
+    const bool all_cells = this->determine_iteration_set(
+        cell_start, cell_end, &cell_start_v, &cell_end_v);
+
     ParticleLoopImplementation::ParticleLoopGlobalInfo global_info;
     global_info.particle_group = this->particle_group_ptr;
     global_info.particle_sub_group = nullptr;
+    global_info.d_npart_cell_lb = this->d_npart_cell_lb;
     global_info.d_npart_cell_es = this->d_npart_cell_es;
     global_info.d_npart_cell_es_lb = this->d_npart_cell_es_lb;
-
-    global_info.starting_cell = (cell == std::nullopt) ? 0 : cell.value();
-    global_info.bounding_cell =
-        (cell == std::nullopt) ? this->ncell : cell.value() + 1;
-
+    global_info.all_cells = all_cells;
+    global_info.starting_cell = cell_start_v;
+    global_info.bounding_cell = cell_end_v;
     global_info.loop_type_int = this->get_loop_type_int();
     global_info.local_size = this->get_local_size();
     return global_info;
   }
 
-  inline bool iteration_set_is_empty(const std::optional<int> cell) {
-    if (cell != std::nullopt) {
-      const int cellx = cell.value();
+  inline bool determine_iteration_set(const std::optional<int> cell_start,
+                                      const std::optional<int> cell_end,
+                                      int *cell_start_v, int *cell_end_v) {
+    if ((cell_start == std::nullopt) && (cell_end == std::nullopt)) {
+      // Is all cells
+      *cell_start_v = 0;
+      *cell_end_v = this->ncell;
+      return true;
+    } else if ((cell_start != std::nullopt) && (cell_end == std::nullopt)) {
+      // Is single cell
+      *cell_start_v = cell_start.value();
+      *cell_end_v = *cell_start_v + 1;
+      return false;
+    } else if ((cell_start != std::nullopt) && (cell_end != std::nullopt)) {
+      // Is single cell
+      *cell_start_v = cell_start.value();
+      *cell_end_v = cell_end.value();
+      return false;
+    } else {
+      NESOASSERT(false, "Bad cell_start, cell_end found.");
+      return false;
+    }
+  }
+
+  inline bool iteration_set_is_empty(const std::optional<int> cell_start,
+                                     const std::optional<int> cell_end) {
+
+    int cell_start_v = -1;
+    int cell_end_v = -1;
+    const bool all_cells = this->determine_iteration_set(
+        cell_start, cell_end, &cell_start_v, &cell_end_v);
+
+    if (!all_cells) {
       NESOASSERT(
-          (cell > -1) && (cell < this->ncell),
+          (cell_start_v > -1) && (cell_start_v <= this->ncell) &&
+              (cell_end_v > -1) && (cell_end_v <= this->ncell),
           "ParticleLoop execute or submit called on cell that does not exist.");
-      return this->h_npart_cell_lb[cellx] == 0;
+      int max_npart = 0;
+      for (int cellx = cell_start_v; cellx < cell_end_v; cellx++) {
+        max_npart = std::max(max_npart, this->h_npart_cell_lb[cellx]);
+      }
+      return max_npart == 0;
     } else if (this->particle_group_ptr != nullptr) {
       return this->particle_group_ptr->get_npart_local() == 0;
     } else {
@@ -449,35 +491,51 @@ public:
    *  MPI communicator of the ParticleGroup. Loop execution is complete when
    *  the corresponding call to wait returns.
    *
-   *  @param cell Optional cell index to only launch the ParticleLoop over.
+   *  submit() Launches the ParticleLoop over all cells.
+   *  submit(i) Launches the ParticleLoop over cell i.
+   *  submit(i, i+4) Launches the ParticleLoop over cells i, i+1, i+2, i+3.
+   *  Note cell_end itself is not visited.
+   *
+   *  @param cell_start Optional starting cell to launch the ParticleLoop over.
+   *  @param cell_end Optional ending cell to launch the ParticleLoop over.
    */
-  inline void submit(const std::optional<int> cell = std::nullopt) {
+  virtual inline void
+  submit(const std::optional<int> cell_start = std::nullopt,
+         const std::optional<int> cell_end = std::nullopt) override {
     this->profiling_region_init();
 
     NESOASSERT(
-        (!this->loop_running) || (cell != std::nullopt),
+        (!this->loop_running) || (cell_start != std::nullopt),
         "ParticleLoop::submit called - but the loop is already submitted.");
     this->loop_running = true;
-    if (this->iteration_set_is_empty(cell)) {
+
+    int cell_start_v = -1;
+    int cell_end_v = -1;
+    const bool all_cells = this->determine_iteration_set(
+        cell_start, cell_end, &cell_start_v, &cell_end_v);
+
+    if (this->iteration_set_is_empty(cell_start, cell_end)) {
       return;
     }
 
     auto t0 = profile_timestamp();
-    auto global_info = this->create_global_info(cell);
+    auto global_info = this->create_global_info(cell_start, cell_end);
     this->apply_pre_loop(global_info);
 
     auto &is = this->iteration_set->iteration_set;
-    if (cell != std::nullopt) {
-      // Num local bytes is already used to compute the local size
-      is = this->iteration_set->get_single_cell(cell.value(),
-                                                global_info.local_size, 0);
-    } else {
+
+    if (all_cells) {
       const std::size_t nbin = this->sycl_target->parameters
                                    ->template get<SizeTParameter>("LOOP_NBIN")
                                    ->value;
       // Num local bytes is already used to compute the local size
       is = this->iteration_set->get_all_cells(nbin, global_info.local_size, 0);
+    } else {
+      // Num local bytes is already used to compute the local size
+      is = this->iteration_set->get_range_cell(cell_start_v, cell_end_v,
+                                               global_info.local_size, 0);
     }
+
     this->profiling_region_metrics(this->iteration_set->iteration_set_size);
     auto k_kernel = ParticleLoopImplementation::get_kernel(this->kernel);
     this->sycl_target->profile_map.inc(
@@ -485,18 +543,49 @@ public:
 
     for (auto &blockx : is) {
       const auto block_device = blockx.block_device;
-      this->event_stack.push(sycl_target->queue.submit([&](sycl::handler &cgh) {
-        loop_parameter_type loop_args;
-        create_loop_args(cgh, loop_args, &global_info);
-        cgh.parallel_for<>(
-            blockx.loop_iteration_set, [=](sycl::nd_item<2> idx) {
-              std::size_t cell;
-              std::size_t layer;
-              block_device.get_cell_layer(idx, &cell, &layer);
-              const int cellx = static_cast<int>(cell);
-              const int layerx = static_cast<int>(layer);
-              ParticleLoopImplementation::ParticleLoopIteration iterationx;
-              if (block_device.work_item_required(cell, layer)) {
+      auto lambda_dispatch = [&]() {
+        this->event_stack.push(
+            sycl_target->queue.submit([&](sycl::handler &cgh) {
+              loop_parameter_type loop_args;
+              create_loop_args(cgh, loop_args, &global_info);
+              cgh.parallel_for<>(blockx.loop_iteration_set, [=](sycl::nd_item<2>
+                                                                    idx) {
+                std::size_t cell;
+                std::size_t layer;
+                block_device.get_cell_layer(idx, &cell, &layer);
+                const int cellx = static_cast<int>(cell);
+                const int layerx = static_cast<int>(layer);
+                ParticleLoopImplementation::ParticleLoopIteration iterationx;
+                if (block_device.work_item_required(cell, layer)) {
+                  iterationx.local_sycl_index = idx.get_local_id(1);
+                  iterationx.cellx = cellx;
+                  iterationx.layerx = layerx;
+                  iterationx.loop_layerx = layerx;
+                  kernel_parameter_type kernel_args;
+                  create_kernel_args(iterationx, loop_args, kernel_args);
+                  Tuple::apply(k_kernel, kernel_args);
+                }
+              });
+            }));
+      };
+#ifdef NESO_PARTICLES_SINGLE_COMPILED_LOOP
+      lambda_dispatch();
+#else
+      if (blockx.layer_bounds_check_required) {
+        lambda_dispatch();
+      } else {
+        this->event_stack.push(
+            sycl_target->queue.submit([&](sycl::handler &cgh) {
+              loop_parameter_type loop_args;
+              create_loop_args(cgh, loop_args, &global_info);
+              cgh.parallel_for<>(blockx.loop_iteration_set, [=](sycl::nd_item<2>
+                                                                    idx) {
+                std::size_t cell;
+                std::size_t layer;
+                block_device.get_cell_layer(idx, &cell, &layer);
+                const int cellx = static_cast<int>(cell);
+                const int layerx = static_cast<int>(layer);
+                ParticleLoopImplementation::ParticleLoopIteration iterationx;
                 iterationx.local_sycl_index = idx.get_local_id(1);
                 iterationx.cellx = cellx;
                 iterationx.layerx = layerx;
@@ -504,9 +593,10 @@ public:
                 kernel_parameter_type kernel_args;
                 create_kernel_args(iterationx, loop_args, kernel_args);
                 Tuple::apply(k_kernel, kernel_args);
-              }
-            });
-      }));
+              });
+            }));
+      }
+#endif
     }
   }
 
@@ -514,7 +604,7 @@ public:
    * Wait for loop execution to complete. On completion perform post-loop
    * actions. Must be called collectively on communicator.
    */
-  inline void wait() {
+  virtual inline void wait() override {
     NESOASSERT(this->loop_running,
                "ParticleLoop::wait called - but the loop is not submitted.");
     // wait for the loop execution to complete
@@ -533,11 +623,19 @@ public:
    *  called collectively on the MPI communicator associated with the
    *  SYCLTarget this loop is over.
    *
-   *  @param cell Optional cell to launch the ParticleLoop over.
+   *  execute() Launches the ParticleLoop over all cells.
+   *  execute(i) Launches the ParticleLoop over cell i.
+   *  execute(i, i+4) Launches the ParticleLoop over cells i, i+1, i+2, i+3.
+   *  Note cell_end itself is not visited.
+   *
+   *  @param cell_start Optional starting cell to launch the ParticleLoop over.
+   *  @param cell_end Optional ending cell to launch the ParticleLoop over.
    */
-  inline void execute(const std::optional<int> cell = std::nullopt) {
+  virtual inline void
+  execute(const std::optional<int> cell_start = std::nullopt,
+          const std::optional<int> cell_end = std::nullopt) override {
     auto t0 = profile_timestamp();
-    this->submit(cell);
+    this->submit(cell_start, cell_end);
     this->wait();
     this->sycl_target->profile_map.inc(
         this->loop_type, this->name, 1,

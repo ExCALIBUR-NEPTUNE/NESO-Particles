@@ -12,6 +12,7 @@ struct WorkGroupLimits {
   sycl::range<1> max_global_workgroup_1;
   sycl::range<2> max_global_workgroup_2;
   sycl::range<3> max_global_workgroup_3;
+  std::size_t max_work_group_size;
 };
 
 template <int N>
@@ -51,6 +52,9 @@ protected:
     this->wgl.max_global_workgroup_2 = sycl::range<2>(env_max_1, env_max_0);
     this->wgl.max_global_workgroup_3 =
         sycl::range<3>(env_max_2, env_max_1, env_max_0);
+    this->wgl.max_work_group_size =
+        get_env_size_t("NESO_PARTICLES_DEVICE_LIMIT_WORK_GROUP_SIZE",
+                       this->wgl.max_work_group_size);
   }
 
   inline void setup_generic() {
@@ -59,6 +63,9 @@ protected:
     this->wgl.max_global_workgroup_2 = sycl::range<2>(max_size_t, max_size_t);
     this->wgl.max_global_workgroup_3 =
         sycl::range<3>(max_size_t, max_size_t, max_size_t);
+    this->wgl.max_work_group_size =
+        device.get_info<sycl::info::device::max_work_group_size>();
+
     auto local_mem_exists =
         device.get_info<sycl::info::device::local_mem_type>() !=
         sycl::info::local_mem_type::none;
@@ -72,6 +79,7 @@ protected:
     this->wgl.max_global_workgroup_1 = sycl::range<1>(2147483647);
     this->wgl.max_global_workgroup_2 = sycl::range<2>(65535, 2147483647);
     this->wgl.max_global_workgroup_3 = sycl::range<3>(65535, 65535, 2147483647);
+    this->wgl.max_work_group_size = 1024;
   }
 
 public:
@@ -90,12 +98,13 @@ public:
 
   inline void print() {
     nprint("Using global workgroup limits:");
-    auto d1 = Private::get_max_global_workgroup<1>(wgl);
+    auto d1 = Private::get_max_global_workgroup<1>(this->wgl);
     nprint("1D:", d1.get(0));
-    auto d2 = Private::get_max_global_workgroup<2>(wgl);
+    auto d2 = Private::get_max_global_workgroup<2>(this->wgl);
     nprint("2D:", d2.get(0), d2.get(1));
-    auto d3 = Private::get_max_global_workgroup<3>(wgl);
+    auto d3 = Private::get_max_global_workgroup<3>(this->wgl);
     nprint("3D:", d3.get(0), d3.get(1), d3.get(2));
+    nprint("Workgroup size limit:", this->wgl.max_work_group_size);
     auto local_mem_exists =
         this->device.get_info<sycl::info::device::local_mem_type>() !=
         sycl::info::local_mem_type::none;
@@ -116,7 +125,7 @@ public:
   inline sycl::range<N>
   validate_range_global(const sycl::range<N> &range_global) {
     sycl::range<N> max_global_workgroup =
-        Private::get_max_global_workgroup<N>(wgl);
+        Private::get_max_global_workgroup<N>(this->wgl);
     for (int dx = 0; dx < N; dx++) {
       if (max_global_workgroup.get(dx)) {
         NESOASSERT(
@@ -139,13 +148,18 @@ public:
 
     const sycl::range<N> max_work_item_sizes =
         this->device.get_info<sycl::info::device::max_work_item_sizes<N>>();
+    std::size_t total_size = 1;
     for (int dx = 0; dx < N; dx++) {
+      const std::size_t dx_size = range_local.get(dx);
       if (max_work_item_sizes.get(dx)) {
-        NESOASSERT(
-            range_local.get(dx) <= max_work_item_sizes.get(dx),
-            "Workgroup size exceeds device maximum local workgroup size.");
+        NESOASSERT(dx_size <= max_work_item_sizes.get(dx),
+                   "Workgroup size exceeds device maximum local workgroup size "
+                   "in a dimension.");
       }
+      total_size *= dx_size;
     }
+    NESOASSERT(total_size <= this->wgl.max_work_group_size,
+               "Workgroup size exceeds device maximum local workgroup size.");
     return range_local;
   }
 

@@ -4,7 +4,7 @@
 #include "containers/descendant_products.hpp"
 #include "global_mapping.hpp"
 #include "particle_group.hpp"
-#include "particle_sub_group.hpp"
+#include "particle_sub_group/particle_sub_group.hpp"
 
 namespace NESO::Particles {
 
@@ -74,20 +74,46 @@ inline void ParticleGroup::add_particles_local(ParticleSet &particle_data) {
   buffer_memcpy(this->d_npart_cell, this->h_npart_cell).wait_and_throw();
   this->recompute_npart_cell_es();
 
+  // Containers for device copies of the data
+  std::map<Sym<INT>, std::shared_ptr<BufferDevice<INT>>> map_int;
+  std::map<Sym<REAL>, std::shared_ptr<BufferDevice<REAL>>> map_real;
+
+  // Make these buffers once for all ParticleDats.
+  auto d_cells =
+      std::make_shared<BufferDevice<INT>>(this->sycl_target, cellids.size());
+  auto d_layers =
+      std::make_shared<BufferDevice<INT>>(this->sycl_target, layers.size());
+
   EventStack es;
+  es.push(d_cells->set_async(cellids));
+  es.push(d_layers->set_async(layers));
+  for (auto &dat : this->particle_dats_real) {
+    auto &tmphostdata = particle_data.get(dat.first);
+    auto tmpdata = std::make_shared<BufferDevice<REAL>>(this->sycl_target,
+                                                        tmphostdata.size());
+    map_real[dat.first] = tmpdata;
+    es.push(tmpdata->set_async(tmphostdata));
+  }
+  for (auto &dat : this->particle_dats_int) {
+    auto &tmphostdata = particle_data.get(dat.first);
+    auto tmpdata = std::make_shared<BufferDevice<INT>>(this->sycl_target,
+                                                       tmphostdata.size());
+    map_int[dat.first] = tmpdata;
+    es.push(tmpdata->set_async(tmphostdata));
+  }
+  es.wait();
 
   for (auto &dat : this->particle_dats_real) {
     realloc_dat(dat.second);
-    dat.second->append_particle_data(npart_new,
-                                     particle_data.contains(dat.first), cellids,
-                                     layers, particle_data.get(dat.first), es);
+    dat.second->append_particle_data(
+        npart_new, particle_data.contains(dat.first), cellids, d_cells,
+        d_layers, map_real.at(dat.first), es);
   }
-
   for (auto &dat : this->particle_dats_int) {
     realloc_dat(dat.second);
-    dat.second->append_particle_data(npart_new,
-                                     particle_data.contains(dat.first), cellids,
-                                     layers, particle_data.get(dat.first), es);
+    dat.second->append_particle_data(
+        npart_new, particle_data.contains(dat.first), cellids, d_cells,
+        d_layers, map_int.at(dat.first), es);
   }
 
   es.wait();
@@ -112,34 +138,29 @@ inline void ParticleGroup::remove_particles(const int npart,
                                             const std::vector<INT> &cells,
                                             const std::vector<INT> &layers) {
 
-  this->d_remove_cells.realloc_no_copy(npart);
-  this->d_remove_layers.realloc_no_copy(npart);
+  if (npart > 0) {
+    this->d_remove_cells.realloc_no_copy(npart);
+    this->d_remove_layers.realloc_no_copy(npart);
 
-  auto k_cells = this->d_remove_cells.ptr;
-  auto k_layers = this->d_remove_layers.ptr;
+    auto k_cells = this->d_remove_cells.ptr;
+    auto k_layers = this->d_remove_layers.ptr;
 
-  NESOASSERT(cells.size() >= static_cast<std::size_t>(npart),
-             "Bad cells length compared to npart");
-  NESOASSERT(layers.size() >= static_cast<std::size_t>(npart),
-             "Bad layers length compared to npart");
+    NESOASSERT(cells.size() >= static_cast<std::size_t>(npart),
+               "Bad cells length compared to npart");
+    NESOASSERT(layers.size() >= static_cast<std::size_t>(npart),
+               "Bad layers length compared to npart");
 
-  auto b_cells = sycl::buffer<INT>(cells.data(), sycl::range<1>(npart));
-  auto b_layers = sycl::buffer<INT>(layers.data(), sycl::range<1>(npart));
+    const std::size_t num_bytes = static_cast<std::size_t>(npart) * sizeof(INT);
+    auto event_cells =
+        this->sycl_target->queue.memcpy(k_cells, cells.data(), num_bytes);
+    auto event_layers =
+        this->sycl_target->queue.memcpy(k_layers, layers.data(), num_bytes);
 
-  this->sycl_target->queue
-      .submit([&](sycl::handler &cgh) {
-        auto a_cells = b_cells.get_access<sycl::access::mode::read>(cgh);
-        auto a_layers = b_layers.get_access<sycl::access::mode::read>(cgh);
-        cgh.parallel_for<>(sycl::range<1>(static_cast<size_t>(npart)),
-                           [=](sycl::id<1> idx) {
-                             k_cells[idx] = static_cast<INT>(a_cells[idx]);
-                             k_layers[idx] = static_cast<INT>(a_layers[idx]);
-                           });
-      })
-      .wait_and_throw();
+    event_cells.wait_and_throw();
+    event_layers.wait_and_throw();
 
-  this->remove_particles(npart, this->d_remove_cells.ptr,
-                         this->d_remove_layers.ptr);
+    this->remove_particles(npart, k_cells, k_layers);
+  }
 }
 
 inline void ParticleGroup::remove_particles(
@@ -184,9 +205,9 @@ inline void ParticleGroup::local_move() {
   this->invalidate_group_version();
 }
 
-template <typename... T> inline void ParticleGroup::print(T... args) {
+template <typename... T> inline void ParticleGroup::print(T &&...args) {
 
-  SymStore print_spec(args...);
+  SymStore print_spec(std::forward<T>(args)...);
 
   std::cout << "==============================================================="
                "================="

@@ -15,14 +15,25 @@ namespace NESO::Particles {
  */
 template <typename T> struct AtomicBlockRNG {
   int buffer_size;
-  int *counter;
+  int *RESTRICT counter;
   T const *RESTRICT d_ptr;
-  inline T at(const Access::LoopIndex::Read &, const int) {
+  inline T at(const Access::LoopIndex::Read &, const int, bool *valid_sample) {
     sycl::atomic_ref<int, sycl::memory_order::relaxed,
                      sycl::memory_scope::device>
         element_atomic(this->counter[0]);
     const int index = element_atomic.fetch_add(1);
-    return (index < buffer_size) ? this->d_ptr[index] : static_cast<T>(0);
+    bool valid_tmp = (index < buffer_size) && (0 <= index);
+
+    sycl::atomic_ref<int, sycl::memory_order::relaxed,
+                     sycl::memory_scope::device>
+        poison_atomic(this->counter[1]);
+
+    const int to_poison_int = static_cast<int>(!valid_tmp);
+    const int already_poisoned_int = poison_atomic.fetch_max(to_poison_int);
+
+    valid_tmp = valid_tmp && (!already_poisoned_int);
+    *valid_sample = valid_tmp;
+    return valid_tmp ? this->d_ptr[index] : static_cast<T>(0);
   }
 };
 
@@ -55,7 +66,7 @@ protected:
   inline void create_counter(SYCLTargetSharedPtr sycl_target) {
     if (!this->d_counters.count(sycl_target)) {
       this->d_counters[sycl_target] =
-          std::make_shared<BufferDevice<int>>(sycl_target, 1);
+          std::make_shared<BufferDevice<int>>(sycl_target, 2);
     }
   }
 
@@ -64,17 +75,18 @@ protected:
     return this->d_counters.at(sycl_target)->ptr;
   }
 
-  inline int get_counter(SYCLTargetSharedPtr sycl_target) {
+  inline int get_counter(SYCLTargetSharedPtr sycl_target, bool *is_poisoned) {
     int *ptr = this->get_counter_ptr(sycl_target);
-    int count;
-    sycl_target->queue.memcpy(&count, ptr, sizeof(int)).wait_and_throw();
-    return count;
+    int count[2];
+    sycl_target->queue.memcpy(&count, ptr, 2 * sizeof(int)).wait_and_throw();
+    *is_poisoned = static_cast<bool>(count[1]);
+    return count[0];
   }
 
   inline void reset_counter(SYCLTargetSharedPtr sycl_target) {
     int *ptr = this->get_counter_ptr(sycl_target);
-    int count = 0;
-    sycl_target->queue.memcpy(ptr, &count, sizeof(int)).wait_and_throw();
+    int count[2] = {0, 0};
+    sycl_target->queue.memcpy(ptr, &count, 2 * sizeof(int)).wait_and_throw();
   }
 
 public:
@@ -137,8 +149,9 @@ public:
                             num_random_numbers, this->block_size);
         this->set_num_values(sycl_target, num_random_numbers);
       } else {
+        bool tmp_bool;
         const std::size_t current_count =
-            static_cast<std::size_t>(this->get_counter(sycl_target));
+            static_cast<std::size_t>(this->get_counter(sycl_target, &tmp_bool));
         // Fill the block of numbers previously used.
         if (current_count > 0) {
           std::size_t num_required =
@@ -178,15 +191,17 @@ public:
       override {
     this->internal_state = 0;
     auto sycl_target = global_info->particle_group->sycl_target;
-    const int read_count = this->get_counter(sycl_target);
+    bool is_poisoned = false;
+    const int read_count = this->get_counter(sycl_target, &is_poisoned);
     const int max_count = this->get_num_values(sycl_target);
-    NESOWARN((read_count <= max_count) || this->suppress_warnings,
+    NESOWARN(((read_count <= max_count) && (!is_poisoned)) ||
+                 this->suppress_warnings,
              "ParticleLoop attempted to read more RNG values than existed in "
              "the buffer. Buffer size is " +
                  std::to_string(max_count) +
                  " but the attempted read count was " +
                  std::to_string(read_count) + ".");
-    if (read_count > max_count) {
+    if ((read_count > max_count) || is_poisoned) {
       this->internal_state_is_valid = false;
     }
   }

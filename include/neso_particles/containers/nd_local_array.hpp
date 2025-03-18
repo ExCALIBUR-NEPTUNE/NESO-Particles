@@ -238,6 +238,7 @@ public:
   template <typename... SHAPE>
   NDLocalArray(SYCLTargetSharedPtr sycl_target, SHAPE... shape)
       : sycl_target(sycl_target) {
+    static_assert(sizeof...(shape) == N, "Missmatch between shape size and N.");
     this->index = nd_index<N>(shape...);
     this->size = this->index.size();
     this->buffer =

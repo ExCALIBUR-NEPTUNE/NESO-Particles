@@ -81,7 +81,7 @@ inline std::filesystem::path get_test_resource(std::string resource_name) {
 #define MAKE_WRAP_METHOD(method_name)                                          \
   template <typename... T> auto wrap_##method_name(T... args) {                \
     return method_name(args...);                                               \
-  };
+  }
 #endif
 
 /**

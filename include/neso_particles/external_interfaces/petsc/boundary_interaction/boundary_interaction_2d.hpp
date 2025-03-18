@@ -43,7 +43,7 @@ struct BoundaryNormalMapper {
    * @returns True if the boundary element is found otherwise false.
    */
   inline bool get(const INT global_id, REAL **normal) const {
-    BoundaryInteractionNormalData2D *node;
+    BoundaryInteractionNormalData2D *node = nullptr;
     bool *exists;
     const bool e = root->get_location(global_id, &exists, &node);
     *normal = node->d_normal;

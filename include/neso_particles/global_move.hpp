@@ -5,6 +5,7 @@
 
 #include "cell_dat_compression.hpp"
 #include "communication.hpp"
+#include "communication/global_move_communication.hpp"
 #include "compute_target.hpp"
 #include "departing_particle_identification.hpp"
 #include "global_move_exchange.hpp"
@@ -45,25 +46,27 @@ public:
   /// Compute device used by the instance.
   SYCLTargetSharedPtr sycl_target;
 
-  inline void free() { this->global_move_exchange.free(); }
-
   ~GlobalMove(){};
   /**
    * Construct a new global move instance to move particles between the cells
    * of a MeshHierarchy.
    *
    * @param sycl_target SYCLTargetSharedPtr to use as compute device.
+   * @param global_move_communication GlobalMoveCommunication.
    * @param layer_compressor LayerCompressor to use to compress ParticleDat rows
    * @param particle_dats_real Container of the REAL valued ParticleDats.
    * @param particle_dats_int Container of the INT valued ParticleDats.
    */
   GlobalMove(
-      SYCLTargetSharedPtr sycl_target, LayerCompressor &layer_compressor,
+      SYCLTargetSharedPtr sycl_target,
+      GlobalMoveCommunicationSharedPtr global_move_communication,
+      LayerCompressor &layer_compressor,
       std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
       std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int)
       : particle_dats_real(particle_dats_real),
         particle_dats_int(particle_dats_int), particle_packer(sycl_target),
-        particle_unpacker(sycl_target), global_move_exchange(sycl_target),
+        particle_unpacker(sycl_target),
+        global_move_exchange(sycl_target, global_move_communication),
         departing_identify(sycl_target), layer_compressor(layer_compressor),
         dh_send_rank_npart(sycl_target, 1), sycl_target(sycl_target){};
 
@@ -150,6 +153,13 @@ public:
     this->global_move_exchange.npart_exchange_sendrecv(
         num_remote_send_ranks, dh_send_ranks,
         this->dh_send_rank_npart.h_buffer);
+
+    if (Debug::enabled(Debug::MOVEMENT_LEVEL)) {
+      nprint("GlobalMove::move::send_ranks:");
+      for (int rank = 0; rank < num_remote_send_ranks; rank++) {
+        nprint("\t", rank, dh_send_ranks.h_buffer.ptr[rank]);
+      }
+    }
 
     sycl_target->profile_map.inc("GlobalMove", "move_stage_f", 1,
                                  profile_elapsed(t0, profile_timestamp()));
