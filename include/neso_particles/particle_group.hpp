@@ -408,14 +408,7 @@ public:
   LayerCompressor layer_compressor;
 
   /// Used to be required to be called. Kept to not break API.
-  inline void free() {
-    if (this->resource_stack_sub_group_resource != nullptr) {
-      this->resource_stack_sub_group_resource->free();
-    }
-    if (this->resource_stack_particle_group_temporary != nullptr) {
-      this->resource_stack_particle_group_temporary->free();
-    }
-  }
+  inline void free() {}
 
   /**
    * Construct a new ParticleGroup.
@@ -496,7 +489,7 @@ public:
     // object
     this->domain->local_mapper->particle_group_callback(*this);
   }
-  ~ParticleGroup() { this->free(); }
+  ~ParticleGroup() {}
 
   /**
    *  Add a ParticleDat to the ParticleGroup after construction.
