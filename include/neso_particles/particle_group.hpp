@@ -104,6 +104,8 @@ protected:
   typedef int64_t ParticleGroupVersion;
   typedef std::map<ParticleDatVersion, int64_t> ParticleDatVersionTracker;
 
+  std::size_t npart_cell_hint{0};
+  bool is_temporary;
   int ncell;
   int npart_local;
   BufferHost<INT> h_npart_cell;
@@ -289,6 +291,13 @@ protected:
     NESOASSERT(this->particle_dat_versions.count(key) == 0,
                "ParticleDat already in version tracker.");
     this->particle_dat_versions[key] = value;
+
+    if (this->npart_cell_hint > 0) {
+      for (int cellx = 0; cellx < this->ncell; cellx++) {
+        particle_dat->realloc(cellx, static_cast<int>(this->npart_cell_hint));
+      }
+      particle_dat->cell_dat.wait_set_nrow();
+    }
   }
 
   /// BufferDeviceHost holding the exclusive sum of the number of particles in
@@ -374,64 +383,9 @@ protected:
     this->dh_npart_cell_es->host_to_device();
   }
 
-public:
-  /// Disable (implicit) copies.
-  ParticleGroup(const ParticleGroup &st) = delete;
-  /// Disable (implicit) copies.
-  ParticleGroup &operator=(ParticleGroup const &a) = delete;
-
-  /// Domain this instance is defined over.
-  DomainSharedPtr domain;
-  /// Compute device used by the instance.
-  SYCLTargetSharedPtr sycl_target;
-  /// Map from Sym instances to REAL valued ParticleDat instances.
-  std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> particle_dats_real{};
-  /// Map from Sym instances to INT valued ParticleDat instances.
-  std::map<Sym<INT>, ParticleDatSharedPtr<INT>> particle_dats_int{};
-
-  /// Sym of ParticleDat storing particle positions.
-  std::shared_ptr<Sym<REAL>> position_sym;
-  /// ParticleDat storing particle positions.
-  ParticleDatSharedPtr<REAL> position_dat;
-  /// Sym of ParticleDat storing particle cell ids.
-  std::shared_ptr<Sym<INT>> cell_id_sym;
-  /// ParticleDat storing particle cell ids.
-  ParticleDatSharedPtr<INT> cell_id_dat;
-  /// Sym of ParticleDat storing particle MPI ranks.
-  std::shared_ptr<Sym<INT>> mpi_rank_sym;
-  /// ParticleDat storing particle MPI ranks.
-  ParticleDatSharedPtr<INT> mpi_rank_dat;
-  /// ParticleSpec of all the ParticleDats of this ParticleGroup.
-  ParticleSpec particle_spec;
-
-  /// Layer compression instance for dats when particles are removed from cells.
-  LayerCompressor layer_compressor;
-
-  /// Used to be required to be called. Kept to not break API.
-  inline void free() {}
-
-  /**
-   * Construct a new ParticleGroup.
-   *
-   * @param domain Domain instance containing these particles.
-   * @param particle_spec ParticleSpec that describes the ParticleDat instances
-   * required.
-   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
-   */
-  ParticleGroup(DomainSharedPtr domain, ParticleSpec &particle_spec,
-                SYCLTargetSharedPtr sycl_target)
-      : ncell(domain->mesh->get_cell_count()), npart_local(0),
-        h_npart_cell(sycl_target, 1), d_npart_cell(sycl_target, 1),
-        d_remove_cells(sycl_target, 1), d_remove_layers(sycl_target, 1),
-        global_move_ctx(
-            sycl_target,
-            domain->mesh->get_mesh_hierarchy()->global_move_communication,
-            layer_compressor, particle_dats_real, particle_dats_int),
-        cell_move_ctx(sycl_target, this->ncell, layer_compressor,
-                      particle_dats_real, particle_dats_int),
-        particle_group_version(1), domain(domain), sycl_target(sycl_target),
-        layer_compressor(sycl_target, ncell, particle_dats_real,
-                         particle_dats_int) {
+  inline void setup_internal(DomainSharedPtr domain,
+                             ParticleSpec &particle_spec,
+                             SYCLTargetSharedPtr sycl_target) {
 
     this->debug_sub_group_create =
         get_env_size_t("NESO_PARTICLES_DEBUG_SUB_GROUPS", 0);
@@ -489,6 +443,92 @@ public:
     // object
     this->domain->local_mapper->particle_group_callback(*this);
   }
+
+public:
+  /// Disable (implicit) copies.
+  ParticleGroup(const ParticleGroup &st) = delete;
+  /// Disable (implicit) copies.
+  ParticleGroup &operator=(ParticleGroup const &a) = delete;
+
+  /// Domain this instance is defined over.
+  DomainSharedPtr domain;
+  /// Compute device used by the instance.
+  SYCLTargetSharedPtr sycl_target;
+  /// Map from Sym instances to REAL valued ParticleDat instances.
+  std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> particle_dats_real{};
+  /// Map from Sym instances to INT valued ParticleDat instances.
+  std::map<Sym<INT>, ParticleDatSharedPtr<INT>> particle_dats_int{};
+
+  /// Sym of ParticleDat storing particle positions.
+  std::shared_ptr<Sym<REAL>> position_sym;
+  /// ParticleDat storing particle positions.
+  ParticleDatSharedPtr<REAL> position_dat;
+  /// Sym of ParticleDat storing particle cell ids.
+  std::shared_ptr<Sym<INT>> cell_id_sym;
+  /// ParticleDat storing particle cell ids.
+  ParticleDatSharedPtr<INT> cell_id_dat;
+  /// Sym of ParticleDat storing particle MPI ranks.
+  std::shared_ptr<Sym<INT>> mpi_rank_sym;
+  /// ParticleDat storing particle MPI ranks.
+  ParticleDatSharedPtr<INT> mpi_rank_dat;
+  /// ParticleSpec of all the ParticleDats of this ParticleGroup.
+  ParticleSpec particle_spec;
+
+  /// Layer compression instance for dats when particles are removed from cells.
+  LayerCompressor layer_compressor;
+
+  /// Used to be required to be called. Kept to not break API.
+  inline void free() {}
+
+  /**
+   * Construct a new ParticleGroup.
+   *
+   * @param domain Domain instance containing these particles.
+   * @param particle_spec ParticleSpec that describes the ParticleDat instances
+   * required.
+   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
+   * @param is_temporary The constructed ParticleGroup is a short lived
+   * temporary.
+   */
+  ParticleGroup(DomainSharedPtr domain, ParticleSpec &particle_spec,
+                SYCLTargetSharedPtr sycl_target, const bool is_temporary)
+      : is_temporary(is_temporary), ncell(domain->mesh->get_cell_count()),
+        npart_local(0), h_npart_cell(sycl_target, 1),
+        d_npart_cell(sycl_target, 1), d_remove_cells(sycl_target, 1),
+        d_remove_layers(sycl_target, 1),
+        global_move_ctx(
+            sycl_target,
+            domain->mesh->get_mesh_hierarchy()->global_move_communication,
+            layer_compressor, particle_dats_real, particle_dats_int),
+        cell_move_ctx(sycl_target, this->ncell, layer_compressor,
+                      particle_dats_real, particle_dats_int),
+        particle_group_version(1), domain(domain), sycl_target(sycl_target),
+        layer_compressor(sycl_target, ncell, particle_dats_real,
+                         particle_dats_int) {
+    if (!this->is_temporary) {
+      const std::string name = "NESO_PARTICLES_NPART_CELL_HINT";
+      if (!this->sycl_target->parameters->contains(name)) {
+        auto v = std::make_shared<SizeTParameter>();
+        v->value = get_env_size_t(name, 0);
+        this->sycl_target->parameters->set(name, v);
+      }
+      auto v = this->sycl_target->parameters->get<SizeTParameter>(name);
+      this->npart_cell_hint = v->value;
+    }
+    this->setup_internal(domain, particle_spec, sycl_target);
+  }
+
+  /**
+   * Construct a new ParticleGroup.
+   *
+   * @param domain Domain instance containing these particles.
+   * @param particle_spec ParticleSpec that describes the ParticleDat instances
+   * required.
+   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
+   */
+  ParticleGroup(DomainSharedPtr domain, ParticleSpec &particle_spec,
+                SYCLTargetSharedPtr sycl_target)
+      : ParticleGroup(domain, particle_spec, sycl_target, false) {}
   ~ParticleGroup() {}
 
   /**

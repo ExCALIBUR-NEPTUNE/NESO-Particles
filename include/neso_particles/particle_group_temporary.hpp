@@ -3,7 +3,6 @@
 
 #include "containers/resource_stack.hpp"
 #include "particle_group_impl.hpp"
-#include <unordered_map>
 
 namespace NESO::Particles {
 
@@ -17,7 +16,7 @@ struct ParticleGroupTemporaryRSI : ResourceStackInterface<ParticleGroup> {
 
   virtual inline ParticleGroupSharedPtr construct() override final {
     return std::make_shared<ParticleGroup>(this->domain, *this->particle_spec,
-                                           this->sycl_target);
+                                           this->sycl_target, true);
   }
 
   virtual inline void
