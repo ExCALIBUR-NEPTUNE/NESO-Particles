@@ -2,6 +2,7 @@
 #define _NESO_PARTICLES_HOST_RNG_COMMON_H_
 
 #include "../../compute_target.hpp"
+#include "../../device_buffers.hpp"
 #include <functional>
 #include <tuple>
 
@@ -114,7 +115,7 @@ public:
   /// Factor for allocation
   REAL max_factor;
 
-  BlockKernelRNGBase() : num_components(0), block_size(8192), max_factor(1.2) {}
+  BlockKernelRNGBase() : num_components(0), block_size(8192), max_factor(2) {}
 
   BlockKernelRNGBase(const int num_components, const int block_size = 8192)
       : num_components(num_components), block_size(block_size) {}
