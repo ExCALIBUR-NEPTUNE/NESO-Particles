@@ -139,6 +139,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_dat.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_group.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_group_impl.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/particle_group_temporary.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_io.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_remover.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_set.hpp

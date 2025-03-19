@@ -31,6 +31,7 @@
 namespace NESO::Particles {
 class DescendantProducts;
 class ParticleSubGroup;
+class ParticleGroupTemporary;
 namespace ParticleSubGroupImplementation {
 class SubGroupSelector;
 class SubGroupSelectorBase;
@@ -94,6 +95,7 @@ class ParticleGroup {
   friend class ParticleSubGroup;
   friend class SymVector<REAL>;
   friend class SymVector<INT>;
+  friend class ParticleGroupTemporary;
 
 protected:
   // This type should be replaceable with typedef std::variant<Sym<INT>,
@@ -293,6 +295,10 @@ protected:
   /// each cell.
   std::shared_ptr<BufferDeviceHost<INT>> dh_npart_cell_es;
 
+  /// This is a ResourceStack for temporary particle groups that are in some
+  /// sense equivalent to this ParticleGroup.
+  std::shared_ptr<ResourceStackBase> resource_stack_particle_group_temporary;
+
   /// This is a ResourceStack instance to speed-up creation and destruction of
   /// ParticleSubGroups.
   std::shared_ptr<ResourceStack<SubGroupSelectorResource>>
@@ -402,7 +408,14 @@ public:
   LayerCompressor layer_compressor;
 
   /// Used to be required to be called. Kept to not break API.
-  inline void free() {}
+  inline void free() {
+    if (this->resource_stack_sub_group_resource != nullptr) {
+      this->resource_stack_sub_group_resource->free();
+    }
+    if (this->resource_stack_particle_group_temporary != nullptr) {
+      this->resource_stack_particle_group_temporary->free();
+    }
+  }
 
   /**
    * Construct a new ParticleGroup.
@@ -483,7 +496,7 @@ public:
     // object
     this->domain->local_mapper->particle_group_callback(*this);
   }
-  ~ParticleGroup() {}
+  ~ParticleGroup() { this->free(); }
 
   /**
    *  Add a ParticleDat to the ParticleGroup after construction.
