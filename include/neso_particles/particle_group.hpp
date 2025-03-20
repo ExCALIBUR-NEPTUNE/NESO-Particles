@@ -21,6 +21,7 @@
 #include "local_move.hpp"
 #include "packing_unpacking.hpp"
 #include "particle_dat.hpp"
+#include "particle_group_pointer_map.hpp"
 #include "particle_set.hpp"
 #include "particle_spec.hpp"
 #include "particle_sub_group/sub_group_selector_resource_stack_interface.hpp"
@@ -273,6 +274,7 @@ protected:
     this->particle_dat_versions.erase(particle_dat->sym);
     this->particle_spec.remove(ParticleProp(
         particle_dat->sym, particle_dat->ncomp, particle_dat->positions));
+    this->particle_group_pointer_map->invalidate();
   }
 
   template <typename T>
@@ -298,6 +300,7 @@ protected:
       }
       particle_dat->cell_dat.wait_set_nrow();
     }
+    this->particle_group_pointer_map->invalidate();
   }
 
   /// BufferDeviceHost holding the exclusive sum of the number of particles in
@@ -316,6 +319,13 @@ protected:
   /// Cached pointers for SymVector to use.
   std::shared_ptr<SymVectorPointerCacheDispatch>
       sym_vector_pointer_cache_dispatch;
+
+  // Are we printing debug information about when sub groups are recreated.
+  std::size_t debug_sub_group_create{0};
+  std::size_t debug_sub_group_indent{0};
+
+  // Helper type to hold pointers to the dats
+  std::shared_ptr<ParticleGroupPointerMap> particle_group_pointer_map;
 
   /**
    * Returns true if the passed version is behind and can be updated. By
@@ -367,10 +377,6 @@ protected:
       this->particle_group_version++;
     }
   }
-  // Are we printing debug information about when sub groups are recreated.
-  std::size_t debug_sub_group_create{0};
-  std::size_t debug_sub_group_indent{0};
-
   inline void recompute_npart_cell_es() {
     auto h_ptr_s = this->h_npart_cell.ptr;
     auto h_ptr = this->dh_npart_cell_es->h_buffer.ptr;
@@ -382,10 +388,14 @@ protected:
     this->npart_local = static_cast<int>(total);
     this->dh_npart_cell_es->host_to_device();
   }
-
   inline void setup_internal(DomainSharedPtr domain,
                              ParticleSpec &particle_spec,
                              SYCLTargetSharedPtr sycl_target) {
+    // create the pointer map
+    this->particle_group_pointer_map =
+        std::make_shared<ParticleGroupPointerMap>(this->sycl_target,
+                                                  &this->particle_dats_real,
+                                                  &this->particle_dats_int);
 
     this->debug_sub_group_create =
         get_env_size_t("NESO_PARTICLES_DEBUG_SUB_GROUPS", 0);

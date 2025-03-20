@@ -140,6 +140,11 @@ struct TestParticleGroup : public ParticleGroup {
   inline bool wrap_check_validation(int64_t &to_check) {
     return this->check_validation(to_check);
   }
+
+  inline std::shared_ptr<ParticleGroupPointerMap>
+  get_particle_group_pointer_map() {
+    return this->particle_group_pointer_map;
+  }
 };
 
 template <> struct TestMapperToNP<TestParticleGroup> {
@@ -175,7 +180,8 @@ particle_loop_common_2d(const int npart_cell = 1093, const int nx = 16,
                              ParticleProp(Sym<INT>("LOOP_INDEX"), 2),
                              ParticleProp(Sym<INT>("ID"), 1)};
 
-  auto A = std::make_shared<ParticleGroup>(domain, particle_spec, sycl_target);
+  auto A =
+      std::make_shared<TestParticleGroup>(domain, particle_spec, sycl_target);
   A->add_particle_dat(ParticleDat(sycl_target,
                                   ParticleProp(Sym<REAL>("FOO"), 3),
                                   domain->mesh->get_cell_count()));
