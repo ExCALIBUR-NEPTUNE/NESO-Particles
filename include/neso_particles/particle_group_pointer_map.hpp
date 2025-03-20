@@ -15,6 +15,10 @@ struct ParticleGroupPointerMapDevice {
   int *d_ncomp_int;
   int *d_ncomp_exscan_real;
   int *d_ncomp_exscan_int;
+  int *h_ncomp_real;
+  int *h_ncomp_int;
+  int *h_ncomp_exscan_real;
+  int *h_ncomp_exscan_int;
   int ndat_real;
   int ndat_int;
   int ncomp_total_real;
@@ -49,6 +53,9 @@ public:
   ParticleGroupPointerMap(const ParticleGroupPointerMap &st) = delete;
   /// Disable (implicit) copies.
   ParticleGroupPointerMap &operator=(ParticleGroupPointerMap const &a) = delete;
+
+  std::vector<Sym<REAL>> map_index_to_sym_real;
+  std::vector<Sym<INT>> map_index_to_sym_int;
 
   /**
    * Create new instance.
@@ -95,6 +102,9 @@ public:
    */
   inline ParticleGroupPointerMapDevice get() {
     if (!this->valid) {
+      this->map_index_to_sym_real.clear();
+      this->map_index_to_sym_int.clear();
+
       const std::size_t ndat_real = this->particle_dats_real->size();
       const std::size_t ndat_int = this->particle_dats_int->size();
       this->dh_dat_ptr_real->realloc_no_copy(ndat_real);
@@ -114,6 +124,7 @@ public:
             this->ncomp_total_real;
         this->ncomp_total_real += ncomp;
         index++;
+        this->map_index_to_sym_real.push_back(sym);
       }
       this->ncomp_total_int = 0;
       index = 0;
@@ -125,6 +136,7 @@ public:
             this->ncomp_total_int;
         this->ncomp_total_int += ncomp;
         index++;
+        this->map_index_to_sym_int.push_back(sym);
       }
 
       this->dh_dat_ptr_real->host_to_device();
@@ -136,12 +148,21 @@ public:
       // Creat the device copyable struct
       this->d_cache.d_ptr_real = this->dh_dat_ptr_real->d_buffer.ptr;
       this->d_cache.d_ptr_int = this->dh_dat_ptr_int->d_buffer.ptr;
+
       this->d_cache.d_ncomp_real = this->dh_dat_ncomp_real->d_buffer.ptr;
       this->d_cache.d_ncomp_int = this->dh_dat_ncomp_int->d_buffer.ptr;
       this->d_cache.d_ncomp_exscan_real =
           this->dh_dat_ncomp_exscan_real->d_buffer.ptr;
       this->d_cache.d_ncomp_exscan_int =
           this->dh_dat_ncomp_exscan_int->d_buffer.ptr;
+
+      this->d_cache.h_ncomp_real = this->dh_dat_ncomp_real->h_buffer.ptr;
+      this->d_cache.h_ncomp_int = this->dh_dat_ncomp_int->h_buffer.ptr;
+      this->d_cache.h_ncomp_exscan_real =
+          this->dh_dat_ncomp_exscan_real->h_buffer.ptr;
+      this->d_cache.h_ncomp_exscan_int =
+          this->dh_dat_ncomp_exscan_int->h_buffer.ptr;
+
       this->d_cache.ndat_real = static_cast<int>(ndat_real);
       this->d_cache.ndat_int = static_cast<int>(ndat_int);
       this->d_cache.ncomp_total_real = this->ncomp_total_real;

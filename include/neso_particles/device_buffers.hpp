@@ -2,6 +2,7 @@
 #define _NESO_PARTICLES_DEVICE_BUFFERS_HPP_
 
 #include "compute_target.hpp"
+#include <optional>
 
 namespace NESO::Particles {
 
@@ -458,22 +459,45 @@ public:
 
   /**
    * Copy the contents of the host buffer to the device buffer.
+   *
+   * @param num_elements Optional number of elements to move, default entire
+   * buffer.
    */
-  inline void host_to_device() {
-    if (this->size_bytes() > 0) {
+  inline void
+  host_to_device(std::optional<std::size_t> num_elements = std::nullopt) {
+
+    std::size_t num_bytes = 0;
+    if (num_elements != std::nullopt) {
+      num_bytes = num_elements.value() * sizeof(T);
+    } else {
+      num_bytes = this->size_bytes();
+    }
+
+    if (num_bytes > 0) {
       this->sycl_target->queue
-          .memcpy(this->d_buffer.ptr, this->h_buffer.ptr, this->size_bytes())
-          .wait();
+          .memcpy(this->d_buffer.ptr, this->h_buffer.ptr, num_bytes)
+          .wait_and_throw();
     }
   }
   /**
    * Copy the contents of the device buffer to the host buffer.
+   *
+   * @param num_elements Optional number of elements to move, default entire
+   * buffer.
    */
-  inline void device_to_host() {
-    if (this->size_bytes() > 0) {
+  inline void
+  device_to_host(std::optional<std::size_t> num_elements = std::nullopt) {
+    std::size_t num_bytes = 0;
+    if (num_elements != std::nullopt) {
+      num_bytes = num_elements.value() * sizeof(T);
+    } else {
+      num_bytes = this->size_bytes();
+    }
+
+    if (num_bytes > 0) {
       this->sycl_target->queue
-          .memcpy(this->h_buffer.ptr, this->d_buffer.ptr, this->size_bytes())
-          .wait();
+          .memcpy(this->h_buffer.ptr, this->d_buffer.ptr, num_bytes)
+          .wait_and_throw();
     }
   }
   /**

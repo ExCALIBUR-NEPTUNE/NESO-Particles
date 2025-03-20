@@ -121,6 +121,8 @@ TEST(ParticleGroup, particle_group_pointer_map) {
       ASSERT_EQ(h_ptr_real.at(index), dat->cell_dat.device_ptr());
       ASSERT_EQ(h_ncomp_real.at(index), ncomp);
       ASSERT_EQ(h_ncomp_exscan_real.at(index), total_ncomp);
+      ASSERT_EQ(d_ptr_map.h_ncomp_real[index], ncomp);
+      ASSERT_EQ(d_ptr_map.h_ncomp_exscan_real[index], total_ncomp);
       total_ncomp += ncomp;
       index++;
     }
@@ -133,6 +135,8 @@ TEST(ParticleGroup, particle_group_pointer_map) {
       ASSERT_EQ(h_ptr_int.at(index), dat->cell_dat.device_ptr());
       ASSERT_EQ(h_ncomp_int.at(index), ncomp);
       ASSERT_EQ(h_ncomp_exscan_int.at(index), total_ncomp);
+      ASSERT_EQ(d_ptr_map.h_ncomp_int[index], ncomp);
+      ASSERT_EQ(d_ptr_map.h_ncomp_exscan_int[index], total_ncomp);
       total_ncomp += ncomp;
       index++;
     }

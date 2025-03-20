@@ -374,17 +374,12 @@ public:
         });
       });
 
-      std::vector<INT> inner_layers(num_particles);
-      e0.wait_and_throw();
-      sycl_target->queue
-          .memcpy(inner_layers.data(), d_inner_layers,
-                  num_particles * sizeof(INT))
-          .wait_and_throw();
-
+      auto ps = this->particle_group->get_particles(num_particles, d_cells,
+                                                    d_inner_layers);
       restore_resource(sycl_target->resource_stack_map,
                        ResourceStackKeyBufferDeviceHost<INT>{}, tmp_buffer);
 
-      return this->particle_group->get_particles(cells, inner_layers);
+      return ps;
     }
   }
 
