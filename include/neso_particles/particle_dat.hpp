@@ -30,6 +30,7 @@ class CellMove;
 class LayerCompressor;
 class ParticlePacker;
 class ParticleUnpacker;
+class ParticleGroupPointerMap;
 
 template <typename T> using ParticleDatImplGetT = T ***;
 template <typename T> using ParticleDatImplGetConstT = T *const *const *;
@@ -82,6 +83,7 @@ template <typename T> class ParticleDatT {
   friend class LayerCompressor;
   friend class ParticlePacker;
   friend class ParticleUnpacker;
+  friend class ParticleGroupPointerMap;
   friend ParticleDatImplGetConstT<T>
   ParticleLoopImplementation::create_loop_arg<T>(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,

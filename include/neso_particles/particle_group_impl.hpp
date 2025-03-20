@@ -139,11 +139,14 @@ inline void ParticleGroup::remove_particles(const int npart,
                                             const std::vector<INT> &layers) {
 
   if (npart > 0) {
-    this->d_remove_cells.realloc_no_copy(npart);
-    this->d_remove_layers.realloc_no_copy(npart);
+    auto d_buffer = get_resource<BufferDevice<INT>,
+                                 ResourceStackInterfaceBufferDevice<INT>>(
+        sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<INT>{},
+        sycl_target);
+    d_buffer->realloc_no_copy(2 * npart);
 
-    auto k_cells = this->d_remove_cells.ptr;
-    auto k_layers = this->d_remove_layers.ptr;
+    auto k_cells = d_buffer->ptr;
+    auto k_layers = k_cells + npart;
 
     NESOASSERT(cells.size() >= static_cast<std::size_t>(npart),
                "Bad cells length compared to npart");
@@ -160,6 +163,9 @@ inline void ParticleGroup::remove_particles(const int npart,
     event_layers.wait_and_throw();
 
     this->remove_particles(npart, k_cells, k_layers);
+
+    restore_resource(sycl_target->resource_stack_map,
+                     ResourceStackKeyBufferDevice<INT>{}, d_buffer);
   }
 }
 
@@ -173,13 +179,20 @@ inline void ParticleGroup::remove_particles(
   if (particle_sub_group->is_entire_particle_group()) {
     this->clear();
   } else {
+    auto d_buffer = get_resource<BufferDevice<INT>,
+                                 ResourceStackInterfaceBufferDevice<INT>>(
+        sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<INT>{},
+        sycl_target);
+
     const auto npart = particle_sub_group->get_npart_local();
-    this->d_remove_cells.realloc_no_copy(npart);
-    this->d_remove_layers.realloc_no_copy(npart);
-    auto k_cells = this->d_remove_cells.ptr;
-    auto k_layers = this->d_remove_layers.ptr;
+    d_buffer->realloc_no_copy(2 * npart);
+
+    auto k_cells = d_buffer->ptr;
+    auto k_layers = k_cells + npart;
     particle_sub_group->get_cells_layers(k_cells, k_layers);
     this->remove_particles(npart, k_cells, k_layers);
+    restore_resource(sycl_target->resource_stack_map,
+                     ResourceStackKeyBufferDevice<INT>{}, d_buffer);
   }
 }
 
@@ -373,11 +386,15 @@ inline void ParticleGroup::add_particles_local(
              "not exist in the ParticleGroup.");
 
   const int num_products = product_matrix->num_products;
+  auto d_buffer =
+      get_resource<BufferDevice<INT>, ResourceStackInterfaceBufferDevice<INT>>(
+          sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<INT>{},
+          sycl_target);
+  d_buffer->realloc_no_copy(2 * num_products);
+
   // reuse this space
-  this->d_remove_cells.realloc_no_copy(num_products);
-  this->d_remove_layers.realloc_no_copy(num_products);
-  INT *cells_ptr = this->d_remove_cells.ptr;
-  INT *layers_ptr = this->d_remove_layers.ptr;
+  INT *cells_ptr = d_buffer->ptr;
+  INT *layers_ptr = cells_ptr + num_products;
   auto d_pm = product_matrix->impl_get_const();
 
   // Either the cells are set in the product matrix or we need to default
@@ -516,6 +533,9 @@ inline void ParticleGroup::add_particles_local(
   es.wait();
   this->check_dats_and_group_agree();
   this->invalidate_group_version();
+
+  restore_resource(sycl_target->resource_stack_map,
+                   ResourceStackKeyBufferDevice<INT>{}, d_buffer);
 }
 
 inline void ParticleGroup::add_particles_local(
@@ -576,11 +596,18 @@ inline void ParticleGroup::add_particles_local(
     this->add_particles_local(particle_sub_group->particle_group);
   } else {
     const INT npart = particle_sub_group->get_npart_local();
-    this->d_remove_cells.realloc_no_copy(npart);
-    this->d_remove_layers.realloc_no_copy(2 * npart);
-    auto k_cells = this->d_remove_cells.ptr;
-    auto k_layers_src = this->d_remove_layers.ptr;
+
+    auto d_buffer = get_resource<BufferDevice<INT>,
+                                 ResourceStackInterfaceBufferDevice<INT>>(
+        sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<INT>{},
+        sycl_target);
+
+    d_buffer->realloc_no_copy(3 * npart);
+
+    auto k_cells = d_buffer->ptr;
+    auto k_layers_src = k_cells + npart;
     auto k_layers_dst = k_layers_src + npart;
+
     particle_sub_group->get_cells_layers(k_cells, k_layers_src);
     // get dst layers also sets h_npart_cell, d_npart_cell
     this->get_new_layers(npart, k_cells, k_layers_dst);
@@ -644,6 +671,9 @@ inline void ParticleGroup::add_particles_local(
     es.wait();
     this->check_dats_and_group_agree();
     this->invalidate_group_version();
+
+    restore_resource(sycl_target->resource_stack_map,
+                     ResourceStackKeyBufferDevice<INT>{}, d_buffer);
   }
 }
 

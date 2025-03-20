@@ -21,6 +21,7 @@
 #include "local_move.hpp"
 #include "packing_unpacking.hpp"
 #include "particle_dat.hpp"
+#include "particle_group_pointer_map.hpp"
 #include "particle_set.hpp"
 #include "particle_spec.hpp"
 #include "particle_sub_group/sub_group_selector_resource_stack_interface.hpp"
@@ -31,6 +32,7 @@
 namespace NESO::Particles {
 class DescendantProducts;
 class ParticleSubGroup;
+class ParticleGroupTemporary;
 namespace ParticleSubGroupImplementation {
 class SubGroupSelector;
 class SubGroupSelectorBase;
@@ -94,6 +96,7 @@ class ParticleGroup {
   friend class ParticleSubGroup;
   friend class SymVector<REAL>;
   friend class SymVector<INT>;
+  friend class ParticleGroupTemporary;
 
 protected:
   // This type should be replaceable with typedef std::variant<Sym<INT>,
@@ -102,13 +105,12 @@ protected:
   typedef int64_t ParticleGroupVersion;
   typedef std::map<ParticleDatVersion, int64_t> ParticleDatVersionTracker;
 
+  std::size_t npart_cell_hint{0};
+  bool is_temporary;
   int ncell;
   int npart_local;
   BufferHost<INT> h_npart_cell;
   BufferDevice<INT> d_npart_cell;
-
-  BufferDevice<INT> d_remove_cells;
-  BufferDevice<INT> d_remove_layers;
 
   template <typename T>
   inline void realloc_dat_start(ParticleDatSharedPtr<T> &dat) {
@@ -269,6 +271,7 @@ protected:
     this->particle_dat_versions.erase(particle_dat->sym);
     this->particle_spec.remove(ParticleProp(
         particle_dat->sym, particle_dat->ncomp, particle_dat->positions));
+    this->particle_group_pointer_map->invalidate();
   }
 
   template <typename T>
@@ -287,11 +290,23 @@ protected:
     NESOASSERT(this->particle_dat_versions.count(key) == 0,
                "ParticleDat already in version tracker.");
     this->particle_dat_versions[key] = value;
+
+    if (this->npart_cell_hint > 0) {
+      for (int cellx = 0; cellx < this->ncell; cellx++) {
+        particle_dat->realloc(cellx, static_cast<int>(this->npart_cell_hint));
+      }
+      particle_dat->cell_dat.wait_set_nrow();
+    }
+    this->particle_group_pointer_map->invalidate();
   }
 
   /// BufferDeviceHost holding the exclusive sum of the number of particles in
   /// each cell.
   std::shared_ptr<BufferDeviceHost<INT>> dh_npart_cell_es;
+
+  /// This is a ResourceStack for temporary particle groups that are in some
+  /// sense equivalent to this ParticleGroup.
+  std::shared_ptr<ResourceStackBase> resource_stack_particle_group_temporary;
 
   /// This is a ResourceStack instance to speed-up creation and destruction of
   /// ParticleSubGroups.
@@ -301,6 +316,13 @@ protected:
   /// Cached pointers for SymVector to use.
   std::shared_ptr<SymVectorPointerCacheDispatch>
       sym_vector_pointer_cache_dispatch;
+
+  // Are we printing debug information about when sub groups are recreated.
+  std::size_t debug_sub_group_create{0};
+  std::size_t debug_sub_group_indent{0};
+
+  // Helper type to hold pointers to the dats
+  std::shared_ptr<ParticleGroupPointerMap> particle_group_pointer_map;
 
   /**
    * Returns true if the passed version is behind and can be updated. By
@@ -352,10 +374,6 @@ protected:
       this->particle_group_version++;
     }
   }
-  // Are we printing debug information about when sub groups are recreated.
-  std::size_t debug_sub_group_create{0};
-  std::size_t debug_sub_group_indent{0};
-
   inline void recompute_npart_cell_es() {
     auto h_ptr_s = this->h_npart_cell.ptr;
     auto h_ptr = this->dh_npart_cell_es->h_buffer.ptr;
@@ -367,65 +385,14 @@ protected:
     this->npart_local = static_cast<int>(total);
     this->dh_npart_cell_es->host_to_device();
   }
-
-public:
-  /// Disable (implicit) copies.
-  ParticleGroup(const ParticleGroup &st) = delete;
-  /// Disable (implicit) copies.
-  ParticleGroup &operator=(ParticleGroup const &a) = delete;
-
-  /// Domain this instance is defined over.
-  DomainSharedPtr domain;
-  /// Compute device used by the instance.
-  SYCLTargetSharedPtr sycl_target;
-  /// Map from Sym instances to REAL valued ParticleDat instances.
-  std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> particle_dats_real{};
-  /// Map from Sym instances to INT valued ParticleDat instances.
-  std::map<Sym<INT>, ParticleDatSharedPtr<INT>> particle_dats_int{};
-
-  /// Sym of ParticleDat storing particle positions.
-  std::shared_ptr<Sym<REAL>> position_sym;
-  /// ParticleDat storing particle positions.
-  ParticleDatSharedPtr<REAL> position_dat;
-  /// Sym of ParticleDat storing particle cell ids.
-  std::shared_ptr<Sym<INT>> cell_id_sym;
-  /// ParticleDat storing particle cell ids.
-  ParticleDatSharedPtr<INT> cell_id_dat;
-  /// Sym of ParticleDat storing particle MPI ranks.
-  std::shared_ptr<Sym<INT>> mpi_rank_sym;
-  /// ParticleDat storing particle MPI ranks.
-  ParticleDatSharedPtr<INT> mpi_rank_dat;
-  /// ParticleSpec of all the ParticleDats of this ParticleGroup.
-  ParticleSpec particle_spec;
-
-  /// Layer compression instance for dats when particles are removed from cells.
-  LayerCompressor layer_compressor;
-
-  /// Used to be required to be called. Kept to not break API.
-  inline void free() {}
-
-  /**
-   * Construct a new ParticleGroup.
-   *
-   * @param domain Domain instance containing these particles.
-   * @param particle_spec ParticleSpec that describes the ParticleDat instances
-   * required.
-   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
-   */
-  ParticleGroup(DomainSharedPtr domain, ParticleSpec &particle_spec,
-                SYCLTargetSharedPtr sycl_target)
-      : ncell(domain->mesh->get_cell_count()), npart_local(0),
-        h_npart_cell(sycl_target, 1), d_npart_cell(sycl_target, 1),
-        d_remove_cells(sycl_target, 1), d_remove_layers(sycl_target, 1),
-        global_move_ctx(
-            sycl_target,
-            domain->mesh->get_mesh_hierarchy()->global_move_communication,
-            layer_compressor, particle_dats_real, particle_dats_int),
-        cell_move_ctx(sycl_target, this->ncell, layer_compressor,
-                      particle_dats_real, particle_dats_int),
-        particle_group_version(1), domain(domain), sycl_target(sycl_target),
-        layer_compressor(sycl_target, ncell, particle_dats_real,
-                         particle_dats_int) {
+  inline void setup_internal(DomainSharedPtr domain,
+                             ParticleSpec &particle_spec,
+                             SYCLTargetSharedPtr sycl_target) {
+    // create the pointer map
+    this->particle_group_pointer_map =
+        std::make_shared<ParticleGroupPointerMap>(this->sycl_target,
+                                                  &this->particle_dats_real,
+                                                  &this->particle_dats_int);
 
     this->debug_sub_group_create =
         get_env_size_t("NESO_PARTICLES_DEBUG_SUB_GROUPS", 0);
@@ -483,6 +450,190 @@ public:
     // object
     this->domain->local_mapper->particle_group_callback(*this);
   }
+
+  inline ParticleSetSharedPtr get_particles(const std::size_t num_particles,
+                                            const INT *const d_cells,
+                                            const INT *const d_layers) {
+    if (num_particles > 0) {
+      auto dh_real = get_resource<BufferDeviceHost<REAL>,
+                                  ResourceStackInterfaceBufferDeviceHost<REAL>>(
+          sycl_target->resource_stack_map,
+          ResourceStackKeyBufferDeviceHost<REAL>{}, sycl_target);
+      auto dh_int = get_resource<BufferDeviceHost<INT>,
+                                 ResourceStackInterfaceBufferDeviceHost<INT>>(
+          sycl_target->resource_stack_map,
+          ResourceStackKeyBufferDeviceHost<INT>{}, sycl_target);
+
+      const auto k_dat_info = this->particle_group_pointer_map->get();
+      const std::size_t num_elements_real =
+          num_particles * static_cast<std::size_t>(k_dat_info.ncomp_total_real);
+      const std::size_t num_elements_int =
+          num_particles * static_cast<std::size_t>(k_dat_info.ncomp_total_int);
+      dh_real->realloc_no_copy(num_elements_real);
+      dh_int->realloc_no_copy(num_elements_int);
+
+      REAL *k_real = dh_real->d_buffer.ptr;
+      INT *k_int = dh_int->d_buffer.ptr;
+
+      auto e0 = this->sycl_target->queue.parallel_for<>(
+          this->sycl_target->device_limits.validate_range_global(
+              sycl::range<2>(k_dat_info.ndat_real, num_particles)),
+          [=](sycl::id<2> idx) {
+            const INT index_dat = static_cast<INT>(idx[0]);
+            const INT index_particle = static_cast<INT>(idx[1]);
+            const INT cell = d_cells[index_particle];
+            const INT layer = d_layers[index_particle];
+            const int ncomp = k_dat_info.d_ncomp_real[index_dat];
+            const int ncomp_es = k_dat_info.d_ncomp_exscan_real[index_dat];
+            REAL *dst_dat = k_real + ncomp_es * num_particles;
+            for (int cx = 0; cx < ncomp; cx++) {
+              REAL *dst = dst_dat + cx * num_particles;
+              dst[index_particle] =
+                  k_dat_info.d_ptr_real[index_dat][cell][cx][layer];
+            }
+          });
+
+      auto e1 = this->sycl_target->queue.parallel_for<>(
+          this->sycl_target->device_limits.validate_range_global(
+              sycl::range<2>(k_dat_info.ndat_int, num_particles)),
+          [=](sycl::id<2> idx) {
+            const INT index_dat = static_cast<INT>(idx[0]);
+            const INT index_particle = static_cast<INT>(idx[1]);
+            const INT cell = d_cells[index_particle];
+            const INT layer = d_layers[index_particle];
+            const int ncomp = k_dat_info.d_ncomp_int[index_dat];
+            const int ncomp_es = k_dat_info.d_ncomp_exscan_int[index_dat];
+            INT *dst_dat = k_int + ncomp_es * num_particles;
+            for (int cx = 0; cx < ncomp; cx++) {
+              INT *dst = dst_dat + cx * num_particles;
+              dst[index_particle] =
+                  k_dat_info.d_ptr_int[index_dat][cell][cx][layer];
+            }
+          });
+
+      auto ps =
+          std::make_shared<ParticleSet>(num_particles, this->particle_spec);
+
+      e0.wait_and_throw();
+      dh_real->device_to_host(num_elements_real);
+      e1.wait_and_throw();
+      dh_int->device_to_host(num_elements_int);
+
+      for (int dx = 0; dx < k_dat_info.ndat_real; dx++) {
+        const int dat_ncomp = k_dat_info.h_ncomp_real[dx];
+        const int dat_ncomp_exscan = k_dat_info.h_ncomp_exscan_real[dx];
+        auto sym =
+            this->particle_group_pointer_map->map_index_to_sym_real.at(dx);
+        REAL *dst_ptr = ps->get_ptr(sym, 0, 0);
+        REAL *src_ptr =
+            dh_real->h_buffer.ptr + dat_ncomp_exscan * num_particles;
+        std::memcpy(dst_ptr, src_ptr, num_particles * dat_ncomp * sizeof(REAL));
+      }
+
+      for (int dx = 0; dx < k_dat_info.ndat_int; dx++) {
+        const int dat_ncomp = k_dat_info.h_ncomp_int[dx];
+        const int dat_ncomp_exscan = k_dat_info.h_ncomp_exscan_int[dx];
+        auto sym =
+            this->particle_group_pointer_map->map_index_to_sym_int.at(dx);
+        INT *dst_ptr = ps->get_ptr(sym, 0, 0);
+        INT *src_ptr = dh_int->h_buffer.ptr + dat_ncomp_exscan * num_particles;
+        std::memcpy(dst_ptr, src_ptr, num_particles * dat_ncomp * sizeof(INT));
+      }
+
+      restore_resource(sycl_target->resource_stack_map,
+                       ResourceStackKeyBufferDeviceHost<REAL>{}, dh_real);
+      restore_resource(sycl_target->resource_stack_map,
+                       ResourceStackKeyBufferDeviceHost<INT>{}, dh_int);
+      return ps;
+    } else {
+      return std::make_shared<ParticleSet>(0, this->particle_spec);
+    }
+  }
+
+public:
+  /// Disable (implicit) copies.
+  ParticleGroup(const ParticleGroup &st) = delete;
+  /// Disable (implicit) copies.
+  ParticleGroup &operator=(ParticleGroup const &a) = delete;
+
+  /// Domain this instance is defined over.
+  DomainSharedPtr domain;
+  /// Compute device used by the instance.
+  SYCLTargetSharedPtr sycl_target;
+  /// Map from Sym instances to REAL valued ParticleDat instances.
+  std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> particle_dats_real{};
+  /// Map from Sym instances to INT valued ParticleDat instances.
+  std::map<Sym<INT>, ParticleDatSharedPtr<INT>> particle_dats_int{};
+
+  /// Sym of ParticleDat storing particle positions.
+  std::shared_ptr<Sym<REAL>> position_sym;
+  /// ParticleDat storing particle positions.
+  ParticleDatSharedPtr<REAL> position_dat;
+  /// Sym of ParticleDat storing particle cell ids.
+  std::shared_ptr<Sym<INT>> cell_id_sym;
+  /// ParticleDat storing particle cell ids.
+  ParticleDatSharedPtr<INT> cell_id_dat;
+  /// Sym of ParticleDat storing particle MPI ranks.
+  std::shared_ptr<Sym<INT>> mpi_rank_sym;
+  /// ParticleDat storing particle MPI ranks.
+  ParticleDatSharedPtr<INT> mpi_rank_dat;
+  /// ParticleSpec of all the ParticleDats of this ParticleGroup.
+  ParticleSpec particle_spec;
+
+  /// Layer compression instance for dats when particles are removed from cells.
+  LayerCompressor layer_compressor;
+
+  /// Used to be required to be called. Kept to not break API.
+  inline void free() {}
+
+  /**
+   * Construct a new ParticleGroup.
+   *
+   * @param domain Domain instance containing these particles.
+   * @param particle_spec ParticleSpec that describes the ParticleDat instances
+   * required.
+   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
+   * @param is_temporary The constructed ParticleGroup is a short lived
+   * temporary.
+   */
+  ParticleGroup(DomainSharedPtr domain, ParticleSpec &particle_spec,
+                SYCLTargetSharedPtr sycl_target, const bool is_temporary)
+      : is_temporary(is_temporary), ncell(domain->mesh->get_cell_count()),
+        npart_local(0), h_npart_cell(sycl_target, 1),
+        d_npart_cell(sycl_target, 1),
+        global_move_ctx(
+            sycl_target,
+            domain->mesh->get_mesh_hierarchy()->global_move_communication,
+            layer_compressor, particle_dats_real, particle_dats_int),
+        cell_move_ctx(sycl_target, this->ncell, layer_compressor,
+                      particle_dats_real, particle_dats_int),
+        particle_group_version(1), domain(domain), sycl_target(sycl_target),
+        layer_compressor(sycl_target, ncell, particle_dats_real,
+                         particle_dats_int) {
+    if (!this->is_temporary) {
+      const std::string name = "NESO_PARTICLES_NPART_CELL_HINT";
+      if (!this->sycl_target->parameters->contains(name)) {
+        auto v = std::make_shared<SizeTParameter>();
+        v->value = get_env_size_t(name, 0);
+        this->sycl_target->parameters->set(name, v);
+      }
+      auto v = this->sycl_target->parameters->get<SizeTParameter>(name);
+      this->npart_cell_hint = v->value;
+    }
+    this->setup_internal(domain, particle_spec, sycl_target);
+  }
+
+  /**
+   * Construct a new ParticleGroup.
+   *
+   * @param domain Domain instance containing these particles.
+   * @param particle_spec ParticleSpec that describes the ParticleDat instances
+   * required.
+   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
+   */
+  ParticleGroup(DomainSharedPtr domain, ParticleSpec &particle_spec,
+                SYCLTargetSharedPtr sycl_target)
+      : ParticleGroup(domain, particle_spec, sycl_target, false) {}
   ~ParticleGroup() {}
 
   /**
@@ -868,38 +1019,37 @@ public:
     NESOASSERT(cells.size() == layers.size(),
                "Cells and layers vectors have different sizes.");
     const int num_particles = cells.size();
-    auto ps = std::make_shared<ParticleSet>(num_particles, this->particle_spec);
+
+    auto d_buffer = get_resource<BufferDevice<INT>,
+                                 ResourceStackInterfaceBufferDevice<INT>>(
+        sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<INT>{},
+        sycl_target);
+    d_buffer->realloc_no_copy(2 * num_particles);
+
+    INT *d_cells = d_buffer->ptr;
+    INT *d_layers = d_cells + num_particles;
+
+    auto e0 = this->sycl_target->queue.memcpy(d_cells, cells.data(),
+                                              num_particles * sizeof(INT));
+    auto e1 = this->sycl_target->queue.memcpy(d_layers, layers.data(),
+                                              num_particles * sizeof(INT));
+
     const INT num_cells = this->domain->mesh->get_cell_count();
-
-    EventStack es;
-
-    auto lambda_copy = [&](const std::size_t num_bytes_per_element, auto dat,
-                           const INT particle_index, const INT cell,
-                           const INT layer) {
-      const int ncomp = dat->ncomp;
-      for (int nx = 0; nx < ncomp; nx++) {
-        auto dest_ptr = ps->get_ptr(dat->sym, particle_index, nx);
-        const auto source_ptr = dat->col_device_const_ptr(cell, nx) + layer;
-        es.push(this->sycl_target->queue.memcpy(dest_ptr, source_ptr,
-                                                num_bytes_per_element));
-      }
-    };
-
     for (int px = 0; px < num_particles; px++) {
       const INT cell = cells.at(px);
       const INT layer = layers.at(px);
       NESOASSERT((cell > -1) && (cell < num_cells), "Cell index not in range.");
       NESOASSERT((layer > -1) && (layer < this->get_npart_cell(cell)),
                  "Layer index not in range.");
-      for (auto &dat : this->particle_dats_real) {
-        lambda_copy(sizeof(REAL), dat.second, px, cell, layer);
-      }
-      for (auto &dat : this->particle_dats_int) {
-        lambda_copy(sizeof(INT), dat.second, px, cell, layer);
-      }
     }
 
-    es.wait();
+    e0.wait_and_throw();
+    e1.wait_and_throw();
+
+    auto ps = this->get_particles(num_particles, d_cells, d_layers);
+
+    restore_resource(sycl_target->resource_stack_map,
+                     ResourceStackKeyBufferDevice<INT>{}, d_buffer);
     return ps;
   }
 };

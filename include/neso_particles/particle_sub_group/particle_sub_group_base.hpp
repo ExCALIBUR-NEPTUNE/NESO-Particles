@@ -364,27 +364,25 @@ public:
 
       auto k_map_cells_to_particles = this->selection.d_map_cells_to_particles;
 
-      auto e0 = sycl_target->queue.submit([&](sycl::handler &cgh) {
-        cgh.parallel_for<>(sycl::range<1>(num_particles), [=](sycl::id<1> idx) {
-          const INT cell = d_cells[idx];
-          const INT layer = d_layers[idx];
-          const INT inner_layer =
-              k_map_cells_to_particles.map_loop_layer_to_layer(cell, layer);
-          d_inner_layers[idx] = inner_layer;
-        });
-      });
-
-      std::vector<INT> inner_layers(num_particles);
-      e0.wait_and_throw();
       sycl_target->queue
-          .memcpy(inner_layers.data(), d_inner_layers,
-                  num_particles * sizeof(INT))
+          .parallel_for<>(
+              sycl::range<1>(num_particles),
+              [=](sycl::id<1> idx) {
+                const INT cell = d_cells[idx];
+                const INT layer = d_layers[idx];
+                const INT inner_layer =
+                    k_map_cells_to_particles.map_loop_layer_to_layer(cell,
+                                                                     layer);
+                d_inner_layers[idx] = inner_layer;
+              })
           .wait_and_throw();
 
+      auto ps = this->particle_group->get_particles(num_particles, d_cells,
+                                                    d_inner_layers);
       restore_resource(sycl_target->resource_stack_map,
                        ResourceStackKeyBufferDeviceHost<INT>{}, tmp_buffer);
 
-      return this->particle_group->get_particles(cells, inner_layers);
+      return ps;
     }
   }
 

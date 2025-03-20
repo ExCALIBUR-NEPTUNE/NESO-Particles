@@ -35,6 +35,12 @@ template <typename T> inline auto rsqrt(const T x) { return sycl::rsqrt(x); }
 template <typename T> inline auto sin(const T x) { return sycl::sin(x); }
 template <typename T> inline auto cos(const T x) { return sycl::cos(x); }
 template <typename T> inline auto tan(const T x) { return sycl::tan(x); }
+template <typename T> inline auto log(const T x) { return sycl::log(x); }
+template <typename T> inline auto log2(const T x) { return sycl::log2(x); }
+template <typename T> inline auto log10(const T x) { return sycl::log10(x); }
+template <typename T> inline auto round(const T x) { return sycl::round(x); }
+template <typename T> inline auto tgamma(const T x) { return sycl::tgamma(x); }
+template <typename T> inline auto trunc(const T x) { return sycl::trunc(x); }
 
 namespace Private {
 // ACPP does not seem to define a sycl::sincos(REAL, REAL*)

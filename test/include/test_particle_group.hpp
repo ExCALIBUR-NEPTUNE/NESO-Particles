@@ -140,6 +140,11 @@ struct TestParticleGroup : public ParticleGroup {
   inline bool wrap_check_validation(int64_t &to_check) {
     return this->check_validation(to_check);
   }
+
+  inline std::shared_ptr<ParticleGroupPointerMap>
+  get_particle_group_pointer_map() {
+    return this->particle_group_pointer_map;
+  }
 };
 
 template <> struct TestMapperToNP<TestParticleGroup> {
@@ -148,6 +153,78 @@ template <> struct TestMapperToNP<TestParticleGroup> {
 template <> struct NPToTestMapper<ParticleGroup> {
   using type = TestParticleGroup;
 };
+
+inline std::tuple<ParticleGroupSharedPtr, SYCLTargetSharedPtr, int>
+particle_loop_common_2d(const int npart_cell = 1093, const int nx = 16,
+                        const int ny = 32) {
+  constexpr int ndim = 2;
+  std::vector<int> dims(ndim);
+  dims[0] = nx;
+  dims[1] = ny;
+
+  const double cell_extent = 1.0;
+  const int subdivision_order = 0;
+  auto mesh = std::make_shared<CartesianHMesh>(MPI_COMM_WORLD, ndim, dims,
+                                               cell_extent, subdivision_order);
+
+  auto sycl_target =
+      std::make_shared<SYCLTarget>(GPU_SELECTOR, mesh->get_comm());
+
+  auto cart_local_mapper = CartesianHMeshLocalMapper(sycl_target, mesh);
+  auto domain = std::make_shared<Domain>(mesh, cart_local_mapper);
+
+  ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
+                             ParticleProp(Sym<REAL>("V"), 3),
+                             ParticleProp(Sym<REAL>("P2"), ndim),
+                             ParticleProp(Sym<INT>("CELL_ID"), 1, true),
+                             ParticleProp(Sym<INT>("LOOP_INDEX"), 2),
+                             ParticleProp(Sym<INT>("ID"), 1)};
+
+  auto A =
+      std::make_shared<TestParticleGroup>(domain, particle_spec, sycl_target);
+  A->add_particle_dat(ParticleDat(sycl_target,
+                                  ParticleProp(Sym<REAL>("FOO"), 3),
+                                  domain->mesh->get_cell_count()));
+
+  const int cell_count = mesh->get_cell_count();
+  const int N = cell_count * npart_cell;
+  int id_offset;
+  MPICHK(MPI_Exscan(&N, &id_offset, 1, MPI_INT, MPI_SUM, mesh->get_comm()));
+
+  const int rank = sycl_target->comm_pair.rank_parent;
+
+  std::mt19937 rng_pos(52234234 + rank);
+  std::mt19937 rng_vel(52234231 + rank);
+
+  auto positions =
+      uniform_within_extents(N, ndim, mesh->global_extents, rng_pos);
+  auto velocities =
+      NESO::Particles::normal_distribution(N, 3, 0.0, 1.0, rng_vel);
+
+  ParticleSet initial_distribution(N, particle_spec);
+
+  for (int px = 0; px < N; px++) {
+    for (int dimx = 0; dimx < ndim; dimx++) {
+      initial_distribution[Sym<REAL>("P")][px][dimx] = positions[dimx][px];
+    }
+    for (int dimx = 0; dimx < 3; dimx++) {
+      initial_distribution[Sym<REAL>("V")][px][dimx] = velocities[dimx][px];
+    }
+    initial_distribution[Sym<INT>("CELL_ID")][px][0] = 0;
+    initial_distribution[Sym<INT>("ID")][px][0] = px + id_offset;
+  }
+
+  A->add_particles_local(initial_distribution);
+  parallel_advection_initialisation(A, 16);
+
+  auto ccb = std::make_shared<CartesianCellBin>(
+      sycl_target, mesh, A->position_dat, A->cell_id_dat);
+
+  ccb->execute();
+  A->cell_move();
+
+  return {A, sycl_target, cell_count};
+}
 
 } // namespace NESO::Particles
 

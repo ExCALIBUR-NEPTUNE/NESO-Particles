@@ -39,6 +39,7 @@
 #include "neso_particles/parallel_initialisation.hpp"
 #include "neso_particles/particle_dat.hpp"
 #include "neso_particles/particle_group.hpp"
+#include "neso_particles/particle_group_temporary.hpp"
 #include "neso_particles/particle_io.hpp"
 #include "neso_particles/particle_remover.hpp"
 #include "neso_particles/particle_set.hpp"
