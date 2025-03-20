@@ -42,6 +42,7 @@ set(TEST_SRCS
     ${TEST_DIR}/test_particle_dat.cpp
     ${TEST_DIR}/test_particle_group_cell_move.cpp
     ${TEST_DIR}/test_particle_group.cpp
+    ${TEST_DIR}/test_particle_group_b.cpp
     ${TEST_DIR}/test_particle_group_global_move.cpp
     ${TEST_DIR}/test_particle_group_hybrid_move.cpp
     ${TEST_DIR}/test_particle_group_local_move.cpp
