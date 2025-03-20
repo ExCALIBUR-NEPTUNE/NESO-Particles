@@ -112,9 +112,6 @@ protected:
   BufferHost<INT> h_npart_cell;
   BufferDevice<INT> d_npart_cell;
 
-  BufferDevice<INT> d_remove_cells;
-  BufferDevice<INT> d_remove_layers;
-
   template <typename T>
   inline void realloc_dat_start(ParticleDatSharedPtr<T> &dat) {
     dat->realloc(this->h_npart_cell);
@@ -504,8 +501,7 @@ public:
                 SYCLTargetSharedPtr sycl_target, const bool is_temporary)
       : is_temporary(is_temporary), ncell(domain->mesh->get_cell_count()),
         npart_local(0), h_npart_cell(sycl_target, 1),
-        d_npart_cell(sycl_target, 1), d_remove_cells(sycl_target, 1),
-        d_remove_layers(sycl_target, 1),
+        d_npart_cell(sycl_target, 1),
         global_move_ctx(
             sycl_target,
             domain->mesh->get_mesh_hierarchy()->global_move_communication,
