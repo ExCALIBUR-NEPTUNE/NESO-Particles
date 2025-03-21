@@ -464,7 +464,7 @@ protected:
           sycl_target->resource_stack_map,
           ResourceStackKeyBufferDeviceHost<INT>{}, sycl_target);
 
-      const auto k_dat_info = this->particle_group_pointer_map->get();
+      const auto k_dat_info = this->particle_group_pointer_map->get_const();
       const std::size_t num_elements_real =
           num_particles * static_cast<std::size_t>(k_dat_info.ncomp_total_real);
       const std::size_t num_elements_int =

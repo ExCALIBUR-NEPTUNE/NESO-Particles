@@ -74,43 +74,70 @@ TEST(ParticleGroup, particle_group_pointer_map) {
   auto lambda_test = [&]() {
     auto AT = std::static_pointer_cast<TestParticleGroup>(A);
     auto ptr_map = AT->get_particle_group_pointer_map();
+    auto d_ptr_const_map = ptr_map->get_const();
     auto d_ptr_map = ptr_map->get();
+
+    ASSERT_EQ(d_ptr_const_map.d_ncomp_real, d_ptr_map.d_ncomp_real);
+    ASSERT_EQ(d_ptr_const_map.d_ncomp_int, d_ptr_map.d_ncomp_int);
+    ASSERT_EQ(d_ptr_const_map.d_ncomp_exscan_real,
+              d_ptr_map.d_ncomp_exscan_real);
+    ASSERT_EQ(d_ptr_const_map.d_ncomp_exscan_int, d_ptr_map.d_ncomp_exscan_int);
+    ASSERT_EQ(d_ptr_const_map.h_ncomp_real, d_ptr_map.h_ncomp_real);
+    ASSERT_EQ(d_ptr_const_map.h_ncomp_int, d_ptr_map.h_ncomp_int);
+    ASSERT_EQ(d_ptr_const_map.h_ncomp_exscan_real,
+              d_ptr_map.h_ncomp_exscan_real);
+    ASSERT_EQ(d_ptr_const_map.h_ncomp_exscan_int, d_ptr_map.h_ncomp_exscan_int);
+    ASSERT_EQ(d_ptr_const_map.ndat_real, d_ptr_map.ndat_real);
+    ASSERT_EQ(d_ptr_const_map.ndat_int, d_ptr_map.ndat_int);
+    ASSERT_EQ(d_ptr_const_map.ncomp_total_real, d_ptr_map.ncomp_total_real);
+    ASSERT_EQ(d_ptr_const_map.ncomp_total_int, d_ptr_map.ncomp_total_int);
 
     const std::size_t ndat_real = A->particle_dats_real.size();
     const std::size_t ndat_int = A->particle_dats_int.size();
 
-    ASSERT_EQ(ndat_real, d_ptr_map.ndat_real);
-    ASSERT_EQ(ndat_int, d_ptr_map.ndat_int);
+    ASSERT_EQ(ndat_real, d_ptr_const_map.ndat_real);
+    ASSERT_EQ(ndat_int, d_ptr_const_map.ndat_int);
 
-    std::vector<REAL *const *const *> h_ptr_real(ndat_real);
-    std::vector<INT *const *const *> h_ptr_int(ndat_int);
+    std::vector<REAL *const *const *> h_ptr_const_real(ndat_real);
+    std::vector<INT *const *const *> h_ptr_const_int(ndat_int);
+    std::vector<REAL ***> h_ptr_real(ndat_real);
+    std::vector<INT ***> h_ptr_int(ndat_int);
     std::vector<int> h_ncomp_real(ndat_real);
     std::vector<int> h_ncomp_int(ndat_int);
     std::vector<int> h_ncomp_exscan_real(ndat_real);
     std::vector<int> h_ncomp_exscan_int(ndat_int);
 
     sycl_target->queue
-        .memcpy(h_ptr_real.data(), d_ptr_map.d_ptr_real,
+        .memcpy(h_ptr_const_real.data(), d_ptr_const_map.d_ptr_real,
                 ndat_real * sizeof(REAL *const *const *))
         .wait_and_throw();
     sycl_target->queue
-        .memcpy(h_ptr_int.data(), d_ptr_map.d_ptr_int,
+        .memcpy(h_ptr_const_int.data(), d_ptr_const_map.d_ptr_int,
                 ndat_int * sizeof(INT *const *const *))
         .wait_and_throw();
     sycl_target->queue
-        .memcpy(h_ncomp_real.data(), d_ptr_map.d_ncomp_real,
+        .memcpy(h_ptr_real.data(), d_ptr_map.d_ptr_real,
+                ndat_real * sizeof(REAL ***))
+        .wait_and_throw();
+    sycl_target->queue
+        .memcpy(h_ptr_int.data(), d_ptr_map.d_ptr_int,
+                ndat_int * sizeof(INT ***))
+        .wait_and_throw();
+
+    sycl_target->queue
+        .memcpy(h_ncomp_real.data(), d_ptr_const_map.d_ncomp_real,
                 ndat_real * sizeof(int))
         .wait_and_throw();
     sycl_target->queue
-        .memcpy(h_ncomp_int.data(), d_ptr_map.d_ncomp_int,
+        .memcpy(h_ncomp_int.data(), d_ptr_const_map.d_ncomp_int,
                 ndat_int * sizeof(int))
         .wait_and_throw();
     sycl_target->queue
-        .memcpy(h_ncomp_exscan_real.data(), d_ptr_map.d_ncomp_exscan_real,
+        .memcpy(h_ncomp_exscan_real.data(), d_ptr_const_map.d_ncomp_exscan_real,
                 ndat_real * sizeof(int))
         .wait_and_throw();
     sycl_target->queue
-        .memcpy(h_ncomp_exscan_int.data(), d_ptr_map.d_ncomp_exscan_int,
+        .memcpy(h_ncomp_exscan_int.data(), d_ptr_const_map.d_ncomp_exscan_int,
                 ndat_int * sizeof(int))
         .wait_and_throw();
 
@@ -118,29 +145,31 @@ TEST(ParticleGroup, particle_group_pointer_map) {
     int total_ncomp = 0;
     for (auto [sym, dat] : A->particle_dats_real) {
       const int ncomp = dat->ncomp;
+      ASSERT_EQ(h_ptr_const_real.at(index), dat->cell_dat.device_ptr());
       ASSERT_EQ(h_ptr_real.at(index), dat->cell_dat.device_ptr());
       ASSERT_EQ(h_ncomp_real.at(index), ncomp);
       ASSERT_EQ(h_ncomp_exscan_real.at(index), total_ncomp);
-      ASSERT_EQ(d_ptr_map.h_ncomp_real[index], ncomp);
-      ASSERT_EQ(d_ptr_map.h_ncomp_exscan_real[index], total_ncomp);
+      ASSERT_EQ(d_ptr_const_map.h_ncomp_real[index], ncomp);
+      ASSERT_EQ(d_ptr_const_map.h_ncomp_exscan_real[index], total_ncomp);
       total_ncomp += ncomp;
       index++;
     }
-    ASSERT_EQ(d_ptr_map.ncomp_total_real, total_ncomp);
+    ASSERT_EQ(d_ptr_const_map.ncomp_total_real, total_ncomp);
 
     index = 0;
     total_ncomp = 0;
     for (auto [sym, dat] : A->particle_dats_int) {
       const int ncomp = dat->ncomp;
+      ASSERT_EQ(h_ptr_const_int.at(index), dat->cell_dat.device_ptr());
       ASSERT_EQ(h_ptr_int.at(index), dat->cell_dat.device_ptr());
       ASSERT_EQ(h_ncomp_int.at(index), ncomp);
       ASSERT_EQ(h_ncomp_exscan_int.at(index), total_ncomp);
-      ASSERT_EQ(d_ptr_map.h_ncomp_int[index], ncomp);
-      ASSERT_EQ(d_ptr_map.h_ncomp_exscan_int[index], total_ncomp);
+      ASSERT_EQ(d_ptr_const_map.h_ncomp_int[index], ncomp);
+      ASSERT_EQ(d_ptr_const_map.h_ncomp_exscan_int[index], total_ncomp);
       total_ncomp += ncomp;
       index++;
     }
-    ASSERT_EQ(d_ptr_map.ncomp_total_int, total_ncomp);
+    ASSERT_EQ(d_ptr_const_map.ncomp_total_int, total_ncomp);
   };
 
   lambda_test();
