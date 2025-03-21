@@ -77,6 +77,8 @@ public:
 
   std::vector<Sym<REAL>> map_index_to_sym_real;
   std::vector<Sym<INT>> map_index_to_sym_int;
+  std::map<Sym<REAL>, int> map_sym_to_index_real;
+  std::map<Sym<INT>, int> map_sym_to_index_int;
 
   /**
    * Create new instance.
@@ -131,6 +133,8 @@ public:
     if (!this->valid) {
       this->map_index_to_sym_real.clear();
       this->map_index_to_sym_int.clear();
+      this->map_sym_to_index_real.clear();
+      this->map_sym_to_index_int.clear();
 
       const std::size_t ndat_real = this->particle_dats_real->size();
       const std::size_t ndat_int = this->particle_dats_int->size();
@@ -151,8 +155,9 @@ public:
         this->dh_dat_ncomp_exscan_real->h_buffer.ptr[index] =
             this->ncomp_total_real;
         this->ncomp_total_real += ncomp;
-        index++;
         this->map_index_to_sym_real.push_back(sym);
+        this->map_sym_to_index_real[sym] = index;
+        index++;
       }
       this->ncomp_total_int = 0;
       index = 0;
@@ -163,8 +168,9 @@ public:
         this->dh_dat_ncomp_exscan_int->h_buffer.ptr[index] =
             this->ncomp_total_int;
         this->ncomp_total_int += ncomp;
-        index++;
         this->map_index_to_sym_int.push_back(sym);
+        this->map_sym_to_index_int[sym] = index;
+        index++;
       }
 
       this->dh_dat_ptr_const_real->host_to_device();

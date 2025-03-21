@@ -3,6 +3,7 @@
 
 #include "containers/descendant_products.hpp"
 #include "global_mapping.hpp"
+#include "loop/particle_loop_iteration_set.hpp"
 #include "particle_group.hpp"
 #include "particle_sub_group/particle_sub_group.hpp"
 
@@ -678,6 +679,30 @@ inline void ParticleGroup::add_particles_local(
 inline void ParticleGroup::add_particles_local(
     std::shared_ptr<ParticleGroup> particle_group) {
 
+  NESOASSERT(this->domain->mesh->get_cell_count() ==
+                 particle_group->domain->mesh->get_cell_count(),
+             "Miss-match in cell counts between source and destination "
+             "ParticleGroups.");
+
+  auto lambda_test_dat = [&](auto m) {
+    for (auto &[sym, dat] : m) {
+      if (particle_group->contains_dat(sym)) {
+        const int ncomp_correct = dat->ncomp;
+        const int ncomp_to_test = particle_group->get_dat(sym)->ncomp;
+        NESOASSERT(ncomp_correct == ncomp_to_test,
+                   "Dat " + sym.name +
+                       "Has a different number of components in source and "
+                       "destination ParticleGroups.");
+      }
+    }
+  };
+  lambda_test_dat(this->particle_dats_real);
+  lambda_test_dat(this->particle_dats_int);
+
+  const auto k_src_map_ptrs =
+      particle_group->particle_group_pointer_map->get_const();
+  const auto k_dst_map_ptrs = this->particle_group_pointer_map->get();
+
   // Get the new cell occupancies
   const int cell_count = this->domain->mesh->get_cell_count();
   std::vector<INT> h_npart_cell_existing(cell_count);
@@ -693,26 +718,128 @@ inline void ParticleGroup::add_particles_local(
 
   // Allocate space in all the dats for the new particles
   this->realloc_all_dats();
+
+  std::vector<int> src_dat_index_real;
+  std::vector<int> dst_dat_index_real;
+  std::vector<int> dst_dat_zero_index_real;
+  int index = 0;
+  for (auto [sym, dat] : this->particle_dats_real) {
+    if (particle_group->contains_dat(sym)) {
+      src_dat_index_real.push_back(
+          particle_group->particle_group_pointer_map->map_sym_to_index_real.at(
+              sym));
+      dst_dat_index_real.push_back(index);
+    } else {
+      dst_dat_zero_index_real.push_back(index);
+    }
+    index++;
+  }
+  std::vector<int> src_dat_index_int;
+  std::vector<int> dst_dat_index_int;
+  std::vector<int> dst_dat_zero_index_int;
+  index = 0;
+  for (auto [sym, dat] : this->particle_dats_int) {
+    if (particle_group->contains_dat(sym)) {
+      src_dat_index_int.push_back(
+          particle_group->particle_group_pointer_map->map_sym_to_index_int.at(
+              sym));
+      dst_dat_index_int.push_back(index);
+    } else {
+      dst_dat_zero_index_int.push_back(index);
+    }
+    index++;
+  }
+
+  auto d_npart_cell_existing = std::make_shared<BufferDevice<INT>>(
+      this->sycl_target, h_npart_cell_existing);
+  auto d_src_dat_index_real = std::make_shared<BufferDevice<int>>(
+      this->sycl_target, src_dat_index_real);
+  auto d_src_dat_index_int =
+      std::make_shared<BufferDevice<int>>(this->sycl_target, src_dat_index_int);
+  auto d_dst_dat_index_real = std::make_shared<BufferDevice<int>>(
+      this->sycl_target, dst_dat_index_real);
+  auto d_dst_dat_index_int =
+      std::make_shared<BufferDevice<int>>(this->sycl_target, dst_dat_index_int);
+  auto d_dst_dat_zero_index_real = std::make_shared<BufferDevice<int>>(
+      this->sycl_target, dst_dat_zero_index_real);
+  auto d_dst_dat_zero_index_int = std::make_shared<BufferDevice<int>>(
+      this->sycl_target, dst_dat_zero_index_int);
+
+  auto k_npart_cell_existing = d_npart_cell_existing->ptr;
+  auto k_src_dat_index_real = d_src_dat_index_real->ptr;
+  auto k_src_dat_index_int = d_src_dat_index_int->ptr;
+  auto k_dst_dat_index_real = d_dst_dat_index_real->ptr;
+  auto k_dst_dat_index_int = d_dst_dat_index_int->ptr;
+  auto k_dst_dat_zero_index_real = d_dst_dat_zero_index_real->ptr;
+  auto k_dst_dat_zero_index_int = d_dst_dat_zero_index_int->ptr;
+
+  const std::size_t k_num_real_copy = dst_dat_index_real.size();
+  const std::size_t k_num_int_copy = dst_dat_index_int.size();
+  const std::size_t k_num_real_zero = dst_dat_zero_index_real.size();
+  const std::size_t k_num_int_zero = dst_dat_zero_index_int.size();
+
   EventStack es;
 
-  auto lambda_dispatch = [&](auto dat_dst) {
-    // get a shared ptr of the right type
-    auto dat_src = dat_dst;
-    dat_src = nullptr;
-    auto sym = dat_dst->sym;
-    if (particle_group->contains_dat(sym)) {
-      dat_src = particle_group->get_dat(sym);
-    }
-    dat_dst->append_particle_data(dat_src, h_npart_cell_existing,
-                                  h_npart_cell_to_add, es);
-  };
+  // Create a ParticleLoop iteration set to loop over all the particles in the
+  // source ParticleGroup.
+  ParticleLoopImplementation::ParticleLoopBlockIterationSet iteration_set(
+      particle_group->mpi_rank_dat);
+  const std::size_t nbin =
+      this->sycl_target->parameters->template get<SizeTParameter>("LOOP_NBIN")
+          ->value;
+  const std::size_t local_size =
+      this->sycl_target->parameters
+          ->template get<SizeTParameter>("LOOP_LOCAL_SIZE")
+          ->value;
+  auto is = iteration_set.get_all_cells(nbin, local_size, 0);
 
-  // launch the copies of the npart cells into the ParticleDats
-  for (auto &dat : this->particle_dats_real) {
-    lambda_dispatch(dat.second);
-  }
-  for (auto &dat : this->particle_dats_int) {
-    lambda_dispatch(dat.second);
+  for (auto &blockx : is) {
+    const auto block_device = blockx.block_device;
+    es.push(sycl_target->queue.parallel_for<>(
+        blockx.loop_iteration_set, [=](sycl::nd_item<2> idx) {
+          std::size_t cell;
+          std::size_t src_layer;
+          block_device.get_cell_layer(idx, &cell, &src_layer);
+          const std::size_t dst_layer = k_npart_cell_existing[cell] + src_layer;
+          if (block_device.work_item_required(cell, src_layer)) {
+            for (std::size_t dx = 0; dx < k_num_real_copy; dx++) {
+              const int dst_dat_index = k_dst_dat_index_real[dx];
+              const int src_dat_index = k_src_dat_index_real[dx];
+              const int ncomp = k_dst_map_ptrs.d_ncomp_real[dst_dat_index];
+              auto dst_ptrs = k_dst_map_ptrs.d_ptr_real[dst_dat_index];
+              auto src_ptrs = k_src_map_ptrs.d_ptr_real[src_dat_index];
+              for (int cx = 0; cx < ncomp; cx++) {
+                dst_ptrs[cell][cx][dst_layer] = src_ptrs[cell][cx][src_layer];
+              }
+            }
+            for (std::size_t dx = 0; dx < k_num_int_copy; dx++) {
+              const int dst_dat_index = k_dst_dat_index_int[dx];
+              const int src_dat_index = k_src_dat_index_int[dx];
+              const int ncomp = k_dst_map_ptrs.d_ncomp_int[dst_dat_index];
+              auto dst_ptrs = k_dst_map_ptrs.d_ptr_int[dst_dat_index];
+              auto src_ptrs = k_src_map_ptrs.d_ptr_int[src_dat_index];
+              for (int cx = 0; cx < ncomp; cx++) {
+                dst_ptrs[cell][cx][dst_layer] = src_ptrs[cell][cx][src_layer];
+              }
+            }
+            for (std::size_t dx = 0; dx < k_num_real_zero; dx++) {
+              const int dst_dat_index = k_dst_dat_zero_index_real[dx];
+              const int ncomp = k_dst_map_ptrs.d_ncomp_real[dst_dat_index];
+              auto dst_ptrs = k_dst_map_ptrs.d_ptr_real[dst_dat_index];
+              for (int cx = 0; cx < ncomp; cx++) {
+                dst_ptrs[cell][cx][dst_layer] = static_cast<REAL>(0.0);
+              }
+            }
+            for (std::size_t dx = 0; dx < k_num_int_zero; dx++) {
+              const int dst_dat_index = k_dst_dat_zero_index_int[dx];
+              const int ncomp = k_dst_map_ptrs.d_ncomp_int[dst_dat_index];
+              auto dst_ptrs = k_dst_map_ptrs.d_ptr_int[dst_dat_index];
+              for (int cx = 0; cx < ncomp; cx++) {
+                dst_ptrs[cell][cx][dst_layer] = static_cast<INT>(0);
+              }
+            }
+          }
+        }));
   }
 
   // launch the copies of the npart cells into the ParticleDats
