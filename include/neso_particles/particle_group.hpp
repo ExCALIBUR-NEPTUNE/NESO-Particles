@@ -30,6 +30,7 @@
 #include "typedefs.hpp"
 
 namespace NESO::Particles {
+struct TestParticleGroup;
 class DescendantProducts;
 class ParticleSubGroup;
 class ParticleGroupTemporary;
@@ -97,6 +98,7 @@ class ParticleGroup {
   friend class SymVector<REAL>;
   friend class SymVector<INT>;
   friend class ParticleGroupTemporary;
+  friend struct TestParticleGroup;
 
 protected:
   // This type should be replaceable with typedef std::variant<Sym<INT>,

@@ -145,6 +145,57 @@ struct TestParticleGroup : public ParticleGroup {
   get_particle_group_pointer_map() {
     return this->particle_group_pointer_map;
   }
+
+  inline void
+  add_particles_local_old(std::shared_ptr<ParticleGroup> particle_group) {
+
+    // Get the new cell occupancies
+    const int cell_count = this->domain->mesh->get_cell_count();
+    std::vector<INT> h_npart_cell_existing(cell_count);
+    std::vector<INT> h_npart_cell_to_add(cell_count);
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      h_npart_cell_existing.at(cellx) = this->h_npart_cell.ptr[cellx];
+      const INT to_add = particle_group->h_npart_cell.ptr[cellx];
+      this->h_npart_cell.ptr[cellx] += to_add;
+      h_npart_cell_to_add.at(cellx) = to_add;
+    }
+    buffer_memcpy(this->d_npart_cell, this->h_npart_cell).wait_and_throw();
+    this->recompute_npart_cell_es();
+
+    // Allocate space in all the dats for the new particles
+    this->realloc_all_dats();
+    EventStack es;
+
+    auto lambda_dispatch = [&](auto dat_dst) {
+      // get a shared ptr of the right type
+      auto dat_src = dat_dst;
+      dat_src = nullptr;
+      auto sym = dat_dst->sym;
+      if (particle_group->contains_dat(sym)) {
+        dat_src = particle_group->get_dat(sym);
+      }
+      dat_dst->append_particle_data(dat_src, h_npart_cell_existing,
+                                    h_npart_cell_to_add, es);
+    };
+
+    // launch the copies of the npart cells into the ParticleDats
+    for (auto &dat : this->particle_dats_real) {
+      lambda_dispatch(dat.second);
+    }
+    for (auto &dat : this->particle_dats_int) {
+      lambda_dispatch(dat.second);
+    }
+
+    // launch the copies of the npart cells into the ParticleDats
+    for (auto &dat : this->particle_dats_real) {
+      es.push(dat.second->async_set_npart_cells(this->h_npart_cell));
+    }
+    for (auto &dat : this->particle_dats_int) {
+      es.push(dat.second->async_set_npart_cells(this->h_npart_cell));
+    }
+    es.wait();
+    this->invalidate_group_version();
+  }
 };
 
 template <> struct TestMapperToNP<TestParticleGroup> {
