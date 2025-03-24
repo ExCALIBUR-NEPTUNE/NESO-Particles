@@ -658,6 +658,15 @@ public:
   inline void add_particle_dat(ParticleDatSharedPtr<INT> particle_dat);
 
   /**
+   * Add a new ParticleDat by specifying the Sym and number of components.
+   *
+   * @param sym Sym<INT> or Sym<REAL> for new ParticleDat.
+   * @param int ncomp Number of components for the new ParticleDat.
+   */
+  template <typename T>
+  inline void add_particle_dat(const Sym<T> sym, const int ncomp);
+
+  /**
    *  Add particles to the ParticleGroup. Any rank may add particles that exist
    *  anywhere in the domain. This call is collective across the ParticleGroup
    *  and ranks that do not add particles should not pass any new particle
@@ -798,6 +807,22 @@ public:
    */
   inline bool contains_dat(Sym<INT> sym) {
     return (bool)this->particle_dats_int.count(sym);
+  }
+
+  /**
+   * Determine if the ParticleGroup contains a ParticleDat with a given sym and
+   * number of components.
+   *
+   * @param sym Sym<REAL> or Sym<INT> to check existence of.
+   * @param ncomp Number of components the dat should have.
+   * @returns True if a dat with the specified number of components is held.
+   */
+  template <typename T> inline bool contains_dat(Sym<T> sym, const int ncomp) {
+    if (!this->contains_dat(sym)) {
+      return false;
+    } else {
+      return this->get_dat(sym)->ncomp == ncomp;
+    }
   }
 
   /**

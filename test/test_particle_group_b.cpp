@@ -398,3 +398,24 @@ TEST(ParticleGroup, add_particles_local_particle_group_b) {
   pgtmp->restore(A, C);
   sycl_target->free();
 }
+
+TEST(ParticleGroup, contains_dat_sym_ncomp) {
+  auto [A_t, sycl_target_t, cell_count_t] = particle_loop_common_2d(1, 16, 32);
+  auto A = A_t;
+  auto sycl_target = sycl_target_t;
+
+  ASSERT_TRUE(A->contains_dat(Sym<REAL>("P"), 2));
+  ASSERT_FALSE(A->contains_dat(Sym<REAL>("P"), 3));
+  ASSERT_TRUE(A->contains_dat(Sym<INT>("NESO_MPI_RANK"), 2));
+  ASSERT_FALSE(A->contains_dat(Sym<INT>("NESO_MPI_RANK"), 3));
+  ASSERT_FALSE(A->contains_dat(Sym<REAL>("MADE_UP_DAT"), 2));
+  ASSERT_FALSE(A->contains_dat(Sym<INT>("MADE_UP_DAT"), 2));
+
+  A->add_particle_dat(Sym<REAL>("MADE_UP_DAT"), 2);
+  ASSERT_TRUE(A->contains_dat(Sym<REAL>("MADE_UP_DAT"), 2));
+  ASSERT_FALSE(A->contains_dat(Sym<INT>("MADE_UP_DAT"), 2));
+  A->add_particle_dat(Sym<INT>("MADE_UP_DAT"), 3);
+  ASSERT_TRUE(A->contains_dat(Sym<INT>("MADE_UP_DAT"), 3));
+
+  sycl_target->free();
+}

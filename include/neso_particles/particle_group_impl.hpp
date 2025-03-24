@@ -34,6 +34,13 @@ ParticleGroup::add_particle_dat(ParticleDatSharedPtr<INT> particle_dat) {
   }
 }
 
+template <typename T>
+inline void ParticleGroup::add_particle_dat(const Sym<T> sym, const int ncomp) {
+  this->add_particle_dat(ParticleDat(this->sycl_target,
+                                     ParticleProp(sym, ncomp),
+                                     this->domain->mesh->get_cell_count()));
+}
+
 inline void ParticleGroup::add_particles() {
   NESOASSERT(false, "Not implemented yet - use add_particles_local and hybrid "
                     "move or parallel advection initialisation.");
