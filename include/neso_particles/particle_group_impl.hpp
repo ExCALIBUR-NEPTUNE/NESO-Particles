@@ -190,6 +190,8 @@ inline void ParticleGroup::add_particles_local(ParticleSet &particle_data) {
   auto k_dst_dat_ptr_real = d_dst_dat_ptr_real->ptr;
   auto k_dst_dat_ptr_int = d_dst_dat_ptr_int->ptr;
 
+  const REAL k_zero_value_real = this->zero_value_real;
+  const INT k_zero_value_int = this->zero_value_int;
   es.wait();
   es.push(this->sycl_target->queue.parallel_for<>(
       this->sycl_target->device_limits.validate_range_global(
@@ -234,8 +236,7 @@ inline void ParticleGroup::add_particles_local(ParticleSet &particle_data) {
         const INT layer = k_layers[new_particle_index];
         const int ncomp = k_dat_info.d_ncomp_real[dat_index];
         for (int cx = 0; cx < ncomp; cx++) {
-          k_dat_info.d_ptr_real[dat_index][cell][cx][layer] =
-              static_cast<REAL>(0.0);
+          k_dat_info.d_ptr_real[dat_index][cell][cx][layer] = k_zero_value_real;
         }
       }));
   es.push(this->sycl_target->queue.parallel_for<>(
@@ -249,8 +250,7 @@ inline void ParticleGroup::add_particles_local(ParticleSet &particle_data) {
         const INT layer = k_layers[new_particle_index];
         const int ncomp = k_dat_info.d_ncomp_int[dat_index];
         for (int cx = 0; cx < ncomp; cx++) {
-          k_dat_info.d_ptr_int[dat_index][cell][cx][layer] =
-              static_cast<INT>(0);
+          k_dat_info.d_ptr_int[dat_index][cell][cx][layer] = k_zero_value_int;
         }
       }));
 
