@@ -65,7 +65,45 @@ public:
         particle_group->resource_stack_particle_group_temporary);
     NESOASSERT(ptr != nullptr, "Could not cast ptr.");
 
-    return ptr->get();
+    auto tmp_particle_group = ptr->get();
+
+    auto lambda_add_dat = [&](auto sym, const int ncomp) {
+      tmp_particle_group->add_particle_dat(
+          ParticleDat(particle_group->sycl_target, ParticleProp(sym, ncomp),
+                      particle_group->domain->mesh->get_cell_count()));
+    };
+
+    auto lambda_check_container_new = [&](auto m) {
+      for (auto &[sym, dat] : m) {
+        const int ncomp = dat->ncomp;
+        if (tmp_particle_group->contains_dat(sym)) {
+          auto tmp_dat = tmp_particle_group->get_dat(sym);
+          const int tmp_ncomp = tmp_dat->ncomp;
+          if (ncomp != tmp_ncomp) {
+            tmp_particle_group->remove_particle_dat(sym);
+            lambda_add_dat(sym, ncomp);
+          }
+        } else {
+          lambda_add_dat(sym, ncomp);
+        }
+      }
+    };
+
+    lambda_check_container_new(particle_group->particle_dats_real);
+    lambda_check_container_new(particle_group->particle_dats_int);
+
+    auto lambda_check_container_old = [&](auto m) {
+      for (auto &[sym, dat] : m) {
+        if (!particle_group->contains_dat(sym)) {
+          tmp_particle_group->remove_particle_dat(sym);
+        }
+      }
+    };
+
+    lambda_check_container_old(tmp_particle_group->particle_dats_real);
+    lambda_check_container_old(tmp_particle_group->particle_dats_int);
+
+    return tmp_particle_group;
   }
 
   /**

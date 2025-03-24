@@ -356,9 +356,7 @@ inline void ParticleGroup::local_move() {
   this->invalidate_group_version();
 }
 
-template <typename... T> inline void ParticleGroup::print(T &&...args) {
-
-  SymStore print_spec(std::forward<T>(args)...);
+inline void ParticleGroup::print(SymStore print_spec) {
 
   std::cout << "==============================================================="
                "================="
@@ -422,8 +420,12 @@ template <typename... T> inline void ParticleGroup::print(T &&...args) {
             << std::endl;
 }
 
+template <typename... T> inline void ParticleGroup::print(T &&...args) {
+  SymStore print_spec(std::forward<T>(args)...);
+  this->print(print_spec);
+}
+
 inline void ParticleGroup::print_particle(const int cell, const int layer) {
-  nprint("Particle info, cell:", cell, "layer:", layer);
   auto lambda_print_dat = [&](auto sym, auto dat) {
     std::cout << "\t" << sym.name << ": ";
     auto data = dat->cell_dat.get_cell(cell);
@@ -679,6 +681,9 @@ inline void ParticleGroup::add_particles_local(
 inline void ParticleGroup::add_particles_local(
     std::shared_ptr<ParticleGroup> particle_group) {
 
+  NESOASSERT(particle_group.get() != this,
+             "Cannot add a ParticleGroup to itself.");
+
   NESOASSERT(this->domain->mesh->get_cell_count() ==
                  particle_group->domain->mesh->get_cell_count(),
              "Miss-match in cell counts between source and destination "
@@ -706,15 +711,22 @@ inline void ParticleGroup::add_particles_local(
   // Get the new cell occupancies
   const int cell_count = this->domain->mesh->get_cell_count();
   std::vector<INT> h_npart_cell_existing(cell_count);
-  std::vector<INT> h_npart_cell_to_add(cell_count);
+  INT total_to_add = 0;
+  const INT npart_local_old = this->get_npart_local();
   for (int cellx = 0; cellx < cell_count; cellx++) {
     h_npart_cell_existing.at(cellx) = this->h_npart_cell.ptr[cellx];
+    NESOASSERT(h_npart_cell_existing.at(cellx) >= 0, "Bad npart cell.");
     const INT to_add = particle_group->h_npart_cell.ptr[cellx];
+    total_to_add += to_add;
+    NESOASSERT(to_add >= 0, "Bad npart cell.");
     this->h_npart_cell.ptr[cellx] += to_add;
-    h_npart_cell_to_add.at(cellx) = to_add;
   }
+  NESOASSERT(total_to_add == particle_group->get_npart_local(),
+             "Source ParticleGroup is not self consistent.");
   buffer_memcpy(this->d_npart_cell, this->h_npart_cell).wait_and_throw();
   this->recompute_npart_cell_es();
+  NESOASSERT(npart_local_old + total_to_add == this->get_npart_local(),
+             "Destination ParticleGroup is not self consistent.");
 
   // Allocate space in all the dats for the new particles
   this->realloc_all_dats();
@@ -784,6 +796,12 @@ inline void ParticleGroup::add_particles_local(
   // source ParticleGroup.
   ParticleLoopImplementation::ParticleLoopBlockIterationSet iteration_set(
       particle_group->mpi_rank_dat);
+  particle_group->check_dats_and_group_agree();
+
+  NESOASSERT(particle_group->get_dat(Sym<INT>("NESO_MPI_RANK")).get() ==
+                 particle_group->mpi_rank_dat.get(),
+             "Bad MPI_RANK_DAT");
+
   const std::size_t nbin =
       this->sycl_target->parameters->template get<SizeTParameter>("LOOP_NBIN")
           ->value;
@@ -792,6 +810,9 @@ inline void ParticleGroup::add_particles_local(
           ->template get<SizeTParameter>("LOOP_LOCAL_SIZE")
           ->value;
   auto is = iteration_set.get_all_cells(nbin, local_size, 0);
+
+  const auto k_zero_value_real = this->zero_value_real;
+  const auto k_zero_value_int = this->zero_value_int;
 
   for (auto &blockx : is) {
     const auto block_device = blockx.block_device;
@@ -827,7 +848,7 @@ inline void ParticleGroup::add_particles_local(
               const int ncomp = k_dst_map_ptrs.d_ncomp_real[dst_dat_index];
               auto dst_ptrs = k_dst_map_ptrs.d_ptr_real[dst_dat_index];
               for (int cx = 0; cx < ncomp; cx++) {
-                dst_ptrs[cell][cx][dst_layer] = static_cast<REAL>(0.0);
+                dst_ptrs[cell][cx][dst_layer] = k_zero_value_real;
               }
             }
             for (std::size_t dx = 0; dx < k_num_int_zero; dx++) {
@@ -835,7 +856,7 @@ inline void ParticleGroup::add_particles_local(
               const int ncomp = k_dst_map_ptrs.d_ncomp_int[dst_dat_index];
               auto dst_ptrs = k_dst_map_ptrs.d_ptr_int[dst_dat_index];
               for (int cx = 0; cx < ncomp; cx++) {
-                dst_ptrs[cell][cx][dst_layer] = static_cast<INT>(0);
+                dst_ptrs[cell][cx][dst_layer] = k_zero_value_int;
               }
             }
           }
@@ -850,7 +871,18 @@ inline void ParticleGroup::add_particles_local(
     es.push(dat.second->async_set_npart_cells(this->h_npart_cell));
   }
   es.wait();
+  this->check_dats_and_group_agree();
   this->invalidate_group_version();
+
+  INT total_added = 0;
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    const INT added = this->h_npart_cell.ptr[cellx];
+    total_added += added;
+  }
+  NESOASSERT(this->get_npart_local() == total_added,
+             "Interals are not self consistent.");
+  NESOASSERT(total_to_add == particle_group->get_npart_local(),
+             "Source ParticleGroup is not self consistent.");
 }
 
 inline void ParticleGroup::add_particles_local(

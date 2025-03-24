@@ -21,6 +21,15 @@ TEST(ParticleGroup, temporary) {
     ASSERT_EQ(*A->position_sym, *B->position_sym);
     ASSERT_EQ(*A->mpi_rank_sym, *B->mpi_rank_sym);
 
+    ASSERT_EQ(A->mpi_rank_dat.get(),
+              A->get_dat(Sym<INT>("NESO_MPI_RANK")).get());
+    ASSERT_EQ(B->mpi_rank_dat.get(),
+              B->get_dat(Sym<INT>("NESO_MPI_RANK")).get());
+    ASSERT_EQ(A->position_dat.get(), A->get_dat(Sym<REAL>("P")).get());
+    ASSERT_EQ(B->position_dat.get(), B->get_dat(Sym<REAL>("P")).get());
+    ASSERT_EQ(A->cell_id_dat.get(), A->get_dat(Sym<INT>("CELL_ID")).get());
+    ASSERT_EQ(B->cell_id_dat.get(), B->get_dat(Sym<INT>("CELL_ID")).get());
+
     auto lambda_assert_dats = [&](auto a, auto b) {
       auto lambda_inner = [&](auto &datmap) {
         for (auto &[sym, dat] : datmap) {
@@ -63,6 +72,17 @@ TEST(ParticleGroup, temporary) {
   lambda_test(A, B);
   pgtmp->restore(A, B);
 
+  A->remove_particle_dat(Sym<REAL>("FOO"));
+  B = pgtmp->get(A);
+  lambda_test(A, B);
+  pgtmp->restore(A, B);
+
+  A->add_particle_dat(ParticleDat(sycl_target, ParticleProp(Sym<INT>("BAR"), 4),
+                                  A->domain->mesh->get_cell_count()));
+  B = pgtmp->get(A);
+  lambda_test(A, B);
+  pgtmp->restore(A, B);
+
   sycl_target->free();
 }
 
@@ -71,9 +91,29 @@ TEST(ParticleGroup, particle_group_pointer_map) {
   auto A = A_t;
   auto sycl_target = sycl_target_t;
 
+  auto aa = particle_sub_group(
+      A, [=](auto ID) { return ID.at(0) % 2 == 0; },
+      Access::read(Sym<INT>("ID")));
+  ASSERT_TRUE(aa->create_if_required());
+  ASSERT_FALSE(aa->create_if_required());
+
+  aa->create_if_required();
+  ASSERT_FALSE(aa->create_if_required());
+
+  auto AT = std::static_pointer_cast<TestParticleGroup>(A);
+  auto ptr_map = AT->get_particle_group_pointer_map();
+
+  ASSERT_FALSE(aa->create_if_required());
+  ptr_map->get_const();
+  ASSERT_FALSE(aa->create_if_required());
+  ptr_map->get();
+  ASSERT_TRUE(aa->create_if_required());
+  ASSERT_FALSE(aa->create_if_required());
+
   auto lambda_test = [&]() {
     auto AT = std::static_pointer_cast<TestParticleGroup>(A);
     auto ptr_map = AT->get_particle_group_pointer_map();
+
     auto d_ptr_const_map = ptr_map->get_const();
     auto d_ptr_map = ptr_map->get();
 
@@ -189,6 +229,7 @@ TEST(ParticleGroup, particle_group_pointer_map) {
   A->add_particle_dat(ParticleDat(sycl_target, ParticleProp(Sym<INT>("BAR"), 4),
                                   A->domain->mesh->get_cell_count()));
   lambda_test();
+
   sycl_target->free();
 }
 
@@ -201,8 +242,9 @@ TEST(ParticleGroup, add_particles_local_particle_group_b) {
 
   auto B = std::make_shared<TestParticleGroup>(A->domain, A->particle_spec,
                                                sycl_target);
-  auto C = std::make_shared<TestParticleGroup>(A->domain, A->particle_spec,
-                                               sycl_target);
+
+  auto pgtmp = std::make_shared<ParticleGroupTemporary>();
+  auto C = pgtmp->get(A);
 
   auto bb = particle_sub_group(
       B, [&](auto ID) { return ID.at(0) % 2 == 0; },
@@ -270,5 +312,89 @@ TEST(ParticleGroup, add_particles_local_particle_group_b) {
     lambda_test(A->particle_dats_int);
   }
 
+  B->add_particles_local_old(A);
+  C->add_particles_local(A);
+
+  ASSERT_TRUE(bb->create_if_required());
+  ASSERT_FALSE(bb->create_if_required());
+  ASSERT_TRUE(cc->create_if_required());
+  ASSERT_FALSE(cc->create_if_required());
+
+  ASSERT_EQ(2 * A->get_npart_local(), B->get_npart_local());
+  ASSERT_EQ(2 * A->get_npart_local(), C->get_npart_local());
+
+  lambda_test(A->particle_dats_real);
+  lambda_test(A->particle_dats_int);
+
+  for (int cx = 0; cx < cell_count; cx++) {
+    const int nrow = 2 * A->get_npart_cell(cx);
+    ASSERT_EQ(nrow, B->get_npart_cell(cx));
+    ASSERT_EQ(nrow, C->get_npart_cell(cx));
+
+    auto lambda_test = [&](auto m) {
+      for (auto [sym, dat] : m) {
+        int tmp;
+        sycl_target->queue
+            .memcpy(&tmp, B->get_dat(sym)->d_npart_cell + cx, sizeof(int))
+            .wait_and_throw();
+        ASSERT_EQ(nrow, tmp);
+        sycl_target->queue
+            .memcpy(&tmp, C->get_dat(sym)->d_npart_cell + cx, sizeof(int))
+            .wait_and_throw();
+        ASSERT_EQ(nrow, tmp);
+        ASSERT_EQ(B->get_dat(sym)->h_npart_cell[cx], nrow);
+        ASSERT_EQ(C->get_dat(sym)->h_npart_cell[cx], nrow);
+        auto Cd = C->get_cell(sym, cx);
+        auto Bd = B->get_cell(sym, cx);
+        const int ncomp = dat->ncomp;
+
+        for (int nx = 0; nx < ncomp; nx++) {
+          for (int rx = 0; rx < nrow; rx++) {
+            ASSERT_EQ(Cd->at(rx, nx), Bd->at(rx, nx));
+          }
+        }
+      }
+    };
+    lambda_test(A->particle_dats_real);
+    lambda_test(A->particle_dats_int);
+  }
+
+  B->set_zero_values(3.14, -4);
+
+  B->clear();
+  C->clear();
+
+  B->add_particle_dat(
+      ParticleDat(sycl_target, ParticleProp(Sym<REAL>("BAR"), 2), cell_count));
+  B->add_particle_dat(
+      ParticleDat(sycl_target, ParticleProp(Sym<INT>("BAR"), 4), cell_count));
+  C->add_particle_dat(
+      ParticleDat(sycl_target, ParticleProp(Sym<REAL>("BAR"), 2), cell_count));
+  C->add_particle_dat(
+      ParticleDat(sycl_target, ParticleProp(Sym<INT>("BAR"), 4), cell_count));
+
+  B->add_particles_local(A);
+  C->add_particles_local(A);
+
+  for (int cx = 0; cx < cell_count; cx++) {
+    auto BBAR_real = B->get_cell(Sym<REAL>("BAR"), cx);
+    auto BBAR_int = B->get_cell(Sym<INT>("BAR"), cx);
+    auto CBAR_real = C->get_cell(Sym<REAL>("BAR"), cx);
+    auto CBAR_int = C->get_cell(Sym<INT>("BAR"), cx);
+    const int nrow = B->get_npart_cell(cx);
+    for (int rx = 0; rx < nrow; rx++) {
+      for (int nx = 0; nx < 2; nx++) {
+        ASSERT_EQ(BBAR_real->at(rx, nx), 3.14);
+        ASSERT_EQ(CBAR_real->at(rx, nx), 0.0);
+      }
+      for (int nx = 0; nx < 4; nx++) {
+        ASSERT_EQ(BBAR_int->at(rx, nx), -4);
+        ASSERT_EQ(CBAR_int->at(rx, nx), 0);
+      }
+    }
+  }
+
+  cc = nullptr;
+  pgtmp->restore(A, C);
   sycl_target->free();
 }

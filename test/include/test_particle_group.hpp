@@ -7,6 +7,11 @@ namespace NESO::Particles {
 
 struct TestParticleGroup : public ParticleGroup {
 
+  inline void set_zero_values(const REAL value_real, const INT value_int) {
+    this->zero_value_real = value_real;
+    this->zero_value_int = value_int;
+  }
+
   int test_ncell;
   ParticleDatVersionTracker t_particle_dat_versions;
 
@@ -239,7 +244,7 @@ particle_loop_common_2d(const int npart_cell = 1093, const int nx = 16,
 
   const int cell_count = mesh->get_cell_count();
   const int N = cell_count * npart_cell;
-  int id_offset;
+  int id_offset = 0;
   MPICHK(MPI_Exscan(&N, &id_offset, 1, MPI_INT, MPI_SUM, mesh->get_comm()));
 
   const int rank = sycl_target->comm_pair.rank_parent;

@@ -107,6 +107,9 @@ protected:
   typedef int64_t ParticleGroupVersion;
   typedef std::map<ParticleDatVersion, int64_t> ParticleDatVersionTracker;
 
+  REAL zero_value_real{0.0};
+  INT zero_value_int{0};
+
   std::size_t npart_cell_hint{0};
   bool is_temporary;
   int ncell;
@@ -422,18 +425,20 @@ protected:
     buffer_memcpy(this->d_npart_cell, this->h_npart_cell).wait();
     this->dh_npart_cell_es->host_to_device();
 
-    for (auto &property : particle_spec.properties_real) {
-      add_particle_dat(ParticleDat(sycl_target, property, this->ncell));
-    }
-    for (auto &property : particle_spec.properties_int) {
-      add_particle_dat(ParticleDat(sycl_target, property, this->ncell));
-    }
     // Create a ParticleDat to store the MPI rank of the particles in.
     mpi_rank_sym = std::make_shared<Sym<INT>>("NESO_MPI_RANK");
     mpi_rank_dat =
         ParticleDat(sycl_target, ParticleProp(*mpi_rank_sym, 2), ncell);
     add_particle_dat(mpi_rank_dat);
     this->global_move_ctx.set_mpi_rank_dat(mpi_rank_dat);
+
+    // Add the user added dats
+    for (auto &property : particle_spec.properties_real) {
+      add_particle_dat(ParticleDat(sycl_target, property, this->ncell));
+    }
+    for (auto &property : particle_spec.properties_int) {
+      add_particle_dat(ParticleDat(sycl_target, property, this->ncell));
+    }
 
     this->local_move_ctx = std::make_unique<LocalMove>(
         sycl_target, layer_compressor, particle_dats_real, particle_dats_int,
@@ -974,6 +979,14 @@ public:
   template <typename... T> inline void print(T &&...args);
 
   /**
+   *  Print particle data for all particles for the specified ParticleDats.
+   *  Empty cells are not printed.
+   *
+   *  @param print_spec SymStore of data to print.
+   */
+  inline void print(SymStore print_spec);
+
+  /**
    *  Print all particle data for a particle.
    *
    *  @param cell Cell of particle.
@@ -989,6 +1002,10 @@ public:
   inline void remove_particle_dat(Sym<REAL> sym) {
     NESOASSERT(this->particle_dats_real.count(sym) == 1,
                "ParticleDat not found.");
+
+    NESOASSERT(sym.name != this->position_dat->name,
+               "The positions dat cannot be removed.");
+
     this->remove_particle_dat_common(this->particle_dats_real.at(sym));
     this->particle_dats_real.erase(sym);
   }
@@ -1000,6 +1017,12 @@ public:
   inline void remove_particle_dat(Sym<INT> sym) {
     NESOASSERT(this->particle_dats_int.count(sym) == 1,
                "ParticleDat not found.");
+
+    NESOASSERT(sym.name != "NESO_MPI_RANK",
+               "The MPI rank dat cannot be removed.");
+    NESOASSERT(sym.name != this->cell_id_sym->name,
+               "The cell id dat cannot be removed.");
+
     this->remove_particle_dat_common(this->particle_dats_int.at(sym));
     this->particle_dats_int.erase(sym);
   }
@@ -1053,6 +1076,56 @@ public:
     restore_resource(sycl_target->resource_stack_map,
                      ResourceStackKeyBufferDevice<INT>{}, d_buffer);
     return ps;
+  }
+
+  inline void foo(std::shared_ptr<ParticleGroup> particle_group) {
+
+    // Get the new cell occupancies
+    const int cell_count = this->domain->mesh->get_cell_count();
+    std::vector<INT> h_npart_cell_existing(cell_count);
+    std::vector<INT> h_npart_cell_to_add(cell_count);
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      h_npart_cell_existing.at(cellx) = this->h_npart_cell.ptr[cellx];
+      const INT to_add = particle_group->h_npart_cell.ptr[cellx];
+      this->h_npart_cell.ptr[cellx] += to_add;
+      h_npart_cell_to_add.at(cellx) = to_add;
+    }
+    buffer_memcpy(this->d_npart_cell, this->h_npart_cell).wait_and_throw();
+    this->recompute_npart_cell_es();
+
+    // Allocate space in all the dats for the new particles
+    this->realloc_all_dats();
+    EventStack es;
+
+    auto lambda_dispatch = [&](auto dat_dst) {
+      // get a shared ptr of the right type
+      auto dat_src = dat_dst;
+      dat_src = nullptr;
+      auto sym = dat_dst->sym;
+      if (particle_group->contains_dat(sym)) {
+        dat_src = particle_group->get_dat(sym);
+      }
+      dat_dst->append_particle_data(dat_src, h_npart_cell_existing,
+                                    h_npart_cell_to_add, es);
+    };
+
+    // launch the copies of the npart cells into the ParticleDats
+    for (auto &dat : this->particle_dats_real) {
+      lambda_dispatch(dat.second);
+    }
+    for (auto &dat : this->particle_dats_int) {
+      lambda_dispatch(dat.second);
+    }
+
+    // launch the copies of the npart cells into the ParticleDats
+    for (auto &dat : this->particle_dats_real) {
+      es.push(dat.second->async_set_npart_cells(this->h_npart_cell));
+    }
+    for (auto &dat : this->particle_dats_int) {
+      es.push(dat.second->async_set_npart_cells(this->h_npart_cell));
+    }
+    es.wait();
+    this->invalidate_group_version();
   }
 };
 
