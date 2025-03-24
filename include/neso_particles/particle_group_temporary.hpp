@@ -68,9 +68,7 @@ public:
     auto tmp_particle_group = ptr->get();
 
     auto lambda_add_dat = [&](auto sym, const int ncomp) {
-      tmp_particle_group->add_particle_dat(
-          ParticleDat(particle_group->sycl_target, ParticleProp(sym, ncomp),
-                      particle_group->domain->mesh->get_cell_count()));
+      tmp_particle_group->add_particle_dat(sym, ncomp);
     };
 
     auto lambda_check_container_new = [&](auto m) {

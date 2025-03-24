@@ -418,9 +418,7 @@ public:
     std::string name = "contrib_" + std::to_string(ncomp);
     auto sym = Sym<REAL>(name);
     if (!this->particle_group->contains_dat(sym)) {
-      this->particle_group->add_particle_dat(
-          ParticleDat(this->sycl_target, ParticleProp(sym, ncomp),
-                      this->domain->mesh->get_cell_count()));
+      this->particle_group->add_particle_dat(sym, ncomp);
     }
     return sym;
   }

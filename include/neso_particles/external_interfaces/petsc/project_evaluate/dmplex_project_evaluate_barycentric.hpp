@@ -131,10 +131,8 @@ protected:
     // Add the particle property for the Barycentric coordinates if it does not
     // exist already.
     if (!particle_group->contains_dat(sym_barycentric_coords)) {
-      particle_group->add_particle_dat(ParticleDat(
-          particle_group->sycl_target,
-          ParticleProp(sym_barycentric_coords, ncomp_barycentric_coords),
-          particle_group->domain->mesh->get_cell_count()));
+      particle_group->add_particle_dat(sym_barycentric_coords,
+                                       ncomp_barycentric_coords);
     }
     // Compute the Barycentric coordinates for all the particles in the
     // ParticleGroup.
