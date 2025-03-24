@@ -118,7 +118,7 @@ public:
   BlockKernelRNGBase() : num_components(0), block_size(8192), max_factor(2) {}
 
   BlockKernelRNGBase(const int num_components, const int block_size = 8192)
-      : num_components(num_components), block_size(block_size) {}
+      : num_components(num_components), block_size(block_size), max_factor(2) {}
 };
 
 } // namespace NESO::Particles
