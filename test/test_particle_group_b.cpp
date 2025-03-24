@@ -77,6 +77,15 @@ TEST(ParticleGroup, particle_group_pointer_map) {
     auto d_ptr_const_map = ptr_map->get_const();
     auto d_ptr_map = ptr_map->get();
 
+    int ncomp_total_real_correct = 0;
+    for (auto &[sym, dat] : A->particle_dats_real) {
+      ncomp_total_real_correct += dat->ncomp;
+    }
+    int ncomp_total_int_correct = 0;
+    for (auto &[sym, dat] : A->particle_dats_int) {
+      ncomp_total_int_correct += dat->ncomp;
+    }
+
     ASSERT_EQ(d_ptr_const_map.d_ncomp_real, d_ptr_map.d_ncomp_real);
     ASSERT_EQ(d_ptr_const_map.d_ncomp_int, d_ptr_map.d_ncomp_int);
     ASSERT_EQ(d_ptr_const_map.d_ncomp_exscan_real,
@@ -89,6 +98,8 @@ TEST(ParticleGroup, particle_group_pointer_map) {
     ASSERT_EQ(d_ptr_const_map.h_ncomp_exscan_int, d_ptr_map.h_ncomp_exscan_int);
     ASSERT_EQ(d_ptr_const_map.ndat_real, d_ptr_map.ndat_real);
     ASSERT_EQ(d_ptr_const_map.ndat_int, d_ptr_map.ndat_int);
+    ASSERT_EQ(ncomp_total_real_correct, d_ptr_map.ncomp_total_real);
+    ASSERT_EQ(ncomp_total_int_correct, d_ptr_map.ncomp_total_int);
     ASSERT_EQ(d_ptr_const_map.ncomp_total_real, d_ptr_map.ncomp_total_real);
     ASSERT_EQ(d_ptr_const_map.ncomp_total_int, d_ptr_map.ncomp_total_int);
 

@@ -221,7 +221,6 @@ public:
       this->dh_dat_ptr_real->h_buffer.ptr[index] = dat->impl_get();
       index++;
     }
-    this->ncomp_total_int = 0;
     index = 0;
     for (auto [sym, dat] : *this->particle_dats_int) {
       this->dh_dat_ptr_int->h_buffer.ptr[index] = dat->impl_get();
