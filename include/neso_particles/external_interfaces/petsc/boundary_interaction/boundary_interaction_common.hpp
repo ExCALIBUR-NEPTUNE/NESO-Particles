@@ -34,9 +34,7 @@ protected:
   inline void check_dat(ParticleGroupSharedPtr particle_group, Sym<T> sym,
                         const int ncomp) {
     if (!particle_group->contains_dat(sym)) {
-      ParticleProp prop(sym, ncomp);
-      particle_group->add_particle_dat(
-          ParticleDat(this->sycl_target, prop, this->mesh->get_cell_count()));
+      particle_group->add_particle_dat(sym, ncomp);
     } else {
       NESOASSERT(
           particle_group->get_dat(sym)->ncomp >= ncomp,

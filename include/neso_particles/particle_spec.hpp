@@ -228,6 +228,7 @@ public:
   std::vector<Sym<REAL>> syms_real;
   /// Container of Sym<INT> symbols.
   std::vector<Sym<INT>> syms_int;
+
   /**
    *  Constructor for SymStore should be called with a list of arguments which
    *  are Sym instances.
@@ -237,6 +238,18 @@ public:
    */
   template <typename... T> SymStore(T &&...args) {
     this->push(std::forward<T>(args)...);
+  }
+
+  /**
+   * @param particle_spec ParticleSpec instance to create SymStore from.
+   */
+  SymStore(ParticleSpec &particle_spec) {
+    for (auto &prop : particle_spec.properties_real) {
+      this->push(prop.sym);
+    }
+    for (auto &prop : particle_spec.properties_int) {
+      this->push(prop.sym);
+    }
   }
 
   SymStore(){};

@@ -33,9 +33,7 @@ inline void parallel_advection_store(ParticleGroupSharedPtr particle_group) {
   const int space_ncomp = particle_group->position_dat->ncomp;
   auto domain = particle_group->domain;
   auto sycl_target = particle_group->sycl_target;
-  particle_group->add_particle_dat(ParticleDat(
-      sycl_target, ParticleProp(Sym<REAL>("NESO_ORIG_POS"), space_ncomp),
-      domain->mesh->get_cell_count()));
+  particle_group->add_particle_dat(Sym<REAL>("NESO_ORIG_POS"), space_ncomp);
 
   std::vector<REAL> local_point(3);
   get_point_in_local_domain(particle_group, local_point.data());

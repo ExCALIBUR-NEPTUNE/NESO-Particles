@@ -30,6 +30,7 @@
 #include "typedefs.hpp"
 
 namespace NESO::Particles {
+struct TestParticleGroup;
 class DescendantProducts;
 class ParticleSubGroup;
 class ParticleGroupTemporary;
@@ -97,6 +98,7 @@ class ParticleGroup {
   friend class SymVector<REAL>;
   friend class SymVector<INT>;
   friend class ParticleGroupTemporary;
+  friend struct TestParticleGroup;
 
 protected:
   // This type should be replaceable with typedef std::variant<Sym<INT>,
@@ -104,6 +106,9 @@ protected:
   typedef ParticleDatVersionT ParticleDatVersion;
   typedef int64_t ParticleGroupVersion;
   typedef std::map<ParticleDatVersion, int64_t> ParticleDatVersionTracker;
+
+  REAL zero_value_real{0.0};
+  INT zero_value_int{0};
 
   std::size_t npart_cell_hint{0};
   bool is_temporary;
@@ -420,18 +425,20 @@ protected:
     buffer_memcpy(this->d_npart_cell, this->h_npart_cell).wait();
     this->dh_npart_cell_es->host_to_device();
 
-    for (auto &property : particle_spec.properties_real) {
-      add_particle_dat(ParticleDat(sycl_target, property, this->ncell));
-    }
-    for (auto &property : particle_spec.properties_int) {
-      add_particle_dat(ParticleDat(sycl_target, property, this->ncell));
-    }
     // Create a ParticleDat to store the MPI rank of the particles in.
     mpi_rank_sym = std::make_shared<Sym<INT>>("NESO_MPI_RANK");
     mpi_rank_dat =
         ParticleDat(sycl_target, ParticleProp(*mpi_rank_sym, 2), ncell);
     add_particle_dat(mpi_rank_dat);
     this->global_move_ctx.set_mpi_rank_dat(mpi_rank_dat);
+
+    // Add the user added dats
+    for (auto &property : particle_spec.properties_real) {
+      add_particle_dat(ParticleDat(sycl_target, property, this->ncell));
+    }
+    for (auto &property : particle_spec.properties_int) {
+      add_particle_dat(ParticleDat(sycl_target, property, this->ncell));
+    }
 
     this->local_move_ctx = std::make_unique<LocalMove>(
         sycl_target, layer_compressor, particle_dats_real, particle_dats_int,
@@ -464,7 +471,7 @@ protected:
           sycl_target->resource_stack_map,
           ResourceStackKeyBufferDeviceHost<INT>{}, sycl_target);
 
-      const auto k_dat_info = this->particle_group_pointer_map->get();
+      const auto k_dat_info = this->particle_group_pointer_map->get_const();
       const std::size_t num_elements_real =
           num_particles * static_cast<std::size_t>(k_dat_info.ncomp_total_real);
       const std::size_t num_elements_int =
@@ -651,6 +658,15 @@ public:
   inline void add_particle_dat(ParticleDatSharedPtr<INT> particle_dat);
 
   /**
+   * Add a new ParticleDat by specifying the Sym and number of components.
+   *
+   * @param sym Sym<INT> or Sym<REAL> for new ParticleDat.
+   * @param int ncomp Number of components for the new ParticleDat.
+   */
+  template <typename T>
+  inline void add_particle_dat(const Sym<T> sym, const int ncomp);
+
+  /**
    *  Add particles to the ParticleGroup. Any rank may add particles that exist
    *  anywhere in the domain. This call is collective across the ParticleGroup
    *  and ranks that do not add particles should not pass any new particle
@@ -791,6 +807,22 @@ public:
    */
   inline bool contains_dat(Sym<INT> sym) {
     return (bool)this->particle_dats_int.count(sym);
+  }
+
+  /**
+   * Determine if the ParticleGroup contains a ParticleDat with a given sym and
+   * number of components.
+   *
+   * @param sym Sym<REAL> or Sym<INT> to check existence of.
+   * @param ncomp Number of components the dat should have.
+   * @returns True if a dat with the specified number of components is held.
+   */
+  template <typename T> inline bool contains_dat(Sym<T> sym, const int ncomp) {
+    if (!this->contains_dat(sym)) {
+      return false;
+    } else {
+      return this->get_dat(sym)->ncomp == ncomp;
+    }
   }
 
   /**
@@ -972,6 +1004,14 @@ public:
   template <typename... T> inline void print(T &&...args);
 
   /**
+   *  Print particle data for all particles for the specified ParticleDats.
+   *  Empty cells are not printed.
+   *
+   *  @param print_spec SymStore of data to print.
+   */
+  inline void print(SymStore print_spec);
+
+  /**
    *  Print all particle data for a particle.
    *
    *  @param cell Cell of particle.
@@ -987,6 +1027,10 @@ public:
   inline void remove_particle_dat(Sym<REAL> sym) {
     NESOASSERT(this->particle_dats_real.count(sym) == 1,
                "ParticleDat not found.");
+
+    NESOASSERT(sym.name != this->position_dat->name,
+               "The positions dat cannot be removed.");
+
     this->remove_particle_dat_common(this->particle_dats_real.at(sym));
     this->particle_dats_real.erase(sym);
   }
@@ -998,6 +1042,12 @@ public:
   inline void remove_particle_dat(Sym<INT> sym) {
     NESOASSERT(this->particle_dats_int.count(sym) == 1,
                "ParticleDat not found.");
+
+    NESOASSERT(sym.name != "NESO_MPI_RANK",
+               "The MPI rank dat cannot be removed.");
+    NESOASSERT(sym.name != this->cell_id_sym->name,
+               "The cell id dat cannot be removed.");
+
     this->remove_particle_dat_common(this->particle_dats_int.at(sym));
     this->particle_dats_int.erase(sym);
   }
