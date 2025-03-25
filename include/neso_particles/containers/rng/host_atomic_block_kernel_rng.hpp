@@ -140,6 +140,11 @@ public:
               : static_cast<std::size_t>(num_particles) *
                     static_cast<std::size_t>(this->num_components);
 
+      NESOASSERT(static_cast<std::size_t>(num_particles) *
+                         static_cast<std::size_t>(this->num_components) <
+                     static_cast<std::size_t>(std::numeric_limits<int>::max()),
+                 "Number of RNG samples required exceeds int max.");
+
       bool reallocated;
       auto d_ptr =
           this->allocate(sycl_target, num_random_numbers, &reallocated);
