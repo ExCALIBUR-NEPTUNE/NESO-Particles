@@ -100,3 +100,68 @@ TEST(SYCLTarget, matrix_transpose) {
     ASSERT_EQ(h_correct, h_to_test);
   }
 }
+
+TEST(SYCLTarget, compare_and_swap_REAL) {
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+
+  const std::size_t N = 1024000;
+  std::vector<REAL> h_y(1);
+  h_y.at(0) = N;
+
+  BufferDevice d_y(sycl_target, h_y);
+
+  auto k_y = d_y.ptr;
+  sycl_target->queue
+      .parallel_for<>(
+          sycl_target->device_limits.validate_range_global(sycl::range<1>(N)),
+          [=](sycl::id<1> idx) {
+            const REAL value =
+                static_cast<REAL>(idx) - static_cast<REAL>(N) / 2;
+            sycl::atomic_ref<REAL, sycl::memory_order::relaxed,
+                             sycl::memory_scope::device>
+                element_atomic(k_y[0]);
+            REAL expected = k_y[0];
+            REAL desired;
+            do {
+              desired = sycl::min(value, expected);
+            } while (!element_atomic.compare_exchange_weak(expected, desired));
+          })
+      .wait_and_throw();
+
+  d_y.get(h_y);
+  ASSERT_EQ(h_y.at(0), -static_cast<REAL>(N) / 2);
+
+  sycl_target->free();
+}
+
+TEST(SYCLTarget, compare_and_swap_INT) {
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+
+  const std::size_t N = 1024000;
+  std::vector<INT> h_y(1);
+  h_y.at(0) = N;
+
+  BufferDevice d_y(sycl_target, h_y);
+
+  auto k_y = d_y.ptr;
+  sycl_target->queue
+      .parallel_for<>(
+          sycl_target->device_limits.validate_range_global(sycl::range<1>(N)),
+          [=](sycl::id<1> idx) {
+            const INT value = static_cast<INT>(idx) - static_cast<INT>(N) / 2;
+            sycl::atomic_ref<INT, sycl::memory_order::relaxed,
+                             sycl::memory_scope::device>
+                element_atomic(k_y[0]);
+            INT expected = k_y[0];
+            INT desired;
+            do {
+              desired = sycl::min(value, expected);
+            } while (!element_atomic.compare_exchange_weak(expected, desired));
+          })
+      .wait_and_throw();
+
+  d_y.get(h_y);
+  ASSERT_EQ(h_y.at(0), -static_cast<INT>(N) / 2);
+
+  sycl_target->free();
+}
