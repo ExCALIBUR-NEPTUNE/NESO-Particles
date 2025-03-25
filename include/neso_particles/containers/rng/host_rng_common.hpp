@@ -82,23 +82,25 @@ protected:
   inline T *allocate(SYCLTargetSharedPtr sycl_target,
                      const std::size_t required_size,
                      bool *reallocated = nullptr) {
-    auto size_start = this->get_buffer_size(sycl_target);
-
     if (required_size == 0) {
       return nullptr;
     }
 
+    const std::size_t padded_size = std::max(
+        required_size,
+        static_cast<std::size_t>(static_cast<REAL>(required_size) * 1.1));
+
     if (!this->d_buffers.count(sycl_target)) {
       this->d_buffers[sycl_target] =
-          std::make_unique<BufferDevice<T>>(sycl_target, required_size);
+          std::make_unique<BufferDevice<T>>(sycl_target, padded_size);
     } else {
-      this->d_buffers.at(sycl_target)
-          ->realloc_no_copy(required_size, this->max_factor);
+      if (this->d_buffers.at(sycl_target)->size < required_size) {
+        this->d_buffers.at(sycl_target)->realloc(padded_size, this->max_factor);
+      }
     }
 
-    auto size_end = this->get_buffer_size(sycl_target);
     if (reallocated != nullptr) {
-      *reallocated = size_start != size_end;
+      *reallocated = false;
     }
     return this->d_buffers.at(sycl_target)->ptr;
   }
@@ -113,12 +115,14 @@ public:
   /// RNG values are sampled and copied to the device in this block size.
   int block_size;
   /// Factor for allocation
-  REAL max_factor;
+  std::optional<REAL> max_factor;
 
-  BlockKernelRNGBase() : num_components(0), block_size(8192), max_factor(2) {}
+  BlockKernelRNGBase()
+      : num_components(0), block_size(8192), max_factor(std::nullopt) {}
 
   BlockKernelRNGBase(const int num_components, const int block_size = 8192)
-      : num_components(num_components), block_size(block_size) {}
+      : num_components(num_components), block_size(block_size),
+        max_factor(std::nullopt) {}
 };
 
 } // namespace NESO::Particles

@@ -5,8 +5,8 @@
 using namespace NESO::Particles;
 
 TEST(Buffer, host) {
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
   for (std::size_t alignment : {0, 32}) {
-    auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
     const int N = 15;
     std::vector<int> correct(N);
     for (int ix = 0; ix < N; ix++) {
@@ -30,19 +30,22 @@ TEST(Buffer, host) {
       EXPECT_EQ(correct[ix], to_test_vector.ptr[ix]);
     }
   }
+  sycl_target->free();
 }
 
 TEST(Buffer, device) {
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
   for (std::size_t alignment : {0, 32}) {
-    auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
     const int N = 15;
     std::vector<int> correct(N);
     std::vector<int> to_test(N);
     for (int ix = 0; ix < N; ix++) {
       correct.at(ix) = ix;
     }
-    sycl::buffer<int, 1> b_to_test(to_test.data(), to_test.size());
 
+    const std::size_t num_bytes = to_test.size() * sizeof(int);
+    auto d_ptr =
+        static_cast<int *>(sycl_target->malloc_device(num_bytes, alignment));
     BufferDevice buffer{sycl_target, correct, alignment};
 
     EXPECT_EQ(buffer.size, N);
@@ -51,16 +54,16 @@ TEST(Buffer, device) {
     const auto k_to_test = buffer.ptr;
     sycl_target->queue
         .submit([&](sycl::handler &cgh) {
-          auto a_to_test = b_to_test.get_access<sycl::access::mode::write>(cgh);
           cgh.parallel_for<>(sycl::range<1>(N), [=](sycl::id<1> idx) {
-            a_to_test[idx] = k_to_test[idx];
+            d_ptr[idx] = k_to_test[idx];
           });
         })
         .wait_and_throw();
 
-    auto h_to_test = b_to_test.get_host_access();
+    sycl_target->queue.memcpy(to_test.data(), d_ptr, num_bytes)
+        .wait_and_throw();
     for (int ix = 0; ix < N; ix++) {
-      EXPECT_EQ(correct[ix], h_to_test[ix]);
+      EXPECT_EQ(correct[ix], to_test[ix]);
     }
 
     std::vector<double> empty(0);
@@ -74,20 +77,18 @@ TEST(Buffer, device) {
     auto k_to_test_vector = to_test_vector.ptr;
 
     std::vector<int> to_test2(N);
-    sycl::buffer<int, 1> b_to_test2(to_test2.data(), to_test2.size());
     sycl_target->queue
         .submit([&](sycl::handler &cgh) {
-          auto a_to_test =
-              b_to_test2.get_access<sycl::access::mode::write>(cgh);
           cgh.parallel_for<>(sycl::range<1>(N), [=](sycl::id<1> idx) {
-            a_to_test[idx] = k_to_test_vector[idx];
+            d_ptr[idx] = k_to_test_vector[idx];
           });
         })
         .wait_and_throw();
 
-    auto h_to_test2 = b_to_test2.get_host_access();
+    sycl_target->queue.memcpy(to_test2.data(), d_ptr, num_bytes)
+        .wait_and_throw();
     for (int ix = 0; ix < N; ix++) {
-      EXPECT_EQ(correct[ix], h_to_test2[ix]);
+      EXPECT_EQ(correct[ix], to_test2[ix]);
     }
 
     auto to_test_get = to_test_vector.get();
@@ -102,19 +103,27 @@ TEST(Buffer, device) {
     for (int ix = 0; ix < N; ix++) {
       ASSERT_NEAR(to_test_get.at(ix), correct.at(ix), 1.0e-15);
     }
+
+    sycl_target->free(d_ptr);
   }
+  sycl_target->free();
 }
 
 TEST(Buffer, device_host) {
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
   for (std::size_t alignment : {0, 32}) {
-    auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
     const int N = 15;
     std::vector<int> correct(N);
     std::vector<int> to_test(N);
     for (int ix = 0; ix < N; ix++) {
       correct.at(ix) = ix;
     }
-    sycl::buffer<int, 1> b_to_test(to_test.data(), to_test.size());
+    const std::size_t num_bytes = to_test.size() * sizeof(int);
+
+    std::vector<int> host_buffer(N);
+    auto h_ptr = host_buffer.data();
+    auto d_ptr =
+        static_cast<int *>(sycl_target->malloc_device(num_bytes, alignment));
 
     BufferDeviceHost buffer{sycl_target, correct, alignment};
     EXPECT_EQ(buffer.size, N);
@@ -123,17 +132,16 @@ TEST(Buffer, device_host) {
     auto k_to_test = buffer.d_buffer.ptr;
     sycl_target->queue
         .submit([&](sycl::handler &cgh) {
-          auto a_to_test = b_to_test.get_access<sycl::access::mode::write>(cgh);
           cgh.parallel_for<>(sycl::range<1>(N), [=](sycl::id<1> idx) {
-            a_to_test[idx] = k_to_test[idx];
+            d_ptr[idx] = k_to_test[idx];
           });
         })
         .wait_and_throw();
 
     {
-      auto h_to_test = b_to_test.get_host_access();
+      sycl_target->queue.memcpy(h_ptr, d_ptr, num_bytes).wait_and_throw();
       for (int ix = 0; ix < N; ix++) {
-        EXPECT_EQ(correct[ix], h_to_test[ix]);
+        EXPECT_EQ(correct[ix], h_ptr[ix]);
         EXPECT_EQ(correct[ix], buffer.h_buffer.ptr[ix]);
       }
     }
@@ -145,9 +153,8 @@ TEST(Buffer, device_host) {
 
     sycl_target->queue
         .submit([&](sycl::handler &cgh) {
-          auto a_to_test = b_to_test.get_access<sycl::access::mode::write>(cgh);
           cgh.parallel_for<>(sycl::range<1>(N), [=](sycl::id<1> idx) {
-            a_to_test[idx] = k_to_test[idx];
+            d_ptr[idx] = k_to_test[idx];
             k_to_test[idx] *= 4;
           });
         })
@@ -155,9 +162,9 @@ TEST(Buffer, device_host) {
 
     buffer.device_to_host();
     {
-      auto h_to_test = b_to_test.get_host_access();
+      sycl_target->queue.memcpy(h_ptr, d_ptr, num_bytes).wait_and_throw();
       for (int ix = 0; ix < N; ix++) {
-        EXPECT_EQ(correct[ix] * 2, h_to_test[ix]);
+        EXPECT_EQ(correct[ix] * 2, h_ptr[ix]);
         EXPECT_EQ(correct[ix] * 8, buffer.h_buffer.ptr[ix]);
       }
     }
@@ -188,5 +195,80 @@ TEST(Buffer, device_host) {
         EXPECT_EQ(correct[ix] * 2, to_test_vector.h_buffer.ptr[ix]);
       }
     }
+
+    sycl_target->free(d_ptr);
   }
+  sycl_target->free();
+}
+
+TEST(Buffer, realloc_host) {
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+  for (std::size_t alignment : {0, 32}) {
+    const int N = 15;
+    std::vector<int> correct(N);
+    for (int ix = 0; ix < N; ix++) {
+      correct.at(ix) = ix;
+    }
+
+    BufferHost<int> b(sycl_target, correct, alignment);
+    for (int ix = 0; ix < N; ix++) {
+      ASSERT_EQ(correct[ix], b.ptr[ix]);
+    }
+    b.realloc(2 * N);
+    ASSERT_EQ(b.size, 2 * N);
+
+    for (int ix = 0; ix < N; ix++) {
+      ASSERT_EQ(correct[ix], b.ptr[ix]);
+    }
+
+    for (int ix = 0; ix < N; ix++) {
+      b.ptr[ix + N] = 2 * ix;
+    }
+    for (int ix = 0; ix < N; ix++) {
+      ASSERT_EQ(correct[ix] * 2, b.ptr[ix + N]);
+    }
+  }
+  sycl_target->free();
+}
+
+TEST(Buffer, realloc_device) {
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+  for (std::size_t alignment : {0, 32}) {
+    const int N = 15;
+    std::vector<int> correct(N);
+    std::vector<int> to_test(2 * N);
+    for (int ix = 0; ix < N; ix++) {
+      correct.at(ix) = ix;
+    }
+
+    BufferDevice<int> b(sycl_target, correct, alignment);
+    sycl_target->queue.memcpy(to_test.data(), b.ptr, N * sizeof(int))
+        .wait_and_throw();
+
+    for (int ix = 0; ix < N; ix++) {
+      ASSERT_EQ(correct[ix], to_test[ix]);
+    }
+    b.realloc(2 * N);
+    ASSERT_EQ(b.size, 2 * N);
+
+    sycl_target->queue.memcpy(to_test.data(), b.ptr, N * sizeof(int))
+        .wait_and_throw();
+    for (int ix = 0; ix < N; ix++) {
+      ASSERT_EQ(correct[ix], to_test[ix]);
+    }
+
+    auto k_ptr = b.ptr;
+    sycl_target->queue
+        .parallel_for<>(
+            sycl_target->device_limits.validate_range_global(sycl::range<1>(N)),
+            [=](sycl::id<1> idx) { k_ptr[idx + N] = 2 * idx; })
+        .wait_and_throw();
+
+    sycl_target->queue.memcpy(to_test.data(), b.ptr, 2 * N * sizeof(int))
+        .wait_and_throw();
+    for (int ix = 0; ix < N; ix++) {
+      ASSERT_EQ(correct[ix] * 2, to_test[ix + N]);
+    }
+  }
+  sycl_target->free();
 }
