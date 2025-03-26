@@ -120,11 +120,13 @@ TEST(SYCLTarget, compare_and_swap_REAL) {
             sycl::atomic_ref<REAL, sycl::memory_order::relaxed,
                              sycl::memory_scope::device>
                 element_atomic(k_y[0]);
-            REAL expected = k_y[0];
+            REAL expected = std::numeric_limits<REAL>::max();
             REAL desired;
             do {
               desired = sycl::min(value, expected);
-            } while (!element_atomic.compare_exchange_weak(expected, desired));
+            } while (
+                (!element_atomic.compare_exchange_strong(expected, desired)) &&
+                (expected > value));
           })
       .wait_and_throw();
 
@@ -138,30 +140,49 @@ TEST(SYCLTarget, compare_and_swap_INT) {
   auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
 
   const std::size_t N = 1024000;
+
+  std::vector<INT> h_x(N);
+
+  std::mt19937 rng(52234234);
+  std::uniform_int_distribution<INT> dist{std::numeric_limits<INT>::lowest(),
+                                          std::numeric_limits<INT>::max()};
+
+  INT correct = std::numeric_limits<INT>::max();
+  for (std::size_t ix = 0; ix < N; ix++) {
+    const INT v = dist(rng);
+    h_x.at(ix) = v;
+    correct = std::min(correct, v);
+  }
+
   std::vector<INT> h_y(1);
   h_y.at(0) = N;
 
+  BufferDevice d_x(sycl_target, h_x);
   BufferDevice d_y(sycl_target, h_y);
 
+  auto k_x = d_x.ptr;
   auto k_y = d_y.ptr;
+
   sycl_target->queue
       .parallel_for<>(
           sycl_target->device_limits.validate_range_global(sycl::range<1>(N)),
           [=](sycl::id<1> idx) {
-            const INT value = static_cast<INT>(idx) - static_cast<INT>(N) / 2;
+            const INT value = k_x[idx];
             sycl::atomic_ref<INT, sycl::memory_order::relaxed,
                              sycl::memory_scope::device>
                 element_atomic(k_y[0]);
-            INT expected = k_y[0];
+            INT expected = std::numeric_limits<INT>::max();
             INT desired;
             do {
               desired = sycl::min(value, expected);
-            } while (!element_atomic.compare_exchange_weak(expected, desired));
+            } while (
+                (!element_atomic.compare_exchange_strong(expected, desired) &&
+                 (expected > value)));
           })
       .wait_and_throw();
 
   d_y.get(h_y);
-  ASSERT_EQ(h_y.at(0), -static_cast<INT>(N) / 2);
+  ASSERT_EQ(h_y.at(0), correct);
 
   sycl_target->free();
 }
