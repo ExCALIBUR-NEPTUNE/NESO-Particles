@@ -1,6 +1,11 @@
 #ifndef _NESO_PARTICLES_DEVICE_ATOMIC_SANITY_CHECK_HPP_
 #define _NESO_PARTICLES_DEVICE_ATOMIC_SANITY_CHECK_HPP_
 
+/**
+ * This file contains the implementation to test if a SYCL implementation has
+ * fundamentally broken atomics.
+ */
+
 #include "device_functions.hpp"
 #include <random>
 #include <vector>

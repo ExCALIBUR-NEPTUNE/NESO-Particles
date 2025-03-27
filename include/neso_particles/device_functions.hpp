@@ -285,6 +285,7 @@ inline T atomic_fetch_max_cas_strong(T *ptr, const T value) {
 
   sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>
       element_atomic(*ptr);
+  // This implementation deliberately avoids issuing an atomic load.
   T expected = std::numeric_limits<T>::min();
   T desired;
   do {
@@ -310,6 +311,7 @@ inline T atomic_fetch_min_cas_strong(T *ptr, const T value) {
 
   sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>
       element_atomic(*ptr);
+  // This implementation deliberately avoids issuing an atomic load.
   T expected = std::numeric_limits<T>::max();
   T desired;
   do {
