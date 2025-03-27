@@ -242,6 +242,7 @@ public:
     }
 #endif
 
+// The tests run these checks as a test, hence don't redo them all the time.
 #ifdef NESO_PARTICLES_TEST_COMPILATION
 #define NESO_PARTICLES_DISABLE_ATOMIC_SELFTEST
 #endif

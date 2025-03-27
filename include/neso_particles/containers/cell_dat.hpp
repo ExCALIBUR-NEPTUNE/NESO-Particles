@@ -36,9 +36,7 @@ template <typename T> struct Add {
   T ***ptr;
   int cell;
   inline T fetch_add(const int row, const int col, const T value) {
-    sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>
-        element_atomic(ptr[cell][col][row]);
-    return element_atomic.fetch_add(value);
+    return atomic_fetch_add(&ptr[cell][col][row], value);
   }
 };
 

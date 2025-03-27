@@ -107,12 +107,10 @@ struct Add {
    */
   inline REAL fetch_add_real(const int product, const int property,
                              const int component, const REAL value) {
-    sycl::atomic_ref<REAL, sycl::memory_order::relaxed,
-                     sycl::memory_scope::device>
-        element_atomic(
-            ptr_real[(offsets_real[property] + component) * num_products +
-                     product]);
-    return element_atomic.fetch_add(value);
+    return atomic_fetch_add(
+        &ptr_real[(offsets_real[property] + component) * num_products +
+                  product],
+        value);
   }
 
   /**
@@ -128,12 +126,9 @@ struct Add {
    */
   inline INT fetch_add_int(const int product, const int property,
                            const int component, const INT value) {
-    sycl::atomic_ref<INT, sycl::memory_order::relaxed,
-                     sycl::memory_scope::device>
-        element_atomic(
-            ptr_int[(offsets_int[property] + component) * num_products +
-                    product]);
-    return element_atomic.fetch_add(value);
+    return atomic_fetch_add(
+        &ptr_int[(offsets_int[property] + component) * num_products + product],
+        value);
   }
 };
 

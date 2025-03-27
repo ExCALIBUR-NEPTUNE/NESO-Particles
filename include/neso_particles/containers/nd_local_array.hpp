@@ -62,11 +62,8 @@ template <typename T, std::size_t N> struct Add {
     const auto index =
         Tuple::apply_truncated<N>(lambda_index_wrapper, tuple_index);
 
-    sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>
-        element_atomic(ptr[index]);
-
     const T value = Tuple::get_last_arg(ix...);
-    return element_atomic.fetch_add(value);
+    return atomic_fetch_add(&ptr[index], value);
   }
 };
 

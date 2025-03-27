@@ -50,9 +50,7 @@ template <typename T> struct Add {
    * meaningful value.
    */
   inline T fetch_add(const int component, const T value) {
-    sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>
-        element_atomic(ptr[component]);
-    return element_atomic.fetch_add(value);
+    return atomic_fetch_add(&ptr[component], value);
   }
 };
 
