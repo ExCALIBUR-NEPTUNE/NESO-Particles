@@ -87,6 +87,8 @@ foreach(TEST ${TEST_SRCS})
   add_executable(${TEST_NAME} ${TEST_SOURCES})
   target_link_libraries(${TEST_NAME} PRIVATE NESO-Particles GTest::gtest)
   target_compile_definitions(${TEST_NAME} PRIVATE GPU_SELECTOR=0)
+  target_compile_definitions(${TEST_NAME}
+                             PRIVATE NESO_PARTICLES_TEST_COMPILATION)
   target_compile_definitions(
     ${TEST_NAME} PRIVATE CMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX})
   target_compile_options(${TEST_NAME} PRIVATE "-Wpedantic;-Wall;-Wextra")
@@ -110,6 +112,8 @@ add_executable(${EXECUTABLE} ${TEST_MAIN} ${TEST_LIST})
 
 target_link_libraries(${EXECUTABLE} PRIVATE NESO-Particles GTest::gtest)
 target_compile_definitions(${EXECUTABLE} PRIVATE GPU_SELECTOR=0)
+target_compile_definitions(${EXECUTABLE}
+                           PRIVATE NESO_PARTICLES_TEST_COMPILATION)
 target_compile_definitions(${EXECUTABLE}
                            PRIVATE CMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX})
 target_compile_options(${EXECUTABLE} PRIVATE "-Wpedantic;-Wall;-Wextra")

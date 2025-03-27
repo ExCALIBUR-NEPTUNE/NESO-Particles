@@ -587,9 +587,8 @@ TEST(ParticleLoop, cell_dat_const) {
   }
 
   inner_cell_dat_min_max<int>(sycl_target, A, cell_count);
-  // Issues with atomic_max/atomic_min with adaptivecpp cuda-nvcxx
-  // inner_cell_dat_min_max<INT>(sycl_target, A, cell_count);
-  // inner_cell_dat_min_max<REAL>(sycl_target, A, cell_count);
+  inner_cell_dat_min_max<INT>(sycl_target, A, cell_count);
+  inner_cell_dat_min_max<REAL>(sycl_target, A, cell_count);
 
   particle_loop(
       A,

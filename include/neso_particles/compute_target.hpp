@@ -69,17 +69,30 @@ private:
   int local_rank{-1};
 
   inline void print_info_inner() {
+    std::string mods = "";
+
 #ifdef NESO_PARTICLES_SINGLE_COMPILED_LOOP
-    constexpr int single_compiled_loop = 1;
-#else
-    constexpr int single_compiled_loop = 0;
+    mods += "single_compiled_loop ";
 #endif
+
+#ifdef NESO_PARTICLES_CAS_MAX_INT
+    mods += "cas_max_INT ";
+#endif
+#ifdef NESO_PARTICLES_CAS_MIN_INT
+    mods += "cas_min_INT ";
+#endif
+#ifdef NESO_PARTICLES_CAS_MAX_REAL
+    mods += "cas_max_REAL ";
+#endif
+#ifdef NESO_PARTICLES_CAS_MIN_REAL
+    mods += "cas_min_REAL ";
+#endif
+
     std::cout << "Using " << this->device.get_info<sycl::info::device::name>()
               << std::endl;
     std::cout << "Kernel type: " << NESO_PARTICLES_DEVICE_LABEL << std::endl;
     std::cout << "In order queue: " << this->queue.is_in_order() << std::endl;
-    std::cout << "Single compiled ParticleLoop: " << single_compiled_loop
-              << std::endl;
+    std::cout << "Mods: " << mods << std::endl;
     std::cout << "MPI comm size: " << this->comm_pair.size_parent << std::endl;
     std::cout << "MPI comm rank: " << this->comm_pair.rank_parent << std::endl;
     std::cout << "MPI inter-comm size: " << this->comm_pair.size_inter
@@ -227,6 +240,15 @@ public:
     for (int cx = 0; cx < DEBUG_OOB_WIDTH; cx++) {
       this->ptr_bit_mask[cx] = static_cast<unsigned char>(255);
     }
+#endif
+
+// The tests run these checks as a test, hence don't redo them all the time.
+#ifdef NESO_PARTICLES_TEST_COMPILATION
+#define NESO_PARTICLES_DISABLE_ATOMIC_SELFTEST
+#endif
+
+#ifndef NESO_PARTICLES_DISABLE_ATOMIC_SELFTEST
+    this->device_limits.check_atomics_sanity(this->queue);
 #endif
   }
   ~SYCLTarget() {

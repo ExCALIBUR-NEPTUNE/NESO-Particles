@@ -52,9 +52,7 @@ template <typename T> struct Add {
    * on this MPI rank.
    */
   inline void add(const int component, const T value) {
-    sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>
-        element_atomic(ptr[component]);
-    element_atomic.fetch_add(value);
+    atomic_fetch_add(&ptr[component], value);
   }
 };
 
@@ -226,6 +224,8 @@ public:
     this->buffer = std::make_shared<BufferDeviceHost<T>>(sycl_target, size);
     if (init_value) {
       this->fill(init_value.value());
+    } else {
+      this->fill(T());
     }
   }
 

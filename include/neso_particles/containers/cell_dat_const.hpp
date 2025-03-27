@@ -66,9 +66,7 @@ template <typename T> struct Add {
   T *ptr;
   int nrow;
   inline T fetch_add(const int row, const int col, const T value) {
-    sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>
-        element_atomic(ptr[nrow * col + row]);
-    return element_atomic.fetch_add(value);
+    return atomic_fetch_add(&ptr[nrow * col + row], value);
   }
 };
 
@@ -82,9 +80,7 @@ template <typename T> struct Min {
   T *ptr;
   int nrow;
   inline T fetch_min(const int row, const int col, const T value) {
-    sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>
-        element_atomic(ptr[nrow * col + row]);
-    return element_atomic.fetch_min(value);
+    return atomic_fetch_min(&ptr[nrow * col + row], value);
   }
 };
 
@@ -98,9 +94,7 @@ template <typename T> struct Max {
   T *ptr;
   int nrow;
   inline T fetch_max(const int row, const int col, const T value) {
-    sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>
-        element_atomic(ptr[nrow * col + row]);
-    return element_atomic.fetch_max(value);
+    return atomic_fetch_max(&ptr[nrow * col + row], value);
   }
 };
 

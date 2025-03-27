@@ -79,7 +79,6 @@ public:
  */
 class ParticleSpec {
 private:
-  template <typename... T> void push(T... args) { this->push(args...); }
   template <typename... T> void push(ParticleProp<REAL> pp, T... args) {
     this->properties_real.push_back(pp);
     this->push(args...);
@@ -195,9 +194,6 @@ public:
  */
 class SymStore {
 private:
-  template <typename... T> void push(T &&...args) {
-    this->push(std::forward<T>(args)...);
-  }
   void push(Sym<REAL> pp) { this->syms_real.push_back(pp); }
   void push(Sym<INT> pp) { this->syms_int.push_back(pp); }
   template <typename... T> void push(Sym<REAL> pp, T &&...args) {
@@ -238,6 +234,18 @@ public:
    */
   template <typename... T> SymStore(T &&...args) {
     this->push(std::forward<T>(args)...);
+  }
+
+  /**
+   * @param sym_store SymStore to copy.
+   */
+  SymStore(SymStore &sym_store) {
+    for (auto &sym : sym_store.syms_real) {
+      this->push(sym);
+    }
+    for (auto &sym : sym_store.syms_int) {
+      this->push(sym);
+    }
   }
 
   /**

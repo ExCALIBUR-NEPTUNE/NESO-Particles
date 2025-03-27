@@ -100,3 +100,95 @@ TEST(SYCLTarget, matrix_transpose) {
     ASSERT_EQ(h_correct, h_to_test);
   }
 }
+
+TEST(SYCLTarget, compare_and_swap_REAL) {
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+
+  const std::size_t N = 1024000;
+  std::vector<REAL> h_y(1);
+  h_y.at(0) = N;
+
+  BufferDevice d_y(sycl_target, h_y);
+
+  auto k_y = d_y.ptr;
+  sycl_target->queue
+      .parallel_for<>(
+          sycl_target->device_limits.validate_range_global(sycl::range<1>(N)),
+          [=](sycl::id<1> idx) {
+            const REAL value =
+                static_cast<REAL>(idx) - static_cast<REAL>(N) / 2;
+            atomic_fetch_min_cas_strong(k_y, value);
+          })
+      .wait_and_throw();
+
+  d_y.get(h_y);
+  ASSERT_EQ(h_y.at(0), -static_cast<REAL>(N) / 2);
+
+  sycl_target->free();
+}
+
+TEST(SYCLTarget, compare_and_swap_INT) {
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+
+  const std::size_t N = 1024000;
+
+  std::vector<INT> h_x(N);
+
+  std::mt19937 rng(52234234);
+  std::uniform_int_distribution<INT> dist{std::numeric_limits<INT>::lowest(),
+                                          std::numeric_limits<INT>::max()};
+
+  INT correct = std::numeric_limits<INT>::max();
+  for (std::size_t ix = 0; ix < N; ix++) {
+    const INT v = dist(rng);
+    h_x.at(ix) = v;
+    correct = std::min(correct, v);
+  }
+
+  std::vector<INT> h_y(1);
+  h_y.at(0) = N;
+
+  BufferDevice d_x(sycl_target, h_x);
+  BufferDevice d_y(sycl_target, h_y);
+
+  auto k_x = d_x.ptr;
+  auto k_y = d_y.ptr;
+
+  sycl_target->queue
+      .parallel_for<>(
+          sycl_target->device_limits.validate_range_global(sycl::range<1>(N)),
+          [=](sycl::id<1> idx) {
+            const INT value = k_x[idx];
+            atomic_fetch_min_cas_strong(k_y, value);
+          })
+      .wait_and_throw();
+
+  d_y.get(h_y);
+  ASSERT_EQ(h_y.at(0), correct);
+
+  sycl_target->free();
+}
+
+TEST(SYCLTarget, atomics) {
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+  ASSERT_TRUE(sycl_target->device_limits.check_atomics_sanity(
+      sycl_target->queue, true));
+  sycl_target->free();
+}
+
+TEST(SYCLTarget, atomics_long) {
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+  auto queue = sycl_target->queue;
+
+  ASSERT_TRUE(atomic_binop_check_long(queue, CheckAdd<int>{}));
+  ASSERT_TRUE(atomic_binop_check_long(queue, CheckAdd<INT>{}));
+  ASSERT_TRUE(atomic_binop_check_long(queue, CheckAdd<REAL>{}));
+  ASSERT_TRUE(atomic_binop_check_long(queue, CheckMin<int>{}));
+  ASSERT_TRUE(atomic_binop_check_long(queue, CheckMin<INT>{}));
+  ASSERT_TRUE(atomic_binop_check_long(queue, CheckMin<REAL>{}));
+  ASSERT_TRUE(atomic_binop_check_long(queue, CheckMax<int>{}));
+  ASSERT_TRUE(atomic_binop_check_long(queue, CheckMax<INT>{}));
+  ASSERT_TRUE(atomic_binop_check_long(queue, CheckMax<REAL>{}));
+
+  sycl_target->free();
+}

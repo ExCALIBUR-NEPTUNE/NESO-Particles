@@ -1,6 +1,7 @@
 #ifndef _NESO_PARTICLES_COMPUTE_TARGET_DEVICE_LIMITS_HPP_
 #define _NESO_PARTICLES_COMPUTE_TARGET_DEVICE_LIMITS_HPP_
 
+#include "device_atomic_sanity_check.hpp"
 #include "sycl_typedefs.hpp"
 #include "typedefs.hpp"
 
@@ -188,6 +189,49 @@ public:
                  "Local workgroup does not factor global workgroup.");
     }
     return is;
+  }
+
+  /**
+   * Check atomics pass basic functionality tests.
+   *
+   * @param queue sycl::queue to run tests on.
+   * @param fatal Call NESOASSERT if any of the tests fail, default true.
+   * @returns True if tests pass.
+   */
+  inline bool check_atomics_sanity(sycl::queue queue, const bool fatal = true) {
+    bool success = true;
+
+    success = success && atomic_binop_check(queue, CheckAdd<int>{});
+    NESOASSERT((!fatal) || success,
+               "Atomic sanity check on CheckAdd<int> failed.");
+    success = success && atomic_binop_check(queue, CheckAdd<INT>{});
+    NESOASSERT((!fatal) || success,
+               "Atomic sanity check on CheckAdd<INT> failed.");
+    success = success && atomic_binop_check(queue, CheckAdd<REAL>{});
+    NESOASSERT((!fatal) || success,
+               "Atomic sanity check on CheckAdd<REAL> failed.");
+
+    success = success && atomic_binop_check(queue, CheckMin<int>{});
+    NESOASSERT((!fatal) || success,
+               "Atomic sanity check on CheckMin<int> failed.");
+    success = success && atomic_binop_check(queue, CheckMin<INT>{});
+    NESOASSERT((!fatal) || success,
+               "Atomic sanity check on CheckMin<INT> failed.");
+    success = success && atomic_binop_check(queue, CheckMin<REAL>{});
+    NESOASSERT((!fatal) || success,
+               "Atomic sanity check on CheckMin<REAL> failed.");
+
+    success = success && atomic_binop_check(queue, CheckMax<int>{});
+    NESOASSERT((!fatal) || success,
+               "Atomic sanity check on CheckMax<int> failed.");
+    success = success && atomic_binop_check(queue, CheckMax<INT>{});
+    NESOASSERT((!fatal) || success,
+               "Atomic sanity check on CheckMax<INT> failed.");
+    success = success && atomic_binop_check(queue, CheckMax<REAL>{});
+    NESOASSERT((!fatal) || success,
+               "Atomic sanity check on CheckMax<REAL> failed.");
+
+    return success;
   }
 };
 
