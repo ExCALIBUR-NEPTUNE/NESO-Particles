@@ -270,6 +270,139 @@ inline void naive_matrix_inverse<4>(const REAL *RESTRICT M, REAL *RESTRICT L) {
           inverse_factor;
 }
 
+/**
+ * Wrapper to perform fetch_max on an address and return the previous value,
+ * i.e.
+ *
+ * max(current, value). This implementation uses strong CAS.
+ *
+ * @param ptr Address to contiainng current value.
+ * @param value Value to perform operation with.
+ * @returns Original value before new value was reduced.
+ */
+template <typename T>
+inline T atomic_fetch_max_cas_strong(T *ptr, const T value) {
+
+  sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>
+      element_atomic(*ptr);
+  T expected = std::numeric_limits<T>::min();
+  T desired;
+  do {
+    desired = sycl::max(value, expected);
+  } while ((!element_atomic.compare_exchange_strong(expected, desired) &&
+            (expected < value)));
+
+  return expected;
+}
+
+/**
+ * Wrapper to perform fetch_min on an address and return the previous value,
+ * i.e.
+ *
+ * min(current, value). This implementation uses strong CAS.
+ *
+ * @param ptr Address to contiainng current value.
+ * @param value Value to perform operation with.
+ * @returns Original value before new value was reduced.
+ */
+template <typename T>
+inline T atomic_fetch_min_cas_strong(T *ptr, const T value) {
+
+  sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>
+      element_atomic(*ptr);
+  T expected = std::numeric_limits<T>::max();
+  T desired;
+  do {
+    desired = sycl::min(value, expected);
+  } while ((!element_atomic.compare_exchange_strong(expected, desired) &&
+            (expected > value)));
+
+  return expected;
+}
+
+/**
+ * Wrapper to perform fetch_add on an address and return the value.
+ *
+ * @param ptr Address to atomically increment.
+ * @param value Value to increment by.
+ * @returns Original value before new value was incremented.
+ */
+template <typename T> inline T atomic_fetch_add(T *ptr, const T value) {
+  sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>
+      a_ref(*ptr);
+  return a_ref.fetch_add(value);
+}
+
+/**
+ * Wrapper to perform fetch_min on an address and return the previous value,
+ * i.e.
+ *
+ * min(current, value).
+ *
+ * @param ptr Address to contiainng current value.
+ * @param value Value to perform operation with.
+ * @returns Original value before new value was reduced.
+ */
+template <typename T> inline T atomic_fetch_min(T *ptr, const T value) {
+  sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>
+      a_ref(*ptr);
+  return a_ref.fetch_min(value);
+}
+
+/**
+ * Wrapper to perform fetch_max on an address and return the previous value,
+ * i.e.
+ *
+ * max(current, value).
+ *
+ * @param ptr Address to contiainng current value.
+ * @param value Value to perform operation with.
+ * @returns Original value before new value was reduced.
+ */
+template <typename T> inline T atomic_fetch_max(T *ptr, const T value) {
+  sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>
+      a_ref(*ptr);
+  return a_ref.fetch_max(value);
+}
+
+// Are we using an AdaptiveCpp CUDA pass?
+#ifdef __ACPP_ENABLE_CUDA_TARGET__
+// Is this the nvcxx backend?
+#ifdef __NVCOMPILER
+
+inline INT atomic_fetch_min(INT *ptr, const INT value) {
+  return atomic_fetch_min_cas_strong(ptr, value);
+}
+#define NESO_PARTICLES_CAS_MIN_INT
+inline INT atomic_fetch_max(INT *ptr, const INT value) {
+  return atomic_fetch_max_cas_strong(ptr, value);
+}
+#define NESO_PARTICLES_CAS_MAX_INT
+
+#else // Assume that if we are not using the nvcxx backend then it is the clang
+      // cuda backend.
+
+inline REAL atomic_fetch_min(REAL *ptr, const REAL value) {
+  return atomic_fetch_min_cas_strong(ptr, value);
+}
+#define NESO_PARTICLES_CAS_MIN_REAL
+inline REAL atomic_fetch_max(REAL *ptr, const REAL value) {
+  return atomic_fetch_max_cas_strong(ptr, value);
+}
+#define NESO_PARTICLES_CAS_MAX_REAL
+
+inline INT atomic_fetch_min(INT *ptr, const INT value) {
+  return atomic_fetch_min_cas_strong(ptr, value);
+}
+#define NESO_PARTICLES_CAS_MIN_INT
+inline INT atomic_fetch_max(INT *ptr, const INT value) {
+  return atomic_fetch_max_cas_strong(ptr, value);
+}
+#define NESO_PARTICLES_CAS_MAX_INT
+
+#endif
+#endif
+
 } // namespace NESO::Particles
 
 #endif

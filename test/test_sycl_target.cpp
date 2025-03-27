@@ -117,16 +117,7 @@ TEST(SYCLTarget, compare_and_swap_REAL) {
           [=](sycl::id<1> idx) {
             const REAL value =
                 static_cast<REAL>(idx) - static_cast<REAL>(N) / 2;
-            sycl::atomic_ref<REAL, sycl::memory_order::relaxed,
-                             sycl::memory_scope::device>
-                element_atomic(k_y[0]);
-            REAL expected = std::numeric_limits<REAL>::max();
-            REAL desired;
-            do {
-              desired = sycl::min(value, expected);
-            } while (
-                (!element_atomic.compare_exchange_strong(expected, desired)) &&
-                (expected > value));
+            atomic_fetch_min_cas_strong(k_y, value);
           })
       .wait_and_throw();
 
@@ -168,21 +159,19 @@ TEST(SYCLTarget, compare_and_swap_INT) {
           sycl_target->device_limits.validate_range_global(sycl::range<1>(N)),
           [=](sycl::id<1> idx) {
             const INT value = k_x[idx];
-            sycl::atomic_ref<INT, sycl::memory_order::relaxed,
-                             sycl::memory_scope::device>
-                element_atomic(k_y[0]);
-            INT expected = std::numeric_limits<INT>::max();
-            INT desired;
-            do {
-              desired = sycl::min(value, expected);
-            } while (
-                (!element_atomic.compare_exchange_strong(expected, desired) &&
-                 (expected > value)));
+            atomic_fetch_min_cas_strong(k_y, value);
           })
       .wait_and_throw();
 
   d_y.get(h_y);
   ASSERT_EQ(h_y.at(0), correct);
 
+  sycl_target->free();
+}
+
+TEST(SYCLTarget, atomics) {
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+  ASSERT_TRUE(sycl_target->device_limits.check_atomics_sanity(
+      sycl_target->queue, true));
   sycl_target->free();
 }
