@@ -175,3 +175,20 @@ TEST(SYCLTarget, atomics) {
       sycl_target->queue, true));
   sycl_target->free();
 }
+
+TEST(SYCLTarget, atomics_long) {
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+  auto queue = sycl_target->queue;
+
+  ASSERT_TRUE(atomic_binop_check_long(queue, CheckAdd<int>{}));
+  ASSERT_TRUE(atomic_binop_check_long(queue, CheckAdd<INT>{}));
+  ASSERT_TRUE(atomic_binop_check_long(queue, CheckAdd<REAL>{}));
+  ASSERT_TRUE(atomic_binop_check_long(queue, CheckMin<int>{}));
+  ASSERT_TRUE(atomic_binop_check_long(queue, CheckMin<INT>{}));
+  ASSERT_TRUE(atomic_binop_check_long(queue, CheckMin<REAL>{}));
+  ASSERT_TRUE(atomic_binop_check_long(queue, CheckMax<int>{}));
+  ASSERT_TRUE(atomic_binop_check_long(queue, CheckMax<INT>{}));
+  ASSERT_TRUE(atomic_binop_check_long(queue, CheckMax<REAL>{}));
+
+  sycl_target->free();
+}
