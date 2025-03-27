@@ -227,6 +227,8 @@ public:
     this->buffer = std::make_shared<BufferDevice<T>>(sycl_target, size);
     if (init_value) {
       this->fill(init_value.value());
+    } else {
+      this->fill(T());
     }
   }
 

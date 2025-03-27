@@ -240,6 +240,7 @@ public:
     this->size = this->index.size();
     this->buffer =
         std::make_shared<BufferDevice<T>>(this->sycl_target, this->size);
+    this->fill(T());
   }
 
   /**
