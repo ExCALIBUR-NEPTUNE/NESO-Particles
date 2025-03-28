@@ -419,3 +419,65 @@ TEST(ParticleGroup, contains_dat_sym_ncomp) {
 
   sycl_target->free();
 }
+
+TEST(ParticleGroup, print) {
+  auto [A_t, sycl_target_t, cell_count_t] = particle_loop_common_2d(10, 16, 32);
+  auto A = A_t;
+  auto sycl_target = sycl_target_t;
+
+  constexpr std::size_t size_buffer = 1e6;
+  struct vecbuf : std::streambuf {
+    std::vector<char> buffer;
+    vecbuf() : buffer(size_buffer) {
+      this->setp(buffer.data(), buffer.data() + size_buffer);
+    }
+    size_t num_bytes_written() { return this->pptr() - this->pbase(); }
+  };
+
+  {
+    vecbuf vb;
+    std::ostream ostream{&vb};
+    for (int cx = 0; cx < cell_count_t; cx++) {
+      const int npart_cell = A->get_npart_cell(cx);
+      if (npart_cell > 0) {
+        for (int rx = 0; rx < npart_cell; rx++) {
+          A->print_particle(ostream, cx, rx);
+        }
+        ASSERT_TRUE(vb.num_bytes_written());
+        ASSERT_TRUE(vb.num_bytes_written() < size_buffer);
+        break;
+      }
+    }
+  }
+
+  {
+    vecbuf vb;
+    std::ostream ostream{&vb};
+    SymStore syms(A->get_particle_spec());
+    A->print(ostream, syms);
+    ASSERT_TRUE(vb.num_bytes_written());
+    ASSERT_TRUE(vb.num_bytes_written() < size_buffer);
+  }
+
+  {
+    vecbuf vb;
+    std::ostream ostream{&vb};
+    A->print(ostream, Sym<REAL>("P"), Sym<INT>("CELL_ID"));
+    ASSERT_TRUE(vb.num_bytes_written());
+    ASSERT_TRUE(vb.num_bytes_written() < size_buffer);
+  }
+
+  auto aa = particle_sub_group(
+      A, [=](auto ID) { return ID.at(0) % 2 == 0; },
+      Access::read(Sym<INT>("ID")));
+
+  {
+    vecbuf vb;
+    std::ostream ostream{&vb};
+    aa->print(ostream, Sym<REAL>("P"), Sym<INT>("CELL_ID"));
+    ASSERT_TRUE(vb.num_bytes_written());
+    ASSERT_TRUE(vb.num_bytes_written() < size_buffer);
+  }
+
+  sycl_target->free();
+}

@@ -400,10 +400,11 @@ public:
   /**
    *  Print particle data for all particles for the specified ParticleDats.
    *
+   *  @param os Output stream to print to.
    *  @param args Sym<REAL> or Sym<INT> instances that indicate which particle
    *  data to print.
    */
-  template <typename... T> inline void print(T &&...args) {
+  template <typename... T> inline void print(std::ostream &os, T &&...args) {
     if (this->is_whole_particle_group) {
       return this->particle_group->print(std::forward<T>(args)...);
     } else {
@@ -417,10 +418,9 @@ public:
         NESOASSERT(this->particle_group->contains_dat(symx), "Sym not found.");
       }
 
-      std::cout
-          << "==============================================================="
-             "================="
-          << std::endl;
+      os << "==============================================================="
+            "================="
+         << std::endl;
 
       const int cell_count =
           this->particle_group->domain->mesh->get_cell_count();
@@ -445,39 +445,48 @@ public:
             cell_data_int.push_back(cell_data);
           }
 
-          std::cout << "------- " << cellx << " -------" << std::endl;
+          os << "------- " << cellx << " -------" << std::endl;
           for (auto &symx : print_spec.syms_real) {
-            std::cout << "| " << symx.name << " ";
+            os << "| " << symx.name << " ";
           }
           for (auto &symx : print_spec.syms_int) {
-            std::cout << "| " << symx.name << " ";
+            os << "| " << symx.name << " ";
           }
-          std::cout << "|" << std::endl;
+          os << "|" << std::endl;
 
           for (int rx = 0; rx < nrow; rx++) {
             const int rowx = map_cell_to_particles.at(cellx).at(rx);
             for (auto &cx : cell_data_real) {
-              std::cout << "| ";
+              os << "| ";
               for (int colx = 0; colx < cx->ncol; colx++) {
-                std::cout << fixed_width_format((*cx)[colx][rowx]) << " ";
+                os << fixed_width_format((*cx)[colx][rowx]) << " ";
               }
             }
             for (auto &cx : cell_data_int) {
-              std::cout << "| ";
+              os << "| ";
               for (int colx = 0; colx < cx->ncol; colx++) {
-                std::cout << fixed_width_format((*cx)[colx][rowx]) << " ";
+                os << fixed_width_format((*cx)[colx][rowx]) << " ";
               }
             }
 
-            std::cout << "|" << std::endl;
+            os << "|" << std::endl;
           }
         }
       }
-      std::cout
-          << "==============================================================="
-             "================="
-          << std::endl;
+      os << "==============================================================="
+            "================="
+         << std::endl;
     }
+  }
+
+  /**
+   *  Print particle data for all particles for the specified ParticleDats.
+   *
+   *  @param args Sym<REAL> or Sym<INT> instances that indicate which particle
+   *  data to print.
+   */
+  template <typename... T> inline void print(T &&...args) {
+    this->print(std::cout, args...);
   }
 };
 

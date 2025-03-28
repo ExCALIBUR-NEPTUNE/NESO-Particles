@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <gtest/gtest.h>
 #include <memory>
+#include <streambuf>
 #include <string>
 
 #ifndef TO_STRING_MACRO

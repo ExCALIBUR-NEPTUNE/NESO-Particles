@@ -998,6 +998,17 @@ public:
    *  Print particle data for all particles for the specified ParticleDats.
    *  Empty cells are not printed.
    *
+   *
+   *  @param os Output stream to print to.
+   *  @param args Sym<REAL> or Sym<INT> instances that indicate which particle
+   *  data to print.
+   */
+  template <typename... T> inline void print(std::ostream &os, T &&...args);
+
+  /**
+   *  Print particle data for all particles for the specified ParticleDats.
+   *  Empty cells are not printed.
+   *
    *  @param args Sym<REAL> or Sym<INT> instances that indicate which particle
    *  data to print.
    */
@@ -1007,9 +1018,27 @@ public:
    *  Print particle data for all particles for the specified ParticleDats.
    *  Empty cells are not printed.
    *
+   *  @param os Output stream to print to.
+   *  @param print_spec SymStore of data to print.
+   */
+  inline void print(std::ostream &os, SymStore print_spec);
+
+  /**
+   *  Print particle data for all particles for the specified ParticleDats.
+   *  Empty cells are not printed.
+   *
    *  @param print_spec SymStore of data to print.
    */
   inline void print(SymStore print_spec);
+
+  /**
+   *  Print all particle data for a particle.
+   *
+   *  @param os Output stream to print to.
+   *  @param cell Cell of particle.
+   *  @param layer Layer of particle.
+   */
+  inline void print_particle(std::ostream &os, const int cell, const int layer);
 
   /**
    *  Print all particle data for a particle.
