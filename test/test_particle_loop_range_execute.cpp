@@ -165,7 +165,7 @@ TEST(ParticleLoop, range_execute_loop_index) {
             ASSERT_EQ(loop_index->at(rowx, 3),
                       (cellx / range_size) * range_size);
             ASSERT_EQ(loop_index->at(rowx, 4), local_linear_index);
-            
+
             // This test only works if the iteration set is a particle group.
             if (static_cast<void *>(iteration_set.get()) ==
                 static_cast<void *>(particle_group.get())) {

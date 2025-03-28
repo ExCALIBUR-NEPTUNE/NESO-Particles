@@ -363,11 +363,11 @@ inline void ParticleGroup::local_move() {
   this->invalidate_group_version();
 }
 
-inline void ParticleGroup::print(SymStore print_spec) {
+inline void ParticleGroup::print(std::ostream &os, SymStore print_spec) {
 
-  std::cout << "==============================================================="
-               "================="
-            << std::endl;
+  os << "==============================================================="
+        "================="
+     << std::endl;
   for (int cellx = 0; cellx < this->domain->mesh->get_cell_count(); cellx++) {
     if (this->h_npart_cell.ptr[cellx] > 0) {
 
@@ -394,37 +394,47 @@ inline void ParticleGroup::print(SymStore print_spec) {
         nrow = cell_data->nrow;
       }
 
-      std::cout << "------- " << cellx << " -------" << std::endl;
+      os << "------- " << cellx << " -------" << std::endl;
       for (auto &symx : print_spec.syms_real) {
-        std::cout << "| " << symx.name << " ";
+        os << "| " << symx.name << " ";
       }
       for (auto &symx : print_spec.syms_int) {
-        std::cout << "| " << symx.name << " ";
+        os << "| " << symx.name << " ";
       }
-      std::cout << "|" << std::endl;
+      os << "|" << std::endl;
 
       for (int rowx = 0; rowx < nrow; rowx++) {
         for (auto &cx : cell_data_real) {
-          std::cout << "| ";
+          os << "| ";
           for (int colx = 0; colx < cx->ncol; colx++) {
-            std::cout << fixed_width_format((*cx)[colx][rowx]) << " ";
+            os << fixed_width_format((*cx)[colx][rowx]) << " ";
           }
         }
         for (auto &cx : cell_data_int) {
-          std::cout << "| ";
+          os << "| ";
           for (int colx = 0; colx < cx->ncol; colx++) {
-            std::cout << fixed_width_format((*cx)[colx][rowx]) << " ";
+            os << fixed_width_format((*cx)[colx][rowx]) << " ";
           }
         }
 
-        std::cout << "|" << std::endl;
+        os << "|" << std::endl;
       }
     }
   }
 
-  std::cout << "==============================================================="
-               "================="
-            << std::endl;
+  os << "==============================================================="
+        "================="
+     << std::endl;
+}
+
+inline void ParticleGroup::print(SymStore print_spec) {
+  this->print(std::cout, print_spec);
+}
+
+template <typename... T>
+inline void ParticleGroup::print(std::ostream &os, T &&...args) {
+  SymStore print_spec(std::forward<T>(args)...);
+  this->print(os, print_spec);
 }
 
 template <typename... T> inline void ParticleGroup::print(T &&...args) {
@@ -432,15 +442,20 @@ template <typename... T> inline void ParticleGroup::print(T &&...args) {
   this->print(print_spec);
 }
 
-inline void ParticleGroup::print_particle(const int cell, const int layer) {
+inline void ParticleGroup::print_particle(std::ostream &os, const int cell,
+                                          const int layer) {
+  NESOASSERT(0 <= cell && cell < this->ncell, "Bad input cell.");
+  const auto nlayers = this->get_npart_cell(cell);
+  NESOASSERT(0 <= layer && layer < nlayers, "Bad input layer.");
+
   auto lambda_print_dat = [&](auto sym, auto dat) {
-    std::cout << "\t" << sym.name << ": ";
+    os << "\t" << sym.name << ": ";
     auto data = dat->cell_dat.get_cell(cell);
     auto ncomp = dat->ncomp;
     for (int cx = 0; cx < ncomp; cx++) {
-      std::cout << data->at(layer, cx) << " ";
+      os << data->at(layer, cx) << " ";
     }
-    std::cout << std::endl;
+    os << std::endl;
   };
 
   for (auto d : this->particle_dats_int) {
@@ -449,6 +464,10 @@ inline void ParticleGroup::print_particle(const int cell, const int layer) {
   for (auto d : this->particle_dats_real) {
     lambda_print_dat(d.first, d.second);
   }
+}
+
+inline void ParticleGroup::print_particle(const int cell, const int layer) {
+  this->print_particle(std::cout, cell, layer);
 }
 
 /*
