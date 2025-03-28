@@ -240,48 +240,49 @@ public:
     sycl_target->profile_map.inc("ParticlePacker", "pack_prepare", 1,
                                  profile_elapsed(t0, profile_timestamp()));
 
-    sycl::event event =
-        this->sycl_target->queue.submit([&](sycl::handler &cgh) {
-          cgh.parallel_for<>(
-              // for each leaving particle
-              sycl::range<1>(static_cast<size_t>(num_particles_leaving)),
-              [=](sycl::id<1> idx) {
-                const int cell = k_pack_cells[idx];
-                const int layer_src = k_pack_layers_src[idx];
-                const int layer_dst = k_pack_layers_dst[idx];
-                const int rank =
-                    k_particle_dat_rank[cell][k_rank_component][layer_src];
-                const int rank_packing_cell = k_send_rank_map[rank];
+    sycl::event event;
 
-                char *base_pack_ptr =
-                    &k_pack_cell_dat[rank_packing_cell][0]
-                                    [layer_dst * k_num_bytes_per_particle];
-                REAL *pack_ptr_real = (REAL *)base_pack_ptr;
-                // for each real dat
-                int index = 0;
-                for (int dx = 0; dx < k_num_dats_real; dx++) {
-                  auto dat_ptr = k_particle_dat_ptr_real[dx];
-                  const int ncomp = k_particle_dat_ncomp_real[dx];
-                  // for each component
-                  for (int cx = 0; cx < ncomp; cx++) {
-                    pack_ptr_real[index + cx] = dat_ptr[cell][cx][layer_src];
-                  }
-                  index += ncomp;
-                }
-                // for each int dat
-                INT *pack_ptr_int = (INT *)(pack_ptr_real + index);
-                index = 0;
-                for (int dx = 0; dx < k_num_dats_int; dx++) {
-                  auto dat_ptr = k_particle_dat_ptr_int[dx];
-                  const int ncomp = k_particle_dat_ncomp_int[dx];
-                  // for each component
-                  for (int cx = 0; cx < ncomp; cx++) {
-                    pack_ptr_int[index + cx] = dat_ptr[cell][cx][layer_src];
-                  }
-                  index += ncomp;
-                }
-              });
-        });
+    if (num_particles_leaving > 0) {
+      event = this->sycl_target->queue.parallel_for<>(
+          // for each leaving particle
+          sycl::range<1>(static_cast<size_t>(num_particles_leaving)),
+          [=](sycl::id<1> idx) {
+            const int cell = k_pack_cells[idx];
+            const int layer_src = k_pack_layers_src[idx];
+            const int layer_dst = k_pack_layers_dst[idx];
+            const int rank =
+                k_particle_dat_rank[cell][k_rank_component][layer_src];
+            const int rank_packing_cell = k_send_rank_map[rank];
+
+            char *base_pack_ptr =
+                &k_pack_cell_dat[rank_packing_cell][0]
+                                [layer_dst * k_num_bytes_per_particle];
+            REAL *pack_ptr_real = (REAL *)base_pack_ptr;
+            // for each real dat
+            int index = 0;
+            for (int dx = 0; dx < k_num_dats_real; dx++) {
+              auto dat_ptr = k_particle_dat_ptr_real[dx];
+              const int ncomp = k_particle_dat_ncomp_real[dx];
+              // for each component
+              for (int cx = 0; cx < ncomp; cx++) {
+                pack_ptr_real[index + cx] = dat_ptr[cell][cx][layer_src];
+              }
+              index += ncomp;
+            }
+            // for each int dat
+            INT *pack_ptr_int = (INT *)(pack_ptr_real + index);
+            index = 0;
+            for (int dx = 0; dx < k_num_dats_int; dx++) {
+              auto dat_ptr = k_particle_dat_ptr_int[dx];
+              const int ncomp = k_particle_dat_ncomp_int[dx];
+              // for each component
+              for (int cx = 0; cx < ncomp; cx++) {
+                pack_ptr_int[index + cx] = dat_ptr[cell][cx][layer_src];
+              }
+              index += ncomp;
+            }
+          });
+    }
 
     return event;
   };
@@ -534,9 +535,10 @@ public:
     }
 
     r = ProfileRegion("unpack", "unpack_loop");
-    this->sycl_target->queue
-        .submit([&](sycl::handler &cgh) {
-          cgh.parallel_for<>(
+
+    if (k_npart_recv > 0) {
+      this->sycl_target->queue
+          .parallel_for(
               // for each new particle
               sycl::range<1>(static_cast<size_t>(k_npart_recv)),
               [=](sycl::id<1> idx) {
@@ -570,9 +572,9 @@ public:
                   }
                   index += ncomp;
                 }
-              });
-        })
-        .wait_and_throw();
+              })
+          .wait_and_throw();
+    }
     r.end();
     this->sycl_target->profile_map.add_region(r);
   }

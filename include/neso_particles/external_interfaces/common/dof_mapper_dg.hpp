@@ -172,22 +172,22 @@ public:
     }
     auto k_dofs = this->d_dofs->ptr;
     auto k_cell_dat_const = cell_dat_const->device_ptr();
-
-    auto e0 = this->sycl_target->queue.submit([&](sycl::handler &cgh) {
-      cgh.parallel_for<>(sycl::range<2>(k_num_cells_local, k_num_dofs_per_cell),
-                         [=](sycl::id<2> idx) {
-                           const int cell = idx[0];
-                           const int dof = idx[1];
-                           k_mapper.copy_to_external(cell, dof,
-                                                     k_cell_dat_const, k_dofs);
-                         });
-    });
-
     const std::size_t num_bytes =
         k_num_cells_local * k_num_dofs_per_cell * sizeof(REAL);
-    auto e1 =
-        this->sycl_target->queue.memcpy(h_external_dofs, k_dofs, num_bytes, e0);
-    es.push(e1);
+
+    if (num_bytes > 0) {
+      auto e0 = this->sycl_target->queue.parallel_for(
+          sycl::range<2>(k_num_cells_local, k_num_dofs_per_cell),
+          [=](sycl::id<2> idx) {
+            const int cell = idx[0];
+            const int dof = idx[1];
+            k_mapper.copy_to_external(cell, dof, k_cell_dat_const, k_dofs);
+          });
+
+      auto e1 = this->sycl_target->queue.memcpy(h_external_dofs, k_dofs,
+                                                num_bytes, e0);
+      es.push(e1);
+    }
   }
 
   /**
@@ -212,20 +212,23 @@ public:
 
     const std::size_t num_bytes =
         k_num_cells_local * k_num_dofs_per_cell * sizeof(REAL);
-    this->sycl_target->queue.memcpy(h_external_dofs, k_dofs, num_bytes)
-        .wait_and_throw();
 
-    auto e1 = this->sycl_target->queue.submit([&](sycl::handler &cgh) {
-      cgh.parallel_for<>(sycl::range<2>(k_num_cells_local, k_num_dofs_per_cell),
-                         [=](sycl::id<2> idx) {
-                           const int cell = idx[0];
-                           const int dof = idx[1];
-                           k_mapper.copy_from_external(cell, dof, k_dofs,
-                                                       k_cell_dat_const);
-                         });
-    });
+    if (num_bytes > 0) {
+      this->sycl_target->queue.memcpy(h_external_dofs, k_dofs, num_bytes)
+          .wait_and_throw();
 
-    es.push(e1);
+      auto e1 = this->sycl_target->queue.submit([&](sycl::handler &cgh) {
+        cgh.parallel_for<>(
+            sycl::range<2>(k_num_cells_local, k_num_dofs_per_cell),
+            [=](sycl::id<2> idx) {
+              const int cell = idx[0];
+              const int dof = idx[1];
+              k_mapper.copy_from_external(cell, dof, k_dofs, k_cell_dat_const);
+            });
+      });
+
+      es.push(e1);
+    }
   }
 };
 

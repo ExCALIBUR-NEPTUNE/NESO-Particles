@@ -330,9 +330,11 @@ public:
     T ***d_cell_dat_ptr = this->impl_get();
     const int ncomp = this->ncomp;
 
-    sycl::event event =
-        this->sycl_target->queue.submit([&](sycl::handler &cgh) {
-          cgh.parallel_for<>(sycl::range<1>(npart_s), [=](sycl::id<1> idx) {
+    sycl::event event;
+
+    if (npart_s > 0) {
+      event = this->sycl_target->queue.parallel_for(
+          sycl::range<1>(npart_s), [=](sycl::id<1> idx) {
             const INT cell_oldx = d_cells_old[idx];
             // remove particles currently masks of elements using -1
             if (cell_oldx > -1) {
@@ -347,8 +349,7 @@ public:
               }
             }
           });
-        });
-
+    }
     return event;
   }
 
@@ -378,11 +379,9 @@ public:
     this->write_callback_wrapper(0);
     const size_t ncell = static_cast<size_t>(this->ncell);
     int *k_npart_cell = this->d_npart_cell;
-    sycl::event event =
-        this->sycl_target->queue.submit([&](sycl::handler &cgh) {
-          cgh.parallel_for<>(sycl::range<1>(ncell), [=](sycl::id<1> idx) {
-            k_npart_cell[idx] = static_cast<int>(d_npart_cell_in[idx]);
-          });
+    sycl::event event = this->sycl_target->queue.parallel_for(
+        sycl::range<1>(ncell), [=](sycl::id<1> idx) {
+          k_npart_cell[idx] = static_cast<int>(d_npart_cell_in[idx]);
         });
     return event;
   }

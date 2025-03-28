@@ -325,64 +325,72 @@ public:
     if (this->is_whole_particle_group) {
       return this->particle_group->get_particles(cells, layers);
     } else {
+
       this->create_if_required();
       NESOASSERT(cells.size() == layers.size(),
                  "Cells and layers vectors have different sizes.");
-
-      auto sycl_target = this->particle_group->sycl_target;
-      auto tmp_buffer =
-          get_resource<BufferDeviceHost<INT>,
-                       ResourceStackInterfaceBufferDeviceHost<INT>>(
-              sycl_target->resource_stack_map,
-              ResourceStackKeyBufferDeviceHost<INT>{}, sycl_target);
-
       const std::size_t num_particles = cells.size();
-      tmp_buffer->realloc_no_copy(num_particles * 3);
 
-      INT *d_cells = tmp_buffer->d_buffer.ptr;
-      INT *d_layers = d_cells + num_particles;
-      INT *d_inner_layers = d_layers + num_particles;
+      if (num_particles > 0) {
 
-      EventStack es;
-      es.push(sycl_target->queue.memcpy(d_cells, cells.data(),
-                                        num_particles * sizeof(INT)));
-      es.push(sycl_target->queue.memcpy(d_layers, layers.data(),
-                                        num_particles * sizeof(INT)));
+        auto sycl_target = this->particle_group->sycl_target;
+        auto tmp_buffer =
+            get_resource<BufferDeviceHost<INT>,
+                         ResourceStackInterfaceBufferDeviceHost<INT>>(
+                sycl_target->resource_stack_map,
+                ResourceStackKeyBufferDeviceHost<INT>{}, sycl_target);
 
-      const INT num_cells =
-          this->particle_group->domain->mesh->get_cell_count();
-      for (std::size_t px = 0; px < num_particles; px++) {
-        const INT cellx = cells.at(px);
-        NESOASSERT((cellx > -1) && (cellx < num_cells),
-                   "Cell index not in range.");
-        const INT layerx = layers.at(px);
-        NESOASSERT((layerx > -1) && (layerx < this->get_npart_cell(cellx)),
-                   "Layer index not in range.");
+        tmp_buffer->realloc_no_copy(num_particles * 3);
+
+        INT *d_cells = tmp_buffer->d_buffer.ptr;
+        INT *d_layers = d_cells + num_particles;
+        INT *d_inner_layers = d_layers + num_particles;
+
+        EventStack es;
+        es.push(sycl_target->queue.memcpy(d_cells, cells.data(),
+                                          num_particles * sizeof(INT)));
+        es.push(sycl_target->queue.memcpy(d_layers, layers.data(),
+                                          num_particles * sizeof(INT)));
+
+        const INT num_cells =
+            this->particle_group->domain->mesh->get_cell_count();
+        for (std::size_t px = 0; px < num_particles; px++) {
+          const INT cellx = cells.at(px);
+          NESOASSERT((cellx > -1) && (cellx < num_cells),
+                     "Cell index not in range.");
+          const INT layerx = layers.at(px);
+          NESOASSERT((layerx > -1) && (layerx < this->get_npart_cell(cellx)),
+                     "Layer index not in range.");
+        }
+
+        es.wait();
+
+        auto k_map_cells_to_particles =
+            this->selection.d_map_cells_to_particles;
+
+        sycl_target->queue
+            .parallel_for<>(
+                sycl::range<1>(num_particles),
+                [=](sycl::id<1> idx) {
+                  const INT cell = d_cells[idx];
+                  const INT layer = d_layers[idx];
+                  const INT inner_layer =
+                      k_map_cells_to_particles.map_loop_layer_to_layer(cell,
+                                                                       layer);
+                  d_inner_layers[idx] = inner_layer;
+                })
+            .wait_and_throw();
+
+        auto ps = this->particle_group->get_particles(num_particles, d_cells,
+                                                      d_inner_layers);
+        restore_resource(sycl_target->resource_stack_map,
+                         ResourceStackKeyBufferDeviceHost<INT>{}, tmp_buffer);
+
+        return ps;
+      } else {
+        return std::make_shared<ParticleSet>(
+            0, this->particle_group->get_particle_spec());
       }
-
-      es.wait();
-
-      auto k_map_cells_to_particles = this->selection.d_map_cells_to_particles;
-
-      sycl_target->queue
-          .parallel_for<>(
-              sycl::range<1>(num_particles),
-              [=](sycl::id<1> idx) {
-                const INT cell = d_cells[idx];
-                const INT layer = d_layers[idx];
-                const INT inner_layer =
-                    k_map_cells_to_particles.map_loop_layer_to_layer(cell,
-                                                                     layer);
-                d_inner_layers[idx] = inner_layer;
-              })
-          .wait_and_throw();
-
-      auto ps = this->particle_group->get_particles(num_particles, d_cells,
-                                                    d_inner_layers);
-      restore_resource(sycl_target->resource_stack_map,
-                       ResourceStackKeyBufferDeviceHost<INT>{}, tmp_buffer);
-
-      return ps;
     }
   }
 

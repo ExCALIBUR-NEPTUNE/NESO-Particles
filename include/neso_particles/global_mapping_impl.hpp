@@ -110,61 +110,65 @@ inline void MeshHierarchyGlobalMap::execute() {
   auto k_origin = this->d_origin.ptr;
   auto k_dims = this->d_dims.ptr;
 
-  // map particles positions to coarse and fine cells in the mesh hierarchy
-  this->sycl_target->queue
-      .submit([&](sycl::handler &cgh) {
-        cgh.parallel_for<>(sycl::range<1>(npart_query), [=](sycl::id<1> idx) {
-          const INT cellx = k_lookup_local_cells[idx];
-          const INT layerx = k_lookup_local_layers[idx];
+  if (npart_query > 0) {
+    // map particles positions to coarse and fine cells in the mesh hierarchy
+    this->sycl_target->queue
+        .submit([&](sycl::handler &cgh) {
+          cgh.parallel_for<>(sycl::range<1>(npart_query), [=](sycl::id<1> idx) {
+            const INT cellx = k_lookup_local_cells[idx];
+            const INT layerx = k_lookup_local_layers[idx];
 
-          for (int dimx = 0; dimx < k_ndim; dimx++) {
-            // position relative to the mesh origin
-            const REAL pos =
-                k_position_dat[cellx][dimx][layerx] - k_origin[dimx];
-            const REAL tol = 1.0e-10;
+            for (int dimx = 0; dimx < k_ndim; dimx++) {
+              // position relative to the mesh origin
+              const REAL pos =
+                  k_position_dat[cellx][dimx][layerx] - k_origin[dimx];
+              const REAL tol = 1.0e-10;
 
-            // coarse grid index
-            INT cell_coarse = ((REAL)pos * k_inverse_cell_width_coarse);
-            // bounds check the cell at the upper extent
-            if (cell_coarse >= k_dims[dimx]) {
-              // if the particle is within a given tolerance assume the
-              // out of bounds is a floating point issue.
-              if ((ABS(pos - k_dims[dimx] * k_cell_width_coarse) / ABS(pos)) <=
-                  tol) {
-                cell_coarse = k_dims[dimx] - 1;
-                k_lookup_global_cells[(idx * k_ndim * 2) + dimx] = cell_coarse;
+              // coarse grid index
+              INT cell_coarse = ((REAL)pos * k_inverse_cell_width_coarse);
+              // bounds check the cell at the upper extent
+              if (cell_coarse >= k_dims[dimx]) {
+                // if the particle is within a given tolerance assume the
+                // out of bounds is a floating point issue.
+                if ((ABS(pos - k_dims[dimx] * k_cell_width_coarse) /
+                     ABS(pos)) <= tol) {
+                  cell_coarse = k_dims[dimx] - 1;
+                  k_lookup_global_cells[(idx * k_ndim * 2) + dimx] =
+                      cell_coarse;
+                } else {
+                  cell_coarse = 0;
+                  k_lookup_global_cells[(idx * k_ndim * 2) + dimx] = -2;
+                  NESO_KERNEL_ASSERT(false, k_error_propagate);
+                }
               } else {
-                cell_coarse = 0;
-                k_lookup_global_cells[(idx * k_ndim * 2) + dimx] = -2;
-                NESO_KERNEL_ASSERT(false, k_error_propagate);
+                k_lookup_global_cells[(idx * k_ndim * 2) + dimx] = cell_coarse;
               }
-            } else {
-              k_lookup_global_cells[(idx * k_ndim * 2) + dimx] = cell_coarse;
-            }
 
-            // use the coarse cell index to offset the origin and compute
-            // the fine cell index
-            const REAL pos_fine = pos - cell_coarse * k_cell_width_coarse;
-            INT cell_fine = ((REAL)pos_fine * k_inverse_cell_width_fine);
+              // use the coarse cell index to offset the origin and compute
+              // the fine cell index
+              const REAL pos_fine = pos - cell_coarse * k_cell_width_coarse;
+              INT cell_fine = ((REAL)pos_fine * k_inverse_cell_width_fine);
 
-            if (cell_fine >= k_ncells_dim_fine) {
-              if ((ABS(pos_fine - k_ncells_dim_fine * k_cell_width_fine) /
-                   ABS(pos_fine)) <= tol) {
-                cell_fine = k_ncells_dim_fine - 1;
+              if (cell_fine >= k_ncells_dim_fine) {
+                if ((ABS(pos_fine - k_ncells_dim_fine * k_cell_width_fine) /
+                     ABS(pos_fine)) <= tol) {
+                  cell_fine = k_ncells_dim_fine - 1;
+                  k_lookup_global_cells[(idx * k_ndim * 2) + dimx + k_ndim] =
+                      cell_fine;
+                } else {
+                  k_lookup_global_cells[(idx * k_ndim * 2) + dimx + k_ndim] =
+                      -2;
+                  NESO_KERNEL_ASSERT(false, k_error_propagate);
+                }
+              } else {
                 k_lookup_global_cells[(idx * k_ndim * 2) + dimx + k_ndim] =
                     cell_fine;
-              } else {
-                k_lookup_global_cells[(idx * k_ndim * 2) + dimx + k_ndim] = -2;
-                NESO_KERNEL_ASSERT(false, k_error_propagate);
               }
-            } else {
-              k_lookup_global_cells[(idx * k_ndim * 2) + dimx + k_ndim] =
-                  cell_fine;
             }
-          }
-        });
-      })
-      .wait_and_throw();
+          });
+        })
+        .wait_and_throw();
+  }
 
   if (this->error_propagate.get_flag()) {
     auto db_lookup_global_cells = this->d_lookup_global_cells.get();
@@ -219,15 +223,17 @@ inline void MeshHierarchyGlobalMap::execute() {
         .wait_and_throw();
   }
 
-  this->sycl_target->queue
-      .submit([&](sycl::handler &cgh) {
-        cgh.parallel_for<>(sycl::range<1>(npart_query), [=](sycl::id<1> idx) {
-          const INT cellx = k_lookup_local_cells[idx];
-          const INT layerx = k_lookup_local_layers[idx];
-          k_mpi_rank_dat[cellx][0][layerx] = k_lookup_ranks[idx];
-        });
-      })
-      .wait_and_throw();
+  if (npart_query > 0) {
+    this->sycl_target->queue
+        .submit([&](sycl::handler &cgh) {
+          cgh.parallel_for<>(sycl::range<1>(npart_query), [=](sycl::id<1> idx) {
+            const INT cellx = k_lookup_local_cells[idx];
+            const INT layerx = k_lookup_local_layers[idx];
+            k_mpi_rank_dat[cellx][0][layerx] = k_lookup_ranks[idx];
+          });
+        })
+        .wait_and_throw();
+  }
 
   sycl_target->profile_map.inc("MeshHierarchyGlobalMap", "execute", 1,
                                profile_elapsed(t0, profile_timestamp()));

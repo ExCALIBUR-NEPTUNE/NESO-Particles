@@ -105,7 +105,7 @@ public:
    *  (layers) compute the data migration required to keep the particle data
    *  contiguous.
    *
-   *  @param npart Number of particles which are to be removed.
+   *  @param npart Number of particles, N, which are to be removed.
    *  @param usm_cells Device accessible pointers to an array of length N that
    * holds the cells of the particles that are to be removed.
    *  @param usm_layers Device accessible pointers to an array of length N that
