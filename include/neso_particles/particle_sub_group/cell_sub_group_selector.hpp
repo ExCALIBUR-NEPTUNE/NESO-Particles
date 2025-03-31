@@ -34,7 +34,7 @@ public:
   template <typename PARENT>
   CellSubGroupSelector(std::shared_ptr<PARENT> parent, const int cell_start,
                        const int cell_end)
-      : SubGroupSelector(), cell_start(cell_start), cell_end(cell_end) {
+      : SubGroupSelector(parent), cell_start(cell_start), cell_end(cell_end) {
 
     this->particle_group = get_particle_group(parent);
     const int cell_count = this->particle_group->domain->mesh->get_cell_count();
@@ -46,7 +46,6 @@ public:
 
     this->check_sym_type(this->particle_group->cell_id_dat->sym);
     this->parent_is_whole_group = this->get_parent_is_whole_group(parent);
-    this->internal_setup(parent);
     if (!this->parent_is_whole_group) {
       this->loop_0 = particle_loop(
           "sub_group_selector_0", parent,
@@ -93,7 +92,7 @@ public:
     NESOASSERT((cell > -1) && (cell < cell_count), "Bad cell passed.");
   }
 
-  virtual inline Selection get() override {
+  virtual inline void create(Selection *created_selection) override {
     const int cell_count = this->particle_group->domain->mesh->get_cell_count();
     auto sycl_target = this->particle_group->sycl_target;
 
@@ -152,8 +151,7 @@ public:
       s.d_npart_cell_es = d_npart_cell_es_ptr;
       s.d_map_cells_to_particles = {
           this->sub_group_particle_map->d_cell_starts->ptr};
-
-      return s;
+      *created_selection = s;
 
     } else {
 
@@ -225,8 +223,7 @@ public:
       s.d_npart_cell_es = d_npart_cell_es_ptr;
       s.d_map_cells_to_particles = {
           this->sub_group_particle_map->d_cell_starts->ptr};
-
-      return s;
+      *created_selection = s;
     }
   }
 };

@@ -177,7 +177,8 @@ inline bool check_selector(ParticleGroupSharedPtr particle_group,
                            std::shared_ptr<T> selector, std::vector<int> &cells,
                            std::vector<int> &layers) {
   bool status = true;
-  auto s = selector->get();
+  ParticleSubGroupImplementation::Selection s;
+  selector->create(&s);
 
   auto lambda_check_eq = [&](auto a, auto b) { status = status && (a == b); };
   auto lambda_check_true = [&](const bool a) { status = status && a; };

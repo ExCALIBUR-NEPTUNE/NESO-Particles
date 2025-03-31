@@ -106,18 +106,40 @@ protected:
   add_parent_dependencies([[maybe_unused]] ParticleGroupSharedPtr parent) {}
   inline void add_parent_dependencies(std::shared_ptr<ParticleSubGroup> parent);
 
-  // setup the properties on this base class
-  inline void internal_setup_base() {
-    NESOASSERT(this->sub_group_selector_resource == nullptr,
-               "Sub-group resource is already allocated somehow.");
+  inline void printing_create_outer_start() {
+    if (this->particle_group->debug_sub_group_create) {
+      if (!this->particle_group->debug_sub_group_indent) {
+        std::cout << std::string(80, '-') << std::endl;
+        std::cout << "Testing recreation criterion: " << (void *)this
+                  << std::endl;
+      }
+      this->particle_group->debug_sub_group_indent += 4;
+    }
+  }
 
-    this->sub_group_selector_resource =
-        this->particle_group->resource_stack_sub_group_resource->get();
-    this->map_ptrs = this->sub_group_selector_resource->map_ptrs;
-    this->map_cell_to_particles_ptrs =
-        this->sub_group_selector_resource->map_cell_to_particles_ptrs;
-    this->sub_group_particle_map =
-        this->sub_group_selector_resource->sub_group_particle_map;
+  inline void printing_create_outer_end() {
+    if (this->particle_group->debug_sub_group_create) {
+      this->particle_group->debug_sub_group_indent -= 4;
+    }
+  }
+
+  inline void printing_create_inner_start(const bool bool_dats,
+                                          const bool bool_group) {
+    if (this->particle_group->debug_sub_group_create) {
+
+      std::string indent(this->particle_group->debug_sub_group_indent, ' ');
+      std::cout << indent << "Recreating ParticleSubGroup: " << (void *)this
+                << " reason_dats: " << bool_dats
+                << " reason_group: " << bool_group << std::endl;
+    }
+  }
+
+  inline void printing_create_inner_end() {
+    if (this->particle_group->debug_sub_group_create) {
+      if (!this->particle_group->debug_sub_group_indent) {
+        std::cout << std::string(80, '-') << std::endl;
+      }
+    }
   }
 
 public:
@@ -139,11 +161,44 @@ public:
   }
   SubGroupSelectorBase() = default;
 
-  virtual inline Selection get() = 0;
+  inline bool get(Selection *selection) {
+
+    this->printing_create_outer_start();
+
+    const bool bool_dats =
+        this->particle_group->check_validation(this->particle_dat_versions);
+    const bool bool_group =
+        this->particle_group->check_validation(this->particle_group_version);
+
+    if (bool_dats || bool_group) {
+      this->printing_create_inner_start(bool_dats, bool_group);
+      this->create(selection);
+      this->printing_create_inner_end();
+      this->printing_create_outer_end();
+      return true;
+    }
+
+    this->printing_create_outer_end();
+    return false;
+  }
+
+  virtual inline void create(Selection *created_selection) = 0;
 
   template <typename PARENT>
   SubGroupSelectorBase(std::shared_ptr<PARENT> parent)
-      : particle_group(get_particle_group(parent)) {}
+      : particle_group(get_particle_group(parent)), particle_group_version(0) {
+    this->add_parent_dependencies(parent);
+
+    NESOASSERT(this->sub_group_selector_resource == nullptr,
+               "Sub-group resource is already allocated somehow.");
+    this->sub_group_selector_resource =
+        this->particle_group->resource_stack_sub_group_resource->get();
+    this->map_ptrs = this->sub_group_selector_resource->map_ptrs;
+    this->map_cell_to_particles_ptrs =
+        this->sub_group_selector_resource->map_cell_to_particles_ptrs;
+    this->sub_group_particle_map =
+        this->sub_group_selector_resource->sub_group_particle_map;
+  }
 };
 
 typedef std::shared_ptr<SubGroupSelectorBase> SubGroupSelectorBaseSharedPtr;

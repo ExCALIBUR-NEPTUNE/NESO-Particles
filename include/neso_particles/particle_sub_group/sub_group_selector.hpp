@@ -54,11 +54,8 @@ protected:
   SubGroupSelector() = default;
 
   template <typename PARENT>
-  inline void internal_setup(std::shared_ptr<PARENT> parent) {
-    this->internal_setup_base();
-    this->add_parent_dependencies(parent);
-    this->particle_group_version = 0;
-
+  SubGroupSelector(std::shared_ptr<PARENT> parent)
+      : SubGroupSelectorBase(parent) {
     this->loop_1 = particle_loop(
         "sub_group_selector_1", parent,
         [=](auto loop_index, auto k_map_cell_to_particles, auto k_map_ptrs) {
@@ -94,10 +91,9 @@ public:
    */
   template <typename PARENT, typename KERNEL, typename... ARGS>
   SubGroupSelector(std::shared_ptr<PARENT> parent, KERNEL kernel, ARGS... args)
-      : SubGroupSelectorBase(parent) {
+      : SubGroupSelector(parent) {
 
-    (check_read_access(args), ...);
-    this->internal_setup(parent);
+    (this->check_read_access(args), ...);
 
     this->loop_0 = particle_loop(
         "sub_group_selector_0", parent,
@@ -125,7 +121,7 @@ public:
    *
    * @returns List of cells and layers of particles in the sub group.
    */
-  virtual inline Selection get() override {
+  virtual inline void create(Selection *created_selection) override {
     const int cell_count = this->particle_group->domain->mesh->get_cell_count();
     auto sycl_target = this->particle_group->sycl_target;
 
@@ -182,7 +178,7 @@ public:
     s.d_npart_cell = d_npart_cell_ptr;
     s.d_npart_cell_es = d_npart_cell_es_ptr;
     s.d_map_cells_to_particles = {d_cell_starts_ptr};
-    return s;
+    *created_selection = s;
   }
 };
 
