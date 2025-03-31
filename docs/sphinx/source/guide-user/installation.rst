@@ -124,3 +124,14 @@ Two possible solutions are as follows
 #. Build a separate installation of MPICH (ideally with the same compiler as used by the SYCL implementation).
 #. Clear the offending variables from the CMake cache by first running CMake as normal then rerunning CMake as ``cmake -DMPI_CXX_COMPILE_OPTIONS="" -DMPI_CXX_COMPILE_OPTIONS="" ..``.
 
+AdaptiveCpp
+-----------
+
+As the AdaptiveCpp ``generic`` implementation uses just-in-time (JIT) compilation, initial runs and time steps may be slower than desired as the parallel loops are compiled.
+Subsequent execution of the same parallel loops should be much faster.
+
+When running the tests setting ``ACPP_PERSISTENT_RUNTIME=1`` will prevent issues and errors relating to cached JIT compiled objects.
+For MPI execution setting ``ACPP_APPDB_DIR`` to a directory on the parallel storage or node local and ``ACPP_RT_NO_JIT_CACHE_POPULATION=1`` may also be beneficial.
+Please visit the AdaptiveCpp documentation for more information and latest guidance.
+The tests may take a long time to run with the default AdaptiveCpp adaptivity settings.
+Setting ``ACPP_ADAPTIVITY_LEVEL=0`` will speed up the test execution (note that the AdaptiveCpp authors do not recommend changing this value).
