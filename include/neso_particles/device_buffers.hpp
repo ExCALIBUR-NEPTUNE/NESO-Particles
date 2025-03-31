@@ -206,11 +206,13 @@ protected:
   }
   virtual inline void memcpy_wrapper(T *ptr_dst, const T *const ptr_src,
                                      const std::size_t num_elements) override {
-    this->sycl_target->queue
-        .parallel_for(this->sycl_target->device_limits.validate_range_global(
-                          sycl::range<1>(num_elements)),
-                      [=](sycl::id<1> idx) { ptr_dst[idx] = ptr_src[idx]; })
-        .wait_and_throw();
+    if (num_elements > 0) {
+      this->sycl_target->queue
+          .parallel_for(this->sycl_target->device_limits.validate_range_global(
+                            sycl::range<1>(num_elements)),
+                        [=](sycl::id<1> idx) { ptr_dst[idx] = ptr_src[idx]; })
+          .wait_and_throw();
+    }
   }
 
 public:

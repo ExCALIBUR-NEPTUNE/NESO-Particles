@@ -193,67 +193,75 @@ inline void ParticleGroup::add_particles_local(ParticleSet &particle_data) {
   const REAL k_zero_value_real = this->zero_value_real;
   const INT k_zero_value_int = this->zero_value_int;
   es.wait();
-  es.push(this->sycl_target->queue.parallel_for<>(
-      this->sycl_target->device_limits.validate_range_global(
-          sycl::range<2>(dst_dat_index_real.size(), npart_new)),
-      [=](sycl::id<2> idx) {
-        const int dx = idx[0];
-        const int dat_index = k_dst_dat_index_real[dx];
-        const int new_particle_index = idx[1];
-        const INT cell = k_cells[new_particle_index];
-        const INT layer = k_layers[new_particle_index];
-        const int ncomp = k_dat_info.d_ncomp_real[dat_index];
-        const REAL *data_src = k_dst_dat_ptr_real[dx];
-        for (int cx = 0; cx < ncomp; cx++) {
-          k_dat_info.d_ptr_real[dat_index][cell][cx][layer] =
-              data_src[cx * npart_new + new_particle_index];
-        }
-      }));
-  es.push(this->sycl_target->queue.parallel_for<>(
-      this->sycl_target->device_limits.validate_range_global(
-          sycl::range<2>(dst_dat_index_int.size(), npart_new)),
-      [=](sycl::id<2> idx) {
-        const int dx = idx[0];
-        const int dat_index = k_dst_dat_index_int[dx];
-        const int new_particle_index = idx[1];
-        const INT cell = k_cells[new_particle_index];
-        const INT layer = k_layers[new_particle_index];
-        const int ncomp = k_dat_info.d_ncomp_int[dat_index];
-        const INT *data_src = k_dst_dat_ptr_int[dx];
-        for (int cx = 0; cx < ncomp; cx++) {
-          k_dat_info.d_ptr_int[dat_index][cell][cx][layer] =
-              data_src[cx * npart_new + new_particle_index];
-        }
-      }));
-  es.push(this->sycl_target->queue.parallel_for<>(
-      this->sycl_target->device_limits.validate_range_global(
-          sycl::range<2>(dst_dat_zero_index_real.size(), npart_new)),
-      [=](sycl::id<2> idx) {
-        const int dx = idx[0];
-        const int dat_index = k_dst_dat_zero_index_real[dx];
-        const int new_particle_index = idx[1];
-        const INT cell = k_cells[new_particle_index];
-        const INT layer = k_layers[new_particle_index];
-        const int ncomp = k_dat_info.d_ncomp_real[dat_index];
-        for (int cx = 0; cx < ncomp; cx++) {
-          k_dat_info.d_ptr_real[dat_index][cell][cx][layer] = k_zero_value_real;
-        }
-      }));
-  es.push(this->sycl_target->queue.parallel_for<>(
-      this->sycl_target->device_limits.validate_range_global(
-          sycl::range<2>(dst_dat_zero_index_int.size(), npart_new)),
-      [=](sycl::id<2> idx) {
-        const int dx = idx[0];
-        const int dat_index = k_dst_dat_zero_index_int[dx];
-        const int new_particle_index = idx[1];
-        const INT cell = k_cells[new_particle_index];
-        const INT layer = k_layers[new_particle_index];
-        const int ncomp = k_dat_info.d_ncomp_int[dat_index];
-        for (int cx = 0; cx < ncomp; cx++) {
-          k_dat_info.d_ptr_int[dat_index][cell][cx][layer] = k_zero_value_int;
-        }
-      }));
-
+  if (dst_dat_index_real.size()) {
+    es.push(this->sycl_target->queue.parallel_for<>(
+        this->sycl_target->device_limits.validate_range_global(
+            sycl::range<2>(dst_dat_index_real.size(), npart_new)),
+        [=](sycl::id<2> idx) {
+          const int dx = idx[0];
+          const int dat_index = k_dst_dat_index_real[dx];
+          const int new_particle_index = idx[1];
+          const INT cell = k_cells[new_particle_index];
+          const INT layer = k_layers[new_particle_index];
+          const int ncomp = k_dat_info.d_ncomp_real[dat_index];
+          const REAL *data_src = k_dst_dat_ptr_real[dx];
+          for (int cx = 0; cx < ncomp; cx++) {
+            k_dat_info.d_ptr_real[dat_index][cell][cx][layer] =
+                data_src[cx * npart_new + new_particle_index];
+          }
+        }));
+  }
+  if (dst_dat_index_int.size()) {
+    es.push(this->sycl_target->queue.parallel_for<>(
+        this->sycl_target->device_limits.validate_range_global(
+            sycl::range<2>(dst_dat_index_int.size(), npart_new)),
+        [=](sycl::id<2> idx) {
+          const int dx = idx[0];
+          const int dat_index = k_dst_dat_index_int[dx];
+          const int new_particle_index = idx[1];
+          const INT cell = k_cells[new_particle_index];
+          const INT layer = k_layers[new_particle_index];
+          const int ncomp = k_dat_info.d_ncomp_int[dat_index];
+          const INT *data_src = k_dst_dat_ptr_int[dx];
+          for (int cx = 0; cx < ncomp; cx++) {
+            k_dat_info.d_ptr_int[dat_index][cell][cx][layer] =
+                data_src[cx * npart_new + new_particle_index];
+          }
+        }));
+  }
+  if (dst_dat_zero_index_real.size()) {
+    es.push(this->sycl_target->queue.parallel_for<>(
+        this->sycl_target->device_limits.validate_range_global(
+            sycl::range<2>(dst_dat_zero_index_real.size(), npart_new)),
+        [=](sycl::id<2> idx) {
+          const int dx = idx[0];
+          const int dat_index = k_dst_dat_zero_index_real[dx];
+          const int new_particle_index = idx[1];
+          const INT cell = k_cells[new_particle_index];
+          const INT layer = k_layers[new_particle_index];
+          const int ncomp = k_dat_info.d_ncomp_real[dat_index];
+          for (int cx = 0; cx < ncomp; cx++) {
+            k_dat_info.d_ptr_real[dat_index][cell][cx][layer] =
+                k_zero_value_real;
+          }
+        }));
+  }
+  if (dst_dat_zero_index_int.size()) {
+    es.push(this->sycl_target->queue.parallel_for<>(
+        this->sycl_target->device_limits.validate_range_global(
+            sycl::range<2>(dst_dat_zero_index_int.size(), npart_new)),
+        [=](sycl::id<2> idx) {
+          const int dx = idx[0];
+          const int dat_index = k_dst_dat_zero_index_int[dx];
+          const int new_particle_index = idx[1];
+          const INT cell = k_cells[new_particle_index];
+          const INT layer = k_layers[new_particle_index];
+          const int ncomp = k_dat_info.d_ncomp_int[dat_index];
+          for (int cx = 0; cx < ncomp; cx++) {
+            k_dat_info.d_ptr_int[dat_index][cell][cx][layer] = k_zero_value_int;
+          }
+        }));
+  }
   // launch the copies of the npart cells into the ParticleDats
   for (auto &dat : this->particle_dats_real) {
     es.push(dat.second->async_set_npart_cells(this->h_npart_cell));
@@ -552,6 +560,11 @@ inline void ParticleGroup::add_particles_local(
              "not exist in the ParticleGroup.");
 
   const int num_products = product_matrix->num_products;
+  if (num_products == 0) {
+    this->invalidate_group_version();
+    return;
+  }
+
   auto d_buffer =
       get_resource<BufferDevice<INT>, ResourceStackInterfaceBufferDevice<INT>>(
           sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<INT>{},
@@ -924,73 +937,76 @@ inline void ParticleGroup::add_particles_local(
         sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<INT>{},
         sycl_target);
 
-    d_buffer->realloc_no_copy(3 * npart);
+    if (npart > 0) {
+      d_buffer->realloc_no_copy(3 * npart);
 
-    auto k_cells = d_buffer->ptr;
-    auto k_layers_src = k_cells + npart;
-    auto k_layers_dst = k_layers_src + npart;
+      auto k_cells = d_buffer->ptr;
+      auto k_layers_src = k_cells + npart;
+      auto k_layers_dst = k_layers_src + npart;
 
-    particle_sub_group->get_cells_layers(k_cells, k_layers_src);
-    // get dst layers also sets h_npart_cell, d_npart_cell
-    this->get_new_layers(npart, k_cells, k_layers_dst);
-    this->recompute_npart_cell_es();
-    // Allocate space in all the dats for the new particles
-    this->realloc_all_dats();
+      particle_sub_group->get_cells_layers(k_cells, k_layers_src);
+      // get dst layers also sets h_npart_cell, d_npart_cell
+      this->get_new_layers(npart, k_cells, k_layers_dst);
+      this->recompute_npart_cell_es();
+      // Allocate space in all the dats for the new particles
+      this->realloc_all_dats();
 
-    EventStack es;
+      EventStack es;
 
-    // lambda which copies the property
-    auto lambda_copy = [&](auto dat, const auto dat_src) {
-      const int ncomp_dst = dat->ncomp;
-      const int ncomp_src = dat_src->ncomp;
-      NESOASSERT(
-          ncomp_dst == ncomp_src,
-          "Missmatch in the number of components in the local ParticleGroup"
-          "and the number of components on the ParticleGroup for the "
-          "ParticleSubGroup.");
+      // lambda which copies the property
+      auto lambda_copy = [&](auto dat, const auto dat_src) {
+        const int ncomp_dst = dat->ncomp;
+        const int ncomp_src = dat_src->ncomp;
+        NESOASSERT(
+            ncomp_dst == ncomp_src,
+            "Missmatch in the number of components in the local ParticleGroup"
+            "and the number of components on the ParticleGroup for the "
+            "ParticleSubGroup.");
 
-      auto dst_ptr = dat->impl_get();
-      auto src_ptr = dat_src->impl_get_const();
-      const int k_ncomp = dat->ncomp;
-      const int k_npart = npart;
-      es.push(this->sycl_target->queue.submit([&](sycl::handler &cgh) {
-        cgh.parallel_for<>(
-            sycl::range<1>(static_cast<size_t>(k_npart)), [=](sycl::id<1> idx) {
-              const INT cell = k_cells[idx];
-              const INT src_layer = k_layers_src[idx];
-              const INT dst_layer = k_layers_dst[idx];
-              for (int nx = 0; nx < k_ncomp; nx++) {
-                dst_ptr[cell][nx][dst_layer] = src_ptr[cell][nx][src_layer];
-              }
-            });
-      }));
-    };
+        auto dst_ptr = dat->impl_get();
+        auto src_ptr = dat_src->impl_get_const();
+        const int k_ncomp = dat->ncomp;
+        const int k_npart = npart;
+        es.push(this->sycl_target->queue.submit([&](sycl::handler &cgh) {
+          cgh.parallel_for<>(sycl::range<1>(static_cast<size_t>(k_npart)),
+                             [=](sycl::id<1> idx) {
+                               const INT cell = k_cells[idx];
+                               const INT src_layer = k_layers_src[idx];
+                               const INT dst_layer = k_layers_dst[idx];
+                               for (int nx = 0; nx < k_ncomp; nx++) {
+                                 dst_ptr[cell][nx][dst_layer] =
+                                     src_ptr[cell][nx][src_layer];
+                               }
+                             });
+        }));
+      };
 
-    auto lambda_dispatch = [&](auto dat) {
-      auto sym = dat->sym;
-      if (particle_sub_group->particle_group->contains_dat(sym)) {
-        lambda_copy(dat, particle_sub_group->particle_group->get_dat(sym));
-      } else {
-        zero_dat_properties(dat, npart, k_cells, k_layers_dst, es);
+      auto lambda_dispatch = [&](auto dat) {
+        auto sym = dat->sym;
+        if (particle_sub_group->particle_group->contains_dat(sym)) {
+          lambda_copy(dat, particle_sub_group->particle_group->get_dat(sym));
+        } else {
+          zero_dat_properties(dat, npart, k_cells, k_layers_dst, es);
+        }
+      };
+
+      // launch the copies into the ParticleDats
+      for (auto &dat : this->particle_dats_real) {
+        lambda_dispatch(dat.second);
       }
-    };
+      for (auto &dat : this->particle_dats_int) {
+        lambda_dispatch(dat.second);
+      }
+      // launch the copies of the npart cells into the ParticleDats
+      for (auto &dat : this->particle_dats_real) {
+        es.push(dat.second->async_set_npart_cells(this->h_npart_cell));
+      }
+      for (auto &dat : this->particle_dats_int) {
+        es.push(dat.second->async_set_npart_cells(this->h_npart_cell));
+      }
 
-    // launch the copies into the ParticleDats
-    for (auto &dat : this->particle_dats_real) {
-      lambda_dispatch(dat.second);
+      es.wait();
     }
-    for (auto &dat : this->particle_dats_int) {
-      lambda_dispatch(dat.second);
-    }
-    // launch the copies of the npart cells into the ParticleDats
-    for (auto &dat : this->particle_dats_real) {
-      es.push(dat.second->async_set_npart_cells(this->h_npart_cell));
-    }
-    for (auto &dat : this->particle_dats_int) {
-      es.push(dat.second->async_set_npart_cells(this->h_npart_cell));
-    }
-
-    es.wait();
     this->check_dats_and_group_agree();
     this->invalidate_group_version();
 

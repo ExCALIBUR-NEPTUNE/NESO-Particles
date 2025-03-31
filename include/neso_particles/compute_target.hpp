@@ -623,6 +623,9 @@ template <typename T>
 [[nodiscard]] inline sycl::event
 joint_exclusive_scan(SYCLTargetSharedPtr sycl_target, std::size_t N, T *d_src,
                      T *d_dst) {
+  if (N == 0) {
+    return sycl::event{};
+  }
   const std::size_t group_size =
       std::min(static_cast<std::size_t>(
                    sycl_target->device
@@ -658,7 +661,7 @@ template <typename T>
 matrix_transpose(SYCLTargetSharedPtr sycl_target, const std::size_t num_rows,
                  const std::size_t num_cols, const T *RESTRICT const d_src,
                  T *RESTRICT d_dst) {
-  if ((num_rows == 1) || (num_cols == 1)) {
+  if ((num_rows <= 1) || (num_cols <= 1)) {
     return sycl::event();
   }
   const std::size_t num_bytes_per_item = sizeof(T);

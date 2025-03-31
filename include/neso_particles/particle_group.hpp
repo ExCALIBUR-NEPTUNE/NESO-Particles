@@ -180,27 +180,28 @@ protected:
 
   inline void get_new_layers(const int npart, const INT *RESTRICT cells_ptr,
                              INT *RESTRICT layers_ptr) {
-    buffer_memcpy(this->d_npart_cell, this->h_npart_cell).wait_and_throw();
-    INT *k_npart_cell = this->d_npart_cell.ptr;
-    const INT k_ncell = this->ncell;
-    this->sycl_target->queue
-        .submit([&](sycl::handler &cgh) {
-          cgh.parallel_for<>(
-              sycl::range<1>(static_cast<size_t>(npart)), [=](sycl::id<1> idx) {
-                const INT cell = cells_ptr[idx];
-                if ((-1 < cell) && (cell < k_ncell)) {
-                  sycl::atomic_ref<INT, sycl::memory_order::relaxed,
-                                   sycl::memory_scope::device>
-                      element_atomic(k_npart_cell[cell]);
-                  const INT layer = element_atomic.fetch_add((INT)1);
-                  layers_ptr[idx] = layer;
-                } else {
-                  layers_ptr[idx] = -1;
-                }
-              });
-        })
-        .wait_and_throw();
-    buffer_memcpy(this->h_npart_cell, this->d_npart_cell).wait_and_throw();
+
+    if (npart > 0) {
+      buffer_memcpy(this->d_npart_cell, this->h_npart_cell).wait_and_throw();
+      INT *k_npart_cell = this->d_npart_cell.ptr;
+      const INT k_ncell = this->ncell;
+      this->sycl_target->queue
+          .parallel_for(sycl::range<1>(static_cast<size_t>(npart)),
+                        [=](sycl::id<1> idx) {
+                          const INT cell = cells_ptr[idx];
+                          if ((-1 < cell) && (cell < k_ncell)) {
+                            sycl::atomic_ref<INT, sycl::memory_order::relaxed,
+                                             sycl::memory_scope::device>
+                                element_atomic(k_npart_cell[cell]);
+                            const INT layer = element_atomic.fetch_add((INT)1);
+                            layers_ptr[idx] = layer;
+                          } else {
+                            layers_ptr[idx] = -1;
+                          }
+                        })
+          .wait_and_throw();
+      buffer_memcpy(this->h_npart_cell, this->d_npart_cell).wait_and_throw();
+    }
   }
 
   template <typename T>
@@ -208,20 +209,20 @@ protected:
                                   const INT *RESTRICT cells_ptr,
                                   const INT *RESTRICT layers_ptr,
                                   EventStack &es) {
-    auto dat_ptr = dat->impl_get();
-    const int k_ncomp = dat->ncomp;
-    es.push(this->sycl_target->queue.submit([&](sycl::handler &cgh) {
-      cgh.parallel_for<>(sycl::range<1>(static_cast<size_t>(npart)),
-                         [=](sycl::id<1> idx) {
-                           const INT cell = cells_ptr[idx];
-                           const INT layer = layers_ptr[idx];
-                           if (layer > -1) {
-                             for (int nx = 0; nx < k_ncomp; nx++) {
-                               dat_ptr[cell][nx][layer] = 0;
-                             }
-                           }
-                         });
-    }));
+    if (npart > 0) {
+      auto dat_ptr = dat->impl_get();
+      const int k_ncomp = dat->ncomp;
+      es.push(this->sycl_target->queue.parallel_for(
+          sycl::range<1>(static_cast<size_t>(npart)), [=](sycl::id<1> idx) {
+            const INT cell = cells_ptr[idx];
+            const INT layer = layers_ptr[idx];
+            if (layer > -1) {
+              for (int nx = 0; nx < k_ncomp; nx++) {
+                dat_ptr[cell][nx][layer] = 0;
+              }
+            }
+          }));
+    }
   }
 
   template <typename T> inline void push_particle_spec(ParticleProp<T> prop) {
@@ -482,7 +483,7 @@ protected:
       REAL *k_real = dh_real->d_buffer.ptr;
       INT *k_int = dh_int->d_buffer.ptr;
 
-      auto e0 = this->sycl_target->queue.parallel_for<>(
+      auto e0 = this->sycl_target->queue.parallel_for(
           this->sycl_target->device_limits.validate_range_global(
               sycl::range<2>(k_dat_info.ndat_real, num_particles)),
           [=](sycl::id<2> idx) {
@@ -500,7 +501,7 @@ protected:
             }
           });
 
-      auto e1 = this->sycl_target->queue.parallel_for<>(
+      auto e1 = this->sycl_target->queue.parallel_for(
           this->sycl_target->device_limits.validate_range_global(
               sycl::range<2>(k_dat_info.ndat_int, num_particles)),
           [=](sycl::id<2> idx) {

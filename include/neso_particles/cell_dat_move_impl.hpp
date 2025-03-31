@@ -175,38 +175,39 @@ inline void CellMove::move() {
 
   auto t1 = profile_timestamp();
   // copy from old cells/layers to new cells/layers
-  this->sycl_target->queue
-      .submit([&](sycl::handler &cgh) {
-        cgh.parallel_for<>(sycl::range<1>(move_count), [=](sycl::id<1> idx) {
-          const auto cell_old = k_cells_old[idx];
-          const auto cell_new = k_cells_new[idx];
-          const auto layer_old = k_layers_old[idx];
-          const auto layer_new = k_layers_new[idx];
+  if (move_count > 0) {
+    this->sycl_target->queue
+        .parallel_for(sycl::range<1>(move_count),
+                      [=](sycl::id<1> idx) {
+                        const auto cell_old = k_cells_old[idx];
+                        const auto cell_new = k_cells_new[idx];
+                        const auto layer_old = k_layers_old[idx];
+                        const auto layer_new = k_layers_new[idx];
 
-          // loop over the ParticleDats and copy the data
-          // for each real dat
-          for (int dx = 0; dx < k_num_dats_real; dx++) {
-            REAL ***dat_ptr = k_particle_dat_ptr_real[dx];
-            const int ncomp = k_particle_dat_ncomp_real[dx];
-            // for each component
-            for (int cx = 0; cx < ncomp; cx++) {
-              dat_ptr[cell_new][cx][layer_new] =
-                  dat_ptr[cell_old][cx][layer_old];
-            }
-          }
-          // for each int dat
-          for (int dx = 0; dx < k_num_dats_int; dx++) {
-            INT ***dat_ptr = k_particle_dat_ptr_int[dx];
-            const int ncomp = k_particle_dat_ncomp_int[dx];
-            // for each component
-            for (int cx = 0; cx < ncomp; cx++) {
-              dat_ptr[cell_new][cx][layer_new] =
-                  dat_ptr[cell_old][cx][layer_old];
-            }
-          }
-        });
-      })
-      .wait_and_throw();
+                        // loop over the ParticleDats and copy the data
+                        // for each real dat
+                        for (int dx = 0; dx < k_num_dats_real; dx++) {
+                          REAL ***dat_ptr = k_particle_dat_ptr_real[dx];
+                          const int ncomp = k_particle_dat_ncomp_real[dx];
+                          // for each component
+                          for (int cx = 0; cx < ncomp; cx++) {
+                            dat_ptr[cell_new][cx][layer_new] =
+                                dat_ptr[cell_old][cx][layer_old];
+                          }
+                        }
+                        // for each int dat
+                        for (int dx = 0; dx < k_num_dats_int; dx++) {
+                          INT ***dat_ptr = k_particle_dat_ptr_int[dx];
+                          const int ncomp = k_particle_dat_ncomp_int[dx];
+                          // for each component
+                          for (int cx = 0; cx < ncomp; cx++) {
+                            dat_ptr[cell_new][cx][layer_new] =
+                                dat_ptr[cell_old][cx][layer_old];
+                          }
+                        }
+                      })
+        .wait_and_throw();
+  }
 
   r.end();
   r.num_bytes = move_count * this->num_bytes_per_particle * 2;

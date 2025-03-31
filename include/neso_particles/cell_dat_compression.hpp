@@ -105,7 +105,7 @@ public:
    *  (layers) compute the data migration required to keep the particle data
    *  contiguous.
    *
-   *  @param npart Number of particles which are to be removed.
+   *  @param npart Number of particles, N, which are to be removed.
    *  @param usm_cells Device accessible pointers to an array of length N that
    * holds the cells of the particles that are to be removed.
    *  @param usm_layers Device accessible pointers to an array of length N that
@@ -114,6 +114,11 @@ public:
   template <typename T>
   inline void compute_remove_compress_indicies(const int npart, T *usm_cells,
                                                T *usm_layers) {
+
+    if (npart < 1) {
+      return;
+    }
+
     auto t0 = profile_timestamp();
     auto r =
         ProfileRegion("LayerCompressor", "compute_remove_compress_indicies_a");
@@ -316,20 +321,22 @@ public:
     }
     this->event_stack.wait();
 
-    this->sycl_target->queue
-        .submit([&](sycl::handler &cgh) {
-          cgh.parallel_for<>(
-              sycl::range<1>(static_cast<size_t>(this->compress_npart)),
-              [=](sycl::id<1> idx) {
-                const auto cell = compress_cells_old_ptr[idx];
-                const auto offset = compress_layers_old_ptr[idx];
-                const auto cell_offset = to_find_scan_ptr[cell];
-                const auto lookup_index = cell_offset + offset;
-                const auto source_row = k_search_space[lookup_index];
-                compress_layers_old_ptr[idx] = source_row;
-              });
-        })
-        .wait_and_throw();
+    if (this->compress_npart > 0) {
+      this->sycl_target->queue
+          .submit([&](sycl::handler &cgh) {
+            cgh.parallel_for<>(
+                sycl::range<1>(static_cast<size_t>(this->compress_npart)),
+                [=](sycl::id<1> idx) {
+                  const auto cell = compress_cells_old_ptr[idx];
+                  const auto offset = compress_layers_old_ptr[idx];
+                  const auto cell_offset = to_find_scan_ptr[cell];
+                  const auto lookup_index = cell_offset + offset;
+                  const auto source_row = k_search_space[lookup_index];
+                  compress_layers_old_ptr[idx] = source_row;
+                });
+          })
+          .wait_and_throw();
+    }
 
     sycl_target->profile_map.inc("LayerCompressor",
                                  "compute_remove_compress_indicies", 1,

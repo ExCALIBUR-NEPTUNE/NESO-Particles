@@ -40,6 +40,7 @@ inline void DepartingIdentify::identify(const int rank_component) {
   auto k_pack_layers_dst = this->d_pack_layers_dst.ptr;
   auto k_num_particle_send = this->dh_num_particle_send.d_buffer.ptr;
 
+  NESOASSERT(comm_size > 0, "Somehow comm_size is 0.");
   // zero the send/recv counts
   this->sycl_target->queue.submit([&](sycl::handler &cgh) {
     cgh.parallel_for<>(sycl::range<1>(comm_size), [=](sycl::id<1> idx) {
