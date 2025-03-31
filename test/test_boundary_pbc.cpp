@@ -68,7 +68,6 @@ TEST(BoundaryConditions, pbc_apply) {
   A->add_particles_local(initial_distribution);
 
   CartesianPeriodic pbc(sycl_target, mesh, A->position_dat);
-
   pbc.execute();
 
   // ParticleDat P should contain the perodically mapped positions in P_ORIG

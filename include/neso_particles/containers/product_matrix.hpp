@@ -519,40 +519,43 @@ public:
     const auto spec = this->spec.get();
     NESOASSERT(spec != nullptr, "ProductMatrix is not initialised.");
     this->num_products = num_products;
-    this->d_data_real->realloc_no_copy(num_products *
-                                       spec->num_components_real);
-    this->d_data_int->realloc_no_copy(num_products * spec->num_components_int);
-    EventStack es;
+    if (num_products > 0) {
+      this->d_data_real->realloc_no_copy(num_products *
+                                         spec->num_components_real);
+      this->d_data_int->realloc_no_copy(num_products *
+                                        spec->num_components_int);
+      EventStack es;
 
-    // reset the values to either 0 or the set default value
-    for (int sx = 0; sx < spec->num_properties_real; sx++) {
-      for (int cx = 0; cx < spec->components_real[sx]; cx++) {
-        const std::pair<Sym<REAL>, int> key = {spec->syms_real.at(sx), cx};
-        const REAL value = spec->default_values_real.count(key) > 0
-                               ? spec->default_values_real.at(key)
-                               : 0;
-        const int sym_offset = this->dh_offsets_real->h_buffer.ptr[sx];
-        REAL *column_start =
-            this->d_data_real->ptr + (sym_offset + cx) * num_products;
-        es.push(
-            this->sycl_target->queue.fill(column_start, value, num_products));
+      // reset the values to either 0 or the set default value
+      for (int sx = 0; sx < spec->num_properties_real; sx++) {
+        for (int cx = 0; cx < spec->components_real[sx]; cx++) {
+          const std::pair<Sym<REAL>, int> key = {spec->syms_real.at(sx), cx};
+          const REAL value = spec->default_values_real.count(key) > 0
+                                 ? spec->default_values_real.at(key)
+                                 : 0;
+          const int sym_offset = this->dh_offsets_real->h_buffer.ptr[sx];
+          REAL *column_start =
+              this->d_data_real->ptr + (sym_offset + cx) * num_products;
+          es.push(
+              this->sycl_target->queue.fill(column_start, value, num_products));
+        }
       }
-    }
-    for (int sx = 0; sx < spec->num_properties_int; sx++) {
-      for (int cx = 0; cx < spec->components_int[sx]; cx++) {
-        const std::pair<Sym<INT>, int> key = {spec->syms_int.at(sx), cx};
-        const INT value = spec->default_values_int.count(key) > 0
-                              ? spec->default_values_int.at(key)
-                              : 0;
-        const int sym_offset = this->dh_offsets_int->h_buffer.ptr[sx];
-        INT *column_start =
-            this->d_data_int->ptr + (sym_offset + cx) * num_products;
-        es.push(
-            this->sycl_target->queue.fill(column_start, value, num_products));
+      for (int sx = 0; sx < spec->num_properties_int; sx++) {
+        for (int cx = 0; cx < spec->components_int[sx]; cx++) {
+          const std::pair<Sym<INT>, int> key = {spec->syms_int.at(sx), cx};
+          const INT value = spec->default_values_int.count(key) > 0
+                                ? spec->default_values_int.at(key)
+                                : 0;
+          const int sym_offset = this->dh_offsets_int->h_buffer.ptr[sx];
+          INT *column_start =
+              this->d_data_int->ptr + (sym_offset + cx) * num_products;
+          es.push(
+              this->sycl_target->queue.fill(column_start, value, num_products));
+        }
       }
-    }
 
-    es.wait();
+      es.wait();
+    }
   }
 };
 

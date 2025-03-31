@@ -239,7 +239,9 @@ public:
    */
   inline void fill(const T value) {
     T *ptr = this->buffer->ptr;
-    sycl_target->queue.fill(ptr, value, size).wait_and_throw();
+    if (size) {
+      sycl_target->queue.fill(ptr, value, size).wait_and_throw();
+    }
   }
 
   /**
