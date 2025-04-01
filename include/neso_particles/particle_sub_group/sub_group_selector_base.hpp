@@ -106,6 +106,13 @@ protected:
   add_parent_dependencies([[maybe_unused]] ParticleGroupSharedPtr parent) {}
   inline void add_parent_dependencies(std::shared_ptr<ParticleSubGroup> parent);
 
+  inline void add_sym_dependency(Sym<INT> sym) {
+    this->particle_dat_versions[sym] = 0;
+  }
+  inline void add_sym_dependency(Sym<REAL> sym) {
+    this->particle_dat_versions[sym] = 0;
+  }
+
   inline void printing_create_outer_start() {
     if (this->particle_group->debug_sub_group_create) {
       if (!this->particle_group->debug_sub_group_indent) {
@@ -141,6 +148,8 @@ protected:
       }
     }
   }
+
+  virtual inline void create(Selection *created_selection) = 0;
 
 public:
   // The ParticleGroup this selector operates on.
@@ -181,8 +190,6 @@ public:
     this->printing_create_outer_end();
     return false;
   }
-
-  virtual inline void create(Selection *created_selection) = 0;
 
   template <typename PARENT>
   SubGroupSelectorBase(std::shared_ptr<PARENT> parent)

@@ -22,6 +22,8 @@ struct SubGroupParticleMap {
   std::shared_ptr<BufferDevice<INT>> d_layer_map;
   // The cell start and end that were passed to create.
   int cell_start, cell_end;
+  // The number of particles in the map.
+  INT npart_total;
 
   // Helper buffers that the user will need to create the Selection and map.
   // These buffers will not be modified internally.
@@ -69,9 +71,10 @@ struct SubGroupParticleMap {
     this->cell_end = cell_end;
     if (cell_start < cell_end) {
       // Make sure the buffer is large enough to store the map.
-      const INT npart_total = h_cell_counts_es[cell_end - 1] +
-                              static_cast<INT>(h_cell_counts[cell_end - 1]);
-      this->d_layer_map->realloc_no_copy(static_cast<std::size_t>(npart_total));
+      this->npart_total = h_cell_counts_es[cell_end - 1] +
+                          static_cast<INT>(h_cell_counts[cell_end - 1]);
+      this->d_layer_map->realloc_no_copy(
+          static_cast<std::size_t>(this->npart_total));
       INT *ptr = this->d_layer_map->ptr;
       INT **h_cell_ptr = this->h_cell_starts->ptr;
       INT **d_cell_ptr = this->d_cell_starts->ptr;

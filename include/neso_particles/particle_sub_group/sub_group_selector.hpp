@@ -30,7 +30,7 @@ protected:
                   "properties (Sym instances). Sym type check failed.");
 
     // add this sym to the version checker signature
-    this->particle_dat_versions[arg] = 0;
+    this->add_sym_dependency(arg);
   }
 
   template <typename T> inline void check_sym_type(SymVectorSharedPtr<T> sv) {
