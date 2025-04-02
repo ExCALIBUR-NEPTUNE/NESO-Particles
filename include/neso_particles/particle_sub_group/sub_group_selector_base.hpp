@@ -71,9 +71,11 @@ get_host_map_cells_to_particles(SYCLTargetSharedPtr sycl_target,
   EventStack es;
   for (int cx = 0; cx < cell_count; cx++) {
     return_map.at(cx) = std::vector<INT>(selection.h_npart_cell[cx]);
-    es.push(
-        sycl_target->queue.memcpy(return_map.at(cx).data(), d_map_ptrs.at(cx),
-                                  selection.h_npart_cell[cx] * sizeof(INT)));
+    if (selection.h_npart_cell[cx] > 0) {
+      es.push(
+          sycl_target->queue.memcpy(return_map.at(cx).data(), d_map_ptrs.at(cx),
+                                    selection.h_npart_cell[cx] * sizeof(INT)));
+    }
   }
   es.wait();
   return return_map;
@@ -170,6 +172,18 @@ public:
   }
   SubGroupSelectorBase() = default;
 
+  /**
+   * @param sym Sym<INT> or Sym<REAL> to test dependency tracking on.
+   * @returns True if the dependency tracking contains a Sym.
+   */
+  template <typename T> inline bool depends_on(Sym<T> sym) {
+    return static_cast<bool>(this->particle_dat_versions.count(sym));
+  }
+
+  /**
+   * @param[in, out] selection Selection to update if required.
+   * @returns True if selection was updated.
+   */
   inline bool get(Selection *selection) {
 
     this->printing_create_outer_start();

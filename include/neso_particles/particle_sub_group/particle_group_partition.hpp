@@ -4,11 +4,12 @@
 #include "../device_functions.hpp"
 #include "../loop/particle_loop.hpp"
 #include "../loop/particle_loop_base.hpp"
+#include "particle_sub_group_base.hpp"
 #include "sub_group_selector.hpp"
 
 namespace NESO::Particles::ParticleSubGroupImplementation {
 
-class ParticleGroupPartition;
+class ParticleGroupPartitioner;
 
 /**
  * TODO
@@ -16,7 +17,7 @@ class ParticleGroupPartition;
 class ParticleGroupPartitionSelector
     : public ParticleSubGroupImplementation::SubGroupSelectorBase {
 
-  friend class ParticleGroupPartition;
+  friend class ParticleGroupPartitioner;
 
 protected:
   std::function<void(Selection *created_selection)> create_handle;
@@ -41,7 +42,7 @@ public:
 /**
  * TODO
  */
-class ParticleGroupPartition
+class ParticleGroupPartitioner
     : public ParticleSubGroupImplementation::SubGroupSelectorBase {
 protected:
   std::vector<std::shared_ptr<ParticleGroupPartitionSelector>>
@@ -205,9 +206,22 @@ public:
   /**
    * TODO
    */
+  inline SubGroupSelectorBaseSharedPtr
+  get_selector(const std::size_t partition) {
+    NESOASSERT(partition < this->num_partitions, "Bad partition index.");
+    auto ptr = std::dynamic_pointer_cast<SubGroupSelectorBase>(
+        this->partition_selectors.at(partition));
+    NESOASSERT(ptr != nullptr, "Bad pointer cast.");
+    return ptr;
+  }
+
+  /**
+   * TODO
+   */
   template <typename PARENT>
-  ParticleGroupPartition(std::shared_ptr<PARENT> parent, Sym<INT> partition_sym,
-                         const std::size_t num_partitions)
+  ParticleGroupPartitioner(std::shared_ptr<PARENT> parent,
+                           Sym<INT> partition_sym,
+                           const std::size_t num_partitions)
       : SubGroupSelectorBase(parent), partition_sym(partition_sym),
         num_partitions(num_partitions) {
     this->add_sym_dependency(partition_sym);
@@ -236,7 +250,7 @@ public:
 
     const auto k_cell_count = static_cast<std::size_t>(
         this->particle_group->domain->mesh->get_cell_count());
-    const auto k_num_partitions = num_partitions;
+    const INT k_num_partitions = static_cast<INT>(num_partitions);
 
     this->loop_0 = particle_loop(
         "ParticleGroupPartitionCreate0", parent,
@@ -282,5 +296,56 @@ public:
 };
 
 } // namespace NESO::Particles::ParticleSubGroupImplementation
+
+namespace NESO::Particles {
+
+/**
+ * TODO
+ */
+class ParticleGroupPartition {
+protected:
+#ifdef NESO_PARTICLES_TEST_COMPILATION
+public:
+#endif
+  std::unique_ptr<ParticleSubGroupImplementation::ParticleGroupPartitioner>
+      particle_group_partitioner;
+
+public:
+  /// Disable (implicit) copies.
+  ParticleGroupPartition(const ParticleGroupPartition &st) = delete;
+  /// Disable (implicit) copies.
+  ParticleGroupPartition &operator=(ParticleGroupPartition const &a) = delete;
+
+  /**
+   * TODO
+   */
+  template <typename PARENT>
+  ParticleGroupPartition(std::shared_ptr<PARENT> parent, Sym<INT> partition_sym,
+                         const int num_partitions) {
+    NESOASSERT(num_partitions >= 0, "Bad number of partitions");
+    this->particle_group_partitioner = std::make_unique<
+        ParticleSubGroupImplementation::ParticleGroupPartitioner>(
+        parent, partition_sym, static_cast<std::size_t>(num_partitions));
+  }
+
+  /**
+   * TODO
+   */
+  inline std::vector<ParticleSubGroupSharedPtr> get() {
+
+    const std::size_t num_partitions =
+        this->particle_group_partitioner->num_partitions;
+    std::vector<ParticleSubGroupSharedPtr> output(num_partitions);
+
+    for (std::size_t px = 0; px < num_partitions; px++) {
+      output[px] = std::make_shared<ParticleSubGroup>(
+          this->particle_group_partitioner->get_selector(px));
+    }
+
+    return output;
+  }
+};
+
+} // namespace NESO::Particles
 
 #endif

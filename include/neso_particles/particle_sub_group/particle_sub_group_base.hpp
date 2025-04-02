@@ -26,6 +26,10 @@ class ParticleSubGroup {
   friend class ParticleSubGroupImplementation::SubGroupSelectorBase;
 
 protected:
+#ifdef NESO_PARTICLES_TEST_COMPILATION
+public:
+#endif
+
   bool is_static;
   ParticleGroupSharedPtr particle_group;
   ParticleSubGroupImplementation::SubGroupSelectorBaseSharedPtr selector;

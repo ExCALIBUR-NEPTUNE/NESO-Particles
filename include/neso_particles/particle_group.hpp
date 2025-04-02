@@ -373,6 +373,9 @@ protected:
     }
     return updated;
   }
+#ifdef NESO_PARTICLES_TEST_COMPILATION
+public:
+#endif
   inline void invalidate_group_version() {
     this->particle_group_version++;
     // Ensure this value is never 0.
@@ -380,6 +383,9 @@ protected:
       this->particle_group_version++;
     }
   }
+#ifdef NESO_PARTICLES_TEST_COMPILATION
+protected:
+#endif
   inline void recompute_npart_cell_es() {
     auto h_ptr_s = this->h_npart_cell.ptr;
     auto h_ptr = this->dh_npart_cell_es->h_buffer.ptr;
