@@ -12,7 +12,10 @@ namespace NESO::Particles::ParticleSubGroupImplementation {
 class ParticleGroupPartitioner;
 
 /**
- * TODO
+ * This is the Selector type which is actually used to create the
+ * ParticleSubGroups. Instead of creating a Selection this implementation
+ * extracts the corresponding Selection from the parent orchestrating
+ * implementation.
  */
 class ParticleGroupPartitionSelector
     : public ParticleSubGroupImplementation::SubGroupSelectorBase {
@@ -40,7 +43,10 @@ public:
 };
 
 /**
- * TODO
+ * This is a Selector which partitions the parent into num_partitions
+ * partitions. It creates the individual selections which are extracted by
+ * ParticleGroupPartitionSelector. Users should create an instance of
+ * ParticleGroupPartition to use this class.
  */
 class ParticleGroupPartitioner
     : public ParticleSubGroupImplementation::SubGroupSelectorBase {
@@ -66,6 +72,12 @@ protected:
     *created_selection = this->partition_selections.at(index);
   }
 
+  /**
+   * This is the overrided method which is called by get to create all the
+   * partitions. The pointer passed should be nullptr as the corresponding class
+   * ParticleGroupPartitionSelector will extract its selection from the vector
+   * of selections.
+   */
   virtual inline void create(Selection *created_selection) override {
     if (this->num_partitions == 0) {
       return;
@@ -204,7 +216,10 @@ public:
   std::size_t num_partitions;
 
   /**
-   * TODO
+   * Get the child SubGroupSelector for a particular partition.
+   *
+   * @param partition Partition to extract.
+   * @returns SubGroupSelector for partition.
    */
   inline SubGroupSelectorBaseSharedPtr
   get_selector(const std::size_t partition) {
@@ -216,7 +231,11 @@ public:
   }
 
   /**
-   * TODO
+   * Create a orchestration instance that creates num_partition partitions.
+   *
+   * @param parent ParticleGroup or ParticleSubGroup which is the parent.
+   * @param partition_sym Sym to use for partitioning the parent.
+   * @param num_partitions Number of partitions to consider.
    */
   template <typename PARENT>
   ParticleGroupPartitioner(std::shared_ptr<PARENT> parent,
@@ -300,7 +319,8 @@ public:
 namespace NESO::Particles {
 
 /**
- * TODO
+ * This is the class which defines the interface that end users should use to
+ * partition ParticleGroups and ParticleSubGroups.
  */
 class ParticleGroupPartition {
 protected:
@@ -317,7 +337,12 @@ public:
   ParticleGroupPartition &operator=(ParticleGroupPartition const &a) = delete;
 
   /**
-   * TODO
+   * Create a partitioner from a parent ParticleGroup or ParticleSubGroup.
+   *
+   * @param parent Parent ParticleGroup or ParticleSubGroup to partition.
+   * @param partition_sym Particle property to use for partitioning the parent.
+   * The first component will be inspected.
+   * @param num_partitions Number of partitions to consider.
    */
   template <typename PARENT>
   ParticleGroupPartition(std::shared_ptr<PARENT> parent, Sym<INT> partition_sym,
@@ -329,7 +354,8 @@ public:
   }
 
   /**
-   * TODO
+   * @returns A vector of size num_partitions containing the partitions of the
+   * parent.
    */
   inline std::vector<ParticleSubGroupSharedPtr> get() {
 
