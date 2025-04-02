@@ -26,7 +26,7 @@ TEST(ParticleGroup, partition_particle_group) {
 
     auto lambda_test_inner = [&]() {
       auto la_count = std::make_shared<LocalArray<int>>(
-          sycl_target, 1 + num_partitions + 10);
+          sycl_target, 1 + num_partitions);
       la_count->fill(0);
       auto ep = std::make_shared<ErrorPropagate>(sycl_target);
       auto k_ep = ep->device_ptr();

@@ -136,3 +136,9 @@ For MPI execution setting ``ACPP_APPDB_DIR`` to a directory on the parallel stor
 Please visit the AdaptiveCpp documentation for more information and latest guidance.
 The tests may take a long time to run with the default AdaptiveCpp adaptivity settings.
 Setting ``ACPP_ADAPTIVITY_LEVEL=0`` will speed up the test execution (note that the AdaptiveCpp authors do not recommend changing this value).
+
+Intel SYCL
+----------
+
+With the Intel SYCL implementation, currently branded as oneAPI, users may observe illegal instructions. Typically these are a ``vgatherdpd`` like instruction.
+Currently the known workaround is to set the environment variable ``CL_CONFIG_CPU_TARGET_ARCH=corei7-avx``.
