@@ -43,7 +43,10 @@ public:
   /// This shared_ptr stops the partitioner going out of scope until all of the
   /// partition selectors which use it are freed.
   std::shared_ptr<ParticleGroupPartitioner> particle_group_partitioner;
+
   std::function<void(Selection *created_selection)> create_handle;
+  std::function<void()> destroy_handle;
+
   virtual inline void create(Selection *created_selection) override {
     this->create_handle(created_selection);
   }
@@ -56,8 +59,13 @@ public:
       std::function<void(Selection *created_selection)> create_handle) {
     this->create_handle = create_handle;
   }
+  inline void set_destroy_handle(std::function<void()> destroy_handle) {
+    this->destroy_handle = destroy_handle;
+  }
 
 public:
+  virtual ~ParticleGroupPartitionSelector() override { this->destroy_handle(); }
+
   template <typename PARENT>
   ParticleGroupPartitionSelector(std::shared_ptr<PARENT> parent,
                                  Sym<INT> partition_sym)
@@ -75,6 +83,10 @@ public:
 class ParticleGroupPartitioner
     : public ParticleSubGroupImplementation::SubGroupSelectorBase {
 protected:
+#ifdef NESO_PARTICLES_TEST_COMPILATION
+public:
+#endif
+
   std::vector<Selection> partition_selections;
 
   /// The selectors used by the sub groups hold a shared pointer to an instance
@@ -323,6 +335,11 @@ public:
         return this->create_indexed(px, created_selection);
       };
       ptr_shared->set_create_handle(create_handle);
+      std::function<void()> destroy_handle = [=]() -> void {
+        this->partition_selectors.at(px).reset();
+        this->sub_group_particle_maps.at(px).reset();
+      };
+      ptr_shared->set_destroy_handle(destroy_handle);
 
       this->sub_group_particle_maps.push_back(
           ptr_shared->get_sub_group_particle_map());
@@ -394,6 +411,21 @@ namespace NESO::Particles {
 /**
  * Partition a ParticleGroup or ParticleSubGroup into N paritions based on a
  * value held on each particle.
+ *
+ * This function is a computationally cheaper implementation of
+ *
+ *  std::vector<ParticleSubGroupSharedPtr> partitions(num_partitions);
+ *  for(int px=0 ; px<num_partitions ; px++){
+ *    partitions[px] = particle_sub_group(
+ *      parent,
+ *      [=](auto P) {
+ *        return P.at(0) == px;
+ *      },
+ *      Access::read(partition_sym)
+ *    );
+ *  }
+ *
+ *  and will update all the ParticleSubGroups at the same time.
  *
  * @param parent Parent ParticleGroup or ParticleSubGroup to partition.
  * @param partition_sym Particle property to use for partitioning the parent.

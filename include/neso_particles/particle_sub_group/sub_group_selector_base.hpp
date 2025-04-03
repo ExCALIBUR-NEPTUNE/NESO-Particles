@@ -163,9 +163,23 @@ public:
 
   virtual ~SubGroupSelectorBase() {
     if (this->sub_group_selector_resource != nullptr) {
+
       this->map_ptrs = nullptr;
       this->map_cell_to_particles_ptrs = nullptr;
       this->sub_group_particle_map = nullptr;
+
+#ifdef NESO_PARTICLES_TEST_COMPILATION
+      NESOASSERT(this->sub_group_selector_resource->map_ptrs.use_count() == 1,
+                 "A reference has been kept.");
+      NESOASSERT(this->sub_group_selector_resource->map_cell_to_particles_ptrs
+                         .use_count() == 1,
+                 "A reference has been kept.");
+      NESOASSERT(this->sub_group_selector_resource->sub_group_particle_map
+                         .use_count() == 1,
+                 "A reference has been kept.");
+      NESOASSERT(this->sub_group_selector_resource.use_count() == 1,
+                 "A reference has been kept.");
+#endif
       this->particle_group->resource_stack_sub_group_resource->restore(
           this->sub_group_selector_resource);
     }
