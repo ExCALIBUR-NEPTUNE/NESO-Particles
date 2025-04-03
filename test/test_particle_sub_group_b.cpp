@@ -20,9 +20,8 @@ TEST(ParticleGroup, partition_particle_group) {
         Access::read(ParticleLoopIndex{}), Access::write(Sym<INT>("PARTITION")))
         ->execute();
 
-    auto partitioner = std::make_shared<ParticleGroupPartition>(
-        aa, Sym<INT>("PARTITION"), num_partitions);
-    auto sub_groups = partitioner->get();
+    auto sub_groups =
+        particle_group_partition(aa, Sym<INT>("PARTITION"), num_partitions);
 
     auto lambda_test_inner = [&]() {
       auto la_count =
@@ -129,9 +128,8 @@ TEST(ParticleGroup, partition_particle_group_invalidation) {
 
   loop_reset->execute();
   {
-    auto partitioner = std::make_shared<ParticleGroupPartition>(
-        A, Sym<INT>("PARTITION"), num_partitions);
-    auto sub_groups = partitioner->get();
+    auto sub_groups =
+        particle_group_partition(A, Sym<INT>("PARTITION"), num_partitions);
     auto lambda_test = [&]() {
       for (int px = 0; px < num_partitions; px++) {
         ASSERT_TRUE(sub_groups.at(px)->create_if_required());
@@ -146,13 +144,18 @@ TEST(ParticleGroup, partition_particle_group_invalidation) {
     A->invalidate_group_version();
     lambda_test();
 
+    auto selector = std::dynamic_pointer_cast<
+        ParticleSubGroupImplementation::ParticleGroupPartitionSelector>(
+        sub_groups.at(0)->selector);
+    auto partitioner = selector->particle_group_partitioner;
+
     loop_reset->execute();
-    ASSERT_TRUE(partitioner->particle_group_partitioner->get(nullptr));
-    ASSERT_FALSE(partitioner->particle_group_partitioner->get(nullptr));
+    ASSERT_TRUE(partitioner->get(nullptr));
+    ASSERT_FALSE(partitioner->get(nullptr));
 
     A->invalidate_group_version();
-    ASSERT_TRUE(partitioner->particle_group_partitioner->get(nullptr));
-    ASSERT_FALSE(partitioner->particle_group_partitioner->get(nullptr));
+    ASSERT_TRUE(partitioner->get(nullptr));
+    ASSERT_FALSE(partitioner->get(nullptr));
   }
 
   auto aa = particle_sub_group(
@@ -160,10 +163,9 @@ TEST(ParticleGroup, partition_particle_group_invalidation) {
       Access::read(Sym<INT>("ID")));
 
   {
-    auto partitioner = std::make_shared<ParticleGroupPartition>(
-        aa, Sym<INT>("PARTITION"), num_partitions);
+    auto sub_groups =
+        particle_group_partition(aa, Sym<INT>("PARTITION"), num_partitions);
 
-    auto sub_groups = partitioner->get();
     auto lambda_test = [&]() {
       for (int px = 0; px < num_partitions; px++) {
         ASSERT_TRUE(sub_groups.at(px)->create_if_required());
@@ -192,21 +194,29 @@ TEST(ParticleGroup, partition_particle_group_invalidation) {
     ASSERT_TRUE(aa->create_if_required());
     ASSERT_FALSE(aa->create_if_required());
 
+    auto selector = std::dynamic_pointer_cast<
+        ParticleSubGroupImplementation::ParticleGroupPartitionSelector>(
+        sub_groups.at(0)->selector);
+    auto partitioner = selector->particle_group_partitioner;
+
     loop_reset_aa->execute();
-    ASSERT_TRUE(partitioner->particle_group_partitioner->get(nullptr));
-    ASSERT_FALSE(partitioner->particle_group_partitioner->get(nullptr));
+    ASSERT_TRUE(partitioner->get(nullptr));
+    ASSERT_FALSE(partitioner->get(nullptr));
 
     A->invalidate_group_version();
-    ASSERT_TRUE(partitioner->particle_group_partitioner->get(nullptr));
-    ASSERT_FALSE(partitioner->particle_group_partitioner->get(nullptr));
+    ASSERT_TRUE(partitioner->get(nullptr));
+    ASSERT_FALSE(partitioner->get(nullptr));
   }
 
   {
     A->clear();
-    auto partitioner = std::make_shared<ParticleGroupPartition>(
-        A, Sym<INT>("PARTITION"), num_partitions);
-
-    auto sub_groups = partitioner->get();
+    auto sub_groups =
+        particle_group_partition(A, Sym<INT>("PARTITION"), num_partitions);
+    auto selector = std::dynamic_pointer_cast<
+        ParticleSubGroupImplementation::ParticleGroupPartitionSelector>(
+        sub_groups.at(0)->selector);
+    auto partitioner = selector->particle_group_partitioner;
+    partitioner->get(nullptr);
     for (int px = 0; px < num_partitions; px++) {
       ASSERT_TRUE(sub_groups.at(px)->create_if_required());
       ASSERT_FALSE(sub_groups.at(px)->create_if_required());

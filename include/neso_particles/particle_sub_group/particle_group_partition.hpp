@@ -7,6 +7,13 @@
 #include "particle_sub_group_base.hpp"
 #include "sub_group_selector.hpp"
 
+namespace NESO::Particles {
+template <typename PARENT>
+std::vector<ParticleSubGroupSharedPtr>
+particle_group_partition(std::shared_ptr<PARENT> parent, Sym<INT> partition_sym,
+                         const int num_partitions);
+}
+
 namespace NESO::Particles::ParticleSubGroupImplementation {
 
 class ParticleGroupPartitioner;
@@ -22,7 +29,20 @@ class ParticleGroupPartitionSelector
 
   friend class ParticleGroupPartitioner;
 
+  template <typename PARENT>
+  friend std::vector<ParticleSubGroupSharedPtr>
+  NESO::Particles::particle_group_partition(std::shared_ptr<PARENT> parent,
+                                            Sym<INT> partition_sym,
+                                            const int num_partitions);
+
 protected:
+#ifdef NESO_PARTICLES_TEST_COMPILATION
+public:
+#endif
+
+  /// This shared_ptr stops the partitioner going out of scope until all of the
+  /// partition selectors which use it are freed.
+  std::shared_ptr<ParticleGroupPartitioner> particle_group_partitioner;
   std::function<void(Selection *created_selection)> create_handle;
   virtual inline void create(Selection *created_selection) override {
     this->create_handle(created_selection);
@@ -32,12 +52,16 @@ protected:
     return this->sub_group_particle_map;
   }
 
+  inline void set_create_handle(
+      std::function<void(Selection *created_selection)> create_handle) {
+    this->create_handle = create_handle;
+  }
+
 public:
   template <typename PARENT>
-  ParticleGroupPartitionSelector(
-      std::shared_ptr<PARENT> parent, Sym<INT> partition_sym,
-      std::function<void(Selection *created_selection)> create_handle)
-      : SubGroupSelectorBase(parent), create_handle(create_handle) {
+  ParticleGroupPartitionSelector(std::shared_ptr<PARENT> parent,
+                                 Sym<INT> partition_sym)
+      : SubGroupSelectorBase(parent) {
     this->add_sym_dependency(partition_sym);
   }
 };
@@ -51,12 +75,17 @@ public:
 class ParticleGroupPartitioner
     : public ParticleSubGroupImplementation::SubGroupSelectorBase {
 protected:
-  std::vector<std::shared_ptr<ParticleGroupPartitionSelector>>
-      partition_selectors;
-
   std::vector<Selection> partition_selections;
-  std::vector<std::shared_ptr<SubGroupParticleMap>> sub_group_particle_maps;
 
+  /// The selectors used by the sub groups hold a shared pointer to an instance
+  /// of this class, which actually does the partitioning. Hence in this class
+  /// we hold weak pointers to the sub group selectors to avoid a cyclic set of
+  /// shared pointers.
+  std::vector<std::weak_ptr<ParticleGroupPartitionSelector>>
+      partition_selectors;
+  std::vector<std::weak_ptr<SubGroupParticleMap>> sub_group_particle_maps;
+
+  std::shared_ptr<LocalArray<int>> la_still_exists;
   std::shared_ptr<LocalArray<INT *>> la_layer_maps;
   std::shared_ptr<LocalArray<INT *>> la_npart_cell_es;
 
@@ -87,6 +116,15 @@ protected:
     auto sycl_target = this->particle_group->sycl_target;
     const std::size_t cell_count = static_cast<std::size_t>(
         this->particle_group->domain->mesh->get_cell_count());
+
+    // Find once at the begining of this function which of the selectors
+    // actually still exist and have not been deleted.
+    std::vector<int> still_exists(this->num_partitions);
+    for (std::size_t px = 0; px < this->num_partitions; px++) {
+      still_exists[px] =
+          static_cast<int>(!this->sub_group_particle_maps.at(px).expired());
+    }
+    this->la_still_exists->set(still_exists);
 
     // Create overall map.
     auto d_cell_counts = get_resource<BufferDevice<int>,
@@ -126,54 +164,80 @@ protected:
     EventStack es;
 
     for (std::size_t px = 0; px < this->num_partitions; px++) {
-      int *k_cell_counts_int =
-          this->sub_group_particle_maps.at(px)->dh_npart_cell->d_buffer.ptr;
-      INT *k_cell_counts_es =
-          this->sub_group_particle_maps.at(px)->dh_npart_cell_es->d_buffer.ptr;
-      es.push(sycl_target->queue.parallel_for(
-          sycl::range<1>(cell_count), [=](auto idx) {
-            const int cell_count_inner = k_cell_counts[cell_count * px + idx];
-            k_cell_counts_int[idx] = cell_count_inner;
-            k_cell_counts_INT[cell_count * px + idx] =
-                static_cast<INT>(cell_count_inner);
-            k_cell_counts_es[idx] = 0;
-          }));
+      if (still_exists[px]) {
+        int *k_cell_counts_int = this->sub_group_particle_maps.at(px)
+                                     .lock()
+                                     ->dh_npart_cell->d_buffer.ptr;
+        INT *k_cell_counts_es = this->sub_group_particle_maps.at(px)
+                                    .lock()
+                                    ->dh_npart_cell_es->d_buffer.ptr;
+        es.push(sycl_target->queue.parallel_for(
+            sycl::range<1>(cell_count), [=](auto idx) {
+              const int cell_count_inner = k_cell_counts[cell_count * px + idx];
+              k_cell_counts_int[idx] = cell_count_inner;
+              k_cell_counts_INT[cell_count * px + idx] =
+                  static_cast<INT>(cell_count_inner);
+              k_cell_counts_es[idx] = 0;
+            }));
+      }
     }
     es.wait();
 
     for (std::size_t px = 0; px < this->num_partitions; px++) {
-      INT *k_cell_counts_es =
-          this->sub_group_particle_maps.at(px)->dh_npart_cell_es->d_buffer.ptr;
-      es.push(joint_exclusive_scan(sycl_target, cell_count,
-                                   k_cell_counts_INT + px * cell_count,
-                                   k_cell_counts_es));
+      if (still_exists[px]) {
+        INT *k_cell_counts_es = this->sub_group_particle_maps.at(px)
+                                    .lock()
+                                    ->dh_npart_cell_es->d_buffer.ptr;
+        es.push(joint_exclusive_scan(sycl_target, cell_count,
+                                     k_cell_counts_INT + px * cell_count,
+                                     k_cell_counts_es));
+      }
     }
     for (std::size_t px = 0; px < this->num_partitions; px++) {
-      this->sub_group_particle_maps.at(px)->dh_npart_cell->device_to_host();
+      if (still_exists[px]) {
+        this->sub_group_particle_maps.at(px)
+            .lock()
+            ->dh_npart_cell->device_to_host();
+      }
     }
     es.wait();
 
     for (std::size_t px = 0; px < this->num_partitions; px++) {
-      this->sub_group_particle_maps.at(px)->dh_npart_cell_es->device_to_host();
+      if (still_exists[px]) {
+        this->sub_group_particle_maps.at(px)
+            .lock()
+            ->dh_npart_cell_es->device_to_host();
+      }
     }
 
     // Create the particle map for each partition.
     for (std::size_t px = 0; px < this->num_partitions; px++) {
-      int *h_cell_counts =
-          this->sub_group_particle_maps.at(px)->dh_npart_cell->h_buffer.ptr;
-      INT *h_cell_counts_es =
-          this->sub_group_particle_maps.at(px)->dh_npart_cell_es->h_buffer.ptr;
-      this->sub_group_particle_maps.at(px)->create(0, cell_count, h_cell_counts,
-                                                   h_cell_counts_es);
+      if (still_exists[px]) {
+        int *h_cell_counts = this->sub_group_particle_maps.at(px)
+                                 .lock()
+                                 ->dh_npart_cell->h_buffer.ptr;
+        INT *h_cell_counts_es = this->sub_group_particle_maps.at(px)
+                                    .lock()
+                                    ->dh_npart_cell_es->h_buffer.ptr;
+        this->sub_group_particle_maps.at(px).lock()->create(
+            0, cell_count, h_cell_counts, h_cell_counts_es);
+      }
     }
 
     // Populate the particle maps from the particles
     std::vector<INT *> h_layer_maps(this->num_partitions);
     std::vector<INT *> h_npart_cell_es(this->num_partitions);
     for (std::size_t px = 0; px < this->num_partitions; px++) {
-      h_layer_maps[px] = this->sub_group_particle_maps.at(px)->d_layer_map->ptr;
-      h_npart_cell_es[px] =
-          this->sub_group_particle_maps.at(px)->dh_npart_cell_es->d_buffer.ptr;
+      if (still_exists[px]) {
+        h_layer_maps[px] =
+            this->sub_group_particle_maps.at(px).lock()->d_layer_map->ptr;
+        h_npart_cell_es[px] = this->sub_group_particle_maps.at(px)
+                                  .lock()
+                                  ->dh_npart_cell_es->d_buffer.ptr;
+      } else {
+        h_layer_maps[px] = nullptr;
+        h_npart_cell_es[px] = nullptr;
+      }
     }
     this->la_layer_maps->set(h_layer_maps);
     this->la_npart_cell_es->set(h_npart_cell_es);
@@ -181,22 +245,26 @@ protected:
 
     // Create the selections from the particle maps.
     for (std::size_t px = 0; px < this->num_partitions; px++) {
-      auto [h_npart_cell_ptr, d_npart_cell_ptr, h_npart_cell_es_ptr,
-            d_npart_cell_es_ptr] =
-          this->sub_group_particle_maps.at(px)->get_helper_ptrs();
 
-      INT npart_total = this->sub_group_particle_maps.at(px)->npart_total;
-      auto d_cell_starts_ptr =
-          this->sub_group_particle_maps.at(px)->d_cell_starts->ptr;
+      if (still_exists[px]) {
+        auto [h_npart_cell_ptr, d_npart_cell_ptr, h_npart_cell_es_ptr,
+              d_npart_cell_es_ptr] =
+            this->sub_group_particle_maps.at(px).lock()->get_helper_ptrs();
 
-      Selection s;
-      s.npart_local = npart_total;
-      s.ncell = cell_count;
-      s.h_npart_cell = h_npart_cell_ptr;
-      s.d_npart_cell = d_npart_cell_ptr;
-      s.d_npart_cell_es = d_npart_cell_es_ptr;
-      s.d_map_cells_to_particles = {d_cell_starts_ptr};
-      this->partition_selections.at(px) = s;
+        INT npart_total =
+            this->sub_group_particle_maps.at(px).lock()->npart_total;
+        auto d_cell_starts_ptr =
+            this->sub_group_particle_maps.at(px).lock()->d_cell_starts->ptr;
+
+        Selection s;
+        s.npart_local = npart_total;
+        s.ncell = cell_count;
+        s.h_npart_cell = h_npart_cell_ptr;
+        s.d_npart_cell = d_npart_cell_ptr;
+        s.d_npart_cell_es = d_npart_cell_es_ptr;
+        s.d_map_cells_to_particles = {d_cell_starts_ptr};
+        this->partition_selections.at(px) = s;
+      }
     }
 
     this->loop_1->wait();
@@ -216,33 +284,25 @@ public:
   std::size_t num_partitions;
 
   /**
-   * Get the child SubGroupSelector for a particular partition.
-   *
-   * @param partition Partition to extract.
-   * @returns SubGroupSelector for partition.
-   */
-  inline SubGroupSelectorBaseSharedPtr
-  get_selector(const std::size_t partition) {
-    NESOASSERT(partition < this->num_partitions, "Bad partition index.");
-    auto ptr = std::dynamic_pointer_cast<SubGroupSelectorBase>(
-        this->partition_selectors.at(partition));
-    NESOASSERT(ptr != nullptr, "Bad pointer cast.");
-    return ptr;
-  }
-
-  /**
    * Create a orchestration instance that creates num_partition partitions.
    *
    * @param parent ParticleGroup or ParticleSubGroup which is the parent.
    * @param partition_sym Sym to use for partitioning the parent.
    * @param num_partitions Number of partitions to consider.
+   * @param partition_selectors_in The selectors which will be used to construct
+   * the ParticleSubGroups.
    */
   template <typename PARENT>
-  ParticleGroupPartitioner(std::shared_ptr<PARENT> parent,
-                           Sym<INT> partition_sym,
-                           const std::size_t num_partitions)
+  ParticleGroupPartitioner(
+      std::shared_ptr<PARENT> parent, Sym<INT> partition_sym,
+      const std::size_t num_partitions,
+      std::vector<std::shared_ptr<ParticleGroupPartitionSelector>>
+          &partition_selectors_in)
       : SubGroupSelectorBase(parent), partition_sym(partition_sym),
         num_partitions(num_partitions) {
+    NESOASSERT(partition_selectors_in.size() == num_partitions,
+               "size missmatch");
+
     this->add_sym_dependency(partition_sym);
 
     this->partition_selectors.reserve(num_partitions);
@@ -254,26 +314,31 @@ public:
     }
 
     for (std::size_t px = 0; px < this->num_partitions; px++) {
+      auto ptr_shared = partition_selectors_in.at(px);
+      std::weak_ptr<ParticleGroupPartitionSelector> ptr_weak = ptr_shared;
+      this->partition_selectors.push_back(ptr_weak);
+
       std::function<void(Selection * created_selection)> create_handle =
           [=](Selection *created_selection) -> void {
         return this->create_indexed(px, created_selection);
       };
-
-      auto ptr = std::make_shared<ParticleGroupPartitionSelector>(
-          parent, this->partition_sym, create_handle);
-      this->partition_selectors.push_back(ptr);
+      ptr_shared->set_create_handle(create_handle);
 
       this->sub_group_particle_maps.push_back(
-          ptr->get_sub_group_particle_map());
+          ptr_shared->get_sub_group_particle_map());
     }
 
     const auto k_cell_count = static_cast<std::size_t>(
         this->particle_group->domain->mesh->get_cell_count());
     const INT k_num_partitions = static_cast<INT>(num_partitions);
 
+    auto sycl_target = this->particle_group->sycl_target;
+    this->la_still_exists =
+        std::make_shared<LocalArray<int>>(sycl_target, num_partitions);
+
     this->loop_0 = particle_loop(
         "ParticleGroupPartitionCreate0", parent,
-        [=](auto INDEX, auto MAP_PTRS, auto PARTITION_SYM) {
+        [=](auto INDEX, auto MAP_PTRS, auto PARTITION_SYM, auto STILL_EXISTS) {
           int *k_particle_layers = MAP_PTRS.at(0);
           int *k_cell_counts = MAP_PTRS.at(1);
           const INT partition = PARTITION_SYM.at(0);
@@ -281,14 +346,17 @@ public:
               static_cast<std::size_t>(partition) * k_cell_count +
               static_cast<std::size_t>(INDEX.cell);
           if ((0 <= partition) && (partition < k_num_partitions)) {
-            const int layer = atomic_fetch_add(k_cell_counts + offset, 1);
-            k_particle_layers[INDEX.get_loop_linear_index()] = layer;
+            // If the sub group for this partition has been deleted then there
+            // is no point doing this atomic.
+            if (STILL_EXISTS.at(partition)) {
+              const int layer = atomic_fetch_add(k_cell_counts + offset, 1);
+              k_particle_layers[INDEX.get_loop_linear_index()] = layer;
+            }
           }
         },
         Access::read(ParticleLoopIndex{}), Access::read(this->map_ptrs),
-        Access::read(this->partition_sym));
+        Access::read(this->partition_sym), Access::read(this->la_still_exists));
 
-    auto sycl_target = this->particle_group->sycl_target;
     this->la_layer_maps =
         std::make_shared<LocalArray<INT *>>(sycl_target, num_partitions);
     this->la_npart_cell_es =
@@ -304,8 +372,13 @@ public:
           if ((0 <= partition) && (partition < k_num_partitions)) {
             INT *layer_map = LAYER_MAPS.at(partition);
             INT *npart_cell_es = NPART_CELL_ES.at(partition);
-            INT offset = npart_cell_es[INDEX.cell];
-            layer_map[offset + layer] = INDEX.layer;
+            // If the layer_map pointer is null then the ParticleSubGroup for
+            // this partition has been deleted, e.g. by going out of scope, and
+            // hence we do not try to build the map for this partition.
+            if (layer_map != nullptr) {
+              INT offset = npart_cell_es[INDEX.cell];
+              layer_map[offset + layer] = INDEX.layer;
+            }
           }
         },
         Access::read(ParticleLoopIndex{}), Access::read(this->map_ptrs),
@@ -319,58 +392,51 @@ public:
 namespace NESO::Particles {
 
 /**
- * This is the class which defines the interface that end users should use to
- * partition ParticleGroups and ParticleSubGroups.
+ * Partition a ParticleGroup or ParticleSubGroup into N paritions based on a
+ * value held on each particle.
+ *
+ * @param parent Parent ParticleGroup or ParticleSubGroup to partition.
+ * @param partition_sym Particle property to use for partitioning the parent.
+ * The first component will be inspected.
+ * @param num_partitions Number of partitions to consider.
+ * @returns Vector of ParticleSubGroups partitioned using the requested Sym.
  */
-class ParticleGroupPartition {
-protected:
-#ifdef NESO_PARTICLES_TEST_COMPILATION
-public:
-#endif
-  std::unique_ptr<ParticleSubGroupImplementation::ParticleGroupPartitioner>
-      particle_group_partitioner;
-
-public:
-  /// Disable (implicit) copies.
-  ParticleGroupPartition(const ParticleGroupPartition &st) = delete;
-  /// Disable (implicit) copies.
-  ParticleGroupPartition &operator=(ParticleGroupPartition const &a) = delete;
-
-  /**
-   * Create a partitioner from a parent ParticleGroup or ParticleSubGroup.
-   *
-   * @param parent Parent ParticleGroup or ParticleSubGroup to partition.
-   * @param partition_sym Particle property to use for partitioning the parent.
-   * The first component will be inspected.
-   * @param num_partitions Number of partitions to consider.
-   */
-  template <typename PARENT>
-  ParticleGroupPartition(std::shared_ptr<PARENT> parent, Sym<INT> partition_sym,
+template <typename PARENT>
+std::vector<ParticleSubGroupSharedPtr>
+particle_group_partition(std::shared_ptr<PARENT> parent, Sym<INT> partition_sym,
                          const int num_partitions) {
-    NESOASSERT(num_partitions >= 0, "Bad number of partitions");
-    this->particle_group_partitioner = std::make_unique<
-        ParticleSubGroupImplementation::ParticleGroupPartitioner>(
-        parent, partition_sym, static_cast<std::size_t>(num_partitions));
+
+  std::vector<std::shared_ptr<
+      ParticleSubGroupImplementation::ParticleGroupPartitionSelector>>
+      partition_selectors(num_partitions);
+
+  for (int px = 0; px < num_partitions; px++) {
+    auto ptr = std::make_shared<
+        ParticleSubGroupImplementation::ParticleGroupPartitionSelector>(
+        parent, partition_sym);
+    partition_selectors[px] = ptr;
   }
 
-  /**
-   * @returns A vector of size num_partitions containing the partitions of the
-   * parent.
-   */
-  inline std::vector<ParticleSubGroupSharedPtr> get() {
+  auto particle_group_partitioner = std::make_shared<
+      ParticleSubGroupImplementation::ParticleGroupPartitioner>(
+      parent, partition_sym, static_cast<std::size_t>(num_partitions),
+      partition_selectors);
 
-    const std::size_t num_partitions =
-        this->particle_group_partitioner->num_partitions;
-    std::vector<ParticleSubGroupSharedPtr> output(num_partitions);
-
-    for (std::size_t px = 0; px < num_partitions; px++) {
-      output[px] = std::make_shared<ParticleSubGroup>(
-          this->particle_group_partitioner->get_selector(px));
-    }
-
-    return output;
+  // The selectors used to create the ParticleSubGroups each hold a shared_ptr
+  // to the partitioner object. The partitioner holds weak_ptrs to the data
+  // structures inside the selectors.
+  for (int px = 0; px < num_partitions; px++) {
+    partition_selectors[px]->particle_group_partitioner =
+        particle_group_partitioner;
   }
-};
+
+  std::vector<ParticleSubGroupSharedPtr> sub_groups(num_partitions);
+  for (int px = 0; px < num_partitions; px++) {
+    sub_groups[px] =
+        std::make_shared<ParticleSubGroup>(partition_selectors[px]);
+  }
+  return sub_groups;
+}
 
 } // namespace NESO::Particles
 
