@@ -331,15 +331,17 @@ TEST(ParticleGroup, partition_particle_group_deleting) {
     if (px < num_partitions - 1) {
       for (int rx = 0; rx <= px; rx++) {
         ASSERT_EQ(h_still_exists.at(rx), 0);
-        for (int px = 0; px < num_partitions; px++) {
-          ASSERT_TRUE(
-              particle_group_partitioner->partition_selectors.at(rx).expired());
-          ASSERT_TRUE(particle_group_partitioner->sub_group_particle_maps.at(rx)
-                          .expired());
-        }
+        ASSERT_TRUE(
+            particle_group_partitioner->partition_selectors.at(rx).expired());
+        ASSERT_TRUE(particle_group_partitioner->sub_group_particle_maps.at(rx)
+                        .expired());
       }
       for (int rx = px + 1; rx < num_partitions; rx++) {
         ASSERT_EQ(h_still_exists.at(rx), 1);
+        ASSERT_FALSE(
+            particle_group_partitioner->partition_selectors.at(rx).expired());
+        ASSERT_FALSE(particle_group_partitioner->sub_group_particle_maps.at(rx)
+                         .expired());
       }
     }
   }
