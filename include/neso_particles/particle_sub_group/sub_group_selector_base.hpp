@@ -137,7 +137,7 @@ protected:
     if (this->particle_group->debug_sub_group_create) {
 
       std::string indent(this->particle_group->debug_sub_group_indent, ' ');
-      std::cout << indent << "Recreating ParticleSubGroup: " << (void *)this
+      std::cout << indent << "Recreating Selector: " << (void *)this
                 << " reason_dats: " << bool_dats
                 << " reason_group: " << bool_group << std::endl;
     }
