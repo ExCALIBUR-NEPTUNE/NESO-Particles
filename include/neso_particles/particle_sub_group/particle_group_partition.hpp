@@ -425,7 +425,14 @@ namespace NESO::Particles {
  *    );
  *  }
  *
- *  and will update all the ParticleSubGroups at the same time.
+ *  and will update all the ParticleSubGroups at the same time. The sub groups
+ * that this function returns are linked for their lifetime. They are linked in
+ * the sense that when the internal data structures of one sub group are updated
+ * then all of the internal data structures are updated.
+ *
+ * This linking means that users may not asynchronously submit a particle loop
+ * for execution with ParticleLoop::submit with one of the sub groups as the
+ * iteration set whilst triggering an update of another of the sub groups.
  *
  * @param parent Parent ParticleGroup or ParticleSubGroup to partition.
  * @param partition_sym Particle property to use for partitioning the parent.
