@@ -282,6 +282,59 @@ particle_loop_common_2d(const int npart_cell = 1093, const int nx = 16,
   return {A, sycl_target, cell_count};
 }
 
+inline bool selection_is_self_consistent(
+    ParticleSubGroupImplementation::Selection selection, const int cell_count,
+    const int npart_local, SYCLTargetSharedPtr sycl_target,
+    std::set<std::tuple<int, int>> &correct_pairs) {
+  bool success = true;
+  auto check = [&](const bool cond) -> void {
+    NESOASSERT(cond, "uncomment to get throw in correct place");
+    success = success && cond;
+  };
+
+  check(correct_pairs.size() == static_cast<std::size_t>(npart_local));
+  check(npart_local == selection.npart_local);
+  check(cell_count == selection.ncell);
+
+  std::vector<int> h_npart_cell(cell_count);
+  sycl_target->queue
+      .memcpy(h_npart_cell.data(), selection.d_npart_cell,
+              cell_count * sizeof(int))
+      .wait_and_throw();
+  std::vector<INT> h_npart_cell_es(cell_count);
+  sycl_target->queue
+      .memcpy(h_npart_cell_es.data(), selection.d_npart_cell_es,
+              cell_count * sizeof(INT))
+      .wait_and_throw();
+
+  INT total = 0;
+  for (int cx = 0; cx < cell_count; cx++) {
+    INT v = static_cast<INT>(selection.h_npart_cell[cx]);
+    check(h_npart_cell.at(cx) == selection.h_npart_cell[cx]);
+    check(h_npart_cell_es.at(cx) == total);
+    total += v;
+  }
+  check(total == static_cast<INT>(npart_local));
+
+  auto host_to_test_map =
+      get_host_map_cells_to_particles(sycl_target, selection);
+
+  std::set<std::tuple<int, int>> to_test_pairs;
+  for (int cx = 0; cx < cell_count; cx++) {
+    auto m = host_to_test_map.at(cx);
+    check(static_cast<int>(m.size()) == h_npart_cell.at(cx));
+    for (int rx : m) {
+      std::tuple<int, int> key = {cx, rx};
+      check(to_test_pairs.count(key) == 0);
+      to_test_pairs.insert(key);
+    }
+  }
+
+  check(to_test_pairs == correct_pairs);
+
+  return success;
+}
+
 } // namespace NESO::Particles
 
 #endif

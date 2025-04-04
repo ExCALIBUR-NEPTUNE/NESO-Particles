@@ -26,6 +26,10 @@ class ParticleSubGroup {
   friend class ParticleSubGroupImplementation::SubGroupSelectorBase;
 
 protected:
+#ifdef NESO_PARTICLES_TEST_COMPILATION
+public:
+#endif
+
   bool is_static;
   ParticleGroupSharedPtr particle_group;
   ParticleSubGroupImplementation::SubGroupSelectorBaseSharedPtr selector;
@@ -62,56 +66,13 @@ protected:
 
   inline void get_cells_layers(INT *d_cells, INT *d_layers);
 
-  inline void printing_create_outer_start() {
-    if (this->particle_group->debug_sub_group_create) {
-      if (!this->particle_group->debug_sub_group_indent) {
-        std::cout << std::string(80, '-') << std::endl;
-        std::cout << "Testing recreation criterion: " << (void *)this
-                  << std::endl;
-      }
-      this->particle_group->debug_sub_group_indent += 4;
-    }
-  }
-
-  inline void printing_create_outer_end() {
-    if (this->particle_group->debug_sub_group_create) {
-      this->particle_group->debug_sub_group_indent -= 4;
-    }
-  }
-
-  inline void printing_create_inner_start(const bool bool_dats,
-                                          const bool bool_group) {
-    if (this->particle_group->debug_sub_group_create) {
-
-      std::string indent(this->particle_group->debug_sub_group_indent, ' ');
-      std::cout << indent << "Recreating ParticleSubGroup: " << (void *)this
-                << " reason_dats: " << bool_dats
-                << " reason_group: " << bool_group << std::endl;
-    }
-  }
-
-  inline void printing_create_inner_end() {
-    if (this->particle_group->debug_sub_group_create) {
-      if (!this->particle_group->debug_sub_group_indent) {
-        std::cout << std::string(80, '-') << std::endl;
-      }
-    }
-  }
-
-  inline void create_inner() {
+  inline bool create_inner() {
     NESOASSERT(!this->is_whole_particle_group,
                "Explicitly creating the ParticleSubGroup when the sub-group is "
                "the entire ParticleGroup should never be required.");
-    this->selection = this->selector->get();
+    const bool was_updated = this->selector->get(&this->selection);
     this->npart_local = this->selection.npart_local;
-  }
-
-  inline void create_and_update_cache() {
-    create_inner();
-    this->particle_group->check_validation(
-        this->selector->particle_dat_versions);
-    this->particle_group->check_validation(
-        this->selector->particle_group_version);
+    return was_updated;
   }
 
 public:
@@ -211,7 +172,7 @@ public:
   /**
    * Explicitly re-create the sub group.
    */
-  inline void create() { this->create_and_update_cache(); }
+  inline void create() { this->create_inner(); }
 
   /**
    * Test if a ParticleSubGroup has been invalidated by an operation which
@@ -248,25 +209,9 @@ public:
 
     if (this->is_whole_particle_group || this->is_static) {
       return false;
+    } else {
+      return this->create_inner();
     }
-
-    this->printing_create_outer_start();
-
-    const bool bool_dats = this->particle_group->check_validation(
-        this->selector->particle_dat_versions);
-    const bool bool_group = this->particle_group->check_validation(
-        this->selector->particle_group_version);
-
-    if (bool_dats || bool_group) {
-      this->printing_create_inner_start(bool_dats, bool_group);
-      this->create_inner();
-      this->printing_create_inner_end();
-      this->printing_create_outer_end();
-      return true;
-    }
-
-    this->printing_create_outer_end();
-    return false;
   }
 
   /**

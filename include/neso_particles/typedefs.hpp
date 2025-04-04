@@ -345,8 +345,12 @@ constexpr
  * @param threshold
  * @returns True if debug level greater than threshold.
  */
-inline std::size_t enabled(const std::size_t threshold) {
-  return get_level() > threshold;
+inline bool enabled([[maybe_unused]] const std::size_t threshold) {
+#ifdef NDEBUG
+  return false;
+#else
+  return get_env_size_t("NESO_PARTICLES_DEBUG_LEVEL", 0) > threshold;
+#endif
 }
 
 } // namespace Debug

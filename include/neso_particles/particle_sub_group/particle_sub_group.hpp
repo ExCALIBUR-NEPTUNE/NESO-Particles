@@ -6,6 +6,7 @@
 #include <type_traits>
 
 #include "cell_sub_group_selector.hpp"
+#include "particle_group_partition.hpp"
 #include "particle_loop_sub_group.hpp"
 #include "particle_sub_group_base.hpp"
 #include "particle_sub_group_base_impl.hpp"

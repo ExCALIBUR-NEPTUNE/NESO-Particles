@@ -6,9 +6,10 @@ Dependencies
 ============
 
 * CMake 3.24+.
-* SYCL 2020 with USM support: Tested with hipsycl 0.9.4 or Intel DPCPP 2024.1.0.
-* MPI 3.0: Tested with MPICH 4.0 or IntelMPI 2021.6. See known issues for Ubuntu 22.03 mpich.
-* HDF5 (parallel): (optional see CMake variable ``NESO_PARTICLES_ENABLE_HDF5``) If particle trajectories are required - will execute without.
+* SYCL 2020 with USM support: e.g. AdaptiveCpp 24.10.0 or Intel DPCPP 2024.2.1.
+* MPI 3.0: e.g. MPICH 4.0 or IntelMPI 2021.6. See known issues for Ubuntu 22.03 mpich.
+* HDF5 (parallel): (optional) See CMake variable ``NESO_PARTICLES_ENABLE_HDF5`` if particle trajectories are required - will execute without.
+* PETSc: (optional) See CMake variable ``NESO_PARTICLES_ENABLE_PETSC`` if PETSc DMPlex support is required.
 
 Using with CMake 
 ================
@@ -135,3 +136,9 @@ For MPI execution setting ``ACPP_APPDB_DIR`` to a directory on the parallel stor
 Please visit the AdaptiveCpp documentation for more information and latest guidance.
 The tests may take a long time to run with the default AdaptiveCpp adaptivity settings.
 Setting ``ACPP_ADAPTIVITY_LEVEL=0`` will speed up the test execution (note that the AdaptiveCpp authors do not recommend changing this value).
+
+Intel SYCL
+----------
+
+With the Intel SYCL implementation, currently branded as oneAPI, users may observe illegal instructions. Typically these are a ``vgatherdpd`` like instruction.
+Currently the known workaround is to set the environment variable ``CL_CONFIG_CPU_TARGET_ARCH=corei7-avx``.
