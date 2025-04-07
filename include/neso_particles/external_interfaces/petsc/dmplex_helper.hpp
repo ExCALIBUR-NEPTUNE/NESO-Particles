@@ -391,7 +391,10 @@ public:
     return cs;
   }
 
-  ~DMPlexHelper() { PETSCCHK(ISDestroy(&this->global_point_numbers)); }
+  /**
+   * Free the helper. Must be called collectively on the communicator.
+   */
+  inline void free() { PETSCCHK(ISDestroy(&this->global_point_numbers)); }
 
   /**
    * Construct helper class from DMPlex. Collective on the communicator.

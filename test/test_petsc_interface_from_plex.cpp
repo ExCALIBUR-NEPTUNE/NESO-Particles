@@ -23,10 +23,10 @@ TEST(PETSc, dmplex_from_existing_mesh_quads) {
   // matter.
   for (PetscInt cx = 0; cx < num_cells_owned; cx++) {
     // These are global indices not local indices.
-    PetscInt vertex_sw = cx + mpi_rank * mpi_size;
-    PetscInt vertex_se = cx + 1 + mpi_rank * mpi_size;
-    PetscInt vertex_ne = cx + 1 + (mpi_rank + 1) * mpi_size;
-    PetscInt vertex_nw = cx + (mpi_rank + 1) * mpi_size;
+    PetscInt vertex_sw = cx + mpi_rank * (mpi_size + 1);
+    PetscInt vertex_se = vertex_sw + 1;
+    PetscInt vertex_ne = vertex_se + mpi_size + 1;
+    PetscInt vertex_nw = vertex_ne - 1;
     cells.push_back(vertex_sw);
     cells.push_back(vertex_se);
     cells.push_back(vertex_ne);
@@ -59,8 +59,8 @@ TEST(PETSc, dmplex_from_existing_mesh_quads) {
   if (mpi_rank == mpi_size - 1) {
     for (int px = 0; px < mpi_size + 1; px++) {
       // our cell extent is 1.0
-      vertex_coords.at(mpi_size + 1 + px * 2 + 0) = px;
-      vertex_coords.at(mpi_size + 1 + px * 2 + 1) = mpi_rank + 1;
+      vertex_coords.at((mpi_size + 1 + px) * 2 + 0) = px;
+      vertex_coords.at((mpi_size + 1 + px) * 2 + 1) = mpi_rank + 1;
     }
   }
 
@@ -71,7 +71,20 @@ TEST(PETSc, dmplex_from_existing_mesh_quads) {
       PETSC_COMM_WORLD, 2, num_cells_owned, num_vertices_owned, PETSC_DECIDE, 4,
       PETSC_TRUE, cells.data(), 2, vertex_coords.data(), NULL, NULL, &dm));
 
-  // Below here is testing of the DMPlex
+  /*
+   *
+   *
+   *
+   *
+   *
+   * Below here is testing of the DMPlex
+   *
+   *
+   *
+   *
+   *
+   *
+   */
 
   // Create the map from local point numbering to global point numbering.
   IS global_point_numbers;
@@ -81,27 +94,54 @@ TEST(PETSc, dmplex_from_existing_mesh_quads) {
   // DMPlex
   PetscInt cell_local_start, cell_local_end;
   PETSCCHK(DMPlexGetDepthStratum(dm, 2, &cell_local_start, &cell_local_end));
-
   // Map the local cell indices to global indices
   PetscInt point_start, point_end;
   PETSCCHK(DMPlexGetChart(dm, &point_start, &point_end));
   const PetscInt *ptr;
   PETSCCHK(ISGetIndices(global_point_numbers, &ptr));
-
-  std::vector<PetscInt> cell_indices;
+  PetscInt local_index = 0;
+  PetscInt correct_cell_index_start = mpi_rank * mpi_size;
   for (PetscInt point = cell_local_start; point < cell_local_end; point++) {
-    cell_indices.push_back(ptr[point - point_start]);
+    PetscInt cell_index = ptr[point - point_start];
+    ASSERT_EQ(correct_cell_index_start + local_index, cell_index);
+    local_index++;
   }
   PETSCCHK(ISRestoreIndices(global_point_numbers, &ptr));
 
-  for (auto px : cell_indices) {
-    nprint("cell index:", px);
+  // Check the vertices of the local cells are the vertices we expect.
+  // This also checks that the ordering and parallel decomposition is what we
+  // expect
+  PetscInterface::DMPlexHelper dmh(PETSC_COMM_WORLD, dm);
+  std::vector<std::vector<REAL>> vertices;
+  std::set<std::vector<REAL>> vertices_to_test;
+  std::set<std::vector<REAL>> vertices_correct;
+
+  for (int cx = 0; cx < mpi_size; cx++) {
+    dmh.get_cell_vertices(cx, vertices);
+    vertices_to_test.clear();
+    vertices_correct.clear();
+
+    for (auto vx : vertices) {
+      vertices_to_test.insert(vx);
+    }
+
+    vertices_correct.insert(
+        {static_cast<REAL>(cx), static_cast<REAL>(mpi_rank)});
+    vertices_correct.insert(
+        {static_cast<REAL>(cx + 1), static_cast<REAL>(mpi_rank)});
+    vertices_correct.insert(
+        {static_cast<REAL>(cx), static_cast<REAL>(mpi_rank + 1)});
+    vertices_correct.insert(
+        {static_cast<REAL>(cx + 1), static_cast<REAL>(mpi_rank + 1)});
+    ASSERT_EQ(vertices_correct, vertices_to_test);
   }
 
-  sycl_target->free();
+  dmh.free();
+
   PETSCCHK(ISDestroy(&global_point_numbers));
   PETSCCHK(DMDestroy(&dm));
   PETSCCHK(PetscFinalize());
+  sycl_target->free();
 }
 
 #endif
