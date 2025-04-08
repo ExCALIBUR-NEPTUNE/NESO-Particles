@@ -252,8 +252,12 @@ public:
   virtual inline void free() override {
     this->mesh_hierarchy->free();
     this->allocated = false;
-    this->dmh->free();
-    this->dmh_halo->free();
+    if (this->dmh) {
+      this->dmh->free();
+    }
+    if (this->dmh_halo) {
+      this->dmh_halo->free();
+    }
   }
 
   virtual inline void get_point_in_subdomain(double *point) override {
