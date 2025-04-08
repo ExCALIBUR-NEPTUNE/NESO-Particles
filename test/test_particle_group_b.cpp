@@ -479,5 +479,19 @@ TEST(ParticleGroup, print) {
     ASSERT_TRUE(vb.num_bytes_written() < size_buffer);
   }
 
+  auto AA = particle_sub_group(A);
+  {
+    vecbuf vb;
+    std::ostream ostream{&vb};
+    AA->print(ostream, Sym<REAL>("P"), Sym<INT>("CELL_ID"));
+  }
+
+  if (sycl_target->comm_pair.rank_parent == 0) {
+    std::ofstream fout("particle_group_printing.txt");
+    aa->print(fout, Sym<REAL>("P"), Sym<INT>("CELL_ID"));
+    AA->print(fout, Sym<REAL>("P"), Sym<INT>("CELL_ID"));
+    A->print(fout, Sym<REAL>("P"), Sym<INT>("CELL_ID"));
+  }
+
   sycl_target->free();
 }

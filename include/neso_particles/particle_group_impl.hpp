@@ -371,7 +371,7 @@ inline void ParticleGroup::local_move() {
   this->invalidate_group_version();
 }
 
-inline void ParticleGroup::print(std::ostream &os, SymStore print_spec) {
+inline void ParticleGroup::print_inner(std::ostream &os, SymStore print_spec) {
 
   os << "==============================================================="
         "================="
@@ -435,19 +435,29 @@ inline void ParticleGroup::print(std::ostream &os, SymStore print_spec) {
      << std::endl;
 }
 
+inline void ParticleGroup::print(std::ostream &os, SymStore print_spec) {
+  this->print_inner(os, print_spec);
+}
+
 inline void ParticleGroup::print(SymStore print_spec) {
-  this->print(std::cout, print_spec);
+  this->print_inner(std::cout, print_spec);
 }
 
 template <typename... T>
 inline void ParticleGroup::print(std::ostream &os, T &&...args) {
   SymStore print_spec(std::forward<T>(args)...);
-  this->print(os, print_spec);
+  this->print_inner(os, print_spec);
+}
+
+template <typename... T>
+inline void ParticleGroup::print(std::ofstream &os, T &&...args) {
+  SymStore print_spec(std::forward<T>(args)...);
+  this->print_inner(os, print_spec);
 }
 
 template <typename... T> inline void ParticleGroup::print(T &&...args) {
   SymStore print_spec(std::forward<T>(args)...);
-  this->print(print_spec);
+  this->print_inner(std::cout, print_spec);
 }
 
 inline void ParticleGroup::print_particle(std::ostream &os, const int cell,

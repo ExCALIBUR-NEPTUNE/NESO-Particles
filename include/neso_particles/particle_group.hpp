@@ -1001,6 +1001,19 @@ public:
     this->invalidate_group_version();
   }
 
+protected:
+  inline void print_inner(std::ostream &os, SymStore print_spec);
+
+public:
+  /**
+   *  Print particle data for all particles for the specified ParticleDats.
+   *  Empty cells are not printed.
+   *
+   *  @param os Output stream to print to.
+   *  @param print_spec SymStore of data to print.
+   */
+  inline void print(std::ostream &os, SymStore print_spec);
+
   /**
    *  Print particle data for all particles for the specified ParticleDats.
    *  Empty cells are not printed.
@@ -1016,19 +1029,21 @@ public:
    *  Print particle data for all particles for the specified ParticleDats.
    *  Empty cells are not printed.
    *
+   *
+   *  @param os Output stream to print to.
    *  @param args Sym<REAL> or Sym<INT> instances that indicate which particle
    *  data to print.
    */
-  template <typename... T> inline void print(T &&...args);
+  template <typename... T> inline void print(std::ofstream &os, T &&...args);
 
   /**
    *  Print particle data for all particles for the specified ParticleDats.
    *  Empty cells are not printed.
    *
-   *  @param os Output stream to print to.
-   *  @param print_spec SymStore of data to print.
+   *  @param args Sym<REAL> or Sym<INT> instances that indicate which particle
+   *  data to print.
    */
-  inline void print(std::ostream &os, SymStore print_spec);
+  template <typename... T> inline void print(T &&...args);
 
   /**
    *  Print particle data for all particles for the specified ParticleDats.

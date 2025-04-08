@@ -350,6 +350,7 @@ public:
     return this->selection;
   }
 
+protected:
   /**
    *  Print particle data for all particles for the specified ParticleDats.
    *
@@ -357,9 +358,10 @@ public:
    *  @param args Sym<REAL> or Sym<INT> instances that indicate which particle
    *  data to print.
    */
-  template <typename... T> inline void print(std::ostream &os, T &&...args) {
+  template <typename... T>
+  inline void print_inner(std::ostream &os, T &&...args) {
     if (this->is_whole_particle_group) {
-      return this->particle_group->print(std::forward<T>(args)...);
+      return this->particle_group->print(os, std::forward<T>(args)...);
     } else {
       this->create_if_required();
       SymStore print_spec(std::forward<T>(args)...);
@@ -432,6 +434,7 @@ public:
     }
   }
 
+public:
   /**
    *  Print particle data for all particles for the specified ParticleDats.
    *
@@ -439,7 +442,29 @@ public:
    *  data to print.
    */
   template <typename... T> inline void print(T &&...args) {
-    this->print(std::cout, args...);
+    this->print_inner(std::cout, args...);
+  }
+
+  /**
+   *  Print particle data for all particles for the specified ParticleDats.
+   *
+   *  @param os Output stream to print to.
+   *  @param args Sym<REAL> or Sym<INT> instances that indicate which particle
+   *  data to print.
+   */
+  template <typename... T> inline void print(std::ostream &os, T &&...args) {
+    this->print_inner(os, args...);
+  }
+
+  /**
+   *  Print particle data for all particles for the specified ParticleDats.
+   *
+   *  @param os Output stream to print to.
+   *  @param args Sym<REAL> or Sym<INT> instances that indicate which particle
+   *  data to print.
+   */
+  template <typename... T> inline void print(std::ofstream &os, T &&...args) {
+    this->print_inner(os, args...);
   }
 };
 
