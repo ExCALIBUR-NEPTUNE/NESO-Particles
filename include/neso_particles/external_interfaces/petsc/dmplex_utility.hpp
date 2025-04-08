@@ -355,6 +355,27 @@ inline std::array<int, 3> sample_points_for_distribution(
   return {npart_min, npart_max, npart_total};
 }
 
+/**
+ * TODO
+ */
+inline void label_dmplex_edges(DM dm, std::string label_name,
+                               std::vector<PetscInt> &vertex_starts,
+                               std::vector<PetscInt> &vertex_ends,
+                               std::vector<PetscInt> &edge_labels) {
+  MPI_Comm comm;
+  PETSCCHK(PetscObjectGetComm((PetscObject)(dm), &comm));
+
+  NESOASSERT(vertex_starts.size() == vertex_ends.size(),
+             "vertex_starts size != vertex_ends size");
+  NESOASSERT(vertex_starts.size() == edge_labels.size(),
+             "vertex_starts size != edge_labels size");
+
+  PetscBool has_label;
+  PETSCCHK(DMHasLabel(dm, label_name.c_str(), &has_label));
+  if (!has_label) {
+  }
+}
+
 } // namespace NESO::Particles::PetscInterface
 
 #endif
