@@ -12,6 +12,8 @@
 
 namespace NESO::Particles::PetscInterface {
 
+constexpr static char face_sets_label[] = "Face Sets";
+
 /**
  * If there are more than 1 MPI ranks distribute the mesh.
  *

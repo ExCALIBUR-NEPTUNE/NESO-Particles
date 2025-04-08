@@ -71,6 +71,29 @@ TEST(PETSc, dmplex_from_existing_mesh_quads) {
       PETSC_COMM_WORLD, 2, num_cells_owned, num_vertices_owned, PETSC_DECIDE, 4,
       PETSC_TRUE, cells.data(), 2, vertex_coords.data(), NULL, NULL, &dm));
 
+  // Label all of the boundary faces with 100 in the "Face Sets" label by using
+  // the helper function label_all_dmplex_boundaries.
+  PetscInterface::label_all_dmplex_boundaries(
+      dm, PetscInterface::face_sets_label, 100);
+
+  // Label subsections of the boundary by specifing pairs of vertices and using
+  // the label_dmplex_edges helper function.
+  std::vector<PetscInt> vertex_starts, vertex_ends, edge_labels;
+
+  if (mpi_rank == mpi_size - 1) {
+    // Top edge
+    for (int px = 0; px < mpi_size; px++) {
+      const PetscInt tx = (mpi_size + 1) * mpi_size + px;
+      vertex_starts.push_back(tx);
+      vertex_ends.push_back(tx + 1);
+      // Label the top edge with label 200
+      edge_labels.push_back(200);
+    }
+  }
+
+  PetscInterface::label_dmplex_edges(dm, PetscInterface::face_sets_label,
+                                     vertex_starts, vertex_ends, edge_labels);
+
   /*
    *
    *
@@ -139,6 +162,22 @@ TEST(PETSc, dmplex_from_existing_mesh_quads) {
   dmh.free();
 
   PETSCCHK(ISDestroy(&global_point_numbers));
+
+  /*
+   *
+   *
+   *
+   *
+   *
+   * Below here we setup basic advection on the dmplex
+   *
+   *
+   *
+   *
+   *
+   *
+   */
+
   PETSCCHK(DMDestroy(&dm));
   PETSCCHK(PetscFinalize());
   sycl_target->free();
