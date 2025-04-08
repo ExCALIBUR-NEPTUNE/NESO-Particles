@@ -355,6 +355,195 @@ inline std::array<int, 3> sample_points_for_distribution(
   return {npart_min, npart_max, npart_total};
 }
 
+/**
+ * Ensure that a label with the given name exists on the DM. Creates the label
+ * if it does not exist. This function must be called collectively on the
+ * communicator for the DM.
+ *
+ * @param dm DM to ensure label exists on.
+ * @param label_name Name of label to test for.
+ */
+inline void ensure_dm_label_exists(DM dm, std::string label_name) {
+  PetscBool has_label;
+  PETSCCHK(DMHasLabel(dm, label_name.c_str(), &has_label));
+  if (!has_label) {
+    PETSCCHK(DMCreateLabel(dm, label_name.c_str()));
+  }
+}
+
+/**
+ * Label all boundary elements with a given value. This function must be
+ * called collectively on the communicator for the DM.
+ *
+ * @param dm DM to label boundary edges/faces.
+ * @param label_name Label name to assign value to.
+ * @param value Value to label.
+ */
+inline void label_all_dmplex_boundaries(DM dm, std::string label_name,
+                                        PetscInt value) {
+  ensure_dm_label_exists(dm, label_name);
+  DMLabel label;
+  PETSCCHK(DMGetLabel(dm, label_name.c_str(), &label));
+  PETSCCHK(DMPlexMarkBoundaryFaces(dm, value, label));
+  PETSCCHK(DMPlexLabelComplete(dm, label));
+}
+
+/**
+ * Remove the negation from point indices which DMPlex uses to denote global
+ * vs local indices.
+ *
+ * @param c Input index.
+ * @returns c if c > -1 else ((c * (-1)) - 1)
+ */
+inline PetscInt signed_global_id_to_global_id(const PetscInt c) {
+  return (c > -1) ? c : ((c * (-1)) - 1);
+}
+
+/**
+ * Label all edges between the given pairs of vertices with a value by passing
+ * pairs of global vertex indices and a value to set. This function must be
+ * called collectively on the communicator for the DM.
+ *
+ * @param dm The DMPlex to label the edges of.
+ * @param label_name The name of the label to set the value of.
+ * @param vertex_starts The first vertices in the pairs of vertices that define
+ * the edges to label.
+ * @param vertex_ends The second vertices for the pairs of vertices that define
+ * the edges to label.
+ * @param edge_labels The values to set for the given edges.
+ */
+inline void label_dmplex_edges(DM dm, std::string label_name,
+                               std::vector<PetscInt> &vertex_starts,
+                               std::vector<PetscInt> &vertex_ends,
+                               std::vector<PetscInt> &edge_labels) {
+  MPI_Comm comm;
+  PETSCCHK(PetscObjectGetComm((PetscObject)(dm), &comm));
+
+  NESOASSERT(vertex_starts.size() == vertex_ends.size(),
+             "vertex_starts size != vertex_ends size");
+  NESOASSERT(vertex_starts.size() == edge_labels.size(),
+             "vertex_starts size != edge_labels size");
+  ensure_dm_label_exists(dm, label_name);
+
+  // Gather all the edges on all ranks as we don't know which rank owns the
+  // edge.
+  const int nedge_local = vertex_starts.size();
+  int nedge_ex = 0;
+  MPICHK(MPI_Exscan(&nedge_local, &nedge_ex, 1, MPI_INT, MPI_SUM, comm));
+
+  int nedge_total;
+  MPICHK(MPI_Allreduce(&nedge_local, &nedge_total, 1, MPI_INT, MPI_SUM, comm));
+
+  int size, rank;
+  MPICHK(MPI_Comm_size(comm, &size));
+  MPICHK(MPI_Comm_rank(comm, &rank));
+
+  std::vector<int> recvcounts_gather(size);
+  std::vector<int> displs_gather(size);
+
+  std::fill(recvcounts_gather.begin(), recvcounts_gather.end(), 1);
+  std::iota(displs_gather.begin(), displs_gather.end(), 0);
+
+  std::vector<int> recvcounts(size);
+  std::vector<int> displs(size);
+
+  MPICHK(MPI_Allgatherv(&nedge_local, 1, MPI_INT, recvcounts.data(),
+                        recvcounts_gather.data(), displs_gather.data(), MPI_INT,
+                        comm));
+  MPICHK(MPI_Allgatherv(&nedge_ex, 1, MPI_INT, displs.data(),
+                        recvcounts_gather.data(), displs_gather.data(), MPI_INT,
+                        comm));
+
+  std::vector<PetscInt> all_vertex_starts(nedge_total);
+  std::vector<PetscInt> all_vertex_ends(nedge_total);
+  std::vector<PetscInt> all_edge_labels(nedge_total);
+
+  MPICHK(MPI_Allgatherv(vertex_starts.data(), nedge_local, MPIU_INT,
+                        all_vertex_starts.data(), recvcounts.data(),
+                        displs.data(), MPIU_INT, comm));
+  MPICHK(MPI_Allgatherv(vertex_ends.data(), nedge_local, MPIU_INT,
+                        all_vertex_ends.data(), recvcounts.data(),
+                        displs.data(), MPIU_INT, comm));
+  MPICHK(MPI_Allgatherv(edge_labels.data(), nedge_local, MPIU_INT,
+                        all_edge_labels.data(), recvcounts.data(),
+                        displs.data(), MPIU_INT, comm));
+
+  // create a map from global vertex indices to local indices
+  std::map<PetscInt, PetscInt> map_vertex_index_global_to_local;
+  PetscInt vertex_start, vertex_end;
+  PETSCCHK(DMPlexGetDepthStratum(dm, 0, &vertex_start, &vertex_end));
+  IS global_vertex_numbers;
+  PETSCCHK(DMPlexGetVertexNumbering(dm, &global_vertex_numbers));
+  const PetscInt *ptr;
+  PETSCCHK(ISGetIndices(global_vertex_numbers, &ptr));
+  for (PetscInt point = vertex_start; point < vertex_end; point++) {
+    PetscInt global_point =
+        signed_global_id_to_global_id(ptr[point - vertex_start]);
+    map_vertex_index_global_to_local[global_point] = point;
+  }
+  PETSCCHK(ISRestoreIndices(global_vertex_numbers, &ptr));
+  // PETSCCHK(ISDestroy(&global_vertex_numbers));
+
+  std::vector<int> edge_labelled(nedge_total);
+  std::fill(edge_labelled.begin(), edge_labelled.end(), 0);
+
+  std::vector<PetscInt> support_s;
+  std::vector<PetscInt> support_e;
+  std::vector<PetscInt> support_intersection;
+
+  for (int ix = 0; ix < nedge_total; ix++) {
+    const PetscInt vs = all_vertex_starts[ix];
+    const PetscInt ve = all_vertex_ends[ix];
+    const PetscInt ll = all_edge_labels[ix];
+
+    // Does this rank have both vertices
+    const bool has_local_s = map_vertex_index_global_to_local.count(vs);
+    const bool has_local_e = map_vertex_index_global_to_local.count(ve);
+    if (has_local_s && has_local_e) {
+      PetscInt local_vs = map_vertex_index_global_to_local.at(vs);
+      PetscInt local_ve = map_vertex_index_global_to_local.at(ve);
+
+      support_s.clear();
+      support_e.clear();
+      support_intersection.clear();
+
+      auto lambda_get_suppport = [&](auto point_, auto &set_) {
+        PetscInt size;
+        PETSCCHK(DMPlexGetSupportSize(dm, point_, &size));
+        const PetscInt *support;
+        PETSCCHK(DMPlexGetSupport(dm, point_, &support));
+        for (PetscInt jx = 0; jx < size; jx++) {
+          set_.push_back(support[jx]);
+        }
+      };
+
+      lambda_get_suppport(local_vs, support_s);
+      lambda_get_suppport(local_ve, support_e);
+      std::set_intersection(support_s.begin(), support_s.end(),
+                            support_e.begin(), support_e.end(),
+                            std::back_inserter(support_intersection));
+
+      // support_intersection should contain edges, hopefully just one, between
+      // the two vertices.
+      for (auto edge_local_point : support_intersection) {
+        PETSCCHK(DMSetLabelValue(dm, label_name.c_str(), edge_local_point, ll));
+      }
+      if (support_intersection.size()) {
+        edge_labelled[ix] = 1;
+      }
+    }
+  }
+
+  std::vector<PetscInt> edge_labelled_reduced(nedge_total);
+  std::fill(edge_labelled_reduced.begin(), edge_labelled_reduced.end(), 0);
+  MPICHK(MPI_Allreduce(edge_labelled.data(), edge_labelled_reduced.data(),
+                       nedge_total, MPIU_INT, MPI_SUM, comm));
+
+  for (int ix = 0; ix < nedge_total; ix++) {
+    NESOASSERT(edge_labelled_reduced.at(ix) >= 1, "An edge was not labelled");
+  }
+}
+
 } // namespace NESO::Particles::PetscInterface
 
 #endif

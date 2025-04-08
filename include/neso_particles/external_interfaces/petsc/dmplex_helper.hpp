@@ -12,6 +12,8 @@
 
 namespace NESO::Particles::PetscInterface {
 
+constexpr static char face_sets_label[] = "Face Sets";
+
 /**
  * If there are more than 1 MPI ranks distribute the mesh.
  *
@@ -390,6 +392,11 @@ public:
 
     return cs;
   }
+
+  /**
+   * Free the helper. Must be called collectively on the communicator.
+   */
+  inline void free() { PETSCCHK(ISDestroy(&this->global_point_numbers)); }
 
   /**
    * Construct helper class from DMPlex. Collective on the communicator.
