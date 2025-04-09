@@ -30,34 +30,6 @@ private:
 
   bool multi_dim_mode = false;
 
-  inline size_t get_max_particle_size() {
-    int max_ncomp = 0;
-    for (auto &sym : this->sym_store.syms_real) {
-      max_ncomp = MAX(max_ncomp, (*this->particle_group)[sym]->ncomp);
-    }
-    for (auto &sym : this->sym_store.syms_int) {
-      max_ncomp = MAX(max_ncomp, (*this->particle_group)[sym]->ncomp);
-    }
-    max_ncomp = MAX(max_ncomp, this->particle_group->position_dat->ncomp);
-    size_t size_el = MAX(sizeof(double), sizeof(long long));
-    return static_cast<size_t>(max_ncomp) * size_el;
-  };
-
-  // Copy particle data from source to destination whilst casting to a suitable
-  // HDF5 type.
-  inline void memcpy_dat(char *dst, REAL *src, const INT npart) {
-    double *dst_real = (REAL *)dst;
-    for (INT px = 0; px < npart; px++) {
-      dst_real[px] = src[px];
-    }
-  }
-  inline void memcpy_dat(char *dst, INT *src, const INT npart) {
-    long long *dst_ll = (long long *)dst;
-    for (INT px = 0; px < npart; px++) {
-      dst_ll[px] = src[px];
-    }
-  };
-
   // Get the HDF5 type that matches the datatype the particle data was cast to
   // when linearised on the host
   static inline hid_t memtypeid(ParticleDatSharedPtr<REAL>) {
