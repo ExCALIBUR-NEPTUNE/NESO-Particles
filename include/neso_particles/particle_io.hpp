@@ -204,6 +204,20 @@ private:
   }
 
   /**
+   * Open the file if it is closed.
+   */
+  inline void open_read() {
+    if (this->is_closed) {
+      this->plist_id = H5Pcreate(H5P_FILE_ACCESS);
+      H5CHK(H5Pset_fapl_mpio(this->plist_id, this->comm_pair.comm_parent,
+                             MPI_INFO_NULL));
+      H5CHK(this->file_id = H5Fopen(this->filename.c_str(), H5F_ACC_RDONLY,
+                                    this->plist_id));
+      this->is_closed = false;
+    }
+  }
+
+  /**
    *  Write ParticleDats as 2D arrays in the HDF5 file.
    *  TODO This needs better testing if anyone wants it and for it to be made
    * public.
@@ -360,12 +374,7 @@ public:
       : filename(filename), comm_pair(sycl_target->comm_pair),
         particle_group(nullptr), particle_sub_group(nullptr),
         multi_dim_mode(false) {
-    this->plist_id = H5Pcreate(H5P_FILE_ACCESS);
-    H5CHK(H5Pset_fapl_mpio(this->plist_id, this->comm_pair.comm_parent,
-                           MPI_INFO_NULL));
-    this->file_id =
-        H5Fopen(this->filename.c_str(), H5F_ACC_RDONLY, this->plist_id);
-    this->is_closed = false;
+    this->is_closed = true;
     this->step = 0;
   }
 
@@ -425,6 +434,8 @@ public:
    */
   [[nodiscard]] inline ParticleSetSharedPtr
   read(ParticleSpec &particle_spec, INT step, const bool use_xyz_positions) {
+    this->open_read();
+
     std::string step_name = "Step#";
     step_name += std::to_string(step);
 
