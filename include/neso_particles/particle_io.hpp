@@ -38,6 +38,8 @@ private:
   static inline hid_t memtypeid(ParticleDatSharedPtr<INT>) {
     return H5T_NATIVE_LLONG;
   }
+  static inline hid_t memtypeid(Sym<REAL>) { return H5T_NATIVE_DOUBLE; }
+  static inline hid_t memtypeid(Sym<INT>) { return H5T_NATIVE_LLONG; }
 
   /**
    *  Write a ParticleDat to the HDF5 file where each component has its own
@@ -333,7 +335,7 @@ public:
   /**
    *  Construct a H5Part writer for a given set of ParticleDats described by
    *  Sym<type>(name) instances. Must be called collectively on the
-   * communicator.
+   *  communicator.
    *
    *  @param filename Output filename, e.g. "foo.h5part".
    *  @param particle_sub_group ParticleSubGroupSharedPtr instance.
@@ -345,6 +347,26 @@ public:
          T &&...args)
       : H5Part(filename, get_particle_group(particle_sub_group), args...) {
     this->particle_sub_group = particle_sub_group;
+  }
+
+  /**
+   *  Construct a H5Part reader. Must be called collectively on the
+   *  communicator.
+   *
+   *  @param filename Name of file to open for read access, e.g. "foo.h5part".
+   *  @param sycl_target SYCLTarget to use for computation/communcation.
+   */
+  H5Part(std::string filename, SYCLTargetSharedPtr sycl_target)
+      : filename(filename), comm_pair(sycl_target->comm_pair),
+        particle_group(nullptr), particle_sub_group(nullptr),
+        multi_dim_mode(false) {
+    this->plist_id = H5Pcreate(H5P_FILE_ACCESS);
+    H5CHK(H5Pset_fapl_mpio(this->plist_id, this->comm_pair.comm_parent,
+                           MPI_INFO_NULL));
+    this->file_id =
+        H5Fopen(this->filename.c_str(), H5F_ACC_RDONLY, this->plist_id);
+    this->is_closed = false;
+    this->step = 0;
   }
 
   /**
@@ -368,6 +390,10 @@ public:
    * @param step_in Optionally set the step explicitly.
    */
   inline void write(INT step_in = -1) {
+    NESOASSERT(this->particle_group != nullptr,
+               "There is no particle group to write from, maybe this H5Part "
+               "instance is in read-only mode?");
+
     // open the file for writing if required.
     this->open_read_write();
 
@@ -383,6 +409,106 @@ public:
 
     this->step++;
   };
+
+  /**
+   * Reads particle properties from the h5part file. Must be called collectively
+   * on the communicator.
+   *
+   * @param particle_spec Defines which properties should be read from the file
+   * by specifying the Sym and number of components.
+   * @param step Specify which time step to read from the h5part file.
+   * @param use_xyz_positions If set to true then the particle property with a
+   * Sym<REAL> and positions=true can be populated from the x,y,z entries of the
+   * h5part file.
+   * @returns ParticleSet containing the values read from the h5part file on
+   * this MPI rank.
+   */
+  [[nodiscard]] inline ParticleSetSharedPtr
+  read(ParticleSpec &particle_spec, INT step, const bool use_xyz_positions) {
+    std::string step_name = "Step#";
+    step_name += std::to_string(step);
+
+    hid_t group_step;
+    H5CHK(group_step = H5Gopen(this->file_id, step_name.c_str(), H5P_DEFAULT));
+    INT npart_total;
+
+    {
+      hid_t dataset;
+      H5CHK(dataset = H5Dopen(group_step, "x", H5P_DEFAULT));
+      hid_t filespace;
+      H5CHK(filespace = H5Dget_space(dataset));
+
+      hsize_t d_rank = H5Sget_simple_extent_ndims(filespace);
+      NESOASSERT(d_rank == 1, "Expected x to be a column.");
+
+      hsize_t dims[1];
+      H5CHK(H5Sget_simple_extent_dims(filespace, dims, NULL));
+      H5CHK(H5Dclose(dataset));
+      npart_total = dims[0];
+    }
+
+    INT offset_start = -1;
+    INT offset_end = -1;
+    get_decomp_1d(static_cast<INT>(comm_pair.size_parent), npart_total,
+                  static_cast<INT>(comm_pair.rank_parent), &offset_start,
+                  &offset_end);
+    const INT npart_local = offset_end - offset_start;
+
+    auto particle_set =
+        std::make_shared<ParticleSet>(npart_local, particle_spec);
+
+    if (npart_total > 0) {
+
+      // Create a memspace and filespace for the columnwise reads.
+      hsize_t dims_memspace[1] = {static_cast<hsize_t>(npart_local)};
+      hid_t memspace = H5Screate_simple(1, dims_memspace, NULL);
+
+      hsize_t dims_filespace[1] = {static_cast<hsize_t>(npart_total)};
+      hid_t filespace = H5Screate_simple(1, dims_filespace, NULL);
+
+      hsize_t slab_offsets[1] = {static_cast<hsize_t>(offset_start)};
+      hsize_t slab_counts[1] = {static_cast<hsize_t>(npart_local)};
+
+      // select the hyperslab for the columnwite writes.
+      H5CHK(H5Sselect_hyperslab(filespace, H5S_SELECT_SET, slab_offsets, NULL,
+                                slab_counts, NULL));
+      hid_t dxpl = H5Pcreate(H5P_DATASET_XFER);
+      H5CHK(H5Pset_dxpl_mpio(dxpl, H5FD_MPIO_COLLECTIVE));
+
+      auto lambda_read_data = [&](const std::string name, const auto sym,
+                                  auto *h_ptr) {
+        hid_t dset = H5Dopen(group_step, name.c_str(), H5P_DEFAULT);
+        H5CHK(H5Dread(dset, memtypeid(sym), memspace, filespace, dxpl, h_ptr));
+        H5CHK(H5Dclose(dset));
+      };
+
+      for (auto &px : particle_spec.properties_real) {
+        if (px.positions && use_xyz_positions) {
+          for (int cx = 0; cx < px.ncomp; cx++) {
+            lambda_read_data(position_labels[cx], px.sym,
+                             particle_set->get_ptr(px.sym, 0, cx));
+          }
+        } else {
+          for (int cx = 0; cx < px.ncomp; cx++) {
+            lambda_read_data(px.sym.name + "_" + std::to_string(cx), px.sym,
+                             particle_set->get_ptr(px.sym, 0, cx));
+          }
+        }
+      }
+      for (auto &px : particle_spec.properties_int) {
+        for (int cx = 0; cx < px.ncomp; cx++) {
+          lambda_read_data(px.sym.name + "_" + std::to_string(cx), px.sym,
+                           particle_set->get_ptr(px.sym, 0, cx));
+        }
+      }
+
+      H5CHK(H5Pclose(dxpl));
+      H5CHK(H5Sclose(filespace));
+      H5CHK(H5Sclose(memspace));
+    }
+    H5CHK(H5Gclose(group_step));
+    return particle_set;
+  }
 };
 
 #else

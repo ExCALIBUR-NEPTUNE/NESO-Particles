@@ -14,21 +14,24 @@
 namespace NESO::Particles {
 
 class ParticleGroup;
+class H5Part;
 
 /**
  *  Container to hold particle data for a set of particles.
  */
 class ParticleSet {
   friend class ParticleGroup;
+  friend class H5Part;
 
-private:
+protected:
   std::map<Sym<REAL>, std::vector<REAL>> values_real;
   std::map<Sym<INT>, std::vector<INT>> values_int;
+  std::map<Sym<REAL>, int> ncomp_real;
+  std::map<Sym<INT>, int> ncomp_int;
 
   std::vector<REAL> dummy_real;
   std::vector<INT> dummy_int;
 
-protected:
   inline REAL *get_ptr(Sym<REAL> sym, const int particle_index,
                        const int component_index) {
     return values_real.at(sym).data() + component_index * this->npart +
@@ -55,11 +58,13 @@ public:
 
     for (auto const &spec : particle_spec.properties_real) {
       values_real[spec.sym] = std::vector<REAL>(npart * spec.ncomp);
+      ncomp_real[spec.sym] = spec.ncomp;
       std::fill(values_real[spec.sym].begin(), values_real[spec.sym].end(),
                 0.0);
     }
     for (auto const &spec : particle_spec.properties_int) {
       values_int[spec.sym] = std::vector<INT>(npart * spec.ncomp);
+      ncomp_int[spec.sym] = spec.ncomp;
       std::fill(values_int[spec.sym].begin(), values_int[spec.sym].end(), 0);
     }
   };
@@ -157,6 +162,92 @@ public:
    */
   inline bool contains(Sym<INT> const &sym) {
     return (this->values_int.count(sym) > 0);
+  }
+
+  /**
+   * Set all values of a Sym from a std::vector.
+   *
+   * @param sym Sym to set values for.
+   * @param component Component to set values for.
+   * @param values Vector of values to set.
+   */
+  inline void set(Sym<INT> sym, const int component, std::vector<INT> &values) {
+    NESOASSERT(this->contains(sym),
+               "ParticleSet does not contain passed sym: " + sym.name);
+    NESOASSERT(values.size() == static_cast<std::size_t>(this->npart),
+               "Passed vector does not have the same length as the number of "
+               "particles.");
+    NESOASSERT(0 <= component && component < this->ncomp_int.at(sym),
+               "Bad component passed.");
+    std::memcpy(this->get_ptr(sym, 0, component), values.data(),
+                this->npart * sizeof(INT));
+  }
+
+  /**
+   * Set all values of a Sym from a std::vector.
+   *
+   * @param sym Sym to set values for.
+   * @param component Component to set values for.
+   * @param values Vector of values to set.
+   */
+  inline void set(Sym<REAL> sym, const int component,
+                  std::vector<REAL> &values) {
+    NESOASSERT(this->contains(sym),
+               "ParticleSet does not contain passed sym: " + sym.name);
+    NESOASSERT(values.size() == static_cast<std::size_t>(this->npart),
+               "Passed vector does not have the same length as the number of "
+               "particles.");
+    NESOASSERT(0 <= component && component < this->ncomp_real.at(sym),
+               "Bad component passed.");
+    std::memcpy(this->get_ptr(sym, 0, component), values.data(),
+                this->npart * sizeof(REAL));
+  }
+
+  /**
+   * Set all values in this ParticleSet from a another ParticleSet. This will
+   * copy the values from the intersection of the properties defined in this
+   * ParticleSet and the properties defined in the provided ParticleSet.
+   * Component counts must agree between the ParticleSets. The number of
+   * particles in the provided ParticleSet must be the same as this ParticleSet.
+   *
+   * @param particle_set ParticleSet to copy values from.
+   */
+  inline void set(ParticleSet &particle_set) {
+    NESOASSERT(particle_set.npart == this->npart,
+               "Missmatch in particle counts between ParticleSets.");
+    for (auto &sym_vector : this->values_int) {
+      auto sym = sym_vector.first;
+      if (particle_set.contains(sym)) {
+        const auto ncomp = particle_set.ncomp_int.at(sym);
+        NESOASSERT(ncomp == this->ncomp_int.at(sym),
+                   "Component count does not match for sym " + sym.name);
+        std::memcpy(this->get_ptr(sym, 0, 0), particle_set.get_ptr(sym, 0, 0),
+                    this->npart * ncomp * sizeof(INT));
+      }
+    }
+    for (auto &sym_vector : this->values_real) {
+      auto sym = sym_vector.first;
+      if (particle_set.contains(sym)) {
+        const auto ncomp = particle_set.ncomp_real.at(sym);
+        NESOASSERT(ncomp == this->ncomp_real.at(sym),
+                   "Component count does not match for sym " + sym.name);
+        std::memcpy(this->get_ptr(sym, 0, 0), particle_set.get_ptr(sym, 0, 0),
+                    this->npart * ncomp * sizeof(REAL));
+      }
+    }
+  }
+
+  /**
+   * Set all values in this ParticleSet from a another ParticleSet. This will
+   * copy the values from the intersection of the properties defined in this
+   * ParticleSet and the properties defined in the provided ParticleSet.
+   * Component counts must agree between the ParticleSets. The number of
+   * particles in the provided ParticleSet must be the same as this ParticleSet.
+   *
+   * @param particle_set ParticleSet to copy values from.
+   */
+  inline void set(std::shared_ptr<ParticleSet> particle_set) {
+    this->set(*particle_set);
   }
 };
 

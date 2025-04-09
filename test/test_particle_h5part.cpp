@@ -1,12 +1,6 @@
-#include <cmath>
-#include <gtest/gtest.h>
-#include <neso_particles.hpp>
-#include <random>
-#include <string>
+#include "include/test_neso_particles.hpp"
 
-using namespace NESO::Particles;
-
-TEST(ParticleIO, h5_part) {
+TEST(ParticleIO, h5_part_write_particle_group) {
 
 #ifdef NESO_PARTICLES_HDF5
   const int ndim = 2;
@@ -200,7 +194,137 @@ TEST(ParticleIO, h5_part) {
     H5CHK(H5Fclose(file_id));
   }
 
+  sycl_target->free();
   mesh->free();
 
+#endif
+}
+
+TEST(ParticleIO, h5_part_read_particle_group) {
+#ifdef NESO_PARTICLES_HDF5
+  const int ndim = 2;
+  std::vector<int> dims(ndim);
+  dims[0] = 8;
+  dims[1] = 8;
+
+  const double cell_extent = 1.0;
+  const int subdivision_order = 0;
+  auto mesh = std::make_shared<CartesianHMesh>(MPI_COMM_WORLD, ndim, dims,
+                                               cell_extent, subdivision_order);
+
+  auto sycl_target =
+      std::make_shared<SYCLTarget>(GPU_SELECTOR, mesh->get_comm());
+
+  // create object to map local cells + stencil to ranks
+  auto cart_local_mapper = CartesianHMeshLocalMapper(sycl_target, mesh);
+
+  auto domain = std::make_shared<Domain>(mesh, cart_local_mapper);
+
+  ParticleSpec particle_spec{
+      ParticleProp(Sym<REAL>("P"), ndim, true),
+      ParticleProp(Sym<REAL>("P2"), ndim),
+      ParticleProp(Sym<REAL>("V"), 3),
+      ParticleProp(Sym<INT>("CELL_ID"), 1, true),
+      ParticleProp(Sym<INT>("ID"), 1),
+      ParticleProp(Sym<INT>("ID2"), 1),
+  };
+
+  auto A = std::make_shared<ParticleGroup>(domain, particle_spec, sycl_target);
+
+  CartesianPeriodic pbc(sycl_target, mesh, A->position_dat);
+  CartesianCellBin ccb(sycl_target, mesh, A->position_dat, A->cell_id_dat);
+
+  A->add_particle_dat(ParticleDat(sycl_target,
+                                  ParticleProp(Sym<REAL>("FOO"), 3),
+                                  domain->mesh->get_cell_count()));
+
+  H5Part h5parte("test_empty_dump.h5part", A, Sym<REAL>("P"), Sym<REAL>("V"),
+                 Sym<INT>("ID"), Sym<INT>("ID2"), Sym<INT>("NESO_MPI_RANK"));
+
+  h5parte.write();
+  h5parte.close();
+
+  std::mt19937 rng_pos(52234234);
+  std::mt19937 rng_vel(52234231);
+  std::mt19937 rng_rank(18241);
+
+  const int N = 1024;
+
+  auto positions =
+      uniform_within_extents(N, ndim, mesh->global_extents, rng_pos);
+  auto velocities =
+      NESO::Particles::normal_distribution(N, 3, 0.0, 1.0, rng_vel);
+
+  std::uniform_int_distribution<int> uniform_dist(
+      0, sycl_target->comm_pair.size_parent - 1);
+
+  ParticleSet initial_distribution(N, A->get_particle_spec());
+
+  for (int dimx = 0; dimx < ndim; dimx++) {
+    initial_distribution.set(Sym<REAL>("P"), dimx, positions[dimx]);
+  }
+  for (int dimx = 0; dimx < 3; dimx++) {
+    initial_distribution.set(Sym<REAL>("V"), dimx, velocities[dimx]);
+  }
+
+  // determine which particles should end up on which rank
+  std::map<int, std::vector<int>> mapping;
+  for (int px = 0; px < N; px++) {
+    initial_distribution[Sym<INT>("CELL_ID")][px][0] = 0;
+    initial_distribution[Sym<INT>("ID")][px][0] = px;
+    initial_distribution[Sym<INT>("ID2")][px][0] = px * 10;
+    const auto px_rank = uniform_dist(rng_rank);
+    initial_distribution[Sym<INT>("NESO_MPI_RANK")][px][0] = px_rank;
+    mapping[px_rank].push_back(px);
+  }
+
+  if (sycl_target->comm_pair.rank_parent == 0) {
+    A->add_particles_local(initial_distribution);
+  }
+
+  A->hybrid_move();
+  ccb.execute();
+  A->cell_move();
+
+  {
+    H5Part h5part("test_dump.h5part", A, Sym<REAL>("P"), Sym<REAL>("V"),
+                  Sym<INT>("ID"), Sym<INT>("ID2"), Sym<INT>("NESO_MPI_RANK"));
+
+    h5part.write();
+    h5part.close();
+  }
+
+  {
+    ParticleSpec particle_spec(
+        ParticleProp(Sym<REAL>("P2"), ndim, true),
+        ParticleProp(Sym<REAL>("P"), ndim), ParticleProp(Sym<REAL>("V"), 3),
+        ParticleProp(Sym<INT>("ID"), 1), ParticleProp(Sym<INT>("ID2"), 1),
+        ParticleProp(Sym<INT>("NESO_MPI_RANK"), 2));
+    H5Part h5part("test_dump.h5part", sycl_target);
+    auto particle_set = h5part.read(particle_spec, 0, true);
+    h5part.close();
+
+    auto B = std::make_shared<ParticleGroup>(A->domain, A->get_particle_spec(),
+                                             A->sycl_target);
+
+    ParticleSet particle_set_b(particle_set->npart, B->get_particle_spec());
+    particle_set_b.set(particle_set);
+
+    B->add_particles_local(particle_set_b);
+    parallel_advection_initialisation(B, 16);
+
+    CartesianCellBin ccbB(sycl_target, mesh, B->position_dat, B->cell_id_dat);
+    ccbB.execute();
+    B->cell_move();
+
+    A->print(Sym<REAL>("P"), Sym<REAL>("P2"), Sym<REAL>("V"), Sym<INT>("ID"),
+             Sym<INT>("ID2"), Sym<INT>("NESO_MPI_RANK"));
+
+    B->print(Sym<REAL>("P"), Sym<REAL>("P2"), Sym<REAL>("V"), Sym<INT>("ID"),
+             Sym<INT>("ID2"), Sym<INT>("NESO_MPI_RANK"));
+  }
+
+  sycl_target->free();
+  mesh->free();
 #endif
 }
