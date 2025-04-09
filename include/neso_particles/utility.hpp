@@ -170,6 +170,27 @@ inline void uniform_within_cartesian_cells(
   }
 }
 
+/**
+ *  Get the total number of particles. This method must be called collectively
+ * on the communicator.
+ *
+ * @param particle_group ParticleGroup or ParticleSubGroup to sum local particle
+ * counts of.
+ * @returns Global particle count.
+ */
+template <typename GROUP_TYPE>
+inline INT get_npart_global(std::shared_ptr<GROUP_TYPE> particle_group) {
+  const INT npart_local = static_cast<INT>(particle_group->get_npart_local());
+  INT npart_global = 0;
+  MPI_Comm comm =
+      get_particle_group(particle_group)->sycl_target->comm_pair.comm_parent;
+
+  MPICHK(MPI_Allreduce(&npart_local, &npart_global, 1,
+                       map_ctype_mpi_type<INT>(), MPI_SUM, comm));
+
+  return npart_global;
+}
+
 } // namespace NESO::Particles
 
 #endif

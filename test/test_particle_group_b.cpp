@@ -495,3 +495,39 @@ TEST(ParticleGroup, print) {
 
   sycl_target->free();
 }
+
+TEST(ParticleGroup, get_npart_global) {
+  auto [A_t, sycl_target_t, cell_count_t] = particle_loop_common_2d(10, 16, 32);
+  auto A = A_t;
+  auto sycl_target = sycl_target_t;
+
+  {
+    auto ga = std::make_shared<GlobalArray<INT>>(sycl_target, 1);
+    ga->fill(0);
+    particle_loop(
+        A, [=](auto GA) { GA.add(0, 1); }, Access::add(ga))
+        ->execute();
+
+    const INT correct = ga->get().at(0);
+    const INT to_test = get_npart_global(A);
+    ASSERT_EQ(correct, to_test);
+  }
+
+  {
+    auto ga = std::make_shared<GlobalArray<INT>>(sycl_target, 1);
+    ga->fill(0);
+
+    auto aa = particle_sub_group(
+        A, [=](auto ID) { return ID.at(0) % 2 == 0; },
+        Access::read(Sym<INT>("ID")));
+    particle_loop(
+        aa, [=](auto GA) { GA.add(0, 1); }, Access::add(ga))
+        ->execute();
+
+    const INT correct = ga->get().at(0);
+    const INT to_test = get_npart_global(aa);
+    ASSERT_EQ(correct, to_test);
+  }
+
+  sycl_target->free();
+}
