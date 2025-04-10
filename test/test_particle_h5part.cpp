@@ -194,15 +194,6 @@ TEST(ParticleIO, h5_part_write_particle_group) {
     H5CHK(H5Fclose(file_id));
   }
 
-  {
-    A->clear();
-
-    H5Part h5part("test_dump_empty.h5part", A, Sym<REAL>("P"), Sym<REAL>("V"),
-                  Sym<INT>("ID"), Sym<INT>("ID2"), Sym<INT>("NESO_MPI_RANK"));
-    h5part.write();
-    h5part.close();
-  }
-
   sycl_target->free();
   mesh->free();
 
@@ -246,12 +237,6 @@ TEST(ParticleIO, h5_part_read_particle_group) {
   A->add_particle_dat(ParticleDat(sycl_target,
                                   ParticleProp(Sym<REAL>("FOO"), 3),
                                   domain->mesh->get_cell_count()));
-
-  H5Part h5parte("test_empty_dump.h5part", A, Sym<REAL>("P"), Sym<REAL>("V"),
-                 Sym<INT>("ID"), Sym<INT>("ID2"), Sym<INT>("NESO_MPI_RANK"));
-
-  h5parte.write();
-  h5parte.close();
 
   std::mt19937 rng_pos(52234234);
   std::mt19937 rng_vel(52234231);
@@ -368,6 +353,239 @@ TEST(ParticleIO, h5_part_read_particle_group) {
       ASSERT_FALSE(ep.get_flag());
       particle_loop(
           B,
+          [=](auto ID, auto DAT, auto LA) {
+            const INT index = ID.at(0);
+            const bool id_is_good = (0 <= index) && (index < N);
+            NESO_KERNEL_ASSERT(id_is_good, k_ep);
+            if (id_is_good) {
+              for (int cx = 0; cx < ncomp; cx++) {
+                const auto correct = LA.at(index * ncomp + cx);
+                const auto to_test = DAT.at(cx);
+                NESO_KERNEL_ASSERT(correct == to_test, k_ep);
+              }
+            }
+          },
+          Access::read(Sym<INT>("ID")), Access::read(sym), Access::read(la))
+          ->execute();
+      ASSERT_FALSE(ep.get_flag());
+    };
+
+    for (auto &px : particle_spec_read.properties_int) {
+      lambda_test_wrapper(px, la_int);
+    }
+    for (auto &px : particle_spec_read.properties_real) {
+      lambda_test_wrapper(px, la_real);
+    }
+  }
+
+  sycl_target->free();
+  mesh->free();
+#endif
+}
+
+TEST(ParticleIO, h5_part_write_particle_sub_group) {
+#ifdef NESO_PARTICLES_HDF5
+  const int ndim = 2;
+  std::vector<int> dims(ndim);
+  dims[0] = 8;
+  dims[1] = 8;
+
+  const double cell_extent = 1.0;
+  const int subdivision_order = 0;
+  auto mesh = std::make_shared<CartesianHMesh>(MPI_COMM_WORLD, ndim, dims,
+                                               cell_extent, subdivision_order);
+
+  auto sycl_target =
+      std::make_shared<SYCLTarget>(GPU_SELECTOR, mesh->get_comm());
+
+  // create object to map local cells + stencil to ranks
+  auto cart_local_mapper = CartesianHMeshLocalMapper(sycl_target, mesh);
+
+  auto domain = std::make_shared<Domain>(mesh, cart_local_mapper);
+
+  ParticleSpec particle_spec{
+      ParticleProp(Sym<REAL>("P"), ndim, true),
+      ParticleProp(Sym<REAL>("P2"), ndim),
+      ParticleProp(Sym<REAL>("V"), 3),
+      ParticleProp(Sym<INT>("CELL_ID"), 1, true),
+      ParticleProp(Sym<INT>("ID"), 1),
+      ParticleProp(Sym<INT>("ID2"), 5),
+  };
+
+  auto A = std::make_shared<ParticleGroup>(domain, particle_spec, sycl_target);
+
+  CartesianPeriodic pbc(sycl_target, mesh, A->position_dat);
+  CartesianCellBin ccb(sycl_target, mesh, A->position_dat, A->cell_id_dat);
+
+  A->add_particle_dat(ParticleDat(sycl_target,
+                                  ParticleProp(Sym<REAL>("FOO"), 3),
+                                  domain->mesh->get_cell_count()));
+
+  H5Part h5parte("test_empty_dump.h5part", A, Sym<REAL>("P"), Sym<REAL>("V"),
+                 Sym<INT>("ID"), Sym<INT>("ID2"), Sym<INT>("NESO_MPI_RANK"));
+
+  h5parte.write();
+  h5parte.close();
+
+  std::mt19937 rng_pos(52234234);
+  std::mt19937 rng_vel(52234231);
+  std::mt19937 rng_rank(18241);
+
+  const int N = 4096;
+
+  auto positions =
+      uniform_within_extents(N, ndim, mesh->global_extents, rng_pos);
+  auto velocities =
+      NESO::Particles::normal_distribution(N, 3, 0.0, 1.0, rng_vel);
+
+  std::uniform_int_distribution<int> uniform_dist(
+      0, sycl_target->comm_pair.size_parent - 1);
+
+  ParticleSet initial_distribution(N, A->get_particle_spec());
+
+  for (int dimx = 0; dimx < ndim; dimx++) {
+    initial_distribution.set(Sym<REAL>("P"), dimx, positions[dimx]);
+  }
+  for (int dimx = 0; dimx < 3; dimx++) {
+    initial_distribution.set(Sym<REAL>("V"), dimx, velocities[dimx]);
+  }
+
+  // determine which particles should end up on which rank
+  std::map<int, std::vector<int>> mapping;
+  for (int px = 0; px < N; px++) {
+    initial_distribution[Sym<INT>("CELL_ID")][px][0] = 0;
+    initial_distribution[Sym<INT>("ID")][px][0] = px;
+
+    for (int ix = 0; ix < 5; ix++) {
+      initial_distribution[Sym<INT>("ID2")][px][ix] = (px * 10 + ix) % 7;
+    }
+
+    const auto px_rank = uniform_dist(rng_rank);
+    initial_distribution[Sym<INT>("NESO_MPI_RANK")][px][0] = px_rank;
+    mapping[px_rank].push_back(px);
+  }
+
+  if (sycl_target->comm_pair.rank_parent == 0) {
+    A->add_particles_local(initial_distribution);
+  }
+
+  A->hybrid_move();
+  ccb.execute();
+  A->cell_move();
+
+  particle_loop(
+      A,
+      [=](auto P, auto P2) {
+        for (int dx = 0; dx < ndim; dx++) {
+          P2.at(dx) = P.at(dx);
+        }
+      },
+      Access::read(Sym<REAL>("P")), Access::write(Sym<REAL>("P2")))
+      ->execute();
+
+  {
+    auto aa_empty = particle_sub_group(
+        A, [=](auto ID) { return ID.at(0) % 2 == -1000; },
+        Access::read(Sym<INT>("ID")));
+    ASSERT_EQ(get_npart_global(aa_empty), 0);
+
+    H5Part h5part("test_dump.h5part", aa_empty, Sym<REAL>("P"), Sym<REAL>("V"),
+                  Sym<INT>("ID"), Sym<INT>("ID2"), Sym<INT>("NESO_MPI_RANK"));
+
+    h5part.write();
+    h5part.close();
+  }
+
+  auto B = std::make_shared<ParticleGroup>(A->domain, A->get_particle_spec(),
+                                           A->sycl_target);
+
+  {
+    auto aa = particle_sub_group(
+        A, [=](auto ID) { return ID.at(0) % 2 == 0; },
+        Access::read(Sym<INT>("ID")));
+
+    ASSERT_TRUE(get_npart_global(aa) > 0);
+    H5Part h5part("test_dump.h5part", aa, Sym<REAL>("P"), Sym<REAL>("V"),
+                  Sym<INT>("ID"), Sym<INT>("ID2"), Sym<INT>("NESO_MPI_RANK"));
+    h5part.write();
+    h5part.close();
+
+    B->add_particles_local(aa);
+  }
+
+  ParticleSpec particle_spec_read(
+      ParticleProp(Sym<REAL>("P2"), ndim, true),
+      ParticleProp(Sym<REAL>("P"), ndim), ParticleProp(Sym<REAL>("V"), 3),
+      ParticleProp(Sym<INT>("ID"), 1), ParticleProp(Sym<INT>("ID2"), 5));
+  auto C = std::make_shared<ParticleGroup>(A->domain, A->get_particle_spec(),
+                                           A->sycl_target);
+
+  {
+    H5Part h5part("test_dump.h5part", sycl_target);
+    auto particle_set = h5part.read(particle_spec_read, 0, true);
+    h5part.close();
+
+    ParticleSet particle_set_c(particle_set->npart, C->get_particle_spec());
+    particle_set_c.set(particle_set);
+
+    C->add_particles_local(particle_set_c);
+    parallel_advection_initialisation(C, 16);
+
+    CartesianCellBin ccbC(sycl_target, mesh, C->position_dat, C->cell_id_dat);
+    ccbC.execute();
+    C->cell_move();
+  }
+
+  {
+    auto la_int = std::make_shared<LocalArray<INT>>(
+        sycl_target, N * particle_spec_read.get_max_ncomp_int());
+    auto la_real = std::make_shared<LocalArray<REAL>>(
+        sycl_target, N * particle_spec_read.get_max_ncomp_real());
+    auto ep = ErrorPropagate(sycl_target);
+    auto k_ep = ep.device_ptr();
+
+    particle_loop(
+        B,
+        [=](auto ID) {
+          const INT index = ID.at(0);
+          NESO_KERNEL_ASSERT(index % 2 == 0, k_ep);
+        },
+        Access::read(Sym<INT>("ID")))
+        ->execute();
+    ASSERT_FALSE(ep.get_flag());
+
+    particle_loop(
+        C,
+        [=](auto ID) {
+          const INT index = ID.at(0);
+          NESO_KERNEL_ASSERT(index % 2 == 0, k_ep);
+        },
+        Access::read(Sym<INT>("ID")))
+        ->execute();
+    ASSERT_FALSE(ep.get_flag());
+
+    auto lambda_test_wrapper = [&](auto px, auto la) {
+      la->fill(-10000);
+
+      auto sym = px.sym;
+      const int ncomp = px.ncomp;
+      particle_loop(
+          B,
+          [=](auto ID, auto DAT, auto LA) {
+            const INT index = ID.at(0);
+            const bool id_is_good = (0 <= index) && (index < N);
+            NESO_KERNEL_ASSERT(id_is_good, k_ep);
+            if (id_is_good) {
+              for (int cx = 0; cx < ncomp; cx++) {
+                LA.at(index * ncomp + cx) = DAT.at(cx);
+              }
+            }
+          },
+          Access::read(Sym<INT>("ID")), Access::read(sym), Access::write(la))
+          ->execute();
+      ASSERT_FALSE(ep.get_flag());
+      particle_loop(
+          C,
           [=](auto ID, auto DAT, auto LA) {
             const INT index = ID.at(0);
             const bool id_is_good = (0 <= index) && (index < N);

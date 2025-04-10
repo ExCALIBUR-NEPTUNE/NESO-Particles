@@ -480,7 +480,7 @@ public:
       hsize_t slab_offsets[1] = {static_cast<hsize_t>(offset_start)};
       hsize_t slab_counts[1] = {static_cast<hsize_t>(npart_local)};
 
-      // select the hyperslab for the columnwite writes.
+      // select the hyperslab for the columnwite reads.
       H5CHK(H5Sselect_hyperslab(filespace, H5S_SELECT_SET, slab_offsets, NULL,
                                 slab_counts, NULL));
       hid_t dxpl = H5Pcreate(H5P_DATASET_XFER);
