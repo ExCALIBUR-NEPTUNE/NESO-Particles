@@ -112,6 +112,28 @@ public:
   std::vector<ParticleProp<INT>> properties_int;
 
   /**
+   * @returns The maximum number of components of INT properties.
+   */
+  inline int get_max_ncomp_int() {
+    int max_ncomp = 0;
+    for (auto &px : this->properties_int) {
+      max_ncomp = std::max(max_ncomp, px.ncomp);
+    }
+    return max_ncomp;
+  }
+
+  /**
+   * @returns The maximum number of components of REAL properties.
+   */
+  inline int get_max_ncomp_real() {
+    int max_ncomp = 0;
+    for (auto &px : this->properties_real) {
+      max_ncomp = std::max(max_ncomp, px.ncomp);
+    }
+    return max_ncomp;
+  }
+
+  /**
    *  Constructor to create a particle specification.
    *
    *  @param args ParticleSpec is called with a set of ParticleProp arguments.

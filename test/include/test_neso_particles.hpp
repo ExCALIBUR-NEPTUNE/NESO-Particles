@@ -59,6 +59,24 @@ inline std::filesystem::path get_test_resource(std::string resource_name) {
   return path;
 }
 
+inline std::filesystem::path get_test_tmp_directory() {
+  const std::string default_directory =
+      std::filesystem::current_path().string();
+  const std::string configured_directory =
+      get_env_string("NESO_PARTICLES_TEST_TMP_DIR", default_directory);
+  auto path = std::filesystem::path(configured_directory);
+  if (!std::filesystem::exists(path)) {
+    std::filesystem::create_directories(path);
+  }
+  NESOASSERT(std::filesystem::exists(path),
+             "Fatal could not create or access:" + path.string());
+  return path;
+}
+
+inline std::string get_test_root_file(std::string name) {
+  return (get_test_tmp_directory() / std::filesystem::path(name)).string();
+}
+
 #ifndef GET_TEST_RESOURCE
 #define GET_TEST_RESOURCE(x, y)                                                \
   {                                                                            \
