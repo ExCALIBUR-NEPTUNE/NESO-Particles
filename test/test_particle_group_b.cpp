@@ -487,7 +487,7 @@ TEST(ParticleGroup, print) {
   }
 
   if (sycl_target->comm_pair.rank_parent == 0) {
-    std::ofstream fout("particle_group_printing.txt");
+    std::ofstream fout(get_test_root_file("particle_group_printing.txt"));
     aa->print(fout, Sym<REAL>("P"), Sym<INT>("CELL_ID"));
     AA->print(fout, Sym<REAL>("P"), Sym<INT>("CELL_ID"));
     A->print(fout, Sym<REAL>("P"), Sym<INT>("CELL_ID"));

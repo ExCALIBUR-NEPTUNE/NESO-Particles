@@ -38,8 +38,9 @@ TEST(ParticleIO, h5_part_write_particle_group) {
                                   ParticleProp(Sym<REAL>("FOO"), 3),
                                   domain->mesh->get_cell_count()));
 
-  H5Part h5parte("test_empty_dump.h5part", A, Sym<REAL>("P"), Sym<REAL>("V"),
-                 Sym<INT>("ID"), Sym<INT>("ID2"), Sym<INT>("NESO_MPI_RANK"));
+  H5Part h5parte(get_test_root_file("test_empty_dump.h5part"), A,
+                 Sym<REAL>("P"), Sym<REAL>("V"), Sym<INT>("ID"),
+                 Sym<INT>("ID2"), Sym<INT>("NESO_MPI_RANK"));
 
   h5parte.write();
   h5parte.close();
@@ -85,8 +86,9 @@ TEST(ParticleIO, h5_part_write_particle_group) {
   ccb.execute();
   A->cell_move();
 
-  H5Part h5part("test_dump.h5part", A, Sym<REAL>("P"), Sym<REAL>("V"),
-                Sym<INT>("ID"), Sym<INT>("ID2"), Sym<INT>("NESO_MPI_RANK"));
+  H5Part h5part(get_test_root_file("test_dump.h5part"), A, Sym<REAL>("P"),
+                Sym<REAL>("V"), Sym<INT>("ID"), Sym<INT>("ID2"),
+                Sym<INT>("NESO_MPI_RANK"));
 
   h5part.write();
   h5part.close();
@@ -96,7 +98,8 @@ TEST(ParticleIO, h5_part_write_particle_group) {
     std::vector<double> data_real(N);
     std::vector<long long> ordering(N);
 
-    hid_t file_id = H5Fopen("test_dump.h5part", H5F_ACC_RDONLY, H5P_DEFAULT);
+    hid_t file_id = H5Fopen(get_test_root_file("test_dump.h5part").c_str(),
+                            H5F_ACC_RDONLY, H5P_DEFAULT);
     hid_t group_step = H5Gopen(file_id, "Step#0", H5P_DEFAULT);
 
     hid_t dataset = H5Dopen(group_step, "ID_0", H5P_DEFAULT);
@@ -285,8 +288,9 @@ TEST(ParticleIO, h5_part_read_particle_group) {
   A->cell_move();
 
   {
-    H5Part h5part("test_dump.h5part", A, Sym<REAL>("P"), Sym<REAL>("V"),
-                  Sym<INT>("ID"), Sym<INT>("ID2"), Sym<INT>("NESO_MPI_RANK"));
+    H5Part h5part(get_test_root_file("test_dump.h5part"), A, Sym<REAL>("P"),
+                  Sym<REAL>("V"), Sym<INT>("ID"), Sym<INT>("ID2"),
+                  Sym<INT>("NESO_MPI_RANK"));
 
     h5part.write();
     h5part.close();
@@ -297,7 +301,7 @@ TEST(ParticleIO, h5_part_read_particle_group) {
         ParticleProp(Sym<REAL>("P2"), ndim, true),
         ParticleProp(Sym<REAL>("P"), ndim), ParticleProp(Sym<REAL>("V"), 3),
         ParticleProp(Sym<INT>("ID"), 1), ParticleProp(Sym<INT>("ID2"), 5));
-    H5Part h5part("test_dump.h5part", sycl_target);
+    H5Part h5part(get_test_root_file("test_dump.h5part"), sycl_target);
     auto particle_set = h5part.read(particle_spec_read, 0, true);
     h5part.close();
 
@@ -421,8 +425,9 @@ TEST(ParticleIO, h5_part_write_particle_sub_group) {
                                   ParticleProp(Sym<REAL>("FOO"), 3),
                                   domain->mesh->get_cell_count()));
 
-  H5Part h5parte("test_empty_dump.h5part", A, Sym<REAL>("P"), Sym<REAL>("V"),
-                 Sym<INT>("ID"), Sym<INT>("ID2"), Sym<INT>("NESO_MPI_RANK"));
+  H5Part h5parte(get_test_root_file("test_empty_dump.h5part"), A,
+                 Sym<REAL>("P"), Sym<REAL>("V"), Sym<INT>("ID"),
+                 Sym<INT>("ID2"), Sym<INT>("NESO_MPI_RANK"));
 
   h5parte.write();
   h5parte.close();
@@ -489,8 +494,9 @@ TEST(ParticleIO, h5_part_write_particle_sub_group) {
         Access::read(Sym<INT>("ID")));
     ASSERT_EQ(get_npart_global(aa_empty), 0);
 
-    H5Part h5part("test_dump.h5part", aa_empty, Sym<REAL>("P"), Sym<REAL>("V"),
-                  Sym<INT>("ID"), Sym<INT>("ID2"), Sym<INT>("NESO_MPI_RANK"));
+    H5Part h5part(get_test_root_file("test_dump.h5part"), aa_empty,
+                  Sym<REAL>("P"), Sym<REAL>("V"), Sym<INT>("ID"),
+                  Sym<INT>("ID2"), Sym<INT>("NESO_MPI_RANK"));
 
     h5part.write();
     h5part.close();
@@ -505,8 +511,9 @@ TEST(ParticleIO, h5_part_write_particle_sub_group) {
         Access::read(Sym<INT>("ID")));
 
     ASSERT_TRUE(get_npart_global(aa) > 0);
-    H5Part h5part("test_dump.h5part", aa, Sym<REAL>("P"), Sym<REAL>("V"),
-                  Sym<INT>("ID"), Sym<INT>("ID2"), Sym<INT>("NESO_MPI_RANK"));
+    H5Part h5part(get_test_root_file("test_dump.h5part"), aa, Sym<REAL>("P"),
+                  Sym<REAL>("V"), Sym<INT>("ID"), Sym<INT>("ID2"),
+                  Sym<INT>("NESO_MPI_RANK"));
     h5part.write();
     h5part.close();
 
@@ -521,7 +528,7 @@ TEST(ParticleIO, h5_part_write_particle_sub_group) {
                                            A->sycl_target);
 
   {
-    H5Part h5part("test_dump.h5part", sycl_target);
+    H5Part h5part(get_test_root_file("test_dump.h5part"), sycl_target);
     auto particle_set = h5part.read(particle_spec_read, 0, true);
     h5part.close();
 
