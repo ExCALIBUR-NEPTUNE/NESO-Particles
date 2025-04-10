@@ -6,7 +6,7 @@ Dependencies
 ============
 
 * CMake 3.24+.
-* SYCL 2020 with USM support: e.g. AdaptiveCpp 24.10.0 or Intel DPCPP 2024.2.1.
+* SYCL 2020 with USM support: e.g. AdaptiveCpp 24.10.0 or Intel DPCPP 2024.2.1. Please read the section on known issues and workarounds before choosing a SYCL implementation.
 * MPI 3.0: e.g. MPICH 4.0 or IntelMPI 2021.6. See known issues for Ubuntu 22.03 mpich.
 * HDF5 (parallel): (optional) See CMake variable ``NESO_PARTICLES_ENABLE_HDF5`` if particle trajectories are required - will execute without.
 * PETSc: (optional) See CMake variable ``NESO_PARTICLES_ENABLE_PETSC`` if PETSc DMPlex support is required.
