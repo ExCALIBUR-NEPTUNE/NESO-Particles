@@ -481,7 +481,7 @@ public:
    */
   ProductMatrix(SYCLTargetSharedPtr sycl_target,
                 std::shared_ptr<ProductMatrixSpec> spec)
-      : sycl_target(sycl_target), spec(spec) {
+      : sycl_target(sycl_target), num_products(0), spec(spec) {
 
     NESOASSERT(sycl_target != nullptr, "sycl_target is nullptr.");
     this->d_data_real = std::make_shared<BufferDevice<REAL>>(sycl_target, 1);
@@ -518,6 +518,8 @@ public:
   virtual inline void reset(const int num_products) {
     const auto spec = this->spec.get();
     NESOASSERT(spec != nullptr, "ProductMatrix is not initialised.");
+    NESOASSERT(num_products >= 0,
+               "A negative number of products does not make sense.");
     this->num_products = num_products;
     if (num_products > 0) {
       this->d_data_real->realloc_no_copy(num_products *
