@@ -38,6 +38,7 @@
 #include "neso_particles/mesh_interface_local_decomp.hpp"
 #include "neso_particles/parallel_initialisation.hpp"
 #include "neso_particles/particle_dat.hpp"
+#include "neso_particles/particle_dat_direct_access.hpp"
 #include "neso_particles/particle_group.hpp"
 #include "neso_particles/particle_group_temporary.hpp"
 #include "neso_particles/particle_io.hpp"
