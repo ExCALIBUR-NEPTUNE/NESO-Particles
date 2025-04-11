@@ -191,10 +191,12 @@ public:
    * @param num_particles Number of parent particles space is required for.
    */
   virtual inline void reset(const int num_particles) override {
+    NESOASSERT(num_particles >= 0,
+               "A negative number of particles does not make sense.");
     this->num_particles = num_particles;
+    const int num_products = num_particles * num_products_per_parent;
+    ProductMatrix::reset(num_products);
     if (num_particles > 0) {
-      const int num_products = num_particles * num_products_per_parent;
-      ProductMatrix::reset(num_products);
       this->d_parent_cells->realloc_no_copy(num_products);
       this->d_parent_layers->realloc_no_copy(num_products);
       auto e0 = this->sycl_target->queue.fill(
