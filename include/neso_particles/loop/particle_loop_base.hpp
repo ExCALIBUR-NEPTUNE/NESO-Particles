@@ -63,6 +63,8 @@ struct KernelParameter; // { using type = void; };
 struct ParticleLoopIteration {
   /// The local index in the sycl nd range.
   std::size_t local_sycl_index;
+  /// The range of the local work item in the sycl nd range.
+  std::size_t local_sycl_range;
   /// The cell the particle resides in.
   int cellx;
   /// The layer (row) the particle resides in.
