@@ -225,6 +225,30 @@ inline auto get_particle_group(ParticleGroupSharedPtr particle_group) {
   return particle_group;
 }
 
+/**
+ * Helper function for determining if a templated type is a ParticleGroup or
+ * ParticleSubGroup.
+ *
+ * @param p ParticleGroupSharedPtr.
+ * @returns False.
+ */
+constexpr inline bool
+is_particle_sub_group([[maybe_unused]] ParticleGroupSharedPtr &p) {
+  return false;
+}
+
+/**
+ * Helper function for determining if a templated type is a ParticleGroup or
+ * ParticleSubGroup.
+ *
+ * @param p ParticleSubGroupSharedPtr.
+ * @returns True.
+ */
+constexpr inline bool
+is_particle_sub_group([[maybe_unused]] ParticleSubGroupSharedPtr &p) {
+  return true;
+}
+
 } // namespace NESO::Particles
 
 #endif
