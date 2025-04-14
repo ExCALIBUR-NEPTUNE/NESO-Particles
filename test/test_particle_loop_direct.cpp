@@ -57,3 +57,33 @@ TEST(ParticleLoopDirect, read_write_access) {
 
   sycl_target->free();
 }
+
+TEST(ParticleLoopDirect, cache_invalidation) {
+  auto [A, sycl_target, cell_count_t] = particle_loop_common_2d(27, 16, 32);
+
+  auto aa = particle_sub_group(
+      A, [=](auto ID) { return ID.at(0) % 2 == 0; },
+      Access::read(Sym<INT>("ID")));
+
+  EXPECT_TRUE(aa->create_if_required());
+  EXPECT_FALSE(aa->create_if_required());
+
+  {
+    auto d_P = Access::direct_get(Access::write(A->get_dat(Sym<REAL>("P"))));
+    Access::direct_restore(Access::write(A->get_dat(Sym<REAL>("P"))), d_P);
+  }
+  EXPECT_FALSE(aa->create_if_required());
+  {
+    auto d_ID = Access::direct_get(Access::write(A->get_dat(Sym<INT>("ID"))));
+    Access::direct_restore(Access::write(A->get_dat(Sym<INT>("ID"))), d_ID);
+  }
+  EXPECT_TRUE(aa->create_if_required());
+  EXPECT_FALSE(aa->create_if_required());
+  {
+    auto d_ID = Access::direct_get(Access::read(A->get_dat(Sym<INT>("ID"))));
+    Access::direct_restore(Access::read(A->get_dat(Sym<INT>("ID"))), d_ID);
+  }
+
+  EXPECT_FALSE(aa->create_if_required());
+  sycl_target->free();
+}
