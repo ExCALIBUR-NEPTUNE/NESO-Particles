@@ -123,20 +123,23 @@ template <typename T> class ParticleDatT {
       sycl::handler &cgh, Access::Write<ParticleDatT<T> *> &a);
 
   friend ParticleDatImplGetConstT<T>
-  Access::direct_get(Access::Read<ParticleDatSharedPtr<T>> dat_access);
+  Access::direct_get<T>(Access::Read<ParticleDatSharedPtr<T>> dat_access);
 
   friend ParticleDatImplGetT<T>
-  Access::direct_get(Access::Write<ParticleDatSharedPtr<T>> dat_access);
+  Access::direct_get<T>(Access::Write<ParticleDatSharedPtr<T>> dat_access);
 
   friend void
-  Access::direct_restore(Access::Read<ParticleDatSharedPtr<T>> dat_access,
-                         ParticleDatImplGetConstT<T> &data);
+  Access::direct_restore<T>(Access::Read<ParticleDatSharedPtr<T>> dat_access,
+                            ParticleDatImplGetConstT<T> &data);
   friend void
-  Access::direct_restore(Access::Write<ParticleDatSharedPtr<T>> dat_access,
-                         ParticleDatImplGetT<T> &data);
+  Access::direct_restore<T>(Access::Write<ParticleDatSharedPtr<T>> dat_access,
+                            ParticleDatImplGetT<T> &data);
 
-private:
 protected:
+  inline bool check_ptr_is_same(ParticleDatImplGetT<T> &data) {
+    return data == this->cell_dat.d_ptr;
+  }
+
   std::function<void(const Sym<T> &, const int)> write_callback;
 
   inline void

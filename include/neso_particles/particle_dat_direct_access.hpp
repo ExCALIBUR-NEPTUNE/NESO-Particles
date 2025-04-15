@@ -70,7 +70,7 @@ inline void direct_restore(Read<ParticleDatSharedPtr<T>> dat_access,
 template <typename T>
 inline void direct_restore(Write<ParticleDatSharedPtr<T>> dat_access,
                            ParticleDatImplGetT<T> &data) {
-  NESOASSERT(dat_access.obj->cell_dat.d_ptr == data,
+  NESOASSERT(dat_access.obj->check_ptr_is_same(data),
              "Passed pointer is different to that given by direct_get.");
   data = nullptr;
 }
