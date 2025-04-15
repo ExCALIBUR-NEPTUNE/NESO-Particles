@@ -76,8 +76,8 @@ inline void neso_particles_assert(const char *expr_str, bool expr,
     int flag = 0;
     MPI_Initialized(&flag);
     if (flag) {
-      std::abort();
       MPI_Abort(MPI_COMM_WORLD, -1);
+      std::abort();
     } else {
       std::abort();
     }
