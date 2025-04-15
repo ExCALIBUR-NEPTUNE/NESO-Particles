@@ -1,7 +1,33 @@
+namespace {
+
+static int error_count;
+
+#define NESOASSERT_FUNCTION neso_particles_test_assert
+
+template <typename T>
+inline void neso_particles_test_assert([[maybe_unused]] const char *expr_str,
+                                       bool expr,
+                                       [[maybe_unused]] const char *file,
+                                       [[maybe_unused]] int line,
+                                       [[maybe_unused]] T &&msg) {
+  if (!expr) {
+    error_count++;
+  }
+}
+
+} // namespace
+
 #include <gtest/gtest.h>
 #include <neso_particles.hpp>
-
 using namespace NESO::Particles;
+
+TEST(NESOASSERT, override) {
+  error_count = 0;
+  NESOASSERT(false, "foo");
+  ASSERT_EQ(error_count, 1);
+  NESOASSERT(true, "bar");
+  ASSERT_EQ(error_count, 1);
+}
 
 // test that int atomics are functional
 TEST(ErrorPropagate, atomics) {
