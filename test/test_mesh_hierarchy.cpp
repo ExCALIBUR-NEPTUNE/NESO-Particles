@@ -239,3 +239,120 @@ TEST(MeshHierarchyMappers, indexing) {
 
   mesh.free();
 }
+
+TEST(MeshHierarchyMappers, get_neighbour_mh_cells) {
+
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+
+  std::set<INT> output;
+  for (INT offset : {0, 1, 2}) {
+    for (bool pbc : {false, true}) {
+      for (int ndim : {2, 3}) {
+        std::vector<int> dims(ndim);
+        for (int dx : {0, 1, 2}) {
+          dims[dx] = std::pow(2, std::min(2, dx + 2));
+        }
+
+        const double cell_extent = 1.0;
+        const int subdivision_order = 1;
+        CartesianHMesh mesh(MPI_COMM_WORLD, ndim, dims, cell_extent,
+                            subdivision_order);
+        auto mh = mesh.get_mesh_hierarchy();
+        auto mapper = MeshHierarchyMapper(sycl_target, mh);
+        auto host_mapper = mapper.get_host_mapper();
+
+        INT global_tuple_origin[6];
+        INT global_tuple_candidate[6];
+        std::array<INT, 3> cart_tuple_origin;
+        std::array<INT, 3> cart_tuple_candidate;
+
+        std::set<std::array<INT, 3>> correct;
+        std::set<std::array<INT, 3>> to_test;
+        std::set<INT> correct_outer_set;
+
+        for (INT cellx = 0; cellx < mh->ncells_global; cellx++) {
+          for (int dx = 0; dx < 6; dx++) {
+            global_tuple_origin[dx] = 0;
+          }
+          mh->linear_to_tuple_global(cellx, global_tuple_origin);
+          cart_tuple_origin = {0, 0, 0};
+          host_mapper.map_tuple_to_cart_tuple(global_tuple_origin,
+                                              cart_tuple_origin.data());
+
+          std::array<INT, 3> cart_starts = {0, 0, 0};
+          std::array<INT, 3> cart_ends = {1, 1, 1};
+          for (int dx = 0; dx < ndim; dx++) {
+            cart_ends[dx] = mh->dims[dx] * mh->ncells_dim_fine;
+          }
+
+          std::array<INT, 3> idx;
+          for (idx[2] = cart_starts[2]; idx[2] < cart_ends[2]; idx[2]++) {
+            for (idx[1] = cart_starts[1]; idx[1] < cart_ends[1]; idx[1]++) {
+              for (idx[0] = cart_starts[0]; idx[0] < cart_ends[0]; idx[0]++) {
+                bool keep = true;
+                for (int dx = 0; dx < ndim; dx++) {
+                  const INT diff_inner =
+                      std::abs(idx[dx] - cart_tuple_origin[dx]);
+                  const INT diff_outer = cart_ends[dx] - diff_inner;
+
+                  if (pbc) {
+                    if ((diff_inner > offset) && (diff_outer > offset)) {
+                      keep = false;
+                    }
+                  } else {
+                    if (diff_inner > offset) {
+                      keep = false;
+                    }
+                  }
+                }
+                if (keep) {
+                  correct.insert(idx);
+
+                  if (cellx == 0) {
+                    INT global_tuple[6] = {0};
+                    host_mapper.cart_tuple_to_tuple(idx.data(), global_tuple);
+                    correct_outer_set.insert(
+                        host_mapper.tuple_to_linear_global(global_tuple));
+                  }
+                }
+              }
+            }
+          }
+
+          output.clear();
+          output.insert(cellx);
+          if (cellx == 0) {
+            correct_outer_set.insert(cellx);
+          }
+          get_neighbour_mh_cells(mh, cellx, offset, pbc, output);
+          for (INT candidate : output) {
+            for (int dx = 0; dx < 6; dx++) {
+              global_tuple_candidate[dx] = 0;
+            }
+            mh->linear_to_tuple_global(candidate, global_tuple_candidate);
+            cart_tuple_candidate = {0, 0, 0};
+            host_mapper.map_tuple_to_cart_tuple(global_tuple_candidate,
+                                                cart_tuple_candidate.data());
+            to_test.insert(cart_tuple_candidate);
+          }
+          ASSERT_EQ(correct, to_test);
+        }
+
+        std::vector<INT> to_test_outer;
+        std::vector<INT> to_test_outer_cells = {0};
+        get_neighbour_mh_cells(mh, to_test_outer_cells, offset, pbc,
+                               to_test_outer);
+        std::set<INT> to_test_outer_set;
+        for (auto cx : to_test_outer) {
+          to_test_outer_set.insert(cx);
+        }
+
+        ASSERT_EQ(correct_outer_set, to_test_outer_set);
+
+        mesh.free();
+      }
+    }
+  }
+
+  sycl_target->free();
+}

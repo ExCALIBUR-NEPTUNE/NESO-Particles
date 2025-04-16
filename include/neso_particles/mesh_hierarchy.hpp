@@ -536,7 +536,8 @@ struct MeshHierarchyDeviceMapper {
   inline void map_tuple_to_cart_tuple(const INT *mh_tuple,
                                       INT *cart_tuple) const {
     for (int dimx = 0; dimx < ndim; dimx++) {
-      cart_tuple[dimx] = mh_tuple[ndim + dimx] + mh_tuple[dimx];
+      cart_tuple[dimx] =
+          mh_tuple[ndim + dimx] + mh_tuple[dimx] * ncells_dim_fine;
     }
   }
 
@@ -721,6 +722,120 @@ public:
     return mapper;
   }
 };
+
+/**
+ * Find MeshHierarchy global cell indices that within an offset of a given
+ * global cell index.
+ *
+ *  @param[in] mesh_hierarchy MeshHierarchy instance.
+ *  @param[in] cell MeshHierarchy global linear cell index for origin cell.
+ *  @param[in] offset Offset to apply in each direction to find MeshHierarchy
+ * cells.
+ *  @param[in] pbc If true then the offset may wrap around a periodic boundary.
+ *  @param[in, out] output_cells Output set for neighbouring cells. This set
+ * will not be cleared before use.
+ */
+inline void
+get_neighbour_mh_cells(std::shared_ptr<MeshHierarchy> mesh_hierarchy,
+                       const INT cell, const INT offset, const bool pbc,
+                       std::set<INT> &output_cells) {
+  const int ndim = mesh_hierarchy->ndim;
+  const INT ncells_dim_fine = mesh_hierarchy->ncells_dim_fine;
+
+  INT offset_starts[3] = {0, 0, 0};
+  INT offset_ends[3] = {1, 1, 1};
+  for (int dimx = 0; dimx < ndim; dimx++) {
+    offset_starts[dimx] = -offset;
+    offset_ends[dimx] = offset + 1;
+  }
+
+  INT cell_counts[3] = {1, 1, 1};
+  for (int dimx = 0; dimx < ndim; dimx++) {
+    cell_counts[dimx] = mesh_hierarchy->dims[dimx] * ncells_dim_fine;
+  }
+
+  INT global_tuple_mh[6] = {0, 0, 0, 0, 0, 0};
+  INT global_tuple[3] = {0, 0, 0};
+  mesh_hierarchy->linear_to_tuple_global(cell, global_tuple_mh);
+  // convert the mesh hierary tuple format into a more standard tuple format
+  for (int dimx = 0; dimx < ndim; dimx++) {
+    const INT cart_index_dim =
+        global_tuple_mh[dimx] * ncells_dim_fine + global_tuple_mh[dimx + ndim];
+    global_tuple[dimx] = cart_index_dim;
+  }
+
+  // loop over the offsets
+  INT ox[3];
+  for (ox[2] = offset_starts[2]; ox[2] < offset_ends[2]; ox[2]++) {
+    for (ox[1] = offset_starts[1]; ox[1] < offset_ends[1]; ox[1]++) {
+      for (ox[0] = offset_starts[0]; ox[0] < offset_ends[0]; ox[0]++) {
+        // compute the cell from the offset
+
+        bool valid = true;
+        for (int dimx = 0; dimx < ndim; dimx++) {
+          const INT offset_dim_linear_unmapped = global_tuple[dimx] + ox[dimx];
+          if (!pbc) {
+            valid = valid && ((offset_dim_linear_unmapped >= 0) &&
+                              (offset_dim_linear_unmapped < cell_counts[dimx]));
+          }
+          const INT offset_dim_linear =
+              (offset_dim_linear_unmapped + cell_counts[dimx]) %
+              cell_counts[dimx];
+
+          // convert back to a mesh hierarchy tuple index
+          auto pq = std::div((long long)offset_dim_linear,
+                             (long long)ncells_dim_fine);
+          global_tuple_mh[dimx] = pq.quot;
+          global_tuple_mh[dimx + ndim] = pq.rem;
+        }
+        const INT offset_linear =
+            mesh_hierarchy->tuple_to_linear_global(global_tuple_mh);
+
+        NESOASSERT(offset_linear < mesh_hierarchy->ncells_global,
+                   "bad offset index - too high");
+        NESOASSERT(-1 < offset_linear, "bad offset index - too low");
+
+        // if this rank owns this cell then there is nothing to do
+        if (valid && (offset_linear != cell)) {
+          output_cells.insert(offset_linear);
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Find MeshHierarchy global cell indices that within an offset of a given
+ * global cell index.
+ *
+ *  @param[in] mesh_hierarchy MeshHierarchy instance.
+ *  @param[in] cells MeshHierarchy global linear cell indices for origin cells.
+ *  @param[in] offset Offset to apply in each direction to find MeshHierarchy
+ * cells.
+ *  @param[in] pbc If true then the offset may wrap around a periodic boundary.
+ *  @param[in, out] output_cells Output vector for neighbouring cells. This
+ * vector will be cleared before use. This vector will contain the original
+ * cells.
+ */
+inline void
+get_neighbour_mh_cells(std::shared_ptr<MeshHierarchy> mesh_hierarchy,
+                       const std::vector<INT> &cells, const INT offset,
+                       const bool pbc, std::vector<INT> &output_cells) {
+
+  output_cells.clear();
+  std::set<INT> output_cells_set;
+  output_cells_set.clear();
+  for (INT cx : cells) {
+    output_cells_set.insert(cx);
+  }
+  for (INT cx : cells) {
+    get_neighbour_mh_cells(mesh_hierarchy, cx, offset, pbc, output_cells_set);
+  }
+  output_cells.reserve(output_cells_set.size());
+  for (const INT &cx : output_cells_set) {
+    output_cells.push_back(cx);
+  }
+}
 
 } // namespace NESO::Particles
 
