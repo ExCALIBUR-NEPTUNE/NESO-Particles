@@ -340,13 +340,14 @@ TEST(MeshHierarchyMappers, get_neighbour_mh_cells) {
 
         std::vector<INT> to_test_outer;
         std::vector<INT> to_test_outer_cells = {0};
-        get_neighbour_mh_cells(mh, to_test_outer_cells, offset, pbc,
-                               to_test_outer);
+        std::vector<INT> cells_extra = {-100};
+        get_neighbour_mh_cells(mh, to_test_outer_cells, cells_extra, offset,
+                               pbc, to_test_outer);
         std::set<INT> to_test_outer_set;
         for (auto cx : to_test_outer) {
           to_test_outer_set.insert(cx);
         }
-
+        correct_outer_set.insert(-100);
         ASSERT_EQ(correct_outer_set, to_test_outer_set);
 
         mesh.free();

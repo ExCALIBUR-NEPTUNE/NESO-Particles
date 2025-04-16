@@ -810,6 +810,8 @@ get_neighbour_mh_cells(std::shared_ptr<MeshHierarchy> mesh_hierarchy,
  *
  *  @param[in] mesh_hierarchy MeshHierarchy instance.
  *  @param[in] cells MeshHierarchy global linear cell indices for origin cells.
+ *  @param[in] cells_extra MeshHierarchy global linear cell indices to also
+ * include.
  *  @param[in] offset Offset to apply in each direction to find MeshHierarchy
  * cells.
  *  @param[in] pbc If true then the offset may wrap around a periodic boundary.
@@ -819,13 +821,17 @@ get_neighbour_mh_cells(std::shared_ptr<MeshHierarchy> mesh_hierarchy,
  */
 inline void
 get_neighbour_mh_cells(std::shared_ptr<MeshHierarchy> mesh_hierarchy,
-                       const std::vector<INT> &cells, const INT offset,
+                       const std::vector<INT> &cells,
+                       const std::vector<INT> &cells_extra, const INT offset,
                        const bool pbc, std::vector<INT> &output_cells) {
 
   output_cells.clear();
   std::set<INT> output_cells_set;
   output_cells_set.clear();
   for (INT cx : cells) {
+    output_cells_set.insert(cx);
+  }
+  for (INT cx : cells_extra) {
     output_cells_set.insert(cx);
   }
   for (INT cx : cells) {

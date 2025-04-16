@@ -167,7 +167,8 @@ protected:
     constexpr INT stencil_width = 1;
 
     get_neighbour_mh_cells(this->mesh_hierarchy, this->owned_mh_cells,
-                           stencil_width, false, cells_to_gather);
+                           this->unowned_mh_cells, stencil_width, false,
+                           cells_to_gather);
     mhc.gather(cells_to_gather);
 
     int rank;
