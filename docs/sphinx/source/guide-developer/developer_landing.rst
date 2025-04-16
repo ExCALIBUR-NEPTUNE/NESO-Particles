@@ -9,7 +9,7 @@ Files
 =====
 
 * Give files names which are lower case snake case with a ``.hpp`` file extension.
-* Include guards should define a variable of the form ``_NESO_PARTICLES_<filename>_H_`` where ``<filename>`` is the filename in screaming snake case.
+* Include guards should define a variable of the form ``_NESO_PARTICLES_<directory/filename>_HPP_`` where ``<filename>`` is the filename in screaming snake case and ``<directory>`` is the path relative to ``include/neso_particles`` in screaming snake case.
 * If a file is created to contain a class then please name the file to follow the class name, e.g. class ``FooBar`` is contained in file ``foo_bar.hpp``.
 
 Class and Method Naming
@@ -27,7 +27,7 @@ We use variable prefixes to indicate which device a variable corresponds to as f
 * ``h_`` Variable exists on the host. In the case of a pointer the memory region is host allocated.
 * ``d_`` Variable exists on the device. In the case of a pointer the memory region is device allocated.
 * ``s_`` Variable exists on the host and device. In the case of a pointer the memory region is allocated as shared.
-* ``b_`` Variable is a SYCL buffer.
+* ``b_`` Variable is a SYCL buffer. Note that NP uses the USM memory model instead of buffers and accessors.
 * ``a_`` Variable is a SYCL accessor.
 * ``k_`` Variable is a local copy of a variable to pass into a kernel by copy.
 
