@@ -36,6 +36,25 @@ struct TestParticleGroup;
 template <typename T> using ParticleDatImplGetT = T ***;
 template <typename T> using ParticleDatImplGetConstT = T *const *const *;
 class ParticleGroup;
+template <typename T> class ParticleDatT;
+template <typename T>
+using ParticleDatSharedPtr = std::shared_ptr<ParticleDatT<T>>;
+
+namespace Access {
+template <typename T>
+inline ParticleDatImplGetConstT<T>
+direct_get(Access::Read<ParticleDatSharedPtr<T>> dat_access);
+template <typename T>
+inline ParticleDatImplGetT<T>
+direct_get(Access::Write<ParticleDatSharedPtr<T>> dat_access);
+template <typename T>
+inline void direct_restore(Access::Read<ParticleDatSharedPtr<T>> dat_access,
+                           ParticleDatImplGetConstT<T> &data);
+template <typename T>
+inline void direct_restore(Access::Write<ParticleDatSharedPtr<T>> dat_access,
+                           ParticleDatImplGetT<T> &data);
+
+} // namespace Access
 
 namespace ParticleLoopImplementation {
 
@@ -103,8 +122,24 @@ template <typename T> class ParticleDatT {
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
       sycl::handler &cgh, Access::Write<ParticleDatT<T> *> &a);
 
-private:
+  friend ParticleDatImplGetConstT<T>
+  Access::direct_get<T>(Access::Read<ParticleDatSharedPtr<T>> dat_access);
+
+  friend ParticleDatImplGetT<T>
+  Access::direct_get<T>(Access::Write<ParticleDatSharedPtr<T>> dat_access);
+
+  friend void
+  Access::direct_restore<T>(Access::Read<ParticleDatSharedPtr<T>> dat_access,
+                            ParticleDatImplGetConstT<T> &data);
+  friend void
+  Access::direct_restore<T>(Access::Write<ParticleDatSharedPtr<T>> dat_access,
+                            ParticleDatImplGetT<T> &data);
+
 protected:
+  inline bool check_ptr_is_same(ParticleDatImplGetT<T> &data) {
+    return data == this->cell_dat.d_ptr;
+  }
+
   std::function<void(const Sym<T> &, const int)> write_callback;
 
   inline void
@@ -554,9 +589,6 @@ public:
    */
   inline void wait_realloc() { this->cell_dat.wait_set_nrow(); }
 };
-
-template <typename T>
-using ParticleDatSharedPtr = std::shared_ptr<ParticleDatT<T>>;
 
 template <typename T>
 inline ParticleDatSharedPtr<T> ParticleDat(SYCLTargetSharedPtr sycl_target,

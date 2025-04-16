@@ -301,11 +301,10 @@ template <typename T> class CellDatConst {
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
       sycl::handler &cgh, Access::Max<CellDatConst<T> *> &a);
 
-private:
+protected:
   T *d_ptr;
   const int stride;
 
-protected:
   /**
    * Non-const pointer to underlying device data. Intended for friend access
    * from ParticleLoop.
@@ -349,7 +348,7 @@ public:
    * @param value Value to place in all entries.
    */
   inline void fill(const T value) {
-    if (nrow * ncol) {
+    if (nrow && ncol) {
       this->sycl_target->queue.fill(this->d_ptr, value, ncells * nrow * ncol)
           .wait_and_throw();
     }

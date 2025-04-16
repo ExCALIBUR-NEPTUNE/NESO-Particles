@@ -65,8 +65,8 @@ ParticleGroupSharedPtr particle_loop_common(const int N = 1093) {
 
 } // namespace
 
-TEST(ParticleLoop, local_memory) {
-  auto A = particle_loop_common();
+TEST(ParticleLoop, local_memory_block) {
+  auto A = particle_loop_common(4095);
   auto domain = A->domain;
   auto mesh = domain->mesh;
   const int cell_count = mesh->get_cell_count();
@@ -84,10 +84,10 @@ TEST(ParticleLoop, local_memory) {
         INT *ptr_int = LM_INT.data();
         {
           for (int cx = 0; cx < 7; cx++) {
-            ptr_real[cx] = index * 7 + cx;
+            LM_REAL.at(cx) = index * 7 + cx;
           }
           for (int cx = 0; cx < 3; cx++) {
-            ptr_int[cx] = index * 3 + cx;
+            LM_INT.at(cx) = index * 3 + cx;
           }
         }
         ID.at(0) = index;
@@ -104,6 +104,78 @@ TEST(ParticleLoop, local_memory) {
       Access::write(Sym<REAL>("OUT_REAL")), Access::write(Sym<INT>("OUT_INT")),
       Access::write(local_mem_real), Access::write(local_mem_int))
       ->execute();
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto out_real = A->get_dat(Sym<REAL>("OUT_REAL"))->cell_dat.get_cell(cellx);
+    auto out_int = A->get_dat(Sym<INT>("OUT_INT"))->cell_dat.get_cell(cellx);
+    auto index = A->get_dat(Sym<INT>("ID"))->cell_dat.get_cell(cellx);
+    const int nrow = out_real->nrow;
+    // for each particle in the cell
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      auto idx = index->at(rowx, 0);
+      for (int cx = 0; cx < 7; cx++) {
+        ASSERT_NEAR(out_real->at(rowx, cx), idx * 7 + cx, 1.0e-15);
+      }
+      for (int cx = 0; cx < 3; cx++) {
+        ASSERT_NEAR(out_int->at(rowx, cx), idx * 3 + cx, 1.0e-15);
+      }
+    }
+  }
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}
+
+TEST(ParticleLoop, local_memory_interlaced) {
+  auto A = particle_loop_common(4095);
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  const int cell_count = mesh->get_cell_count();
+  auto sycl_target = A->sycl_target;
+
+  LocalMemoryInterlaced<REAL> local_mem_real(7);
+  auto local_mem_int = std::make_shared<LocalMemoryInterlaced<INT>>(3);
+
+  ErrorPropagate ep(sycl_target);
+  auto k_ep = ep.device_ptr();
+
+  particle_loop(
+      A,
+      [=](auto INDEX, auto ID, auto OUT_REAL, auto OUT_INT, auto LM_REAL,
+          auto LM_INT) {
+        const auto index = INDEX.get_local_linear_index();
+        REAL *ptr_real = LM_REAL.data();
+        INT *ptr_int = LM_INT.data();
+        {
+          for (int cx = 0; cx < 7; cx++) {
+            LM_REAL.at(cx) = index * 7 + cx;
+          }
+          for (int cx = 0; cx < 3; cx++) {
+            LM_INT.at(cx) = index * 3 + cx;
+          }
+        }
+        ID.at(0) = index;
+        {
+          for (int cx = 0; cx < 7; cx++) {
+            OUT_REAL.at(cx) = ptr_real[cx * LM_REAL.get_stride()];
+          }
+          for (int cx = 0; cx < 3; cx++) {
+            OUT_INT.at(cx) = ptr_int[cx * LM_INT.get_stride()];
+          }
+        }
+
+        NESO_KERNEL_ASSERT(
+            static_cast<std::size_t>(&LM_REAL.at(1) - &LM_REAL.at(0)) ==
+                LM_REAL.get_stride(),
+            k_ep);
+      },
+      Access::read(ParticleLoopIndex{}), Access::write(Sym<INT>("ID")),
+      Access::write(Sym<REAL>("OUT_REAL")), Access::write(Sym<INT>("OUT_INT")),
+      Access::write(local_mem_real), Access::write(local_mem_int))
+      ->execute();
+
+  ASSERT_FALSE(ep.get_flag());
 
   for (int cellx = 0; cellx < cell_count; cellx++) {
     auto out_real = A->get_dat(Sym<REAL>("OUT_REAL"))->cell_dat.get_cell(cellx);

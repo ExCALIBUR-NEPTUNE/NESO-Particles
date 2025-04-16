@@ -4,9 +4,6 @@
 #include "../compute_target.hpp"
 #include "../loop/access_descriptors.hpp"
 #include "../loop/particle_loop_base.hpp"
-#include <memory>
-#include <optional>
-#include <vector>
 
 namespace NESO::Particles {
 
@@ -44,13 +41,21 @@ template <typename T> struct Write {
   Write() = default;
   T *ptr;
   inline T *data() { return ptr; }
+
+  /**
+   * Access element by component for particle.
+   *
+   * @param index Index of element to access for particle.
+   * @returns Mutable reference to element.
+   */
+  inline T &at(const int index) { return this->ptr[index]; }
 };
 
 } // namespace Access::LocalMemoryBlock
 
 namespace ParticleLoopImplementation {
 
-template <typename T> struct LocalMemoryLoopType {
+template <typename T> struct LocalMemoryBlockLoopType {
   std::size_t size;
   sycl::local_accessor<T, 1> la;
 };
@@ -59,7 +64,7 @@ template <typename T> struct LocalMemoryLoopType {
  *  Loop parameter for write access of a LocalMemoryBlock.
  */
 template <typename T> struct LoopParameter<Access::Write<LocalMemoryBlock<T>>> {
-  using type = LocalMemoryLoopType<T>;
+  using type = LocalMemoryBlockLoopType<T>;
 };
 
 /**
@@ -74,10 +79,10 @@ struct KernelParameter<Access::Write<LocalMemoryBlock<T>>> {
  * Method to compute access to a LocalMemoryBlock (write)
  */
 template <typename T>
-inline LocalMemoryLoopType<T>
+inline LocalMemoryBlockLoopType<T>
 create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
                 Access::Write<LocalMemoryBlock<T> *> &a) {
-  LocalMemoryLoopType<T> local_memory_loop;
+  LocalMemoryBlockLoopType<T> local_memory_loop;
   const std::size_t size = a.obj->size;
   local_memory_loop.size = size;
   local_memory_loop.la = sycl::local_accessor<T, 1>(
@@ -90,7 +95,7 @@ create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
  */
 template <typename T>
 inline void create_kernel_arg(ParticleLoopIteration &iterationx,
-                              LocalMemoryLoopType<T> &rhs,
+                              LocalMemoryBlockLoopType<T> &rhs,
                               Access::LocalMemoryBlock::Write<T> &lhs) {
   lhs.ptr = &rhs.la[iterationx.local_sycl_index * rhs.size];
 }

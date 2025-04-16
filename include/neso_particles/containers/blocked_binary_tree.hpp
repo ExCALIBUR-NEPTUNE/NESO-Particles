@@ -2,6 +2,7 @@
 #define _NESO_PARTICLES_BLOCKED_BINARY_TREE_H_
 
 #include "../compute_target.hpp"
+#include "../device_buffers.hpp"
 #include <map>
 #include <set>
 #include <type_traits>

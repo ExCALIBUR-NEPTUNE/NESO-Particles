@@ -14,6 +14,7 @@
 #include "../containers/global_array.hpp"
 #include "../containers/local_array.hpp"
 #include "../containers/local_memory_block.hpp"
+#include "../containers/local_memory_interlaced.hpp"
 #include "../containers/nd_local_array.hpp"
 #include "../containers/product_matrix.hpp"
 #include "../containers/rng/kernel_rng.hpp"
@@ -558,6 +559,7 @@ public:
                 ParticleLoopImplementation::ParticleLoopIteration iterationx;
                 if (block_device.work_item_required(cell, layer)) {
                   iterationx.local_sycl_index = idx.get_local_id(1);
+                  iterationx.local_sycl_range = idx.get_local_range(1);
                   iterationx.cellx = cellx;
                   iterationx.layerx = layerx;
                   iterationx.loop_layerx = layerx;
@@ -587,6 +589,7 @@ public:
                 const int layerx = static_cast<int>(layer);
                 ParticleLoopImplementation::ParticleLoopIteration iterationx;
                 iterationx.local_sycl_index = idx.get_local_id(1);
+                iterationx.local_sycl_range = idx.get_local_range(1);
                 iterationx.cellx = cellx;
                 iterationx.layerx = layerx;
                 iterationx.loop_layerx = layerx;

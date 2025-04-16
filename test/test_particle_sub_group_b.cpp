@@ -355,3 +355,10 @@ TEST(ParticleGroup, partition_particle_group_deleting) {
 
   sycl_target->free();
 }
+
+TEST(ParticleSubGroup, is_particle_sub_group) {
+  ParticleSubGroupSharedPtr sub_group;
+  ParticleGroupSharedPtr group;
+  ASSERT_TRUE(is_particle_sub_group(sub_group));
+  ASSERT_FALSE(is_particle_sub_group(group));
+}

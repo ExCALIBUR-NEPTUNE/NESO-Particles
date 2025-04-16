@@ -66,6 +66,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/global_array.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/local_array.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/local_memory_block.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/containers/local_memory_interlaced.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/lookup_table.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/nd_local_array.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/product_matrix.hpp
@@ -138,6 +139,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/parallel_initialisation.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/parameters.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_dat.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/particle_dat_direct_access.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_group.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_group_impl.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_group_pointer_map.hpp

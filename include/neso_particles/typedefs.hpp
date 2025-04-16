@@ -21,6 +21,21 @@ inline int reduce_mul(const int nel, std::vector<int> &values) {
 }
 
 /**
+ * Allow the function called by NESOASSERT to be overridden by setting this
+ * macro. This macro should be set to the name of a function with the following
+ * signature
+ *
+ * template<typename T>
+ * void(const char *, bool, const char *, int,  T &&)
+ *
+ * See the function neso_particles_assert for a reference to what these
+ * arguments do.
+ */
+#ifndef NESOASSERT_FUNCTION
+#define NESOASSERT_FUNCTION NESO::Particles::neso_particles_assert
+#endif
+
+/**
  * \def NESOASSERT(expr, msg)
  * This is a helper macro to call the function neso_particles_assert. Users
  * should call this helper macro NESOASSERT like
@@ -30,7 +45,7 @@ inline int reduce_mul(const int nel, std::vector<int> &values) {
  * To check conditionals within their code.
  */
 #define NESOASSERT(expr, msg)                                                  \
-  NESO::Particles::neso_particles_assert(#expr, expr, __FILE__, __LINE__, msg)
+  NESOASSERT_FUNCTION(#expr, expr, __FILE__, __LINE__, msg)
 
 /**
  * This is a helper function to assert conditions are satisfied and terminate
@@ -61,7 +76,6 @@ inline void neso_particles_assert(const char *expr_str, bool expr,
     int flag = 0;
     MPI_Initialized(&flag);
     if (flag) {
-      std::abort();
       MPI_Abort(MPI_COMM_WORLD, -1);
     } else {
       std::abort();

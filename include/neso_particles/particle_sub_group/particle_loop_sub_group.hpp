@@ -163,6 +163,7 @@ public:
                       k_map_cells_to_particles.map_loop_layer_to_layer(
                           loop_cell, loop_layer));
                   iterationx.local_sycl_index = idx.get_local_id(1);
+                  iterationx.local_sycl_range = idx.get_local_range(1);
                   iterationx.cellx = loop_cellx;
                   iterationx.layerx = layer;
                   iterationx.loop_layerx = loop_layerx;
@@ -196,6 +197,7 @@ public:
                     k_map_cells_to_particles.map_loop_layer_to_layer(
                         loop_cell, loop_layer));
                 iterationx.local_sycl_index = idx.get_local_id(1);
+                iterationx.local_sycl_range = idx.get_local_range(1);
                 iterationx.cellx = loop_cellx;
                 iterationx.layerx = layer;
                 iterationx.loop_layerx = loop_layerx;
