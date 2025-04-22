@@ -161,8 +161,15 @@ protected:
                                                   map_cell_dmplex);
     // Explicitly gather all cells this rank owns, this should be a lightweight
     // call as the constructor above should have gathered these.
-    // TODO add stencil offset
-    mhc.gather(this->owned_mh_cells);
+    std::vector<INT> cells_to_gather;
+
+    // Add a stencil offset to the cells to gather.
+    constexpr INT stencil_width = 1;
+
+    get_neighbour_mh_cells(this->mesh_hierarchy, this->owned_mh_cells,
+                           this->unowned_mh_cells, stencil_width, false,
+                           cells_to_gather);
+    mhc.gather(cells_to_gather);
 
     int rank;
     MPICHK(MPI_Comm_rank(this->comm, &rank));
@@ -171,7 +178,7 @@ protected:
     std::list<DMPlexCellSerialise> serialised_halo_cells;
 
     std::vector<DMPlexCellSerialise> serialised_halo_cells_tmp;
-    for (auto mh_cell : this->owned_mh_cells) {
+    for (auto mh_cell : cells_to_gather) {
       mhc.get(mh_cell, serialised_halo_cells_tmp);
       for (auto &dmplex_cell : serialised_halo_cells_tmp) {
         if (
