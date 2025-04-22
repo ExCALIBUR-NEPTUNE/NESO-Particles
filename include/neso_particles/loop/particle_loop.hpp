@@ -16,6 +16,7 @@
 #include "../containers/local_memory_block.hpp"
 #include "../containers/local_memory_interlaced.hpp"
 #include "../containers/nd_local_array.hpp"
+#include "../containers/particle_set_device.hpp"
 #include "../containers/product_matrix.hpp"
 #include "../containers/rng/kernel_rng.hpp"
 #include "../containers/sym_vector.hpp"

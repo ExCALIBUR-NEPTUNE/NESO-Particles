@@ -15,6 +15,7 @@ namespace NESO::Particles {
 
 class ParticleGroup;
 class H5Part;
+class ParticleSetDevice;
 
 /**
  *  Container to hold particle data for a set of particles.
@@ -22,6 +23,7 @@ class H5Part;
 class ParticleSet {
   friend class ParticleGroup;
   friend class H5Part;
+  friend class ParticleSetDevice;
 
 protected:
   std::map<Sym<REAL>, std::vector<REAL>> values_real;

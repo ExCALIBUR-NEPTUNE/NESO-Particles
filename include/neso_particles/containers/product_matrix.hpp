@@ -5,10 +5,10 @@
 #include "../loop/access_descriptors.hpp"
 #include "../loop/particle_loop_base.hpp"
 #include "../particle_spec.hpp"
+#include "particle_set_device.hpp"
 #include <map>
 #include <memory>
 #include <numeric>
-#include <optional>
 #include <vector>
 
 namespace NESO::Particles {
@@ -266,145 +266,7 @@ inline ProductMatrixGet create_loop_arg(ParticleLoopGlobalInfo *global_info,
 /**
  * Type to describe the particle properties of products.
  */
-struct ProductMatrixSpec {
-  /// The total number of components of type REAL stored.
-  int num_components_real;
-  /// The total number of components of type INT stored.
-  int num_components_int;
-  /// The number of REAL particle properties
-  int num_properties_real;
-  /// The number of INT particle properties
-  int num_properties_int;
-  /// The vector of REAL Syms.
-  std::vector<Sym<REAL>> syms_real;
-  /// The vector of INT Syms.
-  std::vector<Sym<INT>> syms_int;
-  /// The number of components per output property for REAL
-  std::vector<int> components_real;
-  /// The number of components per output property for INT
-  std::vector<int> components_int;
-  /// Default values applied on call to reset for REAL.
-  std::map<std::pair<Sym<REAL>, int>, REAL> default_values_real;
-  /// Default values applied on call to reset for INT.
-  std::map<std::pair<Sym<INT>, int>, INT> default_values_int;
-  /// Map from sym to integer index.
-  std::map<Sym<REAL>, int> map_sym_index_real;
-  /// Map from sym to integer index.
-  std::map<Sym<INT>, int> map_sym_index_int;
-
-  /// The ParticleSpec the instance was created from.
-  ParticleSpec particle_spec;
-
-  ProductMatrixSpec() = default;
-  ProductMatrixSpec &operator=(const ProductMatrixSpec &) = default;
-
-  /**
-   * Create a specification for products based on a ParticleSpec.
-   *
-   * @param particle_spec Specification for product particle properties.
-   */
-  ProductMatrixSpec(ParticleSpec &particle_spec)
-      : particle_spec(particle_spec) {
-
-    this->num_properties_real = particle_spec.properties_real.size();
-    this->num_properties_int = particle_spec.properties_int.size();
-    this->components_real = std::vector<int>(num_properties_real);
-    this->components_int = std::vector<int>(num_properties_int);
-    this->syms_real = std::vector<Sym<REAL>>(num_properties_real);
-    this->syms_int = std::vector<Sym<INT>>(num_properties_int);
-
-    for (int px = 0; px < num_properties_real; px++) {
-      this->components_real.at(px) = particle_spec.properties_real.at(px).ncomp;
-      const auto sym = particle_spec.properties_real.at(px).sym;
-      this->syms_real.at(px) = sym;
-      this->map_sym_index_real[sym] = px;
-    }
-    for (int px = 0; px < num_properties_int; px++) {
-      this->components_int.at(px) = particle_spec.properties_int.at(px).ncomp;
-      const auto sym = particle_spec.properties_int.at(px).sym;
-      this->syms_int.at(px) = sym;
-      this->map_sym_index_int[sym] = px;
-    }
-    this->num_components_real = std::accumulate(this->components_real.begin(),
-                                                this->components_real.end(), 0);
-    this->num_components_int = std::accumulate(this->components_int.begin(),
-                                               this->components_int.end(), 0);
-  }
-
-  /**
-   * Set the default value for a particle property.
-   *
-   * @param sym Sym of particle property.
-   * @param component Component of particle property.
-   * @param value Default value to set.
-   */
-  inline void set_default_value(Sym<INT> sym, const int component,
-                                const INT value) {
-    this->default_values_int[{sym, component}] = value;
-  }
-
-  /**
-   * Set the default value for a particle property.
-   *
-   * @param sym Sym of particle property.
-   * @param component Component of particle property.
-   * @param value Default value to set.
-   */
-  inline void set_default_value(Sym<REAL> sym, const int component,
-                                const REAL value) {
-    this->default_values_real[{sym, component}] = value;
-  }
-
-  /**
-   * @returns the integer index that corresponds to a Sym in the specification.
-   * Returns -1 if the Sym is not found.
-   */
-  inline int get_sym_index(const Sym<REAL> sym) const {
-    auto it = this->map_sym_index_real.find(sym);
-    if (it == this->map_sym_index_real.end()) {
-      return -1;
-    } else {
-      return it->second;
-    }
-  }
-
-  /**
-   * @returns the integer index that corresponds to a Sym in the specification.
-   * Returns -1 if the Sym is not found.
-   */
-  inline int get_sym_index(const Sym<INT> sym) const {
-    auto it = this->map_sym_index_int.find(sym);
-    if (it == this->map_sym_index_int.end()) {
-      return -1;
-    } else {
-      return it->second;
-    }
-  }
-
-  /**
-   * @returns the number of components this spec stores for a Sym.
-   */
-  inline int get_num_components(const Sym<REAL> sym) {
-    const int index = this->get_sym_index(sym);
-    if (index < 0) {
-      return 0;
-    } else {
-      return this->components_real.at(index);
-    }
-  }
-
-  /**
-   * @returns the number of components this spec stores for a Sym.
-   */
-  inline int get_num_components(const Sym<INT> sym) {
-    const int index = this->get_sym_index(sym);
-    if (index < 0) {
-      return 0;
-    } else {
-      return this->components_int.at(index);
-    }
-  }
-};
+typedef ParticleSetDeviceSpec ProductMatrixSpec;
 
 /**
  * Helper function to create ProductMatrixSpec instances.
