@@ -56,6 +56,8 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/cell_dat.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/cell_dat_const.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/cell_data.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/containers/ephemeral/ephemeral_dat.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/containers/ephemeral/ephemeral_dats.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/nd_index.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/rng/rng.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/rng/kernel_rng.hpp

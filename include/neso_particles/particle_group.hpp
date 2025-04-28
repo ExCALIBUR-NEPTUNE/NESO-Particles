@@ -1079,7 +1079,7 @@ public:
     NESOASSERT(this->particle_dats_real.count(sym) == 1,
                "ParticleDat not found.");
 
-    NESOASSERT(sym.name != this->position_dat->name,
+    NESOASSERT(sym.name != this->position_dat->sym.name,
                "The positions dat cannot be removed.");
 
     this->remove_particle_dat_common(this->particle_dats_real.at(sym));

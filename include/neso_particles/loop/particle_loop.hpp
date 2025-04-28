@@ -11,6 +11,7 @@
 #include "../cell_dat.hpp"
 #include "../compute_target.hpp"
 #include "../containers/descendant_products.hpp"
+#include "../containers/ephemeral/ephemeral_dats.hpp"
 #include "../containers/global_array.hpp"
 #include "../containers/local_array.hpp"
 #include "../containers/local_memory_block.hpp"

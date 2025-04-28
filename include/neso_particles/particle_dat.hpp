@@ -25,6 +25,8 @@ class ParticleGroup;
 template <typename KERNEL, typename... ARGS> class ParticleLoop;
 template <typename T> class SymVector;
 template <typename T> class SymVectorPointerCache;
+
+class EphemeralDats;
 class MeshHierarchyGlobalMap;
 class CellMove;
 class LayerCompressor;
@@ -105,6 +107,7 @@ template <typename T> class ParticleDatT {
   friend class ParticleUnpacker;
   friend class ParticleGroupPointerMap;
   friend struct TestParticleGroup;
+  friend class EphemeralDats;
 
   friend ParticleDatImplGetConstT<T>
   ParticleLoopImplementation::create_loop_arg<T>(
@@ -191,6 +194,27 @@ protected:
     return this->cell_dat.col_device_ptr(cell, col);
   }
 
+  ParticleDatT(SYCLTargetSharedPtr sycl_target, const Sym<T> sym, int ncomp,
+               int ncell, bool positions, bool fixed_size)
+      : sym(sym), cell_dat(CellDat<T>(sycl_target)), ncomp(ncomp), ncell(ncell),
+        positions(positions), sycl_target(sycl_target), fixed_size(fixed_size) {
+  }
+
+  /**
+   * Constructor for EphemeralDats.
+   */
+  ParticleDatT(SYCLTargetSharedPtr sycl_target, const Sym<T> sym, int ncomp,
+               int ncell, const INT npart_local, int *h_npart_cell,
+               int *d_npart_cell, INT *d_npart_cell_es)
+      : ParticleDatT(sycl_target, sym, ncomp, ncell, false, true) {
+
+    this->cell_dat.create_fixed(ncell, ncomp, npart_local, h_npart_cell,
+                                d_npart_cell, d_npart_cell_es);
+
+    this->d_npart_cell = d_npart_cell;
+    this->h_npart_cell = h_npart_cell;
+  }
+
 public:
   /// Disable (implicit) copies.
   ParticleDatT(const ParticleDatT &st) = delete;
@@ -209,13 +233,13 @@ public:
   const int ncomp;
   /// Number of cells this ParticleDat is defined on.
   const int ncell;
-  /// Flat to indicate if this ParticleDat is to hold particle positions or
+  /// Flag to indicate if this ParticleDat is to hold particle positions or
   // cell ids.
   const bool positions;
-  /// Label given to the ParticleDat.
-  const std::string name;
   /// Compute device used by the instance.
   SYCLTargetSharedPtr sycl_target;
+  /// Is this ParticleDat of fixed size?
+  bool fixed_size;
 
   /**
    * Create a new ParticleDat.
@@ -228,10 +252,9 @@ public:
    */
   ParticleDatT(SYCLTargetSharedPtr sycl_target, const Sym<T> sym, int ncomp,
                int ncell, bool positions = false)
-      : sym(sym), cell_dat(CellDat<T>(sycl_target, ncell, ncomp)), ncomp(ncomp),
-        ncell(ncell), positions(positions), name(sym.name),
-        sycl_target(sycl_target) {
+      : ParticleDatT(sycl_target, sym, ncomp, ncell, positions, false) {
 
+    this->cell_dat.create(ncell, ncomp);
     this->cell_dat.add_write_callback(std::bind(
         &ParticleDatT<T>::write_callback_wrapper, this, std::placeholders::_1));
 
@@ -239,16 +262,18 @@ public:
         sycl::malloc_host<int>(this->ncell, this->sycl_target->queue);
     this->d_npart_cell =
         sycl::malloc_device<int>(this->ncell, this->sycl_target->queue);
-    for (int cellx = 0; cellx < this->ncell; cellx++) {
-      this->h_npart_cell[cellx] = 0;
-    }
-    this->npart_host_to_device();
+
+    auto e0 = this->sycl_target->queue.fill(this->d_npart_cell, 0, this->ncell);
+    std::fill(this->h_npart_cell, this->h_npart_cell + this->ncell, 0);
+    e0.wait();
   }
 
   /**
    *  Copy cell particle counts from host buffer to device buffer.
    */
   inline void npart_host_to_device() {
+    NESOASSERT(!this->fixed_size,
+               "This call does not make sense for a fixed sized ParticleDat.");
     if (this->ncell > 0) {
       this->sycl_target->queue
           .memcpy(this->d_npart_cell, this->h_npart_cell,
@@ -263,6 +288,8 @@ public:
    *  @returns sycl::event for copy operation.
    */
   inline sycl::event async_npart_host_to_device() {
+    NESOASSERT(!this->fixed_size,
+               "This call does not make sense for a fixed sized ParticleDat.");
     NESOASSERT(this->ncell > 0, "Zero sized memcpy issued");
     return this->sycl_target->queue.memcpy(
         this->d_npart_cell, this->h_npart_cell, this->ncell * sizeof(int));
@@ -271,6 +298,8 @@ public:
    *  Copy cell particle counts from device buffer to host buffer.
    */
   inline void npart_device_to_host() {
+    NESOASSERT(!this->fixed_size,
+               "This call does not make sense for a fixed sized ParticleDat.");
     if (this->ncell > 0) {
       this->sycl_target->queue
           .memcpy(this->h_npart_cell, this->d_npart_cell,
@@ -285,14 +314,18 @@ public:
    *  @returns sycl::event for copy operation.
    */
   inline sycl::event async_npart_device_to_host() {
+    NESOASSERT(!this->fixed_size,
+               "This call does not make sense for a fixed sized ParticleDat.");
     NESOASSERT(this->ncell > 0, "Zero sized memcpy issued");
     return this->sycl_target->queue.memcpy(
         this->h_npart_cell, this->d_npart_cell, this->ncell * sizeof(int));
   }
 
   ~ParticleDatT() {
-    sycl::free(this->h_npart_cell, this->sycl_target->queue);
-    sycl::free(this->d_npart_cell, this->sycl_target->queue);
+    if (!this->fixed_size) {
+      sycl::free(this->h_npart_cell, this->sycl_target->queue);
+      sycl::free(this->d_npart_cell, this->sycl_target->queue);
+    }
   }
 
   /**
@@ -429,6 +462,8 @@ public:
    */
   template <typename U>
   inline void set_npart_cells_host(const U *h_npart_cell_in) {
+    NESOASSERT(!this->fixed_size,
+               "This call does not make sense for a fixed sized ParticleDat.");
     this->write_callback_wrapper(0);
     for (int cellx = 0; cellx < this->ncell; cellx++) {
       this->h_npart_cell[cellx] = h_npart_cell_in[cellx];
@@ -442,6 +477,8 @@ public:
    *  @param npart New particle count for cell.
    */
   inline void set_npart_cell(const INT cell, const int npart) {
+    NESOASSERT(!this->fixed_size,
+               "This call does not make sense for a fixed sized ParticleDat.");
     this->write_callback_wrapper(0);
     this->h_npart_cell[cell] = npart;
     this->sycl_target->queue
@@ -457,6 +494,8 @@ public:
    *  @param npart std::vector of new particle counts per cell.
    */
   inline void set_npart_cells(std::vector<INT> &npart) {
+    NESOASSERT(!this->fixed_size,
+               "This call does not make sense for a fixed sized ParticleDat.");
     this->write_callback_wrapper(0);
     NESOASSERT(npart.size() >= this->ncell, "bad vector size");
     for (int cellx = 0; cellx < this->ncell; cellx++) {
@@ -474,6 +513,8 @@ public:
    */
   template <typename U>
   inline void set_npart_cells(const BufferHost<U> &h_npart_cell_in) {
+    NESOASSERT(!this->fixed_size,
+               "This call does not make sense for a fixed sized ParticleDat.");
     this->write_callback_wrapper(0);
     NESOASSERT(h_npart_cell_in.size >= this->ncell, "bad BufferHost size");
     for (int cellx = 0; cellx < this->ncell; cellx++) {
@@ -493,6 +534,8 @@ public:
   template <typename U>
   inline sycl::event
   async_set_npart_cells(const BufferHost<U> &h_npart_cell_in) {
+    NESOASSERT(!this->fixed_size,
+               "This call does not make sense for a fixed sized ParticleDat.");
     this->write_callback_wrapper(0);
     NESOASSERT(h_npart_cell_in.size >= static_cast<std::size_t>(this->ncell),
                "bad BufferHost size");
@@ -637,6 +680,8 @@ inline void ParticleDatT<T>::realloc(const int cell, const int npart_cell_new) {
 }
 
 template <typename T> inline void ParticleDatT<T>::trim_cell_dat_rows() {
+  NESOASSERT(!this->fixed_size,
+             "This call does not make sense for a fixed sized ParticleDat.");
   this->cell_dat.reduce_nrow(this->h_npart_cell);
   this->write_callback_wrapper(0);
 }
@@ -652,7 +697,8 @@ inline void ParticleDatT<T>::append_particle_data(
     const std::shared_ptr<BufferDevice<INT>> d_cells,
     const std::shared_ptr<BufferDevice<INT>> d_layers,
     const std::shared_ptr<BufferDevice<T>> d_data, EventStack &es) {
-
+  NESOASSERT(!this->fixed_size,
+             "This call does not make sense for a fixed sized ParticleDat.");
   if (npart_new == 0) {
     return;
   }
@@ -713,7 +759,8 @@ inline void ParticleDatT<T>::append_particle_data(
     ParticleDatSharedPtr<T> particle_dat,
     const std::vector<INT> &h_npart_cell_existing,
     const std::vector<INT> &h_npart_cell_to_add, EventStack &es) {
-
+  NESOASSERT(!this->fixed_size,
+             "This call does not make sense for a fixed sized ParticleDat.");
   if (particle_dat != nullptr) {
     NESOASSERT(
         this->ncell == particle_dat->ncell,
