@@ -247,8 +247,8 @@ protected:
     this->ncol = ncol;
     this->fixed_size = true;
 
-    T *k_data = static_cast<T *>(this->sycl_target->queue.malloc_device(
-        npart_local * this->ncol * sizeof(T)));
+    T *k_data = static_cast<T *>(
+        this->sycl_target->malloc_device(npart_local * this->ncol * sizeof(T)));
     NESOASSERT(k_data != nullptr, "Bad malloc_device call.");
 
     auto k_ptr = this->d_ptr;

@@ -1,6 +1,7 @@
 #ifndef _NESO_PARTICLES_SUB_GROUP_PARTICLE_SUB_GROUP_BASE_HPP_
 #define _NESO_PARTICLES_SUB_GROUP_PARTICLE_SUB_GROUP_BASE_HPP_
 
+#include "../containers/ephemeral_dats.hpp"
 #include "sub_group_selector.hpp"
 #include "sub_group_selector_base.hpp"
 
@@ -18,7 +19,7 @@ template <typename KERNEL, typename... ARGS> class ParticleLoopSubGroup;
  * A ParticleSubGroup with no selector lambda refers to the entire parent
  * ParticleGroup.
  */
-class ParticleSubGroup {
+class ParticleSubGroup : public EphemeralDats {
   // This allows the ParticleLoop to access the implementation methods.
   template <typename KERNEL, typename... ARGS>
   friend class ParticleLoopSubGroup;
@@ -35,7 +36,7 @@ public:
   ParticleSubGroupImplementation::SubGroupSelectorBaseSharedPtr selector;
   ParticleSubGroupImplementation::Selection selection;
 
-  int npart_local;
+  INT npart_local;
   bool is_whole_particle_group;
 
   /**
@@ -66,16 +67,29 @@ public:
 
   inline void get_cells_layers(INT *d_cells, INT *d_layers);
 
+  virtual inline void prepare_ephemeral_dats() override {
+    this->create_if_required();
+  }
+
   inline bool create_inner() {
     NESOASSERT(!this->is_whole_particle_group,
                "Explicitly creating the ParticleSubGroup when the sub-group is "
                "the entire ParticleGroup should never be required.");
     const bool was_updated = this->selector->get(&this->selection);
     this->npart_local = this->selection.npart_local;
+
+    if (was_updated) {
+      this->reset_ephemeral_dats(
+          this->selection.npart_local, this->selection.h_npart_cell,
+          this->selection.d_npart_cell, this->selection.d_npart_cell_es);
+    }
+
     return was_updated;
   }
 
 public:
+  virtual ~ParticleSubGroup() = default;
+
   /**
    * Create a ParticleSubGroup based on a kernel and arguments. The selector
    * kernel must be a lambda which returns true for particles which are in the
@@ -134,7 +148,9 @@ public:
    */
   ParticleSubGroup(
       ParticleSubGroupImplementation::SubGroupSelectorSharedPtr selector)
-      : is_static(false), particle_group(selector->particle_group),
+      : EphemeralDats(selector->particle_group->sycl_target,
+                      selector->particle_group->domain->mesh->get_cell_count()),
+        is_static(false), particle_group(selector->particle_group),
         selector(selector), is_whole_particle_group(false) {}
 
   /**
@@ -145,7 +161,9 @@ public:
    */
   ParticleSubGroup(
       ParticleSubGroupImplementation::SubGroupSelectorBaseSharedPtr selector)
-      : is_static(false), particle_group(selector->particle_group),
+      : EphemeralDats(selector->particle_group->sycl_target,
+                      selector->particle_group->domain->mesh->get_cell_count()),
+        is_static(false), particle_group(selector->particle_group),
         selector(selector), is_whole_particle_group(false) {}
 
   /**

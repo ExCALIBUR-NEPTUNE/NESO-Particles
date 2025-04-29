@@ -113,7 +113,7 @@ protected:
   std::size_t npart_cell_hint{0};
   bool is_temporary;
   int ncell;
-  int npart_local;
+  INT npart_local;
   BufferHost<INT> h_npart_cell;
   BufferDevice<INT> d_npart_cell;
 
@@ -394,7 +394,7 @@ protected:
       h_ptr[cellx] = total;
       total += h_ptr_s[cellx];
     }
-    this->npart_local = static_cast<int>(total);
+    this->npart_local = total;
     this->dh_npart_cell_es->host_to_device();
   }
   inline void setup_internal(DomainSharedPtr domain,
@@ -794,7 +794,7 @@ public:
    *
    *  @returns Local particle count.
    */
-  inline int get_npart_local() { return this->npart_local; }
+  inline INT get_npart_local() { return this->npart_local; }
 
   /**
    *  Determine if the ParticleGroup contains a ParticleDat of a given name.
