@@ -155,7 +155,6 @@ template <typename T> class SymVector {
 
 protected:
   ParticleGroupSharedPtr particle_group;
-  std::vector<Sym<T>> syms;
   /// The ParticleDats referenced by the SymVector.
   std::vector<ParticleDatSharedPtr<T>> dats;
 
@@ -168,13 +167,14 @@ protected:
         this->syms);
   }
 
-  inline void create() {
-    this->particle_group->sym_vector_pointer_cache_dispatch->create(this->syms);
-  }
-
 public:
   SymVector() = default;
   SymVector<T> &operator=(const SymVector<T> &) = default;
+
+  /**
+   * The Sym<T> instances of this SymVector.
+   */
+  std::vector<Sym<T>> syms;
 
   /**
    * Create a SymVector using a ParticleGroup and a std::vector of Syms.
@@ -183,9 +183,7 @@ public:
    * @param syms Vector of Syms to use from particle_group.
    */
   SymVector(ParticleGroupSharedPtr particle_group, std::vector<Sym<T>> syms)
-      : particle_group(particle_group), syms(syms) {
-    this->create();
-  }
+      : particle_group(particle_group), syms(syms) {}
 
   /**
    * Create a SymVector using a ParticleGroup and an initialiser list of syms,
@@ -198,9 +196,7 @@ public:
    */
   SymVector(ParticleGroupSharedPtr particle_group,
             std::initializer_list<Sym<T>> syms)
-      : particle_group(particle_group), syms(syms) {
-    this->create();
-  }
+      : particle_group(particle_group), syms(syms) {}
 
   /**
    * @returns The ParticleDats that form the SymVector.

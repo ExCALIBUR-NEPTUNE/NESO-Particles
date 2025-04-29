@@ -8,5 +8,7 @@ TEST(EphemeralDats, create) {
       A, [=](auto ID) { return ID.at(0) % 2 == 0; },
       Access::read(Sym<INT>("ID")));
 
+  aa->add_ephemeral_dat(Sym<REAL>("NORMAL"), 2);
+
   sycl_target->free();
 }

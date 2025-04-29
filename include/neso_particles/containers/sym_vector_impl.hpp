@@ -56,6 +56,23 @@ sym_vector(ParticleSubGroupSharedPtr particle_sub_group,
   return sym_vector(particle_sub_group->get_particle_group(), syms);
 }
 
+namespace ParticleLoopImplementation {
+
+template <typename T>
+inline void pre_loop(ParticleLoopGlobalInfo *global_info,
+                     Access::Read<SymVector<T> *> &arg) {
+  global_info->particle_group->sym_vector_pointer_cache_dispatch->create(
+      arg.obj->syms);
+}
+template <typename T>
+inline void pre_loop(ParticleLoopGlobalInfo *global_info,
+                     Access::Write<SymVector<T> *> &arg) {
+  global_info->particle_group->sym_vector_pointer_cache_dispatch->create(
+      arg.obj->syms);
+}
+
+} // namespace ParticleLoopImplementation
+
 } // namespace NESO::Particles
 
 #endif

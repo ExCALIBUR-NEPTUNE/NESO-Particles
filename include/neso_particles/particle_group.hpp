@@ -38,6 +38,14 @@ namespace ParticleSubGroupImplementation {
 class SubGroupSelector;
 class SubGroupSelectorBase;
 } // namespace ParticleSubGroupImplementation
+namespace ParticleLoopImplementation {
+template <typename T>
+inline void pre_loop(ParticleLoopGlobalInfo *global_info,
+                     Access::Read<SymVector<T> *> &arg);
+template <typename T>
+inline void pre_loop(ParticleLoopGlobalInfo *global_info,
+                     Access::Write<SymVector<T> *> &arg);
+} // namespace ParticleLoopImplementation
 
 /**
  * Type to replace std::variant<Sym<INT>, Sym<REAL>> as the version tracking
@@ -99,6 +107,14 @@ class ParticleGroup {
   friend class SymVector<INT>;
   friend class ParticleGroupTemporary;
   friend struct TestParticleGroup;
+  template <typename T>
+  friend inline void ParticleLoopImplementation::pre_loop(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      Access::Read<SymVector<T> *> &arg);
+  template <typename T>
+  friend inline void ParticleLoopImplementation::pre_loop(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      Access::Write<SymVector<T> *> &arg);
 
 protected:
   // This type should be replaceable with typedef std::variant<Sym<INT>,

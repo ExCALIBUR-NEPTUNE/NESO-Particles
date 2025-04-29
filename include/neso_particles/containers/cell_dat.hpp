@@ -242,9 +242,7 @@ protected:
   inline void create_fixed_size(const int ncells, const int ncol,
                                 const INT npart_local, int *h_npart_cell,
                                 int *d_npart_cell, INT *d_npart_cell_es) {
-
-    this->ncells = ncells;
-    this->ncol = ncol;
+    this->create(ncells, ncol);
     this->fixed_size = true;
 
     T *k_data = static_cast<T *>(
@@ -252,8 +250,7 @@ protected:
     NESOASSERT(k_data != nullptr, "Bad malloc_device call.");
 
     auto k_ptr = this->d_ptr;
-    auto k_ncell = this->ncell;
-    auto k_npart_local = this->npart_local;
+    auto k_ncell = ncells;
 
     auto e0 = this->sycl_target->queue.parallel_for(
         sycl::range<1>(k_ncell), [=](auto cellx) {
@@ -262,12 +259,12 @@ protected:
           T *base_ptr = k_data + npart_cell_es * ncol;
           for (int cx = 0; cx < ncol; cx++) {
             auto col_ptr = base_ptr + cx * npart_cell;
-            k_data[cellx][cx] = col_ptr;
+            k_ptr[cellx][cx] = col_ptr;
           }
         });
 
     auto d_tmp = k_data;
-    for (int cellx = 0; cellx < this->ncell; cellx++) {
+    for (int cellx = 0; cellx < ncells; cellx++) {
       const auto npart_cell = h_npart_cell[cellx];
       this->nrow_alloc[cellx] = npart_cell;
       this->nrow[cellx] = npart_cell;
@@ -281,17 +278,19 @@ protected:
   }
 
   inline void create(const int ncells, const int ncol) {
-    this->ncells = ncells, this->ncol = ncol;
+    this->ncells = ncells;
+    this->ncol = ncol;
+
+    this->h_ptr_cells.resize(ncells);
+    this->h_ptr_cols.resize(ncells * ncol);
+    this->nrow_alloc.resize(ncells);
+    this->nrow.resize(ncells);
     this->fixed_size = false;
 
-    this->nrow = std::vector<INT>(ncells);
     // If the lifespan of this member changes then SymVectorPointerCache also
     // needs updating.
     this->d_ptr =
         (T ***)this->sycl_target->malloc_device(ncells * sizeof(T **));
-    this->h_ptr_cells = std::vector<T **>(ncells);
-    this->h_ptr_cols = std::vector<T *>(ncells * ncol);
-    this->nrow_alloc = std::vector<INT>(ncells);
 
     T **cols_base_ptr =
         (T **)this->sycl_target->malloc_device(ncells * ncol * sizeof(T *));

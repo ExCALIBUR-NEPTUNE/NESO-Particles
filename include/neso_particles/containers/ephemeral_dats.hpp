@@ -99,42 +99,13 @@ public:
                    "but with a different number of components.");
 
     if (!this->contains_ephemeral_dat(sym)) {
-      auto d_cell_ptrs = std::make_shared<BufferDevice<T **>>(
-          this->ephemeral.sycl_target, this->ephemeral.ncell);
-      auto d_col_ptrs = std::make_shared<BufferDevice<T *>>(
-          this->ephemeral.sycl_target, this->ephemeral.ncell * ncomp);
-      auto d_data = std::make_shared<BufferDevice<T>>(
-          this->ephemeral.sycl_target, this->ephemeral.npart_local * ncomp);
-      this->push_ephemeral_dat(sym, std::make_shared<ParticleDatT<T>>(
-                                        this->ephemeral.sycl_target, sym, ncomp,
-                                        this->ephemeral.npart_local,
-                                        this->ephemeral.h_npart_cell,
-                                        this->ephemeral.d_npart_cell,
-                                        this->ephemeral.d_npart_cell_es));
-
-      auto k_cell_ptrs = d_cell_ptrs->ptr;
-      auto k_col_ptrs = d_col_ptrs->ptr;
-      auto k_data = d_data->ptr;
-
-      auto k_npart_cell_es = this->ephemeral.d_npart_cell_es;
-      auto k_ncell = this->ephemeral.ncell;
-      auto k_npart_local = this->ephemeral.npart_local;
-
-      this->ephemeral.es.push(this->ephemeral.sycl_target->queue.parallel_for(
-          sycl::range<1>(k_ncell), [=](auto cellx) {
-            const INT npart_cell =
-                (cellx < (k_ncell - 1))
-                    ? k_npart_cell_es[cellx + 1] - k_npart_cell_es[cellx]
-                    : k_npart_local - k_npart_cell_es[cellx];
-
-            const INT npart_cell_es = k_npart_cell_es[cellx];
-            T *base_ptr = k_data + npart_cell_es * ncomp;
-            for (int cx = 0; cx < ncomp; cx++) {
-              auto col_ptr = base_ptr + cx * npart_cell;
-              k_col_ptrs[cellx * ncomp + cx] = col_ptr;
-            }
-            k_cell_ptrs[cellx] = k_col_ptrs + cellx * ncomp;
-          }));
+      // This constructor is protected within ParticleDatT so we have to use a
+      // new.
+      auto ptr = std::shared_ptr<ParticleDatT<T>>(new ParticleDatT(
+          this->ephemeral.sycl_target, sym, ncomp, this->ephemeral.ncell,
+          this->ephemeral.npart_local, this->ephemeral.h_npart_cell,
+          this->ephemeral.d_npart_cell, this->ephemeral.d_npart_cell_es));
+      this->push_ephemeral_dat(sym, ptr);
     }
   }
 

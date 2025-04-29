@@ -227,7 +227,12 @@ template <typename KERNEL, typename... ARGS>
 particle_loop(ParticleSubGroupSharedPtr particle_group, KERNEL kernel,
               ARGS... args) {
   if (particle_group->is_entire_particle_group()) {
-    return particle_loop(particle_group->get_particle_group(), kernel, args...);
+    auto p = std::make_shared<ParticleLoop<KERNEL, ARGS...>>(
+        "unnamed_kernel", particle_group->get_particle_group(), particle_group,
+        kernel, args...);
+    auto b = std::dynamic_pointer_cast<ParticleLoopBase>(p);
+    NESOASSERT(b != nullptr, "ParticleLoop pointer cast failed.");
+    return b;
   } else {
     auto p = std::make_shared<ParticleLoopSubGroup<KERNEL, ARGS...>>(
         particle_group, kernel, args...);
@@ -253,8 +258,12 @@ template <typename KERNEL, typename... ARGS>
 particle_loop(const std::string name, ParticleSubGroupSharedPtr particle_group,
               KERNEL kernel, ARGS... args) {
   if (particle_group->is_entire_particle_group()) {
-    return particle_loop(name, particle_group->get_particle_group(), kernel,
-                         args...);
+    auto p = std::make_shared<ParticleLoop<KERNEL, ARGS...>>(
+        name, particle_group->get_particle_group(), particle_group, kernel,
+        args...);
+    auto b = std::dynamic_pointer_cast<ParticleLoopBase>(p);
+    NESOASSERT(b != nullptr, "ParticleLoop pointer cast failed.");
+    return b;
   } else {
     auto p = std::make_shared<ParticleLoopSubGroup<KERNEL, ARGS...>>(
         name, particle_group, kernel, args...);

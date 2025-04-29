@@ -27,6 +27,7 @@ template <typename T> class SymVector;
 template <typename T> class SymVectorPointerCache;
 
 class EphemeralDats;
+class ParticleSubGroup;
 class MeshHierarchyGlobalMap;
 class CellMove;
 class LayerCompressor;
@@ -108,6 +109,7 @@ template <typename T> class ParticleDatT {
   friend class ParticleGroupPointerMap;
   friend struct TestParticleGroup;
   friend class EphemeralDats;
+  friend class ParticleSubGroup;
 
   friend ParticleDatImplGetConstT<T>
   ParticleLoopImplementation::create_loop_arg<T>(
@@ -208,8 +210,8 @@ protected:
                int *d_npart_cell, INT *d_npart_cell_es)
       : ParticleDatT(sycl_target, sym, ncomp, ncell, false, true) {
 
-    this->cell_dat.create_fixed(ncell, ncomp, npart_local, h_npart_cell,
-                                d_npart_cell, d_npart_cell_es);
+    this->cell_dat.create_fixed_size(ncell, ncomp, npart_local, h_npart_cell,
+                                     d_npart_cell, d_npart_cell_es);
 
     this->d_npart_cell = d_npart_cell;
     this->h_npart_cell = h_npart_cell;
