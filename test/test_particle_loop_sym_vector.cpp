@@ -77,8 +77,10 @@ TEST(ParticleLoop, sym_vector_pointer_cache) {
   auto mesh = domain->mesh;
   auto sycl_target = A->sycl_target;
 
-  SymVectorPointerCache cache_real(sycl_target, &A->particle_dats_real);
-  SymVectorPointerCache cache_int(sycl_target, &A->particle_dats_int);
+  SymVectorPointerCache<REAL> cache_real(sycl_target, &A->particle_dats_real,
+                                         nullptr);
+  SymVectorPointerCache<INT> cache_int(sycl_target, &A->particle_dats_int,
+                                       nullptr);
 
   {
     auto lambda_test_const_pointers = [&](auto syms, auto &cache) {
@@ -167,7 +169,8 @@ TEST(ParticleLoop, sym_vector_pointer_cache) {
   }
 
   SymVectorPointerCacheDispatch dispatcher(sycl_target, &A->particle_dats_int,
-                                           &A->particle_dats_real);
+                                           nullptr, &A->particle_dats_real,
+                                           nullptr);
 
   {
     auto lambda_test_const_pointers = [&](auto syms) {

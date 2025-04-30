@@ -27,14 +27,24 @@ public:
    *  Create instance from map from Syms to ParticleDats
    *
    *  @param sycl_target Compute device for all ParticleDats and buffers.
-   *  @param particle_dats_map Map from Syms to ParticleDats.
+   *  @param particle_dats_map_int Map from Syms to ParticleDats.
+   *  @param particle_dats_map_int_eph Map from Syms to ParticleDats for
+   * EphemeralDats.
+   *  @param particle_dats_map_real Map from Syms to ParticleDats.
+   *  @param particle_dats_map_real_eph Map from Syms to ParticleDats for
+   * EphemeralDats.
    */
   SymVectorPointerCacheDispatch(
       SYCLTargetSharedPtr sycl_target,
       std::map<Sym<INT>, ParticleDatSharedPtr<INT>> *particle_dats_map_int,
-      std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> *particle_dats_map_real)
-      : cache_int(sycl_target, particle_dats_map_int),
-        cache_real(sycl_target, particle_dats_map_real) {}
+      std::map<Sym<INT>, ParticleDatSharedPtr<INT>> *particle_dats_map_int_eph,
+      std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> *particle_dats_map_real,
+      std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>>
+          *particle_dats_map_real_eph)
+      : cache_int(sycl_target, particle_dats_map_int,
+                  particle_dats_map_int_eph),
+        cache_real(sycl_target, particle_dats_map_real,
+                   particle_dats_map_real_eph) {}
 
   /**
    * Create the cache entry for a vector of Syms.
@@ -91,6 +101,46 @@ public:
   inline ParticleDatImplGetConstT<REAL> *
   get_const(std::vector<Sym<REAL>> &syms) {
     return this->cache_real.get_const(syms);
+  }
+
+  /**
+   * Get the device pointer for a single dat.
+   *
+   * @param sym Sym to get device pointers for.
+   * @returns Device pointer for requested dat.
+   */
+  inline ParticleDatImplGetT<INT> get(Sym<INT> sym) {
+    return this->cache_int.get(sym);
+  }
+
+  /**
+   * Get the device pointer for a single dat.
+   *
+   * @param sym Sym to get device pointers for.
+   * @returns Device pointer for requested dat.
+   */
+  inline ParticleDatImplGetT<REAL> get(Sym<REAL> sym) {
+    return this->cache_real.get(sym);
+  }
+
+  /**
+   * Get the device pointer for a single dat.
+   *
+   * @param sym Sym to get device pointers for.
+   * @returns Device pointer for requested dat.
+   */
+  inline ParticleDatImplGetConstT<INT> get_const(Sym<INT> sym) {
+    return this->cache_int.get_const(sym);
+  }
+
+  /**
+   * Get the device pointer for a single dat.
+   *
+   * @param sym Sym to get device pointers for.
+   * @returns Device pointer for requested dat.
+   */
+  inline ParticleDatImplGetConstT<REAL> get_const(Sym<REAL> sym) {
+    return this->cache_real.get_const(sym);
   }
 };
 

@@ -2,6 +2,7 @@
 #define __NESO_PARTICLES_EPHEMERAL_EPHEMERAL_DATS_HPP_
 
 #include "../particle_dat.hpp"
+#include "sym_vector_pointer_cache_dispatch.hpp"
 
 namespace NESO::Particles {
 
@@ -27,11 +28,21 @@ protected:
     int *d_npart_cell{nullptr};
     INT *d_npart_cell_es{nullptr};
     EventStack es;
+    /// Cached pointers for SymVector to use.
+    std::shared_ptr<SymVectorPointerCacheDispatch>
+        sym_vector_pointer_cache_dispatch;
   } ephemeral;
 
-  EphemeralDats(SYCLTargetSharedPtr sycl_target, const int ncell) {
+  EphemeralDats(
+      SYCLTargetSharedPtr sycl_target, const int ncell,
+      std::map<Sym<INT>, ParticleDatSharedPtr<INT>> *particle_dats_int_pg,
+      std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> *particle_dats_real_pg) {
     this->ephemeral.sycl_target = sycl_target;
     this->ephemeral.ncell = ncell;
+    this->ephemeral.sym_vector_pointer_cache_dispatch =
+        std::make_shared<SymVectorPointerCacheDispatch>(
+            sycl_target, particle_dats_int_pg, &this->ephemeral.dats_int,
+            particle_dats_real_pg, &this->ephemeral.dats_real);
   }
 
   virtual inline void prepare_ephemeral_dats() = 0;
@@ -45,6 +56,7 @@ protected:
     this->ephemeral.d_npart_cell_es = d_npart_cell_es;
     this->ephemeral.dats_real.clear();
     this->ephemeral.dats_int.clear();
+    this->ephemeral.sym_vector_pointer_cache_dispatch->reset();
   }
 
   inline void push_ephemeral_dat(Sym<REAL> sym,

@@ -149,7 +149,9 @@ public:
   ParticleSubGroup(
       ParticleSubGroupImplementation::SubGroupSelectorSharedPtr selector)
       : EphemeralDats(selector->particle_group->sycl_target,
-                      selector->particle_group->domain->mesh->get_cell_count()),
+                      selector->particle_group->domain->mesh->get_cell_count(),
+                      &selector->particle_group->particle_dats_int,
+                      &selector->particle_group->particle_dats_real),
         is_static(false), particle_group(selector->particle_group),
         selector(selector), is_whole_particle_group(false) {}
 
@@ -162,7 +164,9 @@ public:
   ParticleSubGroup(
       ParticleSubGroupImplementation::SubGroupSelectorBaseSharedPtr selector)
       : EphemeralDats(selector->particle_group->sycl_target,
-                      selector->particle_group->domain->mesh->get_cell_count()),
+                      selector->particle_group->domain->mesh->get_cell_count(),
+                      &selector->particle_group->particle_dats_int,
+                      &selector->particle_group->particle_dats_real),
         is_static(false), particle_group(selector->particle_group),
         selector(selector), is_whole_particle_group(false) {}
 

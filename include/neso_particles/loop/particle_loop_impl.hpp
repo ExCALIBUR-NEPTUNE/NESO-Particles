@@ -9,7 +9,6 @@ namespace NESO::Particles {
 /**
  * Method to compute access to a type wrapped in a shared_ptr.
  */
-
 template <typename KERNEL, typename... ARGS>
 template <template <typename> typename T, typename U>
 inline auto ParticleLoop<KERNEL, ARGS...>::pre_loop_cast(
@@ -18,6 +17,7 @@ inline auto ParticleLoop<KERNEL, ARGS...>::pre_loop_cast(
   T<U *> c = {a.obj.get()};
   ParticleLoopImplementation::pre_loop(global_info, c);
 }
+
 /**
  * Method to compute access to a type not wrapper in a shared_ptr
  */

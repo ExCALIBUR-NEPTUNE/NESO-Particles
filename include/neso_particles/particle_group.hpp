@@ -432,8 +432,8 @@ protected:
 
     this->sym_vector_pointer_cache_dispatch =
         std::make_shared<SymVectorPointerCacheDispatch>(
-            this->sycl_target, &this->particle_dats_int,
-            &this->particle_dats_real);
+            this->sycl_target, &this->particle_dats_int, nullptr,
+            &this->particle_dats_real, nullptr);
 
     this->h_npart_cell.realloc_no_copy(this->ncell);
     this->d_npart_cell.realloc_no_copy(this->ncell);
