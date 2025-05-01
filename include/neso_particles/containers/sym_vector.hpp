@@ -31,7 +31,7 @@ namespace Access::SymVector {
 template <typename T> struct Read {
   ParticleLoopImplementation::ParticleLoopIteration const *iterationx;
   /// Pointer to underlying data.
-  T *const *const *const *ptr;
+  T const *RESTRICT const *RESTRICT const *RESTRICT const *RESTRICT ptr;
   T const &at(const int dat_index, const int cell, const int layer,
               const int component) const {
     return ptr[dat_index][cell][component][layer];
@@ -54,7 +54,7 @@ template <typename T> struct Read {
 template <typename T> struct Write {
   ParticleLoopImplementation::ParticleLoopIteration const *iterationx;
   /// Pointer to underlying data.
-  T ****ptr;
+  T *RESTRICT const *RESTRICT const *RESTRICT const *RESTRICT ptr;
   T &at(const int dat_index, const int cell, const int layer,
         const int component) const {
     return ptr[dat_index][cell][component][layer];

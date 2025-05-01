@@ -2,7 +2,7 @@
 #include "include/test_neso_particles.hpp"
 
 TEST(EphemeralDats, create) {
-  auto [A, sycl_target, cell_count_t] = particle_loop_common_2d(27, 2, 2);
+  auto [A, sycl_target, cell_count_t] = particle_loop_common_2d(27, 16, 32);
   constexpr int ndim = 2;
 
   const int cell_count = cell_count_t;

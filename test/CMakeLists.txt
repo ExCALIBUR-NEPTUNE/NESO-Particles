@@ -96,6 +96,10 @@ foreach(TEST ${TEST_SRCS})
                              PRIVATE NESO_PARTICLES_TEST_COMPILATION)
   target_compile_definitions(
     ${TEST_NAME} PRIVATE CMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX})
+  if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_compile_definitions(${TEST_NAME}
+                               PRIVATE NESO_PARTICLES_SINGLE_COMPILED_LOOP)
+  endif()
   target_compile_options(${TEST_NAME} PRIVATE "-Wpedantic;-Wall;-Wextra")
   # exclude from all so indiviual tests aren't built for install
   set_target_properties(${TEST_NAME} PROPERTIES EXCLUDE_FROM_ALL TRUE)
@@ -121,6 +125,10 @@ target_compile_definitions(${EXECUTABLE}
                            PRIVATE NESO_PARTICLES_TEST_COMPILATION)
 target_compile_definitions(${EXECUTABLE}
                            PRIVATE CMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX})
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+  target_compile_definitions(${EXECUTABLE}
+                             PRIVATE NESO_PARTICLES_SINGLE_COMPILED_LOOP)
+endif()
 target_compile_options(${EXECUTABLE} PRIVATE "-Wpedantic;-Wall;-Wextra")
 
 set_target_properties(
