@@ -115,6 +115,9 @@ class ParticleGroup {
   friend inline void ParticleLoopImplementation::pre_loop(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
       Access::Write<SymVector<T> *> &arg);
+  friend inline SymVectorPointerCacheDispatchSharedPtr
+  get_sym_vector_cache_dispatch(ParticleGroup *particle_group,
+                                ParticleSubGroup *particle_sub_group);
 
 protected:
   // This type should be replaceable with typedef std::variant<Sym<INT>,

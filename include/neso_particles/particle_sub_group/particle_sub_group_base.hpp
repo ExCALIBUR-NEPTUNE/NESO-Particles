@@ -25,6 +25,9 @@ class ParticleSubGroup : public EphemeralDats {
   friend class ParticleLoopSubGroup;
   friend class ParticleGroup;
   friend class ParticleSubGroupImplementation::SubGroupSelectorBase;
+  friend inline SymVectorPointerCacheDispatchSharedPtr
+  get_sym_vector_cache_dispatch(ParticleGroup *particle_group,
+                                ParticleSubGroup *particle_sub_group);
 
 protected:
 #ifdef NESO_PARTICLES_TEST_COMPILATION
@@ -389,10 +392,12 @@ protected:
       SymStore print_spec(std::forward<T>(args)...);
 
       for (auto &symx : print_spec.syms_real) {
-        NESOASSERT(this->particle_group->contains_dat(symx), "Sym not found.");
+        NESOASSERT(this->particle_group->contains_dat(symx),
+                   "Sym not found: " + symx.name);
       }
       for (auto &symx : print_spec.syms_int) {
-        NESOASSERT(this->particle_group->contains_dat(symx), "Sym not found.");
+        NESOASSERT(this->particle_group->contains_dat(symx),
+                   "Sym not found. " + symx.name);
       }
 
       os << "==============================================================="

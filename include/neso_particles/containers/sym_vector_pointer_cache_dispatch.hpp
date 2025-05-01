@@ -24,6 +24,14 @@ public:
   }
 
   /**
+   * Empty the cache of any keys that include emphemeral dats.
+   */
+  inline void reset_ephemeral() {
+    this->cache_int.reset_ephemeral();
+    this->cache_real.reset_ephemeral();
+  }
+
+  /**
    *  Create instance from map from Syms to ParticleDats
    *
    *  @param sycl_target Compute device for all ParticleDats and buffers.
@@ -62,6 +70,24 @@ public:
    */
   inline void create(std::vector<Sym<REAL>> &syms) {
     this->cache_real.create(syms);
+  }
+
+  /**
+   * Create the cache entry for a vector of Syms.
+   *
+   * @param syms Vector of Syms to create entry for.
+   */
+  inline void create_const(std::vector<Sym<INT>> &syms) {
+    this->cache_int.create_const(syms);
+  }
+
+  /**
+   * Create the cache entry for a vector of Syms.
+   *
+   * @param syms Vector of Syms to create entry for.
+   */
+  inline void create_const(std::vector<Sym<REAL>> &syms) {
+    this->cache_real.create_const(syms);
   }
 
   /**
@@ -143,6 +169,23 @@ public:
     return this->cache_real.get_const(sym);
   }
 };
+
+using SymVectorPointerCacheDispatchSharedPtr =
+    std::shared_ptr<SymVectorPointerCacheDispatch>;
+
+/**
+ * Helper function to return the EphemeralDats SymVectorPointerCacheDispatch or
+ * the ParticleGroup SymVectorPointerCacheDispatch.
+ *
+ * @param particle_group Pointer to ParticleGroup.
+ * @param particle_sub_group Pointer to ParticleSubGroup, possibly nullptr.
+ * @returns SymVectorPointerCacheDispatch from particle_sub_group EphemeralDats
+ * if particle_sub_group is not a nullptr otherwise returns th
+ * SymVectorPointerCacheDispatch from the ParticleGroup.
+ */
+inline SymVectorPointerCacheDispatchSharedPtr
+get_sym_vector_cache_dispatch(ParticleGroup *particle_group,
+                              ParticleSubGroup *particle_sub_group);
 
 } // namespace NESO::Particles
 #endif

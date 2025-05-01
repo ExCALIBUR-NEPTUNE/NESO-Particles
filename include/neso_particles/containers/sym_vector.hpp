@@ -29,10 +29,9 @@ namespace Access::SymVector {
  * SymVector.
  */
 template <typename T> struct Read {
-  int cell;
-  int layer;
+  ParticleLoopImplementation::ParticleLoopIteration const *iterationx;
   /// Pointer to underlying data.
-  T *const *const **ptr;
+  T *const *const *const *ptr;
   T const &at(const int dat_index, const int cell, const int layer,
               const int component) const {
     return ptr[dat_index][cell][component][layer];
@@ -43,13 +42,17 @@ template <typename T> struct Read {
     return ptr[dat_index][particle_index.cell][component][particle_index.layer];
   }
   T const &at(const int dat_index, const int component) const {
-    return ptr[dat_index][this->cell][component][this->layer];
+    return ptr[dat_index][this->iterationx->cellx][component]
+              [this->iterationx->layerx];
+  }
+  T const &at_ephemeral(const int dat_index, const int component) const {
+    return ptr[dat_index][this->iterationx->cellx][component]
+              [this->iterationx->loop_layerx];
   }
 };
 
 template <typename T> struct Write {
-  int cell;
-  int layer;
+  ParticleLoopImplementation::ParticleLoopIteration const *iterationx;
   /// Pointer to underlying data.
   T ****ptr;
   T &at(const int dat_index, const int cell, const int layer,
@@ -61,7 +64,12 @@ template <typename T> struct Write {
     return ptr[dat_index][particle_index.cell][component][particle_index.layer];
   }
   T &at(const int dat_index, const int component) const {
-    return ptr[dat_index][this->cell][component][this->layer];
+    return ptr[dat_index][this->iterationx->cellx][component]
+              [this->iterationx->layerx];
+  }
+  T &at_ephemeral(const int dat_index, const int component) const {
+    return ptr[dat_index][this->iterationx->cellx][component]
+              [this->iterationx->loop_layerx];
   }
 };
 
@@ -100,9 +108,7 @@ template <typename T>
 inline SymVectorImplGetConstT<T>
 create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
                 [[maybe_unused]] sycl::handler &cgh,
-                Access::Read<SymVector<T> *> &a) {
-  return a.obj->impl_get_const();
-}
+                Access::Read<SymVector<T> *> &a);
 /**
  * Method to compute access to a SymVector (write).
  */
@@ -110,9 +116,7 @@ template <typename T>
 inline SymVectorImplGetT<T>
 create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
                 [[maybe_unused]] sycl::handler &cgh,
-                Access::Write<SymVector<T> *> &a) {
-  return a.obj->impl_get();
-}
+                Access::Write<SymVector<T> *> &a);
 
 /**
  *  Function to create the kernel argument for SymVector read access.
@@ -121,8 +125,7 @@ template <typename T>
 inline void create_kernel_arg(ParticleLoopIteration &iterationx,
                               T *const *const **rhs,
                               Access::SymVector::Read<T> &lhs) {
-  lhs.cell = iterationx.cellx;
-  lhs.layer = iterationx.layerx;
+  lhs.iterationx = &iterationx;
   lhs.ptr = rhs;
 }
 /**
@@ -131,8 +134,7 @@ inline void create_kernel_arg(ParticleLoopIteration &iterationx,
 template <typename T>
 inline void create_kernel_arg(ParticleLoopIteration &iterationx, T ****rhs,
                               Access::SymVector::Write<T> &lhs) {
-  lhs.cell = iterationx.cellx;
-  lhs.layer = iterationx.layerx;
+  lhs.iterationx = &iterationx;
   lhs.ptr = rhs;
 }
 

@@ -29,6 +29,9 @@ protected:
            std::unique_ptr<BufferDevice<ParticleDatImplGetConstT<T>>>>
       map_syms_const_ptrs;
 
+  // Keys that contain EphemeralDats.
+  std::set<std::vector<Sym<T>>> ephemeral_keys;
+
 public:
   SymVectorPointerCache<T> &
   operator=(const SymVectorPointerCache<T> &) = delete;
@@ -39,6 +42,17 @@ public:
   inline void reset() {
     this->map_syms_ptrs.clear();
     this->map_syms_const_ptrs.clear();
+  }
+
+  /**
+   * Empty the cache of any keys which contained EphemeralDat Syms.
+   */
+  inline void reset_ephemeral() {
+    for (auto &keyx : this->ephemeral_keys) {
+      this->map_syms_ptrs.erase(keyx);
+      this->map_syms_const_ptrs.erase(keyx);
+    }
+    this->ephemeral_keys.clear();
   }
 
   /**
@@ -77,21 +91,32 @@ public:
    * Find the ParticleDat for a given Sym. First checks the second map for
    * EphermalDats, if the map is not a nullptr, then checks the first.
    *
-   * @param sym Sym to find corresponding ParticleDat for.
+   * @param[in] sym Sym to find corresponding ParticleDat for.
+   * @param[in, out] is_ephemeral Optional bool, if not nullptr then this bool
+   * is true on return if the returned dat is an EphermalDat.
    * @returns ParticleDat.
    */
-  inline ParticleDatSharedPtr<T> find(Sym<T> sym) {
+  inline ParticleDatSharedPtr<T> find(Sym<T> sym,
+                                      bool *is_ephemeral = nullptr) {
     ParticleDatSharedPtr<T> dat = nullptr;
+    bool is_ephemeral_t = false;
+
     if (this->particle_dats_map_eph != nullptr) {
       if (this->particle_dats_map_eph->count(sym)) {
         dat = this->particle_dats_map_eph->at(sym);
+        is_ephemeral_t = true;
       }
     }
 
     if (dat == nullptr) {
       if (this->particle_dats_map->count(sym)) {
         dat = this->particle_dats_map->at(sym);
+        is_ephemeral_t = false;
       }
+    }
+
+    if (is_ephemeral != nullptr) {
+      *is_ephemeral = is_ephemeral_t;
     }
 
     NESOASSERT(
@@ -132,29 +157,47 @@ public:
    * @param syms Syms to create entry for.
    */
   inline void create(std::vector<Sym<T>> &syms) {
-    // If not in one of the caches
-    if ((!this->in_cache(syms)) || (!this->in_const_cache(syms))) {
+    if (!this->in_cache(syms)) {
       const std::size_t n = syms.size();
       std::vector<ParticleDatImplGetT<T>> ptrs(n);
+      bool is_ephemeral = false;
       for (std::size_t ix = 0; ix < n; ix++) {
         // Use d_ptr to avoid side effects from impl_get
-        ptrs[ix] = this->find(syms[ix])->cell_dat.d_ptr;
+        bool is_ephemeral_inner;
+        ptrs[ix] = this->find(syms[ix], &is_ephemeral_inner)->cell_dat.d_ptr;
+        is_ephemeral = is_ephemeral || is_ephemeral_inner;
       }
-
-      if (!this->in_cache(syms)) {
-        this->map_syms_ptrs[syms] =
-            std::make_unique<BufferDevice<ParticleDatImplGetT<T>>>(
-                this->sycl_target, ptrs);
+      this->map_syms_ptrs[syms] =
+          std::make_unique<BufferDevice<ParticleDatImplGetT<T>>>(
+              this->sycl_target, ptrs);
+      if (is_ephemeral) {
+        this->ephemeral_keys.insert(syms);
       }
+    }
+  }
 
-      if (!this->in_const_cache(syms)) {
-        std::vector<ParticleDatImplGetConstT<T>> ptrs_const(n);
-        for (std::size_t ix = 0; ix < n; ix++) {
-          ptrs_const[ix] = ptrs[ix];
-        }
-        this->map_syms_const_ptrs[syms] =
-            std::make_unique<BufferDevice<ParticleDatImplGetConstT<T>>>(
-                this->sycl_target, ptrs_const);
+  /**
+   * Create the cache entry for a vector of Syms for const access.
+   *
+   * @param syms Syms to create entry for.
+   */
+  inline void create_const(std::vector<Sym<T>> &syms) {
+    if (!this->in_const_cache(syms)) {
+      const std::size_t n = syms.size();
+      std::vector<ParticleDatImplGetConstT<T>> ptrs(n);
+
+      bool is_ephemeral = false;
+      for (std::size_t ix = 0; ix < n; ix++) {
+        // Use d_ptr to avoid side effects from impl_get
+        bool is_ephemeral_inner;
+        ptrs[ix] = this->find(syms[ix], &is_ephemeral_inner)->cell_dat.d_ptr;
+        is_ephemeral = is_ephemeral || is_ephemeral_inner;
+      }
+      this->map_syms_const_ptrs[syms] =
+          std::make_unique<BufferDevice<ParticleDatImplGetConstT<T>>>(
+              this->sycl_target, ptrs);
+      if (is_ephemeral) {
+        this->ephemeral_keys.insert(syms);
       }
     }
   }

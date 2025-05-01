@@ -85,6 +85,7 @@ TEST(ParticleLoop, sym_vector_pointer_cache) {
   {
     auto lambda_test_const_pointers = [&](auto syms, auto &cache) {
       cache.create(syms);
+      cache.create_const(syms);
       auto to_test_ptrs = cache.get_const(syms);
       ErrorPropagate ep(sycl_target);
       auto k_ep = ep.device_ptr();
@@ -105,6 +106,7 @@ TEST(ParticleLoop, sym_vector_pointer_cache) {
 
     auto lambda_test_pointers = [&](auto syms, auto &cache) {
       cache.create(syms);
+      cache.create_const(syms);
       auto to_test_ptrs = cache.get(syms);
       ErrorPropagate ep(sycl_target);
       auto k_ep = ep.device_ptr();
@@ -175,6 +177,7 @@ TEST(ParticleLoop, sym_vector_pointer_cache) {
   {
     auto lambda_test_const_pointers = [&](auto syms) {
       dispatcher.create(syms);
+      dispatcher.create_const(syms);
       auto to_test_ptrs = dispatcher.get_const(syms);
       ErrorPropagate ep(sycl_target);
       auto k_ep = ep.device_ptr();
@@ -195,6 +198,7 @@ TEST(ParticleLoop, sym_vector_pointer_cache) {
 
     auto lambda_test_pointers = [&](auto syms) {
       dispatcher.create(syms);
+      dispatcher.create_const(syms);
       auto to_test_ptrs = dispatcher.get(syms);
       ErrorPropagate ep(sycl_target);
       auto k_ep = ep.device_ptr();

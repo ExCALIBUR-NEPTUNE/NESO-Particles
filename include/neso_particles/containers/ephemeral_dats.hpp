@@ -56,7 +56,7 @@ protected:
     this->ephemeral.d_npart_cell_es = d_npart_cell_es;
     this->ephemeral.dats_real.clear();
     this->ephemeral.dats_int.clear();
-    this->ephemeral.sym_vector_pointer_cache_dispatch->reset();
+    this->ephemeral.sym_vector_pointer_cache_dispatch->reset_ephemeral();
   }
 
   inline void push_ephemeral_dat(Sym<REAL> sym,
@@ -71,18 +71,6 @@ protected:
   }
   inline void pop_ephemeral_dat(Sym<INT> sym) {
     this->ephemeral.dats_int.erase(sym);
-  }
-
-  inline ParticleDatSharedPtr<REAL> get_ephemeral_dat(Sym<REAL> sym) const {
-    NESOASSERT(this->contains_ephemeral_dat(sym),
-               "Cannot find EphemeralDat with name: " + sym.name);
-    return this->ephemeral.dats_real.at(sym);
-  }
-
-  inline ParticleDatSharedPtr<INT> get_ephemeral_dat(Sym<INT> sym) const {
-    NESOASSERT(this->contains_ephemeral_dat(sym),
-               "Cannot find EphemeralDat with name: " + sym.name);
-    return this->ephemeral.dats_int.at(sym);
   }
 
 public:
@@ -153,6 +141,30 @@ public:
    */
   inline bool contains_ephemeral_dat(Sym<INT> sym) const {
     return (bool)this->ephemeral.dats_int.count(sym);
+  }
+
+  /**
+   * Get the EphemeralDat for a Sym.
+   *
+   * @param sym Sym to retrieve EphemeralDat for.
+   * @returns ParticleDatSharedPtr for EphemeralDat.
+   */
+  inline ParticleDatSharedPtr<REAL> get_ephemeral_dat(Sym<REAL> sym) const {
+    NESOASSERT(this->contains_ephemeral_dat(sym),
+               "Cannot find EphemeralDat with name: " + sym.name);
+    return this->ephemeral.dats_real.at(sym);
+  }
+
+  /**
+   * Get the EphemeralDat for a Sym.
+   *
+   * @param sym Sym to retrieve EphemeralDat for.
+   * @returns ParticleDatSharedPtr for EphemeralDat.
+   */
+  inline ParticleDatSharedPtr<INT> get_ephemeral_dat(Sym<INT> sym) const {
+    NESOASSERT(this->contains_ephemeral_dat(sym),
+               "Cannot find EphemeralDat with name: " + sym.name);
+    return this->ephemeral.dats_int.at(sym);
   }
 };
 
