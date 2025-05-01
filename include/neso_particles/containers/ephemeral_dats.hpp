@@ -46,6 +46,7 @@ protected:
   }
 
   virtual inline void prepare_ephemeral_dats() = 0;
+  virtual inline bool invalidate_ephemeral_dats_if_required() = 0;
 
   inline void reset_ephemeral_dats(INT npart_local, int *h_npart_cell,
                                    int *d_npart_cell, INT *d_npart_cell_es) {
@@ -129,7 +130,8 @@ public:
    *  @param sym Symbol of EphemeralDat.
    *  @returns True if EphemeralDat exists on this collection of EphemeralDats.
    */
-  inline bool contains_ephemeral_dat(Sym<REAL> sym) const {
+  inline bool contains_ephemeral_dat(Sym<REAL> sym) {
+    this->invalidate_ephemeral_dats_if_required();
     return (bool)this->ephemeral.dats_real.count(sym);
   }
 
@@ -139,7 +141,8 @@ public:
    *  @param sym Symbol of EphemeralDat.
    *  @returns True if EphemeralDat exists on this collection of EphemeralDats.
    */
-  inline bool contains_ephemeral_dat(Sym<INT> sym) const {
+  inline bool contains_ephemeral_dat(Sym<INT> sym) {
+    this->invalidate_ephemeral_dats_if_required();
     return (bool)this->ephemeral.dats_int.count(sym);
   }
 
@@ -149,7 +152,8 @@ public:
    * @param sym Sym to retrieve EphemeralDat for.
    * @returns ParticleDatSharedPtr for EphemeralDat.
    */
-  inline ParticleDatSharedPtr<REAL> get_ephemeral_dat(Sym<REAL> sym) const {
+  inline ParticleDatSharedPtr<REAL> get_ephemeral_dat(Sym<REAL> sym) {
+    this->invalidate_ephemeral_dats_if_required();
     NESOASSERT(this->contains_ephemeral_dat(sym),
                "Cannot find EphemeralDat with name: " + sym.name);
     return this->ephemeral.dats_real.at(sym);
@@ -161,7 +165,8 @@ public:
    * @param sym Sym to retrieve EphemeralDat for.
    * @returns ParticleDatSharedPtr for EphemeralDat.
    */
-  inline ParticleDatSharedPtr<INT> get_ephemeral_dat(Sym<INT> sym) const {
+  inline ParticleDatSharedPtr<INT> get_ephemeral_dat(Sym<INT> sym) {
+    this->invalidate_ephemeral_dats_if_required();
     NESOASSERT(this->contains_ephemeral_dat(sym),
                "Cannot find EphemeralDat with name: " + sym.name);
     return this->ephemeral.dats_int.at(sym);

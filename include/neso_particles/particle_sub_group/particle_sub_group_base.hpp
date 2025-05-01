@@ -74,6 +74,16 @@ public:
     this->create_if_required();
   }
 
+  virtual inline bool invalidate_ephemeral_dats_if_required() override {
+    const bool required = this->selector->update_required();
+    if (required) {
+      this->reset_ephemeral_dats(
+          this->selection.npart_local, this->selection.h_npart_cell,
+          this->selection.d_npart_cell, this->selection.d_npart_cell_es);
+    }
+    return required;
+  }
+
   inline bool create_inner() {
     NESOASSERT(!this->is_whole_particle_group,
                "Explicitly creating the ParticleSubGroup when the sub-group is "

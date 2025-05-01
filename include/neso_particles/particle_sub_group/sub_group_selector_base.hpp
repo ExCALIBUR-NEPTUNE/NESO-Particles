@@ -219,6 +219,28 @@ public:
     return false;
   }
 
+  /**
+   * @returns True if this selector is out of date. A selector is out of date if
+   * any of the particle property dependencies have been accessed with a write
+   * access descriptor since the last call to get. A selector is out of date if
+   * any structural changes have been made, e.g. adding/removing particles,
+   * calling cell_move or calling hybrid_move etc.
+   */
+  inline bool update_required() {
+
+    const bool bool_dats = this->particle_group->check_validation(
+        this->particle_dat_versions, false);
+    const bool bool_group = this->particle_group->check_validation(
+        this->particle_group_version, false);
+
+    return bool_dats || bool_group;
+  }
+
+  /**
+   * Constructor for abstract base type.
+   *
+   * @param parent ParticleGroup or ParticleSubGroup to use as parent.
+   */
   template <typename PARENT>
   SubGroupSelectorBase(std::shared_ptr<PARENT> parent)
       : particle_group(get_particle_group(parent)), particle_group_version(0) {

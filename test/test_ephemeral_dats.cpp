@@ -70,6 +70,8 @@ TEST(EphemeralDats, base) {
     }
   }
 
+  ASSERT_FALSE(aa->invalidate_ephemeral_dats_if_required());
+
   particle_loop(
       A,
       [=](auto) {
@@ -78,6 +80,7 @@ TEST(EphemeralDats, base) {
       Access::write(Sym<INT>("ID")))
       ->execute();
 
+  ASSERT_TRUE(aa->invalidate_ephemeral_dats_if_required());
   ASSERT_FALSE(aa->contains_ephemeral_dat(Sym<REAL>("NORMAL")));
   ASSERT_FALSE(aa->contains_ephemeral_dat(Sym<INT>("IDE")));
 
