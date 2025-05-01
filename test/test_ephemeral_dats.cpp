@@ -84,5 +84,41 @@ TEST(EphemeralDats, base) {
   ASSERT_FALSE(aa->contains_ephemeral_dat(Sym<REAL>("NORMAL")));
   ASSERT_FALSE(aa->contains_ephemeral_dat(Sym<INT>("IDE")));
 
+  auto lambda_test_a = [&]() {
+    aa->add_ephemeral_dat(Sym<REAL>("NORMAL"), 2);
+    aa->add_ephemeral_dat(Sym<REAL>("INTERSECTION_POINT"), 4);
+    ASSERT_TRUE(aa->contains_ephemeral_dat(Sym<REAL>("NORMAL")));
+    ASSERT_FALSE(aa->contains_ephemeral_dat(Sym<INT>("IDE")));
+    aa->add_ephemeral_dat(Sym<INT>("IDE"), 2);
+    aa->add_ephemeral_dat(Sym<INT>("COMPOSITE_ID"), 1);
+    ASSERT_TRUE(aa->contains_ephemeral_dat(Sym<REAL>("NORMAL")));
+    ASSERT_TRUE(aa->contains_ephemeral_dat(Sym<REAL>("INTERSECTION_POINT")));
+    ASSERT_TRUE(aa->contains_ephemeral_dat(Sym<INT>("IDE")));
+    ASSERT_TRUE(aa->contains_ephemeral_dat(Sym<INT>("COMPOSITE_ID")));
+  };
+
+  auto lambda_test_b = [&]() {
+    ASSERT_TRUE(aa->invalidate_ephemeral_dats_if_required());
+    ASSERT_FALSE(aa->contains_ephemeral_dat(Sym<REAL>("NORMAL")));
+    ASSERT_FALSE(aa->contains_ephemeral_dat(Sym<REAL>("INTERSECTION_POINT")));
+    ASSERT_FALSE(aa->contains_ephemeral_dat(Sym<INT>("IDE")));
+    ASSERT_FALSE(aa->contains_ephemeral_dat(Sym<INT>("COMPOSITE_ID")));
+  };
+
+  lambda_test_a();
+  A->hybrid_move();
+  lambda_test_b();
+
+  lambda_test_a();
+  A->cell_move();
+  lambda_test_b();
+
+  lambda_test_a();
+  A->invalidate_group_version();
+  lambda_test_b();
+
+  aa->static_status(true);
+  lambda_test_a();
+
   sycl_target->free();
 }
