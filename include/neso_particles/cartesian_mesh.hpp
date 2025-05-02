@@ -4,7 +4,7 @@
 #include <memory>
 #include <mpi.h>
 
-#include "cell_binning.hpp"
+#include "cartesian_mesh/cartesian_cell_bin.hpp"
 #include "compute_target.hpp"
 #include "local_mapping.hpp"
 #include "loop/particle_loop.hpp"

@@ -12,6 +12,7 @@
 #include "mesh_interface.hpp"
 #include "particle_spec.hpp"
 #include "typedefs.hpp"
+#include "cartesian_mesh/cartesian_h_mesh.hpp"
 
 namespace NESO::Particles {
 
