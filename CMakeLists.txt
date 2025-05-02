@@ -48,6 +48,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR}/neso_particles.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/access.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/boundary_conditions.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/boundary_interaction_specification.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cartesian_mesh.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cell_binning.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cell_dat.hpp

@@ -5,6 +5,7 @@
 
 #include "neso_particles/access.hpp"
 #include "neso_particles/boundary_conditions.hpp"
+#include "neso_particles/boundary_interaction_specification.hpp"
 #include "neso_particles/cartesian_mesh.hpp"
 #include "neso_particles/cell_binning.hpp"
 #include "neso_particles/cell_dat.hpp"
