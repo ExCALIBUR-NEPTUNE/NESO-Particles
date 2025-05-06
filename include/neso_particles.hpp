@@ -4,10 +4,11 @@
 #include <memory>
 
 #include "neso_particles/access.hpp"
-#include "neso_particles/cartesian_mesh/cartesian_periodic.hpp"
 #include "neso_particles/boundary_interaction_specification.hpp"
 #include "neso_particles/cartesian_mesh.hpp"
 #include "neso_particles/cartesian_mesh/cartesian_cell_bin.hpp"
+#include "neso_particles/cartesian_mesh/cartesian_periodic.hpp"
+#include "neso_particles/cartesian_mesh/cartesian_trajectory_intersection.hpp"
 #include "neso_particles/cell_dat.hpp"
 #include "neso_particles/compute_target.hpp"
 #include "neso_particles/containers/blocked_binary_tree.hpp"

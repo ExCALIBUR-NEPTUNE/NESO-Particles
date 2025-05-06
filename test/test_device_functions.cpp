@@ -181,3 +181,76 @@ TEST(Kernel, metadata) {
     EXPECT_EQ(metadata.num_flops.value, 5612);
   }
 }
+
+TEST(DeviceFunctions, line_segment_intersection_2d_x_axis_aligned) {
+
+  {
+    REAL xi, yi;
+    ASSERT_TRUE(line_segment_intersection_2d_x_axis_aligned(
+        5.0, 5.0, 5.0, 11.0, 0.0, 10.0, 10.0, xi, yi));
+    ASSERT_NEAR(xi, 5.0, 1.0e-14);
+    ASSERT_NEAR(yi, 10.0, 1.0e-14);
+  }
+
+  {
+    REAL xi, yi;
+    ASSERT_FALSE(line_segment_intersection_2d_x_axis_aligned(
+        5.0, 5.0, 5.0, 9.0, 0.0, 10.0, 10.0, xi, yi));
+  }
+
+  {
+    REAL xi, yi;
+    ASSERT_FALSE(line_segment_intersection_2d_x_axis_aligned(
+        5.0, 5.0, 4.0, 5.0, 0.0, 10.0, 10.0, xi, yi));
+  }
+
+  {
+    REAL xi, yi;
+    ASSERT_FALSE(line_segment_intersection_2d_x_axis_aligned(
+        -2.0, 5.0, -2.0, -5.0, 0.0, -0.0, 10.0, xi, yi));
+  }
+
+  auto lambda_test = [&](REAL xa, REAL ya, REAL xb, REAL yb, REAL x0, REAL y0,
+                         REAL x1) {
+    const REAL y1 = y0;
+
+    REAL xi_to_test, yi_to_test;
+    ASSERT_TRUE(line_segment_intersection_2d_x_axis_aligned(
+        xa, ya, xb, yb, x0, y0, x1, xi_to_test, yi_to_test));
+
+    REAL xi_correct, yi_correct, l0;
+    ASSERT_TRUE(line_segment_intersection_2d(xa, ya, xb, yb, x0, y0, x1, y1,
+                                             xi_correct, yi_correct, l0));
+
+    ASSERT_NEAR(xi_correct, xi_to_test, 1.0e-14);
+    ASSERT_NEAR(yi_correct, yi_to_test, 1.0e-14);
+  };
+
+  lambda_test(5.0, 5.0, 5.0, 12.0, 0.0, 10.0, 10.0);
+
+  lambda_test(5.0, 5.0, 5.0, -12.0, 0.0, 0.0, 10.0);
+
+  lambda_test(5.0, 5.0, 2.0, -12.0, 0.0, 0.0, 10.0);
+}
+
+TEST(DeviceFunctions, line_segment_intersection_2d_y_axis_aligned) {
+
+  auto lambda_test = [&](REAL xa, REAL ya, REAL xb, REAL yb, REAL x0, REAL y0,
+                         REAL y1) {
+    const REAL x1 = x0;
+
+    REAL xi_to_test, yi_to_test;
+    ASSERT_TRUE(line_segment_intersection_2d_y_axis_aligned(
+        xa, ya, xb, yb, x0, y0, y1, xi_to_test, yi_to_test));
+
+    REAL xi_correct, yi_correct, l0;
+    ASSERT_TRUE(line_segment_intersection_2d(xa, ya, xb, yb, x0, y0, x1, y1,
+                                             xi_correct, yi_correct, l0));
+
+    ASSERT_NEAR(xi_correct, xi_to_test, 1.0e-14);
+    ASSERT_NEAR(yi_correct, yi_to_test, 1.0e-14);
+  };
+
+  lambda_test(5.0, 5.0, -5.0, 5.0, 0.0, 0.0, 10.0);
+  lambda_test(5.0, 5.0, 15.0, 5.0, 10.0, 0.0, 10.0);
+}

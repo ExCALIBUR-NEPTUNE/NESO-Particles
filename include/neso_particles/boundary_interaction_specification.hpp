@@ -62,6 +62,28 @@ inline bool contains_boundary_interaction_data(
   return valid;
 }
 
+/**
+ * Add the required EphemeralDats to a ParticleSubGroup that are required by the
+ * standardised boundary interaction specification.
+ *
+ * @param particle_sub_group ParticleSubGroup to add EphemeralDats to.
+ * @param ndim Number of spatial dimensions.
+ */
+inline void add_boundary_interaction_ephemeral_dats(
+    ParticleSubGroupSharedPtr particle_sub_group, const int ndim) {
+
+  particle_sub_group->add_ephemeral_dat(
+      BoundaryInteractionSpecification::intersection_point, ndim);
+  particle_sub_group->add_ephemeral_dat(
+      BoundaryInteractionSpecification::intersection_normal, ndim);
+  particle_sub_group->add_ephemeral_dat(
+      BoundaryInteractionSpecification::intersection_metadata,
+      BoundaryInteractionSpecification::intersection_metadata_ncomp);
+
+  NESOASSERT(contains_boundary_interaction_data(particle_sub_group, ndim),
+             "Failed to add required boundary EphemeralDats.");
+}
+
 } // namespace NESO::Particles
 
 #endif
