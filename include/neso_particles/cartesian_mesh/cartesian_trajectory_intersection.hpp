@@ -357,15 +357,17 @@ public:
               auto INTERSECTION_METADATA) {
             const INT index = k_lut[INDEX.get_local_linear_index()];
             const INT facet_id = k_buffer_int[index];
-            INTERSECTION_METADATA.at(0) = k_boundary_group_map[facet_id];
+            INTERSECTION_METADATA.at_ephemeral(0) =
+                k_boundary_group_map[facet_id];
 
             constexpr REAL normals[6][3] = {{0.0, 1.0, 0.0},  {-1.0, 0.0, 0.0},
                                             {0.0, -1.0, 0.0}, {1.0, 0.0, 0.0},
                                             {0.0, 0.0, 1.0},  {0.0, 0.0, -1.0}};
 
             for (int dx = 0; dx < k_ndim; dx++) {
-              INTERSECTION_POINT.at(dx) = k_buffer[npart_leaving * dx + index];
-              INTERSECTION_NORMAL.at(dx) = normals[facet_id][dx];
+              INTERSECTION_POINT.at_ephemeral(dx) =
+                  k_buffer[npart_leaving * dx + index];
+              INTERSECTION_NORMAL.at_ephemeral(dx) = normals[facet_id][dx];
             }
 
             constexpr INT facet_to_indices[6][2] = {{0, 2}, {1, 2}, {0, 2},
@@ -373,11 +375,10 @@ public:
 
             REAL facet_point[2] = {0.0, 0.0};
             facet_point[0] =
-                INTERSECTION_POINT.at(facet_to_indices[facet_id][0]);
-            facet_point[1] =
-                (k_ndim == 3)
-                    ? INTERSECTION_POINT.at(facet_to_indices[facet_id][1])
-                    : 0.0;
+                INTERSECTION_POINT.at_ephemeral(facet_to_indices[facet_id][0]);
+            facet_point[1] = (k_ndim == 3) ? INTERSECTION_POINT.at_ephemeral(
+                                                 facet_to_indices[facet_id][1])
+                                           : 0.0;
 
             INT facet_cell[2] = {0, 0};
             facet_cell[0] = Kernel::min(
@@ -390,7 +391,7 @@ public:
             const INT element_id = k_element_offsets[facet_id] + facet_cell[0] +
                                    facet_cell[1] * k_element_strides0[facet_id];
 
-            INTERSECTION_METADATA.at(1) = element_id;
+            INTERSECTION_METADATA.at_ephemeral(1) = element_id;
           },
           Access::read(ParticleLoopIndex{}),
           Access::write(BoundaryInteractionSpecification::intersection_point),

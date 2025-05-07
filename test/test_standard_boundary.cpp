@@ -103,11 +103,12 @@ TEST(CartesianTrajectoryIntersection, base_2d) {
       Access::read(Sym<REAL>("P")), Access::write(Sym<REAL>("P_ORIG")))
       ->execute();
 
-  auto lambda_test = [&](auto offsetx, auto offsety, const int modified_index,
+  auto lambda_test = [&](auto iteration_set, auto offsetx, auto offsety,
+                         const int modified_index,
                          const REAL correct_truncation,
                          const int unmodified_index) {
     particle_loop(
-        A,
+        iteration_set,
         [=](auto P, auto P_ORIG) {
           P.at(0) = P_ORIG.at(0);
           P.at(1) = P_ORIG.at(1);
@@ -115,10 +116,10 @@ TEST(CartesianTrajectoryIntersection, base_2d) {
         Access::write(Sym<REAL>("P")), Access::read(Sym<REAL>("P_ORIG")))
         ->execute();
 
-    cartesian_trajectory_intersection->pre_integration(A);
+    cartesian_trajectory_intersection->pre_integration(iteration_set);
 
     particle_loop(
-        A,
+        iteration_set,
         [=](auto P) {
           P.at(0) += offsetx;
           P.at(1) += offsety;
@@ -126,7 +127,8 @@ TEST(CartesianTrajectoryIntersection, base_2d) {
         Access::write(Sym<REAL>("P")))
         ->execute();
 
-    auto groups = cartesian_trajectory_intersection->post_integration(A);
+    auto groups =
+        cartesian_trajectory_intersection->post_integration(iteration_set);
 
     for (int boundaryx : {0, 1}) {
       ErrorPropagate ep(sycl_target);
@@ -136,23 +138,25 @@ TEST(CartesianTrajectoryIntersection, base_2d) {
           groups.at(boundaryx),
           [=](auto P, auto INTERSECTION_POINT, auto INTERSECTION_NORMAL,
               auto INTERSECTION_METADATA) {
-            NESO_KERNEL_ASSERT(INTERSECTION_METADATA.at(0) % 2 == boundaryx,
-                               k_ep);
+            NESO_KERNEL_ASSERT(
+                INTERSECTION_METADATA.at_ephemeral(0) % 2 == boundaryx, k_ep);
 
-            const INT element_id = INTERSECTION_METADATA.at(1);
+            const INT element_id = INTERSECTION_METADATA.at_ephemeral(1);
             const NormalInformation *normal_info;
             k_correct_lut->get(element_id, &normal_info);
             NESO_KERNEL_ASSERT(element_id == normal_info->element_id, k_ep);
+            NESO_KERNEL_ASSERT(INTERSECTION_NORMAL.at_ephemeral(0) ==
+                                   normal_info->normal[0],
+                               k_ep);
+            NESO_KERNEL_ASSERT(INTERSECTION_NORMAL.at_ephemeral(1) ==
+                                   normal_info->normal[1],
+                               k_ep);
             NESO_KERNEL_ASSERT(
-                INTERSECTION_NORMAL.at(0) == normal_info->normal[0], k_ep);
-            NESO_KERNEL_ASSERT(
-                INTERSECTION_NORMAL.at(1) == normal_info->normal[1], k_ep);
-            NESO_KERNEL_ASSERT(
-                Kernel::abs(INTERSECTION_POINT.at(modified_index) -
+                Kernel::abs(INTERSECTION_POINT.at_ephemeral(modified_index) -
                             correct_truncation) < 1.0e-12,
                 k_ep);
             NESO_KERNEL_ASSERT(
-                Kernel::abs(INTERSECTION_POINT.at(unmodified_index) -
+                Kernel::abs(INTERSECTION_POINT.at_ephemeral(unmodified_index) -
                             P.at(unmodified_index)) < 1.0e-12,
                 k_ep);
           },
@@ -166,10 +170,19 @@ TEST(CartesianTrajectoryIntersection, base_2d) {
     }
   };
 
-  lambda_test(100.0, 0, 0, ncell_x, 1);
-  lambda_test(-100.0, 0, 0, 0.0, 1);
-  lambda_test(0.0, 100.0, 1, ncell_y, 0);
-  lambda_test(0.0, -100.0, 1, 0.0, 0);
+  lambda_test(A, 100.0, 0, 0, ncell_x, 1);
+  lambda_test(A, -100.0, 0, 0, 0.0, 1);
+  lambda_test(A, 0.0, 100.0, 1, ncell_y, 0);
+  lambda_test(A, 0.0, -100.0, 1, 0.0, 0);
+
+  auto aa = particle_sub_group(
+      A, [=](auto ID) { return ID.at(0) % 2 == 0; },
+      Access::read(Sym<INT>("ID")));
+
+  lambda_test(aa, 100.0, 0, 0, ncell_x, 1);
+  lambda_test(aa, -100.0, 0, 0, 0.0, 1);
+  lambda_test(aa, 0.0, 100.0, 1, ncell_y, 0);
+  lambda_test(aa, 0.0, -100.0, 1, 0.0, 0);
 
   sycl_target->free();
 }
