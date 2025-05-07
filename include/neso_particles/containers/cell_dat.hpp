@@ -247,7 +247,8 @@ protected:
 
     T *k_data = static_cast<T *>(
         this->sycl_target->malloc_device(npart_local * this->ncol * sizeof(T)));
-    NESOASSERT(k_data != nullptr, "Bad malloc_device call.");
+    NESOASSERT((k_data != nullptr) || (npart_local == 0),
+               "Bad malloc_device call.");
 
     auto k_ptr = this->d_ptr;
     auto k_ncell = ncells;

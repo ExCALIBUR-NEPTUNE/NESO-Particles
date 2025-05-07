@@ -120,5 +120,8 @@ TEST(EphemeralDats, base) {
   aa->static_status(true);
   lambda_test_a();
 
+  auto aa_empty = particle_sub_group(A, [=]() { return false; });
+  aa_empty->add_ephemeral_dat(Sym<REAL>("FOO"), 2);
+
   sycl_target->free();
 }
