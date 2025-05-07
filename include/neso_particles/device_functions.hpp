@@ -200,6 +200,7 @@ inline bool line_segment_intersection_2d_x_axis_aligned(
     const REAL &xa, const REAL &ya, const REAL &xb, const REAL &yb,
     const REAL &x0, const REAL &y0, const REAL &x1, REAL &xi, REAL &yi,
     const REAL tol = 0.0) {
+
   const REAL diff_a = ya - y0;
   const REAL diff_b = yb - y0;
   const bool is_crossed = (0 >= (diff_a * diff_b));
@@ -213,7 +214,8 @@ inline bool line_segment_intersection_2d_x_axis_aligned(
   xi = xa + ratio * (xb - xa);
   yi = y0;
 
-  const bool in_bounds = ((x0 - tol) <= xi) && (xi <= (x1 + tol));
+  const bool in_bounds = (((x0 - tol) <= xi) && (xi <= (x1 + tol))) ||
+                         (((x1 - tol) <= xi) && (xi <= (x0 + tol)));
 
   return is_crossed && (!colocated) && in_bounds;
 }

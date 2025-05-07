@@ -278,10 +278,17 @@ public:
                   k_tolerance);
             }
 
+            constexpr REAL reorderx[4] = {1.0, 0.0, 1.0, 0.0};
+            constexpr REAL reordery[4] = {0.0, 1.0, 0.0, 1.0};
+
             for (int edgex = 0; edgex < 4; edgex++) {
               const bool exists_inner = exists[edgex];
-              xi_write = exists_inner ? xi[edgex] : xi_write;
-              yi_write = exists_inner ? yi[edgex] : yi_write;
+              xi_write = exists_inner ? xi[edgex] * reorderx[edgex] +
+                                            yi[edgex] * reordery[edgex]
+                                      : xi_write;
+              yi_write = exists_inner ? yi[edgex] * reorderx[edgex] +
+                                            xi[edgex] * reordery[edgex]
+                                      : yi_write;
               edge_write = exists_inner ? edgex : edge_write;
               found = found || exists_inner;
             }

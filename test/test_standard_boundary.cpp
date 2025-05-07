@@ -25,10 +25,22 @@ TEST(StandardBoundary, base) {
   sycl_target->free();
 }
 
-namespace {}
+namespace {
+
+struct NormalInformation {
+  INT element_id{0};
+  REAL normal[3]{0.0, 0.0, 0.0};
+};
+
+} // namespace
 
 TEST(CartesianTrajectoryIntersection, base_2d) {
-  auto [A_t, sycl_target_t, cell_count_t] = particle_loop_common_2d(27, 16, 32);
+
+  const int ncell_x = 16;
+  const int ncell_y = 32;
+
+  auto [A_t, sycl_target_t, cell_count_t] =
+      particle_loop_common_2d(27, ncell_x, ncell_y);
 
   auto sycl_target = sycl_target_t;
   auto A = A_t;
@@ -45,8 +57,42 @@ TEST(CartesianTrajectoryIntersection, base_2d) {
           boundary_groups);
   cartesian_trajectory_intersection->prepare_particle_group(A);
 
-  A->add_particle_dat(Sym<REAL>("P_ORIG"), ndim);
+  const int num_facets = 2 * ncell_x + 2 * ncell_y;
+  auto correct_lut = std::make_shared<LookupTable<INT, NormalInformation>>(
+      sycl_target, num_facets);
 
+  int index = 0;
+  for (int fx = 0; fx < ncell_x; fx++) {
+    NormalInformation normal_info;
+    normal_info.element_id = index;
+    normal_info.normal[1] = 1.0;
+    correct_lut->add(index, normal_info);
+    index++;
+  }
+  for (int fx = 0; fx < ncell_y; fx++) {
+    NormalInformation normal_info;
+    normal_info.element_id = index;
+    normal_info.normal[0] = -1.0;
+    correct_lut->add(index, normal_info);
+    index++;
+  }
+  for (int fx = 0; fx < ncell_x; fx++) {
+    NormalInformation normal_info;
+    normal_info.element_id = index;
+    normal_info.normal[1] = -1.0;
+    correct_lut->add(index, normal_info);
+    index++;
+  }
+  for (int fx = 0; fx < ncell_y; fx++) {
+    NormalInformation normal_info;
+    normal_info.element_id = index;
+    normal_info.normal[0] = 1.0;
+    correct_lut->add(index, normal_info);
+    index++;
+  }
+  ASSERT_EQ(index, num_facets);
+
+  A->add_particle_dat(Sym<REAL>("P_ORIG"), ndim);
   particle_loop(
       A,
       [=](auto P, auto P_ORIG) {
@@ -57,7 +103,18 @@ TEST(CartesianTrajectoryIntersection, base_2d) {
       Access::read(Sym<REAL>("P")), Access::write(Sym<REAL>("P_ORIG")))
       ->execute();
 
-  auto lambda_test = [&](auto offsetx, auto offsety) {
+  auto lambda_test = [&](auto offsetx, auto offsety, const int modified_index,
+                         const REAL correct_truncation,
+                         const int unmodified_index) {
+    particle_loop(
+        A,
+        [=](auto P, auto P_ORIG) {
+          P.at(0) = P_ORIG.at(0);
+          P.at(1) = P_ORIG.at(1);
+        },
+        Access::write(Sym<REAL>("P")), Access::read(Sym<REAL>("P_ORIG")))
+        ->execute();
+
     cartesian_trajectory_intersection->pre_integration(A);
 
     particle_loop(
@@ -74,13 +131,32 @@ TEST(CartesianTrajectoryIntersection, base_2d) {
     for (int boundaryx : {0, 1}) {
       ErrorPropagate ep(sycl_target);
       auto k_ep = ep.device_ptr();
+      auto k_correct_lut = correct_lut->root;
       particle_loop(
           groups.at(boundaryx),
-          [=](auto INTERSECTION_POINT, auto INTERSECTION_NORMAL,
+          [=](auto P, auto INTERSECTION_POINT, auto INTERSECTION_NORMAL,
               auto INTERSECTION_METADATA) {
             NESO_KERNEL_ASSERT(INTERSECTION_METADATA.at(0) % 2 == boundaryx,
                                k_ep);
+
+            const INT element_id = INTERSECTION_METADATA.at(1);
+            const NormalInformation *normal_info;
+            k_correct_lut->get(element_id, &normal_info);
+            NESO_KERNEL_ASSERT(element_id == normal_info->element_id, k_ep);
+            NESO_KERNEL_ASSERT(
+                INTERSECTION_NORMAL.at(0) == normal_info->normal[0], k_ep);
+            NESO_KERNEL_ASSERT(
+                INTERSECTION_NORMAL.at(1) == normal_info->normal[1], k_ep);
+            NESO_KERNEL_ASSERT(
+                Kernel::abs(INTERSECTION_POINT.at(modified_index) -
+                            correct_truncation) < 1.0e-12,
+                k_ep);
+            NESO_KERNEL_ASSERT(
+                Kernel::abs(INTERSECTION_POINT.at(unmodified_index) -
+                            P.at(unmodified_index)) < 1.0e-12,
+                k_ep);
           },
+          Access::read(Sym<REAL>("P")),
           Access::read(BoundaryInteractionSpecification::intersection_point),
           Access::read(BoundaryInteractionSpecification::intersection_normal),
           Access::read(BoundaryInteractionSpecification::intersection_metadata))
@@ -90,7 +166,10 @@ TEST(CartesianTrajectoryIntersection, base_2d) {
     }
   };
 
-  lambda_test(100.0, 0);
+  lambda_test(100.0, 0, 0, ncell_x, 1);
+  lambda_test(-100.0, 0, 0, 0.0, 1);
+  lambda_test(0.0, 100.0, 1, ncell_y, 0);
+  lambda_test(0.0, -100.0, 1, 0.0, 0);
 
   sycl_target->free();
 }
