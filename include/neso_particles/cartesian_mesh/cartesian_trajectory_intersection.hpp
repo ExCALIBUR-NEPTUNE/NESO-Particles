@@ -239,60 +239,51 @@ public:
              *       0
              */
 
+            REAL xi0, xi1;
+            REAL yi0, yi1;
+            INT edges0, edges1;
+            bool exists0, exists1;
+            {
+              // line is in x
+              // x -> x
+              // y -> y
+              const bool plane_base = P.at(1) - k_tolerance <= 0.0;
+              edges0 = plane_base ? 0 : 2;
+              const REAL ax = PP.at(0);
+              const REAL ay = PP.at(1);
+              const REAL bx = P.at(0);
+              const REAL by = P.at(1);
+              const REAL p0x = 0.0;
+              const REAL p0y = plane_base ? 0.0 : k_extents[1];
+              const REAL p1x = k_extents[0];
+
+              exists0 = line_segment_intersection_2d_x_axis_aligned(
+                  ax, ay, bx, by, p0x, p0y, p1x, xi0, yi0, k_tolerance);
+            }
+            {
+              // line is in y
+              // x -> y
+              // y -> x
+              const bool plane_base = P.at(0) - k_tolerance <= 0.0;
+              edges1 = plane_base ? 3 : 1;
+              const REAL ax = PP.at(1);
+              const REAL ay = PP.at(0);
+              const REAL bx = P.at(1);
+              const REAL by = P.at(0);
+              const REAL p0x = 0.0;
+              const REAL p0y = plane_base ? 0.0 : k_extents[0];
+              const REAL p1x = k_extents[1];
+
+              exists1 = line_segment_intersection_2d_x_axis_aligned(
+                  ax, ay, bx, by, p0x, p0y, p1x, yi1, xi1, k_tolerance);
+            }
+
+            const REAL xi_write = exists0 ? xi0 : xi1;
+            const REAL yi_write = exists0 ? yi0 : yi1;
+            const INT edge_write = exists0 ? edges0 : edges1;
+            const bool found = exists0 || exists1;
+
             const INT loop_index = INDEX.get_loop_linear_index();
-
-            REAL xi[4];
-            REAL yi[4];
-            bool exists[4];
-            bool found = false;
-            REAL xi_write = 0.0;
-            REAL yi_write = 0.0;
-            INT edge_write = -1;
-
-            const REAL pa[4][2] = {{PP.at(0), PP.at(1)},
-                                   {PP.at(1), PP.at(0)},
-                                   {PP.at(0), PP.at(1)},
-                                   {PP.at(1), PP.at(0)}};
-
-            const REAL pb[4][2] = {{P.at(0), P.at(1)},
-                                   {P.at(1), P.at(0)},
-                                   {P.at(0), P.at(1)},
-                                   {P.at(1), P.at(0)}};
-
-            const REAL p0[4][2] = {{0.0, 0.0},
-                                   {0.0, k_extents[0]},
-                                   {k_extents[0], k_extents[1]},
-                                   {k_extents[1], 0.0}};
-
-            const REAL p1[4] = {
-                k_extents[0],
-                k_extents[1],
-                0.0,
-                0.0,
-            };
-
-            for (int edgex = 0; edgex < 4; edgex++) {
-              exists[edgex] = line_segment_intersection_2d_x_axis_aligned(
-                  pa[edgex][0], pa[edgex][1], pb[edgex][0], pb[edgex][1],
-                  p0[edgex][0], p0[edgex][1], p1[edgex], xi[edgex], yi[edgex],
-                  k_tolerance);
-            }
-
-            constexpr REAL reorderx[4] = {1.0, 0.0, 1.0, 0.0};
-            constexpr REAL reordery[4] = {0.0, 1.0, 0.0, 1.0};
-
-            for (int edgex = 0; edgex < 4; edgex++) {
-              const bool exists_inner = exists[edgex];
-              xi_write = exists_inner ? xi[edgex] * reorderx[edgex] +
-                                            yi[edgex] * reordery[edgex]
-                                      : xi_write;
-              yi_write = exists_inner ? yi[edgex] * reorderx[edgex] +
-                                            xi[edgex] * reordery[edgex]
-                                      : yi_write;
-              edge_write = exists_inner ? edgex : edge_write;
-              found = found || exists_inner;
-            }
-
             k_buffer[npart_leaving * 0 + loop_index] = xi_write;
             k_buffer[npart_leaving * 1 + loop_index] = yi_write;
             k_buffer_int[loop_index] = edge_write;
@@ -303,7 +294,125 @@ public:
           Access::read(this->previous_position_sym))
           ->execute();
     } else {
-      NESOASSERT(false, "TODO");
+      particle_loop(
+          "CartesianTrajectoryIntersection::post_integration",
+          departing_particles,
+          [=](auto INDEX, auto P, auto PP) {
+            /**
+             *       2
+             *    ------    y
+             *   |      |   ^     Bottom: 4
+             * 3 |      | 1 |     Top:    5
+             *   |      |   -> x
+             *    ------
+             *       0
+             */
+
+            REAL xi[3];
+            REAL yi[3];
+            REAL zi[3];
+            bool exists[3];
+            INT faces[3];
+
+            {
+              // xy plane is xy
+              // x -> x
+              // y -> y
+              // z -> z
+              const bool plane_base = P.at(2) - k_tolerance <= 0.0;
+              faces[0] = plane_base ? 0 : 2;
+              const REAL ax = PP.at(0);
+              const REAL ay = PP.at(1);
+              const REAL az = PP.at(2);
+              const REAL bx = P.at(0);
+              const REAL by = P.at(1);
+              const REAL bz = P.at(2);
+              const REAL p0x = 0.0;
+              const REAL p0y = 0.0;
+              const REAL p0z = plane_base ? 0.0 : k_extents[2];
+              const REAL p1x = k_extents[0];
+              const REAL p2y = k_extents[1];
+
+              exists[0] = plane_intersection_3d_xy_plane_aligned(
+                  ax, ay, az, bx, by, bz, p0x, p0y, p0z, p1x, p2y, xi[0], yi[0],
+                  zi[0], k_tolerance);
+            }
+
+            {
+              // xy plane is xz
+              // x -> x
+              // y -> z
+              // z -> y
+              const bool plane_base = P.at(1) - k_tolerance <= 0.0;
+              faces[1] = plane_base ? 3 : 1;
+              const REAL ax = PP.at(0);
+              const REAL ay = PP.at(2);
+              const REAL az = PP.at(1);
+              const REAL bx = P.at(0);
+              const REAL by = P.at(2);
+              const REAL bz = P.at(1);
+              const REAL p0x = 0.0;
+              const REAL p0y = 0.0;
+              const REAL p0z = plane_base ? 0.0 : k_extents[1];
+              const REAL p1x = k_extents[0];
+              const REAL p2y = k_extents[2];
+
+              exists[1] = plane_intersection_3d_xy_plane_aligned(
+                  ax, ay, az, bx, by, bz, p0x, p0y, p0z, p1x, p2y, xi[1], zi[1],
+                  yi[1], k_tolerance);
+            }
+
+            {
+              // xy plane is yz
+              // x -> y
+              // y -> z
+              // z -> x
+              const bool plane_base = P.at(0) - k_tolerance <= 0.0;
+              faces[2] = plane_base ? 4 : 5;
+              const REAL ax = PP.at(1);
+              const REAL ay = PP.at(2);
+              const REAL az = PP.at(0);
+              const REAL bx = P.at(1);
+              const REAL by = P.at(2);
+              const REAL bz = P.at(0);
+              const REAL p0x = plane_base ? 0.0 : k_extents[0];
+              const REAL p0y = 0.0;
+              const REAL p0z = 0.0;
+              const REAL p1x = k_extents[1];
+              const REAL p2y = k_extents[2];
+
+              exists[2] = plane_intersection_3d_xy_plane_aligned(
+                  ax, ay, az, bx, by, bz, p0x, p0y, p0z, p1x, p2y, yi[2], zi[2],
+                  xi[2], k_tolerance);
+            }
+
+            bool found = false;
+            REAL xi_write = 0.0;
+            REAL yi_write = 0.0;
+            REAL zi_write = 0.0;
+            INT face_write = -1;
+            for (int facex = 0; facex < 3; facex++) {
+              const bool exists_inner = exists[facex];
+              xi_write = exists_inner ? xi[facex] : xi_write;
+              yi_write = exists_inner ? yi[facex] : yi_write;
+              zi_write = exists_inner ? zi[facex] : zi_write;
+
+              face_write = exists_inner ? faces[facex] : face_write;
+              found = found || exists_inner;
+            }
+
+            const INT loop_index = INDEX.get_loop_linear_index();
+            k_buffer[npart_leaving * 0 + loop_index] = xi_write;
+            k_buffer[npart_leaving * 1 + loop_index] = yi_write;
+            k_buffer[npart_leaving * 2 + loop_index] = zi_write;
+            k_buffer_int[loop_index] = face_write;
+
+            k_lut[INDEX.get_local_linear_index()] = found ? loop_index : -1;
+          },
+          Access::read(ParticleLoopIndex{}),
+          Access::read(particle_group->position_dat->sym),
+          Access::read(this->previous_position_sym))
+          ->execute();
     }
 
     ErrorPropagate ep(this->sycl_target);

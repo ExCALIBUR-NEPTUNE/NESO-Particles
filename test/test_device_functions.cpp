@@ -254,3 +254,49 @@ TEST(DeviceFunctions, line_segment_intersection_2d_y_axis_aligned) {
   lambda_test(5.0, 5.0, -5.0, 5.0, 0.0, 0.0, 10.0);
   lambda_test(5.0, 5.0, 15.0, 5.0, 10.0, 0.0, 10.0);
 }
+
+TEST(DeviceFunctions, plane_intersection_3d_xy_plane_aligned) {
+
+  auto lambda_test = [=](const REAL ax, const REAL ay, const REAL az,
+                         const REAL bx, const REAL by, const REAL bz,
+                         const REAL p0x, const REAL p0y, const REAL p0z,
+                         const REAL p1x, const REAL p2y, const bool expected) {
+    REAL xi_to_test;
+    REAL yi_to_test;
+    REAL zi_to_test;
+
+    const bool contained_to_test = plane_intersection_3d_xy_plane_aligned(
+        ax, ay, az, bx, by, bz, p0x, p0y, p0z, p1x, p2y, xi_to_test, yi_to_test,
+        zi_to_test);
+
+    REAL xi_correct;
+    REAL yi_correct;
+    REAL zi_correct;
+
+    const bool contained_correct_x =
+        line_segment_intersection_2d_x_axis_aligned(
+            ax, az, bx, bz, p0x, p0z, p1x, xi_correct, zi_correct);
+    const bool contained_correct_y =
+        line_segment_intersection_2d_x_axis_aligned(
+            ay, az, by, bz, p0y, p0z, p2y, yi_correct, zi_correct);
+
+    ASSERT_EQ(contained_correct_x && contained_correct_y, contained_to_test);
+    ASSERT_EQ(expected, contained_to_test);
+
+    if (contained_to_test) {
+      ASSERT_NEAR(xi_correct, xi_to_test, 1.0e-12);
+      ASSERT_NEAR(yi_correct, yi_to_test, 1.0e-12);
+      ASSERT_NEAR(zi_correct, zi_to_test, 1.0e-12);
+    }
+  };
+
+  lambda_test(0.2, 0.3, 0.5, 0.2, 0.3, -0.5, 0.0, 0.0, 0.0, 1.0, 1.0, true);
+
+  lambda_test(0.2, 0.3, 0.5, 0.2, 0.3, 0.1, 0.0, 0.0, 0.0, 1.0, 1.0, false);
+
+  lambda_test(0.2, 0.3, 0.5, 0.2, 0.3, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, true);
+
+  lambda_test(0.2, 0.3, 0.5, 0.2, 0.3, 0.0, 0.1, 0.2, 0.2, 1.1, 1.2, true);
+
+  lambda_test(0.2, 0.3, -0.5, 0.7, 0.6, 0.4, 0.1, 0.2, 0.2, 1.1, 1.2, true);
+}
