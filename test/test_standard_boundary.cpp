@@ -30,7 +30,18 @@ namespace {
 struct NormalInformation {
   INT element_id{0};
   REAL normal[3]{0.0, 0.0, 0.0};
+  REAL bounding_box[6]{0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
 };
+
+inline bool contains_point(const NormalInformation *normal_info, const REAL p0,
+                           const REAL p1, const REAL p2, const REAL tol) {
+
+  const auto bb = normal_info->bounding_box;
+  const bool contained = (((bb[0] - tol) <= p0) && (p0 <= (bb[3 + 0] + tol))) &&
+                         (((bb[1] - tol) <= p1) && (p1 <= (bb[3 + 1] + tol))) &&
+                         (((bb[2] - tol) <= p2) && (p2 <= (bb[3 + 2] + tol)));
+  return contained;
+}
 
 } // namespace
 
@@ -66,6 +77,9 @@ TEST(CartesianTrajectoryIntersection, base_2d) {
     NormalInformation normal_info;
     normal_info.element_id = index;
     normal_info.normal[1] = 1.0;
+    // These cells have width 1.
+    normal_info.bounding_box[0] = fx;
+    normal_info.bounding_box[3 + 0] = fx + 1.0;
     correct_lut->add(index, normal_info);
     index++;
   }
@@ -73,6 +87,10 @@ TEST(CartesianTrajectoryIntersection, base_2d) {
     NormalInformation normal_info;
     normal_info.element_id = index;
     normal_info.normal[0] = -1.0;
+    normal_info.bounding_box[0] = ncell_x;
+    normal_info.bounding_box[3 + 0] = ncell_x;
+    normal_info.bounding_box[1] = fx;
+    normal_info.bounding_box[3 + 1] = fx + 1.0;
     correct_lut->add(index, normal_info);
     index++;
   }
@@ -80,6 +98,10 @@ TEST(CartesianTrajectoryIntersection, base_2d) {
     NormalInformation normal_info;
     normal_info.element_id = index;
     normal_info.normal[1] = -1.0;
+    normal_info.bounding_box[0] = fx;
+    normal_info.bounding_box[3 + 0] = fx + 1.0;
+    normal_info.bounding_box[1] = ncell_y;
+    normal_info.bounding_box[3 + 1] = ncell_y;
     correct_lut->add(index, normal_info);
     index++;
   }
@@ -87,6 +109,8 @@ TEST(CartesianTrajectoryIntersection, base_2d) {
     NormalInformation normal_info;
     normal_info.element_id = index;
     normal_info.normal[0] = 1.0;
+    normal_info.bounding_box[1] = fx;
+    normal_info.bounding_box[3 + 1] = fx + 1.0;
     correct_lut->add(index, normal_info);
     index++;
   }
@@ -158,6 +182,11 @@ TEST(CartesianTrajectoryIntersection, base_2d) {
             NESO_KERNEL_ASSERT(
                 Kernel::abs(INTERSECTION_POINT.at_ephemeral(unmodified_index) -
                             P.at(unmodified_index)) < 1.0e-12,
+                k_ep);
+            NESO_KERNEL_ASSERT(
+                contains_point(normal_info, INTERSECTION_POINT.at_ephemeral(0),
+                               INTERSECTION_POINT.at_ephemeral(1), 0.0,
+                               1.0e-12),
                 k_ep);
           },
           Access::read(Sym<REAL>("P")),
