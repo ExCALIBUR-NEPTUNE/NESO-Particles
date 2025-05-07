@@ -320,7 +320,7 @@ public:
               // y -> y
               // z -> z
               const bool plane_base = P.at(2) - k_tolerance <= 0.0;
-              faces[0] = plane_base ? 0 : 2;
+              faces[0] = plane_base ? 4 : 5;
               const REAL ax = PP.at(0);
               const REAL ay = PP.at(1);
               const REAL az = PP.at(2);
@@ -344,7 +344,7 @@ public:
               // y -> z
               // z -> y
               const bool plane_base = P.at(1) - k_tolerance <= 0.0;
-              faces[1] = plane_base ? 3 : 1;
+              faces[1] = plane_base ? 0 : 2;
               const REAL ax = PP.at(0);
               const REAL ay = PP.at(2);
               const REAL az = PP.at(1);
@@ -368,16 +368,16 @@ public:
               // y -> z
               // z -> x
               const bool plane_base = P.at(0) - k_tolerance <= 0.0;
-              faces[2] = plane_base ? 4 : 5;
+              faces[2] = plane_base ? 1 : 3;
               const REAL ax = PP.at(1);
               const REAL ay = PP.at(2);
               const REAL az = PP.at(0);
               const REAL bx = P.at(1);
               const REAL by = P.at(2);
               const REAL bz = P.at(0);
-              const REAL p0x = plane_base ? 0.0 : k_extents[0];
+              const REAL p0x = 0.0;
               const REAL p0y = 0.0;
-              const REAL p0z = 0.0;
+              const REAL p0z = plane_base ? 0.0 : k_extents[0];
               const REAL p1x = k_extents[1];
               const REAL p2y = k_extents[2];
 
