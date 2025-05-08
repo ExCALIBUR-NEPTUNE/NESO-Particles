@@ -220,7 +220,7 @@ TEST(DeviceFunctions, line_segment_intersection_2d_x_axis_aligned) {
 
     REAL xi_correct, yi_correct, l0;
     ASSERT_TRUE(line_segment_intersection_2d(xa, ya, xb, yb, x0, y0, x1, y1,
-                                             xi_correct, yi_correct, l0));
+                                             xi_correct, yi_correct, l0, 1.0e-14));
 
     ASSERT_NEAR(xi_correct, xi_to_test, 1.0e-14);
     ASSERT_NEAR(yi_correct, yi_to_test, 1.0e-14);
@@ -245,7 +245,7 @@ TEST(DeviceFunctions, line_segment_intersection_2d_y_axis_aligned) {
 
     REAL xi_correct, yi_correct, l0;
     ASSERT_TRUE(line_segment_intersection_2d(xa, ya, xb, yb, x0, y0, x1, y1,
-                                             xi_correct, yi_correct, l0));
+                                             xi_correct, yi_correct, l0, 1.0e-14));
 
     ASSERT_NEAR(xi_correct, xi_to_test, 1.0e-14);
     ASSERT_NEAR(yi_correct, yi_to_test, 1.0e-14);

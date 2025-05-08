@@ -14,17 +14,17 @@ namespace NESO::Particles {
  */
 struct BoundaryInteractionSpecification {
   /// The Sym corresonding to the intersection point.
-  const inline static Sym<REAL> intersection_point =
+  static const inline Sym<REAL> intersection_point =
       Sym<REAL>("NESO_PARTICLES_BOUNDARY_INTERSECTION_POINT");
   /// The Sym corresonding to the normal vector at the intersection point.
-  const inline static Sym<REAL> intersection_normal =
+  static const inline Sym<REAL> intersection_normal =
       Sym<REAL>("NESO_PARTICLES_BOUNDARY_NORMAL");
   /// The Sym corresonding to the boundary group and geometry ID.
-  const inline static Sym<INT> intersection_metadata =
+  static const inline Sym<INT> intersection_metadata =
       Sym<INT>("NESO_PARTICLES_BOUNDARY_METADATA");
   /// The number of components that the intersection_metadata EphemeralDat
   /// should have.
-  const inline static int intersection_metadata_ncomp = 2;
+  static constexpr inline int intersection_metadata_ncomp = 2;
 };
 
 /**
