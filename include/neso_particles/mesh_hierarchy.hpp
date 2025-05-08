@@ -14,6 +14,7 @@
 #include <stack>
 #include <utility>
 #include <vector>
+#include <set>
 
 namespace NESO::Particles {
 
