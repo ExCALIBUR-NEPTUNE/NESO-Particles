@@ -6,6 +6,7 @@
 #include <map>
 #include <memory>
 #include <vector>
+#include <set>
 
 namespace NESO::Particles {
 
