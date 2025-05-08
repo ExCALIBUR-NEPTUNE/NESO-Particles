@@ -246,6 +246,8 @@ public:
   inline std::size_t get_cacheline_size(const std::size_t num_bytes = 1) {
     const std::size_t hardware_cacheline_size =
         this->device.get_info<sycl::info::device::global_mem_cache_line_size>();
+    NESOASSERT(hardware_cacheline_size > 0,
+               "Bad cacheline size reported by SYCL implementation.");
     return get_next_multiple(hardware_cacheline_size, num_bytes);
   }
 };

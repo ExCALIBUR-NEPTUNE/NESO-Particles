@@ -221,13 +221,3 @@ TEST(SYCLTarget, atomics_long) {
   sycl_target->free();
 }
 
-TEST(SYCLTarget, cacheline_size){
-  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
-
-
-
-
-
-  sycl_target->free();
-}
-
