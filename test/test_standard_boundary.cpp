@@ -40,6 +40,7 @@ inline bool contains_point(const NormalInformation *normal_info, const REAL p0,
   const bool contained = (((bb[0] - tol) <= p0) && (p0 <= (bb[3 + 0] + tol))) &&
                          (((bb[1] - tol) <= p1) && (p1 <= (bb[3 + 1] + tol))) &&
                          (((bb[2] - tol) <= p2) && (p2 <= (bb[3 + 2] + tol)));
+
   return contained;
 }
 
@@ -218,12 +219,12 @@ TEST(CartesianTrajectoryIntersection, offsets_2d) {
 
 TEST(CartesianTrajectoryIntersection, offsets_3d) {
 
-  const int ncell_x = 16;
-  const int ncell_y = 32;
-  const int ncell_z = 48;
+  const int ncell_x = 12;
+  const int ncell_y = 7;
+  const int ncell_z = 8;
 
   auto [A_t, sycl_target_t, cell_count_t] =
-      particle_loop_common_3d(2, ncell_x, ncell_y, ncell_z);
+      particle_loop_common_3d(4, ncell_x, ncell_y, ncell_z);
 
   auto sycl_target = sycl_target_t;
   auto A = A_t;
@@ -241,11 +242,106 @@ TEST(CartesianTrajectoryIntersection, offsets_3d) {
           boundary_groups);
   cartesian_trajectory_intersection->prepare_particle_group(A);
 
-  const int num_facets = 2 * ncell_x + 2 * ncell_y;
+  const int num_facets =
+      2 * ncell_x * ncell_y + 2 * ncell_x * ncell_z + 2 * ncell_y * ncell_z;
   auto correct_lut = std::make_shared<LookupTable<INT, NormalInformation>>(
       sycl_target, num_facets);
 
-  // TODO facets
+  INT index = 0;
+
+  for (int bx = 0; bx < ncell_z; bx++) {
+    for (int ax = 0; ax < ncell_x; ax++) {
+      NormalInformation normal_info;
+      normal_info.element_id = index;
+      normal_info.normal[1] = 1.0;
+      // These cells have width 1.
+      normal_info.bounding_box[0] = ax;
+      normal_info.bounding_box[3 + 0] = ax + 1.0;
+      normal_info.bounding_box[2] = bx;
+      normal_info.bounding_box[3 + 2] = bx + 1.0;
+      correct_lut->add(index, normal_info);
+      index++;
+    }
+  }
+  for (int bx = 0; bx < ncell_z; bx++) {
+    for (int ax = 0; ax < ncell_y; ax++) {
+      NormalInformation normal_info;
+      normal_info.element_id = index;
+      normal_info.normal[0] = -1.0;
+      // These cells have width 1.
+      normal_info.bounding_box[0] = ncell_x;
+      normal_info.bounding_box[3 + 0] = ncell_x;
+      normal_info.bounding_box[1] = ax;
+      normal_info.bounding_box[3 + 1] = ax + 1.0;
+      normal_info.bounding_box[2] = bx;
+      normal_info.bounding_box[3 + 2] = bx + 1.0;
+      correct_lut->add(index, normal_info);
+      index++;
+    }
+  }
+  for (int bx = 0; bx < ncell_z; bx++) {
+    for (int ax = 0; ax < ncell_x; ax++) {
+      NormalInformation normal_info;
+      normal_info.element_id = index;
+      normal_info.normal[1] = -1.0;
+      // These cells have width 1.
+      normal_info.bounding_box[0] = ax;
+      normal_info.bounding_box[3 + 0] = ax + 1;
+      normal_info.bounding_box[1] = ncell_y;
+      normal_info.bounding_box[3 + 1] = ncell_y;
+      normal_info.bounding_box[2] = bx;
+      normal_info.bounding_box[3 + 2] = bx + 1.0;
+      correct_lut->add(index, normal_info);
+      index++;
+    }
+  }
+  for (int bx = 0; bx < ncell_z; bx++) {
+    for (int ax = 0; ax < ncell_y; ax++) {
+      NormalInformation normal_info;
+      normal_info.element_id = index;
+      normal_info.normal[0] = 1.0;
+      // These cells have width 1.
+      normal_info.bounding_box[1] = ax;
+      normal_info.bounding_box[3 + 1] = ax + 1.0;
+      normal_info.bounding_box[2] = bx;
+      normal_info.bounding_box[3 + 2] = bx + 1.0;
+      correct_lut->add(index, normal_info);
+      index++;
+    }
+  }
+
+  for (int bx = 0; bx < ncell_y; bx++) {
+    for (int ax = 0; ax < ncell_x; ax++) {
+      NormalInformation normal_info;
+      normal_info.element_id = index;
+      normal_info.normal[2] = 1.0;
+      // These cells have width 1.
+      normal_info.bounding_box[0] = ax;
+      normal_info.bounding_box[3 + 0] = ax + 1.0;
+      normal_info.bounding_box[1] = bx;
+      normal_info.bounding_box[3 + 1] = bx + 1.0;
+      correct_lut->add(index, normal_info);
+      index++;
+    }
+  }
+  for (int bx = 0; bx < ncell_y; bx++) {
+    for (int ax = 0; ax < ncell_x; ax++) {
+      NormalInformation normal_info;
+      normal_info.element_id = index;
+      normal_info.normal[2] = -1.0;
+      // These cells have width 1.
+      normal_info.bounding_box[0] = ax;
+      normal_info.bounding_box[3 + 0] = ax + 1.0;
+      normal_info.bounding_box[1] = bx;
+      normal_info.bounding_box[3 + 1] = bx + 1.0;
+      normal_info.bounding_box[2] = ncell_z;
+      normal_info.bounding_box[3 + 2] = ncell_z;
+      correct_lut->add(index, normal_info);
+      index++;
+    }
+  }
+
+  ASSERT_EQ(index, num_facets);
 
   A->add_particle_dat(Sym<REAL>("P_ORIG"), ndim);
   particle_loop(
@@ -296,7 +392,36 @@ TEST(CartesianTrajectoryIntersection, offsets_3d) {
           groups.at(boundaryx),
           [=](auto P, auto INTERSECTION_POINT, auto INTERSECTION_NORMAL,
               auto INTERSECTION_METADATA) {
-
+            const INT element_id = INTERSECTION_METADATA.at_ephemeral(1);
+            const NormalInformation *normal_info;
+            k_correct_lut->get(element_id, &normal_info);
+            NESO_KERNEL_ASSERT(element_id == normal_info->element_id, k_ep);
+            NESO_KERNEL_ASSERT(INTERSECTION_NORMAL.at_ephemeral(0) ==
+                                   normal_info->normal[0],
+                               k_ep);
+            NESO_KERNEL_ASSERT(INTERSECTION_NORMAL.at_ephemeral(1) ==
+                                   normal_info->normal[1],
+                               k_ep);
+            NESO_KERNEL_ASSERT(INTERSECTION_NORMAL.at_ephemeral(2) ==
+                                   normal_info->normal[2],
+                               k_ep);
+            NESO_KERNEL_ASSERT(
+                Kernel::abs(INTERSECTION_POINT.at_ephemeral(modified_index) -
+                            correct_truncation) < 1.0e-12,
+                k_ep);
+            NESO_KERNEL_ASSERT(
+                Kernel::abs(INTERSECTION_POINT.at_ephemeral(unmodified_index0) -
+                            P.at(unmodified_index0)) < 1.0e-12,
+                k_ep);
+            NESO_KERNEL_ASSERT(
+                Kernel::abs(INTERSECTION_POINT.at_ephemeral(unmodified_index1) -
+                            P.at(unmodified_index1)) < 1.0e-12,
+                k_ep);
+            NESO_KERNEL_ASSERT(
+                contains_point(normal_info, INTERSECTION_POINT.at_ephemeral(0),
+                               INTERSECTION_POINT.at_ephemeral(1),
+                               INTERSECTION_POINT.at_ephemeral(2), 1.0e-12),
+                k_ep);
           },
           Access::read(Sym<REAL>("P")),
           Access::read(BoundaryInteractionSpecification::intersection_point),
@@ -309,14 +434,24 @@ TEST(CartesianTrajectoryIntersection, offsets_3d) {
   };
 
   lambda_test(A, 100.0, 0.0, 0.0, 0, ncell_x, 1, 2);
-
   lambda_test(A, 0.0, 100.0, 0.0, 1, ncell_y, 0, 2);
-
   lambda_test(A, 0.0, 0.0, 100.0, 2, ncell_z, 0, 1);
+  lambda_test(A, 0.0, -100.0, 0.0, 1, 0.0, 0, 2);
+  lambda_test(A, -100.0, 0.0, 0.0, 0, 0.0, 1, 2);
+  lambda_test(A, 0.0, -100.0, 0.0, 1, 0.0, 0, 2);
+  lambda_test(A, 0.0, 0.0, -100.0, 2, 0.0, 0, 1);
 
   auto aa = particle_sub_group(
       A, [=](auto ID) { return ID.at(0) % 2 == 0; },
       Access::read(Sym<INT>("ID")));
+
+  lambda_test(aa, 100.0, 0.0, 0.0, 0, ncell_x, 1, 2);
+  lambda_test(aa, 0.0, 100.0, 0.0, 1, ncell_y, 0, 2);
+  lambda_test(aa, 0.0, 0.0, 100.0, 2, ncell_z, 0, 1);
+  lambda_test(aa, 0.0, -100.0, 0.0, 1, 0.0, 0, 2);
+  lambda_test(aa, -100.0, 0.0, 0.0, 0, 0.0, 1, 2);
+  lambda_test(aa, 0.0, -100.0, 0.0, 1, 0.0, 0, 2);
+  lambda_test(aa, 0.0, 0.0, -100.0, 2, 0.0, 0, 1);
 
   sycl_target->free();
 }

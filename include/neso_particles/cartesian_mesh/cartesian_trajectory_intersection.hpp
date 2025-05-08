@@ -368,7 +368,7 @@ public:
               // y -> z
               // z -> x
               const bool plane_base = P.at(0) - k_tolerance <= 0.0;
-              faces[2] = plane_base ? 1 : 3;
+              faces[2] = plane_base ? 3 : 1;
               const REAL ax = PP.at(1);
               const REAL ay = PP.at(2);
               const REAL az = PP.at(0);
