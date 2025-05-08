@@ -35,7 +35,6 @@ private:
   std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int;
 
   BufferHost<int> h_npart_cell;
-  BufferDevice<int> d_npart_cell;
 
   // Buffers to store the old/new cells/layers
   BufferDevice<int> d_cells_old;
@@ -174,7 +173,6 @@ public:
       : ncell(ncell), particle_dats_real(particle_dats_real),
         particle_dats_int(particle_dats_int),
         h_npart_cell(sycl_target, this->ncell),
-        d_npart_cell(sycl_target, this->ncell),
         d_cells_old(sycl_target, this->ncell),
         d_cells_new(sycl_target, this->ncell),
         d_layers_old(sycl_target, this->ncell),

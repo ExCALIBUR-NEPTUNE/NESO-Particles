@@ -233,6 +233,21 @@ public:
 
     return success;
   }
+
+  /**
+   * Get the cacheline size in either bytes or as a rounded up multiple of a
+   * number of bytes.
+   *
+   * @param num_bytes Default 1, optionally specify a factor such that if the
+   * cacheline is N bytes then this function returns M such that M * num_bytes
+   * >= N.
+   * @returns Cacheline size in bytes or multiple of provided factor.
+   */
+  inline std::size_t get_cacheline_size(const std::size_t num_bytes = 1) {
+    const std::size_t hardware_cacheline_size =
+        this->device.get_info<sycl::info::device::global_mem_cache_line_size>();
+    return get_next_multiple(hardware_cacheline_size, num_bytes);
+  }
 };
 
 } // namespace NESO::Particles

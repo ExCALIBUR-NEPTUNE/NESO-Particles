@@ -88,6 +88,10 @@ private:
     mods += "cas_min_REAL ";
 #endif
 
+    if (device_aware_mpi_enabled()){
+      mods += "device_aware_mpi ";
+    }
+
     std::cout << "Using " << this->device.get_info<sycl::info::device::name>()
               << std::endl;
     std::cout << "Kernel type: " << NESO_PARTICLES_DEVICE_LABEL << std::endl;
@@ -106,6 +110,7 @@ private:
     std::cout << "MPI local rank: " << this->local_rank << std::endl;
     std::cout << "SYCL device count: " << this->num_devices << std::endl;
     std::cout << "SYCL device index: " << this->device_index << std::endl;
+    std::cout << "SYCL device cacheline size: " << this->device_limits.get_cacheline_size() << std::endl;
     this->device_limits.print();
   }
 

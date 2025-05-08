@@ -16,13 +16,25 @@ inline void CellMove::move() {
   // reset the particle counters on each cell
   auto mpi_rank_dat = particle_dats_int[Sym<INT>("NESO_MPI_RANK")];
   const auto k_ncell = this->ncell;
-  auto k_npart_cell = d_npart_cell.ptr;
+  
+  auto d_npart_cell = get_resource<BufferDevice<int>,
+                               ResourceStackInterfaceBufferDevice<int>>(
+      sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<int>{},
+      sycl_target);
+
+  const std::size_t cacheline_pad_int =
+      this->sycl_target->device_limits.get_cacheline_size(sizeof(int));
+  d_npart_cell->realloc_no_copy(this->ncell + this->ncell * cacheline_pad_int);
+  auto k_npart_cell_seq = d_npart_cell->ptr;
+  auto k_npart_cell = k_npart_cell_seq + this->ncell;
+
   auto k_mpi_npart_cell = mpi_rank_dat->d_npart_cell;
-  auto reset_event = this->sycl_target->queue.submit([&](sycl::handler &cgh) {
-    cgh.parallel_for<>(sycl::range<1>(k_ncell), [=](sycl::id<1> idx) {
-      k_npart_cell[idx] = k_mpi_npart_cell[idx];
-    });
-  });
+  auto reset_event = this->sycl_target->queue.parallel_for(
+    sycl::range<1>(k_ncell), [=](sycl::id<1> idx) {
+      k_npart_cell[idx * cacheline_pad_int] = k_mpi_npart_cell[idx];
+    }
+  );
+
   auto k_move_count = d_move_count.ptr;
   this->sycl_target->queue
       .submit([&](sycl::handler &cgh) {
@@ -69,7 +81,7 @@ inline void CellMove::move() {
           // cell
           sycl::atomic_ref<int, sycl::memory_order::relaxed,
                            sycl::memory_scope::device>
-              atomic_layer(k_npart_cell[cell_on_dat]);
+              atomic_layer(k_npart_cell[cell_on_dat * cacheline_pad_int]);
           const int layer_new = atomic_layer.fetch_add(1);
 
           // Get an index for this particle in the arrays that hold
@@ -109,13 +121,22 @@ inline void CellMove::move() {
                           std::to_string(k_ncell) + ".");
   }
 
+  this->sycl_target->queue.parallel_for(
+    sycl::range<1>(k_ncell), [=](sycl::id<1> idx) {
+      k_npart_cell_seq[idx] = k_npart_cell[idx * cacheline_pad_int];
+    }
+  ).wait();
+
   // Realloc the ParticleDat cells for the move
   if (this->ncell > 0) {
     this->sycl_target->queue
-        .memcpy(this->h_npart_cell.ptr, this->d_npart_cell.ptr,
+        .memcpy(this->h_npart_cell.ptr, k_npart_cell_seq,
                 sizeof(int) * this->ncell)
         .wait();
   }
+
+  restore_resource(sycl_target->resource_stack_map,
+                   ResourceStackKeyBufferDevice<int>{}, d_npart_cell);
 
   auto t0_realloc = profile_timestamp();
   for (auto &dat : particle_dats_real) {
@@ -135,14 +156,6 @@ inline void CellMove::move() {
   sycl_target->profile_map.inc(
       "CellMove", "realloc", 1,
       profile_elapsed(t0_realloc, profile_timestamp()));
-
-  this->sycl_target->queue
-      .submit([&](sycl::handler &cgh) {
-        cgh.parallel_for<class dummy>(
-            sycl::range<1>(k_ncell),
-            [=](sycl::id<1> idx) { k_npart_cell[idx] = 0; });
-      })
-      .wait();
 
   EventStack tmp_stack;
   for (auto &dat : particle_dats_real) {
