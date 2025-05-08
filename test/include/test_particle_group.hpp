@@ -211,8 +211,9 @@ template <> struct NPToTestMapper<ParticleGroup> {
 };
 
 inline std::tuple<ParticleGroupSharedPtr, SYCLTargetSharedPtr, int>
-particle_loop_common(const int npart_cell = 10, const int ndim = 2,
-                     const int nx = 16, const int ny = 32, const int nz = 48) {
+particle_loop_create_common(const int npart_cell = 10, const int ndim = 2,
+                            const int nx = 16, const int ny = 32,
+                            const int nz = 48) {
   std::vector<int> dims(ndim);
   dims[0] = nx;
   dims[1] = ny;
@@ -287,13 +288,13 @@ particle_loop_common(const int npart_cell = 10, const int ndim = 2,
 inline std::tuple<ParticleGroupSharedPtr, SYCLTargetSharedPtr, int>
 particle_loop_common_2d(const int npart_cell = 1093, const int nx = 16,
                         const int ny = 32) {
-  return particle_loop_common(npart_cell, 2, nx, ny, -1);
+  return particle_loop_create_common(npart_cell, 2, nx, ny, -1);
 }
 
 inline std::tuple<ParticleGroupSharedPtr, SYCLTargetSharedPtr, int>
 particle_loop_common_3d(const int npart_cell = 1093, const int nx = 16,
                         const int ny = 32, const int nz = 48) {
-  return particle_loop_common(npart_cell, 3, nx, ny, nz);
+  return particle_loop_create_common(npart_cell, 3, nx, ny, nz);
 }
 
 inline bool selection_is_self_consistent(
