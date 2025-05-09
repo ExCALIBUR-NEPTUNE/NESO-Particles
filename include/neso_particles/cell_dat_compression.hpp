@@ -151,7 +151,7 @@ protected:
 
     int total_num_particles_p1 = -1;
     this->sycl_target->queue
-        .memcpy(&total_num_particles_p1, k_npart_cell_p1_old + this->ncell,
+        .memcpy(&total_num_particles_p1, k_npart_cell_p1_old_es + this->ncell,
                 sizeof(int))
         .wait_and_throw();
 
@@ -191,7 +191,7 @@ protected:
 
     // We now store in the d_masks array a 0 if the particle remains and a 1 if
     // the particle is removed.
-
+    //
     auto is = this->iteration_set->get_all_cells(
         this->sycl_target->parameters->template get<SizeTParameter>("LOOP_NBIN")
             ->value);
@@ -245,19 +245,18 @@ protected:
 
     // Collect the new cell occupancies for each cell.
     this->sycl_target->queue
-        .parallel_for(
-            sycl::range<1>(this->ncell),
-            [=](auto cell) {
-              const int cell_offset = k_npart_cell_p1_old_es[cell];
-              const int last_index = k_npart_cell_p1_old[cell] - 1;
-              const int num_particles_removed =
-                  k_npart_cell_p1_old_es[cell_offset + last_index];
-              const int new_cell_npart =
-                  k_npart_cell_old[cell] - num_particles_removed;
-              k_npart_cell_new[cell] = new_cell_npart;
-              k_npart_to_fill[cell] =
-                  k_npart_cell_p1_old_es[cell_offset + new_cell_npart];
-            })
+        .parallel_for(sycl::range<1>(this->ncell),
+                      [=](auto cell) {
+                        const int cell_offset = k_npart_cell_p1_old_es[cell];
+                        const int last_index = k_npart_cell_p1_old[cell] - 1;
+                        const int num_particles_removed =
+                            k_masks_es[cell_offset + last_index];
+                        const int new_cell_npart =
+                            k_npart_cell_old[cell] - num_particles_removed;
+                        k_npart_cell_new[cell] = new_cell_npart;
+                        k_npart_to_fill[cell] =
+                            k_masks_es[cell_offset + new_cell_npart];
+                      })
         .wait_and_throw();
 
     joint_exclusive_scan(this->sycl_target,
