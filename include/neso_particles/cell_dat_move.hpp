@@ -27,7 +27,13 @@ namespace NESO::Particles {
  *  cell in all the ParticleDat instances.
  */
 class CellMove {
-private:
+
+#ifdef NESO_PARTICLES_TEST_COMPILATION
+public:
+#else
+protected:
+#endif
+
   const int ncell;
 
   ParticleDatSharedPtr<INT> cell_id_dat;

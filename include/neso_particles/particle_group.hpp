@@ -236,9 +236,14 @@ protected:
   std::shared_ptr<MeshHierarchyGlobalMap> mesh_hierarchy_global_map;
   // neighbour communication context
   std::unique_ptr<LocalMove> local_move_ctx;
+
+#ifdef NESO_PARTICLES_TEST_COMPILATION
+public:
+#endif
   // members for moving particles between local cells
   CellMove cell_move_ctx;
 
+protected:
   // This member tracks the versions of the particle dat data
   std::map<ParticleDatVersion, std::tuple<int64_t, bool>> particle_dat_versions;
   // This member tracks the versions of the particle dat structure, which is
