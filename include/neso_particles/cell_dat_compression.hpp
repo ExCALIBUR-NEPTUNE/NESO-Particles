@@ -30,19 +30,10 @@ class LayerCompressor {
 private:
   SYCLTargetSharedPtr sycl_target;
   const int ncell;
-  int compress_npart;
-  BufferDevice<INT> d_compress_cells_old;
-  BufferDevice<INT> d_compress_layers_old;
-  BufferDevice<INT> d_compress_layers_new;
-  BufferDevice<INT> d_compress_offsets;
 
   // these should be INT not int but hipsycl refused to do atomic refs on long
   // int
-  BufferDevice<int> d_npart_cell;
   BufferHost<int> h_npart_cell;
-  BufferDevice<int> d_move_counters;
-  BufferDevice<int> d_search_space;
-  BufferDevice<int> d_to_find_exscan;
 
   // references to the ParticleGroup methods
   ParticleDatSharedPtr<INT> cell_id_dat;
@@ -75,14 +66,7 @@ public:
       std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
       std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int)
       : sycl_target(sycl_target), ncell(ncell),
-        d_compress_cells_old(sycl_target, 1),
-        d_compress_layers_old(sycl_target, 1),
-        d_compress_layers_new(sycl_target, 1),
-        d_compress_offsets(sycl_target, 1), d_npart_cell(sycl_target, ncell),
         h_npart_cell(sycl_target, ncell),
-        d_move_counters(sycl_target, ncell + 1),
-        d_search_space(sycl_target, ncell),
-        d_to_find_exscan(sycl_target, ncell + 1),
         particle_dats_real(particle_dats_real),
         particle_dats_int(particle_dats_int) {
     this->iteration_set =
@@ -112,8 +96,10 @@ public:
    * holds the layers of the particles that are to be removed.
    */
   template <typename T>
-  inline void compute_remove_compress_indicies(const int npart, T *usm_cells,
-                                               T *usm_layers) {
+  inline void compute_remove_compress_indicies_sparse(
+      const int npart, T *usm_cells, T *usm_layers, int *compress_npart,
+      INT *k_compress_cells_old, INT *k_compress_layers_old,
+      INT *k_compress_layers_new, int *k_npart_cell_new) {
 
     if (npart < 1) {
       return;
@@ -123,35 +109,49 @@ public:
     auto r =
         ProfileRegion("LayerCompressor", "compute_remove_compress_indicies_a");
 
-    NESOASSERT(this->d_npart_cell.size >= static_cast<std::size_t>(this->ncell),
-               "Bad device_npart_cell length");
-
     const int ncell = this->ncell;
 
     auto mpi_particle_dat = this->particle_dats_int[Sym<INT>("NESO_MPI_RANK")];
-    auto k_npart_cell = mpi_particle_dat->d_npart_cell;
+    auto k_npart_cell_old = mpi_particle_dat->d_npart_cell;
 
-    auto device_npart_cell_ptr = this->d_npart_cell.ptr;
-    auto device_move_counters_ptr = this->d_move_counters.ptr;
+    auto d_move_counters =
+        get_resource<BufferDevice<int>,
+                     ResourceStackInterfaceBufferDevice<int>>(
+            sycl_target->resource_stack_map,
+            ResourceStackKeyBufferDevice<int>{}, sycl_target);
+    d_move_counters->realloc_no_copy(ncell + 1);
+    auto k_move_counters = d_move_counters->ptr;
 
-    this->d_compress_offsets.realloc_no_copy(npart);
-    auto compress_offsets_ptr = this->d_compress_offsets.ptr;
+    auto d_move_counters_es =
+        get_resource<BufferDevice<int>,
+                     ResourceStackInterfaceBufferDevice<int>>(
+            sycl_target->resource_stack_map,
+            ResourceStackKeyBufferDevice<int>{}, sycl_target);
+    d_move_counters_es->realloc_no_copy(ncell + 1);
+    auto k_move_counters_es = d_move_counters_es->ptr;
+
+    auto d_compress_offsets =
+        get_resource<BufferDevice<int>,
+                     ResourceStackInterfaceBufferDevice<int>>(
+            sycl_target->resource_stack_map,
+            ResourceStackKeyBufferDevice<int>{}, sycl_target);
+    d_compress_offsets->realloc_no_copy(npart);
+    auto k_compress_offsets = d_compress_offsets->ptr;
 
     INT ***cell_ids_ptr = this->cell_id_dat->impl_get();
 
-    // Copy the current cell occupancies into device_npart_cell_ptr.
+    // Copy the current cell occupancies into k_npart_cell_new.
     this->sycl_target->queue
         .submit([&](sycl::handler &cgh) {
-          cgh.parallel_for<>(sycl::range<1>(static_cast<size_t>(ncell)),
-                             [=](sycl::id<1> idx) {
-                               device_npart_cell_ptr[idx] =
-                                   static_cast<int>(k_npart_cell[idx]);
-                             });
+          cgh.parallel_for<>(
+              sycl::range<1>(static_cast<size_t>(ncell)), [=](sycl::id<1> idx) {
+                k_npart_cell_new[idx] = static_cast<int>(k_npart_cell_old[idx]);
+              });
         })
         .wait_and_throw();
 
     // Compute the new cell occupancies by atomically decrementing
-    // device_npart_cell_ptr and setting the cell id of removed particles to
+    // k_npart_cell_new and setting the cell id of removed particles to
     // -1.
     this->sycl_target->queue
         .submit([&](sycl::handler &cgh) {
@@ -160,10 +160,10 @@ public:
                 const auto cell = usm_cells[idx];
                 const auto layer = usm_layers[idx];
 
-                // Atomically do device_npart_cell_ptr[cell]--
+                // Atomically do k_npart_cell_new[cell]--
                 sycl::atomic_ref<int, sycl::memory_order::relaxed,
                                  sycl::memory_scope::device>
-                    element_atomic(device_npart_cell_ptr[cell]);
+                    element_atomic(k_npart_cell_new[cell]);
                 element_atomic.fetch_add(-1);
 
                 //// indicate this particle is removed by setting
@@ -183,7 +183,7 @@ public:
           .submit([&](sycl::handler &cgh) {
             cgh.parallel_for<>(
                 sycl::range<1>(static_cast<size_t>(ncell + 1)),
-                [=](sycl::id<1> idx) { device_move_counters_ptr[idx] = 0; });
+                [=](sycl::id<1> idx) { k_move_counters[idx] = 0; });
           })
           .wait_and_throw();
     };
@@ -201,13 +201,13 @@ public:
                 // Is this layer less than the new cell count?
                 // If so then there is a particle in a row greater than the cell
                 // count to be copied into this layer.
-                if (layer < device_npart_cell_ptr[cell]) {
+                if (layer < k_npart_cell_new[cell]) {
                   sycl::atomic_ref<int, sycl::memory_order::relaxed,
                                    sycl::memory_scope::device>
-                      element_atomic(device_move_counters_ptr[cell]);
+                      element_atomic(k_move_counters[cell]);
                   const int offset = element_atomic.fetch_add(1);
                   // We store this offset to avoid doing the same atomics later.
-                  compress_offsets_ptr[idx] = offset;
+                  k_compress_offsets[idx] = offset;
                 }
               });
         })
@@ -216,26 +216,26 @@ public:
     // We need to allocate space to find these particles but want to allocate
     // space sensibly in the case where the particle distribution is
     // non-uniform.
-    auto to_find_scan_ptr = this->d_to_find_exscan.ptr;
-    joint_exclusive_scan(this->sycl_target, this->ncell + 1,
-                         device_move_counters_ptr, to_find_scan_ptr)
+    joint_exclusive_scan(this->sycl_target, this->ncell + 1, k_move_counters,
+                         k_move_counters_es)
         .wait_and_throw();
     // We made to_find_scan have ncell+1 elements such that the final entry is
     // the number of particles we need to find across all cells.
     this->sycl_target->queue
-        .memcpy(&this->compress_npart, to_find_scan_ptr + this->ncell,
-                sizeof(int))
+        .memcpy(compress_npart, k_move_counters_es + this->ncell, sizeof(int))
         .wait_and_throw();
+
+    NESOASSERT((0 <= *compress_npart) && (*compress_npart <= npart),
+               "Bad compress_npart computed.");
+
     // Allocate the temporary space to be large enough to hold all the layer
     // indices.
-    this->d_search_space.realloc_no_copy(this->compress_npart);
-
-    this->d_compress_cells_old.realloc_no_copy(this->compress_npart);
-    this->d_compress_layers_old.realloc_no_copy(this->compress_npart);
-    this->d_compress_layers_new.realloc_no_copy(this->compress_npart);
-    auto compress_cells_old_ptr = this->d_compress_cells_old.ptr;
-    auto compress_layers_old_ptr = this->d_compress_layers_old.ptr;
-    auto compress_layers_new_ptr = this->d_compress_layers_new.ptr;
+    auto d_search_space = get_resource<BufferDevice<int>,
+                                       ResourceStackInterfaceBufferDevice<int>>(
+        sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<int>{},
+        sycl_target);
+    d_search_space->realloc_no_copy(*compress_npart);
+    auto k_search_space = d_search_space->ptr;
 
     // Remove the indices which we do not need any more.
     this->sycl_target->queue
@@ -247,43 +247,41 @@ public:
                 // Is this layer less than the new cell count?
                 // If so then there is a particle in a row greater than the cell
                 // count to be copied into this layer.
-                if (layer < device_npart_cell_ptr[cell]) {
-                  const auto offset = compress_offsets_ptr[idx];
-                  const auto index = to_find_scan_ptr[cell] + offset;
-                  compress_cells_old_ptr[index] = cell;
-                  compress_layers_old_ptr[index] = offset;
-                  compress_layers_new_ptr[index] = layer;
+                if (layer < k_npart_cell_new[cell]) {
+                  const auto offset = k_compress_offsets[idx];
+                  const auto index = k_move_counters_es[cell] + offset;
+                  k_compress_cells_old[index] = cell;
+                  k_compress_layers_old[index] = offset;
+                  k_compress_layers_new[index] = layer;
                 }
               });
         })
         .wait_and_throw();
 
     // Compute the iteration set sizes for each cell. This loop overrides the
-    // device_move_counters_ptr array. This is the difference between the old
+    // k_move_counters array. This is the difference between the old
     // cell count and new cell count.
     this->sycl_target->queue
         .submit([&](sycl::handler &cgh) {
-          cgh.parallel_for<>(
-              sycl::range<1>(static_cast<size_t>(ncell)), [=](sycl::id<1> idx) {
-                device_move_counters_ptr[idx] =
-                    k_npart_cell[idx] - device_npart_cell_ptr[idx];
-              });
+          cgh.parallel_for<>(sycl::range<1>(static_cast<size_t>(ncell)),
+                             [=](sycl::id<1> idx) {
+                               k_move_counters[idx] = k_npart_cell_old[idx] -
+                                                      k_npart_cell_new[idx];
+                             });
         })
         .wait_and_throw();
 
     // The particle loop iteration set class reads this buffer to determine
     // the iteration set for a particle loop. Required on host not device.
     this->sycl_target->queue
-        .memcpy(this->h_npart_cell.ptr, device_move_counters_ptr,
-                ncell * sizeof(int))
+        .memcpy(this->h_npart_cell.ptr, k_move_counters, ncell * sizeof(int))
         .wait_and_throw();
 
     auto is = this->iteration_set->get();
-    // As the entries in device_move_counters_ptr were already copied to the
+    // As the entries in k_move_counters were already copied to the
     // host to create the particle loop iteration sets we can zero the device
     // side buffer.
     lambda_reset_counters();
-    auto k_search_space = this->d_search_space.ptr;
 
     const int nbin = std::get<0>(is);
     for (int binx = 0; binx < nbin; binx++) {
@@ -298,21 +296,22 @@ public:
               // This takes the layer from the iteration set and offsets it
               // into the interval [new_cell_count, old_cell_count).
               const int layerx =
-                  static_cast<int>(layerxs) + device_npart_cell_ptr[cellxs];
-              // k_npart_cell still holds the old cell count.
-              if (layerx < k_npart_cell[cellx]) {
+                  static_cast<int>(layerxs) + k_npart_cell_new[cellxs];
+              // k_npart_cell_old still holds the old cell count.
+              if (layerx < k_npart_cell_old[cellx]) {
                 // Is this a particle to be copied lower in the cell?
                 if (cell_ids_ptr[cellx][0][layerx] > -1) {
                   // Place an ordering on the found particles to move for this
                   // cell.
                   sycl::atomic_ref<int, sycl::memory_order::relaxed,
                                    sycl::memory_scope::device>
-                      element_atomic(device_move_counters_ptr[cellx]);
+                      element_atomic(k_move_counters[cellx]);
                   const int offset = element_atomic.fetch_add(1);
 
                   // Store the index so we can retrive it later.
-                  // to_find_scan_ptr[cellx] holds the base offset for the cell.
-                  const int store_index = to_find_scan_ptr[cellx] + offset;
+                  // k_move_counters_es[cellx] holds the base offset for the
+                  // cell.
+                  const int store_index = k_move_counters_es[cellx] + offset;
                   k_search_space[store_index] = layerx;
                 }
               }
@@ -321,18 +320,18 @@ public:
     }
     this->event_stack.wait();
 
-    if (this->compress_npart > 0) {
+    if ((*compress_npart) > 0) {
       this->sycl_target->queue
           .submit([&](sycl::handler &cgh) {
             cgh.parallel_for<>(
-                sycl::range<1>(static_cast<size_t>(this->compress_npart)),
+                sycl::range<1>(static_cast<size_t>(*compress_npart)),
                 [=](sycl::id<1> idx) {
-                  const auto cell = compress_cells_old_ptr[idx];
-                  const auto offset = compress_layers_old_ptr[idx];
-                  const auto cell_offset = to_find_scan_ptr[cell];
+                  const auto cell = k_compress_cells_old[idx];
+                  const auto offset = k_compress_layers_old[idx];
+                  const auto cell_offset = k_move_counters_es[cell];
                   const auto lookup_index = cell_offset + offset;
                   const auto source_row = k_search_space[lookup_index];
-                  compress_layers_old_ptr[idx] = source_row;
+                  k_compress_layers_old[idx] = source_row;
                 });
           })
           .wait_and_throw();
@@ -343,6 +342,15 @@ public:
                                  profile_elapsed(t0, profile_timestamp()));
     r.end();
     this->sycl_target->profile_map.add_region(r);
+
+    restore_resource(sycl_target->resource_stack_map,
+                     ResourceStackKeyBufferDevice<int>{}, d_search_space);
+    restore_resource(sycl_target->resource_stack_map,
+                     ResourceStackKeyBufferDevice<int>{}, d_move_counters);
+    restore_resource(sycl_target->resource_stack_map,
+                     ResourceStackKeyBufferDevice<int>{}, d_move_counters_es);
+    restore_resource(sycl_target->resource_stack_map,
+                     ResourceStackKeyBufferDevice<int>{}, d_compress_offsets);
   }
 
   /**
@@ -362,20 +370,50 @@ public:
 
     auto t0 = profile_timestamp();
 
-    // note to refactorers that this call uses h_npart_cell
-    this->compute_remove_compress_indicies(npart, usm_cells, usm_layers);
+    auto d_compress_cells_old =
+        get_resource<BufferDevice<INT>,
+                     ResourceStackInterfaceBufferDevice<INT>>(
+            sycl_target->resource_stack_map,
+            ResourceStackKeyBufferDevice<INT>{}, sycl_target);
+    auto d_compress_layers_old =
+        get_resource<BufferDevice<INT>,
+                     ResourceStackInterfaceBufferDevice<INT>>(
+            sycl_target->resource_stack_map,
+            ResourceStackKeyBufferDevice<INT>{}, sycl_target);
+    auto d_compress_layers_new =
+        get_resource<BufferDevice<INT>,
+                     ResourceStackInterfaceBufferDevice<INT>>(
+            sycl_target->resource_stack_map,
+            ResourceStackKeyBufferDevice<INT>{}, sycl_target);
 
-    auto compress_cells_old_ptr = this->d_compress_cells_old.ptr;
-    auto compress_layers_old_ptr = this->d_compress_layers_old.ptr;
-    auto compress_layers_new_ptr = this->d_compress_layers_new.ptr;
+    d_compress_cells_old->realloc_no_copy(npart);
+    d_compress_layers_old->realloc_no_copy(npart);
+    d_compress_layers_new->realloc_no_copy(npart);
+    auto k_compress_cells_old = d_compress_cells_old->ptr;
+    auto k_compress_layers_old = d_compress_layers_old->ptr;
+    auto k_compress_layers_new = d_compress_layers_new->ptr;
+
+    auto d_npart_cell_new =
+        get_resource<BufferDevice<int>,
+                     ResourceStackInterfaceBufferDevice<int>>(
+            sycl_target->resource_stack_map,
+            ResourceStackKeyBufferDevice<int>{}, sycl_target);
+    d_npart_cell_new->realloc_no_copy(this->ncell);
+    auto k_npart_cell_new = d_npart_cell_new->ptr;
+
+    int compress_npart = 0;
+
+    // note to refactorers that this call uses h_npart_cell
+    this->compute_remove_compress_indicies_sparse(
+        npart, usm_cells, usm_layers, &compress_npart, k_compress_cells_old,
+        k_compress_layers_old, k_compress_layers_new, k_npart_cell_new);
 
     auto t1 = profile_timestamp();
 
     // do this d->h copy once for all dats
-    if (this->d_npart_cell.size_bytes() > 0) {
+    if (this->ncell > 0) {
       this->event_stack.push(this->sycl_target->queue.memcpy(
-          this->h_npart_cell.ptr, this->d_npart_cell.ptr,
-          this->d_npart_cell.size_bytes()));
+          this->h_npart_cell.ptr, k_npart_cell_new, this->ncell * sizeof(int)));
     }
 
     auto r = ProfileRegion("LayerCompressor", "data_movement");
@@ -383,22 +421,22 @@ public:
     std::size_t num_bytes = 0;
     for (auto &dat : particle_dats_real) {
       this->event_stack.push(dat.second->copy_particle_data(
-          this->compress_npart, compress_cells_old_ptr, compress_cells_old_ptr,
-          compress_layers_old_ptr, compress_layers_new_ptr));
+          compress_npart, k_compress_cells_old, k_compress_cells_old,
+          k_compress_layers_old, k_compress_layers_new));
       this->event_stack.push(
-          dat.second->set_npart_cells_device(this->d_npart_cell.ptr));
+          dat.second->set_npart_cells_device(k_npart_cell_new));
       num_bytes += sizeof(REAL) * dat.second->ncomp;
     }
     for (auto &dat : particle_dats_int) {
       this->event_stack.push(dat.second->copy_particle_data(
-          this->compress_npart, compress_cells_old_ptr, compress_cells_old_ptr,
-          compress_layers_old_ptr, compress_layers_new_ptr));
+          compress_npart, k_compress_cells_old, k_compress_cells_old,
+          k_compress_layers_old, k_compress_layers_new));
       this->event_stack.push(
-          dat.second->set_npart_cells_device(this->d_npart_cell.ptr));
+          dat.second->set_npart_cells_device(k_npart_cell_new));
       num_bytes += sizeof(INT) * dat.second->ncomp;
     }
 
-    r.num_bytes = num_bytes * this->compress_npart;
+    r.num_bytes = num_bytes * compress_npart;
     // the move and set_npart calls are async
     this->event_stack.wait();
 
@@ -445,6 +483,15 @@ public:
 
     r.end();
     this->sycl_target->profile_map.add_region(r);
+
+    restore_resource(sycl_target->resource_stack_map,
+                     ResourceStackKeyBufferDevice<INT>{}, d_compress_cells_old);
+    restore_resource(sycl_target->resource_stack_map,
+                     ResourceStackKeyBufferDevice<INT>{},
+                     d_compress_layers_old);
+    restore_resource(sycl_target->resource_stack_map,
+                     ResourceStackKeyBufferDevice<INT>{},
+                     d_compress_layers_new);
   }
 };
 

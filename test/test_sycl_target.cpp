@@ -220,4 +220,3 @@ TEST(SYCLTarget, atomics_long) {
 
   sycl_target->free();
 }
-
