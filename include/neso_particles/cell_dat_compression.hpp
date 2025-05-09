@@ -110,6 +110,12 @@ protected:
             ResourceStackKeyBufferDevice<int>{}, sycl_target);
     d_npart_cell_es_old->realloc_no_copy(this->ncell + 1);
     int *k_npart_cell_p1_old_es = d_npart_cell_es_old->ptr;
+    auto e4 = this->sycl_target->queue.parallel_for(
+      sycl::range<1>(ncell+1),
+      [=](auto ix){
+        k_npart_cell_p1_old_es[ix] = 0;
+      }
+    );
 
     auto d_npart_cell_old =
         get_resource<BufferDevice<int>,
@@ -118,6 +124,8 @@ protected:
             ResourceStackKeyBufferDevice<int>{}, sycl_target);
     d_npart_cell_old->realloc_no_copy(this->ncell + 1);
     int *k_npart_cell_p1_old = d_npart_cell_old->ptr;
+
+
 
     // We collect the npart + 1 of each cell into a buffer that is ncell+1
     const int zero = 0;
@@ -144,6 +152,7 @@ protected:
 
     // Compute the exclusive scan of the occupancies which we need to call
     // joint_exclusive_scan_n
+    e4.wait_and_throw();
     joint_exclusive_scan(this->sycl_target,
                          static_cast<std::size_t>(this->ncell + 1),
                          k_npart_cell_p1_old, k_npart_cell_p1_old_es)
@@ -181,6 +190,13 @@ protected:
         sycl_target);
     d_masks_es->realloc_no_copy(total_num_particles_p1);
     auto k_masks_es = d_masks_es->ptr;
+    auto e6 = this->sycl_target->queue.parallel_for(
+      sycl::range<1>(total_num_particles_p1),
+      [=](auto ix){
+        k_masks_es[ix] = 0;
+      }
+    );
+
 
     e2.wait_and_throw();
 
@@ -217,6 +233,7 @@ protected:
                       "compute_remove_compress_indicies_dense_c");
 
     // Compute the exclusive sum cell wise for all of the masks.
+    e6.wait_and_throw();
     joint_exclusive_scan_n(sycl_target, static_cast<std::size_t>(this->ncell),
                            k_npart_cell_p1_old, k_npart_cell_p1_old_es, k_masks,
                            k_masks_es)
@@ -242,6 +259,12 @@ protected:
             ResourceStackKeyBufferDevice<int>{}, sycl_target);
     d_npart_to_fill_es->realloc_no_copy(this->ncell + 1);
     int *k_npart_to_fill_es = d_npart_to_fill_es->ptr;
+    auto e5 = this->sycl_target->queue.parallel_for(
+      sycl::range<1>(ncell+1),
+      [=](auto ix){
+        k_npart_to_fill_es[ix] = 0;
+      }
+    );
 
     // Collect the new cell occupancies for each cell.
     this->sycl_target->queue
@@ -259,6 +282,7 @@ protected:
                       })
         .wait_and_throw();
 
+    e5.wait_and_throw();
     joint_exclusive_scan(this->sycl_target,
                          static_cast<std::size_t>(this->ncell + 1),
                          k_npart_to_fill, k_npart_to_fill_es)
@@ -363,6 +387,12 @@ protected:
             ResourceStackKeyBufferDevice<int>{}, sycl_target);
     d_move_counters_es->realloc_no_copy(ncell + 1);
     auto k_move_counters_es = d_move_counters_es->ptr;
+    auto e4 = this->sycl_target->queue.parallel_for(
+      sycl::range<1>(ncell+1),
+      [=](auto ix){
+        k_move_counters_es[ix] = 0;
+      }
+    );
 
     auto d_compress_offsets =
         get_resource<BufferDevice<int>,
@@ -450,6 +480,7 @@ protected:
     // We need to allocate space to find these particles but want to allocate
     // space sensibly in the case where the particle distribution is
     // non-uniform.
+    e4.wait_and_throw();
     joint_exclusive_scan(this->sycl_target, this->ncell + 1, k_move_counters,
                          k_move_counters_es)
         .wait_and_throw();
@@ -600,6 +631,7 @@ protected:
                      INT *k_compress_layers_old, INT *k_compress_layers_new,
                      int *k_npart_cell_new)>
       callback_dense;
+  std::function<void()> callback_test;
 
 public:
   /**
@@ -665,6 +697,7 @@ public:
       this->callback_dense(compress_npart, k_compress_cells_old,
                            k_compress_layers_old, k_compress_layers_new,
                            k_npart_cell_new);
+      this->callback_test();
     }
 
     // note to refactorers that this call uses h_npart_cell

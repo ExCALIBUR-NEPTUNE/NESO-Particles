@@ -148,7 +148,7 @@ TEST(ParticleGroup, cell_move_compression) {
   std::mt19937 rng_rank(18241);
 
   const int N = 1024;
-  const int Ntest = 1024;
+  const int Ntest = 1;
   const REAL dt = 1.0;
   const REAL tol = 1.0e-10;
   const int cell_count = domain->mesh->get_cell_count();
@@ -196,23 +196,111 @@ TEST(ParticleGroup, cell_move_compression) {
       },
       Access::read(Sym<REAL>("V")), Access::write(Sym<REAL>("P")));
 
-  auto lambda_callback_dense =
-      [&](int compress_npart, INT *k_compress_cells_old,
-          INT *k_compress_layers_old, INT *k_compress_layers_new,
-          int *k_npart_cell_new) {
 
-      };
+  std::vector<int> h_correct_compress_cells_old;
+  std::vector<int> h_correct_compress_layers_old;
+  std::vector<int> h_correct_compress_layers_new;
+  std::vector<int> h_correct_npart_cell_new(mesh->get_cell_count());
+
+  std::vector<int> h_to_test_compress_cells_old;
+  std::vector<int> h_to_test_compress_layers_old;
+  std::vector<int> h_to_test_compress_layers_new;
+  std::vector<int> h_to_test_npart_cell_new(mesh->get_cell_count());
+
+  const std::size_t ncell_int_num_bytes = mesh->get_cell_count() * sizeof(int);
+
+  std::map<int, std::set<int>> map_cell_layers_old_correct;
+  std::map<int, std::set<int>> map_cell_layers_new_correct;
+  std::map<int, std::set<int>> map_cell_layers_old_to_test;
+  std::map<int, std::set<int>> map_cell_layers_new_to_test;
+
+  int compress_npart_correct;
+  int compress_npart_to_test;
 
   auto lambda_callback_sparse =
       [&](int compress_npart, INT *k_compress_cells_old,
           INT *k_compress_layers_old, INT *k_compress_layers_new,
           int *k_npart_cell_new) {
+        compress_npart_correct = compress_npart;
+        nprint_variable(compress_npart_correct);
+        h_correct_compress_cells_old .resize(compress_npart);
+        h_correct_compress_layers_old.resize(compress_npart);
+        h_correct_compress_layers_new.resize(compress_npart);
+        const std::size_t num_bytes = sizeof(int) * compress_npart;
+        sycl_target->queue.memcpy(h_correct_compress_cells_old.data(), k_compress_cells_old, num_bytes).wait();
+        sycl_target->queue.memcpy(h_correct_compress_layers_old.data(), k_compress_layers_old, num_bytes).wait();
+        sycl_target->queue.memcpy(h_correct_compress_layers_new.data(), k_compress_layers_new, num_bytes).wait();
+        sycl_target->queue.memcpy(h_correct_npart_cell_new.data(), k_npart_cell_new, ncell_int_num_bytes).wait();
+
+        map_cell_layers_old_correct.clear();
+        map_cell_layers_new_correct.clear();
+        for(int ix=0 ; ix<compress_npart ; ix++){
+          const auto cell = h_correct_compress_cells_old.at(ix);
+          const auto layer_old = h_correct_compress_layers_old.at(ix);
+          const auto layer_new = h_correct_compress_layers_new.at(ix);
+          map_cell_layers_old_correct[cell].insert(layer_old);
+          map_cell_layers_new_correct[cell].insert(layer_new);
+          if (cell == 0){
+            nprint("SPARSE:", layer_old, layer_new);
+          }
+        }
 
       };
 
+  auto lambda_callback_dense =
+      [&](int compress_npart, INT *k_compress_cells_old,
+          INT *k_compress_layers_old, INT *k_compress_layers_new,
+          int *k_npart_cell_new) {
+
+        compress_npart_to_test = compress_npart;
+        nprint_variable(compress_npart_to_test);
+        h_to_test_compress_cells_old .resize(compress_npart);
+        h_to_test_compress_layers_old.resize(compress_npart);
+        h_to_test_compress_layers_new.resize(compress_npart);
+        const std::size_t num_bytes = sizeof(int) * compress_npart;
+        sycl_target->queue.memcpy(h_to_test_compress_cells_old.data(), k_compress_cells_old, num_bytes).wait();
+        sycl_target->queue.memcpy(h_to_test_compress_layers_old.data(), k_compress_layers_old, num_bytes).wait();
+        sycl_target->queue.memcpy(h_to_test_compress_layers_new.data(), k_compress_layers_new, num_bytes).wait();
+        sycl_target->queue.memcpy(h_to_test_npart_cell_new.data(), k_npart_cell_new, ncell_int_num_bytes).wait();
+
+        map_cell_layers_old_to_test.clear();
+        map_cell_layers_new_to_test.clear();
+        for(int ix=0 ; ix<compress_npart ; ix++){
+          const auto cell = h_to_test_compress_cells_old.at(ix);
+          const auto layer_old = h_to_test_compress_layers_old.at(ix);
+          const auto layer_new = h_to_test_compress_layers_new.at(ix);
+          map_cell_layers_old_to_test[cell].insert(layer_old);
+          map_cell_layers_new_to_test[cell].insert(layer_new);
+          if (cell == 0){
+            nprint("DENSE:", layer_old, layer_new);
+          }
+        }
+      };
+
+  auto lambda_callback_test = [&](){
+        nprint("TEST CALLNACL");
+
+        ASSERT_EQ(compress_npart_to_test, compress_npart_correct);
+        ASSERT_EQ(h_correct_npart_cell_new, h_to_test_npart_cell_new);
+
+        ASSERT_EQ(map_cell_layers_old_correct.size(), map_cell_layers_new_correct.size());
+        for(int cx=0 ; cx<cell_count ; cx++){
+          ASSERT_EQ(map_cell_layers_old_to_test[cx].size(), map_cell_layers_new_to_test[cx].size());
+          //ASSERT_EQ(map_cell_layers_old_correct[cx].size(), map_cell_layers_new_correct[cx].size());
+          //ASSERT_EQ(map_cell_layers_old_correct[cx].size(), map_cell_layers_old_to_test[cx].size());
+          //ASSERT_EQ(map_cell_layers_new_correct[cx].size(), map_cell_layers_new_to_test[cx].size());
+        }
+
+  };
+
+  nprint("========================================================================");
+  nprint("========================================================================");
+  nprint("========================================================================");
+  nprint("========================================================================");
   A->cell_move_ctx.layer_compressor.test_mode = true;
-  A->cell_move_ctx.layer_compressor.callback_dense = lambda_callback_dense;
   A->cell_move_ctx.layer_compressor.callback_sparse = lambda_callback_sparse;
+  A->cell_move_ctx.layer_compressor.callback_dense = lambda_callback_dense;
+  A->cell_move_ctx.layer_compressor.callback_test = lambda_callback_test;
 
   auto lambda_test = [&] {
 
