@@ -19,7 +19,7 @@ TEST(ParticleGroup, cell_move) {
   ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
                              ParticleProp(Sym<REAL>("V"), 3),
                              ParticleProp(Sym<INT>("CELL_ID"), 1, true),
-                             ParticleProp(Sym<INT>("ID"), 1)};
+                             ParticleProp(Sym<INT>("ID"), 2)};
 
   auto A = make_test_obj<ParticleGroup>(domain, particle_spec, sycl_target);
 
@@ -35,7 +35,7 @@ TEST(ParticleGroup, cell_move) {
   std::mt19937 rng_rank(112348241);
 
   const int N = 1024;
-  const int Ntest = 20;
+  const int Ntest = 200;
 
   auto positions =
       uniform_within_extents(N, ndim, mesh->global_extents, rng_pos);
@@ -58,7 +58,7 @@ TEST(ParticleGroup, cell_move) {
     const auto px_cell = dist_cell(rng_cell);
     initial_distribution[Sym<INT>("CELL_ID")][px][0] = px_cell;
     initial_distribution[Sym<INT>("ID")][px][0] = px;
-
+    initial_distribution[Sym<INT>("ID")][px][1] = rank;
     const auto px_rank = dist_rank(rng_rank);
     initial_distribution[Sym<INT>("NESO_MPI_RANK")][px][0] = px_rank;
   }
@@ -66,6 +66,38 @@ TEST(ParticleGroup, cell_move) {
   A->add_particles_local(initial_distribution);
 
   BufferShared<INT> new_cell_ids(sycl_target, N);
+
+  std::map<int, std::set<std::pair<INT, INT>>> map_pre_move;
+  std::set<std::pair<INT, INT>> population_pre_move;
+
+  auto lambda_pre_move = [&]() {
+    map_pre_move.clear();
+    population_pre_move.clear();
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      auto cell_id = A->get_cell(Sym<INT>("CELL_ID"), cellx);
+      auto id = A->get_cell(Sym<INT>("ID"), cellx);
+      const int nrow = cell_id->nrow;
+      for (int rowx = 0; rowx < nrow; rowx++) {
+        auto cell = cell_id->at(rowx, 0);
+        map_pre_move[cell].insert({id->at(rowx, 0), id->at(rowx, 1)});
+        population_pre_move.insert({id->at(rowx, 0), id->at(rowx, 1)});
+      }
+    }
+  };
+  auto lambda_post_move = [&]() {
+    std::set<std::pair<INT, INT>> population_post_move;
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      auto id = A->get_cell(Sym<INT>("ID"), cellx);
+      const int nrow = id->nrow;
+      std::set<std::pair<INT, INT>> set_to_test;
+      for (int rowx = 0; rowx < nrow; rowx++) {
+        set_to_test.insert({id->at(rowx, 0), id->at(rowx, 1)});
+        population_post_move.insert({id->at(rowx, 0), id->at(rowx, 1)});
+      }
+      ASSERT_EQ(set_to_test, map_pre_move[cellx]);
+    }
+    ASSERT_EQ(population_post_move, population_pre_move);
+  };
 
   for (int testx = 0; testx < Ntest; testx++) {
     // set the new cells
@@ -83,7 +115,9 @@ TEST(ParticleGroup, cell_move) {
         ->execute();
 
     A->reset_version_tracker();
+    lambda_pre_move();
     A->cell_move();
+    lambda_post_move();
     A->test_version_different();
     A->test_internal_state();
 
