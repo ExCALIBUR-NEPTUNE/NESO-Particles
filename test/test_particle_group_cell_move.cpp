@@ -148,9 +148,8 @@ TEST(ParticleGroup, cell_move_compression) {
   std::mt19937 rng_rank(18241);
 
   const int N = 1024;
-  const int Ntest = 1;
+  const int Ntest = 200;
   const REAL dt = 1.0;
-  const REAL tol = 1.0e-10;
   const int cell_count = domain->mesh->get_cell_count();
 
   auto positions =
@@ -196,15 +195,14 @@ TEST(ParticleGroup, cell_move_compression) {
       },
       Access::read(Sym<REAL>("V")), Access::write(Sym<REAL>("P")));
 
-
-  std::vector<int> h_correct_compress_cells_old;
-  std::vector<int> h_correct_compress_layers_old;
-  std::vector<int> h_correct_compress_layers_new;
+  std::vector<INT> h_correct_compress_cells_old;
+  std::vector<INT> h_correct_compress_layers_old;
+  std::vector<INT> h_correct_compress_layers_new;
   std::vector<int> h_correct_npart_cell_new(mesh->get_cell_count());
 
-  std::vector<int> h_to_test_compress_cells_old;
-  std::vector<int> h_to_test_compress_layers_old;
-  std::vector<int> h_to_test_compress_layers_new;
+  std::vector<INT> h_to_test_compress_cells_old;
+  std::vector<INT> h_to_test_compress_layers_old;
+  std::vector<INT> h_to_test_compress_layers_new;
   std::vector<int> h_to_test_npart_cell_new(mesh->get_cell_count());
 
   const std::size_t ncell_int_num_bytes = mesh->get_cell_count() * sizeof(int);
@@ -217,94 +215,201 @@ TEST(ParticleGroup, cell_move_compression) {
   int compress_npart_correct;
   int compress_npart_to_test;
 
+  std::map<int, std::set<int>> map_cell_to_particles;
+  std::map<int, std::set<INT>> map_cell_to_particles_dst;
+  std::map<int, std::set<INT>> map_cell_to_particles_src;
+  std::vector<int> h_npart_cell(cell_count);
+
+  auto lambda_callback_host = [&](const int npart, int *h_cells, int *h_layers,
+                                  int *h_npart_cell_dat) {
+    for (int ix = 0; ix < npart; ix++) {
+      ASSERT_TRUE(h_cells[ix] > -1);
+      ASSERT_TRUE(h_cells[ix] < cell_count);
+      ASSERT_TRUE(h_layers[ix] > -1);
+    }
+
+    map_cell_to_particles.clear();
+    map_cell_to_particles_dst.clear();
+    map_cell_to_particles_src.clear();
+
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      const int npart_cell = h_npart_cell_dat[cellx];
+      for (int ix = 0; ix < npart_cell; ix++) {
+        map_cell_to_particles[cellx].insert(ix);
+      }
+      h_npart_cell.at(cellx) = npart_cell;
+    }
+    for (int ix = 0; ix < npart; ix++) {
+      const int cellx = h_cells[ix];
+      h_npart_cell.at(cellx)--;
+    }
+
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      ASSERT_TRUE(h_npart_cell.at(cellx) > -1);
+    }
+
+    std::set<std::pair<int, int>> to_remove_set;
+    for (int ix = 0; ix < npart; ix++) {
+      const int cellx = h_cells[ix];
+      const int layerx = h_layers[ix];
+      ASSERT_TRUE(map_cell_to_particles.at(cellx).count(layerx));
+      if (layerx < h_npart_cell[cellx]) {
+        map_cell_to_particles_dst[cellx].insert(layerx);
+      }
+
+      map_cell_to_particles.at(cellx).erase(layerx);
+      to_remove_set.insert({cellx, layerx});
+    }
+    ASSERT_EQ(to_remove_set.size(), npart);
+
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      for (auto layerx : map_cell_to_particles[cellx]) {
+        if (layerx >= h_npart_cell[cellx]) {
+          map_cell_to_particles_src[cellx].insert(layerx);
+        }
+      }
+    }
+
+    for (int cellx = 0; cellx < 1; cellx++) {
+      std::vector<int> srcs;
+      for (auto layerx : map_cell_to_particles_src[cellx]) {
+        srcs.push_back(layerx);
+      }
+      std::vector<int> dsts;
+      for (auto layerx : map_cell_to_particles_dst[cellx]) {
+        dsts.push_back(layerx);
+      }
+      ASSERT_EQ(dsts.size(), srcs.size());
+    }
+  };
+
   auto lambda_callback_sparse =
       [&](int compress_npart, INT *k_compress_cells_old,
           INT *k_compress_layers_old, INT *k_compress_layers_new,
           int *k_npart_cell_new) {
         compress_npart_correct = compress_npart;
-        nprint_variable(compress_npart_correct);
-        h_correct_compress_cells_old .resize(compress_npart);
+        h_correct_compress_cells_old.resize(compress_npart);
         h_correct_compress_layers_old.resize(compress_npart);
         h_correct_compress_layers_new.resize(compress_npart);
-        const std::size_t num_bytes = sizeof(int) * compress_npart;
-        sycl_target->queue.memcpy(h_correct_compress_cells_old.data(), k_compress_cells_old, num_bytes).wait();
-        sycl_target->queue.memcpy(h_correct_compress_layers_old.data(), k_compress_layers_old, num_bytes).wait();
-        sycl_target->queue.memcpy(h_correct_compress_layers_new.data(), k_compress_layers_new, num_bytes).wait();
-        sycl_target->queue.memcpy(h_correct_npart_cell_new.data(), k_npart_cell_new, ncell_int_num_bytes).wait();
+        const std::size_t num_bytes = sizeof(INT) * compress_npart;
+        sycl_target->queue
+            .memcpy(h_correct_compress_cells_old.data(), k_compress_cells_old,
+                    num_bytes)
+            .wait();
+        sycl_target->queue
+            .memcpy(h_correct_compress_layers_old.data(), k_compress_layers_old,
+                    num_bytes)
+            .wait();
+        sycl_target->queue
+            .memcpy(h_correct_compress_layers_new.data(), k_compress_layers_new,
+                    num_bytes)
+            .wait();
+        sycl_target->queue
+            .memcpy(h_correct_npart_cell_new.data(), k_npart_cell_new,
+                    ncell_int_num_bytes)
+            .wait();
 
         map_cell_layers_old_correct.clear();
         map_cell_layers_new_correct.clear();
-        for(int ix=0 ; ix<compress_npart ; ix++){
+        for (int ix = 0; ix < compress_npart; ix++) {
           const auto cell = h_correct_compress_cells_old.at(ix);
           const auto layer_old = h_correct_compress_layers_old.at(ix);
           const auto layer_new = h_correct_compress_layers_new.at(ix);
           map_cell_layers_old_correct[cell].insert(layer_old);
           map_cell_layers_new_correct[cell].insert(layer_new);
-          if (cell == 0){
-            nprint("SPARSE:", layer_old, layer_new);
-          }
         }
-
       };
 
   auto lambda_callback_dense =
       [&](int compress_npart, INT *k_compress_cells_old,
           INT *k_compress_layers_old, INT *k_compress_layers_new,
           int *k_npart_cell_new) {
-
         compress_npart_to_test = compress_npart;
-        nprint_variable(compress_npart_to_test);
-        h_to_test_compress_cells_old .resize(compress_npart);
+        h_to_test_compress_cells_old.resize(compress_npart);
         h_to_test_compress_layers_old.resize(compress_npart);
         h_to_test_compress_layers_new.resize(compress_npart);
-        const std::size_t num_bytes = sizeof(int) * compress_npart;
-        sycl_target->queue.memcpy(h_to_test_compress_cells_old.data(), k_compress_cells_old, num_bytes).wait();
-        sycl_target->queue.memcpy(h_to_test_compress_layers_old.data(), k_compress_layers_old, num_bytes).wait();
-        sycl_target->queue.memcpy(h_to_test_compress_layers_new.data(), k_compress_layers_new, num_bytes).wait();
-        sycl_target->queue.memcpy(h_to_test_npart_cell_new.data(), k_npart_cell_new, ncell_int_num_bytes).wait();
+        const std::size_t num_bytes = sizeof(INT) * compress_npart;
+        sycl_target->queue
+            .memcpy(h_to_test_compress_cells_old.data(), k_compress_cells_old,
+                    num_bytes)
+            .wait();
+        sycl_target->queue
+            .memcpy(h_to_test_compress_layers_old.data(), k_compress_layers_old,
+                    num_bytes)
+            .wait();
+        sycl_target->queue
+            .memcpy(h_to_test_compress_layers_new.data(), k_compress_layers_new,
+                    num_bytes)
+            .wait();
+        sycl_target->queue
+            .memcpy(h_to_test_npart_cell_new.data(), k_npart_cell_new,
+                    ncell_int_num_bytes)
+            .wait();
 
         map_cell_layers_old_to_test.clear();
         map_cell_layers_new_to_test.clear();
-        for(int ix=0 ; ix<compress_npart ; ix++){
+        for (int ix = 0; ix < compress_npart; ix++) {
           const auto cell = h_to_test_compress_cells_old.at(ix);
           const auto layer_old = h_to_test_compress_layers_old.at(ix);
           const auto layer_new = h_to_test_compress_layers_new.at(ix);
           map_cell_layers_old_to_test[cell].insert(layer_old);
           map_cell_layers_new_to_test[cell].insert(layer_new);
-          if (cell == 0){
-            nprint("DENSE:", layer_old, layer_new);
-          }
         }
       };
 
-  auto lambda_callback_test = [&](){
-        nprint("TEST CALLNACL");
+  auto lambda_callback_test = [&]() {
+    ASSERT_EQ(compress_npart_to_test, compress_npart_correct);
+    ASSERT_EQ(h_correct_npart_cell_new, h_to_test_npart_cell_new);
 
-        ASSERT_EQ(compress_npart_to_test, compress_npart_correct);
-        ASSERT_EQ(h_correct_npart_cell_new, h_to_test_npart_cell_new);
+    ASSERT_EQ(map_cell_layers_old_correct.size(),
+              map_cell_layers_new_correct.size());
+    for (int cx = 0; cx < cell_count; cx++) {
+      ASSERT_EQ(map_cell_layers_old_to_test[cx].size(),
+                map_cell_layers_new_to_test[cx].size());
+      ASSERT_EQ(map_cell_layers_old_correct[cx].size(),
+                map_cell_layers_new_correct[cx].size());
+      ASSERT_EQ(map_cell_layers_old_correct[cx].size(),
+                map_cell_layers_old_to_test[cx].size());
+      ASSERT_EQ(map_cell_layers_new_correct[cx].size(),
+                map_cell_layers_new_to_test[cx].size());
+    }
 
-        ASSERT_EQ(map_cell_layers_old_correct.size(), map_cell_layers_new_correct.size());
-        for(int cx=0 ; cx<cell_count ; cx++){
-          ASSERT_EQ(map_cell_layers_old_to_test[cx].size(), map_cell_layers_new_to_test[cx].size());
-          //ASSERT_EQ(map_cell_layers_old_correct[cx].size(), map_cell_layers_new_correct[cx].size());
-          //ASSERT_EQ(map_cell_layers_old_correct[cx].size(), map_cell_layers_old_to_test[cx].size());
-          //ASSERT_EQ(map_cell_layers_new_correct[cx].size(), map_cell_layers_new_to_test[cx].size());
-        }
+    for (int cx = 0; cx < cell_count; cx++) {
 
+      std::set<INT> src_host = map_cell_to_particles_src[cx];
+      std::set<INT> dst_host = map_cell_to_particles_dst[cx];
+
+      std::set<INT> src_correct;
+      std::set<INT> dst_correct;
+      for (auto lx : map_cell_layers_old_correct[cx]) {
+        src_correct.insert(lx);
+      }
+      for (auto lx : map_cell_layers_new_correct[cx]) {
+        dst_correct.insert(lx);
+      }
+
+      std::set<INT> src_to_test;
+      std::set<INT> dst_to_test;
+      for (auto lx : map_cell_layers_old_to_test[cx]) {
+        src_to_test.insert(lx);
+      }
+      for (auto lx : map_cell_layers_new_to_test[cx]) {
+        dst_to_test.insert(lx);
+      }
+
+      ASSERT_EQ(src_host, src_correct);
+      ASSERT_EQ(dst_host, dst_correct);
+
+      ASSERT_EQ(src_host, src_to_test);
+      ASSERT_EQ(dst_host, dst_to_test);
+    }
   };
 
-  nprint("========================================================================");
-  nprint("========================================================================");
-  nprint("========================================================================");
-  nprint("========================================================================");
   A->cell_move_ctx.layer_compressor.test_mode = true;
+  A->cell_move_ctx.layer_compressor.callback_host = lambda_callback_host;
   A->cell_move_ctx.layer_compressor.callback_sparse = lambda_callback_sparse;
   A->cell_move_ctx.layer_compressor.callback_dense = lambda_callback_dense;
   A->cell_move_ctx.layer_compressor.callback_test = lambda_callback_test;
-
-  auto lambda_test = [&] {
-
-  };
 
   for (int testx = 0; testx < Ntest; testx++) {
     pbc.execute();
@@ -320,7 +425,6 @@ TEST(ParticleGroup, cell_move_compression) {
 
     A->cell_move();
 
-    lambda_test();
     advect_loop->execute();
   }
   mesh->free();

@@ -111,11 +111,8 @@ protected:
     d_npart_cell_es_old->realloc_no_copy(this->ncell + 1);
     int *k_npart_cell_p1_old_es = d_npart_cell_es_old->ptr;
     auto e4 = this->sycl_target->queue.parallel_for(
-      sycl::range<1>(ncell+1),
-      [=](auto ix){
-        k_npart_cell_p1_old_es[ix] = 0;
-      }
-    );
+        sycl::range<1>(ncell + 1),
+        [=](auto ix) { k_npart_cell_p1_old_es[ix] = 0; });
 
     auto d_npart_cell_old =
         get_resource<BufferDevice<int>,
@@ -124,8 +121,6 @@ protected:
             ResourceStackKeyBufferDevice<int>{}, sycl_target);
     d_npart_cell_old->realloc_no_copy(this->ncell + 1);
     int *k_npart_cell_p1_old = d_npart_cell_old->ptr;
-
-
 
     // We collect the npart + 1 of each cell into a buffer that is ncell+1
     const int zero = 0;
@@ -165,14 +160,19 @@ protected:
         .wait_and_throw();
 
     INT ***cell_ids_ptr = this->cell_id_dat->impl_get();
+    const auto k_ncell = this->ncell;
     auto e2 = this->sycl_target->queue.parallel_for(
         sycl::range<1>(static_cast<size_t>(npart)), [=](sycl::id<1> idx) {
           const auto cell = usm_cells[idx];
           const auto layer = usm_layers[idx];
+          const bool valid_cell = (-1 < cell) && (cell < k_ncell);
+          const bool valid_layer = -1 < layer;
 
           //// indicate this particle is removed by setting
           /// the / cell index to -1
-          cell_ids_ptr[cell][0][layer] = -1;
+          if (valid_cell && valid_layer) {
+            cell_ids_ptr[cell][0][layer] = -1;
+          }
         });
 
     // Create space to store the entry flags for each particle
@@ -191,12 +191,8 @@ protected:
     d_masks_es->realloc_no_copy(total_num_particles_p1);
     auto k_masks_es = d_masks_es->ptr;
     auto e6 = this->sycl_target->queue.parallel_for(
-      sycl::range<1>(total_num_particles_p1),
-      [=](auto ix){
-        k_masks_es[ix] = 0;
-      }
-    );
-
+        sycl::range<1>(total_num_particles_p1),
+        [=](auto ix) { k_masks_es[ix] = 0; });
 
     e2.wait_and_throw();
 
@@ -260,11 +256,8 @@ protected:
     d_npart_to_fill_es->realloc_no_copy(this->ncell + 1);
     int *k_npart_to_fill_es = d_npart_to_fill_es->ptr;
     auto e5 = this->sycl_target->queue.parallel_for(
-      sycl::range<1>(ncell+1),
-      [=](auto ix){
-        k_npart_to_fill_es[ix] = 0;
-      }
-    );
+        sycl::range<1>(ncell + 1),
+        [=](auto ix) { k_npart_to_fill_es[ix] = 0; });
 
     // Collect the new cell occupancies for each cell.
     this->sycl_target->queue
@@ -299,26 +292,26 @@ protected:
             std::size_t layer;
             block_device.get_cell_layer(idx, &cell, &layer);
             if (block_device.work_item_required(cell, layer)) {
-              const int cell_offset = k_npart_cell_p1_old_es[cell];
-              const int index = cell_offset + static_cast<int>(layer);
+              const int cell_offset_mask = k_npart_cell_p1_old_es[cell];
+              const int index_mask = cell_offset_mask + static_cast<int>(layer);
 
               // if particle removed and before the new occupancy
-              if (k_masks[index] &&
+              if (k_masks[index_mask] &&
                   (static_cast<int>(layer) < k_npart_cell_new[cell])) {
-                const int output_index =
-                    k_npart_to_fill_es[cell] + k_masks_es[index];
-                k_compress_cells_old[output_index] = static_cast<INT>(cell);
-                k_compress_layers_new[output_index] = static_cast<INT>(layer);
+                const int index_output =
+                    k_npart_to_fill_es[cell] + k_masks_es[index_mask];
+                k_compress_cells_old[index_output] = static_cast<INT>(cell);
+                k_compress_layers_new[index_output] = static_cast<INT>(layer);
               }
               // if particle NOT removed and after the new occupancy
-              else if ((!k_masks[index]) &&
+              else if ((!k_masks[index_mask]) &&
                        (static_cast<int>(layer) >= k_npart_cell_new[cell])) {
                 const int num_empty_before_index =
-                    k_masks_es[index] - k_npart_to_fill[cell];
-                const int output_index = static_cast<int>(layer) -
-                                         k_npart_cell_new[cell] -
-                                         num_empty_before_index;
-                k_compress_layers_old[output_index] = static_cast<INT>(layer);
+                    k_masks_es[index_mask] - k_npart_to_fill[cell];
+                const int index_output =
+                    k_npart_to_fill_es[cell] + static_cast<int>(layer) -
+                    k_npart_cell_new[cell] - num_empty_before_index;
+                k_compress_layers_old[index_output] = static_cast<INT>(layer);
               }
             }
           }));
@@ -388,11 +381,8 @@ protected:
     d_move_counters_es->realloc_no_copy(ncell + 1);
     auto k_move_counters_es = d_move_counters_es->ptr;
     auto e4 = this->sycl_target->queue.parallel_for(
-      sycl::range<1>(ncell+1),
-      [=](auto ix){
-        k_move_counters_es[ix] = 0;
-      }
-    );
+        sycl::range<1>(ncell + 1),
+        [=](auto ix) { k_move_counters_es[ix] = 0; });
 
     auto d_compress_offsets =
         get_resource<BufferDevice<int>,
@@ -631,6 +621,9 @@ protected:
                      INT *k_compress_layers_old, INT *k_compress_layers_new,
                      int *k_npart_cell_new)>
       callback_dense;
+  std::function<void(const int npart, int *h_cells, int *h_layers,
+                     int *h_npart_cell)>
+      callback_host;
   std::function<void()> callback_test;
 
 public:
@@ -685,23 +678,46 @@ public:
     int compress_npart = 0;
 
     if (test_mode) {
-      this->compute_remove_compress_indicies_sparse(
-          npart, usm_cells, usm_layers, &compress_npart, k_compress_cells_old,
-          k_compress_layers_old, k_compress_layers_new, k_npart_cell_new);
-      this->callback_sparse(compress_npart, k_compress_cells_old,
-                            k_compress_layers_old, k_compress_layers_new,
-                            k_npart_cell_new);
+
+      std::vector<T> h_cellsT(npart);
+      std::vector<T> h_layersT(npart);
+
+      this->sycl_target->queue
+          .memcpy(h_cellsT.data(), usm_cells, npart * sizeof(T))
+          .wait_and_throw();
+      this->sycl_target->queue
+          .memcpy(h_layersT.data(), usm_layers, npart * sizeof(T))
+          .wait_and_throw();
+
+      std::vector<int> h_cells(npart);
+      std::vector<int> h_layers(npart);
+      for (int ix = 0; ix < npart; ix++) {
+        h_cells[ix] = h_cellsT[ix];
+        h_layers[ix] = h_layersT[ix];
+      }
+
+      this->callback_host(npart, h_cells.data(), h_layers.data(),
+                          this->cell_id_dat->h_npart_cell);
+
       this->compute_remove_compress_indicies_dense(
           npart, usm_cells, usm_layers, &compress_npart, k_compress_cells_old,
           k_compress_layers_old, k_compress_layers_new, k_npart_cell_new);
       this->callback_dense(compress_npart, k_compress_cells_old,
                            k_compress_layers_old, k_compress_layers_new,
                            k_npart_cell_new);
+
+      this->compute_remove_compress_indicies_sparse(
+          npart, usm_cells, usm_layers, &compress_npart, k_compress_cells_old,
+          k_compress_layers_old, k_compress_layers_new, k_npart_cell_new);
+      this->callback_sparse(compress_npart, k_compress_cells_old,
+                            k_compress_layers_old, k_compress_layers_new,
+                            k_npart_cell_new);
+
       this->callback_test();
     }
 
     // note to refactorers that this call uses h_npart_cell
-    this->compute_remove_compress_indicies_sparse(
+    this->compute_remove_compress_indicies_dense(
         npart, usm_cells, usm_layers, &compress_npart, k_compress_cells_old,
         k_compress_layers_old, k_compress_layers_new, k_npart_cell_new);
 
