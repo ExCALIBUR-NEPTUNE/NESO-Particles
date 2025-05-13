@@ -1,6 +1,8 @@
 #ifndef _NESO_PARTICLES_TUPLE_H_
 #define _NESO_PARTICLES_TUPLE_H_
 #include <cstdlib>
+#include <tuple>
+#include <utility>
 
 namespace NESO::Particles::Tuple {
 
@@ -55,6 +57,10 @@ template <size_t... S> struct GenerateIntSequence<0, S...> {
   using type = IntSequence<S...>;
 };
 
+
+
+
+
 template <typename KERNEL, size_t... S, typename... ARGS>
 auto apply_inner(KERNEL &kernel, IntSequence<S...>, Tuple<ARGS...> &args) {
   return kernel(get<S>(args)...);
@@ -65,6 +71,27 @@ auto apply(KERNEL kernel, Tuple<ARGS...> &args) {
   return apply_inner(
       kernel, typename GenerateIntSequence<sizeof...(ARGS)>::type(), args);
 }
+
+
+
+
+
+
+
+
+
+template <typename KERNEL, size_t... S, typename... ARGS>
+auto apply_inner(KERNEL &kernel, std::integer_sequence<std::size_t, S...>, std::tuple<ARGS...> &args) {
+  return kernel(std::get<S>(args)...);
+}
+template <typename KERNEL, typename... ARGS>
+auto apply(KERNEL kernel, std::tuple<ARGS...> &args) {
+  return apply_inner(
+      kernel, std::index_sequence_for<ARGS...>{}, args);
+}
+
+
+
 
 template <std::size_t N, typename KERNEL, typename... ARGS>
 auto apply_truncated(KERNEL kernel, Tuple<ARGS...> &args) {

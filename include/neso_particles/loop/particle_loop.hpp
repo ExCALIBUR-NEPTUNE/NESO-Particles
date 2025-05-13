@@ -166,9 +166,9 @@ protected:
    */
 
   /// The types of the parameters for the outside loops.
-  using loop_parameter_type = Tuple::Tuple<loop_parameter_t<ARGS>...>;
+  using loop_parameter_type = std::tuple<loop_parameter_t<ARGS>...>;
   /// The types of the arguments passed to the kernel.
-  using kernel_parameter_type = Tuple::Tuple<kernel_parameter_t<ARGS>...>;
+  using kernel_parameter_type = std::tuple<kernel_parameter_t<ARGS>...>;
   /// Tuple of the arguments passed to the ParticleLoop on construction.
   std::tuple<ARGS...> args;
 
@@ -188,7 +188,7 @@ protected:
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
       sycl::handler &cgh, PARAM &loop_args) {
     if constexpr (INDEX < SIZE) {
-      Tuple::get<INDEX>(loop_args) =
+      std::get<INDEX>(loop_args) =
           create_loop_arg_cast(global_info, cgh, std::get<INDEX>(this->args));
       create_loop_args_inner<INDEX + 1, SIZE>(global_info, cgh, loop_args);
     }
@@ -207,9 +207,9 @@ protected:
       kernel_parameter_type &kernel_args) {
 
     if constexpr (INDEX < SIZE) {
-      auto arg = Tuple::get<INDEX>(loop_args);
+      auto arg = std::get<INDEX>(loop_args);
       ParticleLoopImplementation::create_kernel_arg(
-          iterationx, arg, Tuple::get<INDEX>(kernel_args));
+          iterationx, arg, std::get<INDEX>(kernel_args));
       create_kernel_args_inner<INDEX + 1, SIZE>(iterationx, loop_args,
                                                 kernel_args);
     }
