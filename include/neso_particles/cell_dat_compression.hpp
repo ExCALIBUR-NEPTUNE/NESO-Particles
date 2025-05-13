@@ -805,6 +805,8 @@ public:
     restore_resource(sycl_target->resource_stack_map,
                      ResourceStackKeyBufferDevice<INT>{},
                      d_compress_layers_new);
+    restore_resource(sycl_target->resource_stack_map,
+                     ResourceStackKeyBufferDevice<int>{}, d_npart_cell_new);
   }
 };
 
