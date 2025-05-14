@@ -5,8 +5,8 @@
 #include "../particle_dat.hpp"
 #include <map>
 #include <memory>
-#include <vector>
 #include <set>
+#include <vector>
 
 namespace NESO::Particles {
 

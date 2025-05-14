@@ -46,6 +46,30 @@ TEST(EphemeralDats, base) {
       ->execute();
   ASSERT_FALSE(ep.get_flag());
 
+  particle_loop(
+      aa,
+      [=](auto INDEX, auto DATS) {
+        for (int dx = 0; dx < ndim; dx++) {
+          DATS.at_ephemeral(0, INDEX, dx) = DATS.at(1, dx);
+        }
+      },
+      Access::read(ParticleLoopIndex{}),
+      Access::write(sym_vector(aa, {Sym<REAL>("NORMAL"), Sym<REAL>("V")})))
+      ->execute();
+
+  particle_loop(
+      aa,
+      [=](auto INDEX, auto DATS) {
+        for (int dx = 0; dx < ndim; dx++) {
+          NESO_KERNEL_ASSERT(DATS.at_ephemeral(0, INDEX, dx) == DATS.at(1, dx),
+                             k_ep);
+        }
+      },
+      Access::read(ParticleLoopIndex{}),
+      Access::read(sym_vector(aa, {Sym<REAL>("NORMAL"), Sym<REAL>("V")})))
+      ->execute();
+  ASSERT_FALSE(ep.get_flag());
+
   ASSERT_TRUE(aa->contains_ephemeral_dat(Sym<INT>("IDE")));
 
   particle_loop(

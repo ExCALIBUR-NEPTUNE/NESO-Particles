@@ -45,6 +45,12 @@ template <typename T> struct Read {
     return ptr[dat_index][this->iterationx->cellx][component]
               [this->iterationx->layerx];
   }
+  T const &at_ephemeral(const int dat_index,
+                        const Access::LoopIndex::Read &particle_index,
+                        const int component) const {
+    return ptr[dat_index][particle_index.cell][component]
+              [particle_index.loop_layer];
+  }
   T const &at_ephemeral(const int dat_index, const int component) const {
     return ptr[dat_index][this->iterationx->cellx][component]
               [this->iterationx->loop_layerx];
@@ -66,6 +72,12 @@ template <typename T> struct Write {
   T &at(const int dat_index, const int component) const {
     return ptr[dat_index][this->iterationx->cellx][component]
               [this->iterationx->layerx];
+  }
+  T &at_ephemeral(const int dat_index,
+                  const Access::LoopIndex::Read &particle_index,
+                  const int component) const {
+    return ptr[dat_index][particle_index.cell][component]
+              [particle_index.loop_layer];
   }
   T &at_ephemeral(const int dat_index, const int component) const {
     return ptr[dat_index][this->iterationx->cellx][component]
