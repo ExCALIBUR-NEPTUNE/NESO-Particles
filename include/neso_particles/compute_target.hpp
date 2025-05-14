@@ -88,6 +88,10 @@ private:
     mods += "cas_min_REAL ";
 #endif
 
+    if (device_aware_mpi_enabled()) {
+      mods += "device_aware_mpi ";
+    }
+
     std::cout << "Using " << this->device.get_info<sycl::info::device::name>()
               << std::endl;
     std::cout << "Kernel type: " << NESO_PARTICLES_DEVICE_LABEL << std::endl;
@@ -106,6 +110,8 @@ private:
     std::cout << "MPI local rank: " << this->local_rank << std::endl;
     std::cout << "SYCL device count: " << this->num_devices << std::endl;
     std::cout << "SYCL device index: " << this->device_index << std::endl;
+    std::cout << "SYCL device cacheline size: "
+              << this->device_limits.get_cacheline_size() << std::endl;
     this->device_limits.print();
   }
 
@@ -616,7 +622,7 @@ inline NDRangePeel1D get_nd_range_peel_1d(const std::size_t size,
  * @param[in] sycl_target Compute device to use.
  * @param[in] N Number of elements.
  * @param[in] d_src Device poitner to source values.
- * @param[in, d_dst Device pointer to destination values.
+ * @param[in, out] d_dst Device pointer to destination values.
  * @returns Event to wait on for completion.
  */
 template <typename T>
@@ -626,16 +632,15 @@ joint_exclusive_scan(SYCLTargetSharedPtr sycl_target, std::size_t N, T *d_src,
   if (N == 0) {
     return sycl::event{};
   }
-  const std::size_t group_size =
-      std::min(static_cast<std::size_t>(
-                   sycl_target->device
-                       .get_info<sycl::info::device::max_work_group_size>()),
-               static_cast<std::size_t>(N));
-  NESOASSERT(group_size >= 1, "Bad group size for exclusive_scan.");
 
+  const std::size_t local_size =
+      sycl_target->parameters->template get<SizeTParameter>("LOOP_LOCAL_SIZE")
+          ->value;
+
+  NESOASSERT(local_size >= 1, "Bad group size for exclusive_scan.");
   return sycl_target->queue.submit([&](sycl::handler &cgh) {
-    cgh.parallel_for(sycl::nd_range<1>(sycl::range<1>(group_size),
-                                       sycl::range<1>(group_size)),
+    cgh.parallel_for(sycl::nd_range<1>(sycl::range<1>(local_size),
+                                       sycl::range<1>(local_size)),
                      [=](sycl::nd_item<1> it) {
                        T *first = d_src;
                        T *last = first + N;
@@ -643,6 +648,50 @@ joint_exclusive_scan(SYCLTargetSharedPtr sycl_target, std::size_t N, T *d_src,
                                                   d_dst, sycl::plus<T>());
                      });
   });
+}
+
+/**
+ * Compute the exclusive scan of a n arrays using the SYCL group built-ins.
+ *
+ * @param[in] sycl_target Compute device to use.
+ * @param[in] N Number of arrays.
+ * @param[in] d_array_sizes Number of elements in each sub array.
+ * @param[in] d_array_offsets The starting index of each sub array.
+ * @param[in] d_src Device poitner to source values.
+ * @param[in, out] d_dst Device pointer to destination values.
+ * @returns Event to wait on for completion.
+ */
+template <typename U, typename T>
+[[nodiscard]] inline sycl::event
+joint_exclusive_scan_n(SYCLTargetSharedPtr sycl_target, std::size_t N,
+                       const U *RESTRICT const d_array_sizes,
+                       const U *RESTRICT const d_array_offsets, T *d_src,
+                       T *d_dst)
+
+{
+  if (N == 0) {
+    return sycl::event{};
+  }
+
+  const std::size_t local_size =
+      sycl_target->parameters->template get<SizeTParameter>("LOOP_LOCAL_SIZE")
+          ->value;
+
+  auto iteration_set =
+      sycl_target->device_limits.validate_nd_range(sycl::nd_range<2>(
+          sycl::range<2>(N, local_size), sycl::range<2>(1, local_size)));
+
+  NESOASSERT(local_size >= 1, "Bad local size for exclusive_scan.");
+  return sycl_target->queue.parallel_for(
+      iteration_set, [=](sycl::nd_item<2> it) {
+        const std::size_t array_index = it.get_global_id(0);
+        const auto num_elements = d_array_sizes[array_index];
+        const auto start_index = d_array_offsets[array_index];
+        T *first = d_src + start_index;
+        T *last = first + num_elements;
+        sycl::joint_exclusive_scan(it.get_group(), first, last,
+                                   d_dst + start_index, sycl::plus<T>());
+      });
 }
 
 /**

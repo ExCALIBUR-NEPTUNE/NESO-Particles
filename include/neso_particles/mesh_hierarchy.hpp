@@ -11,10 +11,10 @@
 #include <cstdlib>
 #include <memory>
 #include <mpi.h>
+#include <set>
 #include <stack>
 #include <utility>
 #include <vector>
-#include <set>
 
 namespace NESO::Particles {
 

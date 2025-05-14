@@ -27,7 +27,13 @@ namespace NESO::Particles {
  *  cell in all the ParticleDat instances.
  */
 class CellMove {
-private:
+
+#ifdef NESO_PARTICLES_TEST_COMPILATION
+public:
+#else
+protected:
+#endif
+
   const int ncell;
 
   ParticleDatSharedPtr<INT> cell_id_dat;
@@ -35,17 +41,9 @@ private:
   std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int;
 
   BufferHost<int> h_npart_cell;
-  BufferDevice<int> d_npart_cell;
-
-  // Buffers to store the old/new cells/layers
-  BufferDevice<int> d_cells_old;
-  BufferDevice<int> d_cells_new;
-  BufferDevice<int> d_layers_old;
-  BufferDevice<int> d_layers_new;
 
   // move count buffers;
   BufferHost<int> h_move_count;
-  BufferDevice<int> d_move_count;
 
   // members for ParticleDat interface
   int num_dats_real = 0;
@@ -173,13 +171,8 @@ public:
            std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int)
       : ncell(ncell), particle_dats_real(particle_dats_real),
         particle_dats_int(particle_dats_int),
-        h_npart_cell(sycl_target, this->ncell),
-        d_npart_cell(sycl_target, this->ncell),
-        d_cells_old(sycl_target, this->ncell),
-        d_cells_new(sycl_target, this->ncell),
-        d_layers_old(sycl_target, this->ncell),
-        d_layers_new(sycl_target, this->ncell), h_move_count(sycl_target, 1),
-        d_move_count(sycl_target, 1), h_particle_dat_ptr_real(sycl_target, 1),
+        h_npart_cell(sycl_target, this->ncell), h_move_count(sycl_target, 1),
+        h_particle_dat_ptr_real(sycl_target, 1),
         h_particle_dat_ptr_int(sycl_target, 1),
         h_particle_dat_ncomp_real(sycl_target, 1),
         h_particle_dat_ncomp_int(sycl_target, 1),
