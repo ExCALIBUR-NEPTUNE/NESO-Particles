@@ -155,7 +155,57 @@ TEST(EphemeralDats, whole_group) {
 
   auto aa = particle_sub_group(A);
 
-  aa->add_ephemeral_dat(Sym<REAL>("FOO"), 2);
+  auto lambda_test_a = [&]() {
+    aa->add_ephemeral_dat(Sym<REAL>("VCOPY"), 3);
+    ASSERT_TRUE(aa->contains_ephemeral_dat(Sym<REAL>("VCOPY")));
+    ASSERT_FALSE(aa->contains_ephemeral_dat(Sym<INT>("IDCOPY")));
+
+    aa->add_ephemeral_dat(Sym<INT>("IDCOPY"), 2);
+    aa->add_ephemeral_dat(Sym<INT>("IDE"), 2);
+    ASSERT_TRUE(aa->contains_ephemeral_dat(Sym<REAL>("VCOPY")));
+    ASSERT_TRUE(aa->contains_ephemeral_dat(Sym<INT>("IDCOPY")));
+  };
+
+  auto lambda_test_b = [&]() {
+    ASSERT_TRUE(aa->invalidate_ephemeral_dats_if_required());
+    ASSERT_FALSE(aa->contains_ephemeral_dat(Sym<REAL>("VCOPY")));
+    ASSERT_FALSE(aa->contains_ephemeral_dat(Sym<INT>("IDCOPY")));
+  };
+
+  lambda_test_a();
+  A->invalidate_group_version();
+  lambda_test_b();
+
+  lambda_test_a();
+
+  particle_loop(
+      aa,
+      [=](auto V, auto VCOPY, auto ID) {
+        VCOPY.at_ephemeral(0) = V.at(0);
+        VCOPY.at_ephemeral(1) = V.at(1);
+        ID.at_ephemeral(1, 0) = ID.at(0, 0);
+      },
+      Access::read(Sym<REAL>("V")), Access::write(Sym<REAL>("VCOPY")),
+      Access::write(std::make_shared<SymVector<INT>>(
+          A, std::vector({Sym<INT>("ID"), Sym<INT>("IDCOPY")}))))
+      ->execute();
+
+  ErrorPropagate ep(sycl_target);
+  auto k_ep = ep.device_ptr();
+
+  particle_loop(
+      aa,
+      [=](auto V, auto VCOPY, auto ID) {
+        NESO_KERNEL_ASSERT(VCOPY.at_ephemeral(0) == V.at(0), k_ep);
+        NESO_KERNEL_ASSERT(VCOPY.at_ephemeral(1) == V.at(1), k_ep);
+        NESO_KERNEL_ASSERT(ID.at_ephemeral(1, 0) == ID.at(0, 0), k_ep);
+      },
+      Access::read(Sym<REAL>("V")), Access::read(Sym<REAL>("VCOPY")),
+      Access::read(std::make_shared<SymVector<INT>>(
+          A, std::vector({Sym<INT>("ID"), Sym<INT>("IDCOPY")}))))
+      ->execute();
+
+  ASSERT_FALSE(ep.get_flag());
 
   sycl_target->free();
 }
