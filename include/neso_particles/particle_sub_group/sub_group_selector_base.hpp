@@ -162,6 +162,8 @@ public:
   ParticleGroup::ParticleGroupVersion particle_group_version;
   // Is this a selector to a whole particle group.
   bool is_whole_particle_group{false};
+  // Has this selector been consumed by a ParticleSubGroup
+  bool consumed{false};
 
   virtual ~SubGroupSelectorBase() {
     if (this->sub_group_selector_resource != nullptr) {

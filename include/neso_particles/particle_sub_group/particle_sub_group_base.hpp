@@ -99,6 +99,15 @@ public:
     return was_updated;
   }
 
+  inline void check_selector(
+      ParticleSubGroupImplementation::SubGroupSelectorBaseSharedPtr selector) {
+
+    NESOASSERT(!selector->consumed,
+               "Attempting to create a ParticleSubGroup from a Selector that "
+               "has already been used to make another ParticleSubGroup.");
+    selector->consumed = true;
+  }
+
 public:
   virtual ~ParticleSubGroup() = default;
 
@@ -144,8 +153,7 @@ public:
    *
    * but can make additional optimisations.
    *
-   * @param parent Parent ParticleGroup or ParticleSubGroup from which to form
-   * ParticleSubGroup.
+   * @param parent Parent ParticleGroup from which to form ParticleSubGroup.
    */
   ParticleSubGroup(ParticleGroupSharedPtr particle_group)
       : ParticleSubGroup(std::dynamic_pointer_cast<
@@ -153,6 +161,26 @@ public:
             std::make_shared<
                 ParticleSubGroupImplementation::SubGroupSelectorWholeGroup>(
                 particle_group))) {}
+
+  /**
+   * Create a ParticleSubGroup which is simply a reference/view into an entire
+   * ParticleSubGroup. This constructor creates a sub-group which is equivalent
+   * to
+   *
+   *    auto A_all = std::make_shared<ParticleSubGroup>(
+   *      A, [=]() {
+   *        return true;
+   *      }
+   *    );
+   *
+   * but can make additional optimisations.
+   *
+   * @param parent Parent ParticleSubGroup from which to form ParticleSubGroup.
+   */
+  ParticleSubGroup(std::shared_ptr<ParticleSubGroup> particle_sub_group)
+      : ParticleSubGroup(particle_sub_group, []() { return true; }) {
+    // TODO Make a more efficient selector for copying another selector.
+  }
 
   /**
    * Create a ParticleSubGroup directly from a SubGroupSelector. This allows
@@ -168,7 +196,11 @@ public:
                       &selector->particle_group->particle_dats_real),
         is_static(false), particle_group(selector->particle_group),
         selector(selector),
-        is_whole_particle_group(selector->is_whole_particle_group) {}
+        is_whole_particle_group(selector->is_whole_particle_group) {
+    this->check_selector(
+        std::dynamic_pointer_cast<
+            ParticleSubGroupImplementation::SubGroupSelectorBase>(selector));
+  }
 
   /**
    * Create a ParticleSubGroup directly from a SubGroupSelectorBase. This allows
@@ -184,7 +216,9 @@ public:
                       &selector->particle_group->particle_dats_real),
         is_static(false), particle_group(selector->particle_group),
         selector(selector),
-        is_whole_particle_group(selector->is_whole_particle_group) {}
+        is_whole_particle_group(selector->is_whole_particle_group) {
+    this->check_selector(selector);
+  }
 
   /**
    * Get and optionally set the static status of the ParticleSubGroup.
