@@ -22,7 +22,7 @@ struct MapLoopLayerToLayer {
   /// This member is public but is not part of any API that should be used
   /// outside of NP - use map_loop_layer_to_layer instead.
   // INT const *RESTRICT const *RESTRICT map_ptr;
-  INT **map_ptr;
+  INT **map_ptr{nullptr};
 
   /**
    * For a loop cell and loop layer return the layer of the particle.
@@ -42,11 +42,11 @@ struct MapLoopLayerToLayer {
  * Host type that describes a selection of particles.
  */
 struct Selection {
-  int npart_local;
-  int ncell;
-  int *h_npart_cell;
-  int *d_npart_cell;
-  INT *d_npart_cell_es;
+  int npart_local{0};
+  int ncell{0};
+  int *h_npart_cell{nullptr};
+  int *d_npart_cell{nullptr};
+  INT *d_npart_cell_es{nullptr};
   MapLoopLayerToLayer d_map_cells_to_particles;
 };
 
@@ -160,6 +160,8 @@ public:
   ParticleGroup::ParticleDatVersionTracker particle_dat_versions;
   // ParticleGroup version tracking.
   ParticleGroup::ParticleGroupVersion particle_group_version;
+  // Is this a selector to a whole particle group.
+  bool is_whole_particle_group{false};
 
   virtual ~SubGroupSelectorBase() {
     if (this->sub_group_selector_resource != nullptr) {

@@ -37,6 +37,7 @@ class ParticleGroupTemporary;
 namespace ParticleSubGroupImplementation {
 class SubGroupSelector;
 class SubGroupSelectorBase;
+class SubGroupSelectorWholeGroup;
 } // namespace ParticleSubGroupImplementation
 namespace ParticleLoopImplementation {
 template <typename T>
@@ -102,6 +103,7 @@ struct ParticleDatVersionT {
 class ParticleGroup {
   friend class ParticleSubGroupImplementation::SubGroupSelector;
   friend class ParticleSubGroupImplementation::SubGroupSelectorBase;
+  friend class ParticleSubGroupImplementation::SubGroupSelectorWholeGroup;
   friend class ParticleSubGroup;
   friend class SymVector<REAL>;
   friend class SymVector<INT>;

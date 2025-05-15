@@ -149,3 +149,13 @@ TEST(EphemeralDats, base) {
 
   sycl_target->free();
 }
+
+TEST(EphemeralDats, whole_group) {
+  auto [A, sycl_target, cell_count_t] = particle_loop_common_2d(27, 16, 32);
+
+  auto aa = particle_sub_group(A);
+
+  aa->add_ephemeral_dat(Sym<REAL>("FOO"), 2);
+
+  sycl_target->free();
+}

@@ -4,6 +4,7 @@
 #include "../containers/ephemeral_dats.hpp"
 #include "sub_group_selector.hpp"
 #include "sub_group_selector_base.hpp"
+#include "sub_group_selector_whole_group.hpp"
 
 namespace NESO::Particles {
 
@@ -36,7 +37,8 @@ public:
 
   bool is_static;
   ParticleGroupSharedPtr particle_group;
-  ParticleSubGroupImplementation::SubGroupSelectorBaseSharedPtr selector;
+  ParticleSubGroupImplementation::SubGroupSelectorBaseSharedPtr selector{
+      nullptr};
   ParticleSubGroupImplementation::Selection selection;
 
   INT npart_local;
@@ -85,9 +87,6 @@ public:
   }
 
   inline bool create_inner() {
-    NESOASSERT(!this->is_whole_particle_group,
-               "Explicitly creating the ParticleSubGroup when the sub-group is "
-               "the entire ParticleGroup should never be required.");
     const bool was_updated = this->selector->get(&this->selection);
     this->npart_local = this->selection.npart_local;
 
@@ -149,9 +148,11 @@ public:
    * ParticleSubGroup.
    */
   ParticleSubGroup(ParticleGroupSharedPtr particle_group)
-      : ParticleSubGroup(particle_group, []() { return true; }) {
-    this->is_whole_particle_group = true;
-  }
+      : ParticleSubGroup(std::dynamic_pointer_cast<
+                         ParticleSubGroupImplementation::SubGroupSelectorBase>(
+            std::make_shared<
+                ParticleSubGroupImplementation::SubGroupSelectorWholeGroup>(
+                particle_group))) {}
 
   /**
    * Create a ParticleSubGroup directly from a SubGroupSelector. This allows
@@ -166,7 +167,8 @@ public:
                       &selector->particle_group->particle_dats_int,
                       &selector->particle_group->particle_dats_real),
         is_static(false), particle_group(selector->particle_group),
-        selector(selector), is_whole_particle_group(false) {}
+        selector(selector),
+        is_whole_particle_group(selector->is_whole_particle_group) {}
 
   /**
    * Create a ParticleSubGroup directly from a SubGroupSelectorBase. This allows
@@ -181,7 +183,8 @@ public:
                       &selector->particle_group->particle_dats_int,
                       &selector->particle_group->particle_dats_real),
         is_static(false), particle_group(selector->particle_group),
-        selector(selector), is_whole_particle_group(false) {}
+        selector(selector),
+        is_whole_particle_group(selector->is_whole_particle_group) {}
 
   /**
    * Get and optionally set the static status of the ParticleSubGroup.
@@ -241,8 +244,7 @@ public:
    */
   inline bool create_if_required() {
     NESOASSERT(this->is_valid(), "This ParticleSubGroup has been invalidated.");
-
-    if (this->is_whole_particle_group || this->is_static) {
+    if (this->is_static) {
       return false;
     } else {
       return this->create_inner();
@@ -253,24 +255,16 @@ public:
    * @return The number of particles currently in the ParticleSubGroup.
    */
   inline INT get_npart_local() {
-    if (this->is_whole_particle_group) {
-      return this->particle_group->get_npart_local();
-    } else {
-      this->create_if_required();
-      return this->npart_local;
-    }
+    this->create_if_required();
+    return this->npart_local;
   }
 
   /**
    * @return The number of particles in a cell of the ParticleSubGroup.
    */
   inline INT get_npart_cell(const int cell) {
-    if (this->is_whole_particle_group) {
-      return this->particle_group->get_npart_cell(cell);
-    } else {
-      this->create_if_required();
-      return this->selection.h_npart_cell[cell];
-    }
+    this->create_if_required();
+    return this->selection.h_npart_cell[cell];
   }
 
   /**
