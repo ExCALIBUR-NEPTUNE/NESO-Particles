@@ -23,6 +23,11 @@ option(
   "Enable device aware MPI by default, i.e. pass device pointers to MPI rather than copying to the host."
   OFF)
 
+# This means that when the tests and lib are installed they have rpath set for
+# the installed lib/binary.
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+list(APPEND CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
+
 # Find SYCL
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/SYCL.cmake)
 if(NESO_PARTICLES_ENABLE_FIND_SYCL)
