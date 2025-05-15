@@ -1,364 +1,156 @@
-#include "include/test_neso_particles.hpp"
+#include "include/test_particle_sub_group.hpp"
 
-TEST(ParticleGroup, partition_particle_group) {
-  auto [A_t, sycl_target_t, cell_count_t] = particle_loop_common_2d(27, 16, 32);
+TEST(ParticleSubGroup, creating) {
+  auto A = subgroup_test_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  auto sycl_target = A->sycl_target;
 
-  auto A = A_t;
-  auto sycl_target = sycl_target_t;
+  auto aa = std::make_shared<ParticleSubGroup>(
+      A, [=](auto ID) { return (ID[0] % 2) == 0; },
+      Access::read(Sym<INT>("ID")));
 
-  const int cell_count = A->domain->mesh->get_cell_count();
-  A->add_particle_dat(Sym<INT>("PARTITION"), 1);
+  EXPECT_TRUE(aa->create_if_required());
+  EXPECT_FALSE(aa->create_if_required());
 
-  auto lambda_test = [&](auto aa, auto filter, const std::size_t num_partitions,
-                         Sym<INT> sym_extra) -> void {
-    particle_loop(
-        A,
-        [=](auto INDEX, auto PARTITION) {
-          PARTITION.at(0) =
-              (INDEX.cell + INDEX.layer) % static_cast<INT>(num_partitions);
-        },
-        Access::read(ParticleLoopIndex{}), Access::write(Sym<INT>("PARTITION")))
-        ->execute();
+  A->cell_move();
+  EXPECT_TRUE(aa->create_if_required());
+  EXPECT_FALSE(aa->create_if_required());
 
-    auto sub_groups =
-        particle_group_partition(aa, Sym<INT>("PARTITION"), num_partitions);
+  A->local_move();
+  EXPECT_TRUE(aa->create_if_required());
+  EXPECT_FALSE(aa->create_if_required());
 
-    auto lambda_test_inner = [&]() {
-      auto la_count =
-          std::make_shared<LocalArray<int>>(sycl_target, 1 + num_partitions);
-      la_count->fill(0);
-      auto ep = std::make_shared<ErrorPropagate>(sycl_target);
-      auto k_ep = ep->device_ptr();
+  A->global_move();
+  EXPECT_TRUE(aa->create_if_required());
+  EXPECT_FALSE(aa->create_if_required());
 
-      for (std::size_t px = 0; px < num_partitions; px++) {
-        ASSERT_TRUE(
-            sub_groups.at(px)->selector->depends_on(Sym<INT>("PARTITION")));
-        ASSERT_TRUE(sub_groups.at(px)->selector->depends_on(sym_extra));
+  A->hybrid_move();
+  EXPECT_TRUE(aa->create_if_required());
+  EXPECT_FALSE(aa->create_if_required());
 
-        particle_loop(
-            sub_groups.at(px),
-            [=](auto PARTITION, auto LA_COUNT) {
-              NESO_KERNEL_ASSERT(PARTITION.at(0) == static_cast<INT>(px), k_ep);
-              LA_COUNT.fetch_add(0, 1);
-              LA_COUNT.fetch_add(1 + PARTITION.at(0), 1);
-            },
-            Access::read(Sym<INT>("PARTITION")), Access::add(la_count))
-            ->execute();
-        ASSERT_FALSE(ep->get_flag());
+  auto remover = std::make_shared<ParticleRemover>(A->sycl_target);
+  const int npart0 = A->get_npart_local();
+  remover->remove(A, A->get_dat(Sym<INT>("ID")), 1);
+  const int npart1 = A->get_npart_local();
 
-        std::set<std::tuple<int, int>> correct_pairs;
-        for (int cx = 0; cx < cell_count; cx++) {
-          auto PARTITION = A->get_cell(Sym<INT>("PARTITION"), cx);
-          auto ID = A->get_cell(Sym<INT>("ID"), cx);
-          const int nrow = PARTITION->nrow;
-          for (int rx = 0; rx < nrow; rx++) {
-            if ((PARTITION->at(rx, 0) == static_cast<INT>(px)) &&
-                filter(ID->at(rx, 0))) {
-              std::tuple<int, int> key = {cx, rx};
-              ASSERT_EQ(correct_pairs.count(key), 0);
-              correct_pairs.insert(key);
-            }
-          }
-        }
+  if (npart0 != npart1) {
+    EXPECT_TRUE(aa->create_if_required());
+  }
+  EXPECT_FALSE(aa->create_if_required());
 
-        ASSERT_TRUE(selection_is_self_consistent(
-            sub_groups.at(px)->selection, cell_count,
-            la_count->get().at(1 + px), sycl_target, correct_pairs));
-      }
+  auto la = std::make_shared<LocalArray<INT>>(sycl_target, 1);
+  particle_loop(
+      aa, [=](auto LA) { LA.fetch_add(0, 1); }, Access::add(la))
+      ->execute();
+  auto lav = la->get();
+  const int npart_local = lav.at(0);
+  int npart_min;
+  MPICHK(MPI_Allreduce(&npart_local, &npart_min, 1, MPI_INT, MPI_MIN,
+                       MPI_COMM_WORLD));
+  if (npart_min == 0) {
+    return;
+  }
 
-      ASSERT_EQ(la_count->get().at(0), aa->get_npart_local());
-    };
+  auto p0 = particle_loop(
+      A, [](auto /*ID*/, auto V) { V[0] += 0.0001; },
+      Access::read(Sym<INT>("ID")), Access::write(Sym<REAL>("V")));
+  p0->execute();
+  EXPECT_FALSE(aa->create_if_required());
 
-    lambda_test_inner();
-    particle_loop(
-        aa,
-        [=](auto PARTITION) {
-          PARTITION.at(0) = (PARTITION.at(0) + 1) % num_partitions;
-        },
-        Access::write(Sym<INT>("PARTITION")))
-        ->execute();
-    lambda_test_inner();
-    particle_loop(
-        A, [=](auto ID) { ID.at(0) += 1; }, Access::write(Sym<INT>("ID")))
-        ->execute();
-    lambda_test_inner();
+  auto p1 = particle_loop(
+      aa, [](auto /*ID*/, auto V) { V[0] += 0.0001; },
+      Access::read(Sym<INT>("ID")), Access::write(Sym<REAL>("V")));
+  p1->execute();
+  EXPECT_FALSE(aa->create_if_required());
+
+  p1->execute();
+  p1->execute();
+  EXPECT_FALSE(aa->create_if_required());
+
+  auto p2 = particle_loop(
+      A, [](auto ID) { ID[0] += 2; }, Access::write(Sym<INT>("ID")));
+  p2->execute();
+  EXPECT_TRUE(aa->create_if_required());
+  EXPECT_FALSE(aa->create_if_required());
+
+  std::vector<Sym<INT>> sym_vector_id = {Sym<INT>("ID")};
+  aa = std::make_shared<ParticleSubGroup>(
+      A, [=](auto ID) { return ID.at(0, 0) % 2 == 0; },
+      Access::read(sym_vector(A, sym_vector_id)));
+
+  auto p3 = particle_loop(
+      aa, [](auto ID) { ID[0] += 2; }, Access::write(Sym<INT>("ID")));
+  p3->execute();
+  EXPECT_TRUE(aa->create_if_required());
+  EXPECT_FALSE(aa->create_if_required());
+
+  ParticleSet distribution(1, A->particle_spec);
+  A->add_particles_local(distribution);
+
+  EXPECT_TRUE(aa->create_if_required());
+  EXPECT_FALSE(aa->create_if_required());
+
+  // This sets the P pointer to be "possibly cached"
+  A->get_dat(Sym<REAL>("P"))->cell_dat.device_ptr();
+  EXPECT_FALSE(aa->create_if_required());
+
+  // This sets the ID pointer to be "possibly cached"
+  A->get_dat(Sym<INT>("ID"))->cell_dat.device_ptr();
+  EXPECT_TRUE(aa->create_if_required());
+  EXPECT_TRUE(aa->create_if_required());
+
+  EXPECT_EQ(aa->static_status(), false);
+  EXPECT_EQ(aa->static_status(false), false);
+  EXPECT_EQ(aa->static_status(true), true);
+  EXPECT_EQ(aa->static_status(), true);
+  EXPECT_TRUE(aa->is_valid());
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}
+
+TEST(ParticleSubGroup, static_valid) {
+  auto A = subgroup_test_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  auto sycl_target = A->sycl_target;
+
+  auto lambda_make_aa = [&]() {
+    return static_particle_sub_group(
+        A, [=](auto ID) { return ID.at(0) % 2 == 0; },
+        Access::read(Sym<INT>("ID")));
   };
 
-  lambda_test(
-      A, [&]([[maybe_unused]] auto ID) { return true; }, 1,
-      Sym<INT>("PARTITION"));
-  lambda_test(
-      A, [&]([[maybe_unused]] auto ID) { return true; }, 3,
-      Sym<INT>("PARTITION"));
-  lambda_test(
-      A, [&]([[maybe_unused]] auto ID) { return true; }, 7,
-      Sym<INT>("PARTITION"));
-
-  auto aa = particle_sub_group(
-      A, [=](auto ID) { return ID.at(0) % 3 == 0; },
-      Access::read(Sym<INT>("ID")));
-  lambda_test(
-      aa, [&]([[maybe_unused]] auto ID) { return ID % 3 == 0; }, 1,
-      Sym<INT>("ID"));
-  lambda_test(
-      aa, [&]([[maybe_unused]] auto ID) { return ID % 3 == 0; }, 2,
-      Sym<INT>("ID"));
-  lambda_test(
-      aa, [&]([[maybe_unused]] auto ID) { return ID % 3 == 0; }, 5,
-      Sym<INT>("ID"));
-
-  sycl_target->free();
-}
-
-TEST(ParticleGroup, partition_particle_group_invalidation) {
-  auto [A_t, sycl_target_t, cell_count_t] = particle_loop_common_2d(3, 16, 32);
-
-  auto A = A_t;
-  A->add_particle_dat(Sym<INT>("PARTITION"), 1);
-  auto sycl_target = sycl_target_t;
-  const int num_partitions = 7;
-
-  auto loop_reset = particle_loop(
-      A,
-      [=](auto INDEX, auto PARTITION) {
-        PARTITION.at(0) =
-            (INDEX.cell + INDEX.layer) % static_cast<INT>(num_partitions);
-      },
-      Access::read(ParticleLoopIndex{}), Access::write(Sym<INT>("PARTITION")));
-
-  loop_reset->execute();
-  {
-    auto sub_groups =
-        particle_group_partition(A, Sym<INT>("PARTITION"), num_partitions);
-    auto lambda_test = [&]() {
-      for (int px = 0; px < num_partitions; px++) {
-        ASSERT_TRUE(sub_groups.at(px)->create_if_required());
-        ASSERT_FALSE(sub_groups.at(px)->create_if_required());
-      }
-    };
-
-    lambda_test();
-    loop_reset->execute();
-    lambda_test();
-
-    A->invalidate_group_version();
-    lambda_test();
-
-    auto selector = std::dynamic_pointer_cast<
-        ParticleSubGroupImplementation::ParticleGroupPartitionSelector>(
-        sub_groups.at(0)->selector);
-    auto partitioner = selector->particle_group_partitioner;
-
-    loop_reset->execute();
-    ASSERT_TRUE(partitioner->get(nullptr));
-    ASSERT_FALSE(partitioner->get(nullptr));
-
-    A->invalidate_group_version();
-    ASSERT_TRUE(partitioner->get(nullptr));
-    ASSERT_FALSE(partitioner->get(nullptr));
-  }
-
-  auto aa = particle_sub_group(
-      A, [=](auto ID) { return ID.at(0) % 3 == 0; },
-      Access::read(Sym<INT>("ID")));
-
-  {
-    auto sub_groups =
-        particle_group_partition(aa, Sym<INT>("PARTITION"), num_partitions);
-
-    auto lambda_test = [&]() {
-      for (int px = 0; px < num_partitions; px++) {
-        ASSERT_TRUE(sub_groups.at(px)->create_if_required());
-        ASSERT_FALSE(sub_groups.at(px)->create_if_required());
-      }
-    };
-
-    auto loop_reset_aa = particle_loop(
-        aa, [=]([[maybe_unused]] auto ID) {}, Access::write(Sym<INT>("ID")));
-
-    lambda_test();
-    loop_reset->execute();
-    lambda_test();
-
-    loop_reset_aa->execute();
-    lambda_test();
-
-    loop_reset_aa->execute();
-    ASSERT_TRUE(aa->create_if_required());
-    ASSERT_FALSE(aa->create_if_required());
-
-    A->invalidate_group_version();
-    lambda_test();
-
-    A->invalidate_group_version();
-    ASSERT_TRUE(aa->create_if_required());
-    ASSERT_FALSE(aa->create_if_required());
-
-    auto selector = std::dynamic_pointer_cast<
-        ParticleSubGroupImplementation::ParticleGroupPartitionSelector>(
-        sub_groups.at(0)->selector);
-    auto partitioner = selector->particle_group_partitioner;
-
-    loop_reset_aa->execute();
-    ASSERT_TRUE(partitioner->get(nullptr));
-    ASSERT_FALSE(partitioner->get(nullptr));
-
-    A->invalidate_group_version();
-    ASSERT_TRUE(partitioner->get(nullptr));
-    ASSERT_FALSE(partitioner->get(nullptr));
-  }
-
-  {
-    A->clear();
-    auto sub_groups =
-        particle_group_partition(A, Sym<INT>("PARTITION"), num_partitions);
-    auto selector = std::dynamic_pointer_cast<
-        ParticleSubGroupImplementation::ParticleGroupPartitionSelector>(
-        sub_groups.at(0)->selector);
-    auto partitioner = selector->particle_group_partitioner;
-    partitioner->get(nullptr);
-    for (int px = 0; px < num_partitions; px++) {
-      ASSERT_TRUE(sub_groups.at(px)->create_if_required());
-      ASSERT_FALSE(sub_groups.at(px)->create_if_required());
-    }
-  }
-
-  sycl_target->free();
-}
-
-TEST(ParticleGroup, partition_particle_group_reference_counting) {
-  auto [A_t, sycl_target_t, cell_count_t] = particle_loop_common_2d(3, 16, 32);
-
-  auto A = A_t;
-  A->add_particle_dat(Sym<INT>("PARTITION"), 1);
-  auto sycl_target = sycl_target_t;
-  const int num_partitions = 7;
+  auto aa = lambda_make_aa();
+  EXPECT_TRUE(aa->is_valid());
 
   particle_loop(
-      A,
-      [=](auto INDEX, auto PARTITION) {
-        PARTITION.at(0) =
-            (INDEX.cell + INDEX.layer) % static_cast<INT>(num_partitions);
-      },
-      Access::read(ParticleLoopIndex{}), Access::write(Sym<INT>("PARTITION")))
+      aa, [=](auto ID) { ID.at(0) += 2; }, Access::write(Sym<INT>("ID")))
       ->execute();
+  EXPECT_TRUE(aa->is_valid());
 
-  auto sub_groups =
-      particle_group_partition(A, Sym<INT>("PARTITION"), num_partitions);
+  aa = lambda_make_aa();
+  A->cell_move();
+  EXPECT_TRUE(!aa->is_valid());
 
-  for (int px = 0; px < num_partitions; px++) {
-    ASSERT_EQ(sub_groups.at(px).use_count(), 1);
-    ASSERT_EQ(sub_groups.at(px)->selector.use_count(), 1);
-    auto selector = std::dynamic_pointer_cast<
-        ParticleSubGroupImplementation::ParticleGroupPartitionSelector>(
-        sub_groups.at(px)->selector);
-    ASSERT_EQ(selector.use_count(), 2);
-    ASSERT_EQ(selector->particle_group_partitioner.use_count(), num_partitions);
-  }
+  aa = lambda_make_aa();
+  A->hybrid_move();
+  EXPECT_TRUE(!aa->is_valid());
 
-  auto particle_group_partitioner =
-      std::dynamic_pointer_cast<
-          ParticleSubGroupImplementation::ParticleGroupPartitionSelector>(
-          sub_groups.at(0)->selector)
-          ->particle_group_partitioner;
-  ASSERT_EQ(particle_group_partitioner.use_count(), num_partitions + 1);
+  aa = lambda_make_aa();
+  A->add_particles_local(aa);
+  EXPECT_TRUE(!aa->is_valid());
 
-  for (int px = 0; px < num_partitions; px++) {
-    sub_groups.at(px) = nullptr;
-    ASSERT_EQ(particle_group_partitioner.use_count(), num_partitions - px);
-  }
+  auto bb = static_particle_sub_group(
+      A, [=](auto ID) { return ID.at(0) % 4 == 0; },
+      Access::read(Sym<INT>("ID")));
+  aa = lambda_make_aa();
+  A->remove_particles(bb);
+  EXPECT_TRUE(!aa->is_valid());
 
-  // This last reference is particle_group_partitioner itself
-  ASSERT_EQ(particle_group_partitioner.use_count(), 1);
-
+  A->free();
   sycl_target->free();
-}
-
-TEST(ParticleGroup, partition_particle_group_deleting) {
-  auto [A_t, sycl_target_t, cell_count_t] = particle_loop_common_2d(10, 16, 32);
-
-  auto A = A_t;
-  A->add_particle_dat(Sym<INT>("PARTITION"), 1);
-  auto sycl_target = sycl_target_t;
-  const int num_partitions = 7;
-
-  particle_loop(
-      A,
-      [=](auto INDEX, auto PARTITION) {
-        PARTITION.at(0) =
-            (INDEX.cell + INDEX.layer) % static_cast<INT>(num_partitions);
-      },
-      Access::read(ParticleLoopIndex{}), Access::write(Sym<INT>("PARTITION")))
-      ->execute();
-
-  auto sub_groups =
-      particle_group_partition(A, Sym<INT>("PARTITION"), num_partitions);
-
-  auto ep = std::make_shared<ErrorPropagate>(sycl_target);
-  auto k_ep = ep->device_ptr();
-
-  auto particle_group_partitioner =
-      std::dynamic_pointer_cast<
-          ParticleSubGroupImplementation::ParticleGroupPartitionSelector>(
-          sub_groups.at(0)->selector)
-          ->particle_group_partitioner;
-
-  for (int px = 0; px < num_partitions; px++) {
-    sub_groups.at(px) = nullptr;
-    for (int rx = px + 1; rx < num_partitions; rx++) {
-      particle_loop(
-          sub_groups.at(rx),
-          [=](auto PARTITION) {
-            NESO_KERNEL_ASSERT(PARTITION.at(0) == rx, k_ep);
-          },
-          Access::read(Sym<INT>("PARTITION")))
-          ->execute();
-      ASSERT_FALSE(ep->get_flag());
-    }
-    particle_loop(
-        A,
-        [=](auto INDEX, auto PARTITION) {
-          PARTITION.at(0) = (INDEX.cell + INDEX.layer + px + 1) %
-                            static_cast<INT>(num_partitions);
-        },
-        Access::read(ParticleLoopIndex{}), Access::write(Sym<INT>("PARTITION")))
-        ->execute();
-
-    auto h_still_exists = particle_group_partitioner->la_still_exists->get();
-
-    // The call to remake the particle group will never happen for the last
-    // partition
-    if (px < num_partitions - 1) {
-      for (int rx = 0; rx <= px; rx++) {
-        ASSERT_EQ(h_still_exists.at(rx), 0);
-        ASSERT_TRUE(
-            particle_group_partitioner->partition_selectors.at(rx).expired());
-        ASSERT_TRUE(particle_group_partitioner->sub_group_particle_maps.at(rx)
-                        .expired());
-      }
-      for (int rx = px + 1; rx < num_partitions; rx++) {
-        ASSERT_EQ(h_still_exists.at(rx), 1);
-        ASSERT_FALSE(
-            particle_group_partitioner->partition_selectors.at(rx).expired());
-        ASSERT_FALSE(particle_group_partitioner->sub_group_particle_maps.at(rx)
-                         .expired());
-      }
-    }
-  }
-
-  for (int px = 0; px < num_partitions; px++) {
-    ASSERT_TRUE(
-        particle_group_partitioner->partition_selectors.at(px).expired());
-    ASSERT_TRUE(
-        particle_group_partitioner->sub_group_particle_maps.at(px).expired());
-  }
-
-  sycl_target->free();
-}
-
-TEST(ParticleSubGroup, is_particle_sub_group) {
-  ParticleSubGroupSharedPtr sub_group;
-  ParticleGroupSharedPtr group;
-  ASSERT_TRUE(is_particle_sub_group(sub_group));
-  ASSERT_FALSE(is_particle_sub_group(group));
+  mesh->free();
 }
