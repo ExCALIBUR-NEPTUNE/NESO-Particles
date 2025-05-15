@@ -1,6 +1,7 @@
 #ifdef NESO_PARTICLES_PETSC
 
 #include "include/test_neso_particles.hpp"
+#include <neso_particles/external_interfaces/petsc/petsc_interface.hpp>
 
 namespace {
 class TestBoundaryInteraction2D : public PetscInterface::BoundaryInteraction2D {

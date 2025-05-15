@@ -3,6 +3,7 @@
 #include "include/test_neso_particles.hpp"
 #include <gtest/gtest.h>
 #include <memory>
+#include <neso_particles/external_interfaces/petsc/petsc_interface.hpp>
 #include <string>
 
 using namespace NESO::Particles;

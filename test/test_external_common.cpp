@@ -1,4 +1,6 @@
 #include "include/test_neso_particles.hpp"
+#include "neso_particles/external_interfaces/common/common.hpp"
+#include "neso_particles/external_interfaces/vtk/vtk.hpp"
 
 TEST(ExternalCommon, overlay_cartesian_mesh) {
   auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);

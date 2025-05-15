@@ -1,5 +1,6 @@
 #ifdef NESO_PARTICLES_PETSC
 #include "include/test_neso_particles.hpp"
+#include <neso_particles/external_interfaces/petsc/petsc_interface.hpp>
 
 using namespace NESO::Particles;
 
