@@ -62,8 +62,16 @@ set(TEST_SRCS
     ${TEST_DIR}/test_particle_remover.cpp
     ${TEST_DIR}/test_particle_set.cpp
     ${TEST_DIR}/test_particle_set_device.cpp
-    ${TEST_DIR}/test_particle_sub_group.cpp
+    ${TEST_DIR}/test_particle_sub_group_a.cpp
     ${TEST_DIR}/test_particle_sub_group_b.cpp
+    ${TEST_DIR}/test_particle_sub_group_c.cpp
+    ${TEST_DIR}/test_particle_sub_group_d.cpp
+    ${TEST_DIR}/test_particle_sub_group_e.cpp
+    ${TEST_DIR}/test_particle_sub_group_f.cpp
+    ${TEST_DIR}/test_particle_sub_group_g.cpp
+    ${TEST_DIR}/test_particle_sub_group_h.cpp
+    ${TEST_DIR}/test_particle_sub_group_partition_a.cpp
+    ${TEST_DIR}/test_particle_sub_group_partition_b.cpp
     ${TEST_DIR}/test_product_matrix.cpp
     ${TEST_DIR}/test_resource_stack.cpp
     ${TEST_DIR}/test_serial_container.cpp
