@@ -196,7 +196,7 @@ public:
    * Move particles between cells (on this MPI rank) using the cell ids on
    * the particles.
    */
-  inline void move();
+  void move();
 };
 
 } // namespace NESO::Particles

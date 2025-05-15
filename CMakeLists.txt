@@ -30,7 +30,9 @@ if(NESO_PARTICLES_ENABLE_FIND_SYCL)
 endif()
 
 set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
-set(SRC_FILES ${SRC_DIR}/particle_io.cpp)
+set(SRC_FILES
+    ${SRC_DIR}/particle_io.cpp ${SRC_DIR}/cell_dat_compression.cpp
+    ${SRC_DIR}/parallel_initialisation.cpp ${SRC_DIR}/cell_dat_move.cpp)
 set(SRC_FILES_IGNORE "")
 check_added_file_list(${SRC_DIR} cpp "${SRC_FILES}" "${SRC_FILES_IGNORE}")
 

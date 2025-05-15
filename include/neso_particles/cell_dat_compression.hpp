@@ -626,16 +626,9 @@ protected:
       callback_host;
   std::function<void()> callback_test;
 
-public:
-  /**
-   * Remove particles from the ParticleDat instances.
-   *
-   * @param npart Number of particles to remove.
-   * @param usm_cells Device accessible pointer to the particle cells.
-   * @param usm_layers Device accessible pointer to the particle rows (layers).
-   */
   template <typename T>
-  inline void remove_particles(const int npart, T *usm_cells, T *usm_layers) {
+  inline void remove_particles_inner(const int npart, T *usm_cells,
+                                     T *usm_layers) {
 
     // If there are no particles to remove then there is nothing to do.
     if (npart < 1) {
@@ -808,6 +801,25 @@ public:
     restore_resource(sycl_target->resource_stack_map,
                      ResourceStackKeyBufferDevice<int>{}, d_npart_cell_new);
   }
+
+public:
+  /**
+   * Remove particles from the ParticleDat instances.
+   *
+   * @param npart Number of particles to remove.
+   * @param usm_cells Device accessible pointer to the particle cells.
+   * @param usm_layers Device accessible pointer to the particle rows (layers).
+   */
+  void remove_particles(const int npart, int *usm_cells, int *usm_layers);
+
+  /**
+   * Remove particles from the ParticleDat instances.
+   *
+   * @param npart Number of particles to remove.
+   * @param usm_cells Device accessible pointer to the particle cells.
+   * @param usm_layers Device accessible pointer to the particle rows (layers).
+   */
+  void remove_particles(const int npart, INT *usm_cells, INT *usm_layers);
 };
 
 } // namespace NESO::Particles
