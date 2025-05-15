@@ -6,7 +6,7 @@
 
 ## About
 
-This is the particle component of NESO and is designed as a header only library.
+This is the particle component of NESO and is designed to be a portable high-level library for particle based algorithms. 
 
 ## Documentation
 

@@ -398,26 +398,7 @@ public:
    *
    * @param step_in Optionally set the step explicitly.
    */
-  inline void write(INT step_in = -1) {
-    NESOASSERT(this->particle_group != nullptr,
-               "There is no particle group to write from, maybe this H5Part "
-               "instance is in read-only mode?");
-
-    // open the file for writing if required.
-    this->open_read_write();
-
-    if (step_in >= 0) {
-      this->step = step_in;
-    }
-
-    if (this->particle_sub_group != nullptr) {
-      this->write_inner(this->particle_sub_group);
-    } else {
-      this->write_inner(this->particle_group);
-    }
-
-    this->step++;
-  };
+  void write(INT step_in = -1);
 
   /**
    * Reads particle properties from the h5part file. Must be called collectively
