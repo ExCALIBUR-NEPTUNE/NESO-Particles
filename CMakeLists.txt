@@ -45,9 +45,13 @@ endif()
 
 set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set(SRC_FILES
-    ${SRC_DIR}/particle_io.cpp ${SRC_DIR}/cell_dat_compression.cpp
-    ${SRC_DIR}/cell_dat_move.cpp ${SRC_DIR}/device_limits.cpp
-    ${SRC_DIR}/parallel_initialisation.cpp ${SRC_DIR}/particle_group.cpp)
+    ${SRC_DIR}/particle_io.cpp
+    ${SRC_DIR}/cartesian_mesh.cpp
+    ${SRC_DIR}/cell_dat_compression.cpp
+    ${SRC_DIR}/cell_dat_move.cpp
+    ${SRC_DIR}/device_limits.cpp
+    ${SRC_DIR}/parallel_initialisation.cpp
+    ${SRC_DIR}/particle_group.cpp)
 set(SRC_FILES_IGNORE "")
 check_added_file_list(${SRC_DIR} cpp "${SRC_FILES}" "${SRC_FILES_IGNORE}")
 
@@ -66,6 +70,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/cell_dat.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cell_dat_compression.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cell_dat_move.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/common_impl.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/communication.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/communication/comm_pair.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/communication/communication_edges_counter.hpp

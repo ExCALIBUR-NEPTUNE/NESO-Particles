@@ -1,6 +1,5 @@
 #include <neso_particles/cell_dat_compression.hpp>
-#include <neso_particles/departing_particle_identification_impl.hpp>
-#include <neso_particles/loop/particle_loop_impl.hpp>
+#include <neso_particles/common_impl.hpp>
 
 namespace NESO::Particles {
 

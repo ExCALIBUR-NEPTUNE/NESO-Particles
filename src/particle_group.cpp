@@ -1,12 +1,6 @@
-#include <neso_particles/containers/descendant_products.hpp>
-#include <neso_particles/departing_particle_identification_impl.hpp>
-#include <neso_particles/global_mapping.hpp>
-#include <neso_particles/global_mapping_impl.hpp>
-#include <neso_particles/loop/particle_loop_impl.hpp>
-#include <neso_particles/loop/particle_loop_iteration_set.hpp>
+#include <neso_particles/common_impl.hpp>
 #include <neso_particles/particle_group.hpp>
 #include <neso_particles/particle_group_impl.hpp>
-#include <neso_particles/particle_sub_group/particle_sub_group.hpp>
 
 namespace NESO::Particles {
 
