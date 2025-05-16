@@ -45,6 +45,17 @@ endif()
 
 set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set(SRC_FILES
+    ${SRC_DIR}/external_interfaces/petsc/boundary_interaction/boundary_interaction_2d.cpp
+    ${SRC_DIR}/external_interfaces/petsc/boundary_interaction/boundary_interaction_common.cpp
+    ${SRC_DIR}/external_interfaces/petsc/boundary_interaction/boundary_reflection.cpp
+    ${SRC_DIR}/external_interfaces/petsc/dmplex_cell_serialise.cpp
+    ${SRC_DIR}/external_interfaces/petsc/dmplex_interface.cpp
+    ${SRC_DIR}/external_interfaces/petsc/dmplex_helper.cpp
+    ${SRC_DIR}/external_interfaces/petsc/dmplex_utility.cpp
+    ${SRC_DIR}/external_interfaces/petsc/particle_cell_mapping/dmplex_2d_mapper.cpp
+    ${SRC_DIR}/external_interfaces/petsc/particle_cell_mapping/dmplex_host_mapper.cpp
+    ${SRC_DIR}/external_interfaces/petsc/project_evaluate/dmplex_project_evaluate_barycentric.cpp
+    ${SRC_DIR}/external_interfaces/petsc/project_evaluate/dmplex_project_evaluate_dg.cpp
     ${SRC_DIR}/external_interfaces/common/dof_mapper_dg.cpp
     ${SRC_DIR}/external_interfaces/common/local_claim.cpp
     ${SRC_DIR}/external_interfaces/common/overlay_cartesian_mesh.cpp

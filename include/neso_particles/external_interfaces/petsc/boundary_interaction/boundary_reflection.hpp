@@ -169,14 +169,31 @@ public:
    * first component and in the second component the size (proportion) of the
    * last time update operation.
    */
-  template <typename T>
-  inline void execute(std::shared_ptr<T> particle_group,
-                      Sym<REAL> sym_positions, Sym<REAL> sym_velocities,
-                      Sym<REAL> sym_time_step_proportion) {
-    NESOASSERT(this->ndim == 2, "Only implemented in 2D");
-    return this->execute_inner_2d(particle_group, sym_positions, sym_velocities,
-                                  sym_time_step_proportion);
-  }
+  void execute(std::shared_ptr<ParticleGroup> particle_group,
+               Sym<REAL> sym_positions, Sym<REAL> sym_velocities,
+               Sym<REAL> sym_time_step_proportion);
+
+  /**
+   * Perform reflection operation for all particles passed. This method should
+   * be called after the user has called @ref post_integration on the boundary
+   * interaction class.
+   *
+   * @param particle_group ParticleGroup or ParticleSubGroup of particles to
+   * perform reflection operation on.
+   * @param sym_positions Sym<REAL> which holds the particle positions in the
+   * colllection of particles. These positions will be truncated to the
+   * boundary.
+   * @param sym_velocities Sym<REAL> which holds the velocities of the
+   * particles. These velocities will be reflected using the normal vector of
+   * the boundary.
+   * @param sym_time_step_proportion Sym<REAL> of two components which holds
+   * the proportion of the time step which has currently been performed in the
+   * first component and in the second component the size (proportion) of the
+   * last time update operation.
+   */
+  void execute(std::shared_ptr<ParticleSubGroup> particle_group,
+               Sym<REAL> sym_positions, Sym<REAL> sym_velocities,
+               Sym<REAL> sym_time_step_proportion);
 };
 
 } // namespace NESO::Particles::PetscInterface
