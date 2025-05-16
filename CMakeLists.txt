@@ -55,7 +55,11 @@ set(SRC_FILES
     ${SRC_DIR}/global_mapping.cpp
     ${SRC_DIR}/parallel_initialisation.cpp
     ${SRC_DIR}/packing_unpacking.cpp
-    ${SRC_DIR}/particle_group.cpp)
+    ${SRC_DIR}/particle_dat.cpp
+    ${SRC_DIR}/particle_group.cpp
+    ${SRC_DIR}/particle_set.cpp
+    ${SRC_DIR}/particle_group_temporary.cpp
+    ${SRC_DIR}/particle_group_pointer_map.cpp)
 set(SRC_FILES_IGNORE "")
 check_added_file_list(${SRC_DIR} cpp "${SRC_FILES}" "${SRC_FILES_IGNORE}")
 
