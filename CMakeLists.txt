@@ -51,6 +51,7 @@ set(SRC_FILES
     ${SRC_DIR}/cell_dat_move.cpp
     ${SRC_DIR}/device_limits.cpp
     ${SRC_DIR}/departing_particle_identification.cpp
+    ${SRC_DIR}/mesh_hierarchy.cpp
     ${SRC_DIR}/global_mapping.cpp
     ${SRC_DIR}/parallel_initialisation.cpp
     ${SRC_DIR}/particle_group.cpp)
