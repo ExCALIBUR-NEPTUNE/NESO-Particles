@@ -30,117 +30,10 @@ protected:
   std::array<INT, 6> element_strides1;
   REAL inverse_cell_width_fine;
 
-  inline void setup() {
-    auto ndim = this->mesh->get_ndim();
-    auto mh = this->mesh->get_mesh_hierarchy();
+  void setup();
 
-    std::array<INT, 6> element_offsets_tmp = {0, 0, 0, 0, 0, 0};
-
-    if (ndim == 2) {
-      element_offsets_tmp[0] = mh->dims[0] * mh->ncells_fine;
-      element_offsets_tmp[1] = mh->dims[1] * mh->ncells_fine;
-      element_offsets_tmp[2] = mh->dims[0] * mh->ncells_fine;
-
-      this->element_strides0[0] = mh->dims[0] * mh->ncells_dim_fine;
-      this->element_strides0[1] = mh->dims[1] * mh->ncells_dim_fine;
-      this->element_strides0[2] = mh->dims[0] * mh->ncells_dim_fine;
-      this->element_strides0[3] = mh->dims[1] * mh->ncells_dim_fine;
-      this->element_strides1[0] = 1;
-      this->element_strides1[1] = 1;
-      this->element_strides1[2] = 1;
-      this->element_strides1[3] = 1;
-
-    } else {
-      element_offsets_tmp[0] = mh->dims[0] * mh->dims[2] * mh->ncells_fine;
-      element_offsets_tmp[1] = mh->dims[1] * mh->dims[2] * mh->ncells_fine;
-      element_offsets_tmp[2] = mh->dims[0] * mh->dims[2] * mh->ncells_fine;
-      element_offsets_tmp[3] = mh->dims[1] * mh->dims[2] * mh->ncells_fine;
-      element_offsets_tmp[4] = mh->dims[0] * mh->dims[1] * mh->ncells_fine;
-
-      this->element_strides0[0] = mh->dims[0] * mh->ncells_dim_fine;
-      this->element_strides0[1] = mh->dims[1] * mh->ncells_dim_fine;
-      this->element_strides0[2] = mh->dims[0] * mh->ncells_dim_fine;
-      this->element_strides0[3] = mh->dims[1] * mh->ncells_dim_fine;
-      this->element_strides0[4] = mh->dims[0] * mh->ncells_dim_fine;
-      this->element_strides0[5] = mh->dims[0] * mh->ncells_dim_fine;
-
-      this->element_strides1[0] = mh->dims[2] * mh->ncells_dim_fine;
-      this->element_strides1[1] = mh->dims[2] * mh->ncells_dim_fine;
-      this->element_strides1[2] = mh->dims[2] * mh->ncells_dim_fine;
-      this->element_strides1[3] = mh->dims[2] * mh->ncells_dim_fine;
-      this->element_strides1[4] = mh->dims[1] * mh->ncells_dim_fine;
-      this->element_strides1[5] = mh->dims[1] * mh->ncells_dim_fine;
-    }
-    std::exclusive_scan(element_offsets_tmp.begin(), element_offsets_tmp.end(),
-                        this->element_offsets.begin(), 0);
-    this->inverse_cell_width_fine = mh->inverse_cell_width_fine;
-  }
-
-public:
-  /// Disable (implicit) copies.
-  CartesianTrajectoryIntersection(const CartesianTrajectoryIntersection &st) =
-      delete;
-  /// Disable (implicit) copies.
-  CartesianTrajectoryIntersection &
-  operator=(CartesianTrajectoryIntersection const &a) = delete;
-  ~CartesianTrajectoryIntersection() = default;
-
-  /// The Sym for the particle property which holds the position of each
-  /// particle before the positions were updated in a time stepping loop. These
-  /// positions are populated on call to @ref pre_integration.
-  inline static const Sym<REAL> previous_position_sym =
-      Sym<REAL>("NESO_PARTICLES_CART_H_MESH_PREVIOUS_POS");
-
-  /// Compute device used to find intersections.
-  SYCLTargetSharedPtr sycl_target;
-  /// The underlying mesh.
-  CartesianHMeshSharedPtr mesh;
-  /// Map from boundary group to faces/edges that form the group.
-  std::map<int, std::vector<int>> boundary_groups;
-  /// Tolerance for intersection tests.
-  REAL tolerance;
-
-  /**
-   * Most simple constructor all boundary elements are considered in boundary
-   * group 0.
-   *
-   * @param sycl_target Compute device to use for interactions.
-   * @param mesh CartesianHMesh to detect intersections with.
-   * @param boundary_groups Map from boundarg group to edges/faces indices that
-   * form the group.
-   * @param tolerance Tolerance for intersection tests, default 1E-14.
-   */
-  CartesianTrajectoryIntersection(
-      SYCLTargetSharedPtr sycl_target, CartesianHMeshSharedPtr mesh,
-      std::map<int, std::vector<int>> boundary_groups, REAL tolerance = 1.0e-14)
-      : sycl_target(sycl_target), mesh(mesh), boundary_groups(boundary_groups),
-        tolerance(tolerance) {
-    const int k_ndim = this->mesh->get_ndim();
-    NESOASSERT(k_ndim == 2 || k_ndim == 3,
-               "This method is only implemented in 2D and 3D.");
-    this->setup();
-  }
-
-  /**
-   * Prepare a ParticleGroup such that it, or sub groups based on it, can be
-   * passed to pre_integration and post_integration.
-   *
-   * @param particle_group ParticleGroup to prepare.
-   */
-  inline void prepare_particle_group(ParticleGroupSharedPtr particle_group) {
-    this->check_dat(particle_group, this->previous_position_sym,
-                    this->mesh->get_ndim());
-  }
-
-  /**
-   * This method should be called with a collection of particles prior to
-   * updating the positions of these particles.
-   *
-   * @param particles ParticleGroup or ParticleSubGroup of particles whose
-   * positions are about to be updated, e.g. in a time stepping operation.
-   */
   template <typename T>
-  inline void pre_integration(std::shared_ptr<T> particles) {
+  inline void pre_integration_inner(std::shared_ptr<T> particles) {
     NESOASSERT(get_particle_group(particles)->contains_dat(
                    this->previous_position_sym, this->mesh->get_ndim()),
                "Could not find dat for previous positions. Was "
@@ -159,19 +52,9 @@ public:
         ->execute();
   }
 
-  /**
-   * Call after updating to find particles whose trajectories intersect the
-   * CartesianHMesh boundary.
-   *
-   * @param particles Collection of particles, either a ParticleGroup or
-   * ParticleSubGroup, to identify trajectory-boundary intersections of.
-   * @returns Map from boundary groups ids, which were passed in the
-   * constructor, to a ParticleSubGroup of particles which crossed the boundary
-   * elements which form the boundary group.
-   */
   template <typename T>
   [[nodiscard]] inline std::map<int, ParticleSubGroupSharedPtr>
-  post_integration(std::shared_ptr<T> particles) {
+  post_integration_inner(std::shared_ptr<T> particles) {
 
     auto particle_group = get_particle_group(particles);
 
@@ -518,6 +401,97 @@ public:
                      ResourceStackKeyBufferDevice<INT>{}, d_buffer_int);
     return return_map;
   }
+
+public:
+  /// Disable (implicit) copies.
+  CartesianTrajectoryIntersection(const CartesianTrajectoryIntersection &st) =
+      delete;
+  /// Disable (implicit) copies.
+  CartesianTrajectoryIntersection &
+  operator=(CartesianTrajectoryIntersection const &a) = delete;
+  ~CartesianTrajectoryIntersection() = default;
+
+  /// The Sym for the particle property which holds the position of each
+  /// particle before the positions were updated in a time stepping loop. These
+  /// positions are populated on call to @ref pre_integration.
+  inline static const Sym<REAL> previous_position_sym =
+      Sym<REAL>("NESO_PARTICLES_CART_H_MESH_PREVIOUS_POS");
+
+  /// Compute device used to find intersections.
+  SYCLTargetSharedPtr sycl_target;
+  /// The underlying mesh.
+  CartesianHMeshSharedPtr mesh;
+  /// Map from boundary group to faces/edges that form the group.
+  std::map<int, std::vector<int>> boundary_groups;
+  /// Tolerance for intersection tests.
+  REAL tolerance;
+
+  /**
+   * Most simple constructor all boundary elements are considered in boundary
+   * group 0.
+   *
+   * @param sycl_target Compute device to use for interactions.
+   * @param mesh CartesianHMesh to detect intersections with.
+   * @param boundary_groups Map from boundarg group to edges/faces indices that
+   * form the group.
+   * @param tolerance Tolerance for intersection tests, default 1E-14.
+   */
+  CartesianTrajectoryIntersection(
+      SYCLTargetSharedPtr sycl_target, CartesianHMeshSharedPtr mesh,
+      std::map<int, std::vector<int>> boundary_groups,
+      REAL tolerance = 1.0e-14);
+
+  /**
+   * Prepare a ParticleGroup such that it, or sub groups based on it, can be
+   * passed to pre_integration and post_integration.
+   *
+   * @param particle_group ParticleGroup to prepare.
+   */
+  void prepare_particle_group(ParticleGroupSharedPtr particle_group);
+
+  /**
+   * This method should be called with a collection of particles prior to
+   * updating the positions of these particles.
+   *
+   * @param particles ParticleGroup or ParticleSubGroup of particles whose
+   * positions are about to be updated, e.g. in a time stepping operation.
+   */
+  void pre_integration(std::shared_ptr<ParticleGroup> particles);
+
+  /**
+   * This method should be called with a collection of particles prior to
+   * updating the positions of these particles.
+   *
+   * @param particles ParticleGroup or ParticleSubGroup of particles whose
+   * positions are about to be updated, e.g. in a time stepping operation.
+   */
+  void pre_integration(std::shared_ptr<ParticleSubGroup> particles);
+
+  /**
+   * Call after updating to find particles whose trajectories intersect the
+   * CartesianHMesh boundary.
+   *
+   * @param particles Collection of particles, either a ParticleGroup or
+   * ParticleSubGroup, to identify trajectory-boundary intersections of.
+   * @returns Map from boundary groups ids, which were passed in the
+   * constructor, to a ParticleSubGroup of particles which crossed the boundary
+   * elements which form the boundary group.
+   */
+  [[nodiscard]] std::map<int, ParticleSubGroupSharedPtr>
+  post_integration(std::shared_ptr<ParticleGroup> particles);
+
+  /**
+   * Call after updating to find particles whose trajectories intersect the
+   * CartesianHMesh boundary.
+   *
+   * @param particles Collection of particles, either a ParticleGroup or
+   * ParticleSubGroup, to identify trajectory-boundary intersections of.
+   * @returns Map from boundary groups ids, which were passed in the
+   * constructor, to a ParticleSubGroup of particles which crossed the boundary
+   * elements which form the boundary group.
+   */
+  [[nodiscard]] std::map<int, ParticleSubGroupSharedPtr>
+  post_integration(std::shared_ptr<ParticleSubGroup> particles);
 };
 
 } // namespace NESO::Particles

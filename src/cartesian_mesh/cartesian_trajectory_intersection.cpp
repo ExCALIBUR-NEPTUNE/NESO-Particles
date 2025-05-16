@@ -1,0 +1,91 @@
+#include <neso_particles/cartesian_mesh/cartesian_trajectory_intersection.hpp>
+#include <neso_particles/common_impl.hpp>
+
+namespace NESO::Particles {
+
+void CartesianTrajectoryIntersection::setup() {
+  auto ndim = this->mesh->get_ndim();
+  auto mh = this->mesh->get_mesh_hierarchy();
+
+  std::array<INT, 6> element_offsets_tmp = {0, 0, 0, 0, 0, 0};
+
+  if (ndim == 2) {
+    element_offsets_tmp[0] = mh->dims[0] * mh->ncells_fine;
+    element_offsets_tmp[1] = mh->dims[1] * mh->ncells_fine;
+    element_offsets_tmp[2] = mh->dims[0] * mh->ncells_fine;
+
+    this->element_strides0[0] = mh->dims[0] * mh->ncells_dim_fine;
+    this->element_strides0[1] = mh->dims[1] * mh->ncells_dim_fine;
+    this->element_strides0[2] = mh->dims[0] * mh->ncells_dim_fine;
+    this->element_strides0[3] = mh->dims[1] * mh->ncells_dim_fine;
+    this->element_strides1[0] = 1;
+    this->element_strides1[1] = 1;
+    this->element_strides1[2] = 1;
+    this->element_strides1[3] = 1;
+
+  } else {
+    element_offsets_tmp[0] = mh->dims[0] * mh->dims[2] * mh->ncells_fine;
+    element_offsets_tmp[1] = mh->dims[1] * mh->dims[2] * mh->ncells_fine;
+    element_offsets_tmp[2] = mh->dims[0] * mh->dims[2] * mh->ncells_fine;
+    element_offsets_tmp[3] = mh->dims[1] * mh->dims[2] * mh->ncells_fine;
+    element_offsets_tmp[4] = mh->dims[0] * mh->dims[1] * mh->ncells_fine;
+
+    this->element_strides0[0] = mh->dims[0] * mh->ncells_dim_fine;
+    this->element_strides0[1] = mh->dims[1] * mh->ncells_dim_fine;
+    this->element_strides0[2] = mh->dims[0] * mh->ncells_dim_fine;
+    this->element_strides0[3] = mh->dims[1] * mh->ncells_dim_fine;
+    this->element_strides0[4] = mh->dims[0] * mh->ncells_dim_fine;
+    this->element_strides0[5] = mh->dims[0] * mh->ncells_dim_fine;
+
+    this->element_strides1[0] = mh->dims[2] * mh->ncells_dim_fine;
+    this->element_strides1[1] = mh->dims[2] * mh->ncells_dim_fine;
+    this->element_strides1[2] = mh->dims[2] * mh->ncells_dim_fine;
+    this->element_strides1[3] = mh->dims[2] * mh->ncells_dim_fine;
+    this->element_strides1[4] = mh->dims[1] * mh->ncells_dim_fine;
+    this->element_strides1[5] = mh->dims[1] * mh->ncells_dim_fine;
+  }
+  std::exclusive_scan(element_offsets_tmp.begin(), element_offsets_tmp.end(),
+                      this->element_offsets.begin(), 0);
+  this->inverse_cell_width_fine = mh->inverse_cell_width_fine;
+}
+
+CartesianTrajectoryIntersection::CartesianTrajectoryIntersection(
+    SYCLTargetSharedPtr sycl_target, CartesianHMeshSharedPtr mesh,
+    std::map<int, std::vector<int>> boundary_groups, REAL tolerance)
+    : sycl_target(sycl_target), mesh(mesh), boundary_groups(boundary_groups),
+      tolerance(tolerance) {
+  const int k_ndim = this->mesh->get_ndim();
+  NESOASSERT(k_ndim == 2 || k_ndim == 3,
+             "This method is only implemented in 2D and 3D.");
+  this->setup();
+}
+
+void CartesianTrajectoryIntersection::prepare_particle_group(
+    ParticleGroupSharedPtr particle_group) {
+  this->check_dat(particle_group, this->previous_position_sym,
+                  this->mesh->get_ndim());
+}
+
+void CartesianTrajectoryIntersection::pre_integration(
+    std::shared_ptr<ParticleGroup> particles) {
+  return this->pre_integration_inner(particles);
+}
+
+void CartesianTrajectoryIntersection::pre_integration(
+    std::shared_ptr<ParticleSubGroup> particles) {
+  return this->pre_integration_inner(particles);
+}
+
+std::map<int, ParticleSubGroupSharedPtr>
+CartesianTrajectoryIntersection::post_integration(
+    std::shared_ptr<ParticleGroup> particles) {
+  return this->post_integration_inner(particles);
+}
+
+std::map<int, ParticleSubGroupSharedPtr>
+CartesianTrajectoryIntersection::post_integration(
+    std::shared_ptr<ParticleSubGroup> particles) {
+  return this->post_integration_inner(particles);
+}
+
+} // namespace NESO::Particles

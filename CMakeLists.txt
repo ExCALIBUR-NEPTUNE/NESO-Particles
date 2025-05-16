@@ -47,6 +47,11 @@ set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set(SRC_FILES
     ${SRC_DIR}/particle_io.cpp
     ${SRC_DIR}/cartesian_mesh.cpp
+    ${SRC_DIR}/cartesian_mesh/cartesian_cell_bin.cpp
+    ${SRC_DIR}/cartesian_mesh/cartesian_h_mesh.cpp
+    ${SRC_DIR}/cartesian_mesh/cartesian_periodic.cpp
+    ${SRC_DIR}/cartesian_mesh/cartesian_trajectory_intersection.cpp
+    ${SRC_DIR}/communication/communication_edges_counter.cpp
     ${SRC_DIR}/cell_dat_compression.cpp
     ${SRC_DIR}/cell_dat_move.cpp
     ${SRC_DIR}/device_limits.cpp
