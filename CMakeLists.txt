@@ -59,7 +59,9 @@ set(SRC_FILES
     ${SRC_DIR}/particle_group.cpp
     ${SRC_DIR}/particle_set.cpp
     ${SRC_DIR}/particle_group_temporary.cpp
-    ${SRC_DIR}/particle_group_pointer_map.cpp)
+    ${SRC_DIR}/particle_group_pointer_map.cpp
+    ${SRC_DIR}/utility.cpp
+    ${SRC_DIR}/utility_mesh_hierarchy_plotting.cpp)
 set(SRC_FILES_IGNORE "")
 check_added_file_list(${SRC_DIR} cpp "${SRC_FILES}" "${SRC_FILES_IGNORE}")
 
