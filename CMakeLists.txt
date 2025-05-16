@@ -50,6 +50,7 @@ set(SRC_FILES
     ${SRC_DIR}/cell_dat_compression.cpp
     ${SRC_DIR}/cell_dat_move.cpp
     ${SRC_DIR}/device_limits.cpp
+    ${SRC_DIR}/departing_particle_identification.cpp
     ${SRC_DIR}/parallel_initialisation.cpp
     ${SRC_DIR}/particle_group.cpp)
 set(SRC_FILES_IGNORE "")
@@ -108,7 +109,6 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/sym_vector_pointer_cache_dispatch_impl.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/tuple.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/departing_particle_identification.hpp
-    ${INCLUDE_DIR_NESO_PARTICLES}/departing_particle_identification_impl.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/device_atomic_sanity_check.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/device_buffers.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/device_functions.hpp
