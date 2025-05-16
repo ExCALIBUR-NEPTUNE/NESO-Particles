@@ -26,6 +26,7 @@ set(TEST_SRCS
     ${TEST_DIR}/test_cell_dat.cpp
     ${TEST_DIR}/test_communication.cpp
     ${TEST_DIR}/test_device_functions.cpp
+    ${TEST_DIR}/test_ephemeral_dats.cpp
     ${TEST_DIR}/test_error_propagate.cpp
     ${TEST_DIR}/test_examples.cpp
     ${TEST_DIR}/test_external_common.cpp
@@ -60,6 +61,7 @@ set(TEST_SRCS
     ${TEST_DIR}/test_particle_loop_sym_vector.cpp
     ${TEST_DIR}/test_particle_remover.cpp
     ${TEST_DIR}/test_particle_set.cpp
+    ${TEST_DIR}/test_particle_set_device.cpp
     ${TEST_DIR}/test_particle_sub_group_a.cpp
     ${TEST_DIR}/test_particle_sub_group_b.cpp
     ${TEST_DIR}/test_particle_sub_group_c.cpp
@@ -73,6 +75,7 @@ set(TEST_SRCS
     ${TEST_DIR}/test_product_matrix.cpp
     ${TEST_DIR}/test_resource_stack.cpp
     ${TEST_DIR}/test_serial_container.cpp
+    ${TEST_DIR}/test_standard_boundary.cpp
     ${TEST_DIR}/test_sycl_target.cpp
     ${TEST_DIR}/test_tuple.cpp
     ${TEST_DIR}/test_utility.cpp)
@@ -102,6 +105,10 @@ foreach(TEST ${TEST_SRCS})
                              PRIVATE NESO_PARTICLES_TEST_COMPILATION)
   target_compile_definitions(
     ${TEST_NAME} PRIVATE CMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX})
+  if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_compile_definitions(${TEST_NAME}
+                               PRIVATE NESO_PARTICLES_SINGLE_COMPILED_LOOP)
+  endif()
   target_compile_options(${TEST_NAME} PRIVATE "-Wpedantic;-Wall;-Wextra")
   # exclude from all so indiviual tests aren't built for install
   set_target_properties(${TEST_NAME} PROPERTIES EXCLUDE_FROM_ALL TRUE)
@@ -127,6 +134,10 @@ target_compile_definitions(${EXECUTABLE}
                            PRIVATE NESO_PARTICLES_TEST_COMPILATION)
 target_compile_definitions(${EXECUTABLE}
                            PRIVATE CMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX})
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+  target_compile_definitions(${EXECUTABLE}
+                             PRIVATE NESO_PARTICLES_SINGLE_COMPILED_LOOP)
+endif()
 target_compile_options(${EXECUTABLE} PRIVATE "-Wpedantic;-Wall;-Wextra")
 
 set_target_properties(

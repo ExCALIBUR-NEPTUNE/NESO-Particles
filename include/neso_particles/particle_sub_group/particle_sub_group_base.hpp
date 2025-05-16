@@ -1,8 +1,10 @@
 #ifndef _NESO_PARTICLES_SUB_GROUP_PARTICLE_SUB_GROUP_BASE_HPP_
 #define _NESO_PARTICLES_SUB_GROUP_PARTICLE_SUB_GROUP_BASE_HPP_
 
+#include "../containers/ephemeral_dats.hpp"
 #include "sub_group_selector.hpp"
 #include "sub_group_selector_base.hpp"
+#include "sub_group_selector_whole_group.hpp"
 
 namespace NESO::Particles {
 
@@ -18,12 +20,15 @@ template <typename KERNEL, typename... ARGS> class ParticleLoopSubGroup;
  * A ParticleSubGroup with no selector lambda refers to the entire parent
  * ParticleGroup.
  */
-class ParticleSubGroup {
+class ParticleSubGroup : public EphemeralDats {
   // This allows the ParticleLoop to access the implementation methods.
   template <typename KERNEL, typename... ARGS>
   friend class ParticleLoopSubGroup;
   friend class ParticleGroup;
   friend class ParticleSubGroupImplementation::SubGroupSelectorBase;
+  friend inline SymVectorPointerCacheDispatchSharedPtr
+  get_sym_vector_cache_dispatch(ParticleGroup *particle_group,
+                                ParticleSubGroup *particle_sub_group);
 
 protected:
 #ifdef NESO_PARTICLES_TEST_COMPILATION
@@ -32,10 +37,11 @@ public:
 
   bool is_static;
   ParticleGroupSharedPtr particle_group;
-  ParticleSubGroupImplementation::SubGroupSelectorBaseSharedPtr selector;
+  ParticleSubGroupImplementation::SubGroupSelectorBaseSharedPtr selector{
+      nullptr};
   ParticleSubGroupImplementation::Selection selection;
 
-  int npart_local;
+  INT npart_local;
   bool is_whole_particle_group;
 
   /**
@@ -66,16 +72,45 @@ public:
 
   inline void get_cells_layers(INT *d_cells, INT *d_layers);
 
+  virtual inline void prepare_ephemeral_dats() override {
+    this->create_if_required();
+  }
+
+  virtual inline bool invalidate_ephemeral_dats_if_required() override {
+    const bool required = this->selector->update_required();
+    if (required) {
+      this->reset_ephemeral_dats(
+          this->selection.npart_local, this->selection.h_npart_cell,
+          this->selection.d_npart_cell, this->selection.d_npart_cell_es);
+    }
+    return required;
+  }
+
   inline bool create_inner() {
-    NESOASSERT(!this->is_whole_particle_group,
-               "Explicitly creating the ParticleSubGroup when the sub-group is "
-               "the entire ParticleGroup should never be required.");
     const bool was_updated = this->selector->get(&this->selection);
     this->npart_local = this->selection.npart_local;
+
+    if (was_updated) {
+      this->reset_ephemeral_dats(
+          this->selection.npart_local, this->selection.h_npart_cell,
+          this->selection.d_npart_cell, this->selection.d_npart_cell_es);
+    }
+
     return was_updated;
   }
 
+  inline void check_selector(
+      ParticleSubGroupImplementation::SubGroupSelectorBaseSharedPtr selector) {
+
+    NESOASSERT(!selector->consumed,
+               "Attempting to create a ParticleSubGroup from a Selector that "
+               "has already been used to make another ParticleSubGroup.");
+    selector->consumed = true;
+  }
+
 public:
+  virtual ~ParticleSubGroup() = default;
+
   /**
    * Create a ParticleSubGroup based on a kernel and arguments. The selector
    * kernel must be a lambda which returns true for particles which are in the
@@ -118,12 +153,33 @@ public:
    *
    * but can make additional optimisations.
    *
-   * @param parent Parent ParticleGroup or ParticleSubGroup from which to form
-   * ParticleSubGroup.
+   * @param parent Parent ParticleGroup from which to form ParticleSubGroup.
    */
   ParticleSubGroup(ParticleGroupSharedPtr particle_group)
-      : ParticleSubGroup(particle_group, []() { return true; }) {
-    this->is_whole_particle_group = true;
+      : ParticleSubGroup(std::dynamic_pointer_cast<
+                         ParticleSubGroupImplementation::SubGroupSelectorBase>(
+            std::make_shared<
+                ParticleSubGroupImplementation::SubGroupSelectorWholeGroup>(
+                particle_group))) {}
+
+  /**
+   * Create a ParticleSubGroup which is simply a reference/view into an entire
+   * ParticleSubGroup. This constructor creates a sub-group which is equivalent
+   * to
+   *
+   *    auto A_all = std::make_shared<ParticleSubGroup>(
+   *      A, [=]() {
+   *        return true;
+   *      }
+   *    );
+   *
+   * but can make additional optimisations.
+   *
+   * @param parent Parent ParticleSubGroup from which to form ParticleSubGroup.
+   */
+  ParticleSubGroup(std::shared_ptr<ParticleSubGroup> particle_sub_group)
+      : ParticleSubGroup(particle_sub_group, []() { return true; }) {
+    // TODO Make a more efficient selector for copying another selector.
   }
 
   /**
@@ -134,8 +190,17 @@ public:
    */
   ParticleSubGroup(
       ParticleSubGroupImplementation::SubGroupSelectorSharedPtr selector)
-      : is_static(false), particle_group(selector->particle_group),
-        selector(selector), is_whole_particle_group(false) {}
+      : EphemeralDats(selector->particle_group->sycl_target,
+                      selector->particle_group->domain->mesh->get_cell_count(),
+                      &selector->particle_group->particle_dats_int,
+                      &selector->particle_group->particle_dats_real),
+        is_static(false), particle_group(selector->particle_group),
+        selector(selector),
+        is_whole_particle_group(selector->is_whole_particle_group) {
+    this->check_selector(
+        std::dynamic_pointer_cast<
+            ParticleSubGroupImplementation::SubGroupSelectorBase>(selector));
+  }
 
   /**
    * Create a ParticleSubGroup directly from a SubGroupSelectorBase. This allows
@@ -145,8 +210,15 @@ public:
    */
   ParticleSubGroup(
       ParticleSubGroupImplementation::SubGroupSelectorBaseSharedPtr selector)
-      : is_static(false), particle_group(selector->particle_group),
-        selector(selector), is_whole_particle_group(false) {}
+      : EphemeralDats(selector->particle_group->sycl_target,
+                      selector->particle_group->domain->mesh->get_cell_count(),
+                      &selector->particle_group->particle_dats_int,
+                      &selector->particle_group->particle_dats_real),
+        is_static(false), particle_group(selector->particle_group),
+        selector(selector),
+        is_whole_particle_group(selector->is_whole_particle_group) {
+    this->check_selector(selector);
+  }
 
   /**
    * Get and optionally set the static status of the ParticleSubGroup.
@@ -206,8 +278,7 @@ public:
    */
   inline bool create_if_required() {
     NESOASSERT(this->is_valid(), "This ParticleSubGroup has been invalidated.");
-
-    if (this->is_whole_particle_group || this->is_static) {
+    if (this->is_static) {
       return false;
     } else {
       return this->create_inner();
@@ -218,24 +289,16 @@ public:
    * @return The number of particles currently in the ParticleSubGroup.
    */
   inline INT get_npart_local() {
-    if (this->is_whole_particle_group) {
-      return this->particle_group->get_npart_local();
-    } else {
-      this->create_if_required();
-      return this->npart_local;
-    }
+    this->create_if_required();
+    return this->npart_local;
   }
 
   /**
    * @return The number of particles in a cell of the ParticleSubGroup.
    */
   inline INT get_npart_cell(const int cell) {
-    if (this->is_whole_particle_group) {
-      return this->particle_group->get_npart_cell(cell);
-    } else {
-      this->create_if_required();
-      return this->selection.h_npart_cell[cell];
-    }
+    this->create_if_required();
+    return this->selection.h_npart_cell[cell];
   }
 
   /**
@@ -367,10 +430,12 @@ protected:
       SymStore print_spec(std::forward<T>(args)...);
 
       for (auto &symx : print_spec.syms_real) {
-        NESOASSERT(this->particle_group->contains_dat(symx), "Sym not found.");
+        NESOASSERT(this->particle_group->contains_dat(symx),
+                   "Sym not found: " + symx.name);
       }
       for (auto &symx : print_spec.syms_int) {
-        NESOASSERT(this->particle_group->contains_dat(symx), "Sym not found.");
+        NESOASSERT(this->particle_group->contains_dat(symx),
+                   "Sym not found. " + symx.name);
       }
 
       os << "==============================================================="

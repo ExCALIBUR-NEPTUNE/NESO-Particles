@@ -261,7 +261,7 @@ public:
   }
 
   /**
-   * Called after updating to find particles whose trajectories intersect the
+   * Call after updating to find particles whose trajectories intersect the
    * DMPlex boundary.
    *
    * @param particles Collection of particles, either a ParticleGroup or
@@ -296,7 +296,7 @@ public:
     auto lambda_make_sub_group = [&](auto iteration_set) {
       for (auto &group_labels : this->boundary_groups) {
         const PetscInt k_group = group_labels.first;
-        m[k_group] = particle_sub_group(
+        m[k_group] = static_particle_sub_group(
             iteration_set,
             [=](auto C) -> bool {
               return (C.at(0) > -1) && (C.at(1) == k_group);

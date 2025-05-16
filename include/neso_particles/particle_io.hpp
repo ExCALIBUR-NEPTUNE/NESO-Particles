@@ -85,7 +85,7 @@ private:
       if (is_position) {
         name = position_labels[cx];
       } else {
-        name = dat->name + "_" + std::to_string(cx);
+        name = dat->sym.name + "_" + std::to_string(cx);
       }
 
       // hid_t dset = H5Dcreate1(group_step, name.c_str(), memtypeid(dat),
@@ -152,7 +152,7 @@ private:
                               static_cast<hsize_t>(ncomp)};
 
     // select the relevant part of the hyperslab for this rank
-    std::string name = dat->name;
+    std::string name = dat->sym.name;
     H5CHK(H5Sselect_hyperslab(filespace, H5S_SELECT_SET, slab_offsets, NULL,
                               slab_counts, NULL));
 

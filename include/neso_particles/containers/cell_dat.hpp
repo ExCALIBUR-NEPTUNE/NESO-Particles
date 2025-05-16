@@ -229,6 +229,90 @@ protected:
     return this->h_ptr_cols[cell * this->ncol + col];
   }
 
+  /**
+   * Create new CellDat on a specified compute target.
+   *
+   * @param sycl_target SYCLTargetSharedPtr to use as compute device.
+   */
+  inline CellDat(SYCLTargetSharedPtr sycl_target) : sycl_target(sycl_target) {}
+
+  /**
+   * Constructor for a constant sized CellDat used by the EphemeralDats.
+   */
+  inline void create_fixed_size(const int ncells, const int ncol,
+                                const INT npart_local, int *h_npart_cell,
+                                int *d_npart_cell, INT *d_npart_cell_es) {
+    this->create(ncells, ncol);
+    this->fixed_size = true;
+
+    T *k_data = static_cast<T *>(
+        this->sycl_target->malloc_device(npart_local * this->ncol * sizeof(T)));
+    NESOASSERT((k_data != nullptr) || (npart_local == 0),
+               "Bad malloc_device call.");
+
+    auto k_ptr = this->d_ptr;
+    auto k_ncell = ncells;
+
+    auto e0 = this->sycl_target->queue.parallel_for(
+        sycl::range<1>(k_ncell), [=](auto cellx) {
+          const INT npart_cell = d_npart_cell[cellx];
+          const INT npart_cell_es = d_npart_cell_es[cellx];
+          T *base_ptr = k_data + npart_cell_es * ncol;
+          for (int cx = 0; cx < ncol; cx++) {
+            auto col_ptr = base_ptr + cx * npart_cell;
+            k_ptr[cellx][cx] = col_ptr;
+          }
+        });
+
+    auto d_tmp = k_data;
+    for (int cellx = 0; cellx < ncells; cellx++) {
+      const auto npart_cell = h_npart_cell[cellx];
+      this->nrow_alloc[cellx] = npart_cell;
+      this->nrow[cellx] = npart_cell;
+      for (int cx = 0; cx < ncol; cx++) {
+        this->h_ptr_cols[cellx * this->ncol + cx] = d_tmp;
+        d_tmp += npart_cell;
+      }
+    }
+
+    e0.wait_and_throw();
+  }
+
+  inline void create(const int ncells, const int ncol) {
+    this->ncells = ncells;
+    this->ncol = ncol;
+
+    this->h_ptr_cells.resize(ncells);
+    this->h_ptr_cols.resize(ncells * ncol);
+    this->nrow_alloc.resize(ncells);
+    this->nrow.resize(ncells);
+    this->fixed_size = false;
+
+    // If the lifespan of this member changes then SymVectorPointerCache also
+    // needs updating.
+    this->d_ptr =
+        (T ***)this->sycl_target->malloc_device(ncells * sizeof(T **));
+
+    T **cols_base_ptr =
+        (T **)this->sycl_target->malloc_device(ncells * ncol * sizeof(T *));
+
+    NESOASSERT(cols_base_ptr != nullptr, "malloc_device returned nullptr.");
+
+    for (int cellx = 0; cellx < ncells; cellx++) {
+      this->h_ptr_cells[cellx] = cols_base_ptr;
+      cols_base_ptr += ncol;
+    }
+
+    std::fill(this->h_ptr_cols.begin(), this->h_ptr_cols.end(), nullptr);
+    std::fill(this->nrow_alloc.begin(), this->nrow_alloc.end(), 0);
+    std::fill(this->nrow.begin(), this->nrow.end(), 0);
+
+    sycl_target->queue.memcpy(d_ptr, this->h_ptr_cells.data(),
+                              ncells * sizeof(T **));
+
+    this->sycl_target->queue.wait();
+  }
+
 public:
   /// Disable (implicit) copies.
   CellDat(const CellDat &st) = delete;
@@ -238,19 +322,27 @@ public:
   /// Compute device used by the instance.
   SYCLTargetSharedPtr sycl_target;
   /// Number of cells.
-  const int ncells;
+  int ncells;
   /// Number of rows in each cell.
   std::vector<INT> nrow;
   /// Number of columns, uniform across all cells.
-  const int ncol;
+  int ncol;
   /// Number of rows currently allocated for each cell.
   std::vector<INT> nrow_alloc;
+  /// Is this CellDat of fixed size.
+  bool fixed_size;
+
   ~CellDat() {
     this->sycl_target->free(this->h_ptr_cells.at(0));
-    // for (int colx = 0; colx < ncells * this->ncol; colx++) {
-    for (int cellx = 0; cellx < ncells; cellx++) {
-      if (this->h_ptr_cols[cellx * this->ncol] != NULL) {
-        this->sycl_target->free(this->h_ptr_cols[cellx * this->ncol]);
+    if (this->fixed_size) {
+      if (this->h_ptr_cols[0] != NULL) {
+        this->sycl_target->free(this->h_ptr_cols[0]);
+      }
+    } else {
+      for (int cellx = 0; cellx < ncells; cellx++) {
+        if (this->h_ptr_cols[cellx * this->ncol] != NULL) {
+          this->sycl_target->free(this->h_ptr_cols[cellx * this->ncol]);
+        }
       }
     }
     this->sycl_target->free(this->d_ptr);
@@ -266,34 +358,9 @@ public:
    */
   inline CellDat(SYCLTargetSharedPtr sycl_target, const int ncells,
                  const int ncol)
-      : nrow_max(0), sycl_target(sycl_target), ncells(ncells), ncol(ncol) {
-
-    this->nrow = std::vector<INT>(ncells);
-    // If the lifespan of this member changes then SymVectorPointerCache also
-    // needs updating.
-    this->d_ptr =
-        (T ***)this->sycl_target->malloc_device(ncells * sizeof(T **));
-    this->h_ptr_cells = std::vector<T **>(ncells);
-    this->h_ptr_cols = std::vector<T *>(ncells * ncol);
-    this->nrow_alloc = std::vector<INT>(ncells);
-
-    T **cols_base_ptr =
-        (T **)this->sycl_target->malloc_device(ncells * ncol * sizeof(T *));
-
-    for (int cellx = 0; cellx < ncells; cellx++) {
-      this->nrow_alloc[cellx] = 0;
-      this->nrow[cellx] = 0;
-      this->h_ptr_cells[cellx] = cols_base_ptr;
-      cols_base_ptr += ncol;
-      for (int colx = 0; colx < ncol; colx++) {
-        this->h_ptr_cols[cellx * ncol + colx] = NULL;
-      }
-    }
-
-    sycl_target->queue.memcpy(d_ptr, this->h_ptr_cells.data(),
-                              ncells * sizeof(T *));
-
-    this->sycl_target->queue.wait();
+      : nrow_max(0), sycl_target(sycl_target), ncells(ncells), ncol(ncol),
+        fixed_size(false) {
+    this->create(ncells, ncol);
   };
 
   /**
@@ -301,6 +368,8 @@ public:
    * number of rows are equal to or less than the current number of rows.
    */
   template <typename U> inline void reduce_nrow(const U *h_nrow_required) {
+    NESOASSERT(!this->fixed_size,
+               "Call does not make sense for a fixed size CellDat.");
     this->nrow_max = -1;
     const int ncells = this->ncells;
     for (int cx = 0; cx < ncells; cx++) {
@@ -315,6 +384,8 @@ public:
    * wait_set_nrow should be called before using the dat.
    */
   inline void set_nrow(const INT cell, const INT nrow_required) {
+    NESOASSERT(!this->fixed_size,
+               "Call does not make sense for a fixed size CellDat.");
 #ifndef NDEBUG
     NESOASSERT(cell >= 0, "Cell index is negative");
     NESOASSERT(cell < this->ncells, "Cell index is >= ncells");
