@@ -54,6 +54,7 @@ set(SRC_FILES
     ${SRC_DIR}/mesh_hierarchy.cpp
     ${SRC_DIR}/global_mapping.cpp
     ${SRC_DIR}/parallel_initialisation.cpp
+    ${SRC_DIR}/packing_unpacking.cpp
     ${SRC_DIR}/particle_group.cpp)
 set(SRC_FILES_IGNORE "")
 check_added_file_list(${SRC_DIR} cpp "${SRC_FILES}" "${SRC_FILES_IGNORE}")
