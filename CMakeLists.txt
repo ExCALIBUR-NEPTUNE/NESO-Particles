@@ -20,7 +20,16 @@ option(NESO_PARTICLES_LEGACY_DEVICE_SELECTORS
 option(NESO_PARTICLES_ENABLE_PETSC "Look for PETSc." OFF)
 option(
   NESO_PARTICLES_DEVICE_AWARE_MPI
-  "Enable device aware MPI by default, i.e. pass device pointers to MPI rather than copying to the host."
+  "Enable device aware MPI by default, i.e. pass device pointers to MPI rather
+  than copying to the host." OFF)
+option(
+  NESO_PARTICLES_SINGLE_COMPILED_LOOP
+  "By default, for most backends, NESO-Particles will compile two parallel
+  loops for each ParticleLoop, one with and one without conditionals which mask
+  off the end of the parallel iteration set. This means that the compiler takes
+  longer and consumes more RAM in exhchange for hopefully faster loops. This
+  flag explicitly disables building two loops and produces a single parallel
+  loop for each ParticleLoop."
   OFF)
 
 # This means that when the tests and lib are installed they have rpath set for
@@ -48,9 +57,12 @@ set(INCLUDE_DIR_NESO_PARTICLES ${INCLUDE_DIR}/neso_particles)
 set(HEADER_FILES
     ${INCLUDE_DIR}/neso_particles.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/access.hpp
-    ${INCLUDE_DIR_NESO_PARTICLES}/boundary_conditions.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/cartesian_mesh/cartesian_h_mesh.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/cartesian_mesh/cartesian_cell_bin.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/cartesian_mesh/cartesian_periodic.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/cartesian_mesh/cartesian_trajectory_intersection.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/boundary_interaction_specification.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cartesian_mesh.hpp
-    ${INCLUDE_DIR_NESO_PARTICLES}/cell_binning.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cell_dat.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cell_dat_compression.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cell_dat_move.hpp
@@ -66,6 +78,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/cell_dat.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/cell_dat_const.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/cell_data.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/containers/ephemeral_dats.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/nd_index.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/rng/rng.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/rng/kernel_rng.hpp
@@ -79,6 +92,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/local_memory_interlaced.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/lookup_table.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/nd_local_array.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/containers/particle_set_device.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/product_matrix.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/resource_stack.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/resource_stack_interface.hpp
@@ -87,6 +101,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/sym_vector_impl.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/sym_vector_pointer_cache.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/sym_vector_pointer_cache_dispatch.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/containers/sym_vector_pointer_cache_dispatch_impl.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/tuple.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/departing_particle_identification.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/departing_particle_identification_impl.hpp
@@ -137,6 +152,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_utility.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_index.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_iteration_set.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_impl.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/pli_particle_dat.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_hierarchy.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_hierarchy_data/mesh_hierarchy_container.hpp
@@ -164,6 +180,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/particle_sub_group_base_impl.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/sub_group_particle_map.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/sub_group_selector.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/sub_group_selector_whole_group.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/sub_group_selector_base.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/sub_group_selector_base_impl.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/sub_group_selector_resource_stack_interface.hpp
@@ -225,6 +242,12 @@ if(NESO_PARTICLES_DEVICE_AWARE_MPI)
   target_compile_definitions(NESO-Particles
                              PUBLIC NESO_PARTICLES_DEVICE_AWARE_MPI)
   message(STATUS "Using device aware MPI.")
+endif()
+
+if(NESO_PARTICLES_SINGLE_COMPILED_LOOP)
+  target_compile_definitions(NESO-Particles
+                             PUBLIC NESO_PARTICLES_SINGLE_COMPILED_LOOP)
+  message(STATUS "Using single compiled loop")
 endif()
 
 # Get MPI

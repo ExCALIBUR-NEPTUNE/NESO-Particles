@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "access.hpp"
+#include "cartesian_mesh/cartesian_h_mesh.hpp"
 #include "compute_target.hpp"
 #include "mesh_interface.hpp"
 #include "particle_spec.hpp"

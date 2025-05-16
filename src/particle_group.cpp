@@ -2,6 +2,7 @@
 #include <neso_particles/departing_particle_identification_impl.hpp>
 #include <neso_particles/global_mapping.hpp>
 #include <neso_particles/global_mapping_impl.hpp>
+#include <neso_particles/loop/particle_loop_impl.hpp>
 #include <neso_particles/loop/particle_loop_iteration_set.hpp>
 #include <neso_particles/particle_group.hpp>
 #include <neso_particles/particle_group_impl.hpp>
@@ -94,8 +95,8 @@ void ParticleGroup::setup_internal(DomainSharedPtr domain,
 
   this->sym_vector_pointer_cache_dispatch =
       std::make_shared<SymVectorPointerCacheDispatch>(
-          this->sycl_target, &this->particle_dats_int,
-          &this->particle_dats_real);
+          this->sycl_target, &this->particle_dats_int, nullptr,
+          &this->particle_dats_real, nullptr);
 
   this->h_npart_cell.realloc_no_copy(this->ncell);
   this->d_npart_cell.realloc_no_copy(this->ncell);
@@ -1103,7 +1104,7 @@ void ParticleGroup::remove_particle_dat(Sym<REAL> sym) {
   NESOASSERT(this->particle_dats_real.count(sym) == 1,
              "ParticleDat not found.");
 
-  NESOASSERT(sym.name != this->position_dat->name,
+  NESOASSERT(sym.name != this->position_dat->sym.name,
              "The positions dat cannot be removed.");
 
   this->remove_particle_dat_common(this->particle_dats_real.at(sym));

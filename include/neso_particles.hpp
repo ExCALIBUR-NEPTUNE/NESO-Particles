@@ -4,9 +4,11 @@
 #include <memory>
 
 #include "neso_particles/access.hpp"
-#include "neso_particles/boundary_conditions.hpp"
+#include "neso_particles/boundary_interaction_specification.hpp"
 #include "neso_particles/cartesian_mesh.hpp"
-#include "neso_particles/cell_binning.hpp"
+#include "neso_particles/cartesian_mesh/cartesian_cell_bin.hpp"
+#include "neso_particles/cartesian_mesh/cartesian_periodic.hpp"
+#include "neso_particles/cartesian_mesh/cartesian_trajectory_intersection.hpp"
 #include "neso_particles/cell_dat.hpp"
 #include "neso_particles/compute_target.hpp"
 #include "neso_particles/containers/blocked_binary_tree.hpp"
@@ -50,7 +52,10 @@
 #include "neso_particles/utility_mesh_hierarchy_plotting.hpp"
 // Implementations
 #include "neso_particles/cell_dat_move_impl.hpp"
+#include "neso_particles/containers/sym_vector_pointer_cache_dispatch_impl.hpp"
 #include "neso_particles/departing_particle_identification_impl.hpp"
 #include "neso_particles/global_mapping_impl.hpp"
+#include "neso_particles/loop/particle_loop_impl.hpp"
 #include "neso_particles/particle_group_impl.hpp"
+
 #endif

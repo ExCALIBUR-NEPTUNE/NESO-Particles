@@ -16,6 +16,7 @@
 #include "../containers/local_memory_block.hpp"
 #include "../containers/local_memory_interlaced.hpp"
 #include "../containers/nd_local_array.hpp"
+#include "../containers/particle_set_device.hpp"
 #include "../containers/product_matrix.hpp"
 #include "../containers/rng/kernel_rng.hpp"
 #include "../containers/sym_vector.hpp"
@@ -31,6 +32,8 @@
 #include "pli_particle_dat.hpp"
 
 namespace NESO::Particles {
+
+class ParticleSubGroup;
 
 namespace ParticleLoopImplementation {
 /**
@@ -84,22 +87,16 @@ protected:
    * Method to compute access to a type wrapped in a shared_ptr.
    */
   template <template <typename> typename T, typename U>
-  static inline auto create_loop_arg_cast(
+  inline auto create_loop_arg_cast(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
-      sycl::handler &cgh, T<std::shared_ptr<U>> a) {
-    T<U *> c = {a.obj.get()};
-    return ParticleLoopImplementation::create_loop_arg(global_info, cgh, c);
-  }
+      sycl::handler &cgh, T<std::shared_ptr<U>> a);
   /**
    * Method to compute access to a type not wrapper in a shared_ptr
    */
   template <template <typename> typename T, typename U>
-  static inline auto create_loop_arg_cast(
+  inline auto create_loop_arg_cast(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
-      sycl::handler &cgh, T<U> a) {
-    T<U *> c = {&a.obj};
-    return ParticleLoopImplementation::create_loop_arg(global_info, cgh, c);
-  }
+      sycl::handler &cgh, T<U> a);
 
   /*
    * -----------------------------------------------------------------
@@ -111,39 +108,27 @@ protected:
   template <template <typename> typename T, typename U>
   static inline auto post_loop_cast(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
-      T<std::shared_ptr<U>> a) {
-    T<U *> c = {a.obj.get()};
-    ParticleLoopImplementation::post_loop(global_info, c);
-  }
+      T<std::shared_ptr<U>> a);
   /**
    * Method to compute access to a type not wrapper in a shared_ptr
    */
   template <template <typename> typename T, typename U>
   static inline auto post_loop_cast(
-      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info, T<U> a) {
-    T<U *> c = {&a.obj};
-    ParticleLoopImplementation::post_loop(global_info, c);
-  }
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info, T<U> a);
   /**
    * Method to compute access to a type wrapped in a shared_ptr.
    */
   template <template <typename> typename T, typename U>
-  static inline auto
+  inline void
   pre_loop_cast(ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
-                T<std::shared_ptr<U>> a) {
-    T<U *> c = {a.obj.get()};
-    ParticleLoopImplementation::pre_loop(global_info, c);
-  }
+                T<std::shared_ptr<U>> a);
   /**
    * Method to compute access to a type not wrapper in a shared_ptr
    */
   template <template <typename> typename T, typename U>
-  static inline auto
+  inline void
   pre_loop_cast(ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
-                T<U> a) {
-    T<U *> c = {&a.obj};
-    ParticleLoopImplementation::pre_loop(global_info, c);
-  }
+                T<U> a);
   /**
    * Method to compute access to a type wrapped in a shared_ptr.
    */
@@ -226,6 +211,7 @@ protected:
   }
 
   ParticleGroupSharedPtr particle_group_shrptr;
+  std::shared_ptr<ParticleSubGroup> particle_sub_group_shrptr{nullptr};
   ParticleGroup *particle_group_ptr = {nullptr};
   SYCLTargetSharedPtr sycl_target;
   /// This stores the particle dat the loop was created with to prevent use
@@ -316,7 +302,7 @@ protected:
 
     ParticleLoopImplementation::ParticleLoopGlobalInfo global_info;
     global_info.particle_group = this->particle_group_ptr;
-    global_info.particle_sub_group = nullptr;
+    global_info.particle_sub_group = this->particle_sub_group_shrptr.get();
     global_info.d_npart_cell_lb = this->d_npart_cell_lb;
     global_info.d_npart_cell_es = this->d_npart_cell_es;
     global_info.d_npart_cell_es_lb = this->d_npart_cell_es_lb;
@@ -429,6 +415,27 @@ public:
     this->loop_type = "ParticleLoop";
     this->init_from_particle_dat(particle_group->position_dat);
     this->unpack_args<0>(args...);
+  };
+
+  /**
+   *  Create a ParticleLoop that executes a kernel for all particles in the
+   * ParticleGroup. This is a specisalised constructor for a ParticleSubGroup
+   * which is actually a whole ParticleGroup.
+   *
+   *  @param name Identifier for particle loop.
+   *  @param particle_group ParticleGroup to execute kernel for all particles.
+   *  @param particle_sub_group ParticleSubGroup which wraps the entire
+   * ParticleGroup.
+   *  @param kernel Kernel to execute for all particles in the ParticleGroup.
+   *  @param args The remaining arguments are arguments to be passed to the
+   *              kernel. All arguments must be wrapped in an access descriptor
+   * type.
+   */
+  ParticleLoop(const std::string name, ParticleGroupSharedPtr particle_group,
+               std::shared_ptr<ParticleSubGroup> particle_sub_group,
+               KERNEL kernel, ARGS... args)
+      : ParticleLoop(name, particle_group, kernel, args...) {
+    this->particle_sub_group_shrptr = particle_sub_group;
   };
 
   /**

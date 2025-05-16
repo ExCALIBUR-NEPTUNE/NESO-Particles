@@ -1,14 +1,15 @@
-#ifndef _NESO_PARTICLES_CELL_BINNING
-#define _NESO_PARTICLES_CELL_BINNING
+#ifndef _NESO_PARTICLES_CARTESIAN_MESH_CARTESIAN_CELL_BIN_HPP_
+#define _NESO_PARTICLES_CARTESIAN_MESH_CARTESIAN_CELL_BIN_HPP_
 
 #include <cmath>
 
-#include "domain.hpp"
-#include "loop/particle_loop.hpp"
-#include "particle_dat.hpp"
-#include "profiling.hpp"
-#include "sycl_typedefs.hpp"
-#include "typedefs.hpp"
+#include "../domain.hpp"
+#include "../loop/particle_loop.hpp"
+#include "../particle_dat.hpp"
+#include "../profiling.hpp"
+#include "../sycl_typedefs.hpp"
+#include "../typedefs.hpp"
+#include "cartesian_h_mesh.hpp"
 
 namespace NESO::Particles {
 

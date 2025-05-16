@@ -22,7 +22,7 @@ struct MapLoopLayerToLayer {
   /// This member is public but is not part of any API that should be used
   /// outside of NP - use map_loop_layer_to_layer instead.
   // INT const *RESTRICT const *RESTRICT map_ptr;
-  INT **map_ptr;
+  INT **map_ptr{nullptr};
 
   /**
    * For a loop cell and loop layer return the layer of the particle.
@@ -42,11 +42,11 @@ struct MapLoopLayerToLayer {
  * Host type that describes a selection of particles.
  */
 struct Selection {
-  int npart_local;
-  int ncell;
-  int *h_npart_cell;
-  int *d_npart_cell;
-  INT *d_npart_cell_es;
+  int npart_local{0};
+  int ncell{0};
+  int *h_npart_cell{nullptr};
+  int *d_npart_cell{nullptr};
+  INT *d_npart_cell_es{nullptr};
   MapLoopLayerToLayer d_map_cells_to_particles;
 };
 
@@ -160,6 +160,10 @@ public:
   ParticleGroup::ParticleDatVersionTracker particle_dat_versions;
   // ParticleGroup version tracking.
   ParticleGroup::ParticleGroupVersion particle_group_version;
+  // Is this a selector to a whole particle group.
+  bool is_whole_particle_group{false};
+  // Has this selector been consumed by a ParticleSubGroup
+  bool consumed{false};
 
   virtual ~SubGroupSelectorBase() {
     if (this->sub_group_selector_resource != nullptr) {
@@ -219,6 +223,28 @@ public:
     return false;
   }
 
+  /**
+   * @returns True if this selector is out of date. A selector is out of date if
+   * any of the particle property dependencies have been accessed with a write
+   * access descriptor since the last call to get. A selector is out of date if
+   * any structural changes have been made, e.g. adding/removing particles,
+   * calling cell_move or calling hybrid_move etc.
+   */
+  inline bool update_required() {
+
+    const bool bool_dats = this->particle_group->check_validation(
+        this->particle_dat_versions, false);
+    const bool bool_group = this->particle_group->check_validation(
+        this->particle_group_version, false);
+
+    return bool_dats || bool_group;
+  }
+
+  /**
+   * Constructor for abstract base type.
+   *
+   * @param parent ParticleGroup or ParticleSubGroup to use as parent.
+   */
   template <typename PARENT>
   SubGroupSelectorBase(std::shared_ptr<PARENT> parent)
       : particle_group(get_particle_group(parent)), particle_group_version(0) {

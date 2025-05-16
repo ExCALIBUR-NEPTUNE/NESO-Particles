@@ -1,15 +1,16 @@
-#ifndef _NESO_PARTICLES_BOUNDARY_CONDITIONS
-#define _NESO_PARTICLES_BOUNDARY_CONDITIONS
+#ifndef _NESO_PARTICLES_CARTESIAN_MESH_CARTESIAN_PERIODIC_HPP_
+#define _NESO_PARTICLES_CARTESIAN_MESH_CARTESIAN_PERIODIC_HPP_
 
 #include <cmath>
 #include <memory>
 
-#include "domain.hpp"
-#include "loop/particle_loop.hpp"
-#include "particle_dat.hpp"
-#include "profiling.hpp"
-#include "sycl_typedefs.hpp"
-#include "typedefs.hpp"
+#include "../domain.hpp"
+#include "../loop/particle_loop.hpp"
+#include "../particle_dat.hpp"
+#include "../profiling.hpp"
+#include "../sycl_typedefs.hpp"
+#include "../typedefs.hpp"
+#include "cartesian_h_mesh.hpp"
 
 namespace NESO::Particles {
 
@@ -31,7 +32,7 @@ public:
   /// Disable (implicit) copies.
   CartesianPeriodic &operator=(CartesianPeriodic const &a) = delete;
 
-  ~CartesianPeriodic(){};
+  ~CartesianPeriodic() = default;
 
   /**
    * Construct instance to apply periodic boundary conditions to particles

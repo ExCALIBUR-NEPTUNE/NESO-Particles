@@ -1,6 +1,7 @@
 #include <neso_particles/cell_dat_move_impl.hpp>
 #include <neso_particles/departing_particle_identification_impl.hpp>
 #include <neso_particles/global_mapping_impl.hpp>
+#include <neso_particles/loop/particle_loop_impl.hpp>
 #include <neso_particles/particle_group_impl.hpp>
 #include <neso_particles/particle_io.hpp>
 

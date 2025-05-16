@@ -37,7 +37,16 @@ class ParticleGroupTemporary;
 namespace ParticleSubGroupImplementation {
 class SubGroupSelector;
 class SubGroupSelectorBase;
+class SubGroupSelectorWholeGroup;
 } // namespace ParticleSubGroupImplementation
+namespace ParticleLoopImplementation {
+template <typename T>
+inline void pre_loop(ParticleLoopGlobalInfo *global_info,
+                     Access::Read<SymVector<T> *> &arg);
+template <typename T>
+inline void pre_loop(ParticleLoopGlobalInfo *global_info,
+                     Access::Write<SymVector<T> *> &arg);
+} // namespace ParticleLoopImplementation
 
 /**
  * Type to replace std::variant<Sym<INT>, Sym<REAL>> as the version tracking
@@ -94,11 +103,23 @@ struct ParticleDatVersionT {
 class ParticleGroup {
   friend class ParticleSubGroupImplementation::SubGroupSelector;
   friend class ParticleSubGroupImplementation::SubGroupSelectorBase;
+  friend class ParticleSubGroupImplementation::SubGroupSelectorWholeGroup;
   friend class ParticleSubGroup;
   friend class SymVector<REAL>;
   friend class SymVector<INT>;
   friend class ParticleGroupTemporary;
   friend struct TestParticleGroup;
+  template <typename T>
+  friend inline void ParticleLoopImplementation::pre_loop(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      Access::Read<SymVector<T> *> &arg);
+  template <typename T>
+  friend inline void ParticleLoopImplementation::pre_loop(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      Access::Write<SymVector<T> *> &arg);
+  friend inline SymVectorPointerCacheDispatchSharedPtr
+  get_sym_vector_cache_dispatch(ParticleGroup *particle_group,
+                                ParticleSubGroup *particle_sub_group);
 
 protected:
   // This type should be replaceable with typedef std::variant<Sym<INT>,
@@ -113,7 +134,7 @@ protected:
   std::size_t npart_cell_hint{0};
   bool is_temporary;
   int ncell;
-  int npart_local;
+  INT npart_local;
   BufferHost<INT> h_npart_cell;
   BufferDevice<INT> d_npart_cell;
 
@@ -342,7 +363,7 @@ protected:
       h_ptr[cellx] = total;
       total += h_ptr_s[cellx];
     }
-    this->npart_local = static_cast<int>(total);
+    this->npart_local = total;
     this->dh_npart_cell_es->host_to_device();
   }
   void setup_internal(DomainSharedPtr domain, ParticleSpec &particle_spec,
@@ -580,7 +601,7 @@ public:
    *
    *  @returns Local particle count.
    */
-  inline int get_npart_local() { return this->npart_local; }
+  inline INT get_npart_local() { return this->npart_local; }
 
   /**
    *  Determine if the ParticleGroup contains a ParticleDat of a given name.

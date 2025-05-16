@@ -177,6 +177,138 @@ inline bool line_segment_intersection_2d(const REAL &xa, const REAL &ya,
 }
 
 /**
+ * Compute the intersection point of two line segments
+ * [(xa, ya), (xb, yb)] and [(x0, y0), (x1, y0)].
+ *
+ * Note that the second line segment, (x,y) is aligned with the x-axis and we
+ * assume that !(ya == y0 && yb == y0).
+ *
+ * param[in] xa Input coordinate for point a.
+ * param[in] ya Input coordinate for point a.
+ * param[in] xb Input coordinate for point b.
+ * param[in] yb Input coordinate for point b.
+ * param[in] x0 Input coordinate for point x0.
+ * param[in] y0 Input coordinate for point y0.
+ * param[in] x1 Input coordinate for point x0.
+ * param[in, out] xi Output intersection point if it exists.
+ * param[in, out] yi Output intersection point if it exists.
+ * param[in] tol Tolerance for intersection, e.g. how closely do the lines pass
+ * at the ends default 0.0.
+ * @returns True if the line segments intersect otherwise false.
+ */
+inline bool line_segment_intersection_2d_x_axis_aligned(
+    const REAL &xa, const REAL &ya, const REAL &xb, const REAL &yb,
+    const REAL &x0, const REAL &y0, const REAL &x1, REAL &xi, REAL &yi,
+    const REAL tol = 0.0) {
+
+  const REAL diff_a = ya - y0;
+  const REAL diff_b = yb - y0;
+  const bool is_crossed = (0 >= (diff_a * diff_b));
+
+  const REAL abs_diff_a = Kernel::abs(diff_a);
+  const REAL abs_diff_b = Kernel::abs(diff_b);
+  const REAL width = (abs_diff_a + abs_diff_b);
+  const bool colocated = (width == 0.0);
+  const REAL ratio = (!colocated) ? abs_diff_a / width : 0.0;
+
+  xi = xa + ratio * (xb - xa);
+  yi = y0;
+
+  const bool in_bounds = (((x0 - tol) <= xi) && (xi <= (x1 + tol))) ||
+                         (((x1 - tol) <= xi) && (xi <= (x0 + tol)));
+
+  return is_crossed && (!colocated) && in_bounds;
+}
+
+/**
+ * Compute the intersection point of two line segments
+ * [(xa, ya), (xb, yb)] and [(x0, y0), (x0, y1)].
+ *
+ * Note that the second line segment, (x,y) is aligned with the y-axis and we
+ * assume that !(xa == x0 && xb == x0).
+ *
+ * param[in] xa Input coordinate for point a.
+ * param[in] ya Input coordinate for point a.
+ * param[in] xb Input coordinate for point b.
+ * param[in] yb Input coordinate for point b.
+ * param[in] x0 Input coordinate for point x0.
+ * param[in] y0 Input coordinate for point y0.
+ * param[in] y1 Input coordinate for point y0.
+ * param[in, out] xi Output intersection point if it exists.
+ * param[in, out] yi Output intersection point if it exists.
+ * param[in] tol Tolerance for intersection, e.g. how closely do the lines pass
+ * at the ends default 0.0.
+ * @returns True if the line segments intersect otherwise false.
+ */
+inline bool line_segment_intersection_2d_y_axis_aligned(
+    const REAL &xa, const REAL &ya, const REAL &xb, const REAL &yb,
+    const REAL &x0, const REAL &y0, const REAL &y1, REAL &xi, REAL &yi,
+    const REAL tol = 0.0) {
+  return line_segment_intersection_2d_x_axis_aligned(ya, xa, yb, xb, y0, x0, y1,
+                                                     yi, xi, tol);
+}
+
+/**
+ * Intersection of line segment
+ *
+ *  [(ax, ay, az), (bx, by, bz)]
+ *
+ * with the plane segment
+ *
+ * (p0x, p2y, p0z)    (p1x, p2y, p0z)
+ *               ------   y
+ *              |      |  ^
+ *              |      |  |
+ *               ------   ---> x
+ * (p0x, p0y, p0z)    (p1x, p0y, p0z)
+ *
+ * Assumes that the line does not lie in the plane.
+ *
+ * param[in] ax Input coordinate for point a.
+ * param[in] ay Input coordinate for point a.
+ * param[in] az Input coordinate for point a.
+ * param[in] bx Input coordinate for point b.
+ * param[in] by Input coordinate for point b.
+ * param[in] bz Input coordinate for point b.
+ * param[in] p0x Input coordinate for plane.
+ * param[in] p0y Input coordinate for plane.
+ * param[in] p0z Input coordinate for plane.
+ * param[in] p1x Input coordinate for plane.
+ * param[in] p2y Input coordinate for plane.
+ * param[in, out] xi Output intersection point if it exists.
+ * param[in, out] yi Output intersection point if it exists.
+ * param[in, out] zi Output intersection point if it exists.
+ * param[in] tol Tolerance for intersection, e.g. how closely do the lines pass
+ * at the ends default 0.0.
+ * @returns True if the line segments intersect otherwise false.
+ */
+inline bool plane_intersection_3d_xy_plane_aligned(
+    const REAL &ax, const REAL &ay, const REAL &az, const REAL &bx,
+    const REAL &by, const REAL &bz, const REAL &p0x, const REAL &p0y,
+    const REAL &p0z, const REAL &p1x, const REAL &p2y, REAL &xi, REAL &yi,
+    REAL &zi, const REAL tol = 0.0) {
+  const REAL diff_a = az - p0z;
+  const REAL diff_b = bz - p0z;
+  const bool is_crossed = (0 >= (diff_a * diff_b));
+  const REAL abs_diff_a = Kernel::abs(diff_a);
+  const REAL abs_diff_b = Kernel::abs(diff_b);
+  const REAL width = (abs_diff_a + abs_diff_b);
+  const bool colocated = (width == 0.0);
+  const REAL ratio = (!colocated) ? abs_diff_a / width : 0.0;
+
+  xi = ax + ratio * (bx - ax);
+  yi = ay + ratio * (by - ay);
+  zi = p0z;
+
+  const bool in_bounds_x = (((p0x - tol) <= xi) && (xi <= (p1x + tol))) ||
+                           (((p1x - tol) <= xi) && (xi <= (p0x + tol)));
+  const bool in_bounds_y = (((p0y - tol) <= yi) && (yi <= (p2y + tol))) ||
+                           (((p2y - tol) <= yi) && (yi <= (p0y + tol)));
+
+  return is_crossed && (!colocated) && in_bounds_x && in_bounds_y;
+}
+
+/**
  * Naively invert a matrix. The error bars on this call may be quite large.
  * This function uses row-major format.
  *

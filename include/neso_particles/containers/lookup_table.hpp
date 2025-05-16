@@ -2,6 +2,7 @@
 #define _NESO_PARTICLES_LOOKUP_TABLE_H_
 
 #include "../compute_target.hpp"
+#include "../device_buffers.hpp"
 #include <cstdint>
 #include <memory>
 #include <set>

@@ -29,10 +29,9 @@ namespace Access::SymVector {
  * SymVector.
  */
 template <typename T> struct Read {
-  int cell;
-  int layer;
+  ParticleLoopImplementation::ParticleLoopIteration const *iterationx;
   /// Pointer to underlying data.
-  T *const *const **ptr;
+  T const *RESTRICT const *RESTRICT const *RESTRICT const *RESTRICT ptr;
   T const &at(const int dat_index, const int cell, const int layer,
               const int component) const {
     return ptr[dat_index][cell][component][layer];
@@ -43,15 +42,25 @@ template <typename T> struct Read {
     return ptr[dat_index][particle_index.cell][component][particle_index.layer];
   }
   T const &at(const int dat_index, const int component) const {
-    return ptr[dat_index][this->cell][component][this->layer];
+    return ptr[dat_index][this->iterationx->cellx][component]
+              [this->iterationx->layerx];
+  }
+  T const &at_ephemeral(const int dat_index,
+                        const Access::LoopIndex::Read &particle_index,
+                        const int component) const {
+    return ptr[dat_index][particle_index.cell][component]
+              [particle_index.loop_layer];
+  }
+  T const &at_ephemeral(const int dat_index, const int component) const {
+    return ptr[dat_index][this->iterationx->cellx][component]
+              [this->iterationx->loop_layerx];
   }
 };
 
 template <typename T> struct Write {
-  int cell;
-  int layer;
+  ParticleLoopImplementation::ParticleLoopIteration const *iterationx;
   /// Pointer to underlying data.
-  T ****ptr;
+  T *RESTRICT const *RESTRICT const *RESTRICT const *RESTRICT ptr;
   T &at(const int dat_index, const int cell, const int layer,
         const int component) const {
     return ptr[dat_index][cell][component][layer];
@@ -61,7 +70,18 @@ template <typename T> struct Write {
     return ptr[dat_index][particle_index.cell][component][particle_index.layer];
   }
   T &at(const int dat_index, const int component) const {
-    return ptr[dat_index][this->cell][component][this->layer];
+    return ptr[dat_index][this->iterationx->cellx][component]
+              [this->iterationx->layerx];
+  }
+  T &at_ephemeral(const int dat_index,
+                  const Access::LoopIndex::Read &particle_index,
+                  const int component) const {
+    return ptr[dat_index][particle_index.cell][component]
+              [particle_index.loop_layer];
+  }
+  T &at_ephemeral(const int dat_index, const int component) const {
+    return ptr[dat_index][this->iterationx->cellx][component]
+              [this->iterationx->loop_layerx];
   }
 };
 
@@ -100,9 +120,7 @@ template <typename T>
 inline SymVectorImplGetConstT<T>
 create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
                 [[maybe_unused]] sycl::handler &cgh,
-                Access::Read<SymVector<T> *> &a) {
-  return a.obj->impl_get_const();
-}
+                Access::Read<SymVector<T> *> &a);
 /**
  * Method to compute access to a SymVector (write).
  */
@@ -110,9 +128,7 @@ template <typename T>
 inline SymVectorImplGetT<T>
 create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
                 [[maybe_unused]] sycl::handler &cgh,
-                Access::Write<SymVector<T> *> &a) {
-  return a.obj->impl_get();
-}
+                Access::Write<SymVector<T> *> &a);
 
 /**
  *  Function to create the kernel argument for SymVector read access.
@@ -121,8 +137,7 @@ template <typename T>
 inline void create_kernel_arg(ParticleLoopIteration &iterationx,
                               T *const *const **rhs,
                               Access::SymVector::Read<T> &lhs) {
-  lhs.cell = iterationx.cellx;
-  lhs.layer = iterationx.layerx;
+  lhs.iterationx = &iterationx;
   lhs.ptr = rhs;
 }
 /**
@@ -131,8 +146,7 @@ inline void create_kernel_arg(ParticleLoopIteration &iterationx,
 template <typename T>
 inline void create_kernel_arg(ParticleLoopIteration &iterationx, T ****rhs,
                               Access::SymVector::Write<T> &lhs) {
-  lhs.cell = iterationx.cellx;
-  lhs.layer = iterationx.layerx;
+  lhs.iterationx = &iterationx;
   lhs.ptr = rhs;
 }
 
@@ -155,7 +169,6 @@ template <typename T> class SymVector {
 
 protected:
   ParticleGroupSharedPtr particle_group;
-  std::vector<Sym<T>> syms;
   /// The ParticleDats referenced by the SymVector.
   std::vector<ParticleDatSharedPtr<T>> dats;
 
@@ -168,13 +181,14 @@ protected:
         this->syms);
   }
 
-  inline void create() {
-    this->particle_group->sym_vector_pointer_cache_dispatch->create(this->syms);
-  }
-
 public:
   SymVector() = default;
   SymVector<T> &operator=(const SymVector<T> &) = default;
+
+  /**
+   * The Sym<T> instances of this SymVector.
+   */
+  std::vector<Sym<T>> syms;
 
   /**
    * Create a SymVector using a ParticleGroup and a std::vector of Syms.
@@ -183,9 +197,7 @@ public:
    * @param syms Vector of Syms to use from particle_group.
    */
   SymVector(ParticleGroupSharedPtr particle_group, std::vector<Sym<T>> syms)
-      : particle_group(particle_group), syms(syms) {
-    this->create();
-  }
+      : particle_group(particle_group), syms(syms) {}
 
   /**
    * Create a SymVector using a ParticleGroup and an initialiser list of syms,
@@ -198,9 +210,7 @@ public:
    */
   SymVector(ParticleGroupSharedPtr particle_group,
             std::initializer_list<Sym<T>> syms)
-      : particle_group(particle_group), syms(syms) {
-    this->create();
-  }
+      : particle_group(particle_group), syms(syms) {}
 
   /**
    * @returns The ParticleDats that form the SymVector.
