@@ -51,7 +51,6 @@
 #include "neso_particles/utility.hpp"
 #include "neso_particles/utility_mesh_hierarchy_plotting.hpp"
 // Implementations
-#include "neso_particles/cell_dat_move_impl.hpp"
 #include "neso_particles/containers/sym_vector_pointer_cache_dispatch_impl.hpp"
 #include "neso_particles/departing_particle_identification_impl.hpp"
 #include "neso_particles/global_mapping_impl.hpp"

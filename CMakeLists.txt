@@ -66,7 +66,6 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/cell_dat.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cell_dat_compression.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cell_dat_move.hpp
-    ${INCLUDE_DIR_NESO_PARTICLES}/cell_dat_move_impl.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/communication.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/communication/comm_pair.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/communication/communication_edges_counter.hpp
