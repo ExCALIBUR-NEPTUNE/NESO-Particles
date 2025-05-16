@@ -45,6 +45,10 @@ endif()
 
 set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set(SRC_FILES
+    ${SRC_DIR}/external_interfaces/common/dof_mapper_dg.cpp
+    ${SRC_DIR}/external_interfaces/common/local_claim.cpp
+    ${SRC_DIR}/external_interfaces/common/overlay_cartesian_mesh.cpp
+    ${SRC_DIR}/external_interfaces/common/quadrature_point_mapper.cpp
     ${SRC_DIR}/particle_io.cpp
     ${SRC_DIR}/cartesian_mesh.cpp
     ${SRC_DIR}/cartesian_mesh/cartesian_cell_bin.cpp
