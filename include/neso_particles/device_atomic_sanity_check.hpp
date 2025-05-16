@@ -101,41 +101,6 @@ inline bool atomic_binop_check(sycl::queue queue, const SPEC<T> spec) {
   return passed;
 }
 
-template <template <typename> typename SPEC, typename T>
-inline bool atomic_binop_check_long(sycl::queue queue, const SPEC<T> spec) {
-  constexpr std::size_t num_elements = 4096 * 4;
-  constexpr std::size_t num_bytes = num_elements * sizeof(T);
-  T *d_ptr = static_cast<T *>(sycl::malloc_device(num_bytes, queue));
-
-  T h_correct = SPEC<T>::identity_element;
-  T h_to_test = h_correct;
-
-  T *d_result = static_cast<T *>(sycl::malloc_device(sizeof(T), queue));
-  queue.memcpy(d_result, &h_correct, sizeof(T)).wait_and_throw();
-
-  std::vector<T> elements(num_elements);
-  std::random_device rng{};
-  std::uniform_real_distribution<double> dist(static_cast<double>(-50),
-                                              static_cast<double>(50));
-  for (auto &ex : elements) {
-    ex = static_cast<T>(dist(rng));
-  }
-  queue.memcpy(d_ptr, elements.data(), num_bytes).wait_and_throw();
-
-  bool passed = true;
-  for (std::size_t ix = 0; ix < num_elements; ix++) {
-    queue.single_task<>([=]() { spec.binop_device(d_result, d_ptr[ix]); })
-        .wait_and_throw();
-    queue.memcpy(&h_to_test, d_result, sizeof(T)).wait_and_throw();
-    spec.binop_host(&h_correct, elements.at(ix));
-    passed = passed && spec.test(h_correct, h_to_test);
-  }
-
-  sycl::free(d_ptr, queue);
-  sycl::free(d_result, queue);
-  return passed;
-}
-
 } // namespace NESO::Particles
 
 #endif
