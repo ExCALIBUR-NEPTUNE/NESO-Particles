@@ -51,6 +51,7 @@ set(SRC_FILES
     ${SRC_DIR}/cell_dat_move.cpp
     ${SRC_DIR}/device_limits.cpp
     ${SRC_DIR}/departing_particle_identification.cpp
+    ${SRC_DIR}/global_mapping.cpp
     ${SRC_DIR}/parallel_initialisation.cpp
     ${SRC_DIR}/particle_group.cpp)
 set(SRC_FILES_IGNORE "")
@@ -143,7 +144,6 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/project_evaluate/dmplex_project_evaluate_dg.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/vtk/vtk.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/global_mapping.hpp
-    ${INCLUDE_DIR_NESO_PARTICLES}/global_mapping_impl.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/global_move.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/global_move_exchange.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/local_mapping.hpp
