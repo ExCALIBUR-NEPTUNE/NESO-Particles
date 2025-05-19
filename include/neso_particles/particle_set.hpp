@@ -34,16 +34,10 @@ protected:
   std::vector<REAL> dummy_real;
   std::vector<INT> dummy_int;
 
-  inline REAL *get_ptr(Sym<REAL> sym, const int particle_index,
-                       const int component_index) {
-    return values_real.at(sym).data() + component_index * this->npart +
-           particle_index;
-  }
-  inline INT *get_ptr(Sym<INT> sym, const int particle_index,
-                      const int component_index) {
-    return values_int.at(sym).data() + component_index * this->npart +
-           particle_index;
-  }
+  REAL *get_ptr(Sym<REAL> sym, const int particle_index,
+                const int component_index);
+  INT *get_ptr(Sym<INT> sym, const int particle_index,
+               const int component_index);
 
 public:
   /// Number of particles stored in the container.
@@ -56,36 +50,17 @@ public:
    *  @param particle_spec ParticleSpec instance that describes the particle
    *  properties.
    */
-  ParticleSet(const int npart, ParticleSpec particle_spec) : npart(npart) {
-
-    for (auto const &spec : particle_spec.properties_real) {
-      values_real[spec.sym] = std::vector<REAL>(npart * spec.ncomp);
-      ncomp_real[spec.sym] = spec.ncomp;
-      std::fill(values_real[spec.sym].begin(), values_real[spec.sym].end(),
-                0.0);
-    }
-    for (auto const &spec : particle_spec.properties_int) {
-      values_int[spec.sym] = std::vector<INT>(npart * spec.ncomp);
-      ncomp_int[spec.sym] = spec.ncomp;
-      std::fill(values_int[spec.sym].begin(), values_int[spec.sym].end(), 0);
-    }
-  };
+  ParticleSet(const int npart, ParticleSpec particle_spec);
 
   /**
    *  Access the std::vectors that correspond to a Sym<REAL>.
    */
-  inline ColumnMajorRowAccessor<std::vector, REAL> operator[](Sym<REAL> sym) {
-    return ColumnMajorRowAccessor<std::vector, REAL>{values_real[sym],
-                                                     this->npart};
-  };
+  ColumnMajorRowAccessor<std::vector, REAL> operator[](Sym<REAL> sym);
 
   /**
    *  Access the std::vectors that correspond to a Sym<INT>.
    */
-  inline ColumnMajorRowAccessor<std::vector, INT> operator[](Sym<INT> sym) {
-    return ColumnMajorRowAccessor<std::vector, INT>{values_int[sym],
-                                                    this->npart};
-  };
+  ColumnMajorRowAccessor<std::vector, INT> operator[](Sym<INT> sym);
 
   /**
    * Access REAL elements for a particle.
@@ -95,12 +70,7 @@ public:
    * @param component_index Index of component to access.
    * @returns modifiable reference to element.
    */
-  inline REAL &at(Sym<REAL> sym, const int particle_index,
-                  const int component_index) {
-    NESOASSERT(this->contains(sym), "Property does not exist in ParticleSet");
-    return this->values_real.at(sym).at(component_index * this->npart +
-                                        particle_index);
-  }
+  REAL &at(Sym<REAL> sym, const int particle_index, const int component_index);
 
   /**
    * Access REAL elements for a particle.
@@ -110,12 +80,7 @@ public:
    * @param component_index Index of component to access.
    * @returns modifiable reference to element.
    */
-  inline INT &at(Sym<INT> sym, const int particle_index,
-                 const int component_index) {
-    NESOASSERT(this->contains(sym), "Property does not exist in ParticleSet");
-    return this->values_int.at(sym).at(component_index * this->npart +
-                                       particle_index);
-  }
+  INT &at(Sym<INT> sym, const int particle_index, const int component_index);
 
   /**
    *  Get the vector of values describing the particle data for a given
@@ -125,13 +90,8 @@ public:
    *  @param sym Sym<REAL> to access.
    *  @returns std::vector of data or empty std::vector.
    */
-  inline std::vector<REAL> &get(Sym<REAL> const &sym) {
-    if (contains(sym)) {
-      return values_real[sym];
-    } else {
-      return dummy_real;
-    }
-  };
+  std::vector<REAL> &get(Sym<REAL> const &sym);
+
   /**
    *  Get the vector of values describing the particle data for a given
    *  Sym<INT>. Will return an empty std::vector if the passed Sym is not a
@@ -140,31 +100,23 @@ public:
    *  @param sym Sym<INT> to access.
    *  @returns std::vector of data or empty std::vector.
    */
-  inline std::vector<INT> &get(Sym<INT> const &sym) {
-    if (contains(sym)) {
-      return values_int[sym];
-    } else {
-      return dummy_int;
-    }
-  };
+  std::vector<INT> &get(Sym<INT> const &sym);
+
   /**
    *  Test to see if this ParticleSet contains data for a given Sym<REAL>
    *
    *  @param sym Sym<REAL> to test for.
    *  @returns Bool indicating if data exists.
    */
-  inline bool contains(Sym<REAL> const &sym) {
-    return (this->values_real.count(sym) > 0);
-  }
+  bool contains(Sym<REAL> const &sym);
+
   /**
    *  Test to see if this ParticleSet contains data for a given Sym<INT>
    *
    *  @param sym Sym<INT> to test for.
    *  @returns Bool indicating if data exists.
    */
-  inline bool contains(Sym<INT> const &sym) {
-    return (this->values_int.count(sym) > 0);
-  }
+  bool contains(Sym<INT> const &sym);
 
   /**
    * Set all values of a Sym from a std::vector.
@@ -173,17 +125,7 @@ public:
    * @param component Component to set values for.
    * @param values Vector of values to set.
    */
-  inline void set(Sym<INT> sym, const int component, std::vector<INT> &values) {
-    NESOASSERT(this->contains(sym),
-               "ParticleSet does not contain passed sym: " + sym.name);
-    NESOASSERT(values.size() == static_cast<std::size_t>(this->npart),
-               "Passed vector does not have the same length as the number of "
-               "particles.");
-    NESOASSERT(0 <= component && component < this->ncomp_int.at(sym),
-               "Bad component passed.");
-    std::memcpy(this->get_ptr(sym, 0, component), values.data(),
-                this->npart * sizeof(INT));
-  }
+  void set(Sym<INT> sym, const int component, std::vector<INT> &values);
 
   /**
    * Set all values of a Sym from a std::vector.
@@ -192,18 +134,7 @@ public:
    * @param component Component to set values for.
    * @param values Vector of values to set.
    */
-  inline void set(Sym<REAL> sym, const int component,
-                  std::vector<REAL> &values) {
-    NESOASSERT(this->contains(sym),
-               "ParticleSet does not contain passed sym: " + sym.name);
-    NESOASSERT(values.size() == static_cast<std::size_t>(this->npart),
-               "Passed vector does not have the same length as the number of "
-               "particles.");
-    NESOASSERT(0 <= component && component < this->ncomp_real.at(sym),
-               "Bad component passed.");
-    std::memcpy(this->get_ptr(sym, 0, component), values.data(),
-                this->npart * sizeof(REAL));
-  }
+  void set(Sym<REAL> sym, const int component, std::vector<REAL> &values);
 
   /**
    * Set all values in this ParticleSet from a another ParticleSet. This will
@@ -214,30 +145,7 @@ public:
    *
    * @param particle_set ParticleSet to copy values from.
    */
-  inline void set(ParticleSet &particle_set) {
-    NESOASSERT(particle_set.npart == this->npart,
-               "Missmatch in particle counts between ParticleSets.");
-    for (auto &sym_vector : this->values_int) {
-      auto sym = sym_vector.first;
-      if (particle_set.contains(sym)) {
-        const auto ncomp = particle_set.ncomp_int.at(sym);
-        NESOASSERT(ncomp == this->ncomp_int.at(sym),
-                   "Component count does not match for sym " + sym.name);
-        std::memcpy(this->get_ptr(sym, 0, 0), particle_set.get_ptr(sym, 0, 0),
-                    this->npart * ncomp * sizeof(INT));
-      }
-    }
-    for (auto &sym_vector : this->values_real) {
-      auto sym = sym_vector.first;
-      if (particle_set.contains(sym)) {
-        const auto ncomp = particle_set.ncomp_real.at(sym);
-        NESOASSERT(ncomp == this->ncomp_real.at(sym),
-                   "Component count does not match for sym " + sym.name);
-        std::memcpy(this->get_ptr(sym, 0, 0), particle_set.get_ptr(sym, 0, 0),
-                    this->npart * ncomp * sizeof(REAL));
-      }
-    }
-  }
+  void set(ParticleSet &particle_set);
 
   /**
    * Set all values in this ParticleSet from a another ParticleSet. This will
@@ -248,9 +156,7 @@ public:
    *
    * @param particle_set ParticleSet to copy values from.
    */
-  inline void set(std::shared_ptr<ParticleSet> particle_set) {
-    this->set(*particle_set);
-  }
+  void set(std::shared_ptr<ParticleSet> particle_set);
 };
 
 typedef std::shared_ptr<ParticleSet> ParticleSetSharedPtr;

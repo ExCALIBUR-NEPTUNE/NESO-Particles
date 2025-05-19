@@ -167,7 +167,7 @@ TEST(CartesianTrajectoryIntersection, offsets_2d) {
                 INTERSECTION_METADATA.at_ephemeral(0) % 2 == boundaryx, k_ep);
 
             const INT element_id = INTERSECTION_METADATA.at_ephemeral(1);
-            const NormalInformation *normal_info;
+            const NormalInformation *normal_info = nullptr;
             k_correct_lut->get(element_id, &normal_info);
             NESO_KERNEL_ASSERT(element_id == normal_info->element_id, k_ep);
             NESO_KERNEL_ASSERT(INTERSECTION_NORMAL.at_ephemeral(0) ==
@@ -393,7 +393,7 @@ TEST(CartesianTrajectoryIntersection, offsets_3d) {
           [=](auto P, auto INTERSECTION_POINT, auto INTERSECTION_NORMAL,
               auto INTERSECTION_METADATA) {
             const INT element_id = INTERSECTION_METADATA.at_ephemeral(1);
-            const NormalInformation *normal_info;
+            const NormalInformation *normal_info = nullptr;
             k_correct_lut->get(element_id, &normal_info);
             NESO_KERNEL_ASSERT(element_id == normal_info->element_id, k_ep);
             NESO_KERNEL_ASSERT(INTERSECTION_NORMAL.at_ephemeral(0) ==

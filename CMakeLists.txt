@@ -32,14 +32,58 @@ option(
   loop for each ParticleLoop."
   OFF)
 
-# Create interface/Header only library
-add_library(NESO-Particles INTERFACE)
-# Alias the name to the namespaces name. Can use in subdirectory or via Confiig
-# files with namespace
-add_library(NESO-Particles::NESO-Particles ALIAS NESO-Particles)
+# This means that when the tests and lib are installed they have rpath set for
+# the installed lib/binary.
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+list(APPEND CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
 
-# Set standard
-set_property(TARGET NESO-Particles PROPERTY CXX_STANDARD 17)
+# Find SYCL
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/SYCL.cmake)
+if(NESO_PARTICLES_ENABLE_FIND_SYCL)
+  find_sycl_if_required()
+endif()
+
+set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
+set(SRC_FILES
+    ${SRC_DIR}/external_interfaces/petsc/boundary_interaction/boundary_interaction_2d.cpp
+    ${SRC_DIR}/external_interfaces/petsc/boundary_interaction/boundary_interaction_common.cpp
+    ${SRC_DIR}/external_interfaces/petsc/boundary_interaction/boundary_reflection.cpp
+    ${SRC_DIR}/external_interfaces/petsc/dmplex_cell_serialise.cpp
+    ${SRC_DIR}/external_interfaces/petsc/dmplex_interface.cpp
+    ${SRC_DIR}/external_interfaces/petsc/dmplex_helper.cpp
+    ${SRC_DIR}/external_interfaces/petsc/dmplex_utility.cpp
+    ${SRC_DIR}/external_interfaces/petsc/particle_cell_mapping/dmplex_2d_mapper.cpp
+    ${SRC_DIR}/external_interfaces/petsc/particle_cell_mapping/dmplex_host_mapper.cpp
+    ${SRC_DIR}/external_interfaces/petsc/project_evaluate/dmplex_project_evaluate_barycentric.cpp
+    ${SRC_DIR}/external_interfaces/petsc/project_evaluate/dmplex_project_evaluate_dg.cpp
+    ${SRC_DIR}/external_interfaces/common/dof_mapper_dg.cpp
+    ${SRC_DIR}/external_interfaces/common/local_claim.cpp
+    ${SRC_DIR}/external_interfaces/common/overlay_cartesian_mesh.cpp
+    ${SRC_DIR}/external_interfaces/common/quadrature_point_mapper.cpp
+    ${SRC_DIR}/particle_io.cpp
+    ${SRC_DIR}/cartesian_mesh.cpp
+    ${SRC_DIR}/cartesian_mesh/cartesian_cell_bin.cpp
+    ${SRC_DIR}/cartesian_mesh/cartesian_h_mesh.cpp
+    ${SRC_DIR}/cartesian_mesh/cartesian_periodic.cpp
+    ${SRC_DIR}/cartesian_mesh/cartesian_trajectory_intersection.cpp
+    ${SRC_DIR}/communication/communication_edges_counter.cpp
+    ${SRC_DIR}/cell_dat_compression.cpp
+    ${SRC_DIR}/cell_dat_move.cpp
+    ${SRC_DIR}/device_limits.cpp
+    ${SRC_DIR}/departing_particle_identification.cpp
+    ${SRC_DIR}/mesh_hierarchy.cpp
+    ${SRC_DIR}/global_mapping.cpp
+    ${SRC_DIR}/parallel_initialisation.cpp
+    ${SRC_DIR}/packing_unpacking.cpp
+    ${SRC_DIR}/particle_dat.cpp
+    ${SRC_DIR}/particle_group.cpp
+    ${SRC_DIR}/particle_set.cpp
+    ${SRC_DIR}/particle_group_temporary.cpp
+    ${SRC_DIR}/particle_group_pointer_map.cpp
+    ${SRC_DIR}/utility.cpp
+    ${SRC_DIR}/utility_mesh_hierarchy_plotting.cpp)
+set(SRC_FILES_IGNORE "")
+check_added_file_list(${SRC_DIR} cpp "${SRC_FILES}" "${SRC_FILES_IGNORE}")
 
 # Create a list of the header files.
 set(INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -56,7 +100,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/cell_dat.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cell_dat_compression.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cell_dat_move.hpp
-    ${INCLUDE_DIR_NESO_PARTICLES}/cell_dat_move_impl.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/common_impl.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/communication.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/communication/comm_pair.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/communication/communication_edges_counter.hpp
@@ -94,7 +138,6 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/sym_vector_pointer_cache_dispatch_impl.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/tuple.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/departing_particle_identification.hpp
-    ${INCLUDE_DIR_NESO_PARTICLES}/departing_particle_identification_impl.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/device_atomic_sanity_check.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/device_buffers.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/device_functions.hpp
@@ -129,7 +172,6 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/project_evaluate/dmplex_project_evaluate_dg.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/vtk/vtk.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/global_mapping.hpp
-    ${INCLUDE_DIR_NESO_PARTICLES}/global_mapping_impl.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/global_move.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/global_move_exchange.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/local_mapping.hpp
@@ -188,6 +230,15 @@ set(HEADER_FILES_IGNORE "")
 check_added_file_list(${INCLUDE_DIR} hpp "${HEADER_FILES}"
                       "${HEADER_FILES_IGNORE}")
 
+# Create shared library
+add_library(NESO-Particles SHARED ${SRC_FILES} ${HEADER_FILES})
+# Alias the name to the namespaces name. Can use in subdirectory or via Confiig
+# files with namespace
+add_library(NESO-Particles::NESO-Particles ALIAS NESO-Particles)
+
+# Set standard
+set_property(TARGET NESO-Particles PROPERTY CXX_STANDARD 17)
+
 # Makes it easy to install + adds the files to the INCLUDE property of the lib
 # i.e. don't need target_include_dir.. also no GLOBS
 target_sources(
@@ -201,42 +252,39 @@ target_sources(
          FILES
          ${HEADER_FILES})
 
-# target_include_directories( NESO-Particles INTERFACE
-# $<BUILD_INTERFACE:${INCLUDE_DIR}> $<INSTALL_INTERFACE:include> )
-
 # Don't like this .... TODO: FIXME: Should be a runtime thing?
 if(NESO_PARTICLES_DEVICE_TYPE STREQUAL GPU)
   target_compile_definitions(NESO-Particles
-                             INTERFACE NESO_PARTICLES_DEVICE_TYPE_GPU)
+                             PUBLIC NESO_PARTICLES_DEVICE_TYPE_GPU)
   add_definitions(-DNESO_PARTICLES_DEVICE_TYPE_GPU)
   message(STATUS "Using NESO_PARTICLES_DEVICE_TYPE_GPU")
 else()
   target_compile_definitions(NESO-Particles
-                             INTERFACE NESO_PARTICLES_DEVICE_TYPE_CPU)
+                             PUBLIC NESO_PARTICLES_DEVICE_TYPE_CPU)
   message(STATUS "Using NESO_PARTICLES_DEVICE_TYPE_CPU")
 endif()
 
 if(NESO_PARTICLES_LEGACY_DEVICE_SELECTORS)
   target_compile_definitions(NESO-Particles
-                             INTERFACE NESO_PARTICLES_LEGACY_DEVICE_SELECTORS)
+                             PUBLIC NESO_PARTICLES_LEGACY_DEVICE_SELECTORS)
   message(STATUS "Using legacy SYCL device selectors")
 endif()
 
 if(NESO_PARTICLES_DEVICE_AWARE_MPI)
   target_compile_definitions(NESO-Particles
-                             INTERFACE NESO_PARTICLES_DEVICE_AWARE_MPI)
-  message(STATUS "Using device aware MPI")
+                             PUBLIC NESO_PARTICLES_DEVICE_AWARE_MPI)
+  message(STATUS "Using device aware MPI.")
 endif()
 
 if(NESO_PARTICLES_SINGLE_COMPILED_LOOP)
   target_compile_definitions(NESO-Particles
-                             INTERFACE NESO_PARTICLES_SINGLE_COMPILED_LOOP)
+                             PUBLIC NESO_PARTICLES_SINGLE_COMPILED_LOOP)
   message(STATUS "Using single compiled loop")
 endif()
 
 # Get MPI
 find_package(MPI REQUIRED)
-target_link_libraries(NESO-Particles INTERFACE MPI::MPI_CXX)
+target_link_libraries(NESO-Particles PUBLIC MPI::MPI_CXX)
 
 # Get HDF5 if its around
 set(NESO_PARTICLES_USING_HDF5 FALSE)
@@ -249,8 +297,8 @@ if(NESO_PARTICLES_ENABLE_HDF5)
   find_package(HDF5 REQUIRED)
   if(HDF5_FOUND AND HDF5_IS_PARALLEL)
     message(STATUS "Parallel HDF5 found")
-    target_link_libraries(NESO-Particles INTERFACE HDF5::HDF5 NESO-Particles)
-    target_compile_definitions(NESO-Particles INTERFACE NESO_PARTICLES_HDF5)
+    target_link_libraries(NESO-Particles PUBLIC HDF5::HDF5)
+    target_compile_definitions(NESO-Particles PUBLIC NESO_PARTICLES_HDF5)
     set(NESO_PARTICLES_USING_HDF5 TRUE)
   else()
     message("HDF5 NOT found")
@@ -258,7 +306,7 @@ if(NESO_PARTICLES_ENABLE_HDF5)
 endif()
 
 # set the restrict keyword
-target_compile_definitions(NESO-Particles INTERFACE RESTRICT=${RESTRICT})
+target_compile_definitions(NESO-Particles PUBLIC RESTRICT=${RESTRICT})
 
 # now look for PETSc
 if(NESO_PARTICLES_ENABLE_PETSC)
@@ -270,11 +318,11 @@ if(NESO_PARTICLES_ENABLE_PETSC)
   if(PETSC_FOUND)
     message(STATUS "PETSc found")
     # TODO CHECK AND CLEANUP
-    target_compile_definitions(NESO-Particles INTERFACE NESO_PARTICLES_PETSC
-                                                        ${PETSC_DEFINITIONS})
+    target_compile_definitions(NESO-Particles PUBLIC NESO_PARTICLES_PETSC
+                                                     ${PETSC_DEFINITIONS})
     add_definitions(-DNESO_PARTICLES_PETSC ${PETSC_DEFINITIONS})
-    target_link_libraries(NESO-Particles INTERFACE ${PETSC_LINK_LIBRARIES})
-    target_include_directories(NESO-Particles INTERFACE ${PETSC_INCLUDE_DIRS})
+    target_link_libraries(NESO-Particles PUBLIC ${PETSC_LINK_LIBRARIES})
+    target_include_directories(NESO-Particles PUBLIC ${PETSC_INCLUDE_DIRS})
     message(STATUS PETSC_LINK_LIBRARIES ${PETSC_LINK_LIBRARIES})
     message(STATUS PETSC_LDFLAGS ${PETSC_LDFLAGS})
     message(STATUS PETSC_INCLUDE_DIRS ${PETSC_INCLUDE_DIRS})
@@ -285,13 +333,9 @@ if(NESO_PARTICLES_ENABLE_PETSC)
   endif()
 endif()
 
-# Find SYCL
-include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/SYCL.cmake)
-if(NESO_PARTICLES_ENABLE_FIND_SYCL)
-  find_sycl_if_required()
-endif()
-
 option(NESO_PARTICLES_ENABLE_TESTS "Build unit tests for this project." ON)
+
+add_sycl_to_target(TARGET NESO-Particles SOURCES ${SRC_FILES})
 
 # Include the tests
 if(NESO_PARTICLES_ENABLE_TESTS)

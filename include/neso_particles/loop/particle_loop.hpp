@@ -87,14 +87,14 @@ protected:
    * Method to compute access to a type wrapped in a shared_ptr.
    */
   template <template <typename> typename T, typename U>
-  static inline auto create_loop_arg_cast(
+  inline auto create_loop_arg_cast(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
       sycl::handler &cgh, T<std::shared_ptr<U>> a);
   /**
    * Method to compute access to a type not wrapper in a shared_ptr
    */
   template <template <typename> typename T, typename U>
-  static inline auto create_loop_arg_cast(
+  inline auto create_loop_arg_cast(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
       sycl::handler &cgh, T<U> a);
 
@@ -119,14 +119,14 @@ protected:
    * Method to compute access to a type wrapped in a shared_ptr.
    */
   template <template <typename> typename T, typename U>
-  static inline auto
+  inline void
   pre_loop_cast(ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
                 T<std::shared_ptr<U>> a);
   /**
    * Method to compute access to a type not wrapper in a shared_ptr
    */
   template <template <typename> typename T, typename U>
-  static inline auto
+  inline void
   pre_loop_cast(ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
                 T<U> a);
   /**

@@ -2,6 +2,10 @@
 
 #include "include/test_neso_particles.hpp"
 
+// These are the two includes you should normally use.
+#include <neso_particles.hpp>
+#include <neso_particles/external_interfaces/petsc/petsc_interface.hpp>
+
 /**
  * Create a 2D square mesh of NxN cells each 1x1. N is the number of MPI ranks.
  * MPI rank i owns the i-th row. All objects are indexed lexicographically from

@@ -87,7 +87,7 @@ public:
    *
    * @param rank_component Component to inspect for MPI rank.
    */
-  inline void identify(const int rank_component = 0);
+  void identify(const int rank_component = 0);
 };
 
 } // namespace NESO::Particles

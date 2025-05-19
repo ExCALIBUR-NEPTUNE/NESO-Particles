@@ -796,6 +796,9 @@ inline void ParticleDatT<T>::append_particle_data(
   }
 }
 
+extern template class ParticleDatT<REAL>;
+extern template class ParticleDatT<INT>;
+
 } // namespace NESO::Particles
 
 #endif

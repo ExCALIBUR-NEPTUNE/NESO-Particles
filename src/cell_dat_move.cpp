@@ -1,16 +1,9 @@
-#ifndef _NESO_PARTICLES_CELL_DAT_MOVE_IMPL_H_
-#define _NESO_PARTICLES_CELL_DAT_MOVE_IMPL_H_
-
-#include "cell_dat_move.hpp"
-#include "loop/particle_loop.hpp"
+#include <neso_particles/cell_dat_move.hpp>
+#include <neso_particles/common_impl.hpp>
 
 namespace NESO::Particles {
 
-/**
- * Move particles between cells (on this MPI rank) using the cell ids on
- * the particles.
- */
-inline void CellMove::move() {
+void CellMove::move() {
   auto r = ProfileRegion("CellMove", "prepare");
   auto t0 = profile_timestamp();
   // reset the particle counters on each cell
@@ -307,5 +300,3 @@ inline void CellMove::move() {
 }
 
 } // namespace NESO::Particles
-
-#endif

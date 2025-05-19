@@ -87,13 +87,7 @@ public:
    * @param num_dofs_per_cell Number of DOFs per cell.
    */
   DOFMapperDG(SYCLTargetSharedPtr sycl_target, const int num_cells_local,
-              const int num_dofs_per_cell)
-      : sycl_target(sycl_target), num_cells_local(num_cells_local),
-        num_dofs_per_cell(num_dofs_per_cell) {
-    this->map_to_index.resize(num_cells_local * num_dofs_per_cell);
-    std::fill(this->map_to_index.begin(), this->map_to_index.end(), -1);
-    this->device_valid = false;
-  }
+              const int num_dofs_per_cell);
 
   /**
    * Retrieve the internal index for a given cell and DOF index.
@@ -102,13 +96,7 @@ public:
    * @param dof Index of the DOF to index.
    * @returns Linearised internal index in the store for the cell and DOF.
    */
-  inline int index(const int cell, const int dof) const {
-    NESOASSERT((0 <= cell) && (cell < this->num_cells_local),
-               "Bad cell passed: " + std::to_string(cell));
-    NESOASSERT((0 <= dof) && (dof < this->num_dofs_per_cell),
-               "Bad dof passed: " + std::to_string(cell));
-    return cell * this->num_dofs_per_cell + dof;
-  }
+  int index(const int cell, const int dof) const;
 
   /**
    * Set the external linearised DOF index (global) for a given cell and DOF
@@ -118,10 +106,7 @@ public:
    * @param dof The cell local index of the DOF to set the index for.
    * @param index The global linearised index of the DOF.
    */
-  inline void set(const int cell, const int dof, const int index) {
-    this->map_to_index.at(this->index(cell, dof)) = index;
-    this->device_valid = false;
-  }
+  void set(const int cell, const int dof, const int index);
 
   /**
    * Retrieve the external index for a given cell and DOF index.
@@ -130,26 +115,13 @@ public:
    * @param dof Index of the DOF to index.
    * @returns Linearised external index in the store for the cell and DOF.
    */
-  inline int get(const int cell, const int dof) const {
-    return this->map_to_index.at(this->index(cell, dof));
-  }
+  int get(const int cell, const int dof) const;
 
   /**
    * @returns A device copyable helper type for mapping between internal and
    * external DOF orderings.
    */
-  inline DOFMapperDGDeviceMapper get_device_mapper() {
-    if (!this->device_valid) {
-      this->d_map_to_index = std::make_unique<BufferDevice<int>>(
-          this->sycl_target, this->map_to_index);
-    }
-
-    DOFMapperDGDeviceMapper m;
-    m.num_cells_local = this->num_cells_local;
-    m.num_dofs_per_cell = this->num_dofs_per_cell;
-    m.d_map_to_index = this->d_map_to_index->ptr;
-    return m;
-  }
+  DOFMapperDGDeviceMapper get_device_mapper();
 
   /**
    * Copy DOF values from the DOFs stored in a CellDatConst, stored in the
@@ -161,34 +133,8 @@ public:
    * @param[in, out] h_external_dofs Output location to copy DOFs into.
    * @param[in] es EventStack to push the copy operation onto.
    */
-  inline void copy_to_external(CellDatConstSharedPtr<REAL> cell_dat_const,
-                               REAL *h_external_dofs, EventStack &es) {
-    const auto k_mapper = this->get_device_mapper();
-    const int k_num_cells_local = this->num_cells_local;
-    const int k_num_dofs_per_cell = this->num_dofs_per_cell;
-    if (!this->d_dofs) {
-      this->d_dofs = std::make_unique<BufferDevice<REAL>>(
-          this->sycl_target, k_num_cells_local * k_num_dofs_per_cell);
-    }
-    auto k_dofs = this->d_dofs->ptr;
-    auto k_cell_dat_const = cell_dat_const->device_ptr();
-    const std::size_t num_bytes =
-        k_num_cells_local * k_num_dofs_per_cell * sizeof(REAL);
-
-    if (num_bytes > 0) {
-      auto e0 = this->sycl_target->queue.parallel_for(
-          sycl::range<2>(k_num_cells_local, k_num_dofs_per_cell),
-          [=](sycl::id<2> idx) {
-            const int cell = idx[0];
-            const int dof = idx[1];
-            k_mapper.copy_to_external(cell, dof, k_cell_dat_const, k_dofs);
-          });
-
-      auto e1 = this->sycl_target->queue.memcpy(h_external_dofs, k_dofs,
-                                                num_bytes, e0);
-      es.push(e1);
-    }
-  }
+  void copy_to_external(CellDatConstSharedPtr<REAL> cell_dat_const,
+                        REAL *h_external_dofs, EventStack &es);
 
   /**
    *
@@ -198,38 +144,8 @@ public:
    * ordering.
    * @param[in] es EventStack to push the copy operation onto.
    */
-  inline void copy_from_external(CellDatConstSharedPtr<REAL> cell_dat_const,
-                                 REAL *h_external_dofs, EventStack &es) {
-    const auto k_mapper = this->get_device_mapper();
-    const int k_num_cells_local = this->num_cells_local;
-    const int k_num_dofs_per_cell = this->num_dofs_per_cell;
-    if (!this->d_dofs) {
-      this->d_dofs = std::make_unique<BufferDevice<REAL>>(
-          this->sycl_target, k_num_cells_local * k_num_dofs_per_cell);
-    }
-    auto k_dofs = this->d_dofs->ptr;
-    auto k_cell_dat_const = cell_dat_const->device_ptr();
-
-    const std::size_t num_bytes =
-        k_num_cells_local * k_num_dofs_per_cell * sizeof(REAL);
-
-    if (num_bytes > 0) {
-      this->sycl_target->queue.memcpy(h_external_dofs, k_dofs, num_bytes)
-          .wait_and_throw();
-
-      auto e1 = this->sycl_target->queue.submit([&](sycl::handler &cgh) {
-        cgh.parallel_for<>(
-            sycl::range<2>(k_num_cells_local, k_num_dofs_per_cell),
-            [=](sycl::id<2> idx) {
-              const int cell = idx[0];
-              const int dof = idx[1];
-              k_mapper.copy_from_external(cell, dof, k_dofs, k_cell_dat_const);
-            });
-      });
-
-      es.push(e1);
-    }
-  }
+  void copy_from_external(CellDatConstSharedPtr<REAL> cell_dat_const,
+                          REAL *h_external_dofs, EventStack &es);
 };
 
 } // namespace NESO::Particles::ExternalCommon

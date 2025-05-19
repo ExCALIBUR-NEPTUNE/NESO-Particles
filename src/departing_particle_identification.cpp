@@ -1,8 +1,6 @@
-#ifndef _NESO_PARTICLES_DEPARTING_PARTICLE_IDENTIFICATION_IMPL_H_
-#define _NESO_PARTICLES_DEPARTING_PARTICLE_IDENTIFICATION_IMPL_H_
-
-#include "departing_particle_identification.hpp"
-#include "loop/particle_loop.hpp"
+#include <neso_particles/common_impl.hpp>
+#include <neso_particles/departing_particle_identification.hpp>
+#include <neso_particles/loop/particle_loop.hpp>
 
 namespace NESO::Particles {
 
@@ -17,7 +15,7 @@ namespace NESO::Particles {
  *
  * @param rank_component Component to inspect for MPI rank.
  */
-inline void DepartingIdentify::identify(const int rank_component) {
+void DepartingIdentify::identify(const int rank_component) {
   auto t0 = profile_timestamp();
 
   const int comm_size = this->sycl_target->comm_pair.size_parent;
@@ -141,5 +139,3 @@ inline void DepartingIdentify::identify(const int rank_component) {
 }
 
 } // namespace NESO::Particles
-
-#endif

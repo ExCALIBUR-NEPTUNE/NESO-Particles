@@ -22,14 +22,10 @@
 #include "neso_particles/containers/resource_stack.hpp"
 #include "neso_particles/containers/rng/rng.hpp"
 #include "neso_particles/containers/sym_vector.hpp"
-#include "neso_particles/containers/sym_vector_impl.hpp"
 #include "neso_particles/containers/tuple.hpp"
 #include "neso_particles/device_functions.hpp"
 #include "neso_particles/domain.hpp"
 #include "neso_particles/error_propagate.hpp"
-#include "neso_particles/external_interfaces/common/common.hpp"
-#include "neso_particles/external_interfaces/petsc/petsc_interface.hpp"
-#include "neso_particles/external_interfaces/vtk/vtk.hpp"
 #include "neso_particles/global_mapping.hpp"
 #include "neso_particles/local_mapping.hpp"
 #include "neso_particles/local_move.hpp"
@@ -54,11 +50,10 @@
 #include "neso_particles/utility.hpp"
 #include "neso_particles/utility_mesh_hierarchy_plotting.hpp"
 // Implementations
-#include "neso_particles/cell_dat_move_impl.hpp"
-#include "neso_particles/containers/sym_vector_pointer_cache_dispatch_impl.hpp"
-#include "neso_particles/departing_particle_identification_impl.hpp"
-#include "neso_particles/global_mapping_impl.hpp"
-#include "neso_particles/loop/particle_loop_impl.hpp"
-#include "neso_particles/particle_group_impl.hpp"
+#include "neso_particles/common_impl.hpp"
+// External interfaces
+#include "neso_particles/external_interfaces/common/common.hpp"
+#include "neso_particles/external_interfaces/petsc/petsc_interface.hpp"
+#include "neso_particles/external_interfaces/vtk/vtk.hpp"
 
 #endif

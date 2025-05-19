@@ -1,8 +1,5 @@
-#ifndef _NESO_PARTICLES_GLOBAL_MAPPING_IMPL_H_
-#define _NESO_PARTICLES_GLOBAL_MAPPING_IMPL_H_
-
-#include "global_mapping.hpp"
-#include "loop/particle_loop.hpp"
+#include <neso_particles/common_impl.hpp>
+#include <neso_particles/global_mapping.hpp>
 
 namespace NESO::Particles {
 
@@ -11,7 +8,7 @@ namespace NESO::Particles {
  * a local owner obtain the MPI rank that owns the global cell which contains
  * the particle.
  */
-inline void MeshHierarchyGlobalMap::execute() {
+void MeshHierarchyGlobalMap::execute() {
   auto t0 = profile_timestamp();
 
   // reset the device count for cell ids that need mapping
@@ -244,7 +241,7 @@ inline void MeshHierarchyGlobalMap::execute() {
  *
  *  @param mpi_rank_dat ParticleDat containing MPI ranks to reset.
  */
-inline void reset_mpi_ranks(ParticleDatSharedPtr<INT> mpi_rank_dat) {
+void reset_mpi_ranks(ParticleDatSharedPtr<INT> mpi_rank_dat) {
   ParticleLoop(
       "reset_mpi_ranks", mpi_rank_dat,
       [=](auto mpi_rank_dat) {
@@ -254,6 +251,4 @@ inline void reset_mpi_ranks(ParticleDatSharedPtr<INT> mpi_rank_dat) {
       Access::write(mpi_rank_dat))
       .execute();
 }
-
 } // namespace NESO::Particles
-#endif

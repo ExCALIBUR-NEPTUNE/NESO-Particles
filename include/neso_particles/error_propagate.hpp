@@ -2,6 +2,7 @@
 #define _NESO_PARTICLES_ERROR_PROPAGATE_H_
 
 #include "compute_target.hpp"
+#include "device_buffers.hpp"
 
 namespace NESO::Particles {
 

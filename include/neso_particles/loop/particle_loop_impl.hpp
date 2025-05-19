@@ -2,6 +2,7 @@
 #define _NESO_PARTICLES_LOOP_PARTICLE_LOOP_IMPL_HPP_
 
 #include "../containers/sym_vector_impl.hpp"
+#include "../containers/sym_vector_pointer_cache_dispatch_impl.hpp"
 #include "particle_loop.hpp"
 
 namespace NESO::Particles {
@@ -11,7 +12,7 @@ namespace NESO::Particles {
  */
 template <typename KERNEL, typename... ARGS>
 template <template <typename> typename T, typename U>
-inline auto ParticleLoop<KERNEL, ARGS...>::pre_loop_cast(
+inline void ParticleLoop<KERNEL, ARGS...>::pre_loop_cast(
     ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
     T<std::shared_ptr<U>> a) {
   T<U *> c = {a.obj.get()};
@@ -23,7 +24,7 @@ inline auto ParticleLoop<KERNEL, ARGS...>::pre_loop_cast(
  */
 template <typename KERNEL, typename... ARGS>
 template <template <typename> typename T, typename U>
-inline auto ParticleLoop<KERNEL, ARGS...>::pre_loop_cast(
+inline void ParticleLoop<KERNEL, ARGS...>::pre_loop_cast(
     ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info, T<U> a) {
   T<U *> c = {&a.obj};
   ParticleLoopImplementation::pre_loop(global_info, c);
