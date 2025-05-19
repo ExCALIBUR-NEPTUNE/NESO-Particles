@@ -335,6 +335,9 @@ endif()
 
 option(NESO_PARTICLES_ENABLE_TESTS "Build unit tests for this project." ON)
 
+# Look for vendor implementation, e.g. device RNG
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/vendor-libraries.cmake)
+
 add_sycl_to_target(TARGET NESO-Particles SOURCES ${SRC_FILES})
 
 # Include the tests
