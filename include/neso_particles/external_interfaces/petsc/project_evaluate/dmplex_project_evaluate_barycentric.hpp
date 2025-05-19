@@ -312,9 +312,9 @@ public:
   int polynomial_order;
   virtual ~DMPlexProjectEvaluateBarycentric() = default;
   DMPlexProjectEvaluateBarycentric() = default;
-  inline const static Sym<REAL> sym_barycentric_coords =
+  static inline const Sym<REAL> sym_barycentric_coords =
       Sym<REAL>("NESO_PARTICLES_DMPLEX_PROJ_EVAL_BARY_COORDS");
-  inline constexpr static int ncomp_barycentric_coords = 4;
+  static inline constexpr int ncomp_barycentric_coords = 4;
 
   /**
    * Get a representation of the internal state which can be passed to the
