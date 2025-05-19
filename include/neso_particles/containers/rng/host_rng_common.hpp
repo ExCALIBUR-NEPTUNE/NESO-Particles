@@ -29,6 +29,14 @@ template <typename T> struct RNGGenerationFunction {
                                           const int block_size) = 0;
 };
 
+/**
+ * Helper function to create a RNGGenerationFunction object from child type.
+ * Called like:
+ *
+ *  make_rng_generation_function<RNG_TYPE, VALUE_TYPE>(ARGS...);
+ *
+ * @param args... Args to pass to downstream constructor.
+ */
 template <template <typename> typename RNG_TYPE, typename VALUE_TYPE,
           typename... ARGS>
 inline std::shared_ptr<RNGGenerationFunction<VALUE_TYPE>>
@@ -41,6 +49,10 @@ make_rng_generation_function(ARGS... args) {
   return ptr;
 }
 
+/**
+ * Implementation of RNGGenerationFunction for host functions which return a
+ * single sample.
+ */
 template <typename T>
 struct HostRNGGenerationFunction : RNGGenerationFunction<T> {
   virtual ~HostRNGGenerationFunction() = default;
@@ -112,6 +124,42 @@ struct HostRNGGenerationFunction : RNGGenerationFunction<T> {
     NESOASSERT(d_ptr == d_ptr_start + num_numbers,
                "Failed to copy the correct number of random numbers (pointer "
                "arithmetic)");
+  }
+};
+
+/**
+ * Implementation of RNGGenerationFunction for a callable function that wraps a
+ * function which creates the samples.
+ */
+template <typename T>
+struct GenericDeviceRNGGenerationFunction : RNGGenerationFunction<T> {
+  virtual ~GenericDeviceRNGGenerationFunction() = default;
+
+  /// The host callable that returns RNG samples.
+  std::function<void(T *, const std::size_t)> generation_function;
+
+  /**
+   * @param generation_function Host callable function that returns a sample on
+   * each call.
+   */
+  GenericDeviceRNGGenerationFunction(
+      std::function<void(T *, const std::size_t)> generation_function)
+      : generation_function(generation_function) {}
+
+  /**
+   * Draw values from a host generation function and copy them to a device
+   * buffer.
+   *
+   * @param[in] sycl_target Compute device.
+   * @param[in, out] d_ptr Pointer to buffer in which to place values.
+   * @param[in] num_numbers Number of values to draw from generation function.
+   * @param[in] block_size Block size to use when copying into device buffer.
+   */
+  virtual inline void
+  draw_random_samples([[maybe_unused]] SYCLTargetSharedPtr sycl_target,
+                      T *d_ptr, const std::size_t num_numbers,
+                      [[maybe_unused]] const int block_size) override {
+    this->generation_function(d_ptr, num_numbers);
   }
 };
 
