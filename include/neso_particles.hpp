@@ -51,5 +51,9 @@
 #include "neso_particles/utility_mesh_hierarchy_plotting.hpp"
 // Implementations
 #include "neso_particles/common_impl.hpp"
+// External interfaces
+#include "neso_particles/external_interfaces/common/common.hpp"
+#include "neso_particles/external_interfaces/petsc/petsc_interface.hpp"
+#include "neso_particles/external_interfaces/vtk/vtk.hpp"
 
 #endif
