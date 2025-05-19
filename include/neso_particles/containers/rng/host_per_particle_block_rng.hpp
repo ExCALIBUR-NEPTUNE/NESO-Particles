@@ -66,9 +66,6 @@ protected:
   int internal_state;
 
 public:
-  /// The function pointer which returns samples when called.
-  std::function<T()> generation_function;
-
   HostPerParticleBlockRNG() : BlockKernelRNGBase<T>() {}
 
   virtual ~HostPerParticleBlockRNG() = default;
@@ -84,8 +81,10 @@ public:
   template <typename FUNC_TYPE>
   HostPerParticleBlockRNG(FUNC_TYPE func, const int num_components,
                           const int block_size = 8192)
-      : BlockKernelRNGBase<T>(num_components, block_size), internal_state(0),
-        generation_function(func) {
+      : BlockKernelRNGBase<T>(
+            std::make_shared<HostRNGGenerationFunction<T>>(func),
+            num_components, block_size),
+        internal_state(0) {
     NESOASSERT(num_components >= 0, "Cannot have a RNG for " +
                                         std::to_string(num_components) +
                                         " components.");
@@ -139,8 +138,8 @@ public:
           static_cast<std::size_t>(this->num_components);
       auto d_ptr = this->allocate(sycl_target, num_random_numbers);
 
-      draw_random_samples(sycl_target, this->generation_function, d_ptr,
-                          num_random_numbers, this->block_size);
+      this->generation_function->draw_random_samples(
+          sycl_target, d_ptr, num_random_numbers, this->block_size);
 
       sycl_target->profile_map.inc("HostPerParticleBlockRNG",
                                    "impl_pre_loop_read", 1,
