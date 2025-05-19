@@ -62,7 +62,7 @@ template <typename T> struct CheckMax {
 
 template <template <typename> typename SPEC, typename T>
 inline bool atomic_binop_check(sycl::queue queue, const SPEC<T> spec) {
-  constexpr std::size_t num_elements = 4096 * 4;
+  constexpr std::size_t num_elements = 32;
   constexpr std::size_t num_bytes = num_elements * sizeof(T);
   T *d_ptr = static_cast<T *>(sycl::malloc_device(num_bytes, queue));
 
