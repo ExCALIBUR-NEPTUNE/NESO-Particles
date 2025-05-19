@@ -29,6 +29,18 @@ template <typename T> struct RNGGenerationFunction {
                                           const int block_size) = 0;
 };
 
+template <template <typename> typename RNG_TYPE, typename VALUE_TYPE,
+          typename... ARGS>
+inline std::shared_ptr<RNGGenerationFunction<VALUE_TYPE>>
+make_rng_generation_function(ARGS... args) {
+  std::shared_ptr<RNGGenerationFunction<VALUE_TYPE>> ptr =
+      std::dynamic_pointer_cast<RNGGenerationFunction<VALUE_TYPE>>(
+          std::make_shared<RNG_TYPE<VALUE_TYPE>>(args...));
+  NESOASSERT(ptr != nullptr,
+             "Could not cast pointers for RNGGenerationFunction.");
+  return ptr;
+}
+
 template <typename T>
 struct HostRNGGenerationFunction : RNGGenerationFunction<T> {
   virtual ~HostRNGGenerationFunction() = default;

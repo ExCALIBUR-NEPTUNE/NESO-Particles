@@ -241,6 +241,30 @@ public:
   }
 
   /**
+   * Create a KernelRNG from a RNGGenerationFunction which returns values
+   * of type T when called. For each loop invocation the implementation will
+   * allocate a buffer equal to the number of particles in the loop times the
+   * number of components per particle. The entries in this buffer are
+   * allocated sequentially by atomically incrementing a counter for each call.
+   *
+   * @param generation_function Instance of RNGGenerationFunction<T> to use to
+   * draw samples.
+   * @param num_components Number of RNG values required per particle
+   * (estimated maximum).
+   * @param block_size Optional block size.
+   */
+  HostAtomicBlockKernelRNG(
+      std::shared_ptr<RNGGenerationFunction<T>> generation_function,
+      const int num_components, const int block_size = 8192)
+      : BlockKernelRNGBase<T>(generation_function, num_components, block_size),
+        internal_state(0), num_random_numbers_override(-1),
+        internal_state_is_valid(true), suppress_warnings(false) {
+    NESOASSERT(num_components >= 0, "Cannot have a RNG for " +
+                                        std::to_string(num_components) +
+                                        " components.");
+  }
+
+  /**
    * @returns True if no errors have been detected otherwise false.
    */
   virtual inline bool valid_internal_state() override {

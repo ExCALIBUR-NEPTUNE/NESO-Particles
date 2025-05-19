@@ -91,6 +91,25 @@ public:
   }
 
   /**
+   * Create a KernelRNG from a RNGGenerationFunction which returns values of
+   * type T when called.
+   *
+   * @param generation_function Instance of RNGGenerationFunction<T> to use to
+   * draw samples.
+   * @param num_components Number of RNG values required per particle.
+   * @param block_size Optional block size.
+   */
+  HostPerParticleBlockRNG(
+      std::shared_ptr<RNGGenerationFunction<T>> generation_function,
+      const int num_components, const int block_size = 8192)
+      : BlockKernelRNGBase<T>(generation_function, num_components, block_size),
+        internal_state(0) {
+    NESOASSERT(num_components >= 0, "Cannot have a RNG for " +
+                                        std::to_string(num_components) +
+                                        " components.");
+  }
+
+  /**
    * Create the loop arguments for the RNG implementation.
    *
    * @param global_info Global information for the loop about to be executed.
