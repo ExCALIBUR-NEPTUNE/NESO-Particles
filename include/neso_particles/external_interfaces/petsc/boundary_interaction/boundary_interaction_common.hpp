@@ -85,12 +85,9 @@ protected:
   }
 
   template <typename T, typename U>
-  inline void find_intersections_inner(
-    std::shared_ptr<T> particle_sub_group,
-    const U &intersect_object,
-    REAL * d_real,
-    INT * d_int
-    ) {
+  inline void find_intersections_inner(std::shared_ptr<T> particle_sub_group,
+                                       const U &intersect_object, REAL *d_real,
+                                       INT *d_int) {
     if (intersect_object.boundary_elements_exist()) {
       auto particle_group = this->get_particle_group(particle_sub_group);
       const auto k_ndim = particle_group->position_dat->ncomp;
@@ -167,22 +164,29 @@ protected:
                   const INT linear_index =
                       mesh_hierarchy_device_mapper.tuple_to_linear_global(
                           mh_tuple);
-                  intersect_object.find(linear_index, prev_position,
-                                        curr_position, current_distance, k_intersection_point,
-                                        k_intersection_normal, k_intersection_metadata);
+                  intersect_object.find(
+                      linear_index, prev_position, curr_position,
+                      current_distance, k_intersection_point,
+                      k_intersection_normal, k_intersection_metadata);
                 }
               }
             }
             // If an intersection was found
-            if (k_intersection_metadata[0]){
+            if (k_intersection_metadata[0]) {
               // TODO make this ordering better
               d_int[INDEX.get_local_linear_index() * 3 + 0] = 1;
-              d_int[INDEX.get_local_linear_index() * 3 + 1] = k_intersection_metadata[1];
-              d_int[INDEX.get_local_linear_index() * 3 + 2] = k_intersection_metadata[2];
-              d_real[INDEX.get_local_linear_index() * 4 + 0] = k_intersection_point[0];
-              d_real[INDEX.get_local_linear_index() * 4 + 1] = k_intersection_point[1];
-              d_real[INDEX.get_local_linear_index() * 4 + 2] = k_intersection_normal[0];
-              d_real[INDEX.get_local_linear_index() * 4 + 3] = k_intersection_normal[1];
+              d_int[INDEX.get_local_linear_index() * 3 + 1] =
+                  k_intersection_metadata[1];
+              d_int[INDEX.get_local_linear_index() * 3 + 2] =
+                  k_intersection_metadata[2];
+              d_real[INDEX.get_local_linear_index() * 4 + 0] =
+                  k_intersection_point[0];
+              d_real[INDEX.get_local_linear_index() * 4 + 1] =
+                  k_intersection_point[1];
+              d_real[INDEX.get_local_linear_index() * 4 + 2] =
+                  k_intersection_normal[0];
+              d_real[INDEX.get_local_linear_index() * 4 + 3] =
+                  k_intersection_normal[1];
             }
           },
           Access::read(ParticleLoopIndex{}),

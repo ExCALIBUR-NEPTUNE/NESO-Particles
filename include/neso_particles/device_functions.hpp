@@ -69,11 +69,7 @@ inline auto sincos(const T x, T *cosval) {
   return sycl::sin(x);
 }
 
-template<typename T>
-inline auto dot_product_3d(
-  const T * a,
-  const T * b
-){
+template <typename T> inline auto dot_product_3d(const T *a, const T *b) {
   return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 }
 

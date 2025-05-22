@@ -1,9 +1,9 @@
 #ifndef _NESO_PARTICLES_PETSC_BOUNDARY_INTERACTION_BOUNDARY_INTERACTION_2D_HPP_
 #define _NESO_PARTICLES_PETSC_BOUNDARY_INTERACTION_BOUNDARY_INTERACTION_2D_HPP_
 
+#include "../../../boundary_interaction_specification.hpp"
 #include "../../../containers/blocked_binary_tree.hpp"
 #include "../../../device_functions.hpp"
-#include "../../../boundary_interaction_specification.hpp"
 #include "boundary_interaction_common.hpp"
 #include <cmath>
 #include <numeric>
@@ -111,9 +111,9 @@ protected:
       current_distance = max_distance;
     }
 
-    template <typename P_TYPE, typename C_TYPE>
     inline void find(const INT linear_cell, const REAL *a, const REAL *b,
-                     REAL &current_distance, REAL * P, REAL * NORMAL, INT *C) const {
+                     REAL &current_distance, REAL *P, REAL *NORMAL,
+                     INT *C) const {
 
       bool *exists;
       BoundaryInteractionCellData2D *data = nullptr;
@@ -152,7 +152,7 @@ protected:
             }
           }
           // Populate the normal information for the edge that was found.
-          if (new_intersection_found){
+          if (new_intersection_found) {
             BoundaryInteractionNormalData2D *normal_data = nullptr;
             if (root_normals->get_location(C[2], &exists, &normal_data)) {
               NORMAL[0] = normal_data->d_normal[0];
@@ -182,20 +182,20 @@ protected:
     const INT npart_local = particle_group->get_npart_local();
 
     auto d_real = get_resource<BufferDevice<REAL>,
-                                ResourceStackInterfaceBufferDevice<REAL>>(
+                               ResourceStackInterfaceBufferDevice<REAL>>(
         sycl_target->resource_stack_map,
         ResourceStackKeyBufferDeviceHost<REAL>{}, sycl_target);
     auto d_int = get_resource<BufferDevice<INT>,
-                               ResourceStackInterfaceBufferDevice<INT>>(
+                              ResourceStackInterfaceBufferDevice<INT>>(
         sycl_target->resource_stack_map,
         ResourceStackKeyBufferDeviceHost<INT>{}, sycl_target);
-    
+
     d_real->realloc_no_copy(npart_local * 4);
     d_int->realloc_no_copy(npart_local * 3);
     auto k_real = d_real->ptr;
     auto k_int = d_int->ptr;
-  
-    if (npart_local > 0){
+
+    if (npart_local > 0) {
       this->sycl_target->queue.fill(k_int, 0, npart_local).wait_and_throw();
     }
 
@@ -214,7 +214,8 @@ protected:
             },
             Access::read(ParticleLoopIndex{}));
 
-        // We can now create the EphemeralDats that describe the standard boundary.
+        // We can now create the EphemeralDats that describe the standard
+        // boundary.
         add_boundary_interaction_ephemeral_dats(m[k_group], 2);
 
         // Assemble the standard boundary data
@@ -253,7 +254,7 @@ protected:
           },
           Access::read(ParticleLoopIndex{})));
     }
-    
+
     restore_resource(sycl_target->resource_stack_map,
                      ResourceStackKeyBufferDevice<REAL>{}, d_real);
     restore_resource(sycl_target->resource_stack_map,

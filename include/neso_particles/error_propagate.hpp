@@ -104,7 +104,8 @@ error_propagate(SYCLTargetSharedPtr sycl_target) {
 /**
  * ResourceStack interface for ErrorPropagate.
  */
-struct ResourceStackInterfaceErrorPropagate : ResourceStackInterface<ErrorPropagate> {
+struct ResourceStackInterfaceErrorPropagate
+    : ResourceStackInterface<ErrorPropagate> {
 
   SYCLTargetSharedPtr sycl_target;
   ResourceStackInterfaceErrorPropagate(SYCLTargetSharedPtr sycl_target)
@@ -121,7 +122,6 @@ struct ResourceStackInterfaceErrorPropagate : ResourceStackInterface<ErrorPropag
   clean([[maybe_unused]] std::shared_ptr<ErrorPropagate> &resource) override {
     resource->reset();
   }
-
 };
 
 /**

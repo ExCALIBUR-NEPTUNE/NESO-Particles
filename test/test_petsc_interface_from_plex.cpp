@@ -304,13 +304,13 @@ TEST(PETSc, dmplex_from_existing_mesh_quads) {
     auto b2d = std::make_shared<PetscInterface::BoundaryInteraction2D>(
         sycl_target, mesh, boundary_groups);
     auto reflection =
-        std::make_shared<PetscInterface::BoundaryReflection>(b2d, 1.0e-10);
+        std::make_shared<ExternalCommon::BoundaryReflection>(ndim, 1.0e-10);
 
     auto lambda_apply_boundary_conditions = [&](auto aa) {
       auto sub_groups = b2d->post_integration(aa);
       for (auto &gx : sub_groups) {
         reflection->execute(gx.second, Sym<REAL>("P"), Sym<REAL>("V"),
-                            Sym<REAL>("TSP"));
+                            Sym<REAL>("TSP"), b2d->previous_position_sym);
       }
     };
     auto lambda_apply_timestep_reset = [&](auto aa) {
