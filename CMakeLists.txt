@@ -307,6 +307,16 @@ endif()
 
 # set the restrict keyword
 target_compile_definitions(NESO-Particles PUBLIC RESTRICT=${RESTRICT})
+# set the version infomation
+target_compile_definitions(
+  NESO-Particles
+  PUBLIC NESO_PARTICLES_VERSION_MAJOR=${CMAKE_PROJECT_VERSION_MAJOR})
+target_compile_definitions(
+  NESO-Particles
+  PUBLIC NESO_PARTICLES_VERSION_MINOR=${CMAKE_PROJECT_VERSION_MINOR})
+target_compile_definitions(
+  NESO-Particles
+  PUBLIC NESO_PARTICLES_VERSION_PATCH=${CMAKE_PROJECT_VERSION_PATCH})
 
 # now look for PETSc
 if(NESO_PARTICLES_ENABLE_PETSC)

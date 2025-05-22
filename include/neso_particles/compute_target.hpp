@@ -94,7 +94,9 @@ private:
 
     std::cout << "Using " << this->device.get_info<sycl::info::device::name>()
               << std::endl;
-    std::cout << "Kernel type: " << NESO_PARTICLES_DEVICE_LABEL << std::endl;
+    std::cout << "Version: " << NESO_PARTICLES_VERSION_MAJOR << "."
+              << NESO_PARTICLES_VERSION_MINOR << "."
+              << NESO_PARTICLES_VERSION_PATCH << std::endl;
     std::cout << "In order queue: " << this->queue.is_in_order() << std::endl;
     std::cout << "Mods: " << mods << std::endl;
     std::cout << "MPI comm size: " << this->comm_pair.size_parent << std::endl;

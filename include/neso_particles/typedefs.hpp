@@ -12,6 +12,15 @@
 
 namespace NESO::Particles {
 
+#define NESO_PARTICLES
+
+/**
+ * Reduce values via multiplication.
+ *
+ * @param nel Number of elements.
+ * @param values Vector of at least nel elements.
+ * @returns Elements in values multiplied together.
+ */
 inline int reduce_mul(const int nel, std::vector<int> &values) {
   int v = 1;
   for (int ex = 0; ex < nel; ex++) {
