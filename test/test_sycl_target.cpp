@@ -47,6 +47,12 @@ TEST(SYCLTarget, print_device_info) {
 
   auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
 
+  bool to_test = false;
+#ifdef NESO_PARTICLES
+  to_test = true;
+#endif
+  ASSERT_TRUE(to_test);
+
   sycl_target->print_device_info();
   sycl_target->free();
 }
