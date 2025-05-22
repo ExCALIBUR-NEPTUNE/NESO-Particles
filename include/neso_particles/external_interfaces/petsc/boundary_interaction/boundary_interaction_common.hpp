@@ -173,6 +173,7 @@ protected:
             }
             // If an intersection was found
             if (k_intersection_metadata[0]) {
+              nprint("Writing metadata:", 1, k_intersection_metadata[1], k_intersection_metadata[2]);
               // TODO make this ordering better
               d_int[INDEX.get_local_linear_index() * 3 + 0] = 1;
               d_int[INDEX.get_local_linear_index() * 3 + 1] =

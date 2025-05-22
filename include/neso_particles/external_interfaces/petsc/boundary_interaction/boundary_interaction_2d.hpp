@@ -196,7 +196,7 @@ protected:
     auto k_int = d_int->ptr;
 
     if (npart_local > 0) {
-      this->sycl_target->queue.fill(k_int, 0, npart_local).wait_and_throw();
+      this->sycl_target->queue.fill(k_int, 0, 3 * npart_local).wait_and_throw();
     }
 
     this->find_intersections_inner(particles, intersect_object, k_real, k_int);
@@ -209,6 +209,7 @@ protected:
         m[k_group] = static_particle_sub_group(
             iteration_set,
             [=](auto INDEX) -> bool {
+              nprint("making sub group:", k_int[INDEX.get_local_linear_index() * 3 + 0], k_int[INDEX.get_local_linear_index() * 3 + 1]);
               return (k_int[INDEX.get_local_linear_index() * 3 + 0]) &&
                      (k_int[INDEX.get_local_linear_index() * 3 + 1] == k_group);
             },
@@ -228,8 +229,9 @@ protected:
               INTERSECTION_POINT.at_ephemeral(1) = k_real[index * 4 + 1];
               INTERSECTION_NORMAL.at_ephemeral(0) = k_real[index * 4 + 2];
               INTERSECTION_NORMAL.at_ephemeral(1) = k_real[index * 4 + 3];
-              INTERSECTION_METADATA.at_ephemeral(0) = k_int[index * 2 + 0];
-              INTERSECTION_METADATA.at_ephemeral(1) = k_int[index * 2 + 1];
+              nprint("Writing EphemeralDatInt:", k_group, k_int[index * 3 + 1], k_int[index * 3 + 2]);
+              INTERSECTION_METADATA.at_ephemeral(0) = k_group;
+              INTERSECTION_METADATA.at_ephemeral(1) = k_int[index * 3 + 2];
             },
             Access::read(ParticleLoopIndex{}),
             Access::write(BoundaryInteractionSpecification::intersection_point),

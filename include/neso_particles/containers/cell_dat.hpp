@@ -247,6 +247,7 @@ protected:
 
     T *k_data = static_cast<T *>(
         this->sycl_target->malloc_device(npart_local * this->ncol * sizeof(T)));
+    auto e1 = this->sycl_target->queue.fill(k_data, 0, npart_local * this->ncol);
     NESOASSERT((k_data != nullptr) || (npart_local == 0),
                "Bad malloc_device call.");
 
@@ -275,6 +276,7 @@ protected:
       }
     }
 
+    e1.wait_and_throw();
     e0.wait_and_throw();
   }
 
