@@ -275,6 +275,14 @@ BoundaryInteraction2D::BoundaryInteraction2D(
       this->sycl_target);
 }
 
+template std::map<PetscInt, ParticleSubGroupSharedPtr>
+BoundaryInteraction2D::post_integration_inner<ParticleGroup>(
+    std::shared_ptr<ParticleGroup> particles);
+
+template std::map<PetscInt, ParticleSubGroupSharedPtr>
+BoundaryInteraction2D::post_integration_inner<ParticleSubGroup>(
+    std::shared_ptr<ParticleSubGroup> particles);
+
 } // namespace NESO::Particles::PetscInterface
 
 #endif

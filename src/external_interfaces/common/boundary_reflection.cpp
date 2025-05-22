@@ -72,9 +72,10 @@ void BoundaryReflection::execute(
         }
         // Detect if we moved the particle back past the previous position
         // Both PP - np and PP - IP should have the same sign
-        const bool moved_past_pp = ((PP.at(0) - np[0]) * o[0] < 0.0) ||
-                                   ((PP.at(1) - np[1]) * o[1] < 0.0) ||
-                                   ((PP.at(2) - np[2]) * o[2] < 0.0);
+        bool moved_past_pp = false;
+        for (int dx = 0; dx < k_ndim; dx++) {
+          moved_past_pp = moved_past_pp || ((PP.at(dx) - np[dx]) * o[dx] < 0.0);
+        }
 
         for (int dx = 0; dx < k_ndim; dx++) {
           P.at(dx) = moved_past_pp ? PP.at(dx) : np[dx];

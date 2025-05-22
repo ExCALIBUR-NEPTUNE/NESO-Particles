@@ -183,12 +183,12 @@ protected:
 
     auto d_real = get_resource<BufferDevice<REAL>,
                                ResourceStackInterfaceBufferDevice<REAL>>(
-        sycl_target->resource_stack_map,
-        ResourceStackKeyBufferDeviceHost<REAL>{}, sycl_target);
+        sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<REAL>{},
+        sycl_target);
     auto d_int = get_resource<BufferDevice<INT>,
                               ResourceStackInterfaceBufferDevice<INT>>(
-        sycl_target->resource_stack_map,
-        ResourceStackKeyBufferDeviceHost<INT>{}, sycl_target);
+        sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<INT>{},
+        sycl_target);
 
     d_real->realloc_no_copy(npart_local * 4);
     d_int->realloc_no_copy(npart_local * 3);
@@ -329,6 +329,14 @@ public:
       const REAL tol = 0.0,
       std::optional<Sym<REAL>> previous_position_sym = std::nullopt);
 };
+
+extern template std::map<PetscInt, ParticleSubGroupSharedPtr>
+BoundaryInteraction2D::post_integration_inner<ParticleGroup>(
+    std::shared_ptr<ParticleGroup> particles);
+
+extern template std::map<PetscInt, ParticleSubGroupSharedPtr>
+BoundaryInteraction2D::post_integration_inner<ParticleSubGroup>(
+    std::shared_ptr<ParticleSubGroup> particles);
 
 } // namespace NESO::Particles::PetscInterface
 
