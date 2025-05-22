@@ -1,9 +1,11 @@
-#ifndef _NESO_PARTICLES_PETSC_BOUNDARY_INTERACTION_BOUNDARY_REFLECTION_HPP_
-#define _NESO_PARTICLES_PETSC_BOUNDARY_INTERACTION_BOUNDARY_REFLECTION_HPP_
+#ifndef _NESO_PARTICLES_EXTERNAL_INTERFACES_COMMON_BOUNDARY_REFLECTION_HPP_
+#define _NESO_PARTICLES_EXTERNAL_INTERFACES_COMMON_BOUNDARY_REFLECTION_HPP_
 
-#include "boundary_interaction_2d.hpp"
+#include "../../error_propagate.hpp"
+#include "../../particle_group.hpp"
+#include "../../boundary_interaction_specification.hpp"
 
-namespace NESO::Particles::PetscInterface {
+namespace NESO::Particles::ExternalCommon {
 
 /**
  * Helper class to apply a reflection process to particles which intersect a
@@ -29,24 +31,29 @@ namespace NESO::Particles::PetscInterface {
  */
 class BoundaryReflection {
 protected:
-  std::shared_ptr<BoundaryInteraction2D> boundary_interaction_2d;
   int ndim;
   REAL reset_distance;
-  std::shared_ptr<ErrorPropagate> ep;
 
   template <typename T>
-  inline void execute_inner_2d(std::shared_ptr<T> particle_group,
+  inline void execute_inner_2d(std::shared_ptr<T> particle_sub_group,
                                Sym<REAL> sym_positions,
                                Sym<REAL> sym_velocities,
                                Sym<REAL> sym_time_step_proportion) {
 
-    auto normal_mapper =
-        this->boundary_interaction_2d->get_device_normal_mapper();
-    auto k_ep = this->ep->device_ptr();
+    auto particle_group = get_particle_group(particle_sub_group);
+    auto sycl_target = particle_group->sycl_target;
+
+    auto ep = get_resource<ErrorPropagate, ResourceStackInterfaceErrorPropagate>(
+          sycl_target->resource_stack_map, ResourceStackKeyErrorPropagate{},
+          sycl_target);
+
+    auto k_ep = ep->device_ptr();
     const REAL k_reset_distance = this->reset_distance;
 
+    TODO GENERALISE THIS LOOP
+
     particle_loop(
-        "BoundaryReflection::execute_inner_2d", particle_group,
+        "BoundaryReflection::execute_inner_2d", particle_sub_group,
         [=](auto P, auto V, auto TSP, auto PP, auto B_P, auto B_C) {
           REAL *normal;
           const bool normal_exists = normal_mapper.get(B_C.at(2), &normal);
@@ -125,8 +132,9 @@ protected:
         Access::read(this->boundary_interaction_2d->boundary_label_sym))
         ->execute();
 
-    this->ep->check_and_throw(
-        "Error executing BoundaryReflection::execute_inner_2d");
+    ep->check_and_throw("Error executing BoundaryReflection::execute_inner_2d");
+    restore_resource(sycl_target->resource_stack_map,
+                   ResourceStackKeyErrorPropagate{}, ep);
   }
 
 public:
@@ -135,20 +143,16 @@ public:
    * class. Note that this class does not perform calls to this boundary
    * interaction class other than those to retrieve the normal data.
    *
-   * @param boundary_interaction_2d The boundary interaction object the user
-   * used to identify the intersection of the particle trajectory and the
-   * boundary.
+   * @param ndim Number of spatial dimensions.
    * @param reset_distance Optionally pass the distance from the boundary to
    * the position the particle is reset to. If this value is zero then the
    * particle will become stuck in the wall.
    */
   BoundaryReflection(
-      std::shared_ptr<BoundaryInteraction2D> boundary_interaction_2d,
+      const int ndim,
       const REAL reset_distance = 1.0e-10)
-      : boundary_interaction_2d(boundary_interaction_2d), ndim(2),
+      : ndim(ndim),
         reset_distance(reset_distance) {
-    this->ep = std::make_shared<ErrorPropagate>(
-        this->boundary_interaction_2d->sycl_target);
   }
 
   /**
@@ -196,6 +200,6 @@ public:
                Sym<REAL> sym_time_step_proportion);
 };
 
-} // namespace NESO::Particles::PetscInterface
+} // namespace NESO::Particles::ExternalCommon
 
 #endif

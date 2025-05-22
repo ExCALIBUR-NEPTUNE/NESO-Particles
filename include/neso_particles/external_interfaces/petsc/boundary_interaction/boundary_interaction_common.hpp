@@ -61,8 +61,6 @@ protected:
                "Missmatch of sycl targets.");
     const int ndim = this->mesh->get_ndim();
     this->check_dat(particle_group, this->previous_position_sym, ndim);
-    this->check_dat(particle_group, this->boundary_position_sym, ndim);
-    this->check_dat(particle_group, this->boundary_label_sym, 3);
   }
 
   inline std::set<PetscInt> get_labels() const {
@@ -87,8 +85,12 @@ protected:
   }
 
   template <typename T, typename U>
-  inline void find_intersections_inner(std::shared_ptr<T> particle_sub_group,
-                                       const U &intersect_object) {
+  inline void find_intersections_inner(
+    std::shared_ptr<T> particle_sub_group,
+    const U &intersect_object,
+    REAL * d_real,
+    INT * d_int
+    ) {
     if (intersect_object.boundary_elements_exist()) {
       auto particle_group = this->get_particle_group(particle_sub_group);
       const auto k_ndim = particle_group->position_dat->ncomp;
@@ -100,7 +102,7 @@ protected:
       particle_loop(
           "BoundaryInteractionCommon::find_intersections_inner",
           particle_sub_group,
-          [=](auto B_C, auto B_P, auto PREV_POS, auto CURR_POS) {
+          [=](auto INDEX, auto PREV_POS, auto CURR_POS) {
             // Get the cells containing the start and end points
             REAL curr_position[3];
             REAL prev_position[3];
@@ -143,6 +145,10 @@ protected:
             REAL current_distance;
             intersect_object.reset(current_distance);
 
+            REAL k_intersection_point[2] = {0.0, 0.0};
+            REAL k_intersection_normal[2] = {0.0, 0.0};
+            INT k_intersection_metadata[3] = {0, 0, 0};
+
             // loop over the grid of MH cells
             INT cell_index[3];
             for (cell_index[2] = cell_starts[2]; cell_index[2] < cell_ends[2];
@@ -162,14 +168,24 @@ protected:
                       mesh_hierarchy_device_mapper.tuple_to_linear_global(
                           mh_tuple);
                   intersect_object.find(linear_index, prev_position,
-                                        curr_position, current_distance, B_P,
-                                        B_C);
+                                        curr_position, current_distance, k_intersection_point,
+                                        k_intersection_normal, k_intersection_metadata);
                 }
               }
             }
+            // If an intersection was found
+            if (k_intersection_metadata[0]){
+              // TODO make this ordering better
+              d_int[INDEX.get_local_linear_index() * 3 + 0] = 1;
+              d_int[INDEX.get_local_linear_index() * 3 + 1] = k_intersection_metadata[1];
+              d_int[INDEX.get_local_linear_index() * 3 + 2] = k_intersection_metadata[2];
+              d_real[INDEX.get_local_linear_index() * 4 + 0] = k_intersection_point[0];
+              d_real[INDEX.get_local_linear_index() * 4 + 1] = k_intersection_point[1];
+              d_real[INDEX.get_local_linear_index() * 4 + 2] = k_intersection_normal[0];
+              d_real[INDEX.get_local_linear_index() * 4 + 3] = k_intersection_normal[1];
+            }
           },
-          Access::write(this->boundary_label_sym),
-          Access::write(this->boundary_position_sym),
+          Access::read(ParticleLoopIndex{}),
           Access::read(this->previous_position_sym),
           Access::read(particle_group->position_dat))
           ->execute();
@@ -337,9 +353,7 @@ protected:
   BoundaryInteractionCommon(
       SYCLTargetSharedPtr sycl_target, DMPlexInterfaceSharedPtr mesh,
       std::map<PetscInt, std::vector<PetscInt>> &boundary_groups,
-      std::optional<Sym<REAL>> previous_position_sym = std::nullopt,
-      std::optional<Sym<REAL>> boundary_position_sym = std::nullopt,
-      std::optional<Sym<INT>> boundary_label_sym = std::nullopt);
+      std::optional<Sym<REAL>> previous_position_sym = std::nullopt);
 
 public:
   /// The compute device used to find intersections.
@@ -353,17 +367,6 @@ public:
   /// particle before the positions were updated in a time stepping loop. These
   /// positions are populated on call to @ref pre_integration.
   Sym<REAL> previous_position_sym;
-  /// The Sym for the intersection point for the particle trajectory and the
-  /// boundary. This property is populated if an intersection is discovered in
-  /// a call to @ref post_integration.
-  Sym<REAL> boundary_position_sym;
-  /// The Sym which holds the metadata information for the intersection point
-  /// between the trajectory and the boundary. Component 0 holds a 1 if an
-  /// intersection is found. Component 1 holds the group ID identifed for the
-  /// intersection. Component 2 holds the global ID of the boundary element for
-  /// which the intersection was identified between trajectory and the
-  /// boundary.
-  Sym<INT> boundary_label_sym;
 
   /**
    * This method should be called with a collection of particles prior to

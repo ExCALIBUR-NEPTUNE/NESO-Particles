@@ -117,14 +117,9 @@ BoundaryInteraction2D::post_integration(
 BoundaryInteraction2D::BoundaryInteraction2D(
     SYCLTargetSharedPtr sycl_target, DMPlexInterfaceSharedPtr mesh,
     std::map<PetscInt, std::vector<PetscInt>> &boundary_groups, const REAL tol,
-    std::optional<Sym<REAL>> previous_position_sym,
-    std::optional<Sym<REAL>> boundary_position_sym,
-    std::optional<Sym<INT>> boundary_label_sym)
-    :
-
-      BoundaryInteractionCommon(sycl_target, mesh, boundary_groups,
-                                previous_position_sym, boundary_position_sym,
-                                boundary_label_sym)
+    std::optional<Sym<REAL>> previous_position_sym)
+    : BoundaryInteractionCommon(sycl_target, mesh, boundary_groups,
+                                previous_position_sym)
 
 {
   this->tol = tol;

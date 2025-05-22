@@ -3,7 +3,7 @@
 
 #include "../../../containers/blocked_binary_tree.hpp"
 #include "../../../device_functions.hpp"
-#include "../../common/local_claim.hpp"
+#include "../../../boundary_interaction_specification.hpp"
 #include "boundary_interaction_common.hpp"
 #include <cmath>
 #include <numeric>
@@ -100,6 +100,7 @@ protected:
     REAL max_distance;
     REAL epsilon;
     BlockedBinaryNode<INT, BoundaryInteractionCellData2D, 8> *root;
+    BlockedBinaryNode<INT, BoundaryInteractionNormalData2D, 8> *root_normals;
     REAL tol;
 
     inline bool boundary_elements_exist() const {
@@ -112,10 +113,10 @@ protected:
 
     template <typename P_TYPE, typename C_TYPE>
     inline void find(const INT linear_cell, const REAL *a, const REAL *b,
-                     REAL &current_distance, P_TYPE &P, C_TYPE &C) const {
+                     REAL &current_distance, REAL * P, REAL * NORMAL, INT *C) const {
 
       bool *exists;
-      BoundaryInteractionCellData2D *data;
+      BoundaryInteractionCellData2D *data = nullptr;
       if (root->get_location(linear_cell, &exists, &data)) {
         if (*exists) {
           const REAL xa = a[0];
@@ -123,6 +124,7 @@ protected:
           const REAL xb = b[0];
           const REAL yb = b[1];
           REAL xi, yi, l0;
+          bool new_intersection_found = false;
 
           for (int edgex = 0; edgex < (data->num_edges); edgex++) {
             const REAL x0 = data->d_real[edgex * 4 + 0];
@@ -140,12 +142,21 @@ protected:
             const REAL d2 = xd * xd + yd * yd;
 
             if (intersects && (d2 < current_distance)) {
-              P.at(0) = xi;
-              P.at(1) = yi;
-              C.at(0) = 1;
-              C.at(1) = group_id;
-              C.at(2) = edge_id;
+              P[0] = xi;
+              P[1] = yi;
+              C[0] = 1;
+              C[1] = group_id;
+              C[2] = edge_id;
               current_distance = d2;
+              new_intersection_found = true;
+            }
+          }
+          // Populate the normal information for the edge that was found.
+          if (new_intersection_found){
+            BoundaryInteractionNormalData2D *normal_data = nullptr;
+            if (root_normals->get_location(C[2], &exists, &normal_data)) {
+              NORMAL[0] = normal_data->d_normal[0];
+              NORMAL[1] = normal_data->d_normal[1];
             }
           }
         }
@@ -160,19 +171,35 @@ protected:
     this->find_cells(particles);
     this->collect_cells();
 
-    auto particle_group = this->get_particle_group(particles);
-    particle_loop(
-        "BoundaryInteraction2D::find_intersections_0", particles,
-        [=](auto C) { C.at(0) = -1; }, Access::write(this->boundary_label_sym))
-        ->execute();
-
     TrajectoryIntersect2D intersect_object;
     intersect_object.max_distance = std::numeric_limits<REAL>::max();
     intersect_object.epsilon = std::numeric_limits<REAL>::min();
     intersect_object.root = this->d_map_edge_discovery->root;
+    intersect_object.root_normals = this->d_map_edge_normals->root;
     intersect_object.tol = this->tol;
 
-    this->find_intersections_inner(particles, intersect_object);
+    auto particle_group = get_particle_group(particles);
+    const INT npart_local = particle_group->get_npart_local();
+
+    auto d_real = get_resource<BufferDevice<REAL>,
+                                ResourceStackInterfaceBufferDevice<REAL>>(
+        sycl_target->resource_stack_map,
+        ResourceStackKeyBufferDeviceHost<REAL>{}, sycl_target);
+    auto d_int = get_resource<BufferDevice<INT>,
+                               ResourceStackInterfaceBufferDevice<INT>>(
+        sycl_target->resource_stack_map,
+        ResourceStackKeyBufferDeviceHost<INT>{}, sycl_target);
+    
+    d_real->realloc_no_copy(npart_local * 4);
+    d_int->realloc_no_copy(npart_local * 3);
+    auto k_real = d_real->ptr;
+    auto k_int = d_int->ptr;
+  
+    if (npart_local > 0){
+      this->sycl_target->queue.fill(k_int, 0, npart_local).wait_and_throw();
+    }
+
+    this->find_intersections_inner(particles, intersect_object, k_real, k_int);
 
     std::map<PetscInt, ParticleSubGroupSharedPtr> m;
 
@@ -181,10 +208,35 @@ protected:
         const PetscInt k_group = group_labels.first;
         m[k_group] = static_particle_sub_group(
             iteration_set,
-            [=](auto C) -> bool {
-              return (C.at(0) > -1) && (C.at(1) == k_group);
+            [=](auto INDEX) -> bool {
+              return (k_int[INDEX.get_local_linear_index() * 3 + 0]) &&
+                     (k_int[INDEX.get_local_linear_index() * 3 + 1] == k_group);
             },
-            Access::read(this->boundary_label_sym));
+            Access::read(ParticleLoopIndex{}));
+
+        // We can now create the EphemeralDats that describe the standard boundary.
+        add_boundary_interaction_ephemeral_dats(m[k_group], 2);
+
+        // Assemble the standard boundary data
+        particle_loop(
+            "BoundaryInteraction2D::find_intersections_1", m[k_group],
+            [=](auto INDEX, auto INTERSECTION_POINT, auto INTERSECTION_NORMAL,
+                auto INTERSECTION_METADATA) {
+              const INT index = INDEX.get_local_linear_index();
+              INTERSECTION_POINT.at_ephemeral(0) = k_real[index * 4 + 0];
+              INTERSECTION_POINT.at_ephemeral(1) = k_real[index * 4 + 1];
+              INTERSECTION_NORMAL.at_ephemeral(0) = k_real[index * 4 + 2];
+              INTERSECTION_NORMAL.at_ephemeral(1) = k_real[index * 4 + 3];
+              INTERSECTION_METADATA.at_ephemeral(0) = k_int[index * 2 + 0];
+              INTERSECTION_METADATA.at_ephemeral(1) = k_int[index * 2 + 1];
+            },
+            Access::read(ParticleLoopIndex{}),
+            Access::write(BoundaryInteractionSpecification::intersection_point),
+            Access::write(
+                BoundaryInteractionSpecification::intersection_normal),
+            Access::write(
+                BoundaryInteractionSpecification::intersection_metadata))
+            ->execute();
       }
     };
 
@@ -194,11 +246,18 @@ protected:
     if (this->boundary_groups.size() == 1) {
       lambda_make_sub_group(particles);
     } else {
-      lambda_make_sub_group(particle_sub_group(
-          particles, [=](auto C) -> bool { return C.at(0) > -1; },
-          Access::read(this->boundary_label_sym)));
+      lambda_make_sub_group(static_particle_sub_group(
+          particles,
+          [=](auto INDEX) -> bool {
+            return k_int[INDEX.get_local_linear_index() * 3 + 0] != 0;
+          },
+          Access::read(ParticleLoopIndex{})));
     }
-
+    
+    restore_resource(sycl_target->resource_stack_map,
+                     ResourceStackKeyBufferDevice<REAL>{}, d_real);
+    restore_resource(sycl_target->resource_stack_map,
+                     ResourceStackKeyBufferDevice<INT>{}, d_int);
     return m;
   }
 
@@ -262,24 +321,12 @@ public:
    * the position of each particle before the positions were updated in a time
    * stepping loop. These positions are populated on call to @ref
    * pre_integration.
-   * @param boundary_position_sym The Sym for the intersection point for the
-   * particle trajectory and the boundary. This property is populated if an
-   * intersection is discovered in a call to @ref post_integration.
-   * @param boundary_label_sym The Sym which holds the metadata information for
-   * the intersection point between the trajectory and the boundary. Component 0
-   * holds a 1 if an intersection is found. Component 1 holds the group ID
-   * identifed for the intersection. Component 2 holds the global ID of the
-   * boundary element for which the intersection was identified between
-   * trajectory and the boundary.
-   *
    */
   BoundaryInteraction2D(
       SYCLTargetSharedPtr sycl_target, DMPlexInterfaceSharedPtr mesh,
       std::map<PetscInt, std::vector<PetscInt>> &boundary_groups,
       const REAL tol = 0.0,
-      std::optional<Sym<REAL>> previous_position_sym = std::nullopt,
-      std::optional<Sym<REAL>> boundary_position_sym = std::nullopt,
-      std::optional<Sym<INT>> boundary_label_sym = std::nullopt);
+      std::optional<Sym<REAL>> previous_position_sym = std::nullopt);
 };
 
 } // namespace NESO::Particles::PetscInterface

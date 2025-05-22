@@ -1,8 +1,8 @@
 #ifdef NESO_PARTICLES_PETSC
 #include <neso_particles/common_impl.hpp>
-#include <neso_particles/external_interfaces/petsc/boundary_interaction/boundary_reflection.hpp>
+#include <neso_particles/external_interfaces/common/boundary_reflection.hpp>
 
-namespace NESO::Particles::PetscInterface {
+namespace NESO::Particles::ExternalCommon {
 
 void BoundaryReflection::execute(std::shared_ptr<ParticleGroup> particle_group,
                                  Sym<REAL> sym_positions,
@@ -21,6 +21,6 @@ void BoundaryReflection::execute(
                                 sym_time_step_proportion);
 }
 
-} // namespace NESO::Particles::PetscInterface
+} // namespace NESO::Particles::ExternalCommon
 
 #endif

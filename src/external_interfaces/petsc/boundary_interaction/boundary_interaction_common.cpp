@@ -8,9 +8,7 @@ namespace NESO::Particles::PetscInterface {
 BoundaryInteractionCommon::BoundaryInteractionCommon(
     SYCLTargetSharedPtr sycl_target, DMPlexInterfaceSharedPtr mesh,
     std::map<PetscInt, std::vector<PetscInt>> &boundary_groups,
-    std::optional<Sym<REAL>> previous_position_sym,
-    std::optional<Sym<REAL>> boundary_position_sym,
-    std::optional<Sym<INT>> boundary_label_sym)
+    std::optional<Sym<REAL>> previous_position_sym)
     : sycl_target(sycl_target), mesh(mesh), boundary_groups(boundary_groups) {
 
   for (auto &bx : boundary_groups) {
@@ -29,10 +27,6 @@ BoundaryInteractionCommon::BoundaryInteractionCommon(
   };
   assign_sym(this->previous_position_sym, previous_position_sym,
              Sym<REAL>("NESO_PARTICLES_DMPLEX_BOUNDARY_PREV_POS"));
-  assign_sym(this->boundary_position_sym, boundary_position_sym,
-             Sym<REAL>("NESO_PARTICLES_DMPLEX_BOUNDARY_POS"));
-  assign_sym(this->boundary_label_sym, boundary_label_sym,
-             Sym<INT>("NESO_PARTICLES_DMPLEX_BOUNDARY_LABEL"));
 
   const int k_ndim = this->mesh->get_ndim();
   const int k_cell_count = this->mesh->get_cell_count();
