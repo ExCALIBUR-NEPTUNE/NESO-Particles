@@ -78,6 +78,7 @@ set(SRC_FILES
     ${SRC_DIR}/particle_dat.cpp
     ${SRC_DIR}/particle_group.cpp
     ${SRC_DIR}/particle_set.cpp
+    ${SRC_DIR}/particle_sub_group/particle_group_partition.cpp
     ${SRC_DIR}/particle_group_temporary.cpp
     ${SRC_DIR}/particle_group_pointer_map.cpp
     ${SRC_DIR}/utility.cpp
