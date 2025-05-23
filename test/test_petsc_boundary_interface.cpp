@@ -500,11 +500,9 @@ TEST(PETScBoundary2D, post_integrate) {
         ->execute();
     ASSERT_EQ(ep->get_flag(), 0);
     // Check the boundary metadata is as expected
-    nprint_variable(correct_group);
     particle_loop(
         sub_groups.at(correct_group),
         [=](auto BOUNDARY_INFO) {
-          nprint("Metadata:", BOUNDARY_INFO.at_ephemeral(0), BOUNDARY_INFO.at_ephemeral(1));
           NESO_KERNEL_ASSERT(BOUNDARY_INFO.at_ephemeral(0) == correct_group,
                              k_ep);
           NESO_KERNEL_ASSERT(BOUNDARY_INFO.at_ephemeral(1) > -1, k_ep);
