@@ -77,7 +77,13 @@ public:
   }
 
   virtual inline bool invalidate_ephemeral_dats_if_required() override {
-    const bool required = this->selector->update_required();
+
+    bool bool_dats = false;
+    bool bool_group = false;
+    this->selector->update_required(&bool_dats, &bool_group);
+    const bool required =
+        (this->is_static) ? bool_group : bool_group || bool_dats;
+
     if (required) {
       this->reset_ephemeral_dats(
           this->selection.npart_local, this->selection.h_npart_cell,

@@ -11,14 +11,11 @@ public:
       PetscInterface::DMPlexInterfaceSharedPtr mesh,
       std::map<PetscInt, std::vector<PetscInt>> &boundary_groups,
       const REAL tol = 0.0,
-      std::optional<Sym<REAL>> previous_position_sym = std::nullopt,
-      std::optional<Sym<REAL>> boundary_position_sym = std::nullopt,
-      std::optional<Sym<INT>> boundary_label_sym = std::nullopt)
+      std::optional<Sym<REAL>> previous_position_sym = std::nullopt)
       :
 
         PetscInterface::BoundaryInteraction2D(
-            sycl_target, mesh, boundary_groups, tol, previous_position_sym,
-            boundary_position_sym, boundary_label_sym) {}
+            sycl_target, mesh, boundary_groups, tol, previous_position_sym) {}
 
   using BoundaryInteractionCellData2D =
       PetscInterface::BoundaryInteractionCellData2D;
@@ -484,6 +481,7 @@ TEST(PETScBoundary2D, post_integrate) {
     auto sub_groups = b2d->post_integration(A);
 
     for (auto &sx : sub_groups) {
+      ASSERT_TRUE(contains_boundary_interaction_data(sx.second, ndim));
       if (sx.first != correct_group) {
         ASSERT_EQ(sx.second->get_npart_local(), 0);
       }
@@ -494,21 +492,22 @@ TEST(PETScBoundary2D, post_integrate) {
         sub_groups.at(correct_group),
         [=](auto BOUNDARY_POSITION) {
           NESO_KERNEL_ASSERT(
-              KERNEL_ABS(BOUNDARY_POSITION.at(component) - value) < 1.0e-14,
+              KERNEL_ABS(BOUNDARY_POSITION.at_ephemeral(component) - value) <
+                  1.0e-14,
               k_ep);
         },
-        Access::read(b2d->boundary_position_sym))
+        Access::read(BoundaryInteractionSpecification::intersection_point))
         ->execute();
     ASSERT_EQ(ep->get_flag(), 0);
     // Check the boundary metadata is as expected
     particle_loop(
         sub_groups.at(correct_group),
         [=](auto BOUNDARY_INFO) {
-          NESO_KERNEL_ASSERT(BOUNDARY_INFO.at(0) > -1, k_ep);
-          NESO_KERNEL_ASSERT(BOUNDARY_INFO.at(1) == correct_group, k_ep);
-          NESO_KERNEL_ASSERT(BOUNDARY_INFO.at(2) > -1, k_ep);
+          NESO_KERNEL_ASSERT(BOUNDARY_INFO.at_ephemeral(0) == correct_group,
+                             k_ep);
+          NESO_KERNEL_ASSERT(BOUNDARY_INFO.at_ephemeral(1) > -1, k_ep);
         },
-        Access::read(b2d->boundary_label_sym))
+        Access::read(BoundaryInteractionSpecification::intersection_metadata))
         ->execute();
     ASSERT_EQ(ep->get_flag(), 0);
     // Check that the normal for the intersection point is as expected
@@ -517,7 +516,8 @@ TEST(PETScBoundary2D, post_integrate) {
         sub_groups.at(correct_group),
         [=](auto B_C) {
           REAL *normal;
-          NESO_KERNEL_ASSERT(normal_mapper.get(B_C.at(2), &normal), k_ep);
+          NESO_KERNEL_ASSERT(normal_mapper.get(B_C.at_ephemeral(1), &normal),
+                             k_ep);
 
           const bool bx0 = KERNEL_ABS(normal[0] - normalx) < 1.0e-15;
           const bool bx1 = KERNEL_ABS(normal[0] + normalx) < 1.0e-15;
@@ -527,7 +527,7 @@ TEST(PETScBoundary2D, post_integrate) {
           NESO_KERNEL_ASSERT(bx0 || bx1, k_ep);
           NESO_KERNEL_ASSERT(by0 || by1, k_ep);
         },
-        Access::read(b2d->boundary_label_sym))
+        Access::read(BoundaryInteractionSpecification::intersection_metadata))
         ->execute();
     ASSERT_EQ(ep->get_flag(), 0);
   }
@@ -631,15 +631,15 @@ TEST(PETScBoundary2D, corners) {
     particle_loop(
         sub_group.at(1),
         [=](auto B_P, auto B_C) {
-          NESO_KERNEL_ASSERT(KERNEL_ABS(B_P.at(0) - intersectx) < 1.0e-15,
-                             k_ep);
-          NESO_KERNEL_ASSERT(KERNEL_ABS(B_P.at(1) - intersecty) < 1.0e-15,
-                             k_ep);
-          NESO_KERNEL_ASSERT(B_C.at(0) > -1, k_ep);
-          NESO_KERNEL_ASSERT(B_C.at(1) == 1, k_ep);
+          NESO_KERNEL_ASSERT(
+              KERNEL_ABS(B_P.at_ephemeral(0) - intersectx) < 1.0e-15, k_ep);
+          NESO_KERNEL_ASSERT(
+              KERNEL_ABS(B_P.at_ephemeral(1) - intersecty) < 1.0e-15, k_ep);
+          NESO_KERNEL_ASSERT(B_C.at_ephemeral(0) == 1, k_ep);
+          NESO_KERNEL_ASSERT(B_C.at_ephemeral(1) > -1, k_ep);
         },
-        Access::read(b2d->boundary_position_sym),
-        Access::read(b2d->boundary_label_sym))
+        Access::read(BoundaryInteractionSpecification::intersection_point),
+        Access::read(BoundaryInteractionSpecification::intersection_metadata))
         ->execute();
     ASSERT_EQ(ep->get_flag(), 0);
   }
@@ -685,7 +685,7 @@ TEST(PETScBoundary2D, reflection_truncated) {
   auto b2d = std::make_shared<TestBoundaryInteraction2D>(sycl_target, mesh,
                                                          boundary_groups);
   auto reflection =
-      std::make_shared<PetscInterface::BoundaryReflection>(b2d, 1.0e-10);
+      std::make_shared<ExternalCommon::BoundaryReflection>(2, 1.0e-10);
 
   auto ep = std::make_shared<ErrorPropagate>(sycl_target);
   auto k_ep = ep->device_ptr();
@@ -705,7 +705,7 @@ TEST(PETScBoundary2D, reflection_truncated) {
           ->execute();
 
       reflection->execute(gx.second, Sym<REAL>("P"), Sym<REAL>("V"),
-                          Sym<REAL>("TSP"));
+                          Sym<REAL>("TSP"), b2d->previous_position_sym);
 
       particle_loop(
           gx.second,
@@ -840,13 +840,13 @@ TEST(PETScBoundary2D, reflection_advection) {
     auto b2d = std::make_shared<TestBoundaryInteraction2D>(sycl_target, mesh,
                                                            boundary_groups);
     auto reflection =
-        std::make_shared<PetscInterface::BoundaryReflection>(b2d, 1.0e-10);
+        std::make_shared<ExternalCommon::BoundaryReflection>(2, 1.0e-10);
 
     auto lambda_apply_boundary_conditions = [&](auto aa) {
       auto sub_groups = b2d->post_integration(aa);
       for (auto &gx : sub_groups) {
         reflection->execute(gx.second, Sym<REAL>("P"), Sym<REAL>("V"),
-                            Sym<REAL>("TSP"));
+                            Sym<REAL>("TSP"), b2d->previous_position_sym);
       }
     };
     auto lambda_apply_timestep_reset = [&](auto aa) {

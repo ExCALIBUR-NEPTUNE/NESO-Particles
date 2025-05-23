@@ -224,20 +224,24 @@ public:
   }
 
   /**
+   * @param[in, out] bool_dats Bool to indicate if the invalidation is due to
+   * ParticleDat updates.
+   * @param[in, out] bool_group Bool to indicate if the invalidation is due to
+   * ParticleGroup updates.
    * @returns True if this selector is out of date. A selector is out of date if
    * any of the particle property dependencies have been accessed with a write
    * access descriptor since the last call to get. A selector is out of date if
    * any structural changes have been made, e.g. adding/removing particles,
    * calling cell_move or calling hybrid_move etc.
    */
-  inline bool update_required() {
+  inline bool update_required(bool *bool_dats, bool *bool_group) {
 
-    const bool bool_dats = this->particle_group->check_validation(
+    *bool_dats = this->particle_group->check_validation(
         this->particle_dat_versions, false);
-    const bool bool_group = this->particle_group->check_validation(
+    *bool_group = this->particle_group->check_validation(
         this->particle_group_version, false);
 
-    return bool_dats || bool_group;
+    return (*bool_dats) || (*bool_group);
   }
 
   /**

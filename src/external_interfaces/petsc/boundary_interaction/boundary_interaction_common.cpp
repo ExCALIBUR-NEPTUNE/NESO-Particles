@@ -5,12 +5,32 @@
 
 namespace NESO::Particles::PetscInterface {
 
+namespace {
+template <typename T>
+inline void check_dat(ParticleGroupSharedPtr particle_group, Sym<T> sym,
+                      const int ncomp) {
+  if (!particle_group->contains_dat(sym)) {
+    particle_group->add_particle_dat(sym, ncomp);
+  } else {
+    NESOASSERT(particle_group->get_dat(sym)->ncomp >= ncomp,
+               "Requested dat with sym " + sym.name +
+                   " exists already with an insufficient number of components");
+  }
+}
+} // namespace
+
+void BoundaryInteractionCommon::prepare_particle_group(
+    ParticleGroupSharedPtr particle_group) {
+  NESOASSERT(particle_group->sycl_target == this->sycl_target,
+             "Missmatch of sycl targets.");
+  const int ndim = this->mesh->get_ndim();
+  check_dat(particle_group, this->previous_position_sym, ndim);
+}
+
 BoundaryInteractionCommon::BoundaryInteractionCommon(
     SYCLTargetSharedPtr sycl_target, DMPlexInterfaceSharedPtr mesh,
     std::map<PetscInt, std::vector<PetscInt>> &boundary_groups,
-    std::optional<Sym<REAL>> previous_position_sym,
-    std::optional<Sym<REAL>> boundary_position_sym,
-    std::optional<Sym<INT>> boundary_label_sym)
+    std::optional<Sym<REAL>> previous_position_sym)
     : sycl_target(sycl_target), mesh(mesh), boundary_groups(boundary_groups) {
 
   for (auto &bx : boundary_groups) {
@@ -29,10 +49,6 @@ BoundaryInteractionCommon::BoundaryInteractionCommon(
   };
   assign_sym(this->previous_position_sym, previous_position_sym,
              Sym<REAL>("NESO_PARTICLES_DMPLEX_BOUNDARY_PREV_POS"));
-  assign_sym(this->boundary_position_sym, boundary_position_sym,
-             Sym<REAL>("NESO_PARTICLES_DMPLEX_BOUNDARY_POS"));
-  assign_sym(this->boundary_label_sym, boundary_label_sym,
-             Sym<INT>("NESO_PARTICLES_DMPLEX_BOUNDARY_LABEL"));
 
   const int k_ndim = this->mesh->get_ndim();
   const int k_cell_count = this->mesh->get_cell_count();
@@ -64,8 +80,8 @@ BoundaryInteractionCommon::BoundaryInteractionCommon(
 
 void BoundaryInteractionCommon::pre_integration(
     std::shared_ptr<ParticleGroup> particles) {
-  prepare_particle_group(particles);
-  auto particle_group = this->get_particle_group(particles);
+  auto particle_group = get_particle_group(particles);
+  prepare_particle_group(particle_group);
   auto position_dat = particle_group->position_dat;
   const int k_ncomp = position_dat->ncomp;
   const int k_ndim = this->mesh->get_ndim();
@@ -86,8 +102,8 @@ void BoundaryInteractionCommon::pre_integration(
 
 void BoundaryInteractionCommon::pre_integration(
     std::shared_ptr<ParticleSubGroup> particles) {
-  prepare_particle_group(particles);
-  auto particle_group = this->get_particle_group(particles);
+  auto particle_group = get_particle_group(particles);
+  prepare_particle_group(particle_group);
   auto position_dat = particle_group->position_dat;
   const int k_ncomp = position_dat->ncomp;
   const int k_ndim = this->mesh->get_ndim();

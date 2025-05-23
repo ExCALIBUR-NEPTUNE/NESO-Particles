@@ -1,6 +1,7 @@
 #ifndef _NESO_PARTICLES_EXTERNAL_INTERFACES_COMMON_COMMON_H_
 #define _NESO_PARTICLES_EXTERNAL_INTERFACES_COMMON_COMMON_H_
 
+#include "boundary_reflection.hpp"
 #include "bounding_box.hpp"
 #include "coordinate_mapping.hpp"
 #include "dof_mapper_dg.hpp"

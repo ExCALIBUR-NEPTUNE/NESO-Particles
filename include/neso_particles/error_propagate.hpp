@@ -101,6 +101,34 @@ error_propagate(SYCLTargetSharedPtr sycl_target) {
   return std::make_shared<ErrorPropagate>(sycl_target);
 }
 
+/**
+ * ResourceStack interface for ErrorPropagate.
+ */
+struct ResourceStackInterfaceErrorPropagate
+    : ResourceStackInterface<ErrorPropagate> {
+
+  SYCLTargetSharedPtr sycl_target;
+  ResourceStackInterfaceErrorPropagate(SYCLTargetSharedPtr sycl_target)
+      : sycl_target(sycl_target) {}
+
+  virtual inline std::shared_ptr<ErrorPropagate> construct() override {
+    return std::make_shared<ErrorPropagate>(this->sycl_target);
+  }
+
+  virtual inline void
+  free([[maybe_unused]] std::shared_ptr<ErrorPropagate> &resource) override {}
+
+  virtual inline void
+  clean([[maybe_unused]] std::shared_ptr<ErrorPropagate> &resource) override {
+    resource->reset();
+  }
+};
+
+/**
+ * ResourceStackMap key for ResourceStackInterfaceErrorPropagate.
+ */
+struct ResourceStackKeyErrorPropagate {};
+
 } // namespace NESO::Particles
 
 #endif
