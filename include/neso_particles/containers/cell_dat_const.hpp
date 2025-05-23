@@ -552,6 +552,10 @@ public:
 template <typename T>
 using CellDatConstSharedPtr = std::shared_ptr<CellDatConst<T>>;
 
+extern template class CellDatConst<REAL>;
+extern template class CellDatConst<INT>;
+extern template class CellDatConst<int>;
+
 } // namespace NESO::Particles
 
 #endif

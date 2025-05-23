@@ -287,6 +287,10 @@ public:
   }
 };
 
+extern template class GlobalArray<REAL>;
+extern template class GlobalArray<INT>;
+extern template class GlobalArray<int>;
+
 }; // namespace NESO::Particles
 
 #endif

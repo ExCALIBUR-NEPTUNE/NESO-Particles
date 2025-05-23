@@ -5,17 +5,6 @@
 #include "sym_vector_pointer_cache_dispatch.hpp"
 
 namespace NESO::Particles {
-
-/**
- * Helper function to return the EphemeralDats SymVectorPointerCacheDispatch or
- * the ParticleGroup SymVectorPointerCacheDispatch.
- *
- * @param particle_group Pointer to ParticleGroup.
- * @param particle_sub_group Pointer to ParticleSubGroup, possibly nullptr.
- * @returns SymVectorPointerCacheDispatch from particle_sub_group EphemeralDats
- * if particle_sub_group is not a nullptr otherwise returns th
- * SymVectorPointerCacheDispatch from the ParticleGroup.
- */
 inline SymVectorPointerCacheDispatchSharedPtr
 get_sym_vector_cache_dispatch(ParticleGroup *particle_group,
                               ParticleSubGroup *particle_sub_group) {

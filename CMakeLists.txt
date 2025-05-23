@@ -68,7 +68,16 @@ set(SRC_FILES
     ${SRC_DIR}/cartesian_mesh/cartesian_periodic.cpp
     ${SRC_DIR}/cartesian_mesh/cartesian_trajectory_intersection.cpp
     ${SRC_DIR}/communication/communication_edges_counter.cpp
+    ${SRC_DIR}/containers/cell_dat.cpp
+    ${SRC_DIR}/containers/cell_dat_const.cpp
+    ${SRC_DIR}/containers/descendant_products.cpp
     ${SRC_DIR}/containers/ephemeral_dats.cpp
+    ${SRC_DIR}/containers/global_array.cpp
+    ${SRC_DIR}/containers/local_array.cpp
+    ${SRC_DIR}/containers/particle_set_device.cpp
+    ${SRC_DIR}/containers/sym_vector.cpp
+    ${SRC_DIR}/containers/sym_vector_pointer_cache.cpp
+    ${SRC_DIR}/containers/sym_vector_pointer_cache_dispatch.cpp
     ${SRC_DIR}/cell_dat_compression.cpp
     ${SRC_DIR}/cell_dat_move.cpp
     ${SRC_DIR}/device_limits.cpp

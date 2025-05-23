@@ -18,18 +18,12 @@ public:
   /**
    * Reset the container and empty the cache.
    */
-  inline void reset() {
-    this->cache_int.reset();
-    this->cache_real.reset();
-  }
+  void reset();
 
   /**
    * Empty the cache of any keys that include emphemeral dats.
    */
-  inline void reset_ephemeral() {
-    this->cache_int.reset_ephemeral();
-    this->cache_real.reset_ephemeral();
-  }
+  void reset_ephemeral();
 
   /**
    *  Create instance from map from Syms to ParticleDats
@@ -48,65 +42,49 @@ public:
       std::map<Sym<INT>, ParticleDatSharedPtr<INT>> *particle_dats_map_int_eph,
       std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> *particle_dats_map_real,
       std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>>
-          *particle_dats_map_real_eph)
-      : cache_int(sycl_target, particle_dats_map_int,
-                  particle_dats_map_int_eph),
-        cache_real(sycl_target, particle_dats_map_real,
-                   particle_dats_map_real_eph) {}
+          *particle_dats_map_real_eph);
 
   /**
    * Create the cache entry for a vector of Syms.
    *
    * @param syms Vector of Syms to create entry for.
    */
-  inline void create(std::vector<Sym<INT>> &syms) {
-    this->cache_int.create(syms);
-  }
+  void create(std::vector<Sym<INT>> &syms);
 
   /**
    * Create the cache entry for a vector of Syms.
    *
    * @param syms Vector of Syms to create entry for.
    */
-  inline void create(std::vector<Sym<REAL>> &syms) {
-    this->cache_real.create(syms);
-  }
+  void create(std::vector<Sym<REAL>> &syms);
 
   /**
    * Create the cache entry for a vector of Syms.
    *
    * @param syms Vector of Syms to create entry for.
    */
-  inline void create_const(std::vector<Sym<INT>> &syms) {
-    this->cache_int.create_const(syms);
-  }
+  void create_const(std::vector<Sym<INT>> &syms);
 
   /**
    * Create the cache entry for a vector of Syms.
    *
    * @param syms Vector of Syms to create entry for.
    */
-  inline void create_const(std::vector<Sym<REAL>> &syms) {
-    this->cache_real.create_const(syms);
-  }
+  void create_const(std::vector<Sym<REAL>> &syms);
 
   /**
    * Get the device pointers that correspond to the ParticleDats requested.
    *
    * @param syms Syms to get ParticleDats for.
    */
-  inline ParticleDatImplGetT<INT> *get(std::vector<Sym<INT>> &syms) {
-    return this->cache_int.get(syms);
-  }
+  ParticleDatImplGetT<INT> *get(std::vector<Sym<INT>> &syms);
 
   /**
    * Get the device pointers that correspond to the ParticleDats requested.
    *
    * @param syms Syms to get ParticleDats for.
    */
-  inline ParticleDatImplGetT<REAL> *get(std::vector<Sym<REAL>> &syms) {
-    return this->cache_real.get(syms);
-  }
+  ParticleDatImplGetT<REAL> *get(std::vector<Sym<REAL>> &syms);
 
   /**
    * Get the const device pointers that correspond to the ParticleDats
@@ -114,9 +92,7 @@ public:
    *
    * @param syms Syms to get ParticleDats for.
    */
-  inline ParticleDatImplGetConstT<INT> *get_const(std::vector<Sym<INT>> &syms) {
-    return this->cache_int.get_const(syms);
-  }
+  ParticleDatImplGetConstT<INT> *get_const(std::vector<Sym<INT>> &syms);
 
   /**
    * Get the const device pointers that correspond to the ParticleDats
@@ -124,10 +100,7 @@ public:
    *
    * @param syms Syms to get ParticleDats for.
    */
-  inline ParticleDatImplGetConstT<REAL> *
-  get_const(std::vector<Sym<REAL>> &syms) {
-    return this->cache_real.get_const(syms);
-  }
+  ParticleDatImplGetConstT<REAL> *get_const(std::vector<Sym<REAL>> &syms);
 
   /**
    * Get the device pointer for a single dat.
@@ -135,9 +108,7 @@ public:
    * @param sym Sym to get device pointers for.
    * @returns Device pointer for requested dat.
    */
-  inline ParticleDatImplGetT<INT> get(Sym<INT> sym) {
-    return this->cache_int.get(sym);
-  }
+  ParticleDatImplGetT<INT> get(Sym<INT> sym);
 
   /**
    * Get the device pointer for a single dat.
@@ -145,9 +116,7 @@ public:
    * @param sym Sym to get device pointers for.
    * @returns Device pointer for requested dat.
    */
-  inline ParticleDatImplGetT<REAL> get(Sym<REAL> sym) {
-    return this->cache_real.get(sym);
-  }
+  ParticleDatImplGetT<REAL> get(Sym<REAL> sym);
 
   /**
    * Get the device pointer for a single dat.
@@ -155,9 +124,7 @@ public:
    * @param sym Sym to get device pointers for.
    * @returns Device pointer for requested dat.
    */
-  inline ParticleDatImplGetConstT<INT> get_const(Sym<INT> sym) {
-    return this->cache_int.get_const(sym);
-  }
+  ParticleDatImplGetConstT<INT> get_const(Sym<INT> sym);
 
   /**
    * Get the device pointer for a single dat.
@@ -165,9 +132,7 @@ public:
    * @param sym Sym to get device pointers for.
    * @returns Device pointer for requested dat.
    */
-  inline ParticleDatImplGetConstT<REAL> get_const(Sym<REAL> sym) {
-    return this->cache_real.get_const(sym);
-  }
+  ParticleDatImplGetConstT<REAL> get_const(Sym<REAL> sym);
 };
 
 using SymVectorPointerCacheDispatchSharedPtr =
