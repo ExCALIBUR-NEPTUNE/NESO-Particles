@@ -82,6 +82,10 @@ set(SRC_FILES
     ${SRC_DIR}/particle_set.cpp
     ${SRC_DIR}/particle_sub_group/cell_sub_group_selector.cpp
     ${SRC_DIR}/particle_sub_group/particle_group_partition.cpp
+    ${SRC_DIR}/particle_sub_group/particle_sub_group_base.cpp
+    ${SRC_DIR}/particle_sub_group/sub_group_particle_map.cpp
+    ${SRC_DIR}/particle_sub_group/sub_group_selector.cpp
+    ${SRC_DIR}/particle_sub_group/sub_group_selector_base.cpp
     ${SRC_DIR}/particle_group_temporary.cpp
     ${SRC_DIR}/particle_group_pointer_map.cpp
     ${SRC_DIR}/utility.cpp
@@ -213,12 +217,10 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/particle_group_partition.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/particle_sub_group.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/particle_sub_group_base.hpp
-    ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/particle_sub_group_base_impl.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/sub_group_particle_map.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/sub_group_selector.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/sub_group_selector_whole_group.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/sub_group_selector_base.hpp
-    ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/sub_group_selector_base_impl.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/sub_group_selector_resource_stack_interface.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/particle_loop_sub_group.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/cell_sub_group_selector.hpp

@@ -47,72 +47,13 @@ public:
   /**
    * Get the cells and layers of the particles in the sub group (slow)
    */
-  inline int get_cells_layers(std::vector<INT> &cells,
-                              std::vector<INT> &layers) {
-    this->create_if_required();
-    cells.resize(this->npart_local);
-    layers.resize(this->npart_local);
-    const int cell_count = this->particle_group->domain->mesh->get_cell_count();
-
-    auto map_cells_to_particles = get_host_map_cells_to_particles(
-        this->particle_group->sycl_target, this->selection);
-
-    INT index = 0;
-    for (int cellx = 0; cellx < cell_count; cellx++) {
-      const int nrow = map_cells_to_particles.at(cellx).size();
-      for (int rowx = 0; rowx < nrow; rowx++) {
-        cells[index] = cellx;
-        const int layerx = map_cells_to_particles.at(cellx).at(rowx);
-        layers[index] = layerx;
-        index++;
-      }
-    }
-    return npart_local;
-  }
-
-  inline void get_cells_layers(INT *d_cells, INT *d_layers);
-
-  virtual inline void prepare_ephemeral_dats() override {
-    this->create_if_required();
-  }
-
-  virtual inline bool invalidate_ephemeral_dats_if_required() override {
-
-    bool bool_dats = false;
-    bool bool_group = false;
-    this->selector->update_required(&bool_dats, &bool_group);
-    const bool required =
-        (this->is_static) ? bool_group : bool_group || bool_dats;
-
-    if (required) {
-      this->reset_ephemeral_dats(
-          this->selection.npart_local, this->selection.h_npart_cell,
-          this->selection.d_npart_cell, this->selection.d_npart_cell_es);
-    }
-    return required;
-  }
-
-  inline bool create_inner() {
-    const bool was_updated = this->selector->get(&this->selection);
-    this->npart_local = this->selection.npart_local;
-
-    if (was_updated) {
-      this->reset_ephemeral_dats(
-          this->selection.npart_local, this->selection.h_npart_cell,
-          this->selection.d_npart_cell, this->selection.d_npart_cell_es);
-    }
-
-    return was_updated;
-  }
-
-  inline void check_selector(
-      ParticleSubGroupImplementation::SubGroupSelectorBaseSharedPtr selector) {
-
-    NESOASSERT(!selector->consumed,
-               "Attempting to create a ParticleSubGroup from a Selector that "
-               "has already been used to make another ParticleSubGroup.");
-    selector->consumed = true;
-  }
+  int get_cells_layers(std::vector<INT> &cells, std::vector<INT> &layers);
+  void get_cells_layers(INT *d_cells, INT *d_layers);
+  virtual void prepare_ephemeral_dats() override;
+  virtual bool invalidate_ephemeral_dats_if_required() override;
+  bool create_inner();
+  void check_selector(
+      ParticleSubGroupImplementation::SubGroupSelectorBaseSharedPtr selector);
 
 public:
   virtual ~ParticleSubGroup() = default;
@@ -161,12 +102,7 @@ public:
    *
    * @param parent Parent ParticleGroup from which to form ParticleSubGroup.
    */
-  ParticleSubGroup(ParticleGroupSharedPtr particle_group)
-      : ParticleSubGroup(std::dynamic_pointer_cast<
-                         ParticleSubGroupImplementation::SubGroupSelectorBase>(
-            std::make_shared<
-                ParticleSubGroupImplementation::SubGroupSelectorWholeGroup>(
-                particle_group))) {}
+  ParticleSubGroup(ParticleGroupSharedPtr particle_group);
 
   /**
    * Create a ParticleSubGroup which is simply a reference/view into an entire
@@ -183,10 +119,7 @@ public:
    *
    * @param parent Parent ParticleSubGroup from which to form ParticleSubGroup.
    */
-  ParticleSubGroup(std::shared_ptr<ParticleSubGroup> particle_sub_group)
-      : ParticleSubGroup(particle_sub_group, []() { return true; }) {
-    // TODO Make a more efficient selector for copying another selector.
-  }
+  ParticleSubGroup(std::shared_ptr<ParticleSubGroup> particle_sub_group);
 
   /**
    * Create a ParticleSubGroup directly from a SubGroupSelector. This allows
@@ -195,18 +128,7 @@ public:
    * @param selector Sub-class of SubGroupSelector.
    */
   ParticleSubGroup(
-      ParticleSubGroupImplementation::SubGroupSelectorSharedPtr selector)
-      : EphemeralDats(selector->particle_group->sycl_target,
-                      selector->particle_group->domain->mesh->get_cell_count(),
-                      &selector->particle_group->particle_dats_int,
-                      &selector->particle_group->particle_dats_real),
-        is_static(false), particle_group(selector->particle_group),
-        selector(selector),
-        is_whole_particle_group(selector->is_whole_particle_group) {
-    this->check_selector(
-        std::dynamic_pointer_cast<
-            ParticleSubGroupImplementation::SubGroupSelectorBase>(selector));
-  }
+      ParticleSubGroupImplementation::SubGroupSelectorSharedPtr selector);
 
   /**
    * Create a ParticleSubGroup directly from a SubGroupSelectorBase. This allows
@@ -215,16 +137,7 @@ public:
    * @param selector Sub-class of SubGroupSelectorBase.
    */
   ParticleSubGroup(
-      ParticleSubGroupImplementation::SubGroupSelectorBaseSharedPtr selector)
-      : EphemeralDats(selector->particle_group->sycl_target,
-                      selector->particle_group->domain->mesh->get_cell_count(),
-                      &selector->particle_group->particle_dats_int,
-                      &selector->particle_group->particle_dats_real),
-        is_static(false), particle_group(selector->particle_group),
-        selector(selector),
-        is_whole_particle_group(selector->is_whole_particle_group) {
-    this->check_selector(selector);
-  }
+      ParticleSubGroupImplementation::SubGroupSelectorBaseSharedPtr selector);
 
   /**
    * Get and optionally set the static status of the ParticleSubGroup.
@@ -232,25 +145,12 @@ public:
    * @param status Optional new static status.
    * @returns Static status.
    */
-  inline bool static_status(const std::optional<bool> status = std::nullopt) {
-    if (status != std::nullopt) {
-      // If the two static values are the same then nothing has to change.
-      const bool new_is_static = status.value();
-      if (!(this->is_static == new_is_static)) {
-        if (new_is_static) {
-          // Create the sub group before we disable creating the sub group.
-          this->create_if_required();
-        }
-        this->is_static = new_is_static;
-      }
-    }
-    return this->is_static;
-  }
+  bool static_status(const std::optional<bool> status = std::nullopt);
 
   /**
    * Explicitly re-create the sub group.
    */
-  inline void create() { this->create_inner(); }
+  void create();
 
   /**
    * Test if a ParticleSubGroup has been invalidated by an operation which
@@ -269,58 +169,35 @@ public:
    * particles between cells or MPI ranks, adding or removing particles).
    * Otherwise returns True.
    */
-  inline bool is_valid() {
-    if (this->is_static) {
-      return !this->particle_group->check_validation(
-          this->selector->particle_group_version, false);
-    }
-    return true;
-  }
+  bool is_valid();
 
   /**
    * Re-create the sub group if required.
    *
    * @returns True if an update occured otherwise false.
    */
-  inline bool create_if_required() {
-    NESOASSERT(this->is_valid(), "This ParticleSubGroup has been invalidated.");
-    if (this->is_static) {
-      return false;
-    } else {
-      return this->create_inner();
-    }
-  }
+  bool create_if_required();
 
   /**
    * @return The number of particles currently in the ParticleSubGroup.
    */
-  inline INT get_npart_local() {
-    this->create_if_required();
-    return this->npart_local;
-  }
+  INT get_npart_local();
 
   /**
    * @return The number of particles in a cell of the ParticleSubGroup.
    */
-  inline INT get_npart_cell(const int cell) {
-    this->create_if_required();
-    return this->selection.h_npart_cell[cell];
-  }
+  INT get_npart_cell(const int cell);
 
   /**
    * @returns The original ParticleGroup this ParticleSubGroup references.
    */
-  inline ParticleGroupSharedPtr get_particle_group() {
-    return this->particle_group;
-  }
+  ParticleGroupSharedPtr get_particle_group();
 
   /**
    * @returns True if this ParticleSubGroup references the entirety of the
    * parent ParticleGroup.
    */
-  inline bool is_entire_particle_group() {
-    return this->is_whole_particle_group;
-  }
+  bool is_entire_particle_group();
 
   /**
    * Create a ParticleSet containing the data from particles held in the
@@ -334,79 +211,8 @@ public:
    * @param cells Vector of layer indices of particles to extract.
    * @returns ParticleSet of particle data.
    */
-  inline ParticleSetSharedPtr get_particles(std::vector<INT> &cells,
-                                            std::vector<INT> &layers) {
-    if (this->is_whole_particle_group) {
-      return this->particle_group->get_particles(cells, layers);
-    } else {
-
-      this->create_if_required();
-      NESOASSERT(cells.size() == layers.size(),
-                 "Cells and layers vectors have different sizes.");
-      const std::size_t num_particles = cells.size();
-
-      if (num_particles > 0) {
-
-        auto sycl_target = this->particle_group->sycl_target;
-        auto tmp_buffer =
-            get_resource<BufferDeviceHost<INT>,
-                         ResourceStackInterfaceBufferDeviceHost<INT>>(
-                sycl_target->resource_stack_map,
-                ResourceStackKeyBufferDeviceHost<INT>{}, sycl_target);
-
-        tmp_buffer->realloc_no_copy(num_particles * 3);
-
-        INT *d_cells = tmp_buffer->d_buffer.ptr;
-        INT *d_layers = d_cells + num_particles;
-        INT *d_inner_layers = d_layers + num_particles;
-
-        EventStack es;
-        es.push(sycl_target->queue.memcpy(d_cells, cells.data(),
-                                          num_particles * sizeof(INT)));
-        es.push(sycl_target->queue.memcpy(d_layers, layers.data(),
-                                          num_particles * sizeof(INT)));
-
-        const INT num_cells =
-            this->particle_group->domain->mesh->get_cell_count();
-        for (std::size_t px = 0; px < num_particles; px++) {
-          const INT cellx = cells.at(px);
-          NESOASSERT((cellx > -1) && (cellx < num_cells),
-                     "Cell index not in range.");
-          const INT layerx = layers.at(px);
-          NESOASSERT((layerx > -1) && (layerx < this->get_npart_cell(cellx)),
-                     "Layer index not in range.");
-        }
-
-        es.wait();
-
-        auto k_map_cells_to_particles =
-            this->selection.d_map_cells_to_particles;
-
-        sycl_target->queue
-            .parallel_for<>(
-                sycl::range<1>(num_particles),
-                [=](sycl::id<1> idx) {
-                  const INT cell = d_cells[idx];
-                  const INT layer = d_layers[idx];
-                  const INT inner_layer =
-                      k_map_cells_to_particles.map_loop_layer_to_layer(cell,
-                                                                       layer);
-                  d_inner_layers[idx] = inner_layer;
-                })
-            .wait_and_throw();
-
-        auto ps = this->particle_group->get_particles(num_particles, d_cells,
-                                                      d_inner_layers);
-        restore_resource(sycl_target->resource_stack_map,
-                         ResourceStackKeyBufferDeviceHost<INT>{}, tmp_buffer);
-
-        return ps;
-      } else {
-        return std::make_shared<ParticleSet>(
-            0, this->particle_group->get_particle_spec());
-      }
-    }
-  }
+  ParticleSetSharedPtr get_particles(std::vector<INT> &cells,
+                                     std::vector<INT> &layers);
 
   /**
    * Get a reference to the current selection. This is an advanced method. It is
@@ -415,9 +221,7 @@ public:
    *
    * @returns Reference to the current selection of this instance.
    */
-  const ParticleSubGroupImplementation::Selection &get_selection() const {
-    return this->selection;
-  }
+  const ParticleSubGroupImplementation::Selection &get_selection() const;
 
 protected:
   /**

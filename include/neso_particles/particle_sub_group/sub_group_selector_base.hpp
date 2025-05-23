@@ -56,30 +56,9 @@ struct Selection {
  * @param selection Selection to get a host representaton of.
  * @returns Indexable [cell][layer] map.
  */
-inline std::vector<std::vector<INT>>
+std::vector<std::vector<INT>>
 get_host_map_cells_to_particles(SYCLTargetSharedPtr sycl_target,
-                                const Selection &selection) {
-  const int cell_count = selection.ncell;
-  std::vector<std::vector<INT>> return_map(cell_count);
-  std::vector<INT *> d_map_ptrs(cell_count);
-
-  sycl_target->queue
-      .memcpy(d_map_ptrs.data(), selection.d_map_cells_to_particles.map_ptr,
-              cell_count * sizeof(INT *))
-      .wait_and_throw();
-
-  EventStack es;
-  for (int cx = 0; cx < cell_count; cx++) {
-    return_map.at(cx) = std::vector<INT>(selection.h_npart_cell[cx]);
-    if (selection.h_npart_cell[cx] > 0) {
-      es.push(
-          sycl_target->queue.memcpy(return_map.at(cx).data(), d_map_ptrs.at(cx),
-                                    selection.h_npart_cell[cx] * sizeof(INT)));
-    }
-  }
-  es.wait();
-  return return_map;
-}
+                                const Selection &selection);
 
 /**
  * Base class for creating sub groups.
@@ -91,16 +70,7 @@ protected:
   std::shared_ptr<LocalArray<int *>> map_ptrs;
   std::shared_ptr<LocalArray<INT **>> map_cell_to_particles_ptrs;
   std::shared_ptr<SubGroupParticleMap> sub_group_particle_map;
-
   SubGroupSelectorResourceSharedPtr sub_group_selector_resource;
-
-  // Methods to extract the parent ParticleGroup
-  inline ParticleGroupSharedPtr
-  get_particle_group(std::shared_ptr<ParticleSubGroup> parent);
-  inline ParticleGroupSharedPtr
-  get_particle_group(std::shared_ptr<ParticleGroup> parent) {
-    return parent;
-  }
 
   // As sub groups can be made from sub groups we need methods to recursively
   // collect the dependencies.
@@ -108,49 +78,12 @@ protected:
   add_parent_dependencies([[maybe_unused]] ParticleGroupSharedPtr parent) {}
   inline void add_parent_dependencies(std::shared_ptr<ParticleSubGroup> parent);
 
-  inline void add_sym_dependency(Sym<INT> sym) {
-    this->particle_dat_versions[sym] = 0;
-  }
-  inline void add_sym_dependency(Sym<REAL> sym) {
-    this->particle_dat_versions[sym] = 0;
-  }
-
-  inline void printing_create_outer_start() {
-    if (this->particle_group->debug_sub_group_create) {
-      if (!this->particle_group->debug_sub_group_indent) {
-        std::cout << std::string(80, '-') << std::endl;
-        std::cout << "Testing recreation criterion: " << (void *)this
-                  << std::endl;
-      }
-      this->particle_group->debug_sub_group_indent += 4;
-    }
-  }
-
-  inline void printing_create_outer_end() {
-    if (this->particle_group->debug_sub_group_create) {
-      this->particle_group->debug_sub_group_indent -= 4;
-    }
-  }
-
-  inline void printing_create_inner_start(const bool bool_dats,
-                                          const bool bool_group) {
-    if (this->particle_group->debug_sub_group_create) {
-
-      std::string indent(this->particle_group->debug_sub_group_indent, ' ');
-      std::cout << indent << "Recreating Selector: " << (void *)this
-                << " reason_dats: " << bool_dats
-                << " reason_group: " << bool_group << std::endl;
-    }
-  }
-
-  inline void printing_create_inner_end() {
-    if (this->particle_group->debug_sub_group_create) {
-      if (!this->particle_group->debug_sub_group_indent) {
-        std::cout << std::string(80, '-') << std::endl;
-      }
-    }
-  }
-
+  void add_sym_dependency(Sym<INT> sym);
+  void add_sym_dependency(Sym<REAL> sym);
+  void printing_create_outer_start();
+  void printing_create_outer_end();
+  void printing_create_inner_start(const bool bool_dats, const bool bool_group);
+  void printing_create_inner_end();
   virtual inline void create(Selection *created_selection) = 0;
 
 public:
@@ -202,26 +135,7 @@ public:
    * @param[in, out] selection Selection to update if required.
    * @returns True if selection was updated.
    */
-  inline bool get(Selection *selection) {
-
-    this->printing_create_outer_start();
-
-    const bool bool_dats =
-        this->particle_group->check_validation(this->particle_dat_versions);
-    const bool bool_group =
-        this->particle_group->check_validation(this->particle_group_version);
-
-    if (bool_dats || bool_group) {
-      this->printing_create_inner_start(bool_dats, bool_group);
-      this->create(selection);
-      this->printing_create_inner_end();
-      this->printing_create_outer_end();
-      return true;
-    }
-
-    this->printing_create_outer_end();
-    return false;
-  }
+  bool get(Selection *selection);
 
   /**
    * @param[in, out] bool_dats Bool to indicate if the invalidation is due to
@@ -234,36 +148,21 @@ public:
    * any structural changes have been made, e.g. adding/removing particles,
    * calling cell_move or calling hybrid_move etc.
    */
-  inline bool update_required(bool *bool_dats, bool *bool_group) {
-
-    *bool_dats = this->particle_group->check_validation(
-        this->particle_dat_versions, false);
-    *bool_group = this->particle_group->check_validation(
-        this->particle_group_version, false);
-
-    return (*bool_dats) || (*bool_group);
-  }
+  bool update_required(bool *bool_dats, bool *bool_group);
 
   /**
    * Constructor for abstract base type.
    *
    * @param parent ParticleGroup or ParticleSubGroup to use as parent.
    */
-  template <typename PARENT>
-  SubGroupSelectorBase(std::shared_ptr<PARENT> parent)
-      : particle_group(get_particle_group(parent)), particle_group_version(0) {
-    this->add_parent_dependencies(parent);
+  SubGroupSelectorBase(std::shared_ptr<ParticleGroup> parent);
 
-    NESOASSERT(this->sub_group_selector_resource == nullptr,
-               "Sub-group resource is already allocated somehow.");
-    this->sub_group_selector_resource =
-        this->particle_group->resource_stack_sub_group_resource->get();
-    this->map_ptrs = this->sub_group_selector_resource->map_ptrs;
-    this->map_cell_to_particles_ptrs =
-        this->sub_group_selector_resource->map_cell_to_particles_ptrs;
-    this->sub_group_particle_map =
-        this->sub_group_selector_resource->sub_group_particle_map;
-  }
+  /**
+   * Constructor for abstract base type.
+   *
+   * @param parent ParticleGroup or ParticleSubGroup to use as parent.
+   */
+  SubGroupSelectorBase(std::shared_ptr<ParticleSubGroup> parent);
 };
 
 typedef std::shared_ptr<SubGroupSelectorBase> SubGroupSelectorBaseSharedPtr;
