@@ -21,30 +21,7 @@ namespace NESO::Particles::PetscInterface {
  */
 class BoundaryInteractionCommon {
 protected:
-  inline ParticleGroupSharedPtr
-  get_particle_group(ParticleGroupSharedPtr iteration_set) {
-    return iteration_set;
-  }
-  inline ParticleGroupSharedPtr
-  get_particle_group(ParticleSubGroupSharedPtr iteration_set) {
-    return iteration_set->get_particle_group();
-  }
-
-  template <typename T>
-  inline void check_dat(ParticleGroupSharedPtr particle_group, Sym<T> sym,
-                        const int ncomp) {
-    if (!particle_group->contains_dat(sym)) {
-      particle_group->add_particle_dat(sym, ncomp);
-    } else {
-      NESOASSERT(
-          particle_group->get_dat(sym)->ncomp >= ncomp,
-          "Requested dat with sym " + sym.name +
-              " exists already with an insufficient number of components");
-    }
-  }
-
   std::map<PetscInt, PetscInt> map_label_to_groups;
-
   std::unique_ptr<MeshHierarchyMapper> mesh_hierarchy_mapper;
   std::unique_ptr<BufferDeviceHost<int>> dh_max_box_size;
   std::unique_ptr<BufferDevice<int>> d_cell_bounds;
@@ -54,14 +31,7 @@ protected:
   std::set<INT> required_mh_cells;
   std::set<INT> collected_mh_cells;
 
-  template <typename T>
-  inline void prepare_particle_group(std::shared_ptr<T> particle_sub_group) {
-    auto particle_group = this->get_particle_group(particle_sub_group);
-    NESOASSERT(particle_group->sycl_target == this->sycl_target,
-               "Missmatch of sycl targets.");
-    const int ndim = this->mesh->get_ndim();
-    this->check_dat(particle_group, this->previous_position_sym, ndim);
-  }
+  void prepare_particle_group(ParticleGroupSharedPtr particle_group);
 
   inline std::set<PetscInt> get_labels() const {
     std::map<PetscInt, std::set<PetscInt>> bl;
@@ -89,7 +59,7 @@ protected:
                                        const U &intersect_object, REAL *d_real,
                                        INT *d_int) {
     if (intersect_object.boundary_elements_exist()) {
-      auto particle_group = this->get_particle_group(particle_sub_group);
+      auto particle_group = get_particle_group(particle_sub_group);
       const auto k_ndim = particle_group->position_dat->ncomp;
 
       auto mesh_hierarchy_device_mapper =
@@ -207,7 +177,7 @@ protected:
     const int k_INT_MIN = std::numeric_limits<int>::lowest();
     this->cdc_mh_min->fill(k_INT_MAX);
     this->cdc_mh_max->fill(k_INT_MIN);
-    auto particle_group = this->get_particle_group(particle_sub_group);
+    auto particle_group = get_particle_group(particle_sub_group);
     const auto mesh_hierarchy_device_mapper =
         this->mesh_hierarchy_mapper->get_device_mapper();
     const int k_ndim = this->mesh->get_ndim();
