@@ -228,5 +228,8 @@ public:
 
 template <typename T> using SymVectorSharedPtr = std::shared_ptr<SymVector<T>>;
 
+extern template class SymVector<REAL>;
+extern template class SymVector<INT>;
+
 } // namespace NESO::Particles
 #endif

@@ -494,6 +494,18 @@ public:
   post_integration(std::shared_ptr<ParticleSubGroup> particles);
 };
 
+extern template std::map<int, ParticleSubGroupSharedPtr>
+CartesianTrajectoryIntersection::post_integration_inner(
+    std::shared_ptr<ParticleGroup> particles);
+extern template std::map<int, ParticleSubGroupSharedPtr>
+CartesianTrajectoryIntersection::post_integration_inner(
+    std::shared_ptr<ParticleSubGroup> particles);
+
+extern template void CartesianTrajectoryIntersection::pre_integration_inner(
+    std::shared_ptr<ParticleGroup> particles);
+extern template void CartesianTrajectoryIntersection::pre_integration_inner(
+    std::shared_ptr<ParticleSubGroup> particles);
+
 } // namespace NESO::Particles
 
 #endif

@@ -38,7 +38,10 @@ set(TEST_SRCS
     ${TEST_DIR}/test_parallel_initialisation.cpp
     ${TEST_DIR}/test_petsc_interface.cpp
     ${TEST_DIR}/test_petsc_interface_from_plex.cpp
-    ${TEST_DIR}/test_petsc_boundary_interface.cpp
+    ${TEST_DIR}/test_petsc_boundary_interface_a.cpp
+    ${TEST_DIR}/test_petsc_boundary_interface_b.cpp
+    ${TEST_DIR}/test_petsc_boundary_interface_c.cpp
+    ${TEST_DIR}/test_petsc_boundary_interface_d.cpp
     ${TEST_DIR}/test_petsc_project_evaluate.cpp
     ${TEST_DIR}/test_petsc_utility.cpp
     ${TEST_DIR}/test_particle_dat.cpp
@@ -73,10 +76,12 @@ set(TEST_SRCS
     ${TEST_DIR}/test_particle_sub_group_h.cpp
     ${TEST_DIR}/test_particle_sub_group_partition_a.cpp
     ${TEST_DIR}/test_particle_sub_group_partition_b.cpp
+    ${TEST_DIR}/test_particle_sub_group_partition_c.cpp
     ${TEST_DIR}/test_product_matrix.cpp
     ${TEST_DIR}/test_resource_stack.cpp
     ${TEST_DIR}/test_serial_container.cpp
-    ${TEST_DIR}/test_standard_boundary.cpp
+    ${TEST_DIR}/test_standard_boundary_a.cpp
+    ${TEST_DIR}/test_standard_boundary_b.cpp
     ${TEST_DIR}/test_sycl_target.cpp
     ${TEST_DIR}/test_tuple.cpp
     ${TEST_DIR}/test_utility.cpp)

@@ -112,26 +112,37 @@ inline ParticleDatImplGetT<T>
 create_loop_arg(ParticleLoopGlobalInfo *global_info,
                 [[maybe_unused]] sycl::handler &cgh,
                 Access::Write<Sym<T> *> &a);
+
 /**
  * Method to compute access to a particle dat (read).
  */
-template <typename T>
-inline ParticleDatImplGetConstT<T>
+ParticleDatImplGetConstT<REAL>
 create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
                 [[maybe_unused]] sycl::handler &cgh,
-                Access::Read<ParticleDatT<T> *> &a) {
-  return a.obj->impl_get_const();
-}
+                Access::Read<ParticleDatT<REAL> *> &a);
 /**
  * Method to compute access to a particle dat (write).
  */
-template <typename T>
-inline ParticleDatImplGetT<T>
+ParticleDatImplGetT<REAL>
 create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
                 [[maybe_unused]] sycl::handler &cgh,
-                Access::Write<ParticleDatT<T> *> &a) {
-  return a.obj->impl_get();
-}
+                Access::Write<ParticleDatT<REAL> *> &a);
+
+/**
+ * Method to compute access to a particle dat (read).
+ */
+ParticleDatImplGetConstT<INT>
+create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
+                [[maybe_unused]] sycl::handler &cgh,
+                Access::Read<ParticleDatT<INT> *> &a);
+
+/**
+ * Method to compute access to a particle dat (write).
+ */
+ParticleDatImplGetT<INT>
+create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
+                [[maybe_unused]] sycl::handler &cgh,
+                Access::Write<ParticleDatT<INT> *> &a);
 
 /**
  *  Function to create the kernel argument for ParticleDat read access.

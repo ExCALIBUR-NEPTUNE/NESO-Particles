@@ -23,6 +23,7 @@ class ParticleGroup;
 // Forward declaration of ParticleLoop such that LocalArray can define
 // ParticleLoop as a friend class.
 template <typename KERNEL, typename... ARGS> class ParticleLoop;
+class ParticleLoopBase;
 template <typename T> class SymVector;
 template <typename T> class SymVectorPointerCache;
 
@@ -78,18 +79,27 @@ create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
 /**
  * Method to compute access to a particle dat (read).
  */
-template <typename T>
-inline ParticleDatImplGetConstT<T>
+ParticleDatImplGetConstT<REAL>
 create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
-                Access::Read<ParticleDatT<T> *> &a);
+                Access::Read<ParticleDatT<REAL> *> &a);
 /**
  * Method to compute access to a particle dat (write).
  */
-template <typename T>
-inline ParticleDatImplGetT<T>
+ParticleDatImplGetT<REAL>
 create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
-                Access::Write<ParticleDatT<T> *> &a);
-
+                Access::Write<ParticleDatT<REAL> *> &a);
+/**
+ * Method to compute access to a particle dat (read).
+ */
+ParticleDatImplGetConstT<INT>
+create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
+                Access::Read<ParticleDatT<INT> *> &a);
+/**
+ * Method to compute access to a particle dat (write).
+ */
+ParticleDatImplGetT<INT> create_loop_arg(ParticleLoopGlobalInfo *global_info,
+                                         sycl::handler &cgh,
+                                         Access::Write<ParticleDatT<INT> *> &a);
 } // namespace ParticleLoopImplementation
 
 /**
@@ -98,6 +108,7 @@ create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
 template <typename T> class ParticleDatT {
   // This allows the ParticleLoop to access the implementation methods.
   template <typename KERNEL, typename... ARGS> friend class ParticleLoop;
+  friend class ParticleLoopBase;
   friend class SymVector<T>;
   friend class SymVectorPointerCache<T>;
   friend class ParticleGroup;
@@ -119,13 +130,20 @@ template <typename T> class ParticleDatT {
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
       sycl::handler &cgh, Access::Write<Sym<T> *> &a);
 
-  friend ParticleDatImplGetConstT<T>
-  ParticleLoopImplementation::create_loop_arg<T>(
+  friend ParticleDatImplGetConstT<REAL>
+  ParticleLoopImplementation::create_loop_arg(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
-      sycl::handler &cgh, Access::Read<ParticleDatT<T> *> &a);
-  friend ParticleDatImplGetT<T> ParticleLoopImplementation::create_loop_arg<T>(
+      sycl::handler &cgh, Access::Read<ParticleDatT<REAL> *> &a);
+  friend ParticleDatImplGetT<REAL> ParticleLoopImplementation::create_loop_arg(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
-      sycl::handler &cgh, Access::Write<ParticleDatT<T> *> &a);
+      sycl::handler &cgh, Access::Write<ParticleDatT<REAL> *> &a);
+  friend ParticleDatImplGetConstT<INT>
+  ParticleLoopImplementation::create_loop_arg(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      sycl::handler &cgh, Access::Read<ParticleDatT<INT> *> &a);
+  friend ParticleDatImplGetT<INT> ParticleLoopImplementation::create_loop_arg(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      sycl::handler &cgh, Access::Write<ParticleDatT<INT> *> &a);
 
   friend ParticleDatImplGetConstT<T>
   Access::direct_get<T>(Access::Read<ParticleDatSharedPtr<T>> dat_access);

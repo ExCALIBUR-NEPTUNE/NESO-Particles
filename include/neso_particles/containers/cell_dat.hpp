@@ -649,6 +649,9 @@ public:
   inline size_t row_size() { return ((size_t)this->ncol) * sizeof(T); }
 };
 
+extern template class CellDat<REAL>;
+extern template class CellDat<INT>;
+
 } // namespace NESO::Particles
 
 #endif

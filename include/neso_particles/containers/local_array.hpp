@@ -337,6 +337,10 @@ public:
 template <typename T>
 using LocalArraySharedPtr = std::shared_ptr<LocalArray<T>>;
 
+extern template class LocalArray<REAL>;
+extern template class LocalArray<INT>;
+extern template class LocalArray<int>;
+
 } // namespace NESO::Particles
 
 #endif

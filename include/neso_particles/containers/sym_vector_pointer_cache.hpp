@@ -237,5 +237,8 @@ public:
   }
 };
 
+extern template class SymVectorPointerCache<REAL>;
+extern template class SymVectorPointerCache<INT>;
+
 } // namespace NESO::Particles
 #endif

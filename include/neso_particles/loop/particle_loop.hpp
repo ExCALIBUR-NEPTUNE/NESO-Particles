@@ -28,7 +28,6 @@
 #include "kernel.hpp"
 #include "particle_loop_base.hpp"
 #include "particle_loop_index.hpp"
-#include "particle_loop_iteration_set.hpp"
 #include "pli_particle_dat.hpp"
 
 namespace NESO::Particles {
@@ -210,63 +209,9 @@ protected:
                                                  kernel_args);
   }
 
-  ParticleGroupSharedPtr particle_group_shrptr;
-  std::shared_ptr<ParticleSubGroup> particle_sub_group_shrptr{nullptr};
-  ParticleGroup *particle_group_ptr = {nullptr};
-  SYCLTargetSharedPtr sycl_target;
-  /// This stores the particle dat the loop was created with to prevent use
-  /// after free errors in the case when the ParticleLoop is created with a
-  /// ParticleDat.
-  std::shared_ptr<void> particle_dat_init;
   KERNEL kernel;
-  std::unique_ptr<ParticleLoopImplementation::ParticleLoopBlockIterationSet>
-      iteration_set;
-  std::string loop_type;
-  std::string name;
-  EventStack event_stack;
-  bool loop_running = {false};
-  // The actual number of particles in the cell
-  int *d_npart_cell;
-  int *h_npart_cell_lb;
-  // The number of particles in the cell from the loop bounds point of view.
-  int *d_npart_cell_lb;
-  // Exclusive sum of the actual number of particles in the cell.
-  INT *d_npart_cell_es;
-  // Exclusive sum of the number of particles in the cell from the loop bounds
-  // point of view.
-  INT *d_npart_cell_es_lb;
-  int ncell;
 
-  template <typename T>
-  inline void init_from_particle_dat(ParticleDatSharedPtr<T> particle_dat) {
-    this->ncell = particle_dat->ncell;
-    this->h_npart_cell_lb = particle_dat->h_npart_cell;
-    this->d_npart_cell = particle_dat->d_npart_cell;
-    this->d_npart_cell_lb = this->d_npart_cell;
-    this->d_npart_cell_es = particle_dat->get_d_npart_cell_es();
-    this->d_npart_cell_es_lb = this->d_npart_cell_es;
-    this->iteration_set = std::make_unique<
-        ParticleLoopImplementation::ParticleLoopBlockIterationSet>(
-        particle_dat);
-  }
-
-  template <template <typename> typename T, typename U>
-  inline void check_is_sym_inner([[maybe_unused]] T<U> arg) {
-    static_assert(
-        std::is_same<T<U>, Sym<U>>::value == false,
-        "Sym based arguments cannot be passed to ParticleLoop with a "
-        "ParticleDat iterator. Pass the ParticleDatSharedPtr instead.");
-  }
-  template <typename T>
-  inline void check_is_sym_inner([[maybe_unused]] T arg) {}
-  template <template <typename> typename T, typename U>
-  inline void check_is_sym_outer(T<U> arg) {
-    check_is_sym_inner(arg.obj);
-  }
-
-  virtual inline int get_loop_type_int() { return 0; }
-
-  inline std::size_t get_local_size() {
+  virtual inline std::size_t get_local_size() override {
 
     // Loop over the args and add how many local bytes they each require.
     std::size_t num_bytes = 0;
@@ -291,76 +236,18 @@ protected:
     return local_size;
   }
 
-  inline ParticleLoopImplementation::ParticleLoopGlobalInfo
-  create_global_info(const std::optional<int> cell_start = std::nullopt,
-                     const std::optional<int> cell_end = std::nullopt) {
-
-    int cell_start_v = -1;
-    int cell_end_v = -1;
-    const bool all_cells = this->determine_iteration_set(
-        cell_start, cell_end, &cell_start_v, &cell_end_v);
-
-    ParticleLoopImplementation::ParticleLoopGlobalInfo global_info;
-    global_info.particle_group = this->particle_group_ptr;
-    global_info.particle_sub_group = this->particle_sub_group_shrptr.get();
-    global_info.d_npart_cell_lb = this->d_npart_cell_lb;
-    global_info.d_npart_cell_es = this->d_npart_cell_es;
-    global_info.d_npart_cell_es_lb = this->d_npart_cell_es_lb;
-    global_info.all_cells = all_cells;
-    global_info.starting_cell = cell_start_v;
-    global_info.bounding_cell = cell_end_v;
-    global_info.loop_type_int = this->get_loop_type_int();
-    global_info.local_size = this->get_local_size();
-    return global_info;
+  template <template <typename> typename T, typename U>
+  inline void check_is_sym_inner([[maybe_unused]] T<U> arg) {
+    static_assert(
+        std::is_same<T<U>, Sym<U>>::value == false,
+        "Sym based arguments cannot be passed to ParticleLoop with a "
+        "ParticleDat iterator. Pass the ParticleDatSharedPtr instead.");
   }
-
-  inline bool determine_iteration_set(const std::optional<int> cell_start,
-                                      const std::optional<int> cell_end,
-                                      int *cell_start_v, int *cell_end_v) {
-    if ((cell_start == std::nullopt) && (cell_end == std::nullopt)) {
-      // Is all cells
-      *cell_start_v = 0;
-      *cell_end_v = this->ncell;
-      return true;
-    } else if ((cell_start != std::nullopt) && (cell_end == std::nullopt)) {
-      // Is single cell
-      *cell_start_v = cell_start.value();
-      *cell_end_v = *cell_start_v + 1;
-      return false;
-    } else if ((cell_start != std::nullopt) && (cell_end != std::nullopt)) {
-      // Is single cell
-      *cell_start_v = cell_start.value();
-      *cell_end_v = cell_end.value();
-      return false;
-    } else {
-      NESOASSERT(false, "Bad cell_start, cell_end found.");
-      return false;
-    }
-  }
-
-  inline bool iteration_set_is_empty(const std::optional<int> cell_start,
-                                     const std::optional<int> cell_end) {
-
-    int cell_start_v = -1;
-    int cell_end_v = -1;
-    const bool all_cells = this->determine_iteration_set(
-        cell_start, cell_end, &cell_start_v, &cell_end_v);
-
-    if (!all_cells) {
-      NESOASSERT(
-          (cell_start_v > -1) && (cell_start_v <= this->ncell) &&
-              (cell_end_v > -1) && (cell_end_v <= this->ncell),
-          "ParticleLoop execute or submit called on cell that does not exist.");
-      int max_npart = 0;
-      for (int cellx = cell_start_v; cellx < cell_end_v; cellx++) {
-        max_npart = std::max(max_npart, this->h_npart_cell_lb[cellx]);
-      }
-      return max_npart == 0;
-    } else if (this->particle_group_ptr != nullptr) {
-      return this->particle_group_ptr->get_npart_local() == 0;
-    } else {
-      return false;
-    }
+  template <typename T>
+  inline void check_is_sym_inner([[maybe_unused]] T arg) {}
+  template <template <typename> typename T, typename U>
+  inline void check_is_sym_outer(T<U> arg) {
+    check_is_sym_inner(arg.obj);
   }
 
   inline void apply_pre_loop(
@@ -369,23 +256,12 @@ protected:
     auto pre_loop_caller = [&](auto... as) { (cast_wrapper(as), ...); };
     std::apply(pre_loop_caller, this->args);
   }
-
-  ProfileRegion profile_region;
-
-  inline void profiling_region_init() {
-    this->profile_region = ProfileRegion(this->loop_type, this->name);
-  }
-
-  inline void profiling_region_metrics(const std::size_t size) {
+  virtual inline void
+  profiling_region_metrics(const std::size_t size) override {
     this->profile_region.num_bytes =
         size * ParticleLoopImplementation::get_kernel_num_bytes(this->kernel);
     this->profile_region.num_flops =
         size * ParticleLoopImplementation::get_kernel_num_flops(this->kernel);
-  }
-
-  inline void profile_region_finalise() {
-    this->profile_region.end();
-    this->sycl_target->profile_map.add_region(this->profile_region);
   }
 
 public:
@@ -408,8 +284,7 @@ public:
    */
   ParticleLoop(const std::string name, ParticleGroupSharedPtr particle_group,
                KERNEL kernel, ARGS... args)
-      : particle_group_shrptr(particle_group), kernel(kernel), name(name) {
-
+      : ParticleLoopBase(name, particle_group), kernel(kernel) {
     this->sycl_target = particle_group->sycl_target;
     this->particle_group_ptr = this->particle_group_shrptr.get();
     this->loop_type = "ParticleLoop";
@@ -467,8 +342,8 @@ public:
   ParticleLoop(const std::string name,
                ParticleDatSharedPtr<DAT_TYPE> particle_dat, KERNEL kernel,
                ARGS... args)
-      : kernel(kernel), name(name) {
-
+      : kernel(kernel) {
+    this->name = name;
     this->sycl_target = particle_dat->sycl_target;
     this->particle_group_shrptr = nullptr;
     this->particle_group_ptr = nullptr;
@@ -519,8 +394,8 @@ public:
 
     int cell_start_v = -1;
     int cell_end_v = -1;
-    const bool all_cells = this->determine_iteration_set(
-        cell_start, cell_end, &cell_start_v, &cell_end_v);
+    const bool all_cells = determine_iteration_set(
+        this->ncell, cell_start, cell_end, &cell_start_v, &cell_end_v);
 
     if (this->iteration_set_is_empty(cell_start, cell_end)) {
       return;
