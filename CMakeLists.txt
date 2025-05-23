@@ -80,6 +80,11 @@ set(SRC_FILES
     ${SRC_DIR}/particle_dat.cpp
     ${SRC_DIR}/particle_group.cpp
     ${SRC_DIR}/particle_set.cpp
+    ${SRC_DIR}/loop/particle_loop_base.cpp
+    ${SRC_DIR}/loop/particle_loop_iteration_set.cpp
+    ${SRC_DIR}/loop/particle_loop_index.cpp
+    ${SRC_DIR}/loop/particle_loop_utility.cpp
+    ${SRC_DIR}/loop/pli_particle_dat.cpp
     ${SRC_DIR}/particle_sub_group/cell_sub_group_selector.cpp
     ${SRC_DIR}/particle_sub_group/particle_group_partition.cpp
     ${SRC_DIR}/particle_sub_group/particle_sub_group_base.cpp

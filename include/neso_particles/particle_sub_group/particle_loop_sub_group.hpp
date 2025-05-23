@@ -106,8 +106,8 @@ public:
     this->loop_running = true;
 
     int cell_start_v, cell_end_v;
-    const bool all_cells = this->determine_iteration_set(
-        cell_start, cell_end, &cell_start_v, &cell_end_v);
+    const bool all_cells = determine_iteration_set(
+        this->ncell, cell_start, cell_end, &cell_start_v, &cell_end_v);
 
     if (this->iteration_set_is_empty(cell_start, cell_end)) {
       return;
