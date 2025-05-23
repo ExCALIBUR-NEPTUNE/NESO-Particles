@@ -36,68 +36,6 @@ public:
   MAKE_GETTER_METHOD(d_map_edge_normals)
 };
 
-ParticleGroupSharedPtr particle_loop_common(DM dm, const int N = 1093) {
-
-  const int ndim = 2;
-  auto mesh =
-      std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
-
-  auto sycl_target =
-      std::make_shared<SYCLTarget>(GPU_SELECTOR, mesh->get_comm());
-
-  auto mapper =
-      std::make_shared<PetscInterface::DMPlexLocalMapper>(sycl_target, mesh);
-  auto domain = std::make_shared<Domain>(mesh, mapper);
-
-  ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
-                             ParticleProp(Sym<REAL>("V"), 3),
-                             ParticleProp(Sym<REAL>("U"), 3),
-                             ParticleProp(Sym<REAL>("TSP"), 2),
-                             ParticleProp(Sym<REAL>("P2"), ndim),
-                             ParticleProp(Sym<INT>("CELL_ID"), 1, true),
-                             ParticleProp(Sym<INT>("LOOP_INDEX"), 2),
-                             ParticleProp(Sym<INT>("ID"), 1)};
-
-  auto A = std::make_shared<ParticleGroup>(domain, particle_spec, sycl_target);
-
-  int ncell_local = mesh->get_cell_count();
-  int ncell_global;
-
-  MPICHK(MPI_Allreduce(&ncell_local, &ncell_global, 1, MPI_INT, MPI_SUM,
-                       MPI_COMM_WORLD));
-  const int npart_per_cell = std::max(1, N / ncell_global);
-  const int rank = sycl_target->comm_pair.rank_parent;
-  const INT id_offset = rank * N;
-
-  std::mt19937 rng_pos(52234234 + rank);
-  std::mt19937 rng_vel(52234231 + rank);
-  std::vector<std::vector<double>> positions;
-  std::vector<int> cells;
-
-  uniform_within_dmplex_cells(mesh, npart_per_cell, positions, cells, &rng_pos);
-
-  const int N_actual = cells.size();
-  auto velocities =
-      NESO::Particles::normal_distribution(N_actual, 3, 0.0, 1.0, rng_vel);
-
-  ParticleSet initial_distribution(N_actual, particle_spec);
-
-  for (int px = 0; px < N_actual; px++) {
-    for (int dimx = 0; dimx < ndim; dimx++) {
-      initial_distribution[Sym<REAL>("P")][px][dimx] = positions[dimx][px];
-    }
-    for (int dimx = 0; dimx < 3; dimx++) {
-      initial_distribution[Sym<REAL>("V")][px][dimx] = velocities[dimx][px];
-    }
-    initial_distribution[Sym<INT>("CELL_ID")][px][0] = cells.at(px);
-    initial_distribution[Sym<INT>("ID")][px][0] = px + id_offset;
-  }
-
-  A->add_particles_local(initial_distribution);
-
-  return A;
-}
-
 } // namespace
 
 TEST(PETScBoundary2D, constructor_2d) {

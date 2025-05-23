@@ -66,6 +66,18 @@ void CartesianTrajectoryIntersection::prepare_particle_group(
                   this->mesh->get_ndim());
 }
 
+template void CartesianTrajectoryIntersection::pre_integration_inner(
+    std::shared_ptr<ParticleGroup> particles);
+template void CartesianTrajectoryIntersection::pre_integration_inner(
+    std::shared_ptr<ParticleSubGroup> particles);
+
+template std::map<int, ParticleSubGroupSharedPtr>
+CartesianTrajectoryIntersection::post_integration_inner(
+    std::shared_ptr<ParticleGroup> particles);
+template std::map<int, ParticleSubGroupSharedPtr>
+CartesianTrajectoryIntersection::post_integration_inner(
+    std::shared_ptr<ParticleSubGroup> particles);
+
 void CartesianTrajectoryIntersection::pre_integration(
     std::shared_ptr<ParticleGroup> particles) {
   return this->pre_integration_inner(particles);

@@ -47,32 +47,12 @@ protected:
 
   virtual inline void prepare_ephemeral_dats() = 0;
   virtual inline bool invalidate_ephemeral_dats_if_required() = 0;
-
-  inline void reset_ephemeral_dats(INT npart_local, int *h_npart_cell,
-                                   int *d_npart_cell, INT *d_npart_cell_es) {
-    this->ephemeral.es.wait();
-    this->ephemeral.npart_local = npart_local;
-    this->ephemeral.h_npart_cell = h_npart_cell;
-    this->ephemeral.d_npart_cell = d_npart_cell;
-    this->ephemeral.d_npart_cell_es = d_npart_cell_es;
-    this->ephemeral.dats_real.clear();
-    this->ephemeral.dats_int.clear();
-    this->ephemeral.sym_vector_pointer_cache_dispatch->reset_ephemeral();
-  }
-
-  inline void push_ephemeral_dat(Sym<REAL> sym,
-                                 ParticleDatSharedPtr<REAL> dat) {
-    this->ephemeral.dats_real[sym] = dat;
-  }
-  inline void push_ephemeral_dat(Sym<INT> sym, ParticleDatSharedPtr<INT> dat) {
-    this->ephemeral.dats_int[sym] = dat;
-  }
-  inline void pop_ephemeral_dat(Sym<REAL> sym) {
-    this->ephemeral.dats_real.erase(sym);
-  }
-  inline void pop_ephemeral_dat(Sym<INT> sym) {
-    this->ephemeral.dats_int.erase(sym);
-  }
+  void reset_ephemeral_dats(INT npart_local, int *h_npart_cell,
+                            int *d_npart_cell, INT *d_npart_cell_es);
+  void push_ephemeral_dat(Sym<REAL> sym, ParticleDatSharedPtr<REAL> dat);
+  void push_ephemeral_dat(Sym<INT> sym, ParticleDatSharedPtr<INT> dat);
+  void pop_ephemeral_dat(Sym<REAL> sym);
+  void pop_ephemeral_dat(Sym<INT> sym);
 
 public:
   virtual ~EphemeralDats() = default;
@@ -130,10 +110,7 @@ public:
    *  @param sym Symbol of EphemeralDat.
    *  @returns True if EphemeralDat exists on this collection of EphemeralDats.
    */
-  inline bool contains_ephemeral_dat(Sym<REAL> sym) {
-    this->invalidate_ephemeral_dats_if_required();
-    return (bool)this->ephemeral.dats_real.count(sym);
-  }
+  bool contains_ephemeral_dat(Sym<REAL> sym);
 
   /**
    *  Determine if the container contains a EphemeralDat of a given name.
@@ -141,10 +118,7 @@ public:
    *  @param sym Symbol of EphemeralDat.
    *  @returns True if EphemeralDat exists on this collection of EphemeralDats.
    */
-  inline bool contains_ephemeral_dat(Sym<INT> sym) {
-    this->invalidate_ephemeral_dats_if_required();
-    return (bool)this->ephemeral.dats_int.count(sym);
-  }
+  bool contains_ephemeral_dat(Sym<INT> sym);
 
   /**
    * Get the EphemeralDat for a Sym.
@@ -152,12 +126,7 @@ public:
    * @param sym Sym to retrieve EphemeralDat for.
    * @returns ParticleDatSharedPtr for EphemeralDat.
    */
-  inline ParticleDatSharedPtr<REAL> get_ephemeral_dat(Sym<REAL> sym) {
-    this->invalidate_ephemeral_dats_if_required();
-    NESOASSERT(this->contains_ephemeral_dat(sym),
-               "Cannot find EphemeralDat with name: " + sym.name);
-    return this->ephemeral.dats_real.at(sym);
-  }
+  ParticleDatSharedPtr<REAL> get_ephemeral_dat(Sym<REAL> sym);
 
   /**
    * Get the EphemeralDat for a Sym.
@@ -165,13 +134,15 @@ public:
    * @param sym Sym to retrieve EphemeralDat for.
    * @returns ParticleDatSharedPtr for EphemeralDat.
    */
-  inline ParticleDatSharedPtr<INT> get_ephemeral_dat(Sym<INT> sym) {
-    this->invalidate_ephemeral_dats_if_required();
-    NESOASSERT(this->contains_ephemeral_dat(sym),
-               "Cannot find EphemeralDat with name: " + sym.name);
-    return this->ephemeral.dats_int.at(sym);
-  }
+  ParticleDatSharedPtr<INT> get_ephemeral_dat(Sym<INT> sym);
 };
+
+extern template void EphemeralDats::add_ephemeral_dat(const Sym<REAL> sym,
+                                                      const int ncomp);
+extern template void EphemeralDats::add_ephemeral_dat(const Sym<INT> sym,
+                                                      const int ncomp);
+extern template void EphemeralDats::remove_ephemeral_dat(const Sym<REAL> sym);
+extern template void EphemeralDats::remove_ephemeral_dat(const Sym<INT> sym);
 
 } // namespace NESO::Particles
 

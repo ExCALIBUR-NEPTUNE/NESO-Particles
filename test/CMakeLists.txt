@@ -80,7 +80,8 @@ set(TEST_SRCS
     ${TEST_DIR}/test_product_matrix.cpp
     ${TEST_DIR}/test_resource_stack.cpp
     ${TEST_DIR}/test_serial_container.cpp
-    ${TEST_DIR}/test_standard_boundary.cpp
+    ${TEST_DIR}/test_standard_boundary_a.cpp
+    ${TEST_DIR}/test_standard_boundary_b.cpp
     ${TEST_DIR}/test_sycl_target.cpp
     ${TEST_DIR}/test_tuple.cpp
     ${TEST_DIR}/test_utility.cpp)

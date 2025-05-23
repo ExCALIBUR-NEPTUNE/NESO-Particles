@@ -60,6 +60,7 @@ set(SRC_FILES
     ${SRC_DIR}/external_interfaces/common/local_claim.cpp
     ${SRC_DIR}/external_interfaces/common/overlay_cartesian_mesh.cpp
     ${SRC_DIR}/external_interfaces/common/quadrature_point_mapper.cpp
+    ${SRC_DIR}/boundary_interaction_specification.cpp
     ${SRC_DIR}/particle_io.cpp
     ${SRC_DIR}/cartesian_mesh.cpp
     ${SRC_DIR}/cartesian_mesh/cartesian_cell_bin.cpp
@@ -67,6 +68,7 @@ set(SRC_FILES
     ${SRC_DIR}/cartesian_mesh/cartesian_periodic.cpp
     ${SRC_DIR}/cartesian_mesh/cartesian_trajectory_intersection.cpp
     ${SRC_DIR}/communication/communication_edges_counter.cpp
+    ${SRC_DIR}/containers/ephemeral_dats.cpp
     ${SRC_DIR}/cell_dat_compression.cpp
     ${SRC_DIR}/cell_dat_move.cpp
     ${SRC_DIR}/device_limits.cpp
@@ -78,6 +80,7 @@ set(SRC_FILES
     ${SRC_DIR}/particle_dat.cpp
     ${SRC_DIR}/particle_group.cpp
     ${SRC_DIR}/particle_set.cpp
+    ${SRC_DIR}/particle_sub_group/cell_sub_group_selector.cpp
     ${SRC_DIR}/particle_sub_group/particle_group_partition.cpp
     ${SRC_DIR}/particle_group_temporary.cpp
     ${SRC_DIR}/particle_group_pointer_map.cpp
