@@ -14,7 +14,7 @@ void BoundaryReflection::execute(
   auto sycl_target = particle_group->sycl_target;
 
   NESOASSERT(
-      contains_boundary_interaction_data(particle_sub_group, this->ndim),
+      contains_boundary_interaction_data(particle_sub_group, this->ndim, true),
       "This ParticleSubGroup does not have the EphemeralDats that describe "
       "the boundary interaction.");
 

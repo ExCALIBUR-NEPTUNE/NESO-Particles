@@ -209,3 +209,57 @@ TEST(EphemeralDats, whole_group) {
 
   sycl_target->free();
 }
+
+TEST(EphemeralDats, static_invalidation) {
+  auto [A, sycl_target, cell_count_t] = particle_loop_common_2d(27, 16, 32);
+
+  auto lambda_create = [&](auto &aa) {
+    aa->add_ephemeral_dat(Sym<REAL>("VCOPY"), 3);
+    ASSERT_TRUE(aa->contains_ephemeral_dat(Sym<REAL>("VCOPY")));
+  };
+
+  auto lambda_test_exists = [&](auto &aa) {
+    ASSERT_TRUE(aa->contains_ephemeral_dat(Sym<REAL>("VCOPY")));
+  };
+
+  auto lambda_test_not_exists = [&](auto &aa) {
+    ASSERT_FALSE(aa->contains_ephemeral_dat(Sym<REAL>("VCOPY")));
+  };
+
+  {
+    auto aa = particle_sub_group(
+        A, [=](auto ID) { return ID.at(0) % 2 == 0; },
+        Access::read(Sym<INT>("ID")));
+    lambda_create(aa);
+    lambda_test_exists(aa);
+    particle_loop(
+        aa, [=](auto ID) { ID.at(0) += 2; }, Access::write(Sym<INT>("ID")))
+        ->execute();
+    lambda_test_not_exists(aa);
+
+    lambda_create(aa);
+    lambda_test_exists(aa);
+    A->invalidate_group_version();
+    lambda_test_not_exists(aa);
+  }
+
+  {
+    auto aa = static_particle_sub_group(
+        A, [=](auto ID) { return ID.at(0) % 2 == 0; },
+        Access::read(Sym<INT>("ID")));
+    lambda_create(aa);
+    lambda_test_exists(aa);
+    particle_loop(
+        aa, [=](auto ID) { ID.at(0) += 2; }, Access::write(Sym<INT>("ID")))
+        ->execute();
+    lambda_test_exists(aa);
+
+    lambda_create(aa);
+    lambda_test_exists(aa);
+    A->invalidate_group_version();
+    lambda_test_not_exists(aa);
+  }
+
+  sycl_target->free();
+  A->domain->mesh->free();
+}

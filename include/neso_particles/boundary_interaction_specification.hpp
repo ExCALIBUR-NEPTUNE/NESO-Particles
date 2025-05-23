@@ -40,7 +40,7 @@ struct BoundaryInteractionSpecification {
  */
 inline bool contains_boundary_interaction_data(
     const ParticleSubGroupSharedPtr particle_sub_group,
-    std::optional<int> ndim = std::nullopt) {
+    std::optional<int> ndim = std::nullopt, bool verbose = false) {
   bool valid = true;
 
   auto lambda_test_dat = [&](auto sym, auto ndim_tmp) {
@@ -49,6 +49,10 @@ inline bool contains_boundary_interaction_data(
     if ((ndim_tmp != std::nullopt) && contains_dat) {
       valid = valid && (particle_sub_group->get_ephemeral_dat(sym)->ncomp ==
                         ndim_tmp.value());
+    }
+    if (verbose && (!contains_dat)) {
+      nprint("EphemeralDat:", sym.name,
+             "is missing from the ParticleSubGroup.");
     }
   };
 
