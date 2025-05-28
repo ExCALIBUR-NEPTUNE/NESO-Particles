@@ -44,6 +44,9 @@ void DeviceLimits::setup_nvidia() {
   this->wgl.max_global_workgroup_2 = sycl::range<2>(65535, 2147483647);
   this->wgl.max_global_workgroup_3 = sycl::range<3>(65535, 65535, 2147483647);
   this->wgl.max_work_group_size = 1024;
+  this->local_mem_size =
+      device.get_info<sycl::info::device::local_mem_size>() - 1024;
+  NESOASSERT(this->local_mem_size > 0, "No local memory found.");
 }
 
 void DeviceLimits::print() {
