@@ -506,7 +506,7 @@ public:
       const std::size_t max_num_workitems = local_mem_size / num_bytes;
       // find the max power of two that does not exceed the number of work
       // items.
-      const std::size_t two_power = log2(max_num_workitems);
+      const std::size_t two_power = std::log2(max_num_workitems);
       const std::size_t max_base_two_num_workitems = std::pow(2, two_power);
 
       const std::size_t deduced_num_work_items =
