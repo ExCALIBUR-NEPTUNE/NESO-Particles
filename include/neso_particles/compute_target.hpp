@@ -401,11 +401,15 @@ joint_exclusive_scan_n_sum(SYCLTargetSharedPtr sycl_target, std::size_t N,
   // This loop is dependent on the exclusive scan call above.
   sycl::event event_totals = sycl_target->queue.parallel_for(
       sycl::range<1>(N), event_es, [=](auto ix) {
-        const auto last_value =
-            d_src[d_array_offsets[ix] + d_array_sizes[ix] - 1];
-        const auto last_value_ex =
-            d_dst[d_array_offsets[ix] + d_array_sizes[ix] - 1];
-        d_dst_sum[ix] = last_value + last_value_ex;
+        if (d_array_sizes[ix] == 0) {
+          d_dst_sum[ix] = 0;
+        } else {
+          const auto last_value =
+              d_src[d_array_offsets[ix] + d_array_sizes[ix] - 1];
+          const auto last_value_ex =
+              d_dst[d_array_offsets[ix] + d_array_sizes[ix] - 1];
+          d_dst_sum[ix] = last_value + last_value_ex;
+        }
       });
 
   return event_totals;

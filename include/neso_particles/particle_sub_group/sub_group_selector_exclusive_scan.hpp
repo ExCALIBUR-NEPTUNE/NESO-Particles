@@ -153,6 +153,10 @@ protected:
                                           cell_count * sizeof(int));
 
       // Create the exclusive scan for the selection
+      sycl_target->queue
+          .fill(static_cast<int *>(k_npart_cell_es_parent), static_cast<int>(0),
+                cell_count)
+          .wait_and_throw();
       joint_exclusive_scan(sycl_target, cell_count, d_npart_cell_ptr,
                            k_npart_cell_es_parent)
           .wait_and_throw();
