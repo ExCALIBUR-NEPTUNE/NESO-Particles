@@ -68,6 +68,7 @@ set(SRC_FILES
     ${SRC_DIR}/cartesian_mesh/cartesian_periodic.cpp
     ${SRC_DIR}/cartesian_mesh/cartesian_trajectory_intersection.cpp
     ${SRC_DIR}/communication/communication_edges_counter.cpp
+    ${SRC_DIR}/compute_target.cpp
     ${SRC_DIR}/containers/cell_dat.cpp
     ${SRC_DIR}/containers/cell_dat_const.cpp
     ${SRC_DIR}/containers/descendant_products.cpp
