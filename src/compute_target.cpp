@@ -387,6 +387,18 @@ template sycl::event joint_exclusive_scan(SYCLTargetSharedPtr sycl_target,
                                           INT *d_dst);
 
 template sycl::event
+joint_exclusive_scan_n_sum(SYCLTargetSharedPtr sycl_target, std::size_t N,
+                           const int *RESTRICT const d_array_sizes,
+                           const int *RESTRICT const d_array_offsets,
+                           int *d_src, int *d_dst, int *d_dst_sum);
+
+template sycl::event
+joint_exclusive_scan_n_sum(SYCLTargetSharedPtr sycl_target, std::size_t N,
+                           const INT *RESTRICT const d_array_sizes,
+                           const INT *RESTRICT const d_array_offsets,
+                           INT *d_src, INT *d_dst, INT *d_dst_sum);
+
+template sycl::event
 joint_exclusive_scan_n(SYCLTargetSharedPtr sycl_target, std::size_t N,
                        const int *RESTRICT const d_array_sizes,
                        const int *RESTRICT const d_array_offsets, int *d_src,

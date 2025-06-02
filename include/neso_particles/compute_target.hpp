@@ -275,7 +275,7 @@ NDRangePeel1D get_nd_range_peel_1d(const std::size_t size,
  *
  * @param[in] sycl_target Compute device to use.
  * @param[in] N Number of elements.
- * @param[in] d_src Device poitner to source values.
+ * @param[in] d_src Device pointer to source values.
  * @param[in, out] d_dst Device pointer to destination values.
  * @returns Event to wait on for completion.
  */
@@ -319,7 +319,8 @@ joint_exclusive_scan(SYCLTargetSharedPtr sycl_target, std::size_t N, INT *d_src,
  * @param[in] d_array_sizes Number of elements in each sub array.
  * @param[in] d_array_offsets The starting index of each sub array.
  * @param[in] d_src Device poitner to source values.
- * @param[in, out] d_dst Device pointer to destination values.
+ * @param[in, out] d_dst Device pointer to destination values  (same size as
+ * d_src).
  * @returns Event to wait on for completion.
  */
 template <typename U, typename T>
@@ -366,6 +367,56 @@ joint_exclusive_scan_n(SYCLTargetSharedPtr sycl_target, std::size_t N,
                        const INT *RESTRICT const d_array_sizes,
                        const INT *RESTRICT const d_array_offsets, INT *d_src,
                        INT *d_dst);
+
+/**
+ * Compute the exclusive scan of a n arrays using the SYCL group built-ins. Also
+ * computes the total for each of the n arrays.
+ *
+ * @param[in] sycl_target Compute device to use.
+ * @param[in] N Number of arrays.
+ * @param[in] d_array_sizes Number of elements in each sub array.
+ * @param[in] d_array_offsets The starting index of each sub array.
+ * @param[in] d_src Device pointer to source values.
+ * @param[in, out] d_dst Device pointer to destination values (same size as
+ * d_src).
+ * @param[in, out] d_dst_sum Device pointer to destination summation_values
+ * (size n).
+ * @returns Event to wait on for completion.
+ */
+template <typename U, typename T>
+[[nodiscard]] inline sycl::event
+joint_exclusive_scan_n_sum(SYCLTargetSharedPtr sycl_target, std::size_t N,
+                           const U *RESTRICT const d_array_sizes,
+                           const U *RESTRICT const d_array_offsets, T *d_src,
+                           T *d_dst, T *d_dst_sum) {
+
+  sycl::event event_es = joint_exclusive_scan_n(sycl_target, N, d_array_sizes,
+                                                d_array_offsets, d_src, d_dst);
+
+  // This loop is dependent on the exclusive scan call above.
+  sycl::event event_totals = sycl_target->queue.parallel_for(
+      sycl::range<1>(N), event_es, [=](auto ix) {
+        const auto last_value =
+            d_src[d_array_offsets[ix] + d_array_sizes[ix] - 1];
+        const auto last_value_ex =
+            d_dst[d_array_offsets[ix] + d_array_sizes[ix] - 1];
+        d_dst_sum[ix] = last_value + last_value_ex;
+      });
+
+  return event_totals;
+}
+
+extern template sycl::event
+joint_exclusive_scan_n_sum(SYCLTargetSharedPtr sycl_target, std::size_t N,
+                           const int *RESTRICT const d_array_sizes,
+                           const int *RESTRICT const d_array_offsets,
+                           int *d_src, int *d_dst, int *d_dst_sum);
+
+extern template sycl::event
+joint_exclusive_scan_n_sum(SYCLTargetSharedPtr sycl_target, std::size_t N,
+                           const INT *RESTRICT const d_array_sizes,
+                           const INT *RESTRICT const d_array_offsets,
+                           INT *d_src, INT *d_dst, INT *d_dst_sum);
 
 /**
  * Compute the transpose of a matrix stored in row major format. Assumes that
