@@ -48,6 +48,11 @@ inline void pre_loop(ParticleLoopGlobalInfo *global_info,
                      Access::Write<SymVector<T> *> &arg);
 } // namespace ParticleLoopImplementation
 
+namespace Private {
+INT *get_npart_cell_es_device_ptr(
+    std::shared_ptr<ParticleGroup> particle_group);
+}
+
 /**
  * Type to replace std::variant<Sym<INT>, Sym<REAL>> as the version tracking
  * key as this has been causing segfaults.
@@ -120,6 +125,8 @@ class ParticleGroup {
   friend inline SymVectorPointerCacheDispatchSharedPtr
   get_sym_vector_cache_dispatch(ParticleGroup *particle_group,
                                 ParticleSubGroup *particle_sub_group);
+  friend INT *Private::get_npart_cell_es_device_ptr(
+      std::shared_ptr<ParticleGroup> particle_group);
 
 protected:
   // This type should be replaceable with typedef std::variant<Sym<INT>,
