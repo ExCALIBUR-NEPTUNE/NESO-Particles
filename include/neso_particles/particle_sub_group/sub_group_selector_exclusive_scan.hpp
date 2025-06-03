@@ -27,7 +27,6 @@ class SubGroupSelectorExclusiveScan : public SubGroupSelectorBase {
 protected:
   ParticleLoopSharedPtr loop_0;
   ParticleLoopSharedPtr loop_1;
-  std::shared_ptr<LocalArray<int *>> map_ptrs_ex_scan;
   std::function<void(Selection *)> create_callback;
 
   template <template <typename> typename T, typename U>
@@ -61,27 +60,6 @@ protected:
   SubGroupSelectorExclusiveScan() = default;
 
   template <typename T> inline void create_loop_1(std::shared_ptr<T> parent) {
-
-    this->map_ptrs_ex_scan = std::make_shared<LocalArray<int *>>(
-        get_particle_group(parent)->sycl_target, 1);
-
-    this->loop_1 = particle_loop(
-        "sub_group_selector_exclusive_scan_1", parent,
-        [=](auto loop_index, auto k_map_cell_to_particles, auto k_map_ptrs,
-            auto k_map_ptrs_ex_scan) {
-          INT **base_map_cell_to_particles = k_map_cell_to_particles.at(0);
-          const INT loop_linear_index = loop_index.get_loop_linear_index();
-          const int required = k_map_ptrs.at(0)[loop_linear_index];
-          const int layer = k_map_ptrs_ex_scan.at(0)[loop_linear_index];
-          if (required) {
-            INT *base_map_for_cell =
-                base_map_cell_to_particles[loop_index.cell];
-            base_map_for_cell[layer] = loop_index.layer;
-          }
-        },
-        Access::read(ParticleLoopIndex{}),
-        Access::write(this->map_cell_to_particles_ptrs),
-        Access::read(this->map_ptrs), Access::read(this->map_ptrs_ex_scan));
 
     this->create_callback = [=](Selection *created_selection) {
       auto sycl_target = get_particle_group(parent)->sycl_target;
@@ -117,7 +95,6 @@ protected:
           sycl_target);
       d_masks_es->realloc_no_copy(npart_local);
       int *k_masks_es = d_masks_es->ptr;
-      this->map_ptrs_ex_scan->set({k_masks_es});
       auto e1 = sycl_target->queue.fill(static_cast<int *>(k_masks_es),
                                         static_cast<int>(0),
                                         static_cast<std::size_t>(npart_local));
@@ -179,8 +156,21 @@ protected:
       // Now the map exists and we can populate it
       auto d_cell_starts_ptr = this->sub_group_particle_map->d_cell_starts->ptr;
 
-      this->map_cell_to_particles_ptrs->set({d_cell_starts_ptr});
-      this->loop_1->execute();
+      particle_loop(
+          "sub_group_selector_exclusive_scan_1", parent,
+          [=](auto loop_index) {
+            INT **base_map_cell_to_particles = d_cell_starts_ptr;
+            const INT loop_linear_index = loop_index.get_loop_linear_index();
+            const int required = k_masks[loop_linear_index];
+            const int layer = k_masks_es[loop_linear_index];
+            if (required) {
+              INT *base_map_for_cell =
+                  base_map_cell_to_particles[loop_index.cell];
+              base_map_for_cell[layer] = loop_index.layer;
+            }
+          },
+          Access::read(ParticleLoopIndex{}))
+          ->execute();
 
       created_selection->npart_local =
           this->sub_group_particle_map->npart_total;
