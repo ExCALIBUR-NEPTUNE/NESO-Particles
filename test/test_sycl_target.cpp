@@ -132,7 +132,7 @@ TEST(SYCLTarget, joint_exclusive_scan_n_int) {
 
   int offset = 0;
   for (std::size_t ax = 0; ax < num_arrays; ax++) {
-    const std::size_t num_elements = N - ax;
+    const std::size_t num_elements = (ax == 10) ? 0 : N - ax;
     std::vector<int> tmp_src(num_elements);
     std::vector<int> tmp_correct(num_elements);
 
@@ -188,7 +188,7 @@ TEST(SYCLTarget, joint_exclusive_scan_n_sum_int) {
 
   int offset = 0;
   for (std::size_t ax = 0; ax < num_arrays; ax++) {
-    const std::size_t num_elements = N - ax;
+    const std::size_t num_elements = (ax == 10) ? 0 : N - ax;
     std::vector<int> tmp_src(num_elements);
     std::vector<int> tmp_correct(num_elements);
 

@@ -348,11 +348,13 @@ joint_exclusive_scan_n(SYCLTargetSharedPtr sycl_target, std::size_t N,
       iteration_set, [=](sycl::nd_item<2> it) {
         const std::size_t array_index = it.get_global_id(0);
         const auto num_elements = d_array_sizes[array_index];
-        const auto start_index = d_array_offsets[array_index];
-        T *first = d_src + start_index;
-        T *last = first + num_elements;
-        sycl::joint_exclusive_scan(it.get_group(), first, last,
-                                   d_dst + start_index, sycl::plus<T>());
+        if (num_elements > 0) {
+          const auto start_index = d_array_offsets[array_index];
+          T *first = d_src + start_index;
+          T *last = first + num_elements;
+          sycl::joint_exclusive_scan(it.get_group(), first, last,
+                                     d_dst + start_index, sycl::plus<T>());
+        }
       });
 }
 
@@ -389,6 +391,9 @@ joint_exclusive_scan_n_sum(SYCLTargetSharedPtr sycl_target, std::size_t N,
                            const U *RESTRICT const d_array_sizes,
                            const U *RESTRICT const d_array_offsets, T *d_src,
                            T *d_dst, T *d_dst_sum) {
+  if (N == 0) {
+    return sycl::event{};
+  }
 
   sycl::event event_es = joint_exclusive_scan_n(sycl_target, N, d_array_sizes,
                                                 d_array_offsets, d_src, d_dst);
@@ -396,11 +401,15 @@ joint_exclusive_scan_n_sum(SYCLTargetSharedPtr sycl_target, std::size_t N,
   // This loop is dependent on the exclusive scan call above.
   sycl::event event_totals = sycl_target->queue.parallel_for(
       sycl::range<1>(N), event_es, [=](auto ix) {
-        const auto last_value =
-            d_src[d_array_offsets[ix] + d_array_sizes[ix] - 1];
-        const auto last_value_ex =
-            d_dst[d_array_offsets[ix] + d_array_sizes[ix] - 1];
-        d_dst_sum[ix] = last_value + last_value_ex;
+        if (d_array_sizes[ix] == 0) {
+          d_dst_sum[ix] = 0;
+        } else {
+          const auto last_value =
+              d_src[d_array_offsets[ix] + d_array_sizes[ix] - 1];
+          const auto last_value_ex =
+              d_dst[d_array_offsets[ix] + d_array_sizes[ix] - 1];
+          d_dst_sum[ix] = last_value + last_value_ex;
+        }
       });
 
   return event_totals;

@@ -1,6 +1,5 @@
 #include <gtest/gtest.h>
 
-// #define NESO_PARTICLES_PROFILING_REGION
 #include <neso_particles.hpp>
 #include <random>
 #include <type_traits>
