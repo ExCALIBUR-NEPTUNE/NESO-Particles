@@ -6,7 +6,38 @@
 #include "../particle_sub_group/particle_sub_group.hpp"
 #include "boundary_interaction_specification.hpp"
 
-namespace NESO::Particles::ExternalCommon {
+namespace NESO::Particles {
+
+namespace Private {
+
+/**
+ * Kernel that applies reflection to the particle trajectory.
+ *
+ * @param V Current particle position.
+ * @param INTERSECTION_NORMAL EphemeralDat normal at the intersection point
+ * between particle trajectory and the boundary.
+ */
+template <int k_ndim>
+inline void
+reflect_trajectory(Access::ParticleDat::Write<REAL> V,
+                   Access::ParticleDat::Read<REAL> INTERSECTION_NORMAL) {
+  REAL n[3] = {0.0, 0.0, 0.0};
+  REAL v[3] = {0.0, 0.0, 0.0};
+
+  for (int dx = 0; dx < k_ndim; dx++) {
+    n[dx] = INTERSECTION_NORMAL.at_ephemeral(dx);
+    v[dx] = V.at(dx);
+  }
+  // We don't know if the normal is inwards pointing or outwards
+  // pointing.
+  const REAL in_dot_product = Kernel::dot_product_3d(n, v);
+
+  // compute new velocity from reflection
+  for (int dx = 0; dx < k_ndim; dx++) {
+    V.at(dx) = v[dx] - 2.0 * in_dot_product * n[dx];
+  }
+}
+} // namespace Private
 
 /**
  * Helper class to apply a reflection process to particles which intersect a
@@ -29,6 +60,10 @@ namespace NESO::Particles::ExternalCommon {
  * component would both be 0.5. There are two components as updating the time
  * of the particle is an iterative process which might require multiple calls
  * to execute, for example a particle bouncing in a corner.
+ *
+ * This class assumes that the boundary interaction data exists in the
+ * standardised EphemeralDats that describe particle-boundary intersections. See
+ * the BoundaryInteractionSpecification type for more details.
  */
 class BoundaryReflection {
 protected:
@@ -38,16 +73,14 @@ protected:
 public:
   /**
    * Create an instance to perform reflections from a boundary interaction
-   * class. Note that this class does not perform calls to this boundary
-   * interaction class other than those to retrieve the normal data.
+   * class.
    *
    * @param ndim Number of spatial dimensions.
    * @param reset_distance Optionally pass the distance from the boundary to
    * the position the particle is reset to. If this value is zero then the
    * particle will become stuck in the wall.
    */
-  BoundaryReflection(const int ndim, const REAL reset_distance = 1.0e-10)
-      : ndim(ndim), reset_distance(reset_distance) {}
+  BoundaryReflection(const int ndim, const REAL reset_distance = 1.0e-10);
 
   /**
    * Perform reflection operation for all particles passed. This method should
@@ -75,6 +108,6 @@ public:
                Sym<REAL> sym_positions_previous);
 };
 
-} // namespace NESO::Particles::ExternalCommon
+} // namespace NESO::Particles
 
 #endif
