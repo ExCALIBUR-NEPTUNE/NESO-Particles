@@ -1,9 +1,9 @@
-#ifndef _NESO_PARTICLES_BOUNDARY_INTERACTION_SPECIFICATION_HPP_
-#define _NESO_PARTICLES_BOUNDARY_INTERACTION_SPECIFICATION_HPP_
+#ifndef _NESO_PARTICLES_BOUNDARY_BOUNDARY_INTERACTION_SPECIFICATION_HPP_
+#define _NESO_PARTICLES_BOUNDARY_BOUNDARY_INTERACTION_SPECIFICATION_HPP_
 
-#include "particle_spec.hpp"
-#include "particle_sub_group/particle_sub_group_base.hpp"
-#include "typedefs.hpp"
+#include "../particle_spec.hpp"
+#include "../particle_sub_group/particle_sub_group_base.hpp"
+#include "../typedefs.hpp"
 #include <optional>
 
 namespace NESO::Particles {

@@ -4,7 +4,8 @@
 #include <memory>
 
 #include "neso_particles/access.hpp"
-#include "neso_particles/boundary_interaction_specification.hpp"
+#include "neso_particles/boundary/boundary_interaction_specification.hpp"
+#include "neso_particles/boundary/boundary_reflection.hpp"
 #include "neso_particles/cartesian_mesh.hpp"
 #include "neso_particles/cartesian_mesh/cartesian_cell_bin.hpp"
 #include "neso_particles/cartesian_mesh/cartesian_periodic.hpp"

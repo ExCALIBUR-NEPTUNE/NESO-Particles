@@ -1,5 +1,5 @@
+#include <neso_particles/boundary/boundary_reflection.hpp>
 #include <neso_particles/common_impl.hpp>
-#include <neso_particles/external_interfaces/common/boundary_reflection.hpp>
 
 namespace NESO::Particles::ExternalCommon {
 

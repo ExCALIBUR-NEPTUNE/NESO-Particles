@@ -1,7 +1,7 @@
 #ifndef _NESO_PARTICLES_PETSC_BOUNDARY_INTERACTION_BOUNDARY_INTERACTION_2D_HPP_
 #define _NESO_PARTICLES_PETSC_BOUNDARY_INTERACTION_BOUNDARY_INTERACTION_2D_HPP_
 
-#include "../../../boundary_interaction_specification.hpp"
+#include "../../../boundary/boundary_interaction_specification.hpp"
 #include "../../../containers/blocked_binary_tree.hpp"
 #include "../../../device_functions.hpp"
 #include "boundary_interaction_common.hpp"

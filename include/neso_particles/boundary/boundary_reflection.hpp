@@ -1,10 +1,10 @@
-#ifndef _NESO_PARTICLES_EXTERNAL_INTERFACES_COMMON_BOUNDARY_REFLECTION_HPP_
-#define _NESO_PARTICLES_EXTERNAL_INTERFACES_COMMON_BOUNDARY_REFLECTION_HPP_
+#ifndef _NESO_PARTICLES_BOUNDARY_BOUNDARY_REFLECTION_HPP_
+#define _NESO_PARTICLES_BOUNDARY_BOUNDARY_REFLECTION_HPP_
 
-#include "../../boundary_interaction_specification.hpp"
-#include "../../error_propagate.hpp"
-#include "../../particle_group.hpp"
-#include "../../particle_sub_group/particle_sub_group.hpp"
+#include "../error_propagate.hpp"
+#include "../particle_group.hpp"
+#include "../particle_sub_group/particle_sub_group.hpp"
+#include "boundary_interaction_specification.hpp"
 
 namespace NESO::Particles::ExternalCommon {
 

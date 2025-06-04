@@ -47,7 +47,6 @@ set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set(SRC_FILES
     ${SRC_DIR}/external_interfaces/petsc/boundary_interaction/boundary_interaction_2d.cpp
     ${SRC_DIR}/external_interfaces/petsc/boundary_interaction/boundary_interaction_common.cpp
-    ${SRC_DIR}/external_interfaces/common/boundary_reflection.cpp
     ${SRC_DIR}/external_interfaces/petsc/dmplex_cell_serialise.cpp
     ${SRC_DIR}/external_interfaces/petsc/dmplex_interface.cpp
     ${SRC_DIR}/external_interfaces/petsc/dmplex_helper.cpp
@@ -60,7 +59,8 @@ set(SRC_FILES
     ${SRC_DIR}/external_interfaces/common/local_claim.cpp
     ${SRC_DIR}/external_interfaces/common/overlay_cartesian_mesh.cpp
     ${SRC_DIR}/external_interfaces/common/quadrature_point_mapper.cpp
-    ${SRC_DIR}/boundary_interaction_specification.cpp
+    ${SRC_DIR}/boundary/boundary_reflection.cpp
+    ${SRC_DIR}/boundary/boundary_interaction_specification.cpp
     ${SRC_DIR}/particle_io.cpp
     ${SRC_DIR}/cartesian_mesh.cpp
     ${SRC_DIR}/cartesian_mesh/cartesian_cell_bin.cpp
@@ -120,7 +120,8 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/cartesian_mesh/cartesian_cell_bin.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cartesian_mesh/cartesian_periodic.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cartesian_mesh/cartesian_trajectory_intersection.hpp
-    ${INCLUDE_DIR_NESO_PARTICLES}/boundary_interaction_specification.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/boundary/boundary_interaction_specification.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/boundary/boundary_reflection.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cartesian_mesh.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cell_dat.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cell_dat_compression.hpp
@@ -176,7 +177,6 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/common/overlay_cartesian_mesh.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/common/dof_mapper_dg.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/common/quadrature_point_mapper.hpp
-    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/common/boundary_reflection.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/boundary_interaction/boundary_interaction.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/boundary_interaction/boundary_interaction_2d.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/boundary_interaction/boundary_interaction_common.hpp
