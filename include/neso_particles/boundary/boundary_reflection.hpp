@@ -30,7 +30,7 @@ reflect_trajectory(Access::ParticleDat::Write<REAL> V,
   }
   // We don't know if the normal is inwards pointing or outwards
   // pointing.
-  const REAL in_dot_product = Kernel::dot_product_3d(n, v);
+  const REAL in_dot_product = Kernel::dot_product<k_ndim>(n, v);
 
   // compute new velocity from reflection
   for (int dx = 0; dx < k_ndim; dx++) {

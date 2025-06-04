@@ -46,7 +46,7 @@ inline void truncate_trajectory(
     o[dx] = oo[dx];
   }
 
-  const REAL o_norm2 = Kernel::dot_product_3d(oo, oo);
+  const REAL o_norm2 = Kernel::dot_product<k_ndim>(oo, oo);
   const REAL o_norm = Kernel::sqrt(o_norm2);
   const bool small_move = o_norm < (k_reset_distance * 0.1);
   const REAL o_inorm =
@@ -80,7 +80,7 @@ inline void truncate_trajectory(
   for (int dx = 0; dx < k_ndim; dx++) {
     f[dx] = p[dx] - PP.at(dx);
   }
-  const REAL dist_full_step = Kernel::sqrt(Kernel::dot_product_3d(f, f));
+  const REAL dist_full_step = Kernel::sqrt(Kernel::dot_product<k_ndim>(f, f));
 
   REAL tmp_prop_achieved =
       dist_full_step > 1.0e-16 ? dist_trunc_step / dist_full_step : 1.0;
