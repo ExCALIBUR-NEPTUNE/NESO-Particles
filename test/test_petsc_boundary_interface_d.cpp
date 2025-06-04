@@ -132,8 +132,7 @@ TEST(PETScBoundary2D, reflection_truncated) {
 
   auto b2d = std::make_shared<TestBoundaryInteraction2D>(sycl_target, mesh,
                                                          boundary_groups);
-  auto reflection =
-      std::make_shared<BoundaryReflection>(2, 1.0e-10);
+  auto reflection = std::make_shared<BoundaryReflection>(2, 1.0e-10);
 
   auto ep = std::make_shared<ErrorPropagate>(sycl_target);
   auto k_ep = ep->device_ptr();
@@ -287,8 +286,7 @@ TEST(PETScBoundary2D, reflection_advection) {
 
     auto b2d = std::make_shared<TestBoundaryInteraction2D>(sycl_target, mesh,
                                                            boundary_groups);
-    auto reflection =
-        std::make_shared<BoundaryReflection>(2, 1.0e-10);
+    auto reflection = std::make_shared<BoundaryReflection>(2, 1.0e-10);
 
     auto lambda_apply_boundary_conditions = [&](auto aa) {
       auto sub_groups = b2d->post_integration(aa);

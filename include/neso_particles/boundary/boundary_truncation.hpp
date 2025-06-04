@@ -88,7 +88,7 @@ inline void truncate_trajectory(
   tmp_prop_achieved = tmp_prop_achieved > 1.0 ? 1.0 : tmp_prop_achieved;
 
   // proportion along the full step that we truncated at
-  const REAL proportion_achieved = Kernel::sqrt(tmp_prop_achieved);
+  const REAL proportion_achieved = tmp_prop_achieved;
   const REAL last_dt = TSP.at(1);
   const REAL correct_last_dt = TSP.at(1) * proportion_achieved;
   TSP.at(0) = TSP.at(0) - last_dt + correct_last_dt;
