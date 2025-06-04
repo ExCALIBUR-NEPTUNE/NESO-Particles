@@ -1,4 +1,3 @@
-#ifdef NESO_PARTICLES_PETSC
 #include <neso_particles/common_impl.hpp>
 #include <neso_particles/external_interfaces/common/boundary_reflection.hpp>
 
@@ -111,5 +110,3 @@ void BoundaryReflection::execute(
 }
 
 } // namespace NESO::Particles::ExternalCommon
-
-#endif
