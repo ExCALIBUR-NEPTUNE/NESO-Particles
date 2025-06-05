@@ -87,9 +87,11 @@ inline void check_is_sym_outer(T<U> arg) {
 } // namespace
 
 /**
- *  ParticleLoop loop type. The particle loop applies the given kernel to all
- *  particles in a ParticleGroup. The kernel must be independent of the
- *  execution order (i.e. parallel and unsequenced in C++ terminology).
+ * This class describes how the loop arguments should behave.
+ *
+ * * Methods that discuss "loop" arguments are executed host side.
+ * * Methods that describe "kernel" arguments are executed device side and must
+ *   meet the sycl requirements for a device function.
  */
 template <typename... ARGS> class ParticleLoopArgs {
 protected:
@@ -152,10 +154,6 @@ protected:
     return ParticleLoopImplementation::get_required_local_num_bytes(c);
   }
 
-  /*
-   * =================================================================
-   */
-
   /// The types of the parameters for the outside loops.
   using loop_parameter_type = Tuple::Tuple<loop_parameter_t<ARGS>...>;
   /// The types of the arguments passed to the kernel.
@@ -188,32 +186,6 @@ protected:
       sycl::handler &cgh, loop_parameter_type &loop_args,
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info) {
     create_loop_args_inner<0, sizeof...(ARGS)>(global_info, cgh, loop_args);
-  }
-
-  /// recusively assemble the kernel arguments from the loop arguments
-  template <size_t INDEX, size_t SIZE>
-  static inline constexpr void create_kernel_args_inner(
-      ParticleLoopImplementation::ParticleLoopIteration &iterationx,
-      const loop_parameter_type &loop_args,
-      kernel_parameter_type &kernel_args) {
-
-    if constexpr (INDEX < SIZE) {
-      auto arg = Tuple::get<INDEX>(loop_args);
-      ParticleLoopImplementation::create_kernel_arg(
-          iterationx, arg, Tuple::get<INDEX>(kernel_args));
-      create_kernel_args_inner<INDEX + 1, SIZE>(iterationx, loop_args,
-                                                kernel_args);
-    }
-  }
-
-  /// called before kernel execution to assemble the kernel arguments.
-  static inline constexpr void create_kernel_args(
-      ParticleLoopImplementation::ParticleLoopIteration &iterationx,
-      const loop_parameter_type &loop_args,
-      kernel_parameter_type &kernel_args) {
-
-    create_kernel_args_inner<0, sizeof...(ARGS)>(iterationx, loop_args,
-                                                 kernel_args);
   }
 
   inline void apply_pre_loop(

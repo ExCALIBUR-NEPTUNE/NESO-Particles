@@ -41,6 +41,32 @@ protected:
         size * ParticleLoopImplementation::get_kernel_num_flops(this->kernel);
   }
 
+  /// recusively assemble the kernel arguments from the loop arguments
+  template <size_t INDEX, size_t SIZE>
+  static inline constexpr void create_kernel_args_inner(
+      ParticleLoopImplementation::ParticleLoopIteration &iterationx,
+      const loop_parameter_type &loop_args,
+      kernel_parameter_type &kernel_args) {
+
+    if constexpr (INDEX < SIZE) {
+      auto arg = Tuple::get<INDEX>(loop_args);
+      ParticleLoopImplementation::create_kernel_arg(
+          iterationx, arg, Tuple::get<INDEX>(kernel_args));
+      create_kernel_args_inner<INDEX + 1, SIZE>(iterationx, loop_args,
+                                                kernel_args);
+    }
+  }
+
+  /// called before kernel execution to assemble the kernel arguments.
+  static inline constexpr void create_kernel_args(
+      ParticleLoopImplementation::ParticleLoopIteration &iterationx,
+      const loop_parameter_type &loop_args,
+      kernel_parameter_type &kernel_args) {
+
+    create_kernel_args_inner<0, sizeof...(ARGS)>(iterationx, loop_args,
+                                                 kernel_args);
+  }
+
 public:
   /// Disable (implicit) copies.
   ParticleLoop(const ParticleLoop &st) = delete;
@@ -223,8 +249,7 @@ public:
                   iterationx.layerx = layerx;
                   iterationx.loop_layerx = layerx;
                   kernel_parameter_type kernel_args;
-                  ParticleLoopArgs<ARGS...>::create_kernel_args(
-                      iterationx, loop_args, kernel_args);
+                  create_kernel_args(iterationx, loop_args, kernel_args);
                   Tuple::apply(k_kernel, kernel_args);
                 }
               });
@@ -255,8 +280,7 @@ public:
                 iterationx.layerx = layerx;
                 iterationx.loop_layerx = layerx;
                 kernel_parameter_type kernel_args;
-                ParticleLoopArgs<ARGS...>::create_kernel_args(
-                    iterationx, loop_args, kernel_args);
+                create_kernel_args(iterationx, loop_args, kernel_args);
                 Tuple::apply(k_kernel, kernel_args);
               });
             }));
