@@ -221,6 +221,9 @@ protected:
   ParticleLoopArgs(ARGS... args) { this->unpack_args<0>(args...); }
 };
 
+extern template class ParticleLoopArgs<
+    NESO::Particles::Access::Read<NESO::Particles::Sym<double>>>;
+
 } // namespace NESO::Particles
 
 #endif
