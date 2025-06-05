@@ -4,7 +4,8 @@
 
 namespace NESO::Particles {
 
-template class ParticleLoopArgs<
-    NESO::Particles::Access::Read<NESO::Particles::Sym<double>>>;
+#ifdef NESO_PARTICLES_PARTICLE_LOOP_ARGS_STATS
+ParticleLoopArgsStats particle_loop_args_stats = ParticleLoopArgsStats{};
+#endif
 
-}
+} // namespace NESO::Particles
