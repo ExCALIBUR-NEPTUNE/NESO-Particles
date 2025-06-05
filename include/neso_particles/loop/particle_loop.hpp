@@ -1,5 +1,5 @@
-#ifndef _NESO_PARTICLES_PARTICLE_LOOP_H_
-#define _NESO_PARTICLES_PARTICLE_LOOP_H_
+#ifndef _NESO_PARTICLES_LOOP_PARTICLE_LOOP_H_
+#define _NESO_PARTICLES_LOOP_PARTICLE_LOOP_H_
 
 #include <cstdlib>
 #include <optional>
@@ -8,70 +8,9 @@
 #include <typeinfo>
 #include <vector>
 
-#include "../cell_dat.hpp"
-#include "../compute_target.hpp"
-#include "../containers/descendant_products.hpp"
-#include "../containers/global_array.hpp"
-#include "../containers/local_array.hpp"
-#include "../containers/local_memory_block.hpp"
-#include "../containers/local_memory_interlaced.hpp"
-#include "../containers/nd_local_array.hpp"
-#include "../containers/particle_set_device.hpp"
-#include "../containers/product_matrix.hpp"
-#include "../containers/rng/kernel_rng.hpp"
-#include "../containers/sym_vector.hpp"
-#include "../containers/tuple.hpp"
-#include "../particle_dat.hpp"
-#include "../particle_spec.hpp"
-#include "../sycl_typedefs.hpp"
-#include "cell_info_npart.hpp"
-#include "kernel.hpp"
-#include "particle_loop_base.hpp"
-#include "particle_loop_index.hpp"
-#include "pli_particle_dat.hpp"
+#include "particle_loop_args.hpp"
 
 namespace NESO::Particles {
-
-class ParticleSubGroup;
-
-namespace ParticleLoopImplementation {
-/**
- * Catch all for args passed as shared ptrs
- */
-template <template <typename> typename T, typename U, typename V>
-struct LoopParameter<T<std::shared_ptr<U>>, V> {
-  using type = typename LoopParameter<T<U>, V>::type;
-};
-/**
- * Catch all for args passed as shared ptrs
- */
-template <template <typename> typename T, typename U, typename V>
-struct KernelParameter<T<std::shared_ptr<U>>, V> {
-  using type = typename KernelParameter<T<U>, V>::type;
-};
-
-} // namespace ParticleLoopImplementation
-
-namespace {
-
-/**
- *  This is a metafunction which is passed a input data type and returns the
- *  LoopParamter type that corresponds to the input type (by using the structs
- * defined above).
- */
-template <class T>
-using loop_parameter_t =
-    typename ParticleLoopImplementation::LoopParameter<T, std::true_type>::type;
-
-/**
- *  Function to map access descriptor and data structure type to kernel type.
- */
-template <class T>
-using kernel_parameter_t =
-    typename ParticleLoopImplementation::KernelParameter<T,
-                                                         std::true_type>::type;
-
-} // namespace
 
 /**
  *  ParticleLoop loop type. The particle loop applies the given kernel to all
@@ -79,183 +18,21 @@ using kernel_parameter_t =
  *  execution order (i.e. parallel and unsequenced in C++ terminology).
  */
 template <typename KERNEL, typename... ARGS>
-class ParticleLoop : public ParticleLoopBase {
-
+class ParticleLoop : public ParticleLoopBase, public ParticleLoopArgs<ARGS...> {
 protected:
-  /**
-   * Method to compute access to a type wrapped in a shared_ptr.
-   */
-  template <template <typename> typename T, typename U>
-  inline auto create_loop_arg_cast(
-      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
-      sycl::handler &cgh, T<std::shared_ptr<U>> a);
-  /**
-   * Method to compute access to a type not wrapper in a shared_ptr
-   */
-  template <template <typename> typename T, typename U>
-  inline auto create_loop_arg_cast(
-      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
-      sycl::handler &cgh, T<U> a);
-
-  /*
-   * -----------------------------------------------------------------
-   */
-
-  /**
-   * Method to compute access to a type wrapped in a shared_ptr.
-   */
-  template <template <typename> typename T, typename U>
-  static inline auto post_loop_cast(
-      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
-      T<std::shared_ptr<U>> a);
-  /**
-   * Method to compute access to a type not wrapper in a shared_ptr
-   */
-  template <template <typename> typename T, typename U>
-  static inline auto post_loop_cast(
-      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info, T<U> a);
-  /**
-   * Method to compute access to a type wrapped in a shared_ptr.
-   */
-  template <template <typename> typename T, typename U>
-  inline void
-  pre_loop_cast(ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
-                T<std::shared_ptr<U>> a);
-  /**
-   * Method to compute access to a type not wrapper in a shared_ptr
-   */
-  template <template <typename> typename T, typename U>
-  inline void
-  pre_loop_cast(ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
-                T<U> a);
-  /**
-   * Method to compute access to a type wrapped in a shared_ptr.
-   */
-  template <template <typename> typename T, typename U>
-  static inline std::size_t local_mem_loop_cast(T<std::shared_ptr<U>> a) {
-    T<U *> c = {a.obj.get()};
-    return ParticleLoopImplementation::get_required_local_num_bytes(c);
-  }
-  /**
-   * Method to compute access to a type not wrapper in a shared_ptr
-   */
-  template <template <typename> typename T, typename U>
-  static inline std::size_t local_mem_loop_cast(T<U> a) {
-    T<U *> c = {&a.obj};
-    return ParticleLoopImplementation::get_required_local_num_bytes(c);
-  }
-
-  /*
-   * =================================================================
-   */
-
-  /// The types of the parameters for the outside loops.
-  using loop_parameter_type = Tuple::Tuple<loop_parameter_t<ARGS>...>;
-  /// The types of the arguments passed to the kernel.
-  using kernel_parameter_type = Tuple::Tuple<kernel_parameter_t<ARGS>...>;
-  /// Tuple of the arguments passed to the ParticleLoop on construction.
-  std::tuple<ARGS...> args;
-
-  /// Recursively assemble the tuple args.
-  template <size_t INDEX, typename U> inline void unpack_args(U a0) {
-    std::get<INDEX>(this->args) = a0;
-  }
-  template <size_t INDEX, typename U, typename... V>
-  inline void unpack_args(U a0, V... args) {
-    std::get<INDEX>(this->args) = a0;
-    this->unpack_args<INDEX + 1>(args...);
-  }
-
-  /// Recursively assemble the outer loop arguments.
-  template <size_t INDEX, size_t SIZE, typename PARAM>
-  inline void create_loop_args_inner(
-      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
-      sycl::handler &cgh, PARAM &loop_args) {
-    if constexpr (INDEX < SIZE) {
-      Tuple::get<INDEX>(loop_args) =
-          create_loop_arg_cast(global_info, cgh, std::get<INDEX>(this->args));
-      create_loop_args_inner<INDEX + 1, SIZE>(global_info, cgh, loop_args);
-    }
-  }
-  inline void create_loop_args(
-      sycl::handler &cgh, loop_parameter_type &loop_args,
-      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info) {
-    create_loop_args_inner<0, sizeof...(ARGS)>(global_info, cgh, loop_args);
-  }
-
-  /// recusively assemble the kernel arguments from the loop arguments
-  template <size_t INDEX, size_t SIZE>
-  static inline constexpr void create_kernel_args_inner(
-      ParticleLoopImplementation::ParticleLoopIteration &iterationx,
-      const loop_parameter_type &loop_args,
-      kernel_parameter_type &kernel_args) {
-
-    if constexpr (INDEX < SIZE) {
-      auto arg = Tuple::get<INDEX>(loop_args);
-      ParticleLoopImplementation::create_kernel_arg(
-          iterationx, arg, Tuple::get<INDEX>(kernel_args));
-      create_kernel_args_inner<INDEX + 1, SIZE>(iterationx, loop_args,
-                                                kernel_args);
-    }
-  }
-
-  /// called before kernel execution to assemble the kernel arguments.
-  static inline constexpr void create_kernel_args(
-      ParticleLoopImplementation::ParticleLoopIteration &iterationx,
-      const loop_parameter_type &loop_args,
-      kernel_parameter_type &kernel_args) {
-
-    create_kernel_args_inner<0, sizeof...(ARGS)>(iterationx, loop_args,
-                                                 kernel_args);
-  }
-
   KERNEL kernel;
+  /// The types of the parameters for the outside loops.
+  using loop_parameter_type =
+      typename ParticleLoopArgs<ARGS...>::loop_parameter_type;
+  /// The types of the arguments passed to the kernel.
+  using kernel_parameter_type =
+      typename ParticleLoopArgs<ARGS...>::kernel_parameter_type;
 
   virtual inline std::size_t get_local_size() override {
-
-    // Loop over the args and add how many local bytes they each require.
-    std::size_t num_bytes = 0;
-    auto lambda_size_add = [&](auto argx) {
-      num_bytes += this->local_mem_loop_cast(argx);
-    };
-    auto lambda_size = [&](auto... as) { (lambda_size_add(as), ...); };
-    std::apply(lambda_size, this->args);
-
-    // The amount of local space on the device and required number of local
-    // bytes gives an upper bound on local size.
-    std::size_t local_size =
-        this->sycl_target->parameters
-            ->template get<SizeTParameter>("LOOP_LOCAL_SIZE")
-            ->value;
-    local_size =
-        this->sycl_target->get_num_local_work_items(num_bytes, local_size);
-
-    this->sycl_target->profile_map.set("ParticleLoop::" + this->name,
-                                       "local_size", local_size, 0.0);
-
-    return local_size;
+    return ParticleLoopArgs<ARGS...>::get_local_size_args(this->sycl_target,
+                                                          this->name);
   }
 
-  template <template <typename> typename T, typename U>
-  inline void check_is_sym_inner([[maybe_unused]] T<U> arg) {
-    static_assert(
-        std::is_same<T<U>, Sym<U>>::value == false,
-        "Sym based arguments cannot be passed to ParticleLoop with a "
-        "ParticleDat iterator. Pass the ParticleDatSharedPtr instead.");
-  }
-  template <typename T>
-  inline void check_is_sym_inner([[maybe_unused]] T arg) {}
-  template <template <typename> typename T, typename U>
-  inline void check_is_sym_outer(T<U> arg) {
-    check_is_sym_inner(arg.obj);
-  }
-
-  inline void apply_pre_loop(
-      ParticleLoopImplementation::ParticleLoopGlobalInfo &global_info) {
-    auto cast_wrapper = [&](auto t) { pre_loop_cast(&global_info, t); };
-    auto pre_loop_caller = [&](auto... as) { (cast_wrapper(as), ...); };
-    std::apply(pre_loop_caller, this->args);
-  }
   virtual inline void
   profiling_region_metrics(const std::size_t size) override {
     this->profile_region.num_bytes =
@@ -284,12 +61,12 @@ public:
    */
   ParticleLoop(const std::string name, ParticleGroupSharedPtr particle_group,
                KERNEL kernel, ARGS... args)
-      : ParticleLoopBase(name, particle_group), kernel(kernel) {
+      : ParticleLoopBase(name, particle_group),
+        ParticleLoopArgs<ARGS...>(args...), kernel(kernel) {
     this->sycl_target = particle_group->sycl_target;
     this->particle_group_ptr = this->particle_group_shrptr.get();
     this->loop_type = "ParticleLoop";
     this->init_from_particle_dat(particle_group->position_dat);
-    this->unpack_args<0>(args...);
   };
 
   /**
@@ -342,7 +119,7 @@ public:
   ParticleLoop(const std::string name,
                ParticleDatSharedPtr<DAT_TYPE> particle_dat, KERNEL kernel,
                ARGS... args)
-      : kernel(kernel) {
+      : ParticleLoopArgs<ARGS...>(args...), kernel(kernel) {
     this->name = name;
     this->sycl_target = particle_dat->sycl_target;
     this->particle_group_shrptr = nullptr;
@@ -350,7 +127,6 @@ public:
     this->loop_type = "ParticleLoop";
     this->init_from_particle_dat(particle_dat);
     this->particle_dat_init = std::static_pointer_cast<void>(particle_dat);
-    this->unpack_args<0>(args...);
     (check_is_sym_outer(args), ...);
   }
 
@@ -428,9 +204,10 @@ public:
       const auto block_device = blockx.block_device;
       auto lambda_dispatch = [&]() {
         this->event_stack.push(
-            sycl_target->queue.submit([&](sycl::handler &cgh) {
+            this->sycl_target->queue.submit([&](sycl::handler &cgh) {
               loop_parameter_type loop_args;
-              create_loop_args(cgh, loop_args, &global_info);
+              ParticleLoopArgs<ARGS...>::create_loop_args(cgh, loop_args,
+                                                          &global_info);
               cgh.parallel_for<>(blockx.loop_iteration_set, [=](sycl::nd_item<2>
                                                                     idx) {
                 std::size_t cell;
@@ -446,7 +223,8 @@ public:
                   iterationx.layerx = layerx;
                   iterationx.loop_layerx = layerx;
                   kernel_parameter_type kernel_args;
-                  create_kernel_args(iterationx, loop_args, kernel_args);
+                  ParticleLoopArgs<ARGS...>::create_kernel_args(
+                      iterationx, loop_args, kernel_args);
                   Tuple::apply(k_kernel, kernel_args);
                 }
               });
@@ -461,7 +239,8 @@ public:
         this->event_stack.push(
             sycl_target->queue.submit([&](sycl::handler &cgh) {
               loop_parameter_type loop_args;
-              create_loop_args(cgh, loop_args, &global_info);
+              ParticleLoopArgs<ARGS...>::create_loop_args(cgh, loop_args,
+                                                          &global_info);
               cgh.parallel_for<>(blockx.loop_iteration_set, [=](sycl::nd_item<2>
                                                                     idx) {
                 std::size_t cell;
@@ -476,7 +255,8 @@ public:
                 iterationx.layerx = layerx;
                 iterationx.loop_layerx = layerx;
                 kernel_parameter_type kernel_args;
-                create_kernel_args(iterationx, loop_args, kernel_args);
+                ParticleLoopArgs<ARGS...>::create_kernel_args(
+                    iterationx, loop_args, kernel_args);
                 Tuple::apply(k_kernel, kernel_args);
               });
             }));
@@ -496,7 +276,9 @@ public:
     this->event_stack.wait();
     ParticleLoopImplementation::ParticleLoopGlobalInfo global_info =
         this->create_global_info();
-    auto cast_wrapper = [&](auto t) { post_loop_cast(&global_info, t); };
+    auto cast_wrapper = [&](auto t) {
+      ParticleLoopArgs<ARGS...>::post_loop_cast(&global_info, t);
+    };
     auto post_loop_caller = [&](auto... as) { (cast_wrapper(as), ...); };
     std::apply(post_loop_caller, this->args);
     this->loop_running = false;
