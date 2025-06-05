@@ -1,7 +1,7 @@
 #ifndef _NESO_PARTICLES_CARTESIAN_MESH_CARTESIAN_TRAJECTORY_INTERSECTION_HPP_
 #define _NESO_PARTICLES_CARTESIAN_MESH_CARTESIAN_TRAJECTORY_INTERSECTION_HPP_
 
-#include "../boundary_interaction_specification.hpp"
+#include "../boundary/boundary_interaction_specification.hpp"
 #include "../device_functions.hpp"
 #include "../particle_group_impl.hpp"
 #include "../particle_sub_group/particle_sub_group.hpp"

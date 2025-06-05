@@ -22,6 +22,8 @@ endif()
 set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(TEST_SRCS
     ${TEST_DIR}/test_boundary_pbc.cpp
+    ${TEST_DIR}/test_boundary_truncation.cpp
+    ${TEST_DIR}/test_boundary_reflection.cpp
     ${TEST_DIR}/test_buffers.cpp
     ${TEST_DIR}/test_cell_dat.cpp
     ${TEST_DIR}/test_communication.cpp

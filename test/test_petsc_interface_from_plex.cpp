@@ -303,8 +303,7 @@ TEST(PETSc, dmplex_from_existing_mesh_quads) {
 
     auto b2d = std::make_shared<PetscInterface::BoundaryInteraction2D>(
         sycl_target, mesh, boundary_groups);
-    auto reflection =
-        std::make_shared<ExternalCommon::BoundaryReflection>(ndim, 1.0e-10);
+    auto reflection = std::make_shared<BoundaryReflection>(ndim, 1.0e-10);
 
     auto lambda_apply_boundary_conditions = [&](auto aa) {
       auto sub_groups = b2d->post_integration(aa);

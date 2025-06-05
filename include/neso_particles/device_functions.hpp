@@ -69,8 +69,18 @@ inline auto sincos(const T x, T *cosval) {
   return sycl::sin(x);
 }
 
+template <typename T> inline auto dot_product_2d(const T *a, const T *b) {
+  return a[0] * b[0] + a[1] * b[1];
+}
 template <typename T> inline auto dot_product_3d(const T *a, const T *b) {
   return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+template <int N, typename T> inline T dot_product(const T *a, const T *b) {
+  T value = static_cast<T>(0);
+  for (int ix = 0; ix < N; ix++) {
+    value += a[ix] * b[ix];
+  }
+  return value;
 }
 
 } // namespace Kernel

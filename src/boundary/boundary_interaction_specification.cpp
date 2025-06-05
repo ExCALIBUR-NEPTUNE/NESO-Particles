@@ -1,4 +1,4 @@
-#include <neso_particles/boundary_interaction_specification.hpp>
+#include <neso_particles/boundary/boundary_interaction_specification.hpp>
 #include <neso_particles/common_impl.hpp>
 
 namespace NESO::Particles {
