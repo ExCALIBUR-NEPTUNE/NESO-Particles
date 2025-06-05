@@ -24,6 +24,7 @@
 #include "neso_particles/containers/resource_stack.hpp"
 #include "neso_particles/containers/rng/rng.hpp"
 #include "neso_particles/containers/sym_vector.hpp"
+#include "neso_particles/containers/sym_vector_utility.hpp"
 #include "neso_particles/containers/tuple.hpp"
 #include "neso_particles/device_functions.hpp"
 #include "neso_particles/domain.hpp"

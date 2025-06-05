@@ -19,7 +19,6 @@ void BoundaryTruncation::execute(
       "the boundary interaction.");
 
   const REAL k_reset_distance = this->reset_distance;
-  const auto k_ndim = this->ndim;
 
   if (this->ndim == 1) {
     particle_loop(

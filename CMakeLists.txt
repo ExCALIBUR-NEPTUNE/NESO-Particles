@@ -91,6 +91,7 @@ set(SRC_FILES
     ${SRC_DIR}/particle_dat.cpp
     ${SRC_DIR}/particle_group.cpp
     ${SRC_DIR}/particle_set.cpp
+    ${SRC_DIR}/loop/particle_loop_args.cpp
     ${SRC_DIR}/loop/particle_loop_base.cpp
     ${SRC_DIR}/loop/particle_loop_iteration_set.cpp
     ${SRC_DIR}/loop/particle_loop_index.cpp
@@ -161,6 +162,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/resource_stack_map.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/sym_vector.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/sym_vector_impl.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/containers/sym_vector_utility.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/sym_vector_pointer_cache.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/sym_vector_pointer_cache_dispatch.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/sym_vector_pointer_cache_dispatch_impl.hpp
@@ -207,10 +209,12 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/cell_info_npart.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/kernel.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_args.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_base.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_utility.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_index.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_iteration_set.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_args_impl.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_impl.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/pli_particle_dat.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_hierarchy.hpp
