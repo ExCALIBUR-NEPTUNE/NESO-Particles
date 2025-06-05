@@ -65,8 +65,9 @@ TEST(BoundaryReflection, 2d) {
 
   ASSERT_EQ(groups.at(0)->get_npart_local(), A->get_npart_local());
 
-  auto truncation = std::make_shared<BoundaryReflection>(2, 0.0);
-  truncation->execute(groups.at(0), Sym<REAL>("P"), Sym<REAL>("V"),
+  constexpr REAL reset_distance = std::numeric_limits<REAL>::epsilon();
+  auto reflection = std::make_shared<BoundaryReflection>(2, reset_distance);
+  reflection->execute(groups.at(0), Sym<REAL>("P"), Sym<REAL>("V"),
                       Sym<REAL>("TSP"),
                       cartesian_trajectory_intersection->previous_position_sym);
 
@@ -76,8 +77,8 @@ TEST(BoundaryReflection, 2d) {
   particle_loop(
       groups.at(0),
       [=](auto P, auto TSP, auto PR, auto PP) {
-        NESO_KERNEL_ASSERT((0.0 <= P.at(0)) && (P.at(0) <= 12.0), k_ep);
-        NESO_KERNEL_ASSERT((0.0 <= P.at(1)) && (P.at(1) <= 7.0), k_ep);
+        NESO_KERNEL_ASSERT((0.0 <= P.at(0)) && (P.at(0) <= ncell_x), k_ep);
+        NESO_KERNEL_ASSERT((0.0 <= P.at(1)) && (P.at(1) <= ncell_y), k_ep);
 
         const REAL f0 = PR.at(0) - PP.at(0);
         const REAL f1 = PR.at(1) - PP.at(1);
@@ -121,6 +122,22 @@ TEST(BoundaryReflection, 2d) {
       },
       Access::read(Sym<REAL>("V")), Access::read(Sym<REAL>("VV")),
       Access::read(BoundaryInteractionSpecification::intersection_normal))
+      ->execute();
+
+  ASSERT_FALSE(ep.get_flag());
+
+  particle_loop(
+      groups.at(0),
+      [=](auto P) {
+        constexpr REAL tol = 2.0 * reset_distance;
+        const bool near_xl = Kernel::abs(P.at(0)) <= tol;
+        const bool near_xu = Kernel::abs(P.at(0) - ncell_x) <= tol;
+        const bool near_yl = Kernel::abs(P.at(1)) <= tol;
+        const bool near_yu = Kernel::abs(P.at(1) - ncell_y) <= tol;
+        const bool near_found = near_xl || near_xu || near_yl || near_yu;
+        NESO_KERNEL_ASSERT(near_found, k_ep);
+      },
+      Access::read(Sym<REAL>("P")))
       ->execute();
 
   ASSERT_FALSE(ep.get_flag());
@@ -200,8 +217,9 @@ TEST(BoundaryReflection, 3d) {
 
   ASSERT_EQ(groups.at(0)->get_npart_local(), A->get_npart_local());
 
-  auto truncation = std::make_shared<BoundaryReflection>(3, 0.0);
-  truncation->execute(groups.at(0), Sym<REAL>("P"), Sym<REAL>("V"),
+  constexpr REAL reset_distance = std::numeric_limits<REAL>::epsilon();
+  auto reflection = std::make_shared<BoundaryReflection>(3, reset_distance);
+  reflection->execute(groups.at(0), Sym<REAL>("P"), Sym<REAL>("V"),
                       Sym<REAL>("TSP"),
                       cartesian_trajectory_intersection->previous_position_sym);
 
@@ -211,9 +229,9 @@ TEST(BoundaryReflection, 3d) {
   particle_loop(
       groups.at(0),
       [=](auto P, auto TSP, auto PR, auto PP) {
-        NESO_KERNEL_ASSERT((0.0 <= P.at(0)) && (P.at(0) <= 12.0), k_ep);
-        NESO_KERNEL_ASSERT((0.0 <= P.at(1)) && (P.at(1) <= 7.0), k_ep);
-        NESO_KERNEL_ASSERT((0.0 <= P.at(2)) && (P.at(2) <= 5.0), k_ep);
+        NESO_KERNEL_ASSERT((0.0 <= P.at(0)) && (P.at(0) <= ncell_x), k_ep);
+        NESO_KERNEL_ASSERT((0.0 <= P.at(1)) && (P.at(1) <= ncell_y), k_ep);
+        NESO_KERNEL_ASSERT((0.0 <= P.at(2)) && (P.at(2) <= ncell_z), k_ep);
 
         const REAL f0 = PR.at(0) - PP.at(0);
         const REAL f1 = PR.at(1) - PP.at(1);
@@ -263,6 +281,25 @@ TEST(BoundaryReflection, 3d) {
       },
       Access::read(Sym<REAL>("V")), Access::read(Sym<REAL>("VV")),
       Access::read(BoundaryInteractionSpecification::intersection_normal))
+      ->execute();
+
+  ASSERT_FALSE(ep.get_flag());
+
+  particle_loop(
+      groups.at(0),
+      [=](auto P) {
+        constexpr REAL tol = 2.0 * reset_distance;
+        const bool near_xl = Kernel::abs(P.at(0)) <= tol;
+        const bool near_xu = Kernel::abs(P.at(0) - ncell_x) <= tol;
+        const bool near_yl = Kernel::abs(P.at(1)) <= tol;
+        const bool near_yu = Kernel::abs(P.at(1) - ncell_y) <= tol;
+        const bool near_zl = Kernel::abs(P.at(2)) <= tol;
+        const bool near_zu = Kernel::abs(P.at(2) - ncell_z) <= tol;
+        const bool near_found =
+            near_xl || near_xu || near_yl || near_yu || near_zl || near_zu;
+        NESO_KERNEL_ASSERT(near_found, k_ep);
+      },
+      Access::read(Sym<REAL>("P")))
       ->execute();
 
   ASSERT_FALSE(ep.get_flag());
