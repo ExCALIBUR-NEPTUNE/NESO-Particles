@@ -135,15 +135,15 @@ template <typename T>
 struct GenericDeviceRNGGenerationFunction : RNGGenerationFunction<T> {
   virtual ~GenericDeviceRNGGenerationFunction() = default;
 
-  /// The host callable that returns RNG samples.
-  std::function<void(T *, const std::size_t)> generation_function;
+  /// The host callable that returns RNG samples. Returns zero on success.
+  std::function<int(T *, const std::size_t)> generation_function;
 
   /**
    * @param generation_function Host callable function that returns a sample on
    * each call.
    */
   GenericDeviceRNGGenerationFunction(
-      std::function<void(T *, const std::size_t)> generation_function)
+      std::function<int(T *, const std::size_t)> generation_function)
       : generation_function(generation_function) {}
 
   /**
@@ -159,7 +159,8 @@ struct GenericDeviceRNGGenerationFunction : RNGGenerationFunction<T> {
   draw_random_samples([[maybe_unused]] SYCLTargetSharedPtr sycl_target,
                       T *d_ptr, const std::size_t num_numbers,
                       [[maybe_unused]] const int block_size) override {
-    this->generation_function(d_ptr, num_numbers);
+    NESOASSERT(this->generation_function(d_ptr, num_numbers) == 0,
+               "Failed to draw random samples.");
   }
 };
 

@@ -37,7 +37,7 @@ TEST(ParticleLoopRNGDevice, base_function_only) {
   auto [A, sycl_target_t, cell_count_t] = particle_loop_common_2d(27, 16, 32);
 
   auto sycl_target = sycl_target_t;
-  auto lambda_sampler = [&](REAL *d_ptr, const std::size_t num_numbers) {
+  auto lambda_sampler = [&](REAL *d_ptr, const std::size_t num_numbers) -> int {
     std::mt19937 rng;
     std::uniform_real_distribution<REAL> dist{
         std::uniform_real_distribution<REAL>(1.0, 2.0)};
@@ -48,6 +48,7 @@ TEST(ParticleLoopRNGDevice, base_function_only) {
     }
     sycl_target->queue.memcpy(d_ptr, samples.data(), num_numbers * sizeof(REAL))
         .wait_and_throw();
+    return 0;
   };
 
   auto rng_function =
