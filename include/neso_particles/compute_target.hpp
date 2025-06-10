@@ -44,7 +44,6 @@ private:
 #endif
 
   int num_devices{0};
-  int device_index{-1};
   int local_rank{-1};
 
   void print_info_inner();
@@ -52,6 +51,8 @@ private:
 public:
   /// SYCL device in use.
   sycl::device device;
+  /// The local index of the device in the platform.
+  int device_index{-1};
   /// Main SYCL queue to use.
   sycl::queue queue;
   /// Parent MPI communicator to use.
