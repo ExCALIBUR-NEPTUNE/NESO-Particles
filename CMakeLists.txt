@@ -118,6 +118,7 @@ set(INCLUDE_DIR_NESO_PARTICLES ${INCLUDE_DIR}/neso_particles)
 set(HEADER_FILES
     ${INCLUDE_DIR}/neso_particles.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/access.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/algorithms.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cartesian_mesh/cartesian_h_mesh.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cartesian_mesh/cartesian_cell_bin.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cartesian_mesh/cartesian_periodic.hpp
