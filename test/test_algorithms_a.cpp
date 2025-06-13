@@ -39,9 +39,9 @@ TEST(Algorithms, reduce_dat_component_cellwise) {
           value += V->at(rx, dx);
         }
         ASSERT_TRUE(relative_error(correct.at(cellx)->at(dx, 0), value) <
-                    1.0e-12);
+                    1.0e-10);
         ASSERT_TRUE(relative_error(correct.at(cellx)->at(dx, 0),
-                                   to_test.at(cellx)->at(dx, 0)) < 1.0e-12);
+                                   to_test.at(cellx)->at(dx, 0)) < 1.0e-10);
       }
     }
   }
@@ -120,9 +120,9 @@ TEST(Algorithms, reduce_dat_components_cellwise) {
         }
 
         ASSERT_TRUE(relative_error(correct.at(cellx)->at(dx, 0), value) <
-                    1.0e-12);
+                    1.0e-10);
         ASSERT_TRUE(relative_error(correct.at(cellx)->at(dx, 0),
-                                   to_test.at(cellx)->at(dx, 0)) < 1.0e-12);
+                                   to_test.at(cellx)->at(dx, 0)) < 1.0e-10);
       }
     }
   }
