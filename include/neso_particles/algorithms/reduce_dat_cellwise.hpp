@@ -72,6 +72,75 @@ inline sycl::event reduce_dat_component_cellwise_async(
 }
 
 template <typename T, typename OP>
+inline sycl::event reduce_dat_component_cellwise_async(
+    ParticleSubGroupSharedPtr particle_sub_group, Sym<T> sym,
+    const int sym_component, CellDatConstSharedPtr<T> cell_dat_const,
+    const int cell_dat_const_row, const int cell_dat_const_col, OP op) {
+  auto particle_group = get_particle_group(particle_sub_group);
+
+  if (particle_sub_group->is_entire_particle_group()) {
+    return reduce_dat_component_cellwise_async(
+        particle_group, sym, sym_component, cell_dat_const, cell_dat_const_row,
+        cell_dat_const_col, op);
+  } else {
+
+    auto sycl_target = particle_group->sycl_target;
+    auto dat = particle_group->get_dat(sym);
+
+    const std::size_t cell_count = static_cast<std::size_t>(
+        particle_group->domain->mesh->get_cell_count());
+    const std::size_t local_size =
+        sycl_target->parameters->template get<SizeTParameter>("LOOP_LOCAL_SIZE")
+            ->value;
+    sycl::range<2> iterset_outer{cell_count, local_size};
+    sycl::range<2> iterset_inner{1, local_size};
+
+    const auto d_dat_ptr = particle_dat_impl_get_const(dat);
+    auto d_cell_dat_const = cell_dat_const_impl_get(cell_dat_const);
+
+    particle_sub_group->create_if_required();
+    auto selection = particle_sub_group->get_selection();
+    auto d_npart_cell = selection.d_npart_cell;
+    auto d_map = selection.d_map_cells_to_particles;
+
+    sycl::event event = sycl_target->queue.parallel_for(
+        sycl_target->device_limits.validate_nd_range(
+            sycl::nd_range<2>(iterset_outer, iterset_inner)),
+        [=](sycl::nd_item<2> idx) {
+          const std::size_t cellx = idx.get_global_id(0);
+          const auto npart_cell = d_npart_cell[cellx];
+          if (npart_cell > 0) {
+            auto d_ptr = d_dat_ptr[cellx][sym_component];
+            std::size_t workitem_id = idx.get_local_id(1);
+            T value = Kernel::get_identity(op);
+
+            std::size_t index = workitem_id;
+            while (index < npart_cell) {
+              const INT layer = d_map.map_loop_layer_to_layer(cellx, index);
+              value = op(value, d_ptr[layer]);
+              index += idx.get_local_range(1);
+            }
+
+            value = sycl::reduce_over_group(idx.get_group(), value, op);
+
+            if (workitem_id == 0) {
+              auto ptr = d_cell_dat_const.ptr;
+              auto stride = d_cell_dat_const.stride;
+              auto nrow = d_cell_dat_const.nrow;
+              const std::size_t index = static_cast<std::size_t>(
+                  cellx * stride + nrow * cell_dat_const_col +
+                  cell_dat_const_row);
+              const T current = ptr[index];
+              ptr[index] = op(current, value);
+            }
+          }
+        });
+
+    return event;
+  }
+}
+
+template <typename T, typename OP>
 inline sycl::event reduce_dat_components_cellwise_async(
     ParticleGroupSharedPtr particle_group, Sym<T> sym,
     CellDatConstSharedPtr<T> cell_dat_const, int *d_output_offsets, OP op) {
@@ -127,7 +196,8 @@ inline sycl::event reduce_dat_components_cellwise_async(
  * Reduces a single value from each particle into a specified CellDatConst
  * index.
  *
- * @param[in] particle_group ParticleGroup providing source particles.
+ * @param[in] particle_sub_group ParticleGroup or ParticleSubGroup providing
+ * source particles.
  * @param[in] sym Specify the source particle property.
  * @param[in] sym_component Specify the index in the particle property to
  * reduce.
@@ -138,26 +208,37 @@ inline sycl::event reduce_dat_components_cellwise_async(
  * @param[in] cell_dat_const_cel The column to reduce into of the CellDatConst.
  * @param[in] op Binary operation to apply.
  */
-template <typename T, typename OP>
-void reduce_dat_component_cellwise(ParticleGroupSharedPtr particle_group,
-                                   Sym<T> sym, const int sym_component,
-                                   CellDatConstSharedPtr<T> cell_dat_const,
-                                   const int cell_dat_const_row,
-                                   const int cell_dat_const_col, OP op) {
+template <typename GROUP_TYPE, typename T, typename OP>
+void reduce_dat_component_cellwise(
+    std::shared_ptr<GROUP_TYPE> particle_sub_group, Sym<T> sym,
+    const int sym_component, CellDatConstSharedPtr<T> cell_dat_const,
+    const int cell_dat_const_row, const int cell_dat_const_col, OP op) {
   Private::reduce_dat_component_cellwise_async(
-      particle_group, sym, sym_component, cell_dat_const, cell_dat_const_row,
-      cell_dat_const_col, op)
+      particle_sub_group, sym, sym_component, cell_dat_const,
+      cell_dat_const_row, cell_dat_const_col, op)
       .wait_and_throw();
 }
 
 extern template void reduce_dat_component_cellwise(
-    ParticleGroupSharedPtr particle_group, Sym<REAL> sym,
+    ParticleGroupSharedPtr particle_sub_group, Sym<REAL> sym,
     const int sym_component, CellDatConstSharedPtr<REAL> cell_dat_const,
     const int cell_dat_const_row, const int cell_dat_const_col,
     Kernel::plus<REAL> op);
 
 extern template void reduce_dat_component_cellwise(
-    ParticleGroupSharedPtr particle_group, Sym<INT> sym,
+    ParticleGroupSharedPtr particle_sub_group, Sym<INT> sym,
+    const int sym_component, CellDatConstSharedPtr<INT> cell_dat_const,
+    const int cell_dat_const_row, const int cell_dat_const_col,
+    Kernel::plus<INT> op);
+
+extern template void reduce_dat_component_cellwise(
+    ParticleSubGroupSharedPtr particle_sub_group, Sym<REAL> sym,
+    const int sym_component, CellDatConstSharedPtr<REAL> cell_dat_const,
+    const int cell_dat_const_row, const int cell_dat_const_col,
+    Kernel::plus<REAL> op);
+
+extern template void reduce_dat_component_cellwise(
+    ParticleSubGroupSharedPtr particle_sub_group, Sym<INT> sym,
     const int sym_component, CellDatConstSharedPtr<INT> cell_dat_const,
     const int cell_dat_const_row, const int cell_dat_const_col,
     Kernel::plus<INT> op);
@@ -168,19 +249,20 @@ extern template void reduce_dat_component_cellwise(
  * CellDatConst elements must match the number of components of the particle
  * property.
  *
- * @param[in] particle_group ParticleGroup providing source particles.
+ * @param[in] particle_sub_group ParticleGroup or ParticleSubGroup providing
+ * source particles.
  * @param[in] sym Specify the source particle property.
  * @param[in, out] cell_dat_const The output CellDatConst to reduce into. The
  * reduced values from the particles will be combined with the value already in
  * the CellDatConst.
  * @param[in] op Binary operation to apply.
  */
-template <typename T, typename OP>
-void reduce_dat_components_cellwise(ParticleGroupSharedPtr particle_group,
-                                    Sym<T> sym,
-                                    CellDatConstSharedPtr<T> cell_dat_const,
-                                    OP op) {
+template <typename GROUP_TYPE, typename T, typename OP>
+void reduce_dat_components_cellwise(
+    std::shared_ptr<GROUP_TYPE> particle_sub_group, Sym<T> sym,
+    CellDatConstSharedPtr<T> cell_dat_const, OP op) {
 
+  auto particle_group = get_particle_group(particle_sub_group);
   auto dat_ncomp = particle_group->get_dat(sym)->ncomp;
 
   const auto nrow = cell_dat_const->nrow;
@@ -214,7 +296,7 @@ void reduce_dat_components_cellwise(ParticleGroupSharedPtr particle_group,
       .wait_and_throw();
 
   Private::reduce_dat_components_cellwise_async(
-      particle_group, sym, cell_dat_const, d_buffer->ptr, op)
+      particle_sub_group, sym, cell_dat_const, d_buffer->ptr, op)
       .wait_and_throw();
 
   restore_resource(sycl_target->resource_stack_map,

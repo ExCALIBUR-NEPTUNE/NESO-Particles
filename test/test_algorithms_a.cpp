@@ -1,14 +1,19 @@
 #include "include/test_neso_particles.hpp"
 
-TEST(Algorithms, reduce_dat_component_cellwise) {
-  auto [A, sycl_target, cell_count_t] = particle_loop_common_2d(27, 16, 32);
-
+namespace {
+template <typename GROUP_TYPE>
+void wrapper_reduce_dat_component_cellwise(std::shared_ptr<GROUP_TYPE> A,
+                                           SYCLTargetSharedPtr sycl_target,
+                                           const int cell_count_t,
+                                           const int mask) {
   auto Vto_test =
       std::make_shared<CellDatConst<REAL>>(sycl_target, cell_count_t, 3, 1);
   auto Vcorrect =
       std::make_shared<CellDatConst<REAL>>(sycl_target, cell_count_t, 3, 1);
   Vto_test->fill(0.0);
   Vcorrect->fill(0.0);
+
+  auto particle_group = get_particle_group(A);
 
   particle_loop(
       A,
@@ -30,14 +35,18 @@ TEST(Algorithms, reduce_dat_component_cellwise) {
     auto to_test = Vto_test->get_all_cells();
 
     for (int cellx = 0; cellx < cell_count_t; cellx++) {
-      auto V = A->get_cell(Sym<REAL>("V"), cellx);
+      auto V = particle_group->get_cell(Sym<REAL>("V"), cellx);
+      auto ID = particle_group->get_cell(Sym<INT>("ID"), cellx);
+      const auto nrow = V->nrow;
       for (int dx = 0; dx < 3; dx++) {
-
         REAL value = 0.0;
-        const auto nrow = V->nrow;
+
         for (int rx = 0; rx < nrow; rx++) {
-          value += V->at(rx, dx);
+          if (ID->at(rx, 0) % mask == 0) {
+            value += V->at(rx, dx);
+          }
         }
+
         ASSERT_TRUE(relative_error(correct.at(cellx)->at(dx, 0), value) <
                     1.0e-10);
         ASSERT_TRUE(relative_error(correct.at(cellx)->at(dx, 0),
@@ -66,17 +75,32 @@ TEST(Algorithms, reduce_dat_component_cellwise) {
     auto to_test = IDto_test->get_all_cells();
 
     for (int cellx = 0; cellx < cell_count_t; cellx++) {
-      auto ID = A->get_cell(Sym<INT>("ID"), cellx);
-
-      INT value = 0;
-      const auto nrow = ID->nrow;
-      for (int rx = 0; rx < nrow; rx++) {
-        value += ID->at(rx, 0);
-      }
-      ASSERT_EQ(correct.at(cellx)->at(0, 0), value);
       ASSERT_EQ(correct.at(cellx)->at(0, 0), to_test.at(cellx)->at(0, 0));
     }
   }
+}
+
+} // namespace
+
+TEST(Algorithms, reduce_dat_component_cellwise) {
+  auto [A, sycl_target, cell_count_t] = particle_loop_common_2d(27, 16, 32);
+
+  wrapper_reduce_dat_component_cellwise(A, sycl_target, cell_count_t, 1);
+
+  sycl_target->free();
+  A->domain->mesh->free();
+}
+
+TEST(Algorithms, reduce_dat_component_cellwise_sub_group) {
+  auto [A, sycl_target, cell_count_t] = particle_loop_common_2d(27, 16, 32);
+
+  auto aa = particle_sub_group(
+      A, [=](auto ID) { return ID.at(0) % 2 == 0; },
+      Access::read(Sym<INT>("ID")));
+
+  wrapper_reduce_dat_component_cellwise(aa, sycl_target, cell_count_t, 2);
+  wrapper_reduce_dat_component_cellwise(particle_sub_group(A), sycl_target,
+                                        cell_count_t, 1);
 
   sycl_target->free();
   A->domain->mesh->free();
