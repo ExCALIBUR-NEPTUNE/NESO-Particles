@@ -127,8 +127,10 @@ template <typename T> class ParticleDatT {
   friend struct TestParticleGroup;
   friend class EphemeralDats;
   friend class ParticleSubGroup;
-  friend ParticleDatImplGetConstT<T>
-  Private::particle_dat_impl_get_const(ParticleDatSharedPtr<T> dat);
+
+  template <typename U>
+  friend ParticleDatImplGetConstT<U>
+  Private::particle_dat_impl_get_const(ParticleDatSharedPtr<U> dat);
 
   friend ParticleDatImplGetConstT<T>
   ParticleLoopImplementation::create_loop_arg<T>(

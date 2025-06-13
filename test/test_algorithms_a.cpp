@@ -101,7 +101,8 @@ TEST(Algorithms, reduce_dat_components_cellwise) {
       Access::read(Sym<REAL>("V")), Access::add(Vcorrect))
       ->execute();
 
-  reduce_dat_components_cellwise(A, Sym<REAL>("V"), Vto_test, Kernel::plus<REAL>{});
+  reduce_dat_components_cellwise(A, Sym<REAL>("V"), Vto_test,
+                                 Kernel::plus<REAL>{});
 
   {
     auto correct = Vcorrect->get_all_cells();
@@ -131,31 +132,31 @@ TEST(Algorithms, reduce_dat_components_cellwise) {
       std::make_shared<CellDatConst<INT>>(sycl_target, cell_count_t, 2, 2);
   Vto_test->fill(0);
   Vcorrect->fill(0);
-  
-  particle_loop(
-    A,
-    [=](auto V, auto FOO){
-      FOO.at(0) = 4.0 * V.at(0);
-      FOO.at(1) = 1.0 * V.at(1) + 2;
-      FOO.at(2) = 2.0 * V.at(2) + 3;
-      FOO.at(3) = 3.0 * V.at(0) + 1;
-    },
-    Access::read(Sym<REAL>("V")),
-    Access::write(Sym<INT>("FOO"))
-  )->execute();
-
 
   particle_loop(
-      A, [=](auto FOO, auto FOOCDC) {
-        FOOCDC.fetch_add(0, 0, FOO.at(0)); 
-        FOOCDC.fetch_add(0, 1, FOO.at(1)); 
-        FOOCDC.fetch_add(1, 0, FOO.at(2)); 
-        FOOCDC.fetch_add(1, 1, FOO.at(3)); 
+      A,
+      [=](auto V, auto FOO) {
+        FOO.at(0) = 4.0 * V.at(0);
+        FOO.at(1) = 1.0 * V.at(1) + 2;
+        FOO.at(2) = 2.0 * V.at(2) + 3;
+        FOO.at(3) = 3.0 * V.at(0) + 1;
+      },
+      Access::read(Sym<REAL>("V")), Access::write(Sym<INT>("FOO")))
+      ->execute();
+
+  particle_loop(
+      A,
+      [=](auto FOO, auto FOOCDC) {
+        FOOCDC.fetch_add(0, 0, FOO.at(0));
+        FOOCDC.fetch_add(0, 1, FOO.at(1));
+        FOOCDC.fetch_add(1, 0, FOO.at(2));
+        FOOCDC.fetch_add(1, 1, FOO.at(3));
       },
       Access::read(Sym<INT>("FOO")), Access::add(FOOcorrect))
       ->execute();
 
-  reduce_dat_components_cellwise(A, Sym<INT>("FOO"), FOOto_test, Kernel::plus<INT>{});
+  reduce_dat_components_cellwise(A, Sym<INT>("FOO"), FOOto_test,
+                                 Kernel::plus<INT>{});
 
   {
     auto correct = FOOcorrect->get_all_cells();
@@ -165,19 +166,21 @@ TEST(Algorithms, reduce_dat_components_cellwise) {
       auto FOO = A->get_cell(Sym<INT>("FOO"), cellx);
 
       int index = 0;
-      for(int rx=0 ; rx<2 ; rx++){
-      for(int cx=0 ; cx<2 ; cx++){
+      for (int rx = 0; rx < 2; rx++) {
+        for (int cx = 0; cx < 2; cx++) {
 
-        INT value = 0;
-        const auto nrow = FOO->nrow;
-        for (int px = 0; px < nrow; px++) {
-          value += FOO->at(px, index);
+          INT value = 0;
+          const auto nrow = FOO->nrow;
+          for (int px = 0; px < nrow; px++) {
+            value += FOO->at(px, index);
+          }
+          ASSERT_EQ(correct.at(cellx)->at(rx, cx), value);
+          ASSERT_EQ(correct.at(cellx)->at(rx, cx),
+                    to_test.at(cellx)->at(rx, cx));
+
+          index++;
         }
-        ASSERT_EQ(correct.at(cellx)->at(rx, cx), value);
-        ASSERT_EQ(correct.at(cellx)->at(rx, cx), to_test.at(cellx)->at(rx, cx));
-
-        index++;
-      }}
+      }
     }
   }
 

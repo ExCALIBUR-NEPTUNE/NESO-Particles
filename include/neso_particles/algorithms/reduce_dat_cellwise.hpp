@@ -73,10 +73,8 @@ inline sycl::event reduce_dat_component_cellwise_async(
 
 template <typename T, typename OP>
 inline sycl::event reduce_dat_components_cellwise_async(
-    ParticleGroupSharedPtr particle_group, Sym<T> sym, 
-    CellDatConstSharedPtr<T> cell_dat_const, 
-    int * d_output_offsets,
-    OP op) {
+    ParticleGroupSharedPtr particle_group, Sym<T> sym,
+    CellDatConstSharedPtr<T> cell_dat_const, int *d_output_offsets, OP op) {
   auto sycl_target = particle_group->sycl_target;
   auto dat = particle_group->get_dat(sym);
   const auto num_components = dat->ncomp;
@@ -97,9 +95,9 @@ inline sycl::event reduce_dat_components_cellwise_async(
       sycl_target->device_limits.validate_nd_range(
           sycl::nd_range<2>(iterset_outer, iterset_inner)),
       [=](sycl::nd_item<2> idx) {
-        
         const std::size_t cellx_compx = idx.get_global_id(0);
-        const std::size_t cellx = cellx_compx / static_cast<std::size_t>(num_components);
+        const std::size_t cellx =
+            cellx_compx / static_cast<std::size_t>(num_components);
         const std::size_t sym_component = cellx_compx - cellx * num_components;
         const auto npart_cell = d_npart_cell[cellx];
 
@@ -122,7 +120,6 @@ inline sycl::event reduce_dat_components_cellwise_async(
 
   return event;
 }
-
 
 } // namespace Private
 
@@ -180,15 +177,15 @@ extern template void reduce_dat_component_cellwise(
  */
 template <typename T, typename OP>
 void reduce_dat_components_cellwise(ParticleGroupSharedPtr particle_group,
-                                   Sym<T> sym, 
-                                   CellDatConstSharedPtr<T> cell_dat_const, OP op) {
+                                    Sym<T> sym,
+                                    CellDatConstSharedPtr<T> cell_dat_const,
+                                    OP op) {
 
-  
   auto dat_ncomp = particle_group->get_dat(sym)->ncomp;
 
   const auto nrow = cell_dat_const->nrow;
   const auto ncol = cell_dat_const->ncol;
-  auto cell_dat_const_nelements =  nrow * ncol;
+  auto cell_dat_const_nelements = nrow * ncol;
   NESOASSERT(dat_ncomp == cell_dat_const_nelements,
              "Missmatch between the number of particle components: " +
                  std::to_string(dat_ncomp) +
@@ -196,44 +193,41 @@ void reduce_dat_components_cellwise(ParticleGroupSharedPtr particle_group,
                  std::to_string(cell_dat_const_nelements));
 
   auto sycl_target = particle_group->sycl_target;
-  auto d_buffer = get_resource<BufferDevice<int>,
-                               ResourceStackInterfaceBufferDevice<int>>(
-      sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<int>{},
-      sycl_target);
+  auto d_buffer =
+      get_resource<BufferDevice<int>, ResourceStackInterfaceBufferDevice<int>>(
+          sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<int>{},
+          sycl_target);
   d_buffer->realloc_no_copy(dat_ncomp);
-  
+
   std::vector<int> h_buffer(dat_ncomp);
 
   int index = 0;
-  for(int rx=0 ; rx<nrow ; rx++){
-  for(int cx=0 ; cx<ncol ; cx++){
-    h_buffer.at(index) = nrow * cx + rx;
-    index++;
-  }}
+  for (int rx = 0; rx < nrow; rx++) {
+    for (int cx = 0; cx < ncol; cx++) {
+      h_buffer.at(index) = nrow * cx + rx;
+      index++;
+    }
+  }
 
   sycl_target->queue
       .memcpy(d_buffer->ptr, h_buffer.data(), dat_ncomp * sizeof(int))
       .wait_and_throw();
 
   Private::reduce_dat_components_cellwise_async(
-    particle_group, sym,
-    cell_dat_const, 
-    d_buffer->ptr,
-    op).wait_and_throw();
+      particle_group, sym, cell_dat_const, d_buffer->ptr, op)
+      .wait_and_throw();
 
   restore_resource(sycl_target->resource_stack_map,
                    ResourceStackKeyBufferDevice<int>{}, d_buffer);
 }
 
-extern template 
-void reduce_dat_components_cellwise(ParticleGroupSharedPtr particle_group,
-                                   Sym<REAL> sym, 
-                                   CellDatConstSharedPtr<REAL> cell_dat_const, Kernel::plus<REAL> op);
+extern template void reduce_dat_components_cellwise(
+    ParticleGroupSharedPtr particle_group, Sym<REAL> sym,
+    CellDatConstSharedPtr<REAL> cell_dat_const, Kernel::plus<REAL> op);
 
-extern template 
-void reduce_dat_components_cellwise(ParticleGroupSharedPtr particle_group,
-                                   Sym<INT> sym, 
-                                   CellDatConstSharedPtr<INT> cell_dat_const, Kernel::plus<INT> op);
+extern template void reduce_dat_components_cellwise(
+    ParticleGroupSharedPtr particle_group, Sym<INT> sym,
+    CellDatConstSharedPtr<INT> cell_dat_const, Kernel::plus<INT> op);
 
 } // namespace NESO::Particles
 

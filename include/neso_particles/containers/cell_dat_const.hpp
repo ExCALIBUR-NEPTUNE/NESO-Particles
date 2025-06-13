@@ -311,8 +311,9 @@ template <typename T> class CellDatConst {
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
       sycl::handler &cgh, Access::Max<CellDatConst<T> *> &a);
 
-  friend CellDatConstDeviceType<T>
-  Private::cell_dat_const_impl_get(CellDatConstSharedPtr<T> cell_dat_const);
+  template <typename U>
+  friend CellDatConstDeviceType<U>
+  Private::cell_dat_const_impl_get(CellDatConstSharedPtr<U> cell_dat_const);
 
 protected:
   T *d_ptr;
