@@ -116,6 +116,12 @@ inline std::string get_test_root_file(std::string name) {
   auto &get_##member_variable() { return member_variable; }
 #endif
 
+inline REAL relative_error(const REAL correct, const REAL to_test) {
+  const REAL abs_error = Kernel::abs(correct - to_test);
+  const REAL abs_correct = Kernel::abs(correct);
+  return abs_correct > 0.0 ? abs_error / abs_correct : abs_error;
+}
+
 } // namespace NESO::Particles
 
 using namespace NESO::Particles;

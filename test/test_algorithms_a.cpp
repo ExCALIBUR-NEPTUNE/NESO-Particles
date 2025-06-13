@@ -38,9 +38,10 @@ TEST(Algorithms, reduce_dat_component_cellwise) {
         for (int rx = 0; rx < nrow; rx++) {
           value += V->at(rx, dx);
         }
-        ASSERT_NEAR(correct.at(cellx)->at(dx, 0), value, 1.0e-10);
-        ASSERT_NEAR(correct.at(cellx)->at(dx, 0), to_test.at(cellx)->at(dx, 0),
-                    1.0e-10);
+        ASSERT_TRUE(relative_error(correct.at(cellx)->at(dx, 0), value) <
+                    1.0e-12);
+        ASSERT_TRUE(relative_error(correct.at(cellx)->at(dx, 0),
+                                   to_test.at(cellx)->at(dx, 0)) < 1.0e-12);
       }
     }
   }
@@ -117,9 +118,11 @@ TEST(Algorithms, reduce_dat_components_cellwise) {
         for (int rx = 0; rx < nrow; rx++) {
           value += V->at(rx, dx);
         }
-        ASSERT_NEAR(correct.at(cellx)->at(dx, 0), value, 1.0e-10);
-        ASSERT_NEAR(correct.at(cellx)->at(dx, 0), to_test.at(cellx)->at(dx, 0),
-                    1.0e-10);
+
+        ASSERT_TRUE(relative_error(correct.at(cellx)->at(dx, 0), value) <
+                    1.0e-12);
+        ASSERT_TRUE(relative_error(correct.at(cellx)->at(dx, 0),
+                                   to_test.at(cellx)->at(dx, 0)) < 1.0e-12);
       }
     }
   }
