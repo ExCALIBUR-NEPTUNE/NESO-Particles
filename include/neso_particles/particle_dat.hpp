@@ -44,6 +44,12 @@ template <typename T> class ParticleDatT;
 template <typename T>
 using ParticleDatSharedPtr = std::shared_ptr<ParticleDatT<T>>;
 
+namespace Private {
+template <typename T>
+inline ParticleDatImplGetConstT<T>
+particle_dat_impl_get_const(ParticleDatSharedPtr<T> dat);
+}
+
 namespace Access {
 template <typename T>
 inline ParticleDatImplGetConstT<T>
@@ -121,6 +127,8 @@ template <typename T> class ParticleDatT {
   friend struct TestParticleGroup;
   friend class EphemeralDats;
   friend class ParticleSubGroup;
+  friend ParticleDatImplGetConstT<T>
+  Private::particle_dat_impl_get_const(ParticleDatSharedPtr<T> dat);
 
   friend ParticleDatImplGetConstT<T>
   ParticleLoopImplementation::create_loop_arg<T>(

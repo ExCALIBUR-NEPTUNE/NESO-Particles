@@ -3,8 +3,8 @@
 
 #include <memory>
 
-#include "neso_particles/algorithms/algorithms.hpp"
 #include "neso_particles/access.hpp"
+#include "neso_particles/algorithms/algorithms.hpp"
 #include "neso_particles/boundary/boundary_interaction_specification.hpp"
 #include "neso_particles/boundary/boundary_reflection.hpp"
 #include "neso_particles/boundary/boundary_truncation.hpp"

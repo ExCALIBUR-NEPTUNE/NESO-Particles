@@ -551,6 +551,42 @@ inline INT atomic_fetch_max(INT *ptr, const INT value) {
 #endif
 #endif
 
+namespace Kernel {
+
+template <typename T> using plus = sycl::plus<T>;
+
+template <typename T> constexpr T get_identity(sycl::plus<T>) {
+  return static_cast<T>(0.0);
+}
+
+/**
+ * Wrapper around joint_reduce for buggy implementations.
+ *
+ * @param group SYCL group.
+ * @param d_first Pointer to first element.
+ * @param d_last Pointer to element after last element.
+ * @param binary_op Binary operation for reduction.
+ * @returns Reduced value.
+ */
+template <typename GROUP_TYPE, typename VALUE_TYPE, typename OP_TYPE>
+VALUE_TYPE joint_reduce(GROUP_TYPE group, VALUE_TYPE *d_first,
+                        VALUE_TYPE *d_last, OP_TYPE binary_op) {
+#ifdef __INTEL_LLVM_COMPILER
+  return sycl::joint_reduce(group, d_first, d_last, binary_op);
+#else
+  VALUE_TYPE value = get_identity(binary_op);
+  d_first += group.get_local_id(1);
+  while (d_first < d_last) {
+    value = binary_op(value, *d_first);
+    d_first += group.get_local_range(1);
+  }
+  value = sycl::reduce_over_group(group, value, binary_op);
+  return value;
+#endif
+}
+
+} // namespace Kernel
+
 } // namespace NESO::Particles
 
 #endif
