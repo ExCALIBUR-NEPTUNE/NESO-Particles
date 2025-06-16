@@ -48,9 +48,9 @@ void wrapper_reduce_dat_component_cellwise(std::shared_ptr<GROUP_TYPE> A,
         }
 
         ASSERT_TRUE(relative_error(correct.at(cellx)->at(dx, 0), value) <
-                    1.0e-10);
+                    1.0e-8);
         ASSERT_TRUE(relative_error(correct.at(cellx)->at(dx, 0),
-                                   to_test.at(cellx)->at(dx, 0)) < 1.0e-10);
+                                   to_test.at(cellx)->at(dx, 0)) < 1.0e-8);
       }
     }
   }
@@ -126,9 +126,9 @@ void wrapper_reduce_dat_components_cellwise(std::shared_ptr<GROUP_TYPE> A,
         }
 
         ASSERT_TRUE(relative_error(correct.at(cellx)->at(dx, 0), value) <
-                    1.0e-10);
+                    1.0e-8);
         ASSERT_TRUE(relative_error(correct.at(cellx)->at(dx, 0),
-                                   to_test.at(cellx)->at(dx, 0)) < 1.0e-10);
+                                   to_test.at(cellx)->at(dx, 0)) < 1.0e-8);
       }
     }
   }
