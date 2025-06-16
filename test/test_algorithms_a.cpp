@@ -10,8 +10,8 @@ void wrapper_reduce_dat_component_cellwise(std::shared_ptr<GROUP_TYPE> A,
       std::make_shared<CellDatConst<REAL>>(sycl_target, cell_count_t, 3, 1);
   auto Vcorrect =
       std::make_shared<CellDatConst<REAL>>(sycl_target, cell_count_t, 3, 1);
-  Vto_test->fill(0.0);
-  Vcorrect->fill(0.0);
+  Vto_test->fill(4.0);
+  Vcorrect->fill(4.0);
 
   auto particle_group = get_particle_group(A);
 
@@ -39,7 +39,7 @@ void wrapper_reduce_dat_component_cellwise(std::shared_ptr<GROUP_TYPE> A,
       auto ID = particle_group->get_cell(Sym<INT>("ID"), cellx);
       const auto nrow = V->nrow;
       for (int dx = 0; dx < 3; dx++) {
-        REAL value = 0.0;
+        REAL value = 4.0;
 
         for (int rx = 0; rx < nrow; rx++) {
           if (ID->at(rx, 0) % mask == 0) {
@@ -59,8 +59,8 @@ void wrapper_reduce_dat_component_cellwise(std::shared_ptr<GROUP_TYPE> A,
       std::make_shared<CellDatConst<INT>>(sycl_target, cell_count_t, 1, 1);
   auto IDcorrect =
       std::make_shared<CellDatConst<INT>>(sycl_target, cell_count_t, 1, 1);
-  Vto_test->fill(0);
-  Vcorrect->fill(0);
+  Vto_test->fill(2);
+  Vcorrect->fill(2);
 
   particle_loop(
       A, [=](auto ID, auto IDCDC) { IDCDC.fetch_add(0, 0, ID.at(0)); },
@@ -91,8 +91,8 @@ void wrapper_reduce_dat_components_cellwise(std::shared_ptr<GROUP_TYPE> A,
       std::make_shared<CellDatConst<REAL>>(sycl_target, cell_count_t, 3, 1);
   auto Vcorrect =
       std::make_shared<CellDatConst<REAL>>(sycl_target, cell_count_t, 3, 1);
-  Vto_test->fill(0.0);
-  Vcorrect->fill(0.0);
+  Vto_test->fill(3.0);
+  Vcorrect->fill(3.0);
 
   particle_loop(
       A,
@@ -116,7 +116,7 @@ void wrapper_reduce_dat_components_cellwise(std::shared_ptr<GROUP_TYPE> A,
       auto ID = particle_group->get_cell(Sym<INT>("ID"), cellx);
       for (int dx = 0; dx < 3; dx++) {
 
-        REAL value = 0.0;
+        REAL value = 3.0;
         const auto nrow = V->nrow;
 
         for (int rx = 0; rx < nrow; rx++) {
@@ -137,8 +137,8 @@ void wrapper_reduce_dat_components_cellwise(std::shared_ptr<GROUP_TYPE> A,
       std::make_shared<CellDatConst<INT>>(sycl_target, cell_count_t, 2, 2);
   auto FOOcorrect =
       std::make_shared<CellDatConst<INT>>(sycl_target, cell_count_t, 2, 2);
-  Vto_test->fill(0);
-  Vcorrect->fill(0);
+  FOOto_test->fill(3);
+  FOOcorrect->fill(3);
 
   particle_loop(
       A,
@@ -177,7 +177,7 @@ void wrapper_reduce_dat_components_cellwise(std::shared_ptr<GROUP_TYPE> A,
       for (int rx = 0; rx < 2; rx++) {
         for (int cx = 0; cx < 2; cx++) {
 
-          INT value = 0;
+          INT value = 3;
           const auto nrow = FOO->nrow;
           for (int px = 0; px < nrow; px++) {
             if (ID->at(px, 0) % mask == 0) {
