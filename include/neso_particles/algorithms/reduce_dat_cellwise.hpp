@@ -114,11 +114,11 @@ inline sycl::event reduce_dat_component_cellwise_async(
             std::size_t workitem_id = idx.get_local_id(1);
             T value = Kernel::get_identity(op);
 
-            std::size_t index = workitem_id;
-            while (index < npart_cell) {
+            const std::size_t stride = idx.get_local_range(1);
+            for (std::size_t index = workitem_id; index < npart_cell;
+                 index += stride) {
               const INT layer = d_map.map_loop_layer_to_layer(cellx, index);
               value = op(value, d_ptr[layer]);
-              index += idx.get_local_range(1);
             }
 
             value = sycl::reduce_over_group(idx.get_group(), value, op);
@@ -188,6 +188,76 @@ inline sycl::event reduce_dat_components_cellwise_async(
       });
 
   return event;
+}
+
+template <typename T, typename OP>
+inline sycl::event reduce_dat_components_cellwise_async(
+    ParticleSubGroupSharedPtr particle_sub_group, Sym<T> sym,
+    CellDatConstSharedPtr<T> cell_dat_const, int *d_output_offsets, OP op) {
+
+  auto particle_group = get_particle_group(particle_sub_group);
+  if (particle_sub_group->is_entire_particle_group()) {
+    return reduce_dat_components_cellwise_async(
+        particle_group, sym, cell_dat_const, d_output_offsets, op);
+  } else {
+
+    auto sycl_target = particle_group->sycl_target;
+    auto dat = particle_group->get_dat(sym);
+    const auto num_components = dat->ncomp;
+
+    const std::size_t cell_count = static_cast<std::size_t>(
+        particle_group->domain->mesh->get_cell_count());
+    const std::size_t local_size =
+        sycl_target->parameters->template get<SizeTParameter>("LOOP_LOCAL_SIZE")
+            ->value;
+    sycl::range<2> iterset_outer{cell_count * num_components, local_size};
+    sycl::range<2> iterset_inner{1, local_size};
+
+    const auto d_dat_ptr = particle_dat_impl_get_const(dat);
+    auto d_cell_dat_const = cell_dat_const_impl_get(cell_dat_const);
+
+    particle_sub_group->create_if_required();
+    auto selection = particle_sub_group->get_selection();
+    auto d_npart_cell = selection.d_npart_cell;
+    auto d_map = selection.d_map_cells_to_particles;
+
+    sycl::event event = sycl_target->queue.parallel_for(
+        sycl_target->device_limits.validate_nd_range(
+            sycl::nd_range<2>(iterset_outer, iterset_inner)),
+        [=](sycl::nd_item<2> idx) {
+          const std::size_t cellx_compx = idx.get_global_id(0);
+          const std::size_t cellx =
+              cellx_compx / static_cast<std::size_t>(num_components);
+          const std::size_t sym_component =
+              cellx_compx - cellx * num_components;
+          const auto npart_cell = d_npart_cell[cellx];
+          if (npart_cell > 0) {
+            auto d_ptr = d_dat_ptr[cellx][sym_component];
+            std::size_t workitem_id = idx.get_local_id(1);
+            T value = Kernel::get_identity(op);
+
+            const std::size_t stride = idx.get_local_range(1);
+            for (std::size_t index = workitem_id; index < npart_cell;
+                 index += stride) {
+              const INT layer = d_map.map_loop_layer_to_layer(cellx, index);
+              value = op(value, d_ptr[layer]);
+            }
+
+            value = sycl::reduce_over_group(idx.get_group(), value, op);
+
+            if (workitem_id == 0) {
+              auto ptr = d_cell_dat_const.ptr;
+              auto stride = d_cell_dat_const.stride;
+              const std::size_t index = static_cast<std::size_t>(
+                  cellx * stride + d_output_offsets[sym_component]);
+              const T current = ptr[index];
+              ptr[index] = op(current, value);
+            }
+          }
+        });
+
+    return event;
+  }
 }
 
 } // namespace Private
@@ -309,6 +379,14 @@ extern template void reduce_dat_components_cellwise(
 
 extern template void reduce_dat_components_cellwise(
     ParticleGroupSharedPtr particle_group, Sym<INT> sym,
+    CellDatConstSharedPtr<INT> cell_dat_const, Kernel::plus<INT> op);
+
+extern template void reduce_dat_components_cellwise(
+    ParticleSubGroupSharedPtr particle_group, Sym<REAL> sym,
+    CellDatConstSharedPtr<REAL> cell_dat_const, Kernel::plus<REAL> op);
+
+extern template void reduce_dat_components_cellwise(
+    ParticleSubGroupSharedPtr particle_group, Sym<INT> sym,
     CellDatConstSharedPtr<INT> cell_dat_const, Kernel::plus<INT> op);
 
 } // namespace NESO::Particles
