@@ -1,4 +1,5 @@
 #include <neso_particles/common_impl.hpp>
+#include <neso_particles/loop/particle_loop_functions.hpp>
 #include <neso_particles/parallel_initialisation.hpp>
 
 namespace NESO::Particles {
@@ -35,7 +36,7 @@ void parallel_advection_store(ParticleGroupSharedPtr particle_group) {
 
   const auto k_local_point = d_local_point.ptr;
   auto pos_sym = particle_group->position_dat->sym;
-  ParticleLoop l(
+  particle_loop(
       "parallel_advection_store", particle_group,
       [=](auto P, auto ORIG_P) {
         for (int dx = 0; dx < space_ncomp; dx++) {
@@ -43,8 +44,8 @@ void parallel_advection_store(ParticleGroupSharedPtr particle_group) {
           P[dx] = k_local_point[dx];
         }
       },
-      Access::write(pos_sym), Access::write(Sym<REAL>("NESO_ORIG_POS")));
-  l.execute();
+      Access::write(pos_sym), Access::write(Sym<REAL>("NESO_ORIG_POS")))
+      ->execute();
 }
 
 /**
@@ -62,7 +63,7 @@ void parallel_advection_restore(ParticleGroupSharedPtr particle_group) {
   auto k_ep = ep.device_ptr();
 
   auto pos_sym = particle_group->position_dat->sym;
-  ParticleLoop l(
+  particle_loop(
       "parallel_advection_restore", particle_group,
       [=](auto P, auto ORIG_P) {
         for (int dx = 0; dx < space_ncomp; dx++) {
@@ -79,8 +80,8 @@ void parallel_advection_restore(ParticleGroupSharedPtr particle_group) {
           NESO_KERNEL_ASSERT(valid, k_ep);
         }
       },
-      Access::write(pos_sym), Access::read(Sym<REAL>("NESO_ORIG_POS")));
-  l.execute();
+      Access::write(pos_sym), Access::read(Sym<REAL>("NESO_ORIG_POS")))
+      ->execute();
 
   ep.check_and_throw("Advected particle was very far from intended position.");
 
@@ -105,7 +106,7 @@ void parallel_advection_step(ParticleGroupSharedPtr particle_group,
   const double inverse_steps_left = 1.0 / steps_left;
 
   auto pos_sym = particle_group->position_dat->sym;
-  ParticleLoop l(
+  particle_loop(
       "parallel_advection_step", particle_group,
       [=](auto P, auto ORIG_P) {
         for (int dx = 0; dx < space_ncomp; dx++) {
@@ -113,8 +114,8 @@ void parallel_advection_step(ParticleGroupSharedPtr particle_group,
           P[dx] += inverse_steps_left * offset;
         }
       },
-      Access::write(pos_sym), Access::read(Sym<REAL>("NESO_ORIG_POS")));
-  l.execute();
+      Access::write(pos_sym), Access::read(Sym<REAL>("NESO_ORIG_POS")))
+      ->execute();
 }
 
 /**

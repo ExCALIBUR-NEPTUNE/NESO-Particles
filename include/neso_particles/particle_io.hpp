@@ -1,7 +1,7 @@
 #ifndef _NESO_PARTICLES_PARTICLE_IO
 #define _NESO_PARTICLES_PARTICLE_IO
 
-#include "loop/particle_loop.hpp"
+#include "loop/particle_loop_functions.hpp"
 #include "particle_group.hpp"
 #include "particle_spec.hpp"
 #include "particle_sub_group/particle_sub_group.hpp"

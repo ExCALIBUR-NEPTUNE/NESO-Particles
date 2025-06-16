@@ -1,5 +1,6 @@
 #include <neso_particles/cartesian_mesh/cartesian_cell_bin.hpp>
 #include <neso_particles/common_impl.hpp>
+#include <neso_particles/loop/particle_loop_functions.hpp>
 
 namespace NESO::Particles {
 

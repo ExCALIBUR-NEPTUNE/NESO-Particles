@@ -214,6 +214,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_args.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_base.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_functions.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_utility.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_index.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_iteration_set.hpp

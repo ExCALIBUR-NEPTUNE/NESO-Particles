@@ -1,7 +1,7 @@
 #ifndef _NESO_PARTICLES_SUB_GROUP_PARTICLE_LOOP_SUB_GROUP_HPP_
 #define _NESO_PARTICLES_SUB_GROUP_PARTICLE_LOOP_SUB_GROUP_HPP_
 
-#include "../loop/particle_loop.hpp"
+#include "../loop/particle_loop_functions.hpp"
 #include "particle_sub_group_base.hpp"
 #include "sub_group_selector_base.hpp"
 

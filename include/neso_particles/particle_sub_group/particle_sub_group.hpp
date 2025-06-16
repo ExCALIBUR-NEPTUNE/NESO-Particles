@@ -1,6 +1,6 @@
 #ifndef _PARTICLE_SUB_GROUP_H_
 #define _PARTICLE_SUB_GROUP_H_
-#include "../loop/particle_loop.hpp"
+#include "../loop/particle_loop_functions.hpp"
 #include "../particle_group.hpp"
 #include "../typedefs.hpp"
 #include <type_traits>
