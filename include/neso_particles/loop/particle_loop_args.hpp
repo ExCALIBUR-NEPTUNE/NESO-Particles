@@ -148,11 +148,25 @@ struct LoopParameter<T<std::shared_ptr<U>>, V> {
   using type = typename LoopParameter<T<U>, V>::type;
 };
 /**
+ * Catch Access::Reduction around shared pointers.
+ */
+template <template <typename> typename T, typename U, typename OP>
+struct LoopParameter<Access::Reduction<std::shared_ptr<T<U>>, OP>> {
+  using type = typename LoopParameter<Access::Reduction<T<U>, OP>>::type;
+};
+/**
  * Catch all for args passed as shared ptrs
  */
 template <template <typename> typename T, typename U, typename V>
 struct KernelParameter<T<std::shared_ptr<U>>, V> {
   using type = typename KernelParameter<T<U>, V>::type;
+};
+/**
+ * Catch Access::Reduction around shared pointers.
+ */
+template <template <typename> typename T, typename U, typename OP>
+struct KernelParameter<Access::Reduction<std::shared_ptr<T<U>>, OP>> {
+  using type = typename KernelParameter<Access::Reduction<T<U>, OP>>::type;
 };
 
 } // namespace ParticleLoopImplementation
@@ -215,6 +229,14 @@ protected:
       sycl::handler &cgh, T<U> a);
 
   /**
+   * Method to compute access to a Reduction type.
+   */
+  template <template <typename> typename T, typename U, typename OP>
+  inline auto create_loop_arg_cast(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      sycl::handler &cgh, Access::Reduction<std::shared_ptr<T<U>>, OP> a);
+
+  /**
    * Method to compute access to a type wrapped in a shared_ptr.
    */
   template <template <typename> typename T, typename U>
@@ -227,6 +249,15 @@ protected:
   template <template <typename> typename T, typename U>
   static inline auto post_loop_cast(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info, T<U> a);
+
+  /**
+   * Pre loop cast for reduction access
+   */
+  template <template <typename> typename T, typename U, typename OP>
+  static inline void post_loop_cast(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      Access::Reduction<std::shared_ptr<T<U>>, OP> a);
+
   /**
    * Method to compute access to a type wrapped in a shared_ptr.
    */
@@ -241,6 +272,15 @@ protected:
   inline void
   pre_loop_cast(ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
                 T<U> a);
+
+  /**
+   * Pre loop cast for reduction access
+   */
+  template <template <typename> typename T, typename U, typename OP>
+  inline void
+  pre_loop_cast(ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+                Access::Reduction<std::shared_ptr<T<U>>, OP> a);
+
   /**
    * Method to compute access to a type wrapped in a shared_ptr.
    */
@@ -248,6 +288,14 @@ protected:
   static inline std::size_t local_mem_loop_cast(T<std::shared_ptr<U>> a) {
     T<U *> c = {a.obj.get()};
     return ParticleLoopImplementation::get_required_local_num_bytes(c);
+  }
+  /**
+   * Method to compute access to a Reduction type wrapped in a shared_ptr.
+   */
+  template <template <typename> typename T, typename U, typename OP>
+  static inline std::size_t
+  local_mem_loop_cast(Access::Reduction<std::shared_ptr<T<U>>, OP> a) {
+    return ParticleLoopImplementation::get_required_local_num_bytes(a);
   }
   /**
    * Method to compute access to a type not wrapper in a shared_ptr

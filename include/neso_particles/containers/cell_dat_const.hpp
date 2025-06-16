@@ -25,6 +25,13 @@ template <typename T> struct CellDatConstDeviceTypeConst {
   int nrow;
 };
 
+template <typename T, typename OP> struct CellDatConstDeviceTypeReduction {
+  T *ptr;
+  int stride;
+  int nrow;
+  OP binop;
+};
+
 template <typename T> class CellDatConst;
 
 /**
@@ -102,6 +109,13 @@ template <typename T> struct Max {
   }
 };
 
+template <typename T, typename OP> struct Reduction {
+  Reduction() = default;
+  T *ptr;
+  int nrow;
+  OP binop;
+};
+
 } // namespace Access::CellDatConst
 
 namespace ParticleLoopImplementation {
@@ -136,6 +150,13 @@ template <typename T> struct LoopParameter<Access::Min<CellDatConst<T>>> {
 template <typename T> struct LoopParameter<Access::Max<CellDatConst<T>>> {
   using type = CellDatConstDeviceType<T>;
 };
+/**
+ *  Loop parameter for reduction access of a CellDatConst.
+ */
+template <typename T, typename OP>
+struct LoopParameter<Access::Reduction<CellDatConst<T>, OP>> {
+  using type = CellDatConstDeviceTypeReduction<T, OP>;
+};
 
 /**
  *  KernelParameter type for read access to a CellDatConst.
@@ -166,6 +187,13 @@ template <typename T> struct KernelParameter<Access::Min<CellDatConst<T>>> {
  */
 template <typename T> struct KernelParameter<Access::Max<CellDatConst<T>>> {
   using type = Access::CellDatConst::Max<T>;
+};
+/**
+ *  KernelParameter type for reduction access to a CellDatConst.
+ */
+template <typename T, typename OP>
+struct KernelParameter<Access::Reduction<CellDatConst<T>, OP>> {
+  using type = Access::CellDatConst::Reduction<T, OP>;
 };
 
 /**
@@ -223,6 +251,18 @@ inline void create_kernel_arg(ParticleLoopIteration &iterationx,
   lhs.ptr = ptr;
   lhs.nrow = rhs.nrow;
 }
+/**
+ *  Function to create the kernel argument for CellDatConst reduction access.
+ */
+template <typename T, typename OP>
+inline void create_kernel_arg(ParticleLoopIteration &iterationx,
+                              CellDatConstDeviceTypeReduction<T, OP> &rhs,
+                              Access::CellDatConst::Reduction<T, OP> &lhs) {
+  T *ptr = rhs.ptr + iterationx.cellx * rhs.stride;
+  lhs.ptr = ptr;
+  lhs.nrow = rhs.nrow;
+  lhs.binop = rhs.binop;
+}
 
 /**
  * Method to compute access to a CellDatConst (read)
@@ -274,6 +314,22 @@ create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
                 Access::Max<CellDatConst<T> *> &a) {
   return a.obj->impl_get();
 }
+/**
+ * Method to compute access to a CellDatConst (reduction)
+ */
+template <typename T, typename OP>
+inline CellDatConstDeviceTypeReduction<T, OP>
+create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
+                [[maybe_unused]] sycl::handler &cgh,
+                Access::Reduction<std::shared_ptr<CellDatConst<T>>, OP> &a) {
+  auto rhs = a.obj->impl_get();
+  CellDatConstDeviceTypeReduction<T, OP> lhs;
+  lhs.ptr = rhs.ptr;
+  lhs.stride = rhs.stride;
+  lhs.nrow = rhs.nrow;
+  lhs.binop = a.binop;
+  return lhs;
+}
 
 } // namespace ParticleLoopImplementation
 
@@ -310,6 +366,13 @@ template <typename T> class CellDatConst {
   ParticleLoopImplementation::create_loop_arg<T>(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
       sycl::handler &cgh, Access::Max<CellDatConst<T> *> &a);
+
+  template <typename U, typename OP>
+  friend CellDatConstDeviceTypeReduction<U, OP>
+  ParticleLoopImplementation::create_loop_arg(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      sycl::handler &cgh,
+      Access::Reduction<std::shared_ptr<CellDatConst<U>>, OP> &a);
 
   template <typename U>
   friend CellDatConstDeviceType<U>
