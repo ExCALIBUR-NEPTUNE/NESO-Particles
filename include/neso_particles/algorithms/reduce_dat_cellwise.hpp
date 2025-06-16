@@ -283,6 +283,24 @@ void reduce_dat_component_cellwise(
     std::shared_ptr<GROUP_TYPE> particle_sub_group, Sym<T> sym,
     const int sym_component, CellDatConstSharedPtr<T> cell_dat_const,
     const int cell_dat_const_row, const int cell_dat_const_col, OP op) {
+
+  auto particle_group = get_particle_group(particle_sub_group);
+  const std::size_t cell_count =
+      static_cast<std::size_t>(particle_group->domain->mesh->get_cell_count());
+
+  NESOASSERT(cell_count == static_cast<std::size_t>(cell_dat_const->ncells),
+             "Missmatch in cell count.");
+  NESOASSERT(particle_group->contains_dat(sym),
+             "Sym not in Particle{Sub}Group.");
+  NESOASSERT((0 <= cell_dat_const_row) &&
+                 (cell_dat_const_row < cell_dat_const->nrow),
+             "The passed cell_dat_const_row is incompatible with the "
+             "CellDatConst passed.");
+  NESOASSERT((0 <= cell_dat_const_col) &&
+                 (cell_dat_const_col < cell_dat_const->ncol),
+             "The passed cell_dat_const_row is incompatible with the "
+             "CellDatConst passed.");
+
   Private::reduce_dat_component_cellwise_async(
       particle_sub_group, sym, sym_component, cell_dat_const,
       cell_dat_const_row, cell_dat_const_col, op)
@@ -333,6 +351,15 @@ void reduce_dat_components_cellwise(
     CellDatConstSharedPtr<T> cell_dat_const, OP op) {
 
   auto particle_group = get_particle_group(particle_sub_group);
+
+  const std::size_t cell_count =
+      static_cast<std::size_t>(particle_group->domain->mesh->get_cell_count());
+
+  NESOASSERT(cell_count == static_cast<std::size_t>(cell_dat_const->ncells),
+             "Missmatch in cell count.");
+  NESOASSERT(particle_group->contains_dat(sym),
+             "Sym not in Particle{Sub}Group.");
+
   auto dat_ncomp = particle_group->get_dat(sym)->ncomp;
 
   const auto nrow = cell_dat_const->nrow;
