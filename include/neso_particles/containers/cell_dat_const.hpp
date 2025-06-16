@@ -6,6 +6,10 @@
 
 namespace NESO::Particles {
 
+template <typename T> class CellDatConst;
+template <typename T>
+using CellDatConstSharedPtr = std::shared_ptr<CellDatConst<T>>;
+
 /**
  *  Type the implementation methods return;
  */
@@ -273,6 +277,12 @@ create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
 
 } // namespace ParticleLoopImplementation
 
+namespace Private {
+template <typename T>
+inline CellDatConstDeviceType<T>
+cell_dat_const_impl_get(CellDatConstSharedPtr<T> cell_dat_const);
+}
+
 /**
  *  Container that allocates on the device a matrix of fixed size nrow X ncol
  *  for N cells. Data stored in column major format. i.e. Data order from
@@ -300,6 +310,10 @@ template <typename T> class CellDatConst {
   ParticleLoopImplementation::create_loop_arg<T>(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
       sycl::handler &cgh, Access::Max<CellDatConst<T> *> &a);
+
+  template <typename U>
+  friend CellDatConstDeviceType<U>
+  Private::cell_dat_const_impl_get(CellDatConstSharedPtr<U> cell_dat_const);
 
 protected:
   T *d_ptr;
@@ -548,9 +562,6 @@ public:
         .wait_and_throw();
   }
 };
-
-template <typename T>
-using CellDatConstSharedPtr = std::shared_ptr<CellDatConst<T>>;
 
 extern template class CellDatConst<REAL>;
 extern template class CellDatConst<INT>;
