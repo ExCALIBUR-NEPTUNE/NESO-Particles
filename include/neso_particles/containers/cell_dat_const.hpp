@@ -27,9 +27,10 @@ template <typename T> struct CellDatConstDeviceTypeConst {
 
 template <typename T, typename OP> struct CellDatConstDeviceTypeReduction {
   T *ptr;
-  int stride;
+  int ncol;
   int nrow;
   OP binop;
+  sycl::local_accessor<T, 1> la;
 };
 
 template <typename T> class CellDatConst;
@@ -109,11 +110,32 @@ template <typename T> struct Max {
   }
 };
 
+/**
+ * Kernel type for Reduction for CellDatConst.
+ */
 template <typename T, typename OP> struct Reduction {
   Reduction() = default;
+  int local_sycl_index;
+  int local_sycl_range;
   T *ptr;
   int nrow;
   OP binop;
+
+  /**
+   * Reduce the passed value into the provided index.
+   *
+   * @param row Row of CellDatConst to combine into.
+   * @param col Column of CellDatConst to combine into.
+   * @param value Value to reduce.
+   */
+  inline void combine(const int row, const int col, const T value) {
+    const int component_linear_index = nrow * col + row;
+    const int index =
+        component_linear_index * local_sycl_range + local_sycl_index;
+
+    const T current = ptr[index];
+    ptr[index] = binop(current, value);
+  }
 };
 
 } // namespace Access::CellDatConst
@@ -258,8 +280,9 @@ template <typename T, typename OP>
 inline void create_kernel_arg(ParticleLoopIteration &iterationx,
                               CellDatConstDeviceTypeReduction<T, OP> &rhs,
                               Access::CellDatConst::Reduction<T, OP> &lhs) {
-  T *ptr = rhs.ptr + iterationx.cellx * rhs.stride;
-  lhs.ptr = ptr;
+  lhs.local_sycl_index = static_cast<int>(iterationx.local_sycl_index);
+  lhs.local_sycl_range = static_cast<int>(iterationx.local_sycl_range);
+  lhs.ptr = &rhs.la[0];
   lhs.nrow = rhs.nrow;
   lhs.binop = rhs.binop;
 }
@@ -325,10 +348,83 @@ create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
   auto rhs = a.obj->impl_get();
   CellDatConstDeviceTypeReduction<T, OP> lhs;
   lhs.ptr = rhs.ptr;
-  lhs.stride = rhs.stride;
-  lhs.nrow = rhs.nrow;
+  lhs.ncol = a.obj->ncol;
+  lhs.nrow = a.obj->nrow;
   lhs.binop = a.binop;
+  // The local memory is typed, hence this size does not have sizeof(T).
+  const std::size_t size = a.obj->ncol * a.obj->nrow * global_info->local_size;
+  lhs.la = sycl::local_accessor<T, 1>(sycl::range<1>(size), cgh);
   return lhs;
+}
+
+/**
+ * Indicate that Reduction over CellDatConst requires local memory.
+ */
+template <template <typename> typename T, typename U, typename OP>
+inline std::size_t
+get_required_local_num_bytes(Access::Reduction<std::shared_ptr<T<U>>, OP> &a) {
+  return sizeof(U) * a.obj->nrow * a.obj->ncol;
+}
+
+/**
+ * The Reduction ParticleLoop implementations will call reduction_initialise for
+ * all SYCL work items before the kernel is launched.
+ */
+template <typename T, typename OP>
+inline void reduction_initialise(sycl::nd_item<2> &,
+                                 ParticleLoopIteration &iterationx,
+                                 CellDatConstDeviceTypeReduction<T, OP> &a) {
+
+  const T initial_value = Kernel::get_identity(a.binop);
+  const int stride = static_cast<int>(a.nrow * a.ncol);
+  T *ptr = &a.la[0];
+  const auto local_sycl_range = iterationx.local_sycl_range;
+  const auto local_sycl_index = iterationx.local_sycl_index;
+  for (int ix = 0; ix < stride; ix++) {
+    ptr[ix * local_sycl_range + local_sycl_index] = initial_value;
+  }
+}
+
+/**
+ * The Reduction ParticleLoop implementations will call reduction_finalise for
+ * all SYCL work items after kernels have launched.
+ */
+template <typename T, typename OP>
+inline void reduction_finalise(sycl::nd_item<2> &idx,
+                               ParticleLoopIteration &iterationx,
+                               CellDatConstDeviceTypeReduction<T, OP> &a) {
+
+  const int nrow = a.nrow;
+  const int ncol = a.ncol;
+  T *ptr = &a.la[0];
+  const auto local_sycl_range = iterationx.local_sycl_range;
+  const auto local_sycl_index = iterationx.local_sycl_index;
+  const auto &binop = a.binop;
+  const int half_sycl_range = local_sycl_range / 2;
+
+  // Loop over indices in the matrix to be reduced
+  for (int cx = 0; cx < ncol; cx++) {
+    for (int rx = 0; rx < nrow; rx++) {
+      const int linear_index_matrix = rx + cx * nrow;
+      const int offset = linear_index_matrix * local_sycl_range;
+      for (unsigned int s = half_sycl_range; s > 0; s >>= 1) {
+        if (local_sycl_index < s) {
+          const T current = ptr[local_sycl_index + offset];
+          ptr[local_sycl_index + offset] =
+              binop(current, ptr[local_sycl_index + offset + s]);
+        }
+        idx.barrier(sycl::access::fence_space::local_space);
+      }
+      if (local_sycl_index == 0) {
+        T *d_ptr =
+            a.ptr + iterationx.cellx * (nrow * ncol) + linear_index_matrix;
+        Kernel::atomic_reduce(binop, d_ptr, ptr[offset]);
+      }
+      // This barrier shouldn't be needed but without it ACPP does not visit the
+      // last entry of rx sometimes?
+      idx.barrier(sycl::access::fence_space::local_space);
+    }
+  }
 }
 
 } // namespace ParticleLoopImplementation

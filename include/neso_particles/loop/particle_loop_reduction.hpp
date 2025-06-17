@@ -20,6 +20,50 @@ protected:
   using ParticleLoop<KERNEL, ARGS...>::create_loop_args;
   using ParticleLoop<KERNEL, ARGS...>::create_kernel_args;
 
+  /// recusively assemble the kernel arguments from the loop arguments
+  template <size_t INDEX, size_t SIZE>
+  static inline void reduction_initialise_inner(
+      sycl::nd_item<2> &idx,
+      ParticleLoopImplementation::ParticleLoopIteration &iterationx,
+      const loop_parameter_type &loop_args) {
+
+    if constexpr (INDEX < SIZE) {
+      auto arg = Tuple::get<INDEX>(loop_args);
+      ParticleLoopImplementation::reduction_initialise(idx, iterationx, arg);
+      reduction_initialise_inner<INDEX + 1, SIZE>(idx, iterationx, loop_args);
+    }
+  }
+
+  /// called before kernel execution to assemble the kernel arguments.
+  static inline void reduction_initialise(
+      sycl::nd_item<2> &idx,
+      ParticleLoopImplementation::ParticleLoopIteration &iterationx,
+      const loop_parameter_type &loop_args) {
+    reduction_initialise_inner<0, sizeof...(ARGS)>(idx, iterationx, loop_args);
+  }
+
+  /// recusively assemble the kernel arguments from the loop arguments
+  template <size_t INDEX, size_t SIZE>
+  static inline void reduction_finalise_inner(
+      sycl::nd_item<2> &idx,
+      ParticleLoopImplementation::ParticleLoopIteration &iterationx,
+      const loop_parameter_type &loop_args) {
+
+    if constexpr (INDEX < SIZE) {
+      auto arg = Tuple::get<INDEX>(loop_args);
+      ParticleLoopImplementation::reduction_finalise(idx, iterationx, arg);
+      reduction_finalise_inner<INDEX + 1, SIZE>(idx, iterationx, loop_args);
+    }
+  }
+
+  /// called before kernel execution to assemble the kernel arguments.
+  static inline void reduction_finalise(
+      sycl::nd_item<2> &idx,
+      ParticleLoopImplementation::ParticleLoopIteration &iterationx,
+      const loop_parameter_type &loop_args) {
+    reduction_finalise_inner<0, sizeof...(ARGS)>(idx, iterationx, loop_args);
+  }
+
 public:
   /// Disable (implicit) copies.
   ParticleLoopReduction(const ParticleLoopReduction &st) = delete;
@@ -114,6 +158,9 @@ public:
                                                global_info.local_size, 0);
     }
 
+    NESOASSERT(is_power_of_two(global_info.local_size),
+               "Local size is not a power of two.");
+
     this->profiling_region_metrics(this->iteration_set->iteration_set_size);
     auto k_kernel = ParticleLoopImplementation::get_kernel(this->kernel);
     this->sycl_target->profile_map.inc(
@@ -134,16 +181,22 @@ public:
                   const int cellx = static_cast<int>(cell);
                   const int layerx = static_cast<int>(layer);
                   ParticleLoopImplementation::ParticleLoopIteration iterationx;
+                  iterationx.local_sycl_index = idx.get_local_id(1);
+                  iterationx.local_sycl_range = idx.get_local_range(1);
+                  iterationx.cellx = cellx;
+                  iterationx.layerx = layerx;
+                  iterationx.loop_layerx = layerx;
+                  reduction_initialise(idx, iterationx, loop_args);
+                  idx.barrier(sycl::access::fence_space::local_space);
+
                   if (block_device.work_item_required(cell, layer)) {
-                    iterationx.local_sycl_index = idx.get_local_id(1);
-                    iterationx.local_sycl_range = idx.get_local_range(1);
-                    iterationx.cellx = cellx;
-                    iterationx.layerx = layerx;
-                    iterationx.loop_layerx = layerx;
                     kernel_parameter_type kernel_args;
                     create_kernel_args(iterationx, loop_args, kernel_args);
                     Tuple::apply(k_kernel, kernel_args);
                   }
+
+                  idx.barrier(sycl::access::fence_space::local_space);
+                  reduction_finalise(idx, iterationx, loop_args);
                 });
           }));
     }

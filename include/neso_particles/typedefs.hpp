@@ -436,6 +436,14 @@ inline bool device_aware_mpi_enabled() {
   return enabled;
 }
 
+/**
+ * @param n Positive integer to check.
+ * @returns True if n is a power of two.
+ */
+inline bool is_power_of_two(const std::size_t n) {
+  return (n > 0) ? !(n & (n - 1)) : false;
+}
+
 } // namespace NESO::Particles
 
 // HDF5 includes if it exists.

@@ -559,6 +559,11 @@ template <typename T> constexpr T get_identity(sycl::plus<T>) {
   return static_cast<T>(0.0);
 }
 
+template <typename T>
+inline void atomic_reduce(sycl::plus<T>, T *ptr, const T value) {
+  atomic_fetch_add(ptr, value);
+}
+
 /**
  * Wrapper around joint_reduce for buggy implementations.
  *

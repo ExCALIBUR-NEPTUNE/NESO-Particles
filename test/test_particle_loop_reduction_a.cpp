@@ -1,15 +1,10 @@
-#include <gtest/gtest.h>
-#include <neso_particles.hpp>
-#include <random>
-#include <type_traits>
-
-using namespace NESO::Particles;
+#include "include/test_neso_particles.hpp"
 
 namespace {
 
 const int ndim = 2;
 
-ParticleGroupSharedPtr particle_loop_common(const int N = 10093) {
+ParticleGroupSharedPtr particle_loop_common(const int N = 10124) {
   std::vector<int> dims(ndim);
   dims[0] = 4;
   dims[1] = 8;
@@ -83,26 +78,37 @@ TEST(ParticleLoopReduction, base) {
   const int cell_count = mesh->get_cell_count();
   auto sycl_target = A->sycl_target;
 
+  auto Vcorrect =
+      std::make_shared<CellDatConst<REAL>>(sycl_target, cell_count, 3, 1);
   auto Vto_test =
       std::make_shared<CellDatConst<REAL>>(sycl_target, cell_count, 3, 1);
 
+  Vcorrect->fill(3.2);
+  Vto_test->fill(3.2);
+
   particle_loop(
       A,
-      [=](auto INDEX) {
-
+      [=](auto V, auto CDC) {
+        for (int dx = 0; dx < 3; dx++) {
+          CDC.combine(dx, 0, V.at(dx));
+        }
       },
-      Access::read(ParticleLoopIndex{}))
+      Access::read(Sym<REAL>("V")),
+      Access::reduce(Vto_test, Kernel::plus<REAL>{}))
       ->execute();
 
-  auto loop1 = particle_loop(
-      A,
-      [=](auto INDEX, auto CDC) {
+  reduce_dat_components_cellwise(A, Sym<REAL>("V"), Vcorrect,
+                                 Kernel::plus<REAL>{});
 
-      },
-      Access::read(ParticleLoopIndex{}),
-      Access::reduce(Vto_test, Kernel::plus<REAL>{}));
-
-  loop1->execute();
+  auto correct = Vcorrect->get_all_cells();
+  auto to_test = Vto_test->get_all_cells();
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    for (int dx = 0; dx < 3; dx++) {
+      auto err = relative_error(correct.at(cellx)->at(dx, 0),
+                                to_test.at(cellx)->at(dx, 0));
+      ASSERT_TRUE(err < 1.0e-8);
+    }
+  }
 
   A->free();
   sycl_target->free();

@@ -43,7 +43,7 @@ protected:
 
   /// recusively assemble the kernel arguments from the loop arguments
   template <size_t INDEX, size_t SIZE>
-  static inline constexpr void create_kernel_args_inner(
+  static inline void create_kernel_args_inner(
       ParticleLoopImplementation::ParticleLoopIteration &iterationx,
       const loop_parameter_type &loop_args,
       kernel_parameter_type &kernel_args) {
@@ -58,7 +58,7 @@ protected:
   }
 
   /// called before kernel execution to assemble the kernel arguments.
-  static inline constexpr void create_kernel_args(
+  static inline void create_kernel_args(
       ParticleLoopImplementation::ParticleLoopIteration &iterationx,
       const loop_parameter_type &loop_args,
       kernel_parameter_type &kernel_args) {
