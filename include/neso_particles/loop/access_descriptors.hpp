@@ -1,5 +1,7 @@
 #ifndef _NESO_PARTICLES_ACCESS_DESCRIPTORS_H_
 #define _NESO_PARTICLES_ACCESS_DESCRIPTORS_H_
+#include <type_traits>
+
 /**
  *  Types and functions relating to access descriptors for loops.
  */
@@ -115,6 +117,17 @@ template <typename T, typename OP>
 inline Reduction<T, OP> reduce(T t, OP binop) {
   return Reduction<T, OP>{{t}, binop};
 }
+
+template <typename T> struct IsReduction {
+  using flag = std::false_type;
+};
+template <typename T, typename OP> struct IsReduction<Reduction<T, OP>> {
+  using flag = std::true_type;
+};
+template <typename... ARGS> struct HasReduction {
+  static constexpr bool value{(
+      std::is_same_v<std::true_type, typename IsReduction<ARGS>::flag> || ...)};
+};
 
 } // namespace NESO::Particles::Access
 

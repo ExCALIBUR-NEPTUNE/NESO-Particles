@@ -220,6 +220,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_iteration_set.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_args_impl.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_impl.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_reduction.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/pli_particle_dat.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_hierarchy.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_hierarchy_data/mesh_hierarchy_container.hpp

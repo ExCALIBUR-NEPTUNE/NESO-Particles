@@ -76,41 +76,6 @@ ParticleGroupSharedPtr particle_loop_common(const int N = 10093) {
 
 } // namespace
 
-namespace NESO::Particles {
-namespace Access {
-
-template <typename T> struct IsReduction {
-  using flag = std::false_type;
-};
-template <typename T, typename OP> struct IsReduction<Reduction<T, OP>> {
-  using flag = std::true_type;
-};
-template <typename... ARGS> struct HasReduction {
-  static constexpr bool value{(
-      std::is_same_v<std::true_type, typename IsReduction<ARGS>::flag> || ...)};
-};
-
-} // namespace Access
-
-template <typename KERNEL, typename... ARGS>
-class ParticleLoopReduction : public ParticleLoop<KERNEL, ARGS...> {};
-
-// TODO
-template <typename KERNEL, typename... ARGS>
-[[nodiscard]] inline ParticleLoopSharedPtr
-particle_loop_TODO(ParticleGroupSharedPtr particle_group, KERNEL kernel,
-                   ARGS... args) {
-
-  if constexpr (Access::HasReduction<ARGS...>::value) {
-    nprint("Contains reduction.");
-    return particle_loop(particle_group, kernel, args...);
-    return nullptr;
-  } else {
-    return particle_loop(particle_group, kernel, args...);
-  }
-}
-} // namespace NESO::Particles
-
 TEST(ParticleLoopReduction, base) {
   auto A = particle_loop_common();
   auto domain = A->domain;
@@ -121,7 +86,7 @@ TEST(ParticleLoopReduction, base) {
   auto Vto_test =
       std::make_shared<CellDatConst<REAL>>(sycl_target, cell_count, 3, 1);
 
-  particle_loop_TODO(
+  particle_loop(
       A,
       [=](auto INDEX) {
 
@@ -129,7 +94,7 @@ TEST(ParticleLoopReduction, base) {
       Access::read(ParticleLoopIndex{}))
       ->execute();
 
-  auto loop1 = particle_loop_TODO(
+  auto loop1 = particle_loop(
       A,
       [=](auto INDEX, auto CDC) {
 
@@ -137,11 +102,7 @@ TEST(ParticleLoopReduction, base) {
       Access::read(ParticleLoopIndex{}),
       Access::reduce(Vto_test, Kernel::plus<REAL>{}));
 
-  auto reduce = Access::reduce(Vto_test, Kernel::plus<REAL>{});
-  auto read = Access::read(Vto_test);
-
-  auto foo = ParticleLoopImplementation::LoopParameter<decltype(reduce)>{};
-  auto bar = ParticleLoopImplementation::KernelParameter<decltype(reduce)>{};
+  loop1->execute();
 
   A->free();
   sycl_target->free();

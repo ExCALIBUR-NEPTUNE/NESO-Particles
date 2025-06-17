@@ -5,6 +5,7 @@
 #include <string>
 
 #include "particle_loop.hpp"
+#include "particle_loop_reduction.hpp"
 
 namespace NESO::Particles {
 
@@ -23,11 +24,19 @@ template <typename KERNEL, typename... ARGS>
 [[nodiscard]] inline ParticleLoopSharedPtr
 particle_loop(const std::string name, ParticleGroupSharedPtr particle_group,
               KERNEL kernel, ARGS... args) {
-  auto p = std::make_shared<ParticleLoop<KERNEL, ARGS...>>(name, particle_group,
-                                                           kernel, args...);
-  auto b = std::dynamic_pointer_cast<ParticleLoopBase>(p);
-  NESOASSERT(b != nullptr, "ParticleLoop pointer cast failed.");
-  return b;
+  if constexpr (Access::HasReduction<ARGS...>::value) {
+    auto p = std::make_shared<ParticleLoopReduction<KERNEL, ARGS...>>(
+        name, particle_group, kernel, args...);
+    auto b = std::dynamic_pointer_cast<ParticleLoopBase>(p);
+    NESOASSERT(b != nullptr, "ParticleLoop pointer cast failed.");
+    return b;
+  } else {
+    auto p = std::make_shared<ParticleLoop<KERNEL, ARGS...>>(
+        name, particle_group, kernel, args...);
+    auto b = std::dynamic_pointer_cast<ParticleLoopBase>(p);
+    NESOASSERT(b != nullptr, "ParticleLoop pointer cast failed.");
+    return b;
+  }
 }
 
 /**
@@ -63,6 +72,11 @@ template <typename DAT_TYPE, typename KERNEL, typename... ARGS>
 particle_loop(const std::string name,
               ParticleDatSharedPtr<DAT_TYPE> particle_dat, KERNEL kernel,
               ARGS... args) {
+
+  static_assert(!Access::HasReduction<ARGS...>::value,
+                "Reductions access descriptors not supported with ParticleDat "
+                "iteration sets.");
+
   auto p = std::make_shared<ParticleLoop<KERNEL, ARGS...>>(name, particle_dat,
                                                            kernel, args...);
   auto b = std::dynamic_pointer_cast<ParticleLoopBase>(p);

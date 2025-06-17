@@ -114,7 +114,7 @@ public:
                KERNEL kernel, ARGS... args)
       : ParticleLoop(name, particle_group, kernel, args...) {
     this->particle_sub_group_shrptr = particle_sub_group;
-  };
+  }
 
   /**
    *  Create a ParticleLoop that executes a kernel for all particles in the
@@ -128,7 +128,7 @@ public:
    */
   ParticleLoop(ParticleGroupSharedPtr particle_group, KERNEL kernel,
                ARGS... args)
-      : ParticleLoop("unnamed_kernel", particle_group, kernel, args...){};
+      : ParticleLoop("unnamed_kernel", particle_group, kernel, args...) {}
 
   /**
    *  Create a ParticleLoop that executes a kernel for all particles in the
