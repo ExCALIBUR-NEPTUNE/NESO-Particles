@@ -115,7 +115,8 @@ inline sycl::event reduce_dat_component_cellwise_async(
             T value = Kernel::get_identity(op);
 
             const std::size_t stride = idx.get_local_range(1);
-            for (std::size_t index = workitem_id; index < npart_cell;
+            for (std::size_t index = workitem_id;
+                 index < static_cast<std::size_t>(npart_cell);
                  index += stride) {
               const INT layer = d_map.map_loop_layer_to_layer(cellx, index);
               value = op(value, d_ptr[layer]);
