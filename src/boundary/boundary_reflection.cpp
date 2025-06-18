@@ -1,6 +1,7 @@
 #include <neso_particles/boundary/boundary_reflection.hpp>
 #include <neso_particles/boundary/boundary_truncation.hpp>
 #include <neso_particles/common_impl.hpp>
+#include <neso_particles/particle_sub_group/particle_loop_sub_group_functions.hpp>
 
 namespace NESO::Particles {
 

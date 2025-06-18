@@ -48,6 +48,7 @@
 #include "neso_particles/particle_remover.hpp"
 #include "neso_particles/particle_set.hpp"
 #include "neso_particles/particle_spec.hpp"
+#include "neso_particles/particle_sub_group/particle_loop_sub_group_functions.hpp"
 #include "neso_particles/particle_sub_group/particle_sub_group.hpp"
 #include "neso_particles/profiling.hpp"
 #include "neso_particles/sycl_typedefs.hpp"
