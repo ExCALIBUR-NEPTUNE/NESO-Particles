@@ -416,6 +416,9 @@ inline void reduction_finalise(sycl::nd_item<2> &idx,
       T *d_ptr = a.ptr + iterationx.cellx * num_elements + ex;
       Kernel::atomic_reduce(binop, d_ptr, ptr[offset]);
     }
+
+    // ACPP omp.accelerated seems to not generate the correct loops if this
+    // barrier is missing.
     idx.barrier(sycl::access::fence_space::local_space);
   }
 }
@@ -456,17 +459,14 @@ pre_loop(ParticleLoopGlobalInfo *global_info,
 
     sycl_target->queue
         .submit([&](sycl::handler &cgh) {
-          sycl::local_accessor<T, 1> la(sycl::range<1>(num_elements_total),
-                                        cgh);
-
           CellDatConstDeviceTypeReduction<T, OP> loop_arg;
           T *d_ptr = dh_to_test->d_buffer.ptr;
           loop_arg.ptr = d_ptr;
           loop_arg.ncol = ncol;
           loop_arg.nrow = nrow;
           loop_arg.binop = a.binop;
-          loop_arg.la = la;
-
+          loop_arg.la = sycl::local_accessor<T, 1>(
+              sycl::range<1>(num_elements_total), cgh);
           cgh.parallel_for<>(
               sycl_target->device_limits.validate_nd_range(
                   sycl::nd_range<2>(sycl::range<2>(1, local_size),
@@ -487,7 +487,7 @@ pre_loop(ParticleLoopGlobalInfo *global_info,
                 for (int ex = 0; ex < nrow * ncol; ex++) {
                   const auto index = ex * local_sycl_range + local_sycl_index;
                   const T value = static_cast<T>(ex * local_sycl_index) + 1;
-                  la[index] = value;
+                  loop_arg.la[index] = value;
                 }
                 idx.barrier(sycl::access::fence_space::local_space);
                 reduction_finalise<T, OP>(idx, iterationx, loop_arg_kernel);
