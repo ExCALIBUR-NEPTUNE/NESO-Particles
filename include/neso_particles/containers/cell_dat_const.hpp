@@ -401,29 +401,23 @@ inline void reduction_finalise(sycl::nd_item<2> &idx,
   const auto local_sycl_index = iterationx.local_sycl_index;
   const auto &binop = a.binop;
   const int half_sycl_range = local_sycl_range / 2;
+  const int num_elements = nrow * ncol;
 
-  // Loop over indices in the matrix to be reduced
-  for (int cx = 0; cx < ncol; cx++) {
-    for (int rx = 0; rx < nrow; rx++) {
-      const int linear_index_matrix = rx + cx * nrow;
-      const int offset = linear_index_matrix * local_sycl_range;
-      for (unsigned int s = half_sycl_range; s > 0; s >>= 1) {
-        if (local_sycl_index < s) {
-          const T current = ptr[local_sycl_index + offset];
-          ptr[local_sycl_index + offset] =
-              binop(current, ptr[local_sycl_index + offset + s]);
-        }
-        idx.barrier(sycl::access::fence_space::local_space);
+  for (int ex = 0; ex < num_elements; ex++) {
+    const int offset = ex * local_sycl_range;
+    for (unsigned int s = half_sycl_range; s > 0; s >>= 1) {
+      if (local_sycl_index < s) {
+        const T current = ptr[local_sycl_index + offset];
+        ptr[local_sycl_index + offset] =
+            binop(current, ptr[local_sycl_index + offset + s]);
       }
-      if (local_sycl_index == 0) {
-        T *d_ptr =
-            a.ptr + iterationx.cellx * (nrow * ncol) + linear_index_matrix;
-        Kernel::atomic_reduce(binop, d_ptr, ptr[offset]);
-      }
-      // This barrier shouldn't be needed but without it ACPP does not visit the
-      // last entry of rx sometimes?
       idx.barrier(sycl::access::fence_space::local_space);
     }
+    if (local_sycl_index == 0) {
+      T *d_ptr = a.ptr + iterationx.cellx * num_elements + ex;
+      Kernel::atomic_reduce(binop, d_ptr, ptr[offset]);
+    }
+    idx.barrier(sycl::access::fence_space::local_space);
   }
 }
 
