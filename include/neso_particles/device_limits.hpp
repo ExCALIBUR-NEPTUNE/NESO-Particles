@@ -4,6 +4,8 @@
 #include "device_atomic_sanity_check.hpp"
 #include "sycl_typedefs.hpp"
 #include "typedefs.hpp"
+#include <set>
+#include <vector>
 
 namespace NESO::Particles {
 
@@ -45,6 +47,7 @@ protected:
 public:
   sycl::device device;
   std::size_t local_mem_size;
+  std::set<std::vector<std::size_t>> validated_types;
 
   DeviceLimits() = default;
   DeviceLimits(sycl::device device) : device(device) {

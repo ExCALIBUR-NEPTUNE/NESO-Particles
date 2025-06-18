@@ -393,7 +393,6 @@ template <typename T, typename OP>
 inline void reduction_finalise(sycl::nd_item<2> &idx,
                                ParticleLoopIteration &iterationx,
                                CellDatConstDeviceTypeReduction<T, OP> &a) {
-
   const int nrow = a.nrow;
   const int ncol = a.ncol;
   T *ptr = &a.la[0];
@@ -418,6 +417,109 @@ inline void reduction_finalise(sycl::nd_item<2> &idx,
       Kernel::atomic_reduce(binop, d_ptr, ptr[offset]);
     }
     idx.barrier(sycl::access::fence_space::local_space);
+  }
+}
+
+/**
+ * Sanity checkes at runtime that the reductions do actually work with the SYCL
+ * backend and compiler flags.
+ */
+template <typename T, typename OP>
+inline void
+pre_loop(ParticleLoopGlobalInfo *global_info,
+         Access::Reduction<std::shared_ptr<CellDatConst<T>>, OP> &a) {
+  auto sycl_target = a.obj->sycl_target;
+  const auto local_size = global_info->local_size;
+
+  const auto nrow = a.obj->nrow;
+  const auto ncol = a.obj->ncol;
+  const auto num_elements_total = nrow * ncol * local_size;
+
+  const std::vector<std::size_t> validation_key = {
+      typeid(CellDatConst<T>).hash_code(),
+      typeid(T).hash_code(),
+      typeid(a.binop).hash_code(),
+      static_cast<std::size_t>(nrow),
+      static_cast<std::size_t>(ncol),
+      static_cast<std::size_t>(local_size)};
+
+  if (!sycl_target->device_limits.validated_types.count(validation_key) &&
+      get_env_size_t("NESO_PARTICLES_ENABLE_REDUCTION_SELF_TEST", 1)) {
+
+    auto dh_to_test = get_resource<BufferDeviceHost<T>,
+                                   ResourceStackInterfaceBufferDeviceHost<T>>(
+        sycl_target->resource_stack_map, ResourceStackKeyBufferDeviceHost<T>{},
+        sycl_target);
+    dh_to_test->realloc_no_copy(nrow * ncol);
+    sycl_target->queue.fill((T *)dh_to_test->d_buffer.ptr, (T)0, nrow * ncol)
+        .wait_and_throw();
+
+    sycl_target->queue
+        .submit([&](sycl::handler &cgh) {
+          sycl::local_accessor<T, 1> la(sycl::range<1>(num_elements_total),
+                                        cgh);
+
+          CellDatConstDeviceTypeReduction<T, OP> loop_arg;
+          T *d_ptr = dh_to_test->d_buffer.ptr;
+          loop_arg.ptr = d_ptr;
+          loop_arg.ncol = ncol;
+          loop_arg.nrow = nrow;
+          loop_arg.binop = a.binop;
+          loop_arg.la = la;
+
+          cgh.parallel_for<>(
+              sycl_target->device_limits.validate_nd_range(
+                  sycl::nd_range<2>(sycl::range<2>(1, local_size),
+                                    sycl::range<2>(1, local_size))),
+              [=](sycl::nd_item<2> idx) {
+                CellDatConstDeviceTypeReduction<T, OP> loop_arg_kernel =
+                    loop_arg;
+
+                ParticleLoopIteration iterationx;
+                const auto local_sycl_index = idx.get_local_id(1);
+                const auto local_sycl_range = idx.get_local_range(1);
+                iterationx.local_sycl_index = local_sycl_index;
+                iterationx.local_sycl_range = local_sycl_range;
+                iterationx.cellx = 0;
+                iterationx.layerx = 0;
+                iterationx.loop_layerx = 0;
+
+                for (int ex = 0; ex < nrow * ncol; ex++) {
+                  const auto index = ex * local_sycl_range + local_sycl_index;
+                  const T value = static_cast<T>(ex * local_sycl_index) + 1;
+                  la[index] = value;
+                }
+                idx.barrier(sycl::access::fence_space::local_space);
+                reduction_finalise<T, OP>(idx, iterationx, loop_arg_kernel);
+              });
+        })
+        .wait_and_throw();
+
+    dh_to_test->device_to_host();
+
+    for (int cx = 0; cx < ncol; cx++) {
+      for (int rx = 0; rx < nrow; rx++) {
+        T correct = static_cast<T>(0);
+        const auto linear_index = rx + nrow * cx;
+        for (int idx = 0; idx < static_cast<int>(local_size); idx++) {
+          correct = a.binop(correct, linear_index * idx + 1);
+        }
+        auto to_test = dh_to_test->h_buffer.ptr[linear_index];
+        const REAL err_abs = std::abs(correct - to_test);
+        const REAL err_rel =
+            std::abs(correct) > 0 ? err_abs / std::abs(correct) : err_abs;
+        NESOASSERT(err_rel < 1.0e-6,
+                   "CellDatConst Reduction self test failed. This may be an "
+                   "indication of a bug or the SYCL implementation. The "
+                   "detected error has size: " +
+                       std::to_string(err_rel));
+      }
+    }
+
+    sycl_target->device_limits.validated_types.insert(validation_key);
+
+    restore_resource(sycl_target->resource_stack_map,
+                     ResourceStackKeyBufferDeviceHost<T>{}, dh_to_test);
   }
 }
 

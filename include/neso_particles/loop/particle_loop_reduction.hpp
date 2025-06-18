@@ -35,7 +35,7 @@ protected:
   }
 
   /// called before kernel execution to assemble the kernel arguments.
-  static inline void reduction_initialise(
+  static inline void reduction_initialise_dispatch(
       sycl::nd_item<2> &idx,
       ParticleLoopImplementation::ParticleLoopIteration &iterationx,
       const loop_parameter_type &loop_args) {
@@ -57,7 +57,7 @@ protected:
   }
 
   /// called before kernel execution to assemble the kernel arguments.
-  static inline void reduction_finalise(
+  static inline void reduction_finalise_dispatch(
       sycl::nd_item<2> &idx,
       ParticleLoopImplementation::ParticleLoopIteration &iterationx,
       const loop_parameter_type &loop_args) {
@@ -186,7 +186,7 @@ public:
                   iterationx.cellx = cellx;
                   iterationx.layerx = layerx;
                   iterationx.loop_layerx = layerx;
-                  reduction_initialise(idx, iterationx, loop_args);
+                  reduction_initialise_dispatch(idx, iterationx, loop_args);
                   idx.barrier(sycl::access::fence_space::local_space);
 
                   if (block_device.work_item_required(cell, layer)) {
@@ -196,7 +196,7 @@ public:
                   }
 
                   idx.barrier(sycl::access::fence_space::local_space);
-                  reduction_finalise(idx, iterationx, loop_args);
+                  reduction_finalise_dispatch(idx, iterationx, loop_args);
                 });
           }));
     }

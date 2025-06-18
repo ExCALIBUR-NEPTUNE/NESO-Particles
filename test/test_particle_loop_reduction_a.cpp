@@ -4,13 +4,13 @@ namespace {
 
 const int ndim = 2;
 
-ParticleGroupSharedPtr particle_loop_common(const int N = 20) {
+ParticleGroupSharedPtr particle_loop_common(const int N = 10083) {
   std::vector<int> dims(ndim);
-  dims[0] = 2;
-  dims[1] = 2;
+  dims[0] = 4;
+  dims[1] = 8;
 
   const double cell_extent = 1.0;
-  const int subdivision_order = 0;
+  const int subdivision_order = 2;
 
   auto mesh = std::make_shared<CartesianHMesh>(MPI_COMM_WORLD, ndim, dims,
                                                cell_extent, subdivision_order);
