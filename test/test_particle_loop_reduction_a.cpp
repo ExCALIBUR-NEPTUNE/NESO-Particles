@@ -112,6 +112,7 @@ void wrapper_cdc_reduction_base(GROUP_TYPE A, SYCLTargetSharedPtr sycl_target,
     for (int dx = 0; dx < ncomp; dx++) {
       auto err = relative_error(correct.at(cellx)->at(dx, 0),
                                 to_test.at(cellx)->at(dx, 0));
+
       ASSERT_TRUE(err < 1.0e-8);
       err = relative_error(correct.at(cellx)->at(dx, 1),
                            to_test.at(cellx)->at(dx, 1));

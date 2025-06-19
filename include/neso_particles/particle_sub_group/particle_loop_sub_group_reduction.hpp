@@ -16,8 +16,10 @@ class ParticleLoopSubGroupReduction
 protected:
   using typename ParticleLoop<KERNEL, ARGS...>::loop_parameter_type;
   using typename ParticleLoop<KERNEL, ARGS...>::kernel_parameter_type;
-  using ParticleLoop<KERNEL, ARGS...>::create_loop_args;
-  using ParticleLoop<KERNEL, ARGS...>::create_kernel_args;
+  using ParticleLoopArgs<ARGS...>::create_loop_args;
+  using ParticleLoopArgs<ARGS...>::create_kernel_args;
+  using ParticleLoopArgs<ARGS...>::reduction_initialise_dispatch;
+  using ParticleLoopArgs<ARGS...>::reduction_finalise_dispatch;
 
 public:
   /**
@@ -103,7 +105,7 @@ public:
                   iterationx.cellx = loop_cellx;
                   iterationx.loop_layerx = loop_layerx;
 
-                  // reduction_initialise_dispatch(idx, iterationx, loop_args);
+                  reduction_initialise_dispatch(idx, iterationx, loop_args);
                   idx.barrier(sycl::access::fence_space::local_space);
 
                   if (block_device.work_item_required(loop_cell, loop_layer)) {
@@ -117,7 +119,7 @@ public:
                   }
 
                   idx.barrier(sycl::access::fence_space::local_space);
-                  // reduction_finalise_dispatch(idx, iterationx, loop_args);
+                  reduction_finalise_dispatch(idx, iterationx, loop_args);
                 });
           }));
     }

@@ -511,11 +511,20 @@ pre_loop(ParticleLoopGlobalInfo *global_info,
         const REAL err_abs = std::abs(correct - to_test);
         const REAL err_rel =
             std::abs(correct) > 0 ? err_abs / std::abs(correct) : err_abs;
+
+#ifdef NESO_PARTICLES_TEST_COMPILATION
+        if (!(err_rel < 1.0e-6)) {
+          nprint("CellDatConst reduction self test Failed: " +
+                 std::to_string(err_rel));
+        }
+#else
         NESOASSERT(err_rel < 1.0e-6,
                    "CellDatConst Reduction self test failed. This may be an "
                    "indication of a bug or the SYCL implementation. The "
                    "detected error has size: " +
                        std::to_string(err_rel));
+
+#endif
       }
     }
 
