@@ -172,6 +172,7 @@ public:
   std::shared_ptr<void> particle_dat_init{nullptr};
   std::unique_ptr<ParticleLoopImplementation::ParticleLoopBlockIterationSet>
       iteration_set{nullptr};
+  std::size_t iteration_set_stride{1};
   std::string loop_type;
   std::string name;
   EventStack event_stack;

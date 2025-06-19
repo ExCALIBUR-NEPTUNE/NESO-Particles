@@ -65,6 +65,25 @@ struct ParticleLoopBlockDevice {
   std::size_t stride;
 
   /**
+   * Convert a sycl::nd_item<2> into a cell, layer pair when in strided mode but
+   * work items access particles in an interlaced mode not a block mode.
+   * @param[in] idx SYCL nd_item for work item.
+   * @param[in] stride_index Which index in the stride is this.
+   * @param[in, out] cell Cell for iteration.
+   * @param[in, out] layer Layer for iteration.
+   */
+  inline void get_interlaced_cell_layer(const sycl::nd_item<2> &idx,
+                                        const std::size_t stride_index,
+                                        std::size_t *RESTRICT cell,
+                                        std::size_t *RESTRICT layer) const {
+    *cell = idx.get_global_id(0) + this->offset_cell;
+    *layer = this->offset_layer +
+             idx.get_group().get_group_id(1) * this->stride *
+                 idx.get_local_range(1) +
+             stride_index * idx.get_local_range(1) + idx.get_local_id(1);
+  }
+
+  /**
    * Convert a sycl::nd_item<2> into a cell, layer pair.
    * @param[in] idx SYCL nd_item for work item.
    * @param[in, out] cell Cell for iteration.

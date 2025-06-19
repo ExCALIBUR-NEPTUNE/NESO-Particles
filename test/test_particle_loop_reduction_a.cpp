@@ -170,6 +170,19 @@ TEST(ParticleLoopReduction, base_sub_group) {
   mesh->free();
 }
 
+// TODO
+template <typename KERNEL, typename... ARGS>
+[[nodiscard]] inline ParticleLoopSharedPtr
+particle_loop_reduction(const std::string name,
+                        ParticleGroupSharedPtr particle_group, KERNEL kernel,
+                        ARGS... args) {
+  auto p = std::make_shared<ParticleLoopReduction<KERNEL, ARGS...>>(
+      name, particle_group, kernel, args...);
+  auto b = std::dynamic_pointer_cast<ParticleLoopBase>(p);
+  NESOASSERT(b != nullptr, "ParticleLoop pointer cast failed.");
+  return b;
+}
+
 TEST(ParticleLoopReduction, benchmark) {
   const int N = 1000000;
   auto A = particle_loop_common(N);
@@ -191,16 +204,18 @@ TEST(ParticleLoopReduction, benchmark) {
   Vto_test->fill(0);
   Vspecial->fill(0);
 
-  particle_loop(
+  auto loop0 = particle_loop(
       A,
       [=](auto V, auto CDC) {
         for (int dx = 0; dx < 3; dx++) {
           CDC.fetch_add(dx, 0, V.at(dx));
         }
       },
-      Access::read(Sym<REAL>("V")), Access::add(Vcorrect))
-      ->execute();
-  particle_loop(
+      Access::read(Sym<REAL>("V")), Access::add(Vcorrect));
+
+  loop0->execute();
+
+  auto loop1 = particle_loop(
       A,
       [=](auto V, auto CDC) {
         for (int dx = 0; dx < 3; dx++) {
@@ -208,54 +223,95 @@ TEST(ParticleLoopReduction, benchmark) {
         }
       },
       Access::read(Sym<REAL>("V")),
-      Access::reduce(Vto_test, Kernel::plus<REAL>{}))
-      ->execute();
+      Access::reduce(Vto_test, Kernel::plus<REAL>{}));
+  loop1->execute();
+
+  auto loop2 = particle_loop(
+      A,
+      [=](auto V) {
+        auto v0 = V.at(0);
+        auto v1 = V.at(1);
+        auto v2 = V.at(2);
+        V.at(0) = v2;
+        V.at(1) = v0;
+        V.at(2) = v1;
+      },
+      Access::write(Sym<REAL>("V")));
+  loop2->execute();
+
+  auto loop3 = particle_loop(
+      "fo", A,
+      [=](auto P, auto V) {
+        P.at(0) = V.at(0);
+        P.at(1) = V.at(1);
+      },
+      Access::write(Sym<REAL>("P")), Access::read(Sym<REAL>("V")));
+  loop3->execute();
+
+  auto loop4 = particle_loop_reduction(
+      "fo", A,
+      [=](auto P, auto V) {
+        P.at(0) = V.at(0);
+        P.at(1) = V.at(1);
+      },
+      Access::write(Sym<REAL>("P")), Access::read(Sym<REAL>("V")));
+  loop4->execute();
+
   reduce_dat_components_cellwise(A, Sym<REAL>("V"), Vspecial,
                                  Kernel::plus<REAL>{});
 
   auto t0 = profile_timestamp();
 
+  const int Nrun = 1000;
+
   t0 = profile_timestamp();
-  for (int ix = 0; ix < 100; ix++) {
-    particle_loop(
-        A,
-        [=](auto V, auto CDC) {
-          for (int dx = 0; dx < 3; dx++) {
-            CDC.fetch_add(dx, 0, V.at(dx));
-          }
-        },
-        Access::read(Sym<REAL>("V")), Access::add(Vcorrect))
-        ->execute();
+  for (int ix = 0; ix < Nrun; ix++) {
+    loop0->execute();
   }
-  REAL time_per_run = profile_elapsed(t0, profile_timestamp()) / 100;
+  REAL time_per_run = profile_elapsed(t0, profile_timestamp()) / Nrun;
   REAL gbs = N * 3 * sizeof(REAL) / (time_per_run * 1.0e9);
   nprint("Time taken OLD:", time_per_run, gbs);
 
   t0 = profile_timestamp();
-  for (int ix = 0; ix < 100; ix++) {
-    particle_loop(
-        A,
-        [=](auto V, auto CDC) {
-          for (int dx = 0; dx < 3; dx++) {
-            CDC.combine(dx, 0, V.at(dx));
-          }
-        },
-        Access::read(Sym<REAL>("V")),
-        Access::reduce(Vto_test, Kernel::plus<REAL>{}))
-        ->execute();
+  for (int ix = 0; ix < Nrun; ix++) {
+    loop1->execute();
   }
-  time_per_run = profile_elapsed(t0, profile_timestamp()) / 100;
+  time_per_run = profile_elapsed(t0, profile_timestamp()) / Nrun;
   gbs = N * 3 * sizeof(REAL) / (time_per_run * 1.0e9);
   nprint("Time taken NEW:", time_per_run, gbs);
 
   t0 = profile_timestamp();
-  for (int ix = 0; ix < 100; ix++) {
+  for (int ix = 0; ix < Nrun; ix++) {
     reduce_dat_components_cellwise(A, Sym<REAL>("V"), Vspecial,
                                    Kernel::plus<REAL>{});
   }
-  time_per_run = profile_elapsed(t0, profile_timestamp()) / 100;
+  time_per_run = profile_elapsed(t0, profile_timestamp()) / Nrun;
   gbs = N * 3 * sizeof(REAL) / (time_per_run * 1.0e9);
   nprint("Time taken ALG:", time_per_run, gbs);
+
+  t0 = profile_timestamp();
+  for (int ix = 0; ix < Nrun; ix++) {
+    loop2->execute();
+  }
+  time_per_run = profile_elapsed(t0, profile_timestamp()) / Nrun;
+  gbs = N * 3 * sizeof(REAL) / (time_per_run * 1.0e9);
+  nprint("Time taken CPY:", time_per_run, gbs);
+
+  t0 = profile_timestamp();
+  for (int ix = 0; ix < Nrun; ix++) {
+    loop3->execute();
+  }
+  time_per_run = profile_elapsed(t0, profile_timestamp()) / Nrun;
+  gbs = N * 4 * sizeof(REAL) / (time_per_run * 1.0e9);
+  nprint("Time taken ADA:", time_per_run, gbs);
+
+  t0 = profile_timestamp();
+  for (int ix = 0; ix < Nrun; ix++) {
+    loop4->execute();
+  }
+  time_per_run = profile_elapsed(t0, profile_timestamp()) / Nrun;
+  gbs = N * 4 * sizeof(REAL) / (time_per_run * 1.0e9);
+  nprint("Time taken ADB:", time_per_run, gbs);
 
   sycl_target->free();
   mesh->free();
