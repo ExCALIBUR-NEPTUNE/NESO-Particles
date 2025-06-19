@@ -191,6 +191,8 @@ TEST(ParticleLoopReduction, benchmark) {
   auto sycl_target = A->sycl_target;
   const int cell_count = mesh->get_cell_count();
 
+  nprint_variable(sycl_target->device_limits.get_native_vector_width_real());
+
   const int ncomp = 3;
 
   auto Vcorrect =
@@ -257,6 +259,16 @@ TEST(ParticleLoopReduction, benchmark) {
       Access::write(Sym<REAL>("P")), Access::read(Sym<REAL>("V")));
   loop4->execute();
 
+  std::vector<Sym<REAL>> syms = {Sym<REAL>("P"), Sym<REAL>("V")};
+  auto loop5 = particle_loop_reduction(
+      "fo", A,
+      [=](auto D) {
+        D.at(0, 0) = D.at(1, 0);
+        D.at(0, 1) = D.at(1, 1);
+      },
+      Access::write(SymVector<REAL>(A, syms)));
+  loop5->execute();
+
   reduce_dat_components_cellwise(A, Sym<REAL>("V"), Vspecial,
                                  Kernel::plus<REAL>{});
 
@@ -312,6 +324,14 @@ TEST(ParticleLoopReduction, benchmark) {
   time_per_run = profile_elapsed(t0, profile_timestamp()) / Nrun;
   gbs = N * 4 * sizeof(REAL) / (time_per_run * 1.0e9);
   nprint("Time taken ADB:", time_per_run, gbs);
+
+  t0 = profile_timestamp();
+  for (int ix = 0; ix < Nrun; ix++) {
+    loop5->execute();
+  }
+  time_per_run = profile_elapsed(t0, profile_timestamp()) / Nrun;
+  gbs = N * 4 * sizeof(REAL) / (time_per_run * 1.0e9);
+  nprint("Time taken ADS:", time_per_run, gbs);
 
   sycl_target->free();
   mesh->free();
