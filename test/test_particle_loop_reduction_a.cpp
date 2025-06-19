@@ -169,3 +169,94 @@ TEST(ParticleLoopReduction, base_sub_group) {
   sycl_target->free();
   mesh->free();
 }
+
+TEST(ParticleLoopReduction, benchmark) {
+  const int N = 1000000;
+  auto A = particle_loop_common(N);
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  auto sycl_target = A->sycl_target;
+  const int cell_count = mesh->get_cell_count();
+
+  const int ncomp = 3;
+
+  auto Vcorrect =
+      std::make_shared<CellDatConst<REAL>>(sycl_target, cell_count, ncomp, 1);
+  auto Vto_test =
+      std::make_shared<CellDatConst<REAL>>(sycl_target, cell_count, ncomp, 1);
+  auto Vspecial =
+      std::make_shared<CellDatConst<REAL>>(sycl_target, cell_count, ncomp, 1);
+
+  Vcorrect->fill(0);
+  Vto_test->fill(0);
+  Vspecial->fill(0);
+
+  particle_loop(
+      A,
+      [=](auto V, auto CDC) {
+        for (int dx = 0; dx < 3; dx++) {
+          CDC.fetch_add(dx, 0, V.at(dx));
+        }
+      },
+      Access::read(Sym<REAL>("V")), Access::add(Vcorrect))
+      ->execute();
+  particle_loop(
+      A,
+      [=](auto V, auto CDC) {
+        for (int dx = 0; dx < 3; dx++) {
+          CDC.combine(dx, 0, V.at(dx));
+        }
+      },
+      Access::read(Sym<REAL>("V")),
+      Access::reduce(Vto_test, Kernel::plus<REAL>{}))
+      ->execute();
+  reduce_dat_components_cellwise(A, Sym<REAL>("V"), Vspecial,
+                                 Kernel::plus<REAL>{});
+
+  auto t0 = profile_timestamp();
+
+  t0 = profile_timestamp();
+  for (int ix = 0; ix < 100; ix++) {
+    particle_loop(
+        A,
+        [=](auto V, auto CDC) {
+          for (int dx = 0; dx < 3; dx++) {
+            CDC.fetch_add(dx, 0, V.at(dx));
+          }
+        },
+        Access::read(Sym<REAL>("V")), Access::add(Vcorrect))
+        ->execute();
+  }
+  REAL time_per_run = profile_elapsed(t0, profile_timestamp()) / 100;
+  REAL gbs = N * 3 * sizeof(REAL) / (time_per_run * 1.0e9);
+  nprint("Time taken OLD:", time_per_run, gbs);
+
+  t0 = profile_timestamp();
+  for (int ix = 0; ix < 100; ix++) {
+    particle_loop(
+        A,
+        [=](auto V, auto CDC) {
+          for (int dx = 0; dx < 3; dx++) {
+            CDC.combine(dx, 0, V.at(dx));
+          }
+        },
+        Access::read(Sym<REAL>("V")),
+        Access::reduce(Vto_test, Kernel::plus<REAL>{}))
+        ->execute();
+  }
+  time_per_run = profile_elapsed(t0, profile_timestamp()) / 100;
+  gbs = N * 3 * sizeof(REAL) / (time_per_run * 1.0e9);
+  nprint("Time taken NEW:", time_per_run, gbs);
+
+  t0 = profile_timestamp();
+  for (int ix = 0; ix < 100; ix++) {
+    reduce_dat_components_cellwise(A, Sym<REAL>("V"), Vspecial,
+                                   Kernel::plus<REAL>{});
+  }
+  time_per_run = profile_elapsed(t0, profile_timestamp()) / 100;
+  gbs = N * 3 * sizeof(REAL) / (time_per_run * 1.0e9);
+  nprint("Time taken ALG:", time_per_run, gbs);
+
+  sycl_target->free();
+  mesh->free();
+}
