@@ -27,6 +27,8 @@ protected:
   /// The types of the arguments passed to the kernel.
   using kernel_parameter_type =
       typename ParticleLoopArgs<ARGS...>::kernel_parameter_type;
+  using ParticleLoopArgs<ARGS...>::create_loop_args;
+  using ParticleLoopArgs<ARGS...>::create_kernel_args;
 
   virtual inline std::size_t get_local_size() override {
     return ParticleLoopArgs<ARGS...>::get_local_size_args(this->sycl_target,
@@ -39,32 +41,6 @@ protected:
         size * ParticleLoopImplementation::get_kernel_num_bytes(this->kernel);
     this->profile_region.num_flops =
         size * ParticleLoopImplementation::get_kernel_num_flops(this->kernel);
-  }
-
-  /// recusively assemble the kernel arguments from the loop arguments
-  template <size_t INDEX, size_t SIZE>
-  static inline void create_kernel_args_inner(
-      ParticleLoopImplementation::ParticleLoopIteration &iterationx,
-      const loop_parameter_type &loop_args,
-      kernel_parameter_type &kernel_args) {
-
-    if constexpr (INDEX < SIZE) {
-      auto arg = Tuple::get<INDEX>(loop_args);
-      ParticleLoopImplementation::create_kernel_arg(
-          iterationx, arg, Tuple::get<INDEX>(kernel_args));
-      create_kernel_args_inner<INDEX + 1, SIZE>(iterationx, loop_args,
-                                                kernel_args);
-    }
-  }
-
-  /// called before kernel execution to assemble the kernel arguments.
-  static inline void create_kernel_args(
-      ParticleLoopImplementation::ParticleLoopIteration &iterationx,
-      const loop_parameter_type &loop_args,
-      kernel_parameter_type &kernel_args) {
-
-    create_kernel_args_inner<0, sizeof...(ARGS)>(iterationx, loop_args,
-                                                 kernel_args);
   }
 
 public:
@@ -249,8 +225,7 @@ public:
         this->event_stack.push(
             this->sycl_target->queue.submit([&](sycl::handler &cgh) {
               loop_parameter_type loop_args;
-              ParticleLoopArgs<ARGS...>::create_loop_args(cgh, loop_args,
-                                                          &global_info);
+              create_loop_args(cgh, loop_args, &global_info);
               cgh.parallel_for<>(blockx.loop_iteration_set, [=](sycl::nd_item<2>
                                                                     idx) {
                 std::size_t cell;
@@ -281,8 +256,7 @@ public:
         this->event_stack.push(
             sycl_target->queue.submit([&](sycl::handler &cgh) {
               loop_parameter_type loop_args;
-              ParticleLoopArgs<ARGS...>::create_loop_args(cgh, loop_args,
-                                                          &global_info);
+              create_loop_args(cgh, loop_args, &global_info);
               cgh.parallel_for<>(blockx.loop_iteration_set, [=](sycl::nd_item<2>
                                                                     idx) {
                 std::size_t cell;

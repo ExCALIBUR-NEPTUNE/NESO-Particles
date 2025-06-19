@@ -376,6 +376,76 @@ protected:
     particle_loop_args_stats_increment(args...);
 #endif
   }
+
+  /// recusively assemble the kernel arguments from the loop arguments
+  template <size_t INDEX, size_t SIZE>
+  static inline void create_kernel_args_inner(
+      ParticleLoopImplementation::ParticleLoopIteration &iterationx,
+      const loop_parameter_type &loop_args,
+      kernel_parameter_type &kernel_args) {
+
+    if constexpr (INDEX < SIZE) {
+      auto arg = Tuple::get<INDEX>(loop_args);
+      ParticleLoopImplementation::create_kernel_arg(
+          iterationx, arg, Tuple::get<INDEX>(kernel_args));
+      create_kernel_args_inner<INDEX + 1, SIZE>(iterationx, loop_args,
+                                                kernel_args);
+    }
+  }
+
+  /// called before kernel execution to assemble the kernel arguments.
+  static inline void create_kernel_args(
+      ParticleLoopImplementation::ParticleLoopIteration &iterationx,
+      const loop_parameter_type &loop_args,
+      kernel_parameter_type &kernel_args) {
+
+    create_kernel_args_inner<0, sizeof...(ARGS)>(iterationx, loop_args,
+                                                 kernel_args);
+  }
+
+  /// recusively assemble the kernel arguments from the loop arguments
+  template <size_t INDEX, size_t SIZE>
+  inline void reduction_initialise_inner(
+      sycl::nd_item<2> &idx,
+      ParticleLoopImplementation::ParticleLoopIteration &iterationx,
+      const loop_parameter_type &loop_args) {
+
+    if constexpr (INDEX < SIZE) {
+      auto arg = Tuple::get<INDEX>(loop_args);
+      ParticleLoopImplementation::reduction_initialise(idx, iterationx, arg);
+      reduction_initialise_inner<INDEX + 1, SIZE>(idx, iterationx, loop_args);
+    }
+  }
+
+  /// called before kernel execution to assemble the kernel arguments.
+  inline void reduction_initialise_dispatch(
+      sycl::nd_item<2> &idx,
+      ParticleLoopImplementation::ParticleLoopIteration &iterationx,
+      const loop_parameter_type &loop_args) {
+    reduction_initialise_inner<0, sizeof...(ARGS)>(idx, iterationx, loop_args);
+  }
+
+  /// recusively assemble the kernel arguments from the loop arguments
+  template <size_t INDEX, size_t SIZE>
+  inline void reduction_finalise_inner(
+      sycl::nd_item<2> &idx,
+      ParticleLoopImplementation::ParticleLoopIteration &iterationx,
+      const loop_parameter_type &loop_args) {
+
+    if constexpr (INDEX < SIZE) {
+      auto arg = Tuple::get<INDEX>(loop_args);
+      ParticleLoopImplementation::reduction_finalise(idx, iterationx, arg);
+      reduction_finalise_inner<INDEX + 1, SIZE>(idx, iterationx, loop_args);
+    }
+  }
+
+  /// called before kernel execution to assemble the kernel arguments.
+  inline void reduction_finalise_dispatch(
+      sycl::nd_item<2> &idx,
+      ParticleLoopImplementation::ParticleLoopIteration &iterationx,
+      const loop_parameter_type &loop_args) {
+    reduction_finalise_inner<0, sizeof...(ARGS)>(idx, iterationx, loop_args);
+  }
 };
 
 } // namespace NESO::Particles

@@ -103,7 +103,7 @@ public:
                   iterationx.cellx = loop_cellx;
                   iterationx.loop_layerx = loop_layerx;
 
-                  reduction_initialise_dispatch(idx, iterationx, loop_args);
+                  // reduction_initialise_dispatch(idx, iterationx, loop_args);
                   idx.barrier(sycl::access::fence_space::local_space);
 
                   if (block_device.work_item_required(loop_cell, loop_layer)) {
@@ -117,7 +117,7 @@ public:
                   }
 
                   idx.barrier(sycl::access::fence_space::local_space);
-                  reduction_finalise_dispatch(idx, iterationx, loop_args);
+                  // reduction_finalise_dispatch(idx, iterationx, loop_args);
                 });
           }));
     }

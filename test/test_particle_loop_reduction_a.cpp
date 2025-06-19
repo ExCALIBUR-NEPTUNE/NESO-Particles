@@ -137,3 +137,34 @@ TEST(ParticleLoopReduction, base) {
   sycl_target->free();
   mesh->free();
 }
+
+TEST(ParticleLoopReduction, base_sub_group) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  const int cell_count = mesh->get_cell_count();
+  auto sycl_target = A->sycl_target;
+
+  auto AA = particle_sub_group(A);
+
+  for (int dx = 1; dx < 8; dx++) {
+    wrapper_cdc_reduction_base<REAL>(AA, sycl_target, cell_count, dx);
+  }
+  for (int dx = 1; dx < 8; dx++) {
+    wrapper_cdc_reduction_base<INT>(AA, sycl_target, cell_count, dx);
+  }
+
+  auto aa = particle_sub_group(
+      A, [=](auto ID) { return ID.at(0) % 2 == 0; },
+      Access::read(Sym<INT>("ID")));
+
+  for (int dx = 1; dx < 8; dx++) {
+    wrapper_cdc_reduction_base<REAL>(aa, sycl_target, cell_count, dx);
+  }
+  for (int dx = 1; dx < 8; dx++) {
+    wrapper_cdc_reduction_base<INT>(aa, sycl_target, cell_count, dx);
+  }
+
+  sycl_target->free();
+  mesh->free();
+}
