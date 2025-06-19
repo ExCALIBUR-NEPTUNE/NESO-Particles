@@ -124,49 +124,16 @@ public:
   virtual inline void
   submit(const std::optional<int> cell_start = std::nullopt,
          const std::optional<int> cell_end = std::nullopt) override {
-    this->profiling_region_init();
 
-    NESOASSERT(
-        (!this->loop_running) || (cell_start != std::nullopt),
-        "ParticleLoop::submit called - but the loop is already submitted.");
-    this->loop_running = true;
+    ParticleLoopImplementation::ParticleLoopGlobalInfo global_info;
 
-    int cell_start_v = -1;
-    int cell_end_v = -1;
-    const bool all_cells = determine_iteration_set(
-        this->ncell, cell_start, cell_end, &cell_start_v, &cell_end_v);
-
-    if (this->iteration_set_is_empty(cell_start, cell_end)) {
+    if (!this->prepare_submit(global_info, cell_start, cell_end)) {
       return;
     }
 
-    auto t0 = profile_timestamp();
-    auto global_info = this->create_global_info(cell_start, cell_end);
-    this->apply_pre_loop(global_info);
-
-    auto &is = this->iteration_set->iteration_set;
-
-    if (all_cells) {
-      const std::size_t nbin = this->sycl_target->parameters
-                                   ->template get<SizeTParameter>("LOOP_NBIN")
-                                   ->value;
-      // Num local bytes is already used to compute the local size
-      is = this->iteration_set->get_all_cells(nbin, global_info.local_size, 0);
-    } else {
-      // Num local bytes is already used to compute the local size
-      is = this->iteration_set->get_range_cell(cell_start_v, cell_end_v,
-                                               global_info.local_size, 0);
-    }
-
-    NESOASSERT(is_power_of_two(global_info.local_size),
-               "Local size is not a power of two.");
-
-    this->profiling_region_metrics(this->iteration_set->iteration_set_size);
     auto k_kernel = ParticleLoopImplementation::get_kernel(this->kernel);
-    this->sycl_target->profile_map.inc(
-        "ParticleLoop", "Init", 1, profile_elapsed(t0, profile_timestamp()));
 
-    for (auto &blockx : is) {
+    for (auto &blockx : this->iteration_set->iteration_set) {
       const auto block_device = blockx.block_device;
       this->event_stack.push(
           this->sycl_target->queue.submit([&](sycl::handler &cgh) {

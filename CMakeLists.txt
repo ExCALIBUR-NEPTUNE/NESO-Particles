@@ -255,6 +255,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/sub_group_selector_resource_stack_interface.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/particle_loop_sub_group.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/particle_loop_sub_group_functions.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/particle_loop_sub_group_reduction.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/cell_sub_group_selector.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/profiling.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/sycl_typedefs.hpp

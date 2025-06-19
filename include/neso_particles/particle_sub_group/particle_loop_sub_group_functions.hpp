@@ -2,6 +2,7 @@
 #define _NESO_PARTICLES_SUB_GROUP_PARTICLE_LOOP_SUB_GROUP_FUNCTIONS_HPP_
 
 #include "particle_loop_sub_group.hpp"
+#include "particle_loop_sub_group_reduction.hpp"
 
 namespace NESO::Particles {
 

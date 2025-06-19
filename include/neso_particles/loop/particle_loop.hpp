@@ -171,22 +171,12 @@ public:
                ARGS... args)
       : ParticleLoop("unnamed_kernel", particle_dat, kernel, args...) {}
 
-  /**
-   *  Launch the ParticleLoop and return. Must be called collectively over the
-   *  MPI communicator of the ParticleGroup. Loop execution is complete when
-   *  the corresponding call to wait returns.
-   *
-   *  submit() Launches the ParticleLoop over all cells.
-   *  submit(i) Launches the ParticleLoop over cell i.
-   *  submit(i, i+4) Launches the ParticleLoop over cells i, i+1, i+2, i+3.
-   *  Note cell_end itself is not visited.
-   *
-   *  @param cell_start Optional starting cell to launch the ParticleLoop over.
-   *  @param cell_end Optional ending cell to launch the ParticleLoop over.
-   */
-  virtual inline void
-  submit(const std::optional<int> cell_start = std::nullopt,
-         const std::optional<int> cell_end = std::nullopt) override {
+protected:
+  inline bool prepare_submit(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo &global_info,
+      const std::optional<int> cell_start = std::nullopt,
+      const std::optional<int> cell_end = std::nullopt) {
+
     this->profiling_region_init();
 
     NESOASSERT(
@@ -200,11 +190,11 @@ public:
         this->ncell, cell_start, cell_end, &cell_start_v, &cell_end_v);
 
     if (this->iteration_set_is_empty(cell_start, cell_end)) {
-      return;
+      return false;
     }
 
     auto t0 = profile_timestamp();
-    auto global_info = this->create_global_info(cell_start, cell_end);
+    global_info = this->create_global_info(cell_start, cell_end);
     this->apply_pre_loop(global_info);
 
     auto &is = this->iteration_set->iteration_set;
@@ -222,11 +212,38 @@ public:
     }
 
     this->profiling_region_metrics(this->iteration_set->iteration_set_size);
-    auto k_kernel = ParticleLoopImplementation::get_kernel(this->kernel);
     this->sycl_target->profile_map.inc(
         "ParticleLoop", "Init", 1, profile_elapsed(t0, profile_timestamp()));
+    return true;
+  }
 
-    for (auto &blockx : is) {
+public:
+  /**
+   *  Launch the ParticleLoop and return. Must be called collectively over the
+   *  MPI communicator of the ParticleGroup. Loop execution is complete when
+   *  the corresponding call to wait returns.
+   *
+   *  submit() Launches the ParticleLoop over all cells.
+   *  submit(i) Launches the ParticleLoop over cell i.
+   *  submit(i, i+4) Launches the ParticleLoop over cells i, i+1, i+2, i+3.
+   *  Note cell_end itself is not visited.
+   *
+   *  @param cell_start Optional starting cell to launch the ParticleLoop over.
+   *  @param cell_end Optional ending cell to launch the ParticleLoop over.
+   */
+  virtual inline void
+  submit(const std::optional<int> cell_start = std::nullopt,
+         const std::optional<int> cell_end = std::nullopt) override {
+
+    ParticleLoopImplementation::ParticleLoopGlobalInfo global_info;
+
+    if (!this->prepare_submit(global_info, cell_start, cell_end)) {
+      return;
+    }
+
+    auto k_kernel = ParticleLoopImplementation::get_kernel(this->kernel);
+
+    for (auto &blockx : this->iteration_set->iteration_set) {
       const auto block_device = blockx.block_device;
       auto lambda_dispatch = [&]() {
         this->event_stack.push(

@@ -434,6 +434,9 @@ pre_loop(ParticleLoopGlobalInfo *global_info,
   auto sycl_target = a.obj->sycl_target;
   const auto local_size = global_info->local_size;
 
+  NESOASSERT(is_power_of_two(global_info->local_size),
+             "Local size is not a power of two.");
+
   const auto nrow = a.obj->nrow;
   const auto ncol = a.obj->ncol;
   const auto num_elements_total = nrow * ncol * local_size;
