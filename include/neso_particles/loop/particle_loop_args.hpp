@@ -405,7 +405,7 @@ protected:
 
   /// recusively assemble the kernel arguments from the loop arguments
   template <size_t INDEX, size_t SIZE>
-  inline void reduction_initialise_inner(
+  static inline void reduction_initialise_inner(
       sycl::nd_item<2> &idx,
       ParticleLoopImplementation::ParticleLoopIteration &iterationx,
       const loop_parameter_type &loop_args) {
@@ -418,7 +418,7 @@ protected:
   }
 
   /// called before kernel execution to assemble the kernel arguments.
-  inline void reduction_initialise_dispatch(
+  static inline void reduction_initialise_dispatch(
       sycl::nd_item<2> &idx,
       ParticleLoopImplementation::ParticleLoopIteration &iterationx,
       const loop_parameter_type &loop_args) {
@@ -427,7 +427,7 @@ protected:
 
   /// recusively assemble the kernel arguments from the loop arguments
   template <size_t INDEX, size_t SIZE>
-  inline void reduction_finalise_inner(
+  static inline void reduction_finalise_inner(
       sycl::nd_item<2> &idx,
       ParticleLoopImplementation::ParticleLoopIteration &iterationx,
       const loop_parameter_type &loop_args) {
@@ -440,7 +440,7 @@ protected:
   }
 
   /// called before kernel execution to assemble the kernel arguments.
-  inline void reduction_finalise_dispatch(
+  static inline void reduction_finalise_dispatch(
       sycl::nd_item<2> &idx,
       ParticleLoopImplementation::ParticleLoopIteration &iterationx,
       const loop_parameter_type &loop_args) {
