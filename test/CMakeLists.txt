@@ -32,6 +32,7 @@ set(TEST_SRCS
     ${TEST_DIR}/test_ephemeral_dats.cpp
     ${TEST_DIR}/test_error_propagate.cpp
     ${TEST_DIR}/test_examples.cpp
+    ${TEST_DIR}/test_examples_b.cpp
     ${TEST_DIR}/test_external_common.cpp
     ${TEST_DIR}/test_global_array.cpp
     ${TEST_DIR}/test_int_key_value_map.cpp

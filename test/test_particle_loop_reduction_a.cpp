@@ -202,15 +202,14 @@ particle_loop_reduction(const std::string name,
 template <typename KERNEL, typename... ARGS>
 [[nodiscard]] inline ParticleLoopSharedPtr
 particle_loop_reduction(const std::string name,
-                        ParticleSubGroupSharedPtr particle_sub_group, KERNEL kernel,
-                        ARGS... args) {
+                        ParticleSubGroupSharedPtr particle_sub_group,
+                        KERNEL kernel, ARGS... args) {
   auto p = std::make_shared<ParticleLoopSubGroupReduction<KERNEL, ARGS...>>(
       name, particle_sub_group, kernel, args...);
   auto b = std::dynamic_pointer_cast<ParticleLoopBase>(p);
   NESOASSERT(b != nullptr, "ParticleLoop pointer cast failed.");
   return b;
 }
-
 
 TEST(ParticleLoopReduction, benchmark) {
   const int N = 1000000;
