@@ -120,11 +120,13 @@ protected:
                                    ->template get<SizeTParameter>("LOOP_NBIN")
                                    ->value;
       // Num local bytes is already used to compute the local size
-      is = this->iteration_set->get_all_cells(nbin, global_info.local_size, 0);
+      is = this->iteration_set->get_all_cells(nbin, global_info.local_size, 0,
+                                              this->iteration_set_stride);
     } else {
       // Num local bytes is already used to compute the local size
       is = this->iteration_set->get_range_cell(cell_start_v, cell_end_v,
-                                               global_info.local_size, 0);
+                                               global_info.local_size, 0,
+                                               this->iteration_set_stride);
     }
 
     this->sycl_target->profile_map.inc(
