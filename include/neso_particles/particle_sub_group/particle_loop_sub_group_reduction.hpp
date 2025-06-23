@@ -75,6 +75,8 @@ public:
   submit(const std::optional<int> cell_start = std::nullopt,
          const std::optional<int> cell_end = std::nullopt) override {
 
+    this->iteration_set_stride = NESO_PARTICLES_LOOP_STRIDE;
+
     ParticleSubGroupImplementation::MapLoopLayerToLayer
         k_map_cells_to_particles;
     ParticleLoopImplementation::ParticleLoopGlobalInfo global_info;
@@ -96,26 +98,32 @@ public:
                 blockx.loop_iteration_set, [=](sycl::nd_item<2> idx) {
                   std::size_t loop_cell;
                   std::size_t loop_layer;
-                  block_device.get_cell_layer(idx, &loop_cell, &loop_layer);
-                  const int loop_cellx = static_cast<int>(loop_cell);
-                  const int loop_layerx = static_cast<int>(loop_layer);
                   ParticleLoopImplementation::ParticleLoopIteration iterationx;
                   iterationx.local_sycl_index = idx.get_local_id(1);
                   iterationx.local_sycl_range = idx.get_local_range(1);
-                  iterationx.cellx = loop_cellx;
-                  iterationx.loop_layerx = loop_layerx;
-
                   reduction_initialise_dispatch(idx, iterationx, loop_args);
                   idx.barrier(sycl::access::fence_space::local_space);
 
-                  if (block_device.work_item_required(loop_cell, loop_layer)) {
-                    const int layer = static_cast<int>(
-                        k_map_cells_to_particles.map_loop_layer_to_layer(
-                            loop_cell, loop_layer));
-                    iterationx.layerx = layer;
-                    kernel_parameter_type kernel_args;
-                    create_kernel_args(iterationx, loop_args, kernel_args);
-                    Tuple::apply(k_kernel, kernel_args);
+                  for (std::size_t stridex = 0;
+                       stridex < NESO_PARTICLES_LOOP_STRIDE; stridex++) {
+                    block_device.get_interlaced_cell_layer(
+                        idx, stridex, &loop_cell, &loop_layer);
+
+                    const int loop_cellx = static_cast<int>(loop_cell);
+                    const int loop_layerx = static_cast<int>(loop_layer);
+                    iterationx.cellx = loop_cellx;
+                    iterationx.loop_layerx = loop_layerx;
+
+                    if (block_device.work_item_required(loop_cell,
+                                                        loop_layer)) {
+                      const int layer = static_cast<int>(
+                          k_map_cells_to_particles.map_loop_layer_to_layer(
+                              loop_cell, loop_layer));
+                      iterationx.layerx = layer;
+                      kernel_parameter_type kernel_args;
+                      create_kernel_args(iterationx, loop_args, kernel_args);
+                      Tuple::apply(k_kernel, kernel_args);
+                    }
                   }
 
                   idx.barrier(sycl::access::fence_space::local_space);

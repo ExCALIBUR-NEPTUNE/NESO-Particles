@@ -82,29 +82,45 @@ void wrapper_cdc_reduction_base(GROUP_TYPE A, SYCLTargetSharedPtr sycl_target,
 
   particle_loop(
       A,
-      [=](auto V, auto CDC) {
+      [=](auto V, auto CDC, auto LOOP_INDEX) {
         for (int dx = 0; dx < ncomp; dx++) {
           CDC.combine(dx, 0, V.at(dx % 3));
         }
         for (int dx = 0; dx < ncomp; dx++) {
           CDC.combine(dx, 1, V.at(dx % 3) + 0.1 * dx);
         }
+        LOOP_INDEX.at(0) = 4;
       },
-      Access::read(Sym<REAL>("V")), Access::reduce(Vto_test, Kernel::plus<T>{}))
+      Access::read(Sym<REAL>("V")), Access::reduce(Vto_test, Kernel::plus<T>{}),
+      Access::write(Sym<INT>("LOOP_INDEX")))
       ->execute();
 
   particle_loop(
       A,
-      [=](auto V, auto CDC) {
+      [=](auto V, auto CDC, auto LOOP_INDEX) {
         for (int dx = 0; dx < ncomp; dx++) {
           CDC.fetch_add(dx, 0, V.at(dx % 3));
         }
         for (int dx = 0; dx < ncomp; dx++) {
           CDC.fetch_add(dx, 1, V.at(dx % 3) + 0.1 * dx);
         }
+        LOOP_INDEX.at(1) = 4;
       },
-      Access::read(Sym<REAL>("V")), Access::add(Vcorrect))
+      Access::read(Sym<REAL>("V")), Access::add(Vcorrect),
+      Access::write(Sym<INT>("LOOP_INDEX")))
       ->execute();
+
+  auto ep = ErrorPropagate(sycl_target);
+  auto k_ep = ep.device_ptr();
+  particle_loop(
+      A,
+      [=](auto LOOP_INDEX) {
+        NESO_KERNEL_ASSERT(LOOP_INDEX.at(1) == LOOP_INDEX.at(0), k_ep);
+        ;
+      },
+      Access::read(Sym<INT>("LOOP_INDEX")))
+      ->execute();
+  ASSERT_FALSE(ep.get_flag());
 
   auto correct = Vcorrect->get_all_cells();
   auto to_test = Vto_test->get_all_cells();
@@ -190,8 +206,6 @@ TEST(ParticleLoopReduction, benchmark) {
   auto mesh = domain->mesh;
   auto sycl_target = A->sycl_target;
   const int cell_count = mesh->get_cell_count();
-
-  nprint_variable(sycl_target->device_limits.get_native_vector_width_real());
 
   const int ncomp = 3;
 
