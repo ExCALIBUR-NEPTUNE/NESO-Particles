@@ -162,6 +162,26 @@ struct BlockedBinaryNode {
   }
 
   /**
+   *  For a given key find and return the stored value.
+   *
+   *  @param[in] key Input global key to retrieve value for.
+   *  @param[in, out] value_ptr Pointer to value, only valid if the key is
+   * found.
+   *  @returns True if the key is found in the tree otherwise false.
+   */
+  inline bool get(const KEY_TYPE key, VALUE_TYPE const **value_ptr) {
+    VALUE_TYPE *value_location;
+    bool *leaf_set;
+    const bool exists = this->get_location(key, &leaf_set, &value_location);
+    if (exists && (*leaf_set)) {
+      *value_ptr = value_location;
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  /**
    *  For a given key store the corresponding value in the tree. This function
    *  assumes that the node is already allocated and placed in the tree
    *  according to the node_key.
