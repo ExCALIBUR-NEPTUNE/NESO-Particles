@@ -226,8 +226,7 @@ TEST(BlockedBinaryTree, particle_loop) {
   };
 
   // ValueType can be any type usable on device.
-  auto bbt =
-      std::make_shared<BlockedBinaryTree<int, ValueType, 8>>(sycl_target);
+  auto bbt = std::make_shared<BlockedBinaryTree<int, ValueType>>(sycl_target);
 
   // push data into the Tree
   for (int ix = 0; ix < Nkeys; ix++) {

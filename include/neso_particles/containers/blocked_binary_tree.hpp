@@ -7,6 +7,10 @@
 #include <set>
 #include <type_traits>
 
+#ifndef NESO_PARTICLES_BLOCKED_BINARY_TREE_WIDTH
+#define NESO_PARTICLES_BLOCKED_BINARY_TREE_WIDTH 8
+#endif
+
 namespace NESO::Particles {
 
 /**
@@ -237,7 +241,8 @@ struct BlockedBinaryNode {
  *  Create a blocked key-value map with a given block size. This class creates
  *  the tree and provides methods to get and set key-value pairs.
  */
-template <typename KEY_TYPE, typename VALUE_TYPE, INT WIDTH>
+template <typename KEY_TYPE, typename VALUE_TYPE,
+          INT WIDTH = NESO_PARTICLES_BLOCKED_BINARY_TREE_WIDTH>
 class BlockedBinaryTree {
 protected:
   std::map<KEY_TYPE, BlockedBinaryNode<KEY_TYPE, VALUE_TYPE, WIDTH> *> nodes;
