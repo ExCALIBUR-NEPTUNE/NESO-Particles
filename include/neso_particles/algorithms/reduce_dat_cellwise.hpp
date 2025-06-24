@@ -417,6 +417,38 @@ extern template void reduce_dat_components_cellwise(
     ParticleSubGroupSharedPtr particle_group, Sym<INT> sym,
     CellDatConstSharedPtr<INT> cell_dat_const, Kernel::plus<INT> op);
 
+extern template void reduce_dat_components_cellwise(
+    ParticleGroupSharedPtr particle_group, Sym<REAL> sym,
+    CellDatConstSharedPtr<REAL> cell_dat_const, Kernel::minimum<REAL> op);
+
+extern template void reduce_dat_components_cellwise(
+    ParticleGroupSharedPtr particle_group, Sym<INT> sym,
+    CellDatConstSharedPtr<INT> cell_dat_const, Kernel::minimum<INT> op);
+
+extern template void reduce_dat_components_cellwise(
+    ParticleSubGroupSharedPtr particle_group, Sym<REAL> sym,
+    CellDatConstSharedPtr<REAL> cell_dat_const, Kernel::minimum<REAL> op);
+
+extern template void reduce_dat_components_cellwise(
+    ParticleSubGroupSharedPtr particle_group, Sym<INT> sym,
+    CellDatConstSharedPtr<INT> cell_dat_const, Kernel::minimum<INT> op);
+
+extern template void reduce_dat_components_cellwise(
+    ParticleGroupSharedPtr particle_group, Sym<REAL> sym,
+    CellDatConstSharedPtr<REAL> cell_dat_const, Kernel::maximum<REAL> op);
+
+extern template void reduce_dat_components_cellwise(
+    ParticleGroupSharedPtr particle_group, Sym<INT> sym,
+    CellDatConstSharedPtr<INT> cell_dat_const, Kernel::maximum<INT> op);
+
+extern template void reduce_dat_components_cellwise(
+    ParticleSubGroupSharedPtr particle_group, Sym<REAL> sym,
+    CellDatConstSharedPtr<REAL> cell_dat_const, Kernel::maximum<REAL> op);
+
+extern template void reduce_dat_components_cellwise(
+    ParticleSubGroupSharedPtr particle_group, Sym<INT> sym,
+    CellDatConstSharedPtr<INT> cell_dat_const, Kernel::maximum<INT> op);
+
 } // namespace NESO::Particles
 
 #endif
