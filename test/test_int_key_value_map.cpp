@@ -225,7 +225,9 @@ TEST(BlockedBinaryTree, particle_loop) {
     int a;
   };
 
-  // ValueType can be any type usable on device.
+  // ValueType can be any type usable on device. Note that there is a default
+  // template argument here for the block width, i.e. the full type is
+  // BlockedBinaryTree<int, ValueType, NESO_PARTICLES_BLOCKED_BINARY_TREE_WIDTH>
   auto bbt = std::make_shared<BlockedBinaryTree<int, ValueType>>(sycl_target);
 
   // push data into the Tree
