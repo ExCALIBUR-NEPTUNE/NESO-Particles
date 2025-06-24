@@ -43,10 +43,11 @@ protected:
         "DMPlexProjectEvaluateDG::project_0", particle_sub_group,
         [=](auto SRC, auto DST) {
           for (int cx = 0; cx < ncomp; cx++) {
-            DST.fetch_add(cx, 0, SRC.at(cx));
+            DST.combine(cx, 0, SRC.at(cx));
           }
         },
-        Access::read(sym), Access::add(this->cdc_project))
+        Access::read(sym),
+        Access::reduce(this->cdc_project, Kernel::plus<REAL>()))
         ->execute();
 
     // Read the CellDatConst values onto the quadrature point values

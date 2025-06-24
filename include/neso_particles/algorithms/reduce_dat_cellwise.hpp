@@ -366,7 +366,7 @@ void reduce_dat_components_cellwise(
   const auto nrow = cell_dat_const->nrow;
   const auto ncol = cell_dat_const->ncol;
   auto cell_dat_const_nelements = nrow * ncol;
-  NESOASSERT(dat_ncomp == cell_dat_const_nelements,
+  NESOASSERT(dat_ncomp >= cell_dat_const_nelements,
              "Missmatch between the number of particle components: " +
                  std::to_string(dat_ncomp) +
                  " and the matrix size of the CellDatConst: " +
