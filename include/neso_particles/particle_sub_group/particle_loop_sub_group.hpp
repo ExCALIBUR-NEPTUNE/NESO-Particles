@@ -73,22 +73,13 @@ public:
       : ParticleLoopSubGroup("unnamed_kernel", particle_sub_group, kernel,
                              args...) {}
 
-  /**
-   *  Launch the ParticleLoop and return. Must be called collectively over the
-   *  MPI communicator of the ParticleGroup. Loop execution is complete when
-   *  the corresponding call to wait returns.
-   *
-   *  submit() Launches the ParticleLoop over all cells.
-   *  submit(i) Launches the ParticleLoop over cell i.
-   *  submit(i, i+4) Launches the ParticleLoop over cells i, i+1, i+2, i+3.
-   *  Note cell_end itself is not visited.
-   *
-   *  @param cell_start Optional starting cell to launch the ParticleLoop over.
-   *  @param cell_end Optional ending cell to launch the ParticleLoop over.
-   */
-  virtual inline void
-  submit(const std::optional<int> cell_start = std::nullopt,
-         const std::optional<int> cell_end = std::nullopt) override {
+protected:
+  inline bool prepare_submit(
+      ParticleSubGroupImplementation::MapLoopLayerToLayer
+          &k_map_cells_to_particles,
+      ParticleLoopImplementation::ParticleLoopGlobalInfo &global_info,
+      const std::optional<int> cell_start = std::nullopt,
+      const std::optional<int> cell_end = std::nullopt) {
     auto t0 = profile_timestamp();
     this->profiling_region_init();
 
@@ -110,18 +101,16 @@ public:
         this->ncell, cell_start, cell_end, &cell_start_v, &cell_end_v);
 
     if (this->iteration_set_is_empty(cell_start, cell_end)) {
-      return;
+      return false;
     }
 
     auto selection = this->particle_sub_group->get_selection();
     this->setup_subgroup_is(selection);
+    k_map_cells_to_particles = selection.d_map_cells_to_particles;
 
-    auto global_info = this->create_global_info(cell_start, cell_end);
+    global_info = this->create_global_info(cell_start, cell_end);
     global_info.particle_sub_group = this->particle_sub_group.get();
     this->apply_pre_loop(global_info);
-
-    auto k_kernel = ParticleLoopImplementation::get_kernel(this->kernel);
-    auto k_map_cells_to_particles = selection.d_map_cells_to_particles;
 
     this->profiling_region_metrics(this->iteration_set->iteration_set_size);
 
@@ -131,18 +120,52 @@ public:
                                    ->template get<SizeTParameter>("LOOP_NBIN")
                                    ->value;
       // Num local bytes is already used to compute the local size
-      is = this->iteration_set->get_all_cells(nbin, global_info.local_size, 0);
+      is = this->iteration_set->get_all_cells(nbin, global_info.local_size, 0,
+                                              this->iteration_set_stride);
     } else {
       // Num local bytes is already used to compute the local size
       is = this->iteration_set->get_range_cell(cell_start_v, cell_end_v,
-                                               global_info.local_size, 0);
+                                               global_info.local_size, 0,
+                                               this->iteration_set_stride);
     }
 
     this->sycl_target->profile_map.inc(
         "ParticleLoopSubGroup", "Init", 1,
         profile_elapsed(t0, profile_timestamp()));
 
-    for (auto &blockx : is) {
+    return true;
+  }
+
+public:
+  /**
+   *  Launch the ParticleLoop and return. Must be called collectively over the
+   *  MPI communicator of the ParticleGroup. Loop execution is complete when
+   *  the corresponding call to wait returns.
+   *
+   *  submit() Launches the ParticleLoop over all cells.
+   *  submit(i) Launches the ParticleLoop over cell i.
+   *  submit(i, i+4) Launches the ParticleLoop over cells i, i+1, i+2, i+3.
+   *  Note cell_end itself is not visited.
+   *
+   *  @param cell_start Optional starting cell to launch the ParticleLoop over.
+   *  @param cell_end Optional ending cell to launch the ParticleLoop over.
+   */
+  virtual inline void
+  submit(const std::optional<int> cell_start = std::nullopt,
+         const std::optional<int> cell_end = std::nullopt) override {
+
+    ParticleSubGroupImplementation::MapLoopLayerToLayer
+        k_map_cells_to_particles;
+    ParticleLoopImplementation::ParticleLoopGlobalInfo global_info;
+
+    if (!this->prepare_submit(k_map_cells_to_particles, global_info, cell_start,
+                              cell_end)) {
+      return;
+    }
+
+    auto k_kernel = ParticleLoopImplementation::get_kernel(this->kernel);
+
+    for (auto &blockx : this->iteration_set->iteration_set) {
       const auto block_device = blockx.block_device;
 
       auto lambda_dispatch = [&]() {
@@ -211,67 +234,6 @@ public:
     }
   }
 };
-
-/**
- *  Create a ParticleLoop that executes a kernel for all particles in the
- * ParticleSubGroup.
- *
- *  @param particle_group ParticleSubGroup to execute kernel for all particles.
- *  @param kernel Kernel to execute for all particles in the ParticleSubGroup.
- *  @param args The remaining arguments are arguments to be passed to the
- *              kernel. All arguments must be wrapped in an access descriptor
- * type.
- */
-template <typename KERNEL, typename... ARGS>
-[[nodiscard]] inline ParticleLoopSharedPtr
-particle_loop(ParticleSubGroupSharedPtr particle_group, KERNEL kernel,
-              ARGS... args) {
-  if (particle_group->is_entire_particle_group()) {
-    auto p = std::make_shared<ParticleLoop<KERNEL, ARGS...>>(
-        "unnamed_kernel", particle_group->get_particle_group(), particle_group,
-        kernel, args...);
-    auto b = std::dynamic_pointer_cast<ParticleLoopBase>(p);
-    NESOASSERT(b != nullptr, "ParticleLoop pointer cast failed.");
-    return b;
-  } else {
-    auto p = std::make_shared<ParticleLoopSubGroup<KERNEL, ARGS...>>(
-        particle_group, kernel, args...);
-    auto b = std::dynamic_pointer_cast<ParticleLoopBase>(p);
-    NESOASSERT(b != nullptr, "ParticleLoop pointer cast failed.");
-    return b;
-  }
-}
-
-/**
- *  Create a ParticleLoop that executes a kernel for all particles in the
- * ParticleSubGroup.
- *
- *  @param name Identifier for particle loop.
- *  @param particle_group ParticleSubGroup to execute kernel for all particles.
- *  @param kernel Kernel to execute for all particles in the ParticleSubGroup.
- *  @param args The remaining arguments are arguments to be passed to the
- *              kernel. All arguments must be wrapped in an access descriptor
- * type.
- */
-template <typename KERNEL, typename... ARGS>
-[[nodiscard]] inline ParticleLoopSharedPtr
-particle_loop(const std::string name, ParticleSubGroupSharedPtr particle_group,
-              KERNEL kernel, ARGS... args) {
-  if (particle_group->is_entire_particle_group()) {
-    auto p = std::make_shared<ParticleLoop<KERNEL, ARGS...>>(
-        name, particle_group->get_particle_group(), particle_group, kernel,
-        args...);
-    auto b = std::dynamic_pointer_cast<ParticleLoopBase>(p);
-    NESOASSERT(b != nullptr, "ParticleLoop pointer cast failed.");
-    return b;
-  } else {
-    auto p = std::make_shared<ParticleLoopSubGroup<KERNEL, ARGS...>>(
-        name, particle_group, kernel, args...);
-    auto b = std::dynamic_pointer_cast<ParticleLoopBase>(p);
-    NESOASSERT(b != nullptr, "ParticleLoop pointer cast failed.");
-    return b;
-  }
-}
 
 } // namespace NESO::Particles
 

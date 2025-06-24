@@ -143,6 +143,7 @@ CellDatConst and CellDat
 
 The CellDatConst data structure stores a constant sized matrix per mesh cell.
 When accessed from a particle loop both the read and add access descriptors expose the matrix which corresponds to the cell in which the particle resides.
+To reduce particle data cell wise please visit the section on CellDatConst reductions.
 
 .. literalinclude:: ../example_sources/example_particle_loop_cell_dat_const.hpp
    :language: cpp
@@ -182,6 +183,21 @@ When accessed from a particle loop both the read and add access descriptors expo
    * - Write
      - Access::CellDat::Write<T>
      - Write using a modifiable reference provided by .at(row, col). It is the users responsibility that no write conflicts or race conditions occur.
+
+CellDatConst Reductions
+~~~~~~~~~~~~~~~~~~~~~~~
+
+We provide a "reduce" access mode for CellDatConst data structures which allows users to express cell wise map-reduce style algorithms in terms of particle loops.
+Unlike the "add" access descriptor the "reduce" access descriptor does not perform an atomic fetch-add operation for each kernel invocation and allows the implementation to defer combining elements until a later point in time. 
+We do not define an order in which the reductions are made.
+
+In the example below we create and execute a particle loop using the "reduce" access descriptor. This particle loop construct allows particle data to be modified prior to the reduction.
+For example particle data can be re-weighted before the reduction.
+We also provide a helper function which reduces particle data cell wise bypassing the particle loop interface which allows further optimisations to be made.
+
+.. literalinclude:: ../example_sources/example_particle_loop_cell_dat_const_reduction.hpp
+   :language: cpp
+   :caption: Particle loop example where a CellDatConst is accessed by the ParticleLoop and performs cell wise reductions of particle data.
 
 SymVector
 ~~~~~~~~~

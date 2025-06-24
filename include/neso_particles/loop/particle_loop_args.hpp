@@ -148,11 +148,25 @@ struct LoopParameter<T<std::shared_ptr<U>>, V> {
   using type = typename LoopParameter<T<U>, V>::type;
 };
 /**
+ * Catch Access::Reduction around shared pointers.
+ */
+template <template <typename> typename T, typename U, typename OP>
+struct LoopParameter<Access::Reduction<std::shared_ptr<T<U>>, OP>> {
+  using type = typename LoopParameter<Access::Reduction<T<U>, OP>>::type;
+};
+/**
  * Catch all for args passed as shared ptrs
  */
 template <template <typename> typename T, typename U, typename V>
 struct KernelParameter<T<std::shared_ptr<U>>, V> {
   using type = typename KernelParameter<T<U>, V>::type;
+};
+/**
+ * Catch Access::Reduction around shared pointers.
+ */
+template <template <typename> typename T, typename U, typename OP>
+struct KernelParameter<Access::Reduction<std::shared_ptr<T<U>>, OP>> {
+  using type = typename KernelParameter<Access::Reduction<T<U>, OP>>::type;
 };
 
 } // namespace ParticleLoopImplementation
@@ -215,6 +229,14 @@ protected:
       sycl::handler &cgh, T<U> a);
 
   /**
+   * Method to compute access to a Reduction type.
+   */
+  template <template <typename> typename T, typename U, typename OP>
+  inline auto create_loop_arg_cast(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      sycl::handler &cgh, Access::Reduction<std::shared_ptr<T<U>>, OP> a);
+
+  /**
    * Method to compute access to a type wrapped in a shared_ptr.
    */
   template <template <typename> typename T, typename U>
@@ -227,6 +249,15 @@ protected:
   template <template <typename> typename T, typename U>
   static inline auto post_loop_cast(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info, T<U> a);
+
+  /**
+   * Pre loop cast for reduction access
+   */
+  template <template <typename> typename T, typename U, typename OP>
+  static inline void post_loop_cast(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      Access::Reduction<std::shared_ptr<T<U>>, OP> a);
+
   /**
    * Method to compute access to a type wrapped in a shared_ptr.
    */
@@ -241,6 +272,15 @@ protected:
   inline void
   pre_loop_cast(ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
                 T<U> a);
+
+  /**
+   * Pre loop cast for reduction access
+   */
+  template <template <typename> typename T, typename U, typename OP>
+  inline void
+  pre_loop_cast(ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+                Access::Reduction<std::shared_ptr<T<U>>, OP> a);
+
   /**
    * Method to compute access to a type wrapped in a shared_ptr.
    */
@@ -248,6 +288,14 @@ protected:
   static inline std::size_t local_mem_loop_cast(T<std::shared_ptr<U>> a) {
     T<U *> c = {a.obj.get()};
     return ParticleLoopImplementation::get_required_local_num_bytes(c);
+  }
+  /**
+   * Method to compute access to a Reduction type wrapped in a shared_ptr.
+   */
+  template <template <typename> typename T, typename U, typename OP>
+  static inline std::size_t
+  local_mem_loop_cast(Access::Reduction<std::shared_ptr<T<U>>, OP> a) {
+    return ParticleLoopImplementation::get_required_local_num_bytes(a);
   }
   /**
    * Method to compute access to a type not wrapper in a shared_ptr
@@ -327,6 +375,76 @@ protected:
 #ifdef NESO_PARTICLES_PARTICLE_LOOP_ARGS_STATS
     particle_loop_args_stats_increment(args...);
 #endif
+  }
+
+  /// recusively assemble the kernel arguments from the loop arguments
+  template <size_t INDEX, size_t SIZE>
+  static inline void create_kernel_args_inner(
+      ParticleLoopImplementation::ParticleLoopIteration &iterationx,
+      const loop_parameter_type &loop_args,
+      kernel_parameter_type &kernel_args) {
+
+    if constexpr (INDEX < SIZE) {
+      auto arg = Tuple::get<INDEX>(loop_args);
+      ParticleLoopImplementation::create_kernel_arg(
+          iterationx, arg, Tuple::get<INDEX>(kernel_args));
+      create_kernel_args_inner<INDEX + 1, SIZE>(iterationx, loop_args,
+                                                kernel_args);
+    }
+  }
+
+  /// called before kernel execution to assemble the kernel arguments.
+  static inline void create_kernel_args(
+      ParticleLoopImplementation::ParticleLoopIteration &iterationx,
+      const loop_parameter_type &loop_args,
+      kernel_parameter_type &kernel_args) {
+
+    create_kernel_args_inner<0, sizeof...(ARGS)>(iterationx, loop_args,
+                                                 kernel_args);
+  }
+
+  /// recusively assemble the kernel arguments from the loop arguments
+  template <size_t INDEX, size_t SIZE>
+  static inline void reduction_initialise_inner(
+      sycl::nd_item<2> &idx,
+      ParticleLoopImplementation::ParticleLoopIteration &iterationx,
+      const loop_parameter_type &loop_args) {
+
+    if constexpr (INDEX < SIZE) {
+      auto arg = Tuple::get<INDEX>(loop_args);
+      ParticleLoopImplementation::reduction_initialise(idx, iterationx, arg);
+      reduction_initialise_inner<INDEX + 1, SIZE>(idx, iterationx, loop_args);
+    }
+  }
+
+  /// called before kernel execution to assemble the kernel arguments.
+  static inline void reduction_initialise_dispatch(
+      sycl::nd_item<2> &idx,
+      ParticleLoopImplementation::ParticleLoopIteration &iterationx,
+      const loop_parameter_type &loop_args) {
+    reduction_initialise_inner<0, sizeof...(ARGS)>(idx, iterationx, loop_args);
+  }
+
+  /// recusively assemble the kernel arguments from the loop arguments
+  template <size_t INDEX, size_t SIZE>
+  static inline void reduction_finalise_inner(
+      sycl::nd_item<2> &idx,
+      ParticleLoopImplementation::ParticleLoopIteration &iterationx,
+      const loop_parameter_type &loop_args) {
+
+    if constexpr (INDEX < SIZE) {
+      auto arg = Tuple::get<INDEX>(loop_args);
+      ParticleLoopImplementation::reduction_finalise(idx, iterationx, arg);
+      reduction_finalise_inner<INDEX + 1, SIZE>(idx, iterationx, loop_args);
+    }
+  }
+
+  /// called before kernel execution to assemble the kernel arguments.
+  static inline void reduction_finalise_dispatch(
+      sycl::nd_item<2> &idx,
+      ParticleLoopImplementation::ParticleLoopIteration &iterationx,
+      const loop_parameter_type &loop_args) {
+    reduction_finalise_inner<0, sizeof...(ARGS)>(idx, iterationx, loop_args);
   }
 };
 

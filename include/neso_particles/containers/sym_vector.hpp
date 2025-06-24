@@ -183,7 +183,6 @@ protected:
 
 public:
   SymVector() = default;
-  SymVector<T> &operator=(const SymVector<T> &) = default;
 
   /**
    * The Sym<T> instances of this SymVector.

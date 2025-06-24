@@ -222,13 +222,14 @@ protected:
               for (int cx = 0; cx < ncomp; cx++) {
                 const REAL value = SRC.at(cx);
                 const REAL weight = MATRIX.at(vx, quad_index) * value;
-                DST.fetch_add(cx, vx, weight);
+                DST.combine(cx, vx, weight);
               }
             }
           }
         },
         Access::read(this->cdc_num_vertices), Access::read(this->cdc_matrices),
-        Access::read(source_dat), Access::add(this->cdc_project),
+        Access::read(source_dat),
+        Access::reduce(this->cdc_project, Kernel::plus<REAL>()),
         Access::read(Sym<INT>("ADDING_RANK_INDEX")))
         ->execute();
 
@@ -271,13 +272,13 @@ protected:
           for (int vx = 0; vx < num_vertices; vx++) {
             for (int cx = 0; cx < ncomp; cx++) {
               const REAL lx = B.at(vx);
-              DST.fetch_add(cx, vx, lx * SRC.at(cx));
+              DST.combine(cx, vx, lx * SRC.at(cx));
             }
           }
         },
         Access::read(sym_barycentric_coords),
         Access::read(this->cdc_num_vertices), Access::read(sym),
-        Access::add(this->cdc_project))
+        Access::reduce(this->cdc_project, Kernel::plus<REAL>()))
         ->execute();
 
     // Read the CellDatConst values onto the quadrature point values

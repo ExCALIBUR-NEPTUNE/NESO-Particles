@@ -32,6 +32,7 @@ set(TEST_SRCS
     ${TEST_DIR}/test_ephemeral_dats.cpp
     ${TEST_DIR}/test_error_propagate.cpp
     ${TEST_DIR}/test_examples.cpp
+    ${TEST_DIR}/test_examples_b.cpp
     ${TEST_DIR}/test_external_common.cpp
     ${TEST_DIR}/test_global_array.cpp
     ${TEST_DIR}/test_int_key_value_map.cpp
@@ -63,6 +64,7 @@ set(TEST_SRCS
     ${TEST_DIR}/test_particle_loop_local_array.cpp
     ${TEST_DIR}/test_particle_loop_local_memory.cpp
     ${TEST_DIR}/test_particle_loop_range_execute.cpp
+    ${TEST_DIR}/test_particle_loop_reduction_a.cpp
     ${TEST_DIR}/test_particle_loop_rng.cpp
     ${TEST_DIR}/test_particle_loop_rng_device_block.cpp
     ${TEST_DIR}/test_particle_loop_sym_vector.cpp

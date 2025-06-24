@@ -214,11 +214,13 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_args.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_base.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_functions.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_utility.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_index.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_iteration_set.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_args_impl.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_impl.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_reduction.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/pli_particle_dat.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_hierarchy.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_hierarchy_data/mesh_hierarchy_container.hpp
@@ -252,6 +254,8 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/sub_group_selector_utility.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/sub_group_selector_resource_stack_interface.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/particle_loop_sub_group.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/particle_loop_sub_group_functions.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/particle_loop_sub_group_reduction.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/cell_sub_group_selector.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/profiling.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/sycl_typedefs.hpp

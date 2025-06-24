@@ -4,6 +4,8 @@
 #include "device_atomic_sanity_check.hpp"
 #include "sycl_typedefs.hpp"
 #include "typedefs.hpp"
+#include <set>
+#include <vector>
 
 namespace NESO::Particles {
 
@@ -45,6 +47,7 @@ protected:
 public:
   sycl::device device;
   std::size_t local_mem_size;
+  std::set<std::vector<std::size_t>> validated_types;
 
   DeviceLimits() = default;
   DeviceLimits(sycl::device device) : device(device) {
@@ -57,6 +60,19 @@ public:
   }
 
   void print();
+
+  /**
+   * @returns The native vector width for REAL.
+   */
+  inline std::size_t get_native_vector_width_real() {
+    if constexpr (std::is_same_v<REAL, double>) {
+      return static_cast<std::size_t>(
+          device.get_info<sycl::info::device::native_vector_width_double>());
+    } else {
+      return static_cast<std::size_t>(
+          device.get_info<sycl::info::device::native_vector_width_float>());
+    }
+  }
 
   /**
    * Validate that a range is valid as a global work group.

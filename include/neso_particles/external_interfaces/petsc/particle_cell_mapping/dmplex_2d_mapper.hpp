@@ -5,7 +5,7 @@
 #include "../../../containers/lookup_table.hpp"
 #include "../../../error_propagate.hpp"
 #include "../../../local_mapping.hpp"
-#include "../../../loop/particle_loop.hpp"
+#include "../../../loop/particle_loop_functions.hpp"
 #include "../../../particle_group_impl.hpp"
 #include "../../common/overlay_cartesian_mesh.hpp"
 #include "../dmplex_interface.hpp"

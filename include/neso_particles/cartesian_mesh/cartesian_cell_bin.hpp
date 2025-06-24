@@ -4,7 +4,6 @@
 #include <cmath>
 
 #include "../domain.hpp"
-#include "../loop/particle_loop.hpp"
 #include "../particle_dat.hpp"
 #include "../profiling.hpp"
 #include "../sycl_typedefs.hpp"

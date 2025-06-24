@@ -1,6 +1,6 @@
 #include <neso_particles/common_impl.hpp>
 #include <neso_particles/departing_particle_identification.hpp>
-#include <neso_particles/loop/particle_loop.hpp>
+#include <neso_particles/loop/particle_loop_functions.hpp>
 
 namespace NESO::Particles {
 

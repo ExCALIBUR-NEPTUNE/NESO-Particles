@@ -4,7 +4,7 @@
 #include "../containers/local_array.hpp"
 #include "../containers/sym_vector.hpp"
 #include "../loop/cell_info_npart.hpp"
-#include "../loop/particle_loop.hpp"
+#include "../loop/particle_loop_functions.hpp"
 #include "../loop/particle_loop_impl.hpp"
 #include "../loop/particle_loop_index.hpp"
 #include "particle_sub_group_utility.hpp"

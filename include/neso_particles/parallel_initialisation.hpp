@@ -1,9 +1,7 @@
 #ifndef __NESO_PARTICLES_PARALLEL_INITIALISATION
 #define __NESO_PARTICLES_PARALLEL_INITIALISATION
 
-#include "loop/particle_loop.hpp"
 #include "particle_group.hpp"
-#include <memory>
 
 namespace NESO::Particles {
 

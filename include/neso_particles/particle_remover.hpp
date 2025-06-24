@@ -2,7 +2,7 @@
 #define _NESO_PARTICLES_PARTICLE_REMOVER
 
 #include "compute_target.hpp"
-#include "loop/particle_loop.hpp"
+#include "loop/particle_loop_functions.hpp"
 #include "particle_dat.hpp"
 #include "particle_group.hpp"
 #include "typedefs.hpp"
@@ -60,7 +60,7 @@ public:
     this->dh_remove_count.host_to_device();
     auto k_leave_count = this->dh_remove_count.d_buffer.ptr;
 
-    ParticleLoop(
+    particle_loop(
         "particle_remover_stage_0", particle_group,
         [=](auto compare_dat) {
           const T compare_value = compare_dat[0];
@@ -73,7 +73,7 @@ public:
           }
         },
         Access::read(particle_dat->sym))
-        .execute();
+        ->execute();
 
     // read from the device the number of particles to remove
     this->dh_remove_count.device_to_host();
@@ -89,7 +89,7 @@ public:
       auto k_remove_layers = this->d_remove_layers.ptr;
 
       // assemble the remove indices/layers
-      ParticleLoop(
+      particle_loop(
           "particle_remover_stage_1", particle_group,
           [=](auto loop_index, auto compare_dat) {
             const INT cellx = loop_index.cell;
@@ -106,7 +106,7 @@ public:
             }
           },
           Access::read(ParticleLoopIndex{}), Access::read(particle_dat->sym))
-          .execute();
+          ->execute();
 
       // remove the particles from the particle_group
       particle_group->remove_particles(remove_count, k_remove_cells,

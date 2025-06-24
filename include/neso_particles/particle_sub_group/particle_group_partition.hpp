@@ -2,8 +2,8 @@
 #define _NESO_PARTICLES_PARTICLE_SUB_GROUP_PARTICLE_GROUP_PARTITION_HPP_
 
 #include "../device_functions.hpp"
-#include "../loop/particle_loop.hpp"
 #include "../loop/particle_loop_base.hpp"
+#include "../loop/particle_loop_functions.hpp"
 #include "particle_sub_group_base.hpp"
 #include "sub_group_selector.hpp"
 

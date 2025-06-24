@@ -130,6 +130,22 @@ inline std::size_t get_kernel_num_flops([[maybe_unused]] T &kernel) {
   return 0;
 }
 
+/**
+ * The Reduction ParticleLoop implementations will call reduction_initialise for
+ * all SYCL work items before the kernel is launched.
+ */
+template <typename T>
+inline void reduction_initialise(sycl::nd_item<2> &, ParticleLoopIteration &,
+                                 T) {}
+
+/**
+ * The Reduction ParticleLoop implementations will call reduction_finalise for
+ * all SYCL work items after kernels have launched.
+ */
+template <typename T>
+inline void reduction_finalise(sycl::nd_item<2> &, ParticleLoopIteration &, T) {
+}
+
 } // namespace ParticleLoopImplementation
 
 /**
@@ -156,6 +172,7 @@ public:
   std::shared_ptr<void> particle_dat_init{nullptr};
   std::unique_ptr<ParticleLoopImplementation::ParticleLoopBlockIterationSet>
       iteration_set{nullptr};
+  std::size_t iteration_set_stride{1};
   std::string loop_type;
   std::string name;
   EventStack event_stack;

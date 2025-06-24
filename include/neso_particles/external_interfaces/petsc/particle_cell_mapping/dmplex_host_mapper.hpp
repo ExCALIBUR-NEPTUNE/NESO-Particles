@@ -3,7 +3,7 @@
 
 #include "../../../compute_target.hpp"
 #include "../../../local_mapping.hpp"
-#include "../../../loop/particle_loop.hpp"
+#include "../../../loop/particle_loop_functions.hpp"
 #include "../../../particle_group.hpp"
 #include "../dmplex_interface.hpp"
 

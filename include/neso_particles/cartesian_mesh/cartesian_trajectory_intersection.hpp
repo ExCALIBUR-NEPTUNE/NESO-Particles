@@ -4,6 +4,7 @@
 #include "../boundary/boundary_interaction_specification.hpp"
 #include "../device_functions.hpp"
 #include "../particle_group_impl.hpp"
+#include "../particle_sub_group/particle_loop_sub_group_functions.hpp"
 #include "../particle_sub_group/particle_sub_group.hpp"
 #include "cartesian_h_mesh.hpp"
 #include <array>
