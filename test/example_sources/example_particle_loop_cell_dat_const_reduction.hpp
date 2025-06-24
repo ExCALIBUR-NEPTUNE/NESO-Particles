@@ -25,6 +25,11 @@ inline void cell_dat_const_reduction_example(
     // Particle property access descriptor.
     Access::read(Sym<REAL>("V")),
     // CellDatConst access descriptor for reduction.
+    //
+    // Can be:
+    //  Kernel::plus<T>
+    //  Kernel::minimum<T>
+    //  Kernel::maximum<T>
     Access::reduce(g1, Kernel::plus<REAL>())
   )->execute();
   

@@ -3,6 +3,7 @@
 
 #include "sycl_typedefs.hpp"
 #include "typedefs.hpp"
+#include <limits>
 
 namespace NESO::Particles {
 
@@ -554,14 +555,30 @@ inline INT atomic_fetch_max(INT *ptr, const INT value) {
 namespace Kernel {
 
 template <typename T> using plus = sycl::plus<T>;
+template <typename T> using minimum = sycl::minimum<T>;
+template <typename T> using maximum = sycl::maximum<T>;
 
 template <typename T> constexpr T get_identity(sycl::plus<T>) {
   return static_cast<T>(0.0);
+}
+template <typename T> constexpr T get_identity(sycl::minimum<T>) {
+  return static_cast<T>(std::numeric_limits<T>::max());
+}
+template <typename T> constexpr T get_identity(sycl::maximum<T>) {
+  return static_cast<T>(std::numeric_limits<T>::lowest());
 }
 
 template <typename T>
 inline void atomic_reduce(sycl::plus<T>, T *ptr, const T value) {
   atomic_fetch_add(ptr, value);
+}
+template <typename T>
+inline void atomic_reduce(sycl::minimum<T>, T *ptr, const T value) {
+  atomic_fetch_min(ptr, value);
+}
+template <typename T>
+inline void atomic_reduce(sycl::maximum<T>, T *ptr, const T value) {
+  atomic_fetch_max(ptr, value);
 }
 
 /**
