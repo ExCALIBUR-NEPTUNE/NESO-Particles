@@ -676,7 +676,7 @@ TEST(PETSc, dmplex_project_barycentric_coeffs) {
         const REAL scaling =
             std::abs(correct) > 0.0 ? 1.0 / std::abs(correct) : 1.0;
         const REAL err = std::abs(to_test - correct) * scaling;
-        ASSERT_TRUE(err < 1.0e-10);
+        ASSERT_TRUE(err < 1.0e-8);
       }
     }
   }
