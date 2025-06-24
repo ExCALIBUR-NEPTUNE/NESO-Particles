@@ -361,3 +361,65 @@ TEST(ParticleLoopReduction, maximum) {
   sycl_target->free();
   mesh->free();
 }
+
+TEST(ParticleLoopReduction, min_max_same_loop) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  const int cell_count = mesh->get_cell_count();
+  auto sycl_target = A->sycl_target;
+
+  auto cdc_max =
+      std::make_shared<CellDatConst<INT>>(sycl_target, cell_count, 1, 1);
+  cdc_max->fill(1);
+
+  auto cdc_max_correct =
+      std::make_shared<CellDatConst<INT>>(sycl_target, cell_count, 1, 1);
+  cdc_max_correct->fill(1);
+
+  auto cdc_min =
+      std::make_shared<CellDatConst<INT>>(sycl_target, cell_count, 1, 1);
+  cdc_min->fill(10000000);
+
+  auto cdc_min_correct =
+      std::make_shared<CellDatConst<INT>>(sycl_target, cell_count, 1, 1);
+  cdc_min_correct->fill(10000000);
+
+  particle_loop(
+      A,
+      [=](auto ID, auto MIN, auto MAX) {
+        MIN.combine(0, 0, ID.at(0));
+        MAX.combine(0, 0, ID.at(0));
+      },
+      Access::read(Sym<INT>("ID")),
+      Access::reduce(cdc_min, Kernel::minimum<INT>()),
+      Access::reduce(cdc_max, Kernel::maximum<INT>()))
+      ->execute();
+
+  particle_loop(
+      A,
+      [=](auto ID, auto MIN, auto MAX) {
+        MIN.fetch_min(0, 0, ID.at(0));
+        MAX.fetch_max(0, 0, ID.at(0));
+      },
+      Access::read(Sym<INT>("ID")), Access::min(cdc_min_correct),
+      Access::max(cdc_max_correct))
+      ->execute();
+
+  auto correct_min = cdc_min_correct->get_all_cells();
+  auto to_test_min = cdc_min->get_all_cells();
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    // These should be bitwise equivalent.
+    ASSERT_EQ(correct_min.at(cellx)->at(0, 0), to_test_min.at(cellx)->at(0, 0));
+  }
+
+  auto correct_max = cdc_max_correct->get_all_cells();
+  auto to_test_max = cdc_max->get_all_cells();
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    // These should be bitwise equivalent.
+    ASSERT_EQ(correct_max.at(cellx)->at(0, 0), to_test_max.at(cellx)->at(0, 0));
+  }
+
+  sycl_target->free();
+  mesh->free();
+}
