@@ -384,6 +384,20 @@ endif()
 
 option(NESO_PARTICLES_ENABLE_TESTS "Build unit tests for this project." ON)
 
+# This is a horrible fix for an issue where the AdaptiveCpp nvc++ backend fails
+# to link the libNESO-Particles.so library with an error of "/usr/bin/ld: input
+# file 'libNESO-Particles.so' is the same as output file" when
+# libNESO-Particles.so already exists in the build directory. The issue is
+# possible due to bad arguments or bad argument order when nvc++ is called via
+# acpp/cmake.
+add_custom_target(
+  remove_existing_library
+  COMMAND
+    ${CMAKE_COMMAND}
+    -DFILE_TO_REMOVE=${CMAKE_CURRENT_BINARY_DIR}/libNESO-Particles.so -P
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/remove-file.cmake)
+add_dependencies(NESO-Particles remove_existing_library)
+
 add_sycl_to_target(TARGET NESO-Particles SOURCES ${SRC_FILES})
 
 # Include the tests
