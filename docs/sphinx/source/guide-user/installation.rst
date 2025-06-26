@@ -20,13 +20,9 @@ To use NESO-Particles in package form projects should involve CMake implementati
 
     find_package(NESO-Particles REQUIRED)
     ...
-    find_sycl_if_required()
-    ...
     target_link_libraries(${EXECUTABLE} PUBLIC NESO-Particles::NESO-Particles)
     ...
     add_sycl_to_target(TARGET ${EXECUTABLE} SOURCES ${EXECUTABLE_SOURCE})
-
-We provide the function ``find_sycl_if_required`` as a helper function to find SYCL implementations and define the function ``add_sycl_to_target``.
  
 To use NESO-Particles from a submodule within your project replace the ``find_package`` call as follows:
 ::
