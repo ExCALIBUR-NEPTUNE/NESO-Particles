@@ -384,33 +384,6 @@ endif()
 
 option(NESO_PARTICLES_ENABLE_TESTS "Build unit tests for this project." ON)
 
-# This is a fix for an issue where the AdaptiveCpp nvc++ backend fails to link
-# the libNESO-Particles.so library with an error of "/usr/bin/ld: input file
-# 'libNESO-Particles.so' is the same as output file" when libNESO-Particles.so
-# already exists in the build directory. The issue is possible due to bad
-# arguments or bad argument order when nvc++ is called via acpp/cmake.
-#
-# What we do is detect if the linker is GNU ld which we know also accepts
-# -soname= and replace the -soname <foo> with -soname=<foo> as the linker
-# argument that sets the soname.
-
-# Test if the linker is GNU, or assume it is if we are pre cmake 3.29
-set(NESO_PARTICLES_LINKER_IS_GNU TRUE)
-if(DEFINED CMAKE_CXX_COMPILER_LINKER_ID)
-  if(NOT CMAKE_CXX_COMPILER_LINKER_ID STREQUAL "GNU")
-    set(NESO_PARTICLES_LINKER_IS_GNU FALSE)
-  endif()
-endif()
-# Replace the linker args if the linker is GNU and the soname args are
-# -Wl,-soname
-if(NESO_PARTICLES_LINKER_IS_GNU AND (CMAKE_SHARED_LIBRARY_SONAME_CXX_FLAG
-                                     STREQUAL "-Wl,-soname,"))
-  message(STATUS "Setting CMAKE_SHARED_LIBRARY_SONAME_CXX_FLAG to -Wl,-soname=")
-  set(CMAKE_SHARED_LIBRARY_SONAME_CXX_FLAG "-Wl,-soname=")
-else()
-  message(STATUS "Keeping existing CMAKE_SHARED_LIBRARY_SONAME_CXX_FLAG")
-endif()
-
 add_sycl_to_target(TARGET NESO-Particles SOURCES ${SRC_FILES})
 
 # Include the tests
