@@ -169,43 +169,84 @@ TEST(LookupTable, particle_loop) {
     int a;
   };
 
-  // ValueType can be any type usable on device.
-  auto lut = std::make_shared<LookupTable<int, ValueType>>(sycl_target, Nkeys);
+  {
+    // ValueType can be any type usable on device.
+    auto lut =
+        std::make_shared<LookupTable<int, ValueType>>(sycl_target, Nkeys);
 
-  // push data into the LUT
-  for (int ix = 0; ix < Nkeys; ix++) {
-    lut->add(ix,                 // key
-             {(ix + 123123) % 7} // value, this is an instance of ValueType.
-    );
+    // push data into the LUT
+    for (int ix = 0; ix < Nkeys; ix++) {
+      lut->add(ix,                 // key
+               {(ix + 123123) % 7} // value, this is an instance of ValueType.
+      );
 
-    // Can get the values on the host
-    ValueType v;
-    lut->host_get(ix, &v);
-    ASSERT_EQ(v.a, (ix + 123123) % 7);
+      // Can get the values on the host
+      ValueType v;
+      lut->host_get(ix, &v);
+      ASSERT_EQ(v.a, (ix + 123123) % 7);
+    }
+
+    // Device pointer to the root of the LUT
+    auto k_lut = lut->root;
+
+    particle_loop(
+        A,
+        [=](auto ID) {
+          // Pointer to the device type (note the const)
+          const ValueType *v = nullptr;
+          // Populate the pointer to the entry if the key is in the LUT.
+          const bool exists = k_lut->get(ID.at(0) % Nkeys, // index key
+                                         &v // pointer to populate
+          );
+
+          NESO_KERNEL_ASSERT(exists, k_ep);
+          if (exists) {
+            NESO_KERNEL_ASSERT((((ID.at(0) % Nkeys) + 123123) % 7) == v->a,
+                               k_ep);
+          }
+        },
+        Access::read(Sym<INT>("ID")))
+        ->execute();
+
+    ASSERT_FALSE(ep.get_flag());
   }
 
-  // Device pointer to the root of the LUT
-  auto k_lut = lut->root;
+  {
 
-  particle_loop(
-      A,
-      [=](auto ID) {
-        // Pointer to the device type (note the const)
-        const ValueType *v = nullptr;
-        // Populate the pointer to the entry if the key is in the LUT.
-        const bool exists = k_lut->get(ID.at(0) % Nkeys, // index key
-                                       &v                // pointer to populate
+    auto lut =
+        std::make_shared<LookupTable<int, ValueType>>(sycl_target, Nkeys);
+
+    // push data into the LUT
+    for (int ix = 0; ix < Nkeys; ix++) {
+      if (ix % 2 == 0) {
+        lut->add(ix,                 // key
+                 {(ix + 123123) % 7} // value, this is an instance of ValueType.
         );
+      }
+    }
 
-        NESO_KERNEL_ASSERT(exists, k_ep);
-        if (exists) {
-          NESO_KERNEL_ASSERT((((ID.at(0) % Nkeys) + 123123) % 7) == v->a, k_ep);
-        }
-      },
-      Access::read(Sym<INT>("ID")))
-      ->execute();
+    auto k_lut = lut->root;
 
-  ASSERT_FALSE(ep.get_flag());
+    // Test the out of bounds behaviour.
+    sycl_target->queue
+        .parallel_for(sycl::range<1>(Nkeys + 8),
+                      [=](auto idx) {
+                        const int key = static_cast<int>(idx) - 4;
+                        const ValueType *v;
+                        const bool exists = k_lut->get(key, &v);
+
+                        if ((-1 < key) && (key < Nkeys) && (key % 2 == 0)) {
+                          NESO_KERNEL_ASSERT(exists, k_ep);
+                          NESO_KERNEL_ASSERT(((key + 123123) % 7) == v->a,
+                                             k_ep);
+                        } else {
+                          NESO_KERNEL_ASSERT(!exists, k_ep);
+                        }
+                      })
+        .wait_and_throw();
+
+    ASSERT_FALSE(ep.get_flag());
+  }
 
   sycl_target->free();
   A_t->domain->mesh->free();
@@ -265,6 +306,41 @@ TEST(BlockedBinaryTree, particle_loop) {
       ->execute();
 
   ASSERT_FALSE(ep.get_flag());
+
+  {
+
+    auto bbt = std::make_shared<BlockedBinaryTree<int, ValueType>>(sycl_target);
+
+    for (int ix = 0; ix < Nkeys; ix++) {
+      if (ix % 2 == 0) {
+        bbt->add(ix,                 // key
+                 {(ix + 123123) % 7} // value, this is an instance of ValueType.
+        );
+      }
+    }
+
+    auto k_bbt = bbt->root;
+
+    // Test the out of bounds behaviour.
+    sycl_target->queue
+        .parallel_for(sycl::range<1>(Nkeys + 8),
+                      [=](auto idx) {
+                        const int key = static_cast<int>(idx) - 4;
+                        const ValueType *v;
+                        const bool exists = k_bbt->get(key, &v);
+
+                        if ((-1 < key) && (key < Nkeys) && (key % 2 == 0)) {
+                          NESO_KERNEL_ASSERT(exists, k_ep);
+                          NESO_KERNEL_ASSERT(((key + 123123) % 7) == v->a,
+                                             k_ep);
+                        } else {
+                          NESO_KERNEL_ASSERT(!exists, k_ep);
+                        }
+                      })
+        .wait_and_throw();
+
+    ASSERT_FALSE(ep.get_flag());
+  }
 
   sycl_target->free();
   A_t->domain->mesh->free();

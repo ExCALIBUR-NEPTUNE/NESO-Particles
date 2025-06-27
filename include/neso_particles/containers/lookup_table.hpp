@@ -26,7 +26,7 @@ template <typename KEY_TYPE, typename VALUE_TYPE> struct LookupTableNode {
    *  @returns True if the key is found in the tree otherwise false.
    */
   inline bool get(const KEY_TYPE key, VALUE_TYPE const **value_ptr) const {
-    const bool exists = d_entry_exists[key] > 0;
+    const bool exists = (-1 < key) && (key < size) && (d_entry_exists[key] > 0);
     if (exists) {
       *value_ptr = &d_entries[key];
       return true;
@@ -43,7 +43,7 @@ template <typename KEY_TYPE, typename VALUE_TYPE> struct LookupTableNode {
    *  @returns True if the key is found in the tree otherwise false.
    */
   inline bool get(const KEY_TYPE key, VALUE_TYPE *value) const {
-    VALUE_TYPE const *ptr;
+    VALUE_TYPE const *ptr = nullptr;
     const bool exists = this->get(key, &ptr);
     if (exists) {
       *value = *ptr;
@@ -116,7 +116,7 @@ public:
    * @returns True if the key is found in the container otherwise false.
    */
   inline bool host_get(const KEY_TYPE key, VALUE_TYPE *value) {
-    NESOASSERT((key > -1) && (key < this->size), "Bad key passed to add");
+    NESOASSERT((key > -1) && (key < this->size), "Bad key passed to host_get");
 
     BOOL_TYPE exists;
     this->sycl_target->queue
