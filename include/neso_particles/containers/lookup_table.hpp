@@ -116,7 +116,9 @@ public:
    * @returns True if the key is found in the container otherwise false.
    */
   inline bool host_get(const KEY_TYPE key, VALUE_TYPE *value) {
-    NESOASSERT((key > -1) && (key < this->size), "Bad key passed to host_get");
+    if (!((-1 < key) && (key < this->size))) {
+      return false;
+    }
 
     BOOL_TYPE exists;
     this->sycl_target->queue
