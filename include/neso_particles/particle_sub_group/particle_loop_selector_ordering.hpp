@@ -56,8 +56,7 @@ public:
             "unnamed_selector_ordering", particle_group, kernel, args...) {
     this->hd_cell_counts = hd_cell_counts;
     this->hd_layers = hd_layers;
-    this->local_nbytes_group = sizeof(int);
-    this->local_nbytes_item = sizeof(int) * (NESO_PARTICLES_LOOP_STRIDE + 1);
+    this->local_nbytes_item = sizeof(int) * NESO_PARTICLES_LOOP_STRIDE;
   }
 
   /**
@@ -86,8 +85,7 @@ public:
             kernel, args...) {
     this->hd_cell_counts = hd_cell_counts;
     this->hd_layers = hd_layers;
-    this->local_nbytes_group = sizeof(int);
-    this->local_nbytes_item = sizeof(int) * (NESO_PARTICLES_LOOP_STRIDE + 1);
+    this->local_nbytes_item = sizeof(int) * NESO_PARTICLES_LOOP_STRIDE;
   }
 
   /**
@@ -131,13 +129,9 @@ public:
         loop_parameter_type loop_args;
         ParticleLoopArgs<ARGS...>::create_loop_args(cgh, loop_args,
                                                     &global_info);
-
-        sycl::local_accessor<int, 1> group_offset(sycl::range<1>(1), cgh);
         sycl::local_accessor<int, 1> item_masks(
             sycl::range<1>(global_info.local_size * NESO_PARTICLES_LOOP_STRIDE),
             cgh);
-        // sycl::local_accessor<int, 1> item_totals(
-        //     sycl::range<1>(global_info.local_size), cgh);
 
         auto particle_loop_index = ParticleLoopIndex{};
         auto particle_loop_index_accessor = Access::read(&particle_loop_index);
@@ -182,21 +176,10 @@ public:
             item_total += mask;
             item_masks[local_sycl_index + stridex * local_sycl_range] = mask;
           }
-          idx.barrier(sycl::access::fence_space::local_space);
-
-          int ex_item_total = exclusive_scan_over_group(
-              idx.get_group(), item_total, sycl::plus<int>());
-
-          // get the offset for the particles in this cell
-          if (local_sycl_index == (local_sycl_range - 1)) {
-            group_offset[0] = atomic_fetch_add(&k_cell_counts[cell],
-                                               ex_item_total + item_total);
-          }
-          idx.barrier(sycl::access::fence_space::local_space);
 
           // each work item now can compute a base offset for the
           // particles it will revisit
-          item_total = group_offset[0] + ex_item_total;
+          item_total = atomic_fetch_add(&k_cell_counts[cell], item_total);
 
           // loop back over the particles and assign them their layer if
           // the mask is 1 otherwise -1
