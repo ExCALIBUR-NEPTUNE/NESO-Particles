@@ -313,6 +313,11 @@ protected:
   /// Tuple of the arguments passed to the ParticleLoop on construction.
   std::tuple<ARGS...> args;
 
+  /// Local memory required per work group
+  std::size_t local_nbytes_group{0};
+  /// Local memory required per work item
+  std::size_t local_nbytes_item{0};
+
   /// Recursively assemble the tuple args.
   template <size_t INDEX, typename U> inline void unpack_args(U a0) {
     std::get<INDEX>(this->args) = a0;
@@ -351,7 +356,7 @@ protected:
                                          std::string name) {
 
     // Loop over the args and add how many local bytes they each require.
-    std::size_t num_bytes = 0;
+    std::size_t num_bytes = this->local_nbytes_item;
     auto lambda_size_add = [&](auto argx) {
       num_bytes += this->local_mem_loop_cast(argx);
     };
@@ -363,7 +368,8 @@ protected:
     std::size_t local_size =
         sycl_target->parameters->template get<SizeTParameter>("LOOP_LOCAL_SIZE")
             ->value;
-    local_size = sycl_target->get_num_local_work_items(num_bytes, local_size);
+    local_size = sycl_target->get_num_local_work_items(this->local_nbytes_group,
+                                                       num_bytes, local_size);
 
     sycl_target->profile_map.set("ParticleLoop::" + name, "local_size",
                                  local_size, 0.0);
