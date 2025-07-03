@@ -154,9 +154,10 @@ public:
           iterationx.local_sycl_range = local_sycl_range;
 
           int item_total = 0;
+          bool running = true;
 
-          for (std::size_t stridex = 0; stridex < NESO_PARTICLES_LOOP_STRIDE;
-               stridex++) {
+          for (std::size_t stridex = 0;
+               (stridex < NESO_PARTICLES_LOOP_STRIDE) && running; stridex++) {
             block_device.get_interlaced_cell_layer(idx, stridex, &cell, &layer);
 
             const std::size_t cellx = cell;
@@ -166,15 +167,16 @@ public:
             iterationx.layerx = static_cast<int>(layerx);
             iterationx.loop_layerx = static_cast<int>(layerx);
 
-            int mask = 0;
             if (block_device.work_item_required(cellx, layerx)) {
               kernel_parameter_type kernel_args;
               create_kernel_args(iterationx, loop_args, kernel_args);
-              mask = static_cast<int>(
+              int mask = static_cast<int>(
                   static_cast<bool>(Tuple::apply(k_kernel, kernel_args)));
+              item_total += mask;
+              item_masks[local_sycl_index + stridex * local_sycl_range] = mask;
+            } else {
+              running = false;
             }
-            item_total += mask;
-            item_masks[local_sycl_index + stridex * local_sycl_range] = mask;
           }
 
           // each work item now can compute a base offset for the
@@ -183,8 +185,9 @@ public:
 
           // loop back over the particles and assign them their layer if
           // the mask is 1 otherwise -1
-          for (std::size_t stridex = 0; stridex < NESO_PARTICLES_LOOP_STRIDE;
-               stridex++) {
+          running = true;
+          for (std::size_t stridex = 0;
+               (stridex < NESO_PARTICLES_LOOP_STRIDE) && running; stridex++) {
             block_device.get_interlaced_cell_layer(idx, stridex, &cell, &layer);
             const std::size_t cellx = cell;
             const std::size_t layerx = layer;
@@ -204,6 +207,8 @@ public:
               const INT particle_linear_index =
                   loop_index.get_local_linear_index();
               k_layers[particle_linear_index] = layer;
+            } else {
+              running = false;
             }
           }
         });
