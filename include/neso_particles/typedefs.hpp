@@ -465,7 +465,7 @@ inline bool is_power_of_two(const std::size_t n) {
 #endif
 
 #ifndef NESO_PARTICLES_LOOP_STRIDE
-#define NESO_PARTICLES_LOOP_STRIDE 4
+#define NESO_PARTICLES_LOOP_STRIDE 16
 #endif
 
 #endif

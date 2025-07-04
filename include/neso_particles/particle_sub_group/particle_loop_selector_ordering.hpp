@@ -113,6 +113,8 @@ public:
 
     this->iteration_set_stride = NESO_PARTICLES_LOOP_STRIDE;
 
+    std::size_t offset = get_env_size_t("TEST_OFFSET", 32);
+
     ParticleLoopImplementation::ParticleLoopGlobalInfo global_info;
 
     if (!this->prepare_submit(global_info, cell_start, cell_end)) {
@@ -181,7 +183,7 @@ public:
 
           // each work item now can compute a base offset for the
           // particles it will revisit
-          item_total = atomic_fetch_add(&k_cell_counts[cell], item_total);
+          item_total = atomic_fetch_add(&k_cell_counts[cell * offset], item_total);
 
           // loop back over the particles and assign them their layer if
           // the mask is 1 otherwise -1
