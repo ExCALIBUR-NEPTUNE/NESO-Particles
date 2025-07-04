@@ -56,10 +56,14 @@ protected:
   SubGroupSelector(std::shared_ptr<ParticleGroup> parent);
   SubGroupSelector(std::shared_ptr<ParticleSubGroup> parent);
 
-  void pre_process_npart_cell(SYCLTargetSharedPtr sycl_target,
-                              const int cell_count, int *d_npart_cell);
-  void post_process_npart_cell(SYCLTargetSharedPtr sycl_target,
-                               const int cell_count, int *d_npart_cell);
+#ifdef NESO_PARTICLES_TEST_COMPILATION
+public:
+#endif
+
+  static void pre_process_npart_cell(SYCLTargetSharedPtr sycl_target,
+                                     const int cell_count, int *d_npart_cell);
+  static void post_process_npart_cell(SYCLTargetSharedPtr sycl_target,
+                                      const int cell_count, int *d_npart_cell);
 
 public:
   /**
@@ -92,7 +96,8 @@ public:
           if (required) {
             const int layer = atomic_fetch_add(
                 &(k_map_ptrs.at(
-                    1)[cell_count + loop_index.cell * NESO_PARTICLES_CACHELINE_NUM_int]),
+                    1)[cell_count +
+                       loop_index.cell * NESO_PARTICLES_CACHELINE_NUM_int]),
                 1);
             k_map_ptrs.at(0)[particle_linear_index] = layer;
           } else {

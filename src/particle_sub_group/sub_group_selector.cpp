@@ -58,12 +58,12 @@ void SubGroupSelector::post_process_npart_cell(SYCLTargetSharedPtr sycl_target,
                                                const int cell_count,
                                                int *d_npart_cell) {
   sycl_target->queue
-      .parallel_for(
-          sycl::range<1>(cell_count),
-          [=](auto idx) {
-            d_npart_cell[idx] =
-                d_npart_cell[cell_count + idx * NESO_PARTICLES_CACHELINE_NUM_int];
-          })
+      .parallel_for(sycl::range<1>(cell_count),
+                    [=](auto idx) {
+                      d_npart_cell[idx] =
+                          d_npart_cell[cell_count +
+                                       idx * NESO_PARTICLES_CACHELINE_NUM_int];
+                    })
       .wait_and_throw();
 }
 

@@ -55,7 +55,8 @@ public:
                 loop_index.get_local_linear_index();
             const int layer = atomic_fetch_add(
                 &(k_map_ptrs.at(
-                    1)[cell_count + loop_index.cell * NESO_PARTICLES_CACHELINE_NUM_int]),
+                    1)[cell_count +
+                       loop_index.cell * NESO_PARTICLES_CACHELINE_NUM_int]),
                 1);
             k_map_ptrs.at(0)[particle_linear_index] = layer;
           },
