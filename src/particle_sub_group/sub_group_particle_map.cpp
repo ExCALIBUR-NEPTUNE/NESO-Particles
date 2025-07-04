@@ -18,8 +18,9 @@ SubGroupParticleMap::SubGroupParticleMap(SYCLTargetSharedPtr sycl_target,
       std::make_shared<BufferDevice<INT *>>(sycl_target, cell_count);
   this->d_layer_map =
       std::make_shared<BufferDevice<INT>>(sycl_target, cell_count);
-  this->dh_npart_cell =
-      std::make_shared<BufferDeviceHost<int>>(sycl_target, cell_count);
+  this->dh_npart_cell = std::make_shared<BufferDeviceHost<int>>(
+      sycl_target,
+      cell_count + cell_count * NESO_PARTICLES_CACHELINE_NUM_int);
   this->dh_npart_cell_es =
       std::make_shared<BufferDeviceHost<INT>>(sycl_target, cell_count);
 }

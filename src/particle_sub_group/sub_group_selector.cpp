@@ -42,6 +42,31 @@ SubGroupSelector::SubGroupSelector(std::shared_ptr<ParticleSubGroup> parent)
       Access::read(this->map_ptrs));
 }
 
+void SubGroupSelector::pre_process_npart_cell(SYCLTargetSharedPtr sycl_target,
+                                              const int cell_count,
+                                              int *d_npart_cell) {
+  sycl_target->queue
+      .parallel_for(
+          sycl::range<1>(cell_count),
+          [=](auto idx) {
+            d_npart_cell[cell_count + idx * NESO_PARTICLES_CACHELINE_NUM_int] =
+                d_npart_cell[idx];
+          })
+      .wait_and_throw();
+}
+void SubGroupSelector::post_process_npart_cell(SYCLTargetSharedPtr sycl_target,
+                                               const int cell_count,
+                                               int *d_npart_cell) {
+  sycl_target->queue
+      .parallel_for(
+          sycl::range<1>(cell_count),
+          [=](auto idx) {
+            d_npart_cell[idx] =
+                d_npart_cell[cell_count + idx * NESO_PARTICLES_CACHELINE_NUM_int];
+          })
+      .wait_and_throw();
+}
+
 void SubGroupSelector::create(Selection *created_selection) {
   const int cell_count = this->particle_group->domain->mesh->get_cell_count();
   auto sycl_target = this->particle_group->sycl_target;
@@ -62,7 +87,10 @@ void SubGroupSelector::create(Selection *created_selection) {
   this->map_ptrs->set(tmp);
   e0.wait_and_throw();
 
+  this->pre_process_npart_cell(sycl_target, cell_count, d_npart_cell_ptr);
   this->loop_0->execute();
+  this->post_process_npart_cell(sycl_target, cell_count, d_npart_cell_ptr);
+
   sycl_target->queue
       .memcpy(h_npart_cell_ptr, d_npart_cell_ptr, cell_count * sizeof(int))
       .wait_and_throw();

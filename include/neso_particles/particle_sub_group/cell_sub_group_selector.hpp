@@ -53,10 +53,10 @@ public:
           [=](auto loop_index, auto k_map_ptrs) {
             const INT particle_linear_index =
                 loop_index.get_local_linear_index();
-            sycl::atomic_ref<int, sycl::memory_order::relaxed,
-                             sycl::memory_scope::device>
-                element_atomic(k_map_ptrs.at(1)[loop_index.cell]);
-            const int layer = element_atomic.fetch_add(1);
+            const int layer = atomic_fetch_add(
+                &(k_map_ptrs.at(
+                    1)[cell_count + loop_index.cell * NESO_PARTICLES_CACHELINE_NUM_int]),
+                1);
             k_map_ptrs.at(0)[particle_linear_index] = layer;
           },
           Access::read(ParticleLoopIndex{}), Access::read(this->map_ptrs));
