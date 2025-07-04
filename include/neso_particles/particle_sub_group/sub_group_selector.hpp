@@ -6,7 +6,6 @@
 #include "../loop/cell_info_npart.hpp"
 #include "../loop/particle_loop_base.hpp"
 #include "../loop/particle_loop_index.hpp"
-#include "particle_loop_selector_ordering_functions.hpp"
 #include "sub_group_selector_base.hpp"
 
 namespace NESO::Particles {
