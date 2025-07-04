@@ -338,13 +338,17 @@ void SYCLTarget::check_ptr([[maybe_unused]] unsigned char *ptr_user,
 }
 
 std::size_t
-SYCLTarget::get_num_local_work_items(const std::size_t num_bytes,
+SYCLTarget::get_num_local_work_items(const std::size_t num_bytes_offset,
+                                     const std::size_t num_bytes,
                                      const std::size_t default_num) {
   if (num_bytes <= 0) {
     return default_num;
   } else {
     const std::size_t local_mem_size = this->device_limits.local_mem_size;
-    const std::size_t max_num_workitems = local_mem_size / num_bytes;
+    NESOASSERT(local_mem_size >= num_bytes_offset,
+               "Offset bytes is larger than local memory.");
+    const std::size_t max_num_workitems =
+        (local_mem_size - num_bytes_offset) / num_bytes;
     // find the max power of two that does not exceed the number of work
     // items.
     const std::size_t two_power = std::log2(max_num_workitems);
@@ -355,10 +359,17 @@ SYCLTarget::get_num_local_work_items(const std::size_t num_bytes,
     NESOASSERT((deduced_num_work_items > 0),
                "Deduced number of work items is not strictly positive.");
 
-    const std::size_t local_mem_bytes = deduced_num_work_items * num_bytes;
+    const std::size_t local_mem_bytes =
+        deduced_num_work_items * num_bytes + num_bytes_offset;
     NESOASSERT(local_mem_size >= local_mem_bytes, "Not enough local memory");
     return deduced_num_work_items;
   }
+}
+
+std::size_t
+SYCLTarget::get_num_local_work_items(const std::size_t num_bytes,
+                                     const std::size_t default_num) {
+  return get_num_local_work_items(0, num_bytes, default_num);
 }
 
 NDRangePeel1D get_nd_range_peel_1d(const std::size_t size,

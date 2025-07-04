@@ -560,3 +560,86 @@ TEST(ParticleLoop, iteration_set_stride_all_cells) {
 }
 
 INSTANTIATE_TEST_SUITE_P(init, ParticleLoopLocalMem, testing::Values(0, 8));
+
+TEST(ParticleLoop, particle_loop_block_device) {
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_SELF);
+
+  ErrorPropagate ep(sycl_target);
+  auto k_ep = ep.device_ptr();
+
+  auto dh_npart_cell = std::make_shared<BufferDeviceHost<int>>(sycl_target, 10);
+  for (int ix = 0; ix < 10; ix++) {
+    dh_npart_cell->h_buffer.ptr[ix] = 0;
+  }
+  dh_npart_cell->h_buffer.ptr[4] = 7;
+  dh_npart_cell->host_to_device();
+
+  ParticleLoopImplementation::ParticleLoopBlockDevice block_device;
+  block_device.offset_cell = 4;
+  block_device.offset_layer = 3;
+  block_device.d_npart_cell = dh_npart_cell->d_buffer.ptr;
+  block_device.stride = 1;
+
+  sycl_target->queue
+      .parallel_for(
+          sycl::nd_range<2>(sycl::range<2>(1, 1), sycl::range<2>(1, 1)),
+          [=](auto idx) {
+            std::size_t cell = 0;
+            std::size_t layer = 0;
+            block_device.get_cell_layer(idx, &cell, &layer);
+
+            NESO_KERNEL_ASSERT(cell == 4, k_ep);
+            NESO_KERNEL_ASSERT(layer == 3, k_ep);
+            NESO_KERNEL_ASSERT(
+                block_device.work_item_required(cell, layer) == true, k_ep);
+            NESO_KERNEL_ASSERT(
+                block_device.work_item_required(cell - 1, 0) == false, k_ep);
+            NESO_KERNEL_ASSERT(
+                block_device.work_item_required(cell + 1, 0) == false, k_ep);
+            NESO_KERNEL_ASSERT(
+                block_device.work_item_required(cell, 7) == false, k_ep);
+          })
+      .wait_and_throw();
+  ASSERT_FALSE(ep.get_flag());
+
+  block_device.stride = 3;
+  sycl_target->queue
+      .parallel_for(
+          sycl::nd_range<2>(sycl::range<2>(1, 1), sycl::range<2>(1, 1)),
+          [=](auto idx) {
+            std::size_t cell = 0;
+            std::size_t block = 0;
+            block_device.stride_get_cell_block(idx, &cell, &block);
+
+            NESO_KERNEL_ASSERT(block == 3, k_ep);
+            NESO_KERNEL_ASSERT(cell == 4, k_ep);
+
+            NESO_KERNEL_ASSERT(
+                block_device.stride_work_item_required(4, 0) == true, k_ep);
+            NESO_KERNEL_ASSERT(
+                block_device.stride_work_item_required(4, 1) == true, k_ep);
+            NESO_KERNEL_ASSERT(
+                block_device.stride_work_item_required(4, 2) == true, k_ep);
+            NESO_KERNEL_ASSERT(
+                block_device.stride_work_item_required(4, 3) == false, k_ep);
+
+            NESO_KERNEL_ASSERT(block_device.stride_local_index_bound(4, 0) == 3,
+                               k_ep);
+            NESO_KERNEL_ASSERT(block_device.stride_local_index_bound(4, 1) == 3,
+                               k_ep);
+            NESO_KERNEL_ASSERT(block_device.stride_local_index_bound(4, 2) == 1,
+                               k_ep);
+
+            std::size_t layer = 0;
+            block_device.get_interlaced_cell_layer(idx, 0, &cell, &layer);
+
+            NESO_KERNEL_ASSERT(cell == 4, k_ep);
+            NESO_KERNEL_ASSERT(layer == 3 * 3 + 0 * 3 + 0 * 1 + 0, k_ep);
+            block_device.get_interlaced_cell_layer(idx, 1, &cell, &layer);
+            NESO_KERNEL_ASSERT(layer == 3 * 3 + 0 * 3 + 1 * 1 + 0, k_ep);
+          })
+      .wait_and_throw();
+  ASSERT_FALSE(ep.get_flag());
+
+  sycl_target->free();
+}

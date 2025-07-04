@@ -187,6 +187,19 @@ public:
    */
   std::size_t get_num_local_work_items(const std::size_t num_bytes,
                                        const std::size_t default_num);
+
+  /**
+   *  Get a number of local work items that should not exceed the maximum
+   *  available local memory on the device.
+   *
+   *  @param num_bytes_offset Number of bytes requested for the work group.
+   *  @param num_bytes Number of bytes requested per work item.
+   *  @param default_num Default number of work items.
+   *  @returns Number of work items.
+   */
+  std::size_t get_num_local_work_items(const std::size_t num_bytes_offset,
+                                       const std::size_t num_bytes,
+                                       const std::size_t default_num);
 };
 
 typedef std::shared_ptr<SYCLTarget> SYCLTargetSharedPtr;

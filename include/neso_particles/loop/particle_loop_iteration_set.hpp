@@ -77,7 +77,7 @@ struct ParticleLoopBlockDevice {
                                         std::size_t *RESTRICT cell,
                                         std::size_t *RESTRICT layer) const {
     *cell = idx.get_global_id(0) + this->offset_cell;
-    *layer = this->offset_layer +
+    *layer = this->offset_layer * this->stride +
              idx.get_group().get_group_id(1) * this->stride *
                  idx.get_local_range(1) +
              stride_index * idx.get_local_range(1) + idx.get_local_id(1);
