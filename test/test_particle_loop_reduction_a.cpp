@@ -116,7 +116,6 @@ void wrapper_cdc_reduction_base(GROUP_TYPE A, SYCLTargetSharedPtr sycl_target,
       A,
       [=](auto LOOP_INDEX) {
         NESO_KERNEL_ASSERT(LOOP_INDEX.at(1) == LOOP_INDEX.at(0), k_ep);
-        ;
       },
       Access::read(Sym<INT>("LOOP_INDEX")))
       ->execute();
@@ -128,7 +127,6 @@ void wrapper_cdc_reduction_base(GROUP_TYPE A, SYCLTargetSharedPtr sycl_target,
     for (int dx = 0; dx < ncomp; dx++) {
       auto err = relative_error(correct.at(cellx)->at(dx, 0),
                                 to_test.at(cellx)->at(dx, 0));
-
       ASSERT_TRUE(err < 1.0e-8);
       err = relative_error(correct.at(cellx)->at(dx, 1),
                            to_test.at(cellx)->at(dx, 1));
