@@ -35,7 +35,7 @@ public:
   /// Vector of nearby ranks which local exchange patterns can be setup with.
   std::vector<int> neighbour_ranks;
 
-  ~LocalDecompositionHMesh() {}
+  virtual ~LocalDecompositionHMesh() {}
 
   /**
    * Create a new instance.
