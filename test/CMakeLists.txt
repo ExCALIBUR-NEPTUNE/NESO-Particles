@@ -23,6 +23,7 @@ set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(TEST_SRCS
     ${TEST_DIR}/test_algorithms_a.cpp
     ${TEST_DIR}/test_algorithms_b.cpp
+    ${TEST_DIR}/test_boundary_mesh_interface_a.cpp
     ${TEST_DIR}/test_boundary_pbc.cpp
     ${TEST_DIR}/test_boundary_truncation.cpp
     ${TEST_DIR}/test_boundary_reflection.cpp

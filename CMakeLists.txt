@@ -61,6 +61,7 @@ set(SRC_FILES
     ${SRC_DIR}/external_interfaces/common/overlay_cartesian_mesh.cpp
     ${SRC_DIR}/external_interfaces/common/quadrature_point_mapper.cpp
     ${SRC_DIR}/boundary/boundary_interaction_specification.cpp
+    ${SRC_DIR}/boundary/boundary_mesh_interface.cpp
     ${SRC_DIR}/boundary/boundary_reflection.cpp
     ${SRC_DIR}/boundary/boundary_truncation.cpp
     ${SRC_DIR}/particle_io.cpp
@@ -126,6 +127,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/cartesian_mesh/cartesian_periodic.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cartesian_mesh/cartesian_trajectory_intersection.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/boundary/boundary_interaction_specification.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/boundary/boundary_mesh_interface.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/boundary/boundary_reflection.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/boundary/boundary_truncation.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cartesian_mesh.hpp
