@@ -14,26 +14,35 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
 
   const int num_owned_geoms = 4;
 
-  std::vector<std::pair<int, int>> test_map;
+  std::map<int, std::vector<std::pair<int, int>>> test_map;
   int num_neighbours = 0;
   if (rank > 0) {
     num_neighbours = rank + 1;
   }
 
   int correct_num_edges_t = 0;
-
   std::vector<int> correct_in_degree_t(size);
   std::fill(correct_in_degree_t.begin(), correct_in_degree_t.end(), 0);
   std::vector<int> correct_in_degree(size);
   std::fill(correct_in_degree.begin(), correct_in_degree.end(), 0);
 
-  for (int nx = 0; nx < num_neighbours; nx++) {
-    const int rx = nx % size;
-    const int gx = rx * num_owned_geoms + (rx + rank) % num_owned_geoms;
-    test_map.push_back({rx, gx});
-    correct_in_degree_t.at(rx)++;
-    correct_num_edges_t++;
+  for (int rankx = 0; rankx < size; rankx++) {
+    int num_neighbours_inner = 0;
+    if (rankx > 0) {
+      num_neighbours_inner = rankx + 1;
+    }
+    for (int nx = 0; nx < num_neighbours_inner; nx++) {
+      const int rx = nx % size;
+      const int gx = rx * num_owned_geoms + (rx + rankx) % num_owned_geoms;
+      test_map[rankx].push_back({rx, gx});
+
+      if (rankx == rank) {
+        correct_in_degree_t.at(rx)++;
+        correct_num_edges_t++;
+      }
+    }
   }
+
   int correct_num_edges = 0;
   MPICHK(MPI_Allreduce(&correct_num_edges_t, &correct_num_edges, 1, MPI_INT,
                        MPI_SUM, comm));
@@ -41,7 +50,7 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
   MPICHK(MPI_Allreduce(correct_in_degree_t.data(), correct_in_degree.data(),
                        size, MPI_INT, MPI_SUM, comm));
 
-  bmi.boundary_extend_exchange_pattern(test_map);
+  bmi.boundary_extend_exchange_pattern(test_map[rank]);
 
   MPI_Comm ncomm = bmi.boundary.ncomm;
   ASSERT_NE(ncomm, MPI_COMM_NULL);
@@ -67,4 +76,43 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
   ASSERT_EQ(indegree, correct_in_degree.at(rank));
   ASSERT_EQ(outdegree, num_neighbours);
   ASSERT_EQ(weighted, 0);
+
+  std::vector<int> sources(indegree);
+  std::vector<int> sourcesweights(indegree);
+  std::vector<int> destinations(outdegree);
+  std::fill(destinations.begin(), destinations.end(), -1);
+  std::vector<int> destweights(outdegree);
+
+  MPICHK(MPI_Dist_graph_neighbors(ncomm, indegree, sources.data(),
+                                  sourcesweights.data(), outdegree,
+                                  destinations.data(), destweights.data()));
+
+  for (int dx = 0; dx < outdegree; dx++) {
+    const int dest_rank = destinations.at(dx);
+    ASSERT_TRUE((-1 < dest_rank) && (dest_rank < size));
+    ASSERT_TRUE(bmi.boundary.map_recv_rank_to_geom_ids.count(dest_rank));
+  }
+
+  for (int sx = 0; sx < indegree; sx++) {
+    const int src_rank = sources.at(sx);
+    ASSERT_TRUE((-1 < src_rank) && (src_rank < size));
+    std::set<int> candidate_ranks;
+    for (auto &rank_gids : test_map[src_rank]) {
+      candidate_ranks.insert(rank_gids.first);
+    }
+    ASSERT_TRUE(candidate_ranks.count(rank));
+  }
+
+  // Test that the correct number of geoms were communicated
+  for (int sx = 0; sx < indegree; sx++) {
+    const int src_rank = sources.at(sx);
+    const int to_test_count = bmi.boundary.incoming_geom_counts.at(sx);
+    int correct_count = 0;
+    for (auto &rank_gid : test_map.at(src_rank)) {
+      if (rank_gid.first == rank) {
+        correct_count++;
+      }
+    }
+    ASSERT_EQ(to_test_count, correct_count);
+  }
 }

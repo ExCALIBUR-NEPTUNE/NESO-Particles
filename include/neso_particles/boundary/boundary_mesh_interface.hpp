@@ -26,6 +26,16 @@ public:
     // Map from remote ranks which hold copies of geometry ids this rank owns
     // and the geometry objects that they own.
     std::map<int, std::set<int>> map_send_rank_to_geom_ids;
+    // Number of geometery ids each remote rank will send to this rank. Ordering
+    // is defined by the MPI graph.
+    std::vector<int> incoming_geom_counts;
+
+    struct {
+      int indegree;
+      int outdegree;
+      std::vector<int> sources;
+      std::vector<int> destinations;
+    } graph;
 
   } boundary;
 
