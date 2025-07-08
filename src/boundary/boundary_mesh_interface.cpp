@@ -1,4 +1,5 @@
 #include <neso_particles/boundary/boundary_mesh_interface.hpp>
+#include <numeric>
 
 namespace NESO::Particles {
 
@@ -41,7 +42,6 @@ void BoundaryMeshInterface::boundary_extend_exchange_pattern(
   MPICHK(MPI_Allreduce(&map_is_modified_t, &map_is_modified, 1, MPI_INT,
                        MPI_MAX, comm));
 
-  nprint_variable(map_is_modified);
   // If no rank actually has any new geoms to inform the owner about then there
   // is nothing to do.
   if (map_is_modified) {
@@ -98,30 +98,96 @@ void BoundaryMeshInterface::boundary_extend_exchange_pattern(
     std::fill(this->boundary.incoming_geom_counts.begin(),
               this->boundary.incoming_geom_counts.end(), 0);
 
-    nprint_variable(rank);
-    nprint_variable(this->boundary.graph.outdegree);
-    nprint_variable(this->boundary.graph.indegree);
-
     // We have to reorder these array as the outward edges in the MPI
     // representation of the graph might be different to the order in the map.
     std::vector<int> outgoing_geom_counts(this->boundary.graph.outdegree);
+    this->boundary.total_num_outgoing_geoms = 0;
     for (int dst_rank_index = 0;
          dst_rank_index < this->boundary.graph.outdegree; dst_rank_index++) {
       const int dst_rank = this->boundary.graph.destinations.at(dst_rank_index);
-      outgoing_geom_counts.at(dst_rank_index) =
+      const int tmp_count =
           this->boundary.map_recv_rank_to_geom_ids[dst_rank].size();
+      outgoing_geom_counts.at(dst_rank_index) = tmp_count;
+      this->boundary.total_num_outgoing_geoms += tmp_count;
     }
 
     // mpich complains that the input pointers are nullptr even if that data is
     // not accessed.
     int null_out = -1;
     int null_in = -1;
-    int *out_data =
+    int *out_data_counts =
         outgoing_geom_counts.size() ? outgoing_geom_counts.data() : &null_out;
-    int *in_data = this->boundary.incoming_geom_counts.size()
-                       ? this->boundary.incoming_geom_counts.data()
+    int *in_data_counts = this->boundary.incoming_geom_counts.size()
+                              ? this->boundary.incoming_geom_counts.data()
+                              : &null_in;
+    MPICHK(MPI_Neighbor_allgather(out_data_counts, 1, MPI_INT, in_data_counts,
+                                  1, MPI_INT, this->boundary.ncomm));
+
+    // Send the geometry id to the corresponding owning rank such that the
+    // owning rank knows which geometry object incoming data corresonds to.
+    this->boundary.total_num_incoming_geoms =
+        std::accumulate(this->boundary.incoming_geom_counts.begin(),
+                        this->boundary.incoming_geom_counts.end(), 0);
+    // Realloc the incoming ids vector
+    this->boundary.incoming_geom_ids.resize(
+        this->boundary.total_num_incoming_geoms);
+    // Realloc the outgoing ids vector
+    this->boundary.outgoing_geom_ids.resize(
+        this->boundary.total_num_outgoing_geoms);
+    // Populate the outgoing ids vector in the order that MPI has the edges in
+    // the graph.
+    int index = 0;
+    for (int dst_rank_index = 0;
+         dst_rank_index < this->boundary.graph.outdegree; dst_rank_index++) {
+      const int dst_rank = this->boundary.graph.destinations.at(dst_rank_index);
+      for (int gx : this->boundary.map_recv_rank_to_geom_ids[dst_rank]) {
+        this->boundary.outgoing_geom_ids.at(index++) = gx;
+      }
+    }
+    NESOASSERT(index == this->boundary.total_num_outgoing_geoms,
+               "Bookkeeping error in indexing.");
+
+    // mpich complains that the input pointers are nullptr even if that data is
+    // not accessed.
+    int *out_data = this->boundary.outgoing_geom_ids.size()
+                        ? this->boundary.outgoing_geom_ids.data()
+                        : &null_out;
+    int *in_data = this->boundary.incoming_geom_ids.size()
+                       ? this->boundary.incoming_geom_ids.data()
                        : &null_in;
-    MPICHK(MPI_Neighbor_allgather(out_data, 1, MPI_INT, in_data, 1, MPI_INT,
+
+    // Assemble the MPI data types
+    std::vector<MPI_Datatype> sendtypes(
+        std::max(this->boundary.graph.outdegree, 1));
+    std::fill(sendtypes.begin(), sendtypes.end(), MPI_INT);
+    std::vector<MPI_Datatype> recvtypes(
+        std::max(this->boundary.graph.indegree, 1));
+    std::fill(recvtypes.begin(), recvtypes.end(), MPI_INT);
+
+    // Assemble the displacements
+    std::vector<MPI_Aint> sdispls(std::max(this->boundary.graph.outdegree, 1));
+    MPI_Aint sdisp = 0;
+    for (int dst_rank_index = 0;
+         dst_rank_index < this->boundary.graph.outdegree; dst_rank_index++) {
+      const int dst_rank = this->boundary.graph.destinations.at(dst_rank_index);
+      sdispls.at(dst_rank_index) = sdisp;
+      sdisp += this->boundary.map_recv_rank_to_geom_ids[dst_rank].size() *
+               sizeof(int);
+    }
+
+    std::vector<MPI_Aint> rdispls(std::max(this->boundary.graph.indegree, 1));
+    MPI_Aint rdisp = 0;
+    for (int src_rank_index = 0; src_rank_index < this->boundary.graph.indegree;
+         src_rank_index++) {
+      const int src_rank = this->boundary.graph.sources.at(src_rank_index);
+      rdispls.at(src_rank_index) = rdisp;
+      rdisp += this->boundary.map_send_rank_to_geom_ids[src_rank].size() *
+               sizeof(int);
+    }
+
+    MPICHK(MPI_Neighbor_alltoallw(out_data, out_data_counts, sdispls.data(),
+                                  sendtypes.data(), in_data, in_data_counts,
+                                  rdispls.data(), recvtypes.data(),
                                   this->boundary.ncomm));
   }
 }

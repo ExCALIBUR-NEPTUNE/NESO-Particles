@@ -29,6 +29,14 @@ public:
     // Number of geometery ids each remote rank will send to this rank. Ordering
     // is defined by the MPI graph.
     std::vector<int> incoming_geom_counts;
+    // Total number of geometry objects for which there is incoming data.
+    int total_num_incoming_geoms;
+    // Total number of geometry objects for which there is outgoing data.
+    int total_num_outgoing_geoms;
+    // Geometry ids of the incoming data
+    std::vector<int> incoming_geom_ids;
+    // Geometry ids of the outgoing data
+    std::vector<int> outgoing_geom_ids;
 
     struct {
       int indegree;
