@@ -249,6 +249,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/particle_sub_group_base.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/particle_sub_group_utility.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/sub_group_particle_map.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/sub_group_selection.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/sub_group_selector.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/sub_group_selector_exclusive_scan.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/sub_group_selector_whole_group.hpp
