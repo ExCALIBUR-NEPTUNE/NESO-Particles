@@ -136,6 +136,11 @@ void ParticleGroup::setup_internal(DomainSharedPtr domain,
   // call the callback on the local mapper to complete the setup of that
   // object
   this->domain->local_mapper->particle_group_callback(*this);
+
+  // Create the indirection map for the ephemeraldats
+  this->ephemeral_dat_indirection_map =
+      std::make_shared<EphemeralDatIndirectionMap>(
+          this->sycl_target, this->domain->mesh->get_cell_count());
 }
 
 ParticleSetSharedPtr

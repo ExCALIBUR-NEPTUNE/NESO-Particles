@@ -28,6 +28,7 @@
 #include "profiling.hpp"
 #include "sycl_typedefs.hpp"
 #include "typedefs.hpp"
+#include "particle_sub_group/ephemeral_dat_indirection_map.hpp"
 
 namespace NESO::Particles {
 struct TestParticleGroup;
@@ -349,9 +350,13 @@ protected:
   bool check_validation(ParticleGroupVersion &to_check,
                         const bool update_to_check = true);
 
+  // The indirection maps for the EphemeralDats on ParticleSubGroups.
+  std::shared_ptr<EphemeralDatIndirectionMap> ephemeral_dat_indirection_map;
+
 #ifdef NESO_PARTICLES_TEST_COMPILATION
 public:
 #endif
+
   inline void invalidate_group_version() {
     this->particle_group_version++;
     // Ensure this value is never 0.
@@ -366,12 +371,15 @@ protected:
     auto h_ptr_s = this->h_npart_cell.ptr;
     auto h_ptr = this->dh_npart_cell_es->h_buffer.ptr;
     INT total = 0;
+    INT max_occupancy = 0;
     for (int cellx = 0; cellx < this->ncell; cellx++) {
+      max_occupancy = std::max(max_occupancy, h_ptr_s[cellx]);
       h_ptr[cellx] = total;
       total += h_ptr_s[cellx];
     }
     this->npart_local = total;
     this->dh_npart_cell_es->host_to_device();
+    this->ephemeral_dat_indirection_map->reset(max_occupancy);
   }
   void setup_internal(DomainSharedPtr domain, ParticleSpec &particle_spec,
                       SYCLTargetSharedPtr sycl_target);

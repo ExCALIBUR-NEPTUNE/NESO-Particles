@@ -76,10 +76,19 @@ public:
   inline void reset(const int max_cell_occupancy) {
     this->init_cell_entry_points(&this->identity_map);
     if ((this->identity_map.d_map == nullptr) ||
-        (this->identity_map.d_map->size < max_cell_occupancy)) {
+        (this->identity_map.d_map->size <
+         static_cast<std::size_t>(max_cell_occupancy))) {
       this->init_map(&this->identity_map, max_cell_occupancy);
       this->create_identity_map(max_cell_occupancy);
     }
+  }
+
+  /**
+   * @returns The identity map.
+   */
+  inline ParticleSubGroupImplementation::MapLoopLayerToLayer
+  get_identity_map() {
+    return {this->identity_map.d_cell_entry_points->ptr};
   }
 };
 
