@@ -1,4 +1,5 @@
 #include <neso_particles/common_impl.hpp>
+#include <neso_particles/particle_sub_group/copy_selector.hpp>
 #include <neso_particles/particle_sub_group/particle_sub_group_base.hpp>
 
 namespace NESO::Particles {
@@ -75,9 +76,10 @@ ParticleSubGroup::ParticleSubGroup(ParticleGroupSharedPtr particle_group)
 
 ParticleSubGroup::ParticleSubGroup(
     std::shared_ptr<ParticleSubGroup> particle_sub_group)
-    : ParticleSubGroup(particle_sub_group, []() { return true; }) {
-  // TODO Make a more efficient selector for copying another selector.
-}
+    : ParticleSubGroup(std::dynamic_pointer_cast<
+                       ParticleSubGroupImplementation::SubGroupSelectorBase>(
+          std::make_shared<ParticleSubGroupImplementation::CopySelector>(
+              particle_sub_group))) {}
 
 ParticleSubGroup::ParticleSubGroup(
     ParticleSubGroupImplementation::SubGroupSelectorSharedPtr selector)
