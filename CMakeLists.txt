@@ -100,6 +100,7 @@ set(SRC_FILES
     ${SRC_DIR}/loop/particle_loop_utility.cpp
     ${SRC_DIR}/loop/pli_particle_dat.cpp
     ${SRC_DIR}/particle_sub_group/cell_sub_group_selector.cpp
+    ${SRC_DIR}/particle_sub_group/copy_selector.cpp
     ${SRC_DIR}/particle_sub_group/particle_group_partition.cpp
     ${SRC_DIR}/particle_sub_group/particle_sub_group_base.cpp
     ${SRC_DIR}/particle_sub_group/sub_group_particle_map.cpp
@@ -244,6 +245,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_remover.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_set.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_spec.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/copy_selector.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/particle_group_partition.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/particle_sub_group.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/particle_sub_group_base.hpp
