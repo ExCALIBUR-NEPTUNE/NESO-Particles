@@ -10,9 +10,7 @@ class ParticleSubGroup;
 namespace ParticleSubGroupImplementation {
 
 /**
- * Class to consume the lambda which selects which particles are to be in a
- * ParticleSubGroup and provide to the ParticleSubGroup a list of cells and
- * layers.
+ * Selector that can efficiently duplicate an existing selector.
  */
 class CopySelector : public SubGroupSelectorBase {
   friend class NESO::Particles::ParticleSubGroup;
@@ -21,6 +19,11 @@ protected:
   std::shared_ptr<ParticleSubGroup> parent;
 
 public:
+  /**
+   * Create selector from an existing sub group.
+   *
+   * @param parent ParticleSubGroup to duplicate.
+   */
   CopySelector(std::shared_ptr<ParticleSubGroup> parent)
       : SubGroupSelectorBase(parent), parent(parent) {
     this->add_parent_dependencies(parent);
