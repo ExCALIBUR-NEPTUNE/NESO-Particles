@@ -27,8 +27,6 @@ void BoundaryMeshInterface::boundary_extend_exchange_pattern(
   NESOASSERT(this->boundary.comm != MPI_COMM_NULL,
              "BoundaryMeshInterface::boundary_init has not been called.");
 
-  std::map<int, std::set<int>> map_recv_rank_to_new_geom_ids;
-
   int map_is_modified_t = 0;
   for (auto &[rank, geom_id] : rank_geom_ids) {
     // Is this rank, geom_id pair new?
@@ -169,20 +167,16 @@ void BoundaryMeshInterface::boundary_extend_exchange_pattern(
     MPI_Aint sdisp = 0;
     for (int dst_rank_index = 0;
          dst_rank_index < this->boundary.graph.outdegree; dst_rank_index++) {
-      const int dst_rank = this->boundary.graph.destinations.at(dst_rank_index);
       sdispls.at(dst_rank_index) = sdisp;
-      sdisp += this->boundary.map_recv_rank_to_geom_ids[dst_rank].size() *
-               sizeof(int);
+      sdisp += out_data_counts[dst_rank_index] * sizeof(int);
     }
 
     std::vector<MPI_Aint> rdispls(std::max(this->boundary.graph.indegree, 1));
     MPI_Aint rdisp = 0;
     for (int src_rank_index = 0; src_rank_index < this->boundary.graph.indegree;
          src_rank_index++) {
-      const int src_rank = this->boundary.graph.sources.at(src_rank_index);
       rdispls.at(src_rank_index) = rdisp;
-      rdisp += this->boundary.map_send_rank_to_geom_ids[src_rank].size() *
-               sizeof(int);
+      rdisp += in_data_counts[src_rank_index] * sizeof(int);
     }
 
     MPICHK(MPI_Neighbor_alltoallw(out_data, out_data_counts, sdispls.data(),

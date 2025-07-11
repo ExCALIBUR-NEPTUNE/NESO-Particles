@@ -126,12 +126,8 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
     }
   }
   std::set<int> incoming_geoms_to_test;
-  for(int gx : bmi.boundary.incoming_geom_ids){
+  for (int gx : bmi.boundary.incoming_geom_ids) {
     incoming_geoms_to_test.insert(gx);
   }
   ASSERT_EQ(incoming_geoms_to_test, incoming_geoms_correct);
-
-
-
-
 }
