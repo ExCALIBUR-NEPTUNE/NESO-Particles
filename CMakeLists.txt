@@ -45,6 +45,7 @@ endif()
 
 set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set(SRC_FILES
+    ${SRC_DIR}/algorithms/particle_data_movement.cpp
     ${SRC_DIR}/algorithms/reduce_dat_cellwise.cpp
     ${SRC_DIR}/external_interfaces/petsc/boundary_interaction/boundary_interaction_2d.cpp
     ${SRC_DIR}/external_interfaces/petsc/boundary_interaction/boundary_interaction_common.cpp
@@ -100,6 +101,7 @@ set(SRC_FILES
     ${SRC_DIR}/loop/particle_loop_utility.cpp
     ${SRC_DIR}/loop/pli_particle_dat.cpp
     ${SRC_DIR}/particle_sub_group/cell_sub_group_selector.cpp
+    ${SRC_DIR}/particle_sub_group/copy_selector.cpp
     ${SRC_DIR}/particle_sub_group/particle_group_partition.cpp
     ${SRC_DIR}/particle_sub_group/particle_sub_group_base.cpp
     ${SRC_DIR}/particle_sub_group/sub_group_particle_map.cpp
@@ -121,6 +123,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR}/neso_particles.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/access.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/algorithms.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/particle_data_movement.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/reduce_dat_cellwise.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cartesian_mesh/cartesian_h_mesh.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cartesian_mesh/cartesian_cell_bin.hpp
@@ -244,6 +247,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_remover.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_set.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_spec.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/copy_selector.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/particle_group_partition.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/particle_sub_group.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/particle_sub_group_base.hpp

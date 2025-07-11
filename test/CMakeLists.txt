@@ -24,12 +24,14 @@ set(TEST_SRCS
     ${TEST_DIR}/test_algorithms_a.cpp
     ${TEST_DIR}/test_algorithms_b.cpp
     ${TEST_DIR}/test_boundary_mesh_interface_a.cpp
+    ${TEST_DIR}/test_algorithms_c.cpp
     ${TEST_DIR}/test_boundary_pbc.cpp
     ${TEST_DIR}/test_boundary_truncation.cpp
     ${TEST_DIR}/test_boundary_reflection.cpp
     ${TEST_DIR}/test_buffers.cpp
     ${TEST_DIR}/test_cell_dat.cpp
     ${TEST_DIR}/test_communication.cpp
+    ${TEST_DIR}/test_copy_selector.cpp
     ${TEST_DIR}/test_device_functions.cpp
     ${TEST_DIR}/test_ephemeral_dats.cpp
     ${TEST_DIR}/test_error_propagate.cpp
