@@ -98,14 +98,14 @@ void BoundaryMeshInterface::boundary_extend_exchange_pattern(
 
     // We have to reorder these array as the outward edges in the MPI
     // representation of the graph might be different to the order in the map.
-    std::vector<int> outgoing_geom_counts(this->boundary.graph.outdegree);
+    this->boundary.outgoing_geom_counts.resize(this->boundary.graph.outdegree);
     this->boundary.total_num_outgoing_geoms = 0;
     for (int dst_rank_index = 0;
          dst_rank_index < this->boundary.graph.outdegree; dst_rank_index++) {
       const int dst_rank = this->boundary.graph.destinations.at(dst_rank_index);
       const int tmp_count =
           this->boundary.map_recv_rank_to_geom_ids[dst_rank].size();
-      outgoing_geom_counts.at(dst_rank_index) = tmp_count;
+      this->boundary.outgoing_geom_counts.at(dst_rank_index) = tmp_count;
       this->boundary.total_num_outgoing_geoms += tmp_count;
     }
 
@@ -113,8 +113,9 @@ void BoundaryMeshInterface::boundary_extend_exchange_pattern(
     // not accessed.
     int null_out = -1;
     int null_in = -1;
-    int *out_data_counts =
-        outgoing_geom_counts.size() ? outgoing_geom_counts.data() : &null_out;
+    int *out_data_counts = this->boundary.outgoing_geom_counts.size()
+                               ? this->boundary.outgoing_geom_counts.data()
+                               : &null_out;
     int *in_data_counts = this->boundary.incoming_geom_counts.size()
                               ? this->boundary.incoming_geom_counts.data()
                               : &null_in;
@@ -126,6 +127,7 @@ void BoundaryMeshInterface::boundary_extend_exchange_pattern(
     this->boundary.total_num_incoming_geoms =
         std::accumulate(this->boundary.incoming_geom_counts.begin(),
                         this->boundary.incoming_geom_counts.end(), 0);
+
     // Realloc the incoming ids vector
     this->boundary.incoming_geom_ids.resize(
         this->boundary.total_num_incoming_geoms);
