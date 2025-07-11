@@ -130,4 +130,15 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
     incoming_geoms_to_test.insert(gx);
   }
   ASSERT_EQ(incoming_geoms_to_test, incoming_geoms_correct);
+
+  for (int rx = 0; rx < size; rx++) {
+    incoming_geoms_correct.clear();
+    for (auto &rank_gid : test_map[rx]) {
+      if (rank_gid.first == rank) {
+        incoming_geoms_correct.insert(rank_gid.second);
+      }
+    }
+    ASSERT_EQ(incoming_geoms_correct,
+              bmi.boundary.map_send_rank_to_geom_ids[rx]);
+  }
 }

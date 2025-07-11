@@ -183,6 +183,17 @@ void BoundaryMeshInterface::boundary_extend_exchange_pattern(
                                   sendtypes.data(), in_data, in_data_counts,
                                   rdispls.data(), recvtypes.data(),
                                   this->boundary.ncomm));
+
+    // populate map_send_rank_to_geom_ids (this is mainly for testing/debugging)
+    index = 0;
+    for (int src_rank_index = 0; src_rank_index < this->boundary.graph.indegree;
+         src_rank_index++) {
+      const int src_rank = this->boundary.graph.sources[src_rank_index];
+      for (int ix = 0; ix < in_data_counts[src_rank_index]; ix++) {
+        const int gid = in_data[index++];
+        this->boundary.map_send_rank_to_geom_ids[src_rank].insert(gid);
+      }
+    }
   }
 }
 
