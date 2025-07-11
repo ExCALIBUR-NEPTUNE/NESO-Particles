@@ -115,4 +115,23 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
     }
     ASSERT_EQ(to_test_count, correct_count);
   }
+
+  std::set<int> incoming_geoms_correct;
+  for (int sx = 0; sx < indegree; sx++) {
+    const int src_rank = sources.at(sx);
+    for (auto &rank_gid : test_map.at(src_rank)) {
+      if (rank_gid.first == rank) {
+        incoming_geoms_correct.insert(rank_gid.second);
+      }
+    }
+  }
+  std::set<int> incoming_geoms_to_test;
+  for(int gx : bmi.boundary.incoming_geom_ids){
+    incoming_geoms_to_test.insert(gx);
+  }
+  ASSERT_EQ(incoming_geoms_to_test, incoming_geoms_correct);
+
+
+
+
 }
