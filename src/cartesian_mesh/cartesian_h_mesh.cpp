@@ -151,6 +151,70 @@ CartesianHMesh::CartesianHMesh(MPI_Comm comm, const int ndim,
   for (auto rankx : neighbour_ranks_set) {
     this->neighbour_ranks.push_back(rankx);
   }
+
+  // set number of geoms per face
+  const auto ncells_dim_fine = this->mesh_hierarchy->ncells_dim_fine;
+  if (this->ndim == 2) {
+    this->num_geoms_per_face[0] = dims[0] * ncells_dim_fine;
+    this->num_geoms_per_face[1] = dims[1] * ncells_dim_fine;
+    this->num_geoms_per_face[2] = dims[0] * ncells_dim_fine;
+    this->num_geoms_per_face[3] = dims[1] * ncells_dim_fine;
+
+    const INT total_boundary_cells = std::accumulate(
+        this->num_geoms_per_face.begin(), this->num_geoms_per_face.end(), 0);
+    NESOASSERT(total_boundary_cells ==
+                   ncells_dim_fine * (dims[0] + dims[1] + dims[0] + dims[1]),
+               "Incorrect number of boundary cells.");
+    this->num_face_geoms = static_cast<int>(total_boundary_cells);
+
+    this->face_strides0[0] = dims[0] * ncells_dim_fine;
+    this->face_strides0[1] = dims[1] * ncells_dim_fine;
+    this->face_strides0[2] = dims[0] * ncells_dim_fine;
+    this->face_strides0[3] = dims[1] * ncells_dim_fine;
+    this->face_strides1[0] = 1;
+    this->face_strides1[1] = 1;
+    this->face_strides1[2] = 1;
+    this->face_strides1[3] = 1;
+
+  } else if (this->ndim == 3) {
+    this->num_geoms_per_face[0] =
+        dims[0] * dims[2] * std::pow(ncells_dim_fine, 2);
+    this->num_geoms_per_face[1] =
+        dims[1] * dims[2] * std::pow(ncells_dim_fine, 2);
+    this->num_geoms_per_face[2] =
+        dims[0] * dims[2] * std::pow(ncells_dim_fine, 2);
+    this->num_geoms_per_face[3] =
+        dims[1] * dims[2] * std::pow(ncells_dim_fine, 2);
+    this->num_geoms_per_face[4] =
+        dims[0] * dims[1] * std::pow(ncells_dim_fine, 2);
+    this->num_geoms_per_face[5] =
+        dims[0] * dims[1] * std::pow(ncells_dim_fine, 2);
+
+    const INT total_boundary_cells = std::accumulate(
+        this->num_geoms_per_face.begin(), this->num_geoms_per_face.end(), 0);
+    NESOASSERT(total_boundary_cells ==
+                   ncells_dim_fine * ncells_dim_fine *
+                       (dims[0] * dims[2] + dims[1] * dims[2] +
+                        dims[0] * dims[2] + dims[1] * dims[2] +
+                        dims[0] * dims[1] + dims[0] * dims[1]),
+               "Incorrect number of boundary cells.");
+
+    this->num_face_geoms = static_cast<int>(total_boundary_cells);
+
+    this->face_strides0[0] = dims[0] * ncells_dim_fine;
+    this->face_strides0[1] = dims[1] * ncells_dim_fine;
+    this->face_strides0[2] = dims[0] * ncells_dim_fine;
+    this->face_strides0[3] = dims[1] * ncells_dim_fine;
+    this->face_strides0[4] = dims[0] * ncells_dim_fine;
+    this->face_strides0[5] = dims[0] * ncells_dim_fine;
+
+    this->face_strides1[0] = dims[2] * ncells_dim_fine;
+    this->face_strides1[1] = dims[2] * ncells_dim_fine;
+    this->face_strides1[2] = dims[2] * ncells_dim_fine;
+    this->face_strides1[3] = dims[2] * ncells_dim_fine;
+    this->face_strides1[4] = dims[1] * ncells_dim_fine;
+    this->face_strides1[5] = dims[1] * ncells_dim_fine;
+  }
 }
 
 MPI_Comm CartesianHMesh::get_comm() { return this->comm_cart; }
@@ -231,6 +295,61 @@ std::vector<std::array<int, 3>> CartesianHMesh::get_owned_cells() {
     }
   }
   return cells;
+}
+
+int CartesianHMesh::get_face_id_owning_rank(const int face_id) {
+  NESOASSERT(this->ndim == 2 || this->ndim == 3,
+             "Unexpected number of dimensions.");
+  NESOASSERT((0 <= face_id) && (face_id < this->num_face_geoms), "Bad face id");
+  if (!this->map_face_id_to_rank.count(face_id)) {
+    const int num_faces = this->ndim == 2 ? 4 : 6;
+
+    int face_containg = -1;
+    int offset = 0;
+    for (int facex = 0; facex < num_faces; facex++) {
+      if (face_id < this->num_geoms_per_face[facex]) {
+        face_containg = facex;
+        break;
+      } else {
+        offset += this->num_geoms_per_face[facex];
+      }
+    }
+
+    // id local to each face
+    int local_face_id = face_id - offset;
+    // local face ids are lexicographically indexed
+    const int l0 = local_face_id % this->face_strides0[face_containg];
+    const int l1 = local_face_id / this->face_strides0[face_containg];
+
+    NESOASSERT((0 <= l1) && (l1 < this->face_strides1[face_containg]),
+               "Bad l1 computed.");
+
+    NESOASSERT((l0 + l1 * this->face_strides0[face_containg]) == local_face_id,
+               "Failed to compute geom index correctly (local id)");
+
+    NESOASSERT(offset + local_face_id == face_id,
+               "Failed to compute geom index correctly (local id + offset)");
+
+    // Now find out which rank owns face geom l0, l1 on face face_containg.
+    int lookup_coords[3] = {0, 0, 0};
+
+    if (this->ndim == 2) {
+
+      const int l2_lookup[4] = {0, this->mpi_dims[0], 0, 0};
+
+      constexpr int i0[4] = {
+
+      };
+
+    } else {
+    }
+
+    int owning_rank = -1;
+    MPICHK(MPI_Cart_rank(this->comm_cart, lookup_coords, &owning_rank));
+
+    this->map_face_id_to_rank[face_id] = owning_rank;
+  }
+  return this->map_face_id_to_rank[face_id];
 }
 
 } // namespace NESO::Particles

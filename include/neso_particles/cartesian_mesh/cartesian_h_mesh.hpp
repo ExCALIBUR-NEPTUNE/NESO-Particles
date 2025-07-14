@@ -8,6 +8,7 @@
 #include <memory>
 #include <mpi.h>
 #include <set>
+#include <unordered_map>
 #include <vector>
 
 namespace NESO::Particles {
@@ -26,6 +27,12 @@ private:
   std::shared_ptr<MeshHierarchy> mesh_hierarchy;
   bool allocated = false;
   std::vector<int> neighbour_ranks;
+
+  int num_face_geoms{0};
+  std::array<int, 6> face_strides0{0, 0, 0, 0, 0, 0};
+  std::array<int, 6> face_strides1{0, 0, 0, 0, 0, 0};
+  std::array<int, 6> num_geoms_per_face{0, 0, 0, 0, 0, 0};
+  std::unordered_map<int, int> map_face_id_to_rank;
 
 public:
   /// Disable (implicit) copies.
@@ -132,6 +139,12 @@ public:
    * @returns vector of owned cells in order of the cell ids of the cells.
    */
   std::vector<std::array<int, 3>> get_owned_cells();
+
+  /**
+   * @param face_id Face id to compute owning rank for.
+   * @returns Owning rank for passed face id.
+   */
+  int get_face_id_owning_rank(const int face_id);
 };
 
 typedef std::shared_ptr<CartesianHMesh> CartesianHMeshSharedPtr;

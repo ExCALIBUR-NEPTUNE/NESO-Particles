@@ -10,9 +10,17 @@ void CartesianTrajectoryIntersection::setup() {
   std::array<INT, 6> element_offsets_tmp = {0, 0, 0, 0, 0, 0};
 
   if (ndim == 2) {
-    element_offsets_tmp[0] = mh->dims[0] * mh->ncells_fine;
-    element_offsets_tmp[1] = mh->dims[1] * mh->ncells_fine;
-    element_offsets_tmp[2] = mh->dims[0] * mh->ncells_fine;
+    element_offsets_tmp[0] = mh->dims[0] * mh->ncells_dim_fine;
+    element_offsets_tmp[1] = mh->dims[1] * mh->ncells_dim_fine;
+    element_offsets_tmp[2] = mh->dims[0] * mh->ncells_dim_fine;
+    element_offsets_tmp[3] = mh->dims[1] * mh->ncells_dim_fine;
+
+    const INT total_boundary_cells = std::accumulate(
+        element_offsets_tmp.begin(), element_offsets_tmp.end(), 0);
+    NESOASSERT(total_boundary_cells ==
+                   mh->ncells_dim_fine *
+                       (mh->dims[0] + mh->dims[1] + mh->dims[0] + mh->dims[1]),
+               "Incorrect number of boundary cells.");
 
     this->element_strides0[0] = mh->dims[0] * mh->ncells_dim_fine;
     this->element_strides0[1] = mh->dims[1] * mh->ncells_dim_fine;
@@ -24,11 +32,18 @@ void CartesianTrajectoryIntersection::setup() {
     this->element_strides1[3] = 1;
 
   } else {
-    element_offsets_tmp[0] = mh->dims[0] * mh->dims[2] * mh->ncells_fine;
-    element_offsets_tmp[1] = mh->dims[1] * mh->dims[2] * mh->ncells_fine;
-    element_offsets_tmp[2] = mh->dims[0] * mh->dims[2] * mh->ncells_fine;
-    element_offsets_tmp[3] = mh->dims[1] * mh->dims[2] * mh->ncells_fine;
-    element_offsets_tmp[4] = mh->dims[0] * mh->dims[1] * mh->ncells_fine;
+    element_offsets_tmp[0] =
+        mh->dims[0] * mh->dims[2] * std::pow(mh->ncells_dim_fine, 2);
+    element_offsets_tmp[1] =
+        mh->dims[1] * mh->dims[2] * std::pow(mh->ncells_dim_fine, 2);
+    element_offsets_tmp[2] =
+        mh->dims[0] * mh->dims[2] * std::pow(mh->ncells_dim_fine, 2);
+    element_offsets_tmp[3] =
+        mh->dims[1] * mh->dims[2] * std::pow(mh->ncells_dim_fine, 2);
+    element_offsets_tmp[4] =
+        mh->dims[0] * mh->dims[1] * std::pow(mh->ncells_dim_fine, 2);
+    element_offsets_tmp[5] =
+        mh->dims[0] * mh->dims[1] * std::pow(mh->ncells_dim_fine, 2);
 
     this->element_strides0[0] = mh->dims[0] * mh->ncells_dim_fine;
     this->element_strides0[1] = mh->dims[1] * mh->ncells_dim_fine;
@@ -43,6 +58,15 @@ void CartesianTrajectoryIntersection::setup() {
     this->element_strides1[3] = mh->dims[2] * mh->ncells_dim_fine;
     this->element_strides1[4] = mh->dims[1] * mh->ncells_dim_fine;
     this->element_strides1[5] = mh->dims[1] * mh->ncells_dim_fine;
+
+    const INT total_boundary_cells = std::accumulate(
+        element_offsets_tmp.begin(), element_offsets_tmp.end(), 0);
+    NESOASSERT(total_boundary_cells ==
+                   mh->ncells_dim_fine * mh->ncells_dim_fine *
+                       (mh->dims[0] * mh->dims[2] + mh->dims[1] * mh->dims[2] +
+                        mh->dims[0] * mh->dims[2] + mh->dims[1] * mh->dims[2] +
+                        mh->dims[0] * mh->dims[1] + mh->dims[0] * mh->dims[1]),
+               "Incorrect number of boundary cells.");
   }
   std::exclusive_scan(element_offsets_tmp.begin(), element_offsets_tmp.end(),
                       this->element_offsets.begin(), 0);
