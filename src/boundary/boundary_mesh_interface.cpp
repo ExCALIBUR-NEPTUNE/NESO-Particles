@@ -44,6 +44,7 @@ void BoundaryMeshInterface::boundary_extend_exchange_pattern(
   // is nothing to do.
   if (map_is_modified) {
     MPICHK(MPI_Comm_free(&this->boundary.ncomm));
+    this->boundary.map_typencomp_alltoallwargs.clear();
 
     // Create a distributed graph with the new topology.
     int rank = -1;
@@ -147,56 +148,28 @@ void BoundaryMeshInterface::boundary_extend_exchange_pattern(
     NESOASSERT(index == this->boundary.total_num_outgoing_geoms,
                "Bookkeeping error in indexing.");
 
-    // mpich complains that the input pointers are nullptr even if that data is
-    // not accessed.
-    int *out_data = this->boundary.outgoing_geom_ids.size()
-                        ? this->boundary.outgoing_geom_ids.data()
-                        : &null_out;
-    int *in_data = this->boundary.incoming_geom_ids.size()
-                       ? this->boundary.incoming_geom_ids.data()
-                       : &null_in;
-
-    // Assemble the MPI data types
-    std::vector<MPI_Datatype> sendtypes(
-        std::max(this->boundary.graph.outdegree, 1));
-    std::fill(sendtypes.begin(), sendtypes.end(), MPI_INT);
-    std::vector<MPI_Datatype> recvtypes(
-        std::max(this->boundary.graph.indegree, 1));
-    std::fill(recvtypes.begin(), recvtypes.end(), MPI_INT);
-
-    // Assemble the displacements
-    std::vector<MPI_Aint> sdispls(std::max(this->boundary.graph.outdegree, 1));
-    MPI_Aint sdisp = 0;
-    for (int dst_rank_index = 0;
-         dst_rank_index < this->boundary.graph.outdegree; dst_rank_index++) {
-      sdispls.at(dst_rank_index) = sdisp;
-      sdisp += out_data_counts[dst_rank_index] * sizeof(int);
-    }
-
-    std::vector<MPI_Aint> rdispls(std::max(this->boundary.graph.indegree, 1));
-    MPI_Aint rdisp = 0;
-    for (int src_rank_index = 0; src_rank_index < this->boundary.graph.indegree;
-         src_rank_index++) {
-      rdispls.at(src_rank_index) = rdisp;
-      rdisp += in_data_counts[src_rank_index] * sizeof(int);
-    }
-
-    MPICHK(MPI_Neighbor_alltoallw(out_data, out_data_counts, sdispls.data(),
-                                  sendtypes.data(), in_data, in_data_counts,
-                                  rdispls.data(), recvtypes.data(),
-                                  this->boundary.ncomm));
+    this->exchange(this->boundary.outgoing_geom_ids.data(), 1,
+                   this->boundary.incoming_geom_ids.data());
 
     // populate map_send_rank_to_geom_ids (this is mainly for testing/debugging)
     index = 0;
     for (int src_rank_index = 0; src_rank_index < this->boundary.graph.indegree;
          src_rank_index++) {
       const int src_rank = this->boundary.graph.sources[src_rank_index];
-      for (int ix = 0; ix < in_data_counts[src_rank_index]; ix++) {
-        const int gid = in_data[index++];
+      for (int ix = 0; ix < this->boundary.incoming_geom_counts[src_rank_index];
+           ix++) {
+        const int gid = this->boundary.incoming_geom_ids[index++];
         this->boundary.map_send_rank_to_geom_ids[src_rank].insert(gid);
       }
     }
   }
 }
+
+template void BoundaryMeshInterface::exchange(int *data, const int ncomp,
+                                              int *data_gathered);
+template void BoundaryMeshInterface::exchange(INT *data, const int ncomp,
+                                              INT *data_gathered);
+template void BoundaryMeshInterface::exchange(REAL *data, const int ncomp,
+                                              REAL *data_gathered);
 
 } // namespace NESO::Particles

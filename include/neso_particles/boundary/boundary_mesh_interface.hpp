@@ -4,6 +4,7 @@
 #include "../communication.hpp"
 #include <map>
 #include <set>
+#include <typeindex>
 #include <utility>
 #include <vector>
 
@@ -14,6 +15,15 @@ protected:
 #ifdef NESO_PARTICLES_TEST_COMPILATION
 public:
 #endif
+
+  struct AllToAllWArgs {
+    std::vector<int> sendcounts;
+    std::vector<MPI_Aint> sdispls;
+    std::vector<MPI_Datatype> sendtypes;
+    std::vector<int> recvcounts;
+    std::vector<MPI_Aint> rdispls;
+    std::vector<MPI_Datatype> recvtypes;
+  };
 
   struct {
     // Original MPI Communicator to use.
@@ -41,6 +51,9 @@ public:
     // Geometry ids of the outgoing data
     std::vector<int> outgoing_geom_ids;
 
+    std::map<std::pair<std::type_index, int>, AllToAllWArgs>
+        map_typencomp_alltoallwargs;
+
     struct {
       int indegree;
       int outdegree;
@@ -53,6 +66,46 @@ public:
   void boundary_init(MPI_Comm comm);
   void boundary_free();
 
+  template <typename T>
+  const AllToAllWArgs &boundary_get_alltoallw_args(const int ncomp) {
+    if (!this->boundary.map_typencomp_alltoallwargs.count({typeid(T), ncomp})) {
+
+      AllToAllWArgs args;
+      const auto outdegree = this->boundary.graph.outdegree;
+      const auto indegree = this->boundary.graph.indegree;
+
+      args.sendcounts.resize(std::max(1, outdegree));
+      args.recvcounts.resize(std::max(1, indegree));
+      args.sendtypes.resize(std::max(1, outdegree));
+      args.recvtypes.resize(std::max(1, indegree));
+      args.sdispls.resize(std::max(1, outdegree));
+      args.rdispls.resize(std::max(1, indegree));
+
+      MPI_Aint offset = 0;
+      for (int ix = 0; ix < outdegree; ix++) {
+        const int geom_count = this->boundary.outgoing_geom_counts[ix];
+        args.sendcounts[ix] = geom_count * ncomp;
+        args.sdispls[ix] = offset;
+        offset += geom_count * ncomp * sizeof(T);
+      }
+      offset = 0;
+      for (int ix = 0; ix < indegree; ix++) {
+        const int geom_count = this->boundary.incoming_geom_counts[ix];
+        args.recvcounts[ix] = geom_count * ncomp;
+        args.rdispls[ix] = offset;
+        offset += geom_count * ncomp * sizeof(T);
+      }
+
+      std::fill(args.sendtypes.begin(), args.sendtypes.end(),
+                map_ctype_mpi_type<T>());
+      std::fill(args.recvtypes.begin(), args.recvtypes.end(),
+                map_ctype_mpi_type<T>());
+
+      this->boundary.map_typencomp_alltoallwargs[{typeid(T), ncomp}] = args;
+    }
+    return this->boundary.map_typencomp_alltoallwargs.at({typeid(T), ncomp});
+  }
+
 public:
   /**
    * Indicate to the implementation that communication patterns should be set up
@@ -64,7 +117,53 @@ public:
    */
   void boundary_extend_exchange_pattern(
       const std::vector<std::pair<int, int>> &rank_geom_ids);
+
+  /**
+   * Send data from each rank to the owning rank for the data.
+   *
+   * @param[in] data Data to send to owning ranks. num_geoms x ncomp sized array
+   * ordered by component fastest followed by geometry index. Geometry object id
+   * and ordering is defined by outgoing_geom_ids_geom_ids.
+   * @param[in] ncomp Number of components to send per geometry object.
+   * @param[in, out] data_gathered Output data num_geoms x ncomp sized array
+   * ordered by component fastest followed by geometry index. Geometry object id
+   * and ordering is defined by incoming_geom_ids.
+   */
+  template <typename T>
+  void exchange(T *data, const int ncomp, T *data_gathered) {
+    const AllToAllWArgs &args = this->boundary_get_alltoallw_args<T>(ncomp);
+
+    T null_data = 0;
+    T null_data_gathered = 0;
+
+    MPICHK(MPI_Neighbor_alltoallw(
+        data != nullptr ? data : &null_data, args.sendcounts.data(),
+        args.sdispls.data(), args.sendtypes.data(),
+        data_gathered != nullptr ? data_gathered : &null_data_gathered,
+        args.recvcounts.data(), args.rdispls.data(), args.recvtypes.data(),
+        this->boundary.ncomm));
+  }
+
+  /**
+   * Send data from each rank to the owning rank for the data.
+   *
+   * @param[in] data Data to send to owning ranks. Source ranks must be in the
+   * map_recv_rank_to_geom_ids keys.
+   * @param[in] ncomp Number of components to send per geometry object.
+   * @param[in, out] data_gathered Output data num_geoms x ncomp sized array
+   * ordered by component fastest followed by geometry index. Geometry object id
+   * and ordering is defined by incoming_geom_ids.
+   */
+  template <typename T> void exchange() {}
 };
+
+extern template void BoundaryMeshInterface::exchange(int *data, const int ncomp,
+                                                     int *data_gathered);
+extern template void BoundaryMeshInterface::exchange(INT *data, const int ncomp,
+                                                     INT *data_gathered);
+extern template void BoundaryMeshInterface::exchange(REAL *data,
+                                                     const int ncomp,
+                                                     REAL *data_gathered);
 
 } // namespace NESO::Particles
 
