@@ -131,6 +131,9 @@ public:
    */
   template <typename T>
   void boundary_exchange_surface(T *data, const int ncomp, T *data_gathered) {
+    if (ncomp < 1) {
+      return;
+    }
     const AllToAllWArgs &args = this->boundary_get_alltoallw_args<T>(ncomp);
 
     T null_data = 0;
@@ -143,18 +146,6 @@ public:
         args.recvcounts.data(), args.rdispls.data(), args.recvtypes.data(),
         this->boundary.ncomm));
   }
-
-  /**
-   * Send data from each rank to the owning rank for the data.
-   *
-   * @param[in] data Data to send to owning ranks. Source ranks must be in the
-   * map_recv_rank_to_geom_ids keys.
-   * @param[in] ncomp Number of components to send per geometry object.
-   * @param[in, out] data_gathered Output data num_geoms x ncomp sized array
-   * ordered by component fastest followed by geometry index. Geometry object id
-   * and ordering is defined by incoming_geom_ids.
-   */
-  template <typename T> void boundary_exchange_surface() {}
 };
 
 extern template void
