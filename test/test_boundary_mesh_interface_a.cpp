@@ -6,6 +6,7 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
 
   BoundaryMeshInterface bmi;
   bmi.boundary_init(comm);
+  const int ncomp = 7;
 
   int rank = -1;
   int size = -1;
@@ -15,6 +16,8 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
   const int num_owned_geoms = 4;
 
   std::map<int, std::vector<std::pair<int, int>>> test_map;
+  std::map<int, std::map<int, std::vector<REAL>>> test_data;
+
   int num_neighbours = 0;
   if (rank > 0) {
     num_neighbours = rank + 1;
@@ -35,6 +38,13 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
       const int rx = nx % size;
       const int gx = rx * num_owned_geoms + (rx + rankx) % num_owned_geoms;
       test_map[rankx].push_back({rx, gx});
+
+      std::vector<REAL> tmp_data(ncomp);
+      for (int ix = 0; ix < ncomp; ix++) {
+        tmp_data[ix] = gx * 0.31245 + std::pow(rx, ix) * 0.123;
+      }
+
+      test_data[rankx][gx] = tmp_data;
 
       if (rankx == rank) {
         correct_in_degree_t.at(rx)++;
@@ -141,4 +151,29 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
     ASSERT_EQ(incoming_geoms_correct,
               bmi.boundary.map_send_rank_to_geom_ids[rx]);
   }
+
+  std::vector<REAL> outdata;
+  outdata.reserve(bmi.boundary.total_num_outgoing_geoms);
+  for (int gx : bmi.boundary.outgoing_geom_ids) {
+    outdata.insert(outdata.end(), test_data.at(rank).at(gx).begin(),
+                   test_data.at(rank).at(gx).end());
+  }
+
+  std::vector<REAL> indata(bmi.boundary.total_num_incoming_geoms * ncomp);
+  std::fill(indata.begin(), indata.end(), -1.0);
+
+  bmi.boundary_exchange_surface(outdata.data(), ncomp, indata.data());
+
+  std::vector<REAL> indata_correct;
+
+  indata_correct.reserve(bmi.boundary.total_num_incoming_geoms * ncomp);
+
+  for (int source_rank : bmi.boundary.graph.sources) {
+    for (int gid : bmi.boundary.map_send_rank_to_geom_ids.at(source_rank)) {
+      auto &tmp = test_data.at(source_rank).at(gid);
+      indata_correct.insert(indata_correct.end(), tmp.begin(), tmp.end());
+    }
+  }
+
+  ASSERT_EQ(indata, indata_correct);
 }

@@ -148,8 +148,8 @@ void BoundaryMeshInterface::boundary_extend_exchange_pattern(
     NESOASSERT(index == this->boundary.total_num_outgoing_geoms,
                "Bookkeeping error in indexing.");
 
-    this->exchange(this->boundary.outgoing_geom_ids.data(), 1,
-                   this->boundary.incoming_geom_ids.data());
+    this->boundary_exchange_surface(this->boundary.outgoing_geom_ids.data(), 1,
+                                    this->boundary.incoming_geom_ids.data());
 
     // populate map_send_rank_to_geom_ids (this is mainly for testing/debugging)
     index = 0;
@@ -165,11 +165,14 @@ void BoundaryMeshInterface::boundary_extend_exchange_pattern(
   }
 }
 
-template void BoundaryMeshInterface::exchange(int *data, const int ncomp,
-                                              int *data_gathered);
-template void BoundaryMeshInterface::exchange(INT *data, const int ncomp,
-                                              INT *data_gathered);
-template void BoundaryMeshInterface::exchange(REAL *data, const int ncomp,
-                                              REAL *data_gathered);
+template void
+BoundaryMeshInterface::boundary_exchange_surface(int *data, const int ncomp,
+                                                 int *data_gathered);
+template void
+BoundaryMeshInterface::boundary_exchange_surface(INT *data, const int ncomp,
+                                                 INT *data_gathered);
+template void
+BoundaryMeshInterface::boundary_exchange_surface(REAL *data, const int ncomp,
+                                                 REAL *data_gathered);
 
 } // namespace NESO::Particles

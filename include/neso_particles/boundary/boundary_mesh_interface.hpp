@@ -43,9 +43,9 @@ public:
     // by the MPI graph.
     std::vector<int> outgoing_geom_counts;
     // Total number of geometry objects for which there is incoming data.
-    int total_num_incoming_geoms;
+    int total_num_incoming_geoms{0};
     // Total number of geometry objects for which there is outgoing data.
-    int total_num_outgoing_geoms;
+    int total_num_outgoing_geoms{0};
     // Geometry ids of the incoming data
     std::vector<int> incoming_geom_ids;
     // Geometry ids of the outgoing data
@@ -55,8 +55,8 @@ public:
         map_typencomp_alltoallwargs;
 
     struct {
-      int indegree;
-      int outdegree;
+      int indegree{0};
+      int outdegree{0};
       std::vector<int> sources;
       std::vector<int> destinations;
     } graph;
@@ -130,7 +130,7 @@ public:
    * and ordering is defined by incoming_geom_ids.
    */
   template <typename T>
-  void exchange(T *data, const int ncomp, T *data_gathered) {
+  void boundary_exchange_surface(T *data, const int ncomp, T *data_gathered) {
     const AllToAllWArgs &args = this->boundary_get_alltoallw_args<T>(ncomp);
 
     T null_data = 0;
@@ -154,16 +154,18 @@ public:
    * ordered by component fastest followed by geometry index. Geometry object id
    * and ordering is defined by incoming_geom_ids.
    */
-  template <typename T> void exchange() {}
+  template <typename T> void boundary_exchange_surface() {}
 };
 
-extern template void BoundaryMeshInterface::exchange(int *data, const int ncomp,
-                                                     int *data_gathered);
-extern template void BoundaryMeshInterface::exchange(INT *data, const int ncomp,
-                                                     INT *data_gathered);
-extern template void BoundaryMeshInterface::exchange(REAL *data,
-                                                     const int ncomp,
-                                                     REAL *data_gathered);
+extern template void
+BoundaryMeshInterface::boundary_exchange_surface(int *data, const int ncomp,
+                                                 int *data_gathered);
+extern template void
+BoundaryMeshInterface::boundary_exchange_surface(INT *data, const int ncomp,
+                                                 INT *data_gathered);
+extern template void
+BoundaryMeshInterface::boundary_exchange_surface(REAL *data, const int ncomp,
+                                                 REAL *data_gathered);
 
 } // namespace NESO::Particles
 
