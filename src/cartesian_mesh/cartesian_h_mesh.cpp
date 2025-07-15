@@ -304,6 +304,30 @@ std::vector<std::array<int, 3>> CartesianHMesh::get_owned_cells() {
   return cells;
 }
 
+std::array<int, 3>
+CartesianHMesh::get_global_cell_tuple_index(const INT linear_cell_index) {
+
+  NESOASSERT((0 <= linear_cell_index) && (linear_cell_index < this->cell_count),
+             "Bad linear cell index.");
+
+  std::array<int, 3> index = {0, 0, 0};
+  int w[3] = {1, 1, 1};
+
+  for (int dx = 0; dx < this->ndim; dx++) {
+    w[dx] = this->cell_ends[dx] - this->cell_starts[dx];
+  }
+
+  INT linear_cell_index_t = linear_cell_index;
+  for (int dx = 0; dx < this->ndim; dx++) {
+    INT cx = linear_cell_index_t % w[dx];
+    linear_cell_index_t -= cx;
+    linear_cell_index_t /= w[dx];
+    index[dx] = this->cell_starts[dx] + static_cast<int>(cx);
+  }
+
+  return index;
+}
+
 int CartesianHMesh::get_mesh_tuple_owning_rank(const INT *index_mesh) {
 
   std::vector<int> coords_tmp(this->ndim);

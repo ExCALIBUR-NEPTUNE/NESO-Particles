@@ -67,6 +67,17 @@ TEST(CartesianHMesh, mpi_topology_2d) {
   lambda_test({3, 1}, {0, 1});
   lambda_test({3, 5}, {0, 5});
 
+  // test the linear to tuple methods
+  const int cell_count = mesh->get_cell_count();
+  auto cells = mesh->get_owned_cells();
+
+  for (int cx = 0; cx < cell_count; cx++) {
+    auto correct = cells.at(cx);
+    auto to_test = mesh->get_global_cell_tuple_index(cx);
+
+    ASSERT_EQ(correct, to_test);
+  }
+
   mesh->free();
 }
 
@@ -151,6 +162,17 @@ TEST(CartesianHMesh, mpi_topology_3d) {
   lambda_test({5, 3, 0}, {3, 0, mesh->cell_counts[2] - 1});
   lambda_test({5, 0, 5}, {0, 5, mesh->cell_counts[2] - 1});
   lambda_test({5, 6, 4}, {6, 4, mesh->cell_counts[2] - 1});
+
+  // test the linear to tuple methods
+  const int cell_count = mesh->get_cell_count();
+  auto cells = mesh->get_owned_cells();
+
+  for (int cx = 0; cx < cell_count; cx++) {
+    auto correct = cells.at(cx);
+    auto to_test = mesh->get_global_cell_tuple_index(cx);
+
+    ASSERT_EQ(correct, to_test);
+  }
 
   mesh->free();
 }

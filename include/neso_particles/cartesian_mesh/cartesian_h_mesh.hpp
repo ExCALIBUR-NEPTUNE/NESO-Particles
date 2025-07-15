@@ -140,6 +140,14 @@ public:
   std::vector<std::array<int, 3>> get_owned_cells();
 
   /**
+   * Get the global index in tuple form from a local linear cell id.
+   *
+   * @param linear_cell_index Local linear cell index.
+   * @returns Global tuple of cell index.
+   */
+  std::array<int, 3> get_global_cell_tuple_index(const INT linear_cell_index);
+
+  /**
    * @param face_id Face id to compute owning rank for.
    * @returns Owning rank for passed face id.
    */
