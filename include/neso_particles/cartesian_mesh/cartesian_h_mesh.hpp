@@ -32,6 +32,8 @@ private:
   std::array<int, 6> face_strides0{0, 0, 0, 0, 0, 0};
   std::array<int, 6> face_strides1{0, 0, 0, 0, 0, 0};
   std::array<int, 6> num_geoms_per_face{0, 0, 0, 0, 0, 0};
+  std::array<int, 6> num_geoms_per_face_incscan{0, 0, 0, 0, 0, 0};
+  std::array<int, 6> num_geoms_per_face_exscan{0, 0, 0, 0, 0, 0};
   std::unordered_map<int, int> map_face_id_to_rank;
 
 public:
@@ -101,6 +103,9 @@ public:
   double get_inverse_cell_width_fine();
   int get_ncells_coarse();
   int get_ncells_fine();
+  std::vector<int> &get_local_communication_neighbours();
+  void get_point_in_subdomain(double *point);
+  std::shared_ptr<MeshHierarchy> get_mesh_hierarchy();
 
   /**
    * @returns The number of "cell" NESO-Particles should consider.
@@ -111,8 +116,6 @@ public:
    * @returns The number of Cartesian cells owned by this MPI rank.
    */
   int get_cart_cell_count();
-
-  std::shared_ptr<MeshHierarchy> get_mesh_hierarchy();
 
   /**
    * Convert a mesh index (index_x, index_y, ...) for this cartesian mesh to
@@ -129,10 +132,6 @@ public:
    */
   void free();
 
-  std::vector<int> &get_local_communication_neighbours();
-
-  void get_point_in_subdomain(double *point);
-
   /**
    * Get a vector of the cells owned by this MPI rank.
    *
@@ -145,6 +144,37 @@ public:
    * @returns Owning rank for passed face id.
    */
   int get_face_id_owning_rank(const int face_id);
+
+  /**
+   * @param index_mesh Cartesian mesh index to find owning rank for.
+   * @returns Owning rank of passed mesh index.
+   */
+  int get_mesh_tuple_owning_rank(const INT *index_mesh);
+
+  /**
+   * Convert a face cell id into a face index and local coordinate index for the
+   * face.
+   *
+   * @param[in] face_id Linear face id to convert.
+   * @param[in, out] face_index_tuple Index of the face on which the cell lies.
+   */
+  void get_face_id_as_tuple(const int face_id, INT *face_index_tuple);
+
+  /**
+   * Convert the face geom tuple id to a linear index.
+   *
+   * @param face_index_tuple Tuple describing the face geom.
+   */
+  int get_face_linear_index_from_tuple(const INT *face_index_tuple);
+
+  /**
+   * Get the mesh cell as a mesh tuple which has the passed face geometry index
+   * as a face.
+   *
+   * @param[in] face_tuple Tuple which desribes the cell on the face.
+   * @param[in, out] Mesh tuple that describes the cell which owns the face.
+   */
+  void get_mesh_tuple_owning_face_tuple(INT *face_index_tuple, INT *mesh_tuple);
 };
 
 typedef std::shared_ptr<CartesianHMesh> CartesianHMeshSharedPtr;

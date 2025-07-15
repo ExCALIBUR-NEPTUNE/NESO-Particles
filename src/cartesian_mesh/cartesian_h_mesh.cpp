@@ -215,6 +215,13 @@ CartesianHMesh::CartesianHMesh(MPI_Comm comm, const int ndim,
     this->face_strides1[4] = dims[1] * ncells_dim_fine;
     this->face_strides1[5] = dims[1] * ncells_dim_fine;
   }
+
+  int total = 0;
+  for (int ix = 0; ix < 6; ix++) {
+    num_geoms_per_face_exscan[ix] = total;
+    total += this->num_geoms_per_face[ix];
+    num_geoms_per_face_incscan[ix] = total;
+  }
 }
 
 MPI_Comm CartesianHMesh::get_comm() { return this->comm_cart; }
@@ -297,55 +304,129 @@ std::vector<std::array<int, 3>> CartesianHMesh::get_owned_cells() {
   return cells;
 }
 
+int CartesianHMesh::get_mesh_tuple_owning_rank(const INT *index_mesh) {
+
+  std::vector<int> coords_tmp(this->ndim);
+
+  for (int dx = 0; dx < this->ndim; dx++) {
+    NESOASSERT((0 <= index_mesh[dx]) &&
+                   (index_mesh[dx] <
+                    this->dims[dx] * this->mesh_hierarchy->ncells_dim_fine),
+               "Bad index passed.");
+
+    coords_tmp[dx] = static_cast<int>(
+        get_decomp_1d_inverse(static_cast<std::size_t>(this->mpi_dims[dx]),
+                              static_cast<std::size_t>(this->cell_counts[dx]),
+                              static_cast<std::size_t>(index_mesh[dx])));
+  }
+
+  int owning_rank = -1;
+
+  MPICHK(MPI_Cart_rank(this->comm_cart, coords_tmp.data(), &owning_rank));
+  return owning_rank;
+}
+
+void CartesianHMesh::get_face_id_as_tuple(const int face_id,
+                                          INT *face_index_tuple) {
+
+  const int num_faces = this->ndim == 2 ? 4 : 6;
+
+  const int num_face_indices = std::accumulate(
+      num_geoms_per_face.begin(), num_geoms_per_face.begin() + num_faces, 0);
+
+  NESOASSERT((0 <= face_id) && (face_id < num_face_indices),
+             "Bad linear face id passed.");
+
+  int face_containing = -1;
+  for (int facex = 0; facex < num_faces; facex++) {
+    if (face_id < this->num_geoms_per_face_incscan[facex]) {
+      face_containing = facex;
+      break;
+    }
+  }
+
+  NESOASSERT(face_containing >= 0, "Failed to find face (lower bound).");
+  NESOASSERT(face_containing < num_faces, "Failed to find face (upper bound).");
+
+  // id local to each face
+  int local_face_id =
+      face_id - this->num_geoms_per_face_exscan[face_containing];
+
+  // local face ids are lexicographically indexed
+  const int l0 = local_face_id % this->face_strides0[face_containing];
+  const int l1 = local_face_id / this->face_strides0[face_containing];
+
+  NESOASSERT((0 <= l1) && (l1 < this->face_strides1[face_containing]),
+             "Bad l1 computed.");
+
+  NESOASSERT((l0 + l1 * this->face_strides0[face_containing]) == local_face_id,
+             "Failed to compute geom index correctly (local id)");
+
+  NESOASSERT(this->num_geoms_per_face_exscan[face_containing] + local_face_id ==
+                 face_id,
+             "Failed to compute geom index correctly (local id + offset)");
+
+  face_index_tuple[0] = face_containing;
+  face_index_tuple[1] = l0;
+  face_index_tuple[2] = l1;
+}
+
+void CartesianHMesh::get_mesh_tuple_owning_face_tuple(INT *face_index_tuple,
+                                                      INT *mesh_tuple) {
+  const INT face_index = face_index_tuple[0];
+  const INT l0 = face_index_tuple[1];
+
+  if (this->ndim == 2) {
+    const int index_lhs0[4] = {0, 1, 0, 1};
+
+    const int index_lhs1[4] = {1, 0, 1, 0};
+    const INT last_values[4] = {0, this->cell_counts[0] - 1,
+                                this->cell_counts[1] - 1, 0};
+    mesh_tuple[index_lhs0[face_index]] = l0;
+    mesh_tuple[index_lhs1[face_index]] = last_values[face_index];
+  } else {
+    const INT l1 = face_index_tuple[2];
+
+    const int index_lhs0[6] = {0, 1, 0, 1, 0, 0};
+    const int index_lhs1[6] = {2, 2, 2, 2, 1, 1};
+    const int index_lhs2[6] = {1, 0, 1, 0, 2, 2};
+    const INT last_values[6] = {
+        0, this->cell_counts[0] - 1, this->cell_counts[1] - 1, 0,
+        0, this->cell_counts[2] - 1};
+
+    mesh_tuple[index_lhs0[face_index]] = l0;
+    mesh_tuple[index_lhs1[face_index]] = l1;
+    mesh_tuple[index_lhs2[face_index]] = last_values[face_index];
+  }
+}
+
+int CartesianHMesh::get_face_linear_index_from_tuple(
+    const INT *face_index_tuple) {
+
+  const INT offset = std::accumulate(
+      this->num_geoms_per_face.begin(),
+      this->num_geoms_per_face.begin() + face_index_tuple[0], 0);
+
+  if (this->ndim == 2) {
+    return offset + face_index_tuple[1];
+  } else {
+    return offset + face_index_tuple[1] +
+           face_index_tuple[2] * this->face_strides0[face_index_tuple[0]];
+  }
+}
+
 int CartesianHMesh::get_face_id_owning_rank(const int face_id) {
   NESOASSERT(this->ndim == 2 || this->ndim == 3,
              "Unexpected number of dimensions.");
   NESOASSERT((0 <= face_id) && (face_id < this->num_face_geoms), "Bad face id");
   if (!this->map_face_id_to_rank.count(face_id)) {
-    const int num_faces = this->ndim == 2 ? 4 : 6;
 
-    int face_containg = -1;
-    int offset = 0;
-    for (int facex = 0; facex < num_faces; facex++) {
-      if (face_id < this->num_geoms_per_face[facex]) {
-        face_containg = facex;
-        break;
-      } else {
-        offset += this->num_geoms_per_face[facex];
-      }
-    }
+    INT face_tuple[3] = {0, 0, 0};
+    INT mesh_tuple[3] = {0, 0, 0};
 
-    // id local to each face
-    int local_face_id = face_id - offset;
-    // local face ids are lexicographically indexed
-    const int l0 = local_face_id % this->face_strides0[face_containg];
-    const int l1 = local_face_id / this->face_strides0[face_containg];
-
-    NESOASSERT((0 <= l1) && (l1 < this->face_strides1[face_containg]),
-               "Bad l1 computed.");
-
-    NESOASSERT((l0 + l1 * this->face_strides0[face_containg]) == local_face_id,
-               "Failed to compute geom index correctly (local id)");
-
-    NESOASSERT(offset + local_face_id == face_id,
-               "Failed to compute geom index correctly (local id + offset)");
-
-    // Now find out which rank owns face geom l0, l1 on face face_containg.
-    int lookup_coords[3] = {0, 0, 0};
-
-    if (this->ndim == 2) {
-
-      const int l2_lookup[4] = {0, this->mpi_dims[0], 0, 0};
-
-      constexpr int i0[4] = {
-
-      };
-
-    } else {
-    }
-
-    int owning_rank = -1;
-    MPICHK(MPI_Cart_rank(this->comm_cart, lookup_coords, &owning_rank));
+    this->get_face_id_as_tuple(face_id, face_tuple);
+    this->get_mesh_tuple_owning_face_tuple(face_tuple, mesh_tuple);
+    const int owning_rank = this->get_mesh_tuple_owning_rank(mesh_tuple);
 
     this->map_face_id_to_rank[face_id] = owning_rank;
   }
