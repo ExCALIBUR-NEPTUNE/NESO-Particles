@@ -395,8 +395,8 @@ void CartesianHMesh::get_face_id_as_tuple(const int face_id,
   face_index_tuple[2] = l1;
 }
 
-void CartesianHMesh::get_mesh_tuple_owning_face_tuple(INT *face_index_tuple,
-                                                      INT *mesh_tuple) {
+void CartesianHMesh::get_mesh_tuple_owning_face_tuple(
+    const INT *face_index_tuple, INT *mesh_tuple) {
   const INT face_index = face_index_tuple[0];
   const INT l0 = face_index_tuple[1];
 
@@ -457,7 +457,8 @@ int CartesianHMesh::get_face_id_owning_rank(const int face_id) {
   return this->map_face_id_to_rank[face_id];
 }
 
-std::vector<double> CartesianHMesh::get_vtk_cell_points(const int index) {
+std::vector<double>
+CartesianHMesh::get_vtk_cell_points(const INT *index_tuple) {
 
   std::vector<std::array<int, 3>> offsets;
   offsets.reserve(1 << this->ndim);
@@ -478,17 +479,25 @@ std::vector<double> CartesianHMesh::get_vtk_cell_points(const int index) {
 
   std::vector<double> points;
   points.reserve(3 * (1 << this->ndim));
-  auto cell_tuple = this->get_global_cell_tuple_index(index);
+
   const auto width = this->cell_width_fine;
 
   for (auto &ox : offsets) {
     // The VTK interface is in R^3.
     for (int dx = 0; dx < 3; dx++) {
-      points.push_back(cell_tuple[dx] * width + ox[dx] * width);
+      points.push_back(index_tuple[dx] * width + ox[dx] * width);
     }
   }
 
   return points;
+}
+
+std::vector<double> CartesianHMesh::get_vtk_cell_points(const int index) {
+
+  auto cell_tuple = this->get_global_cell_tuple_index(index);
+  INT index_tuple[3] = {cell_tuple[0], cell_tuple[1], cell_tuple[2]};
+
+  return this->get_vtk_cell_points(index_tuple);
 }
 
 std::vector<VTK::UnstructuredCell> CartesianHMesh::get_vtk_cell_data() {
@@ -501,6 +510,76 @@ std::vector<VTK::UnstructuredCell> CartesianHMesh::get_vtk_cell_data() {
   }
 
   return vtk_cell_data;
+}
+
+std::vector<double>
+CartesianHMesh::get_vtk_face_cell_points(const INT *face_index_tuple) {
+
+  INT cell_tuple[3] = {0, 0, 0};
+  this->get_mesh_tuple_owning_face_tuple(face_index_tuple, cell_tuple);
+  auto cell_points = this->get_vtk_cell_points(cell_tuple);
+
+  std::vector<double> points;
+  points.reserve(3 * (1 << (this->ndim - 1)));
+  const int face_index = static_cast<int>(face_index_tuple[0]);
+
+  if (this->ndim == 2) {
+    constexpr int indices[8] = {0, 1, 1, 2, 3, 2, 0, 3};
+
+    for (int px = 0; px < 2; px++) {
+      for (int cx = 0; cx < 3; cx++) {
+        points.push_back(cell_points[3 * indices[face_index * 2 + px] + cx]);
+      }
+    }
+
+  } else {
+
+    /*
+     *  Top
+     *   7 - 6
+     *   |   |
+     *   4 - 5
+     *  Bottom
+     *
+     *   3 - 2
+     *   |   |
+     *   0 - 1
+     *
+     *  y
+     *  ^
+     *  |
+     *   -> x
+     *
+     */
+    constexpr int indices[24] = {
+        0, 1, 5, 4, // Face 0
+        1, 2, 6, 5, // Face 1
+        3, 2, 6, 7, // Face 2
+        0, 3, 7, 4, // Face 3
+        0, 1, 2, 3, // Face 4
+        4, 5, 6, 7, // Face 5
+    };
+
+    for (int px = 0; px < 4; px++) {
+      for (int cx = 0; cx < 3; cx++) {
+        points.push_back(cell_points[3 * indices[face_index * 4 + px] + cx]);
+      }
+    }
+  }
+
+  return points;
+}
+
+std::vector<double>
+CartesianHMesh::get_vtk_face_cell_points(const int face_index) {
+  NESOASSERT((0 <= face_index) &&
+                 (face_index <
+                  this->num_geoms_per_face_incscan[this->ndim == 2 ? 3 : 5]),
+             "Bad face index passed.");
+
+  INT face_index_tuple[3] = {0, 0, 0};
+  this->get_face_id_as_tuple(face_index, face_index_tuple);
+  return this->get_vtk_face_cell_points(face_index_tuple);
 }
 
 } // namespace NESO::Particles

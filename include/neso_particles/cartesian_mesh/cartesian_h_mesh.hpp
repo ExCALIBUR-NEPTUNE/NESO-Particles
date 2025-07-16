@@ -183,7 +183,8 @@ public:
    * @param[in] face_tuple Tuple which desribes the cell on the face.
    * @param[in, out] Mesh tuple that describes the cell which owns the face.
    */
-  void get_mesh_tuple_owning_face_tuple(INT *face_index_tuple, INT *mesh_tuple);
+  void get_mesh_tuple_owning_face_tuple(const INT *face_index_tuple,
+                                        INT *mesh_tuple);
 
   /**
    * Get the coordinates of the vertices of a cell in a form that can be passed
@@ -194,12 +195,37 @@ public:
   std::vector<double> get_vtk_cell_points(const int index);
 
   /**
+   * Get the coordinates of the vertices of a cell in a form that can be passed
+   * directly to NESO::Particles::VTK::UnstructuredCell.
+   *
+   * @param index_tuple Global index in tuple form of cell to collect vertex
+   * coordinates for.
+   */
+  std::vector<double> get_vtk_cell_points(const INT *index_tuple);
+
+  /**
    * Get VTK data for all cells.
    *
    * @returns Vector of VTK data which can be passed to our VTKHDF
    * implementation.
    */
   std::vector<VTK::UnstructuredCell> get_vtk_cell_data();
+
+  /**
+   * Get the VTK data for a single face cell.
+   *
+   * @param face_index_tuple Index of the face cell in tuple form.
+   * @returns Vertex coordinates in form VTK::UnstructuredCell can use.
+   */
+  std::vector<double> get_vtk_face_cell_points(const INT *face_index_tuple);
+
+  /**
+   * Get the VTK data for a single face cell.
+   *
+   * @param face_index Index of the face cell in linear form.
+   * @returns Vertex coordinates in form VTK::UnstructuredCell can use.
+   */
+  std::vector<double> get_vtk_face_cell_points(const int face_index);
 };
 
 typedef std::shared_ptr<CartesianHMesh> CartesianHMeshSharedPtr;

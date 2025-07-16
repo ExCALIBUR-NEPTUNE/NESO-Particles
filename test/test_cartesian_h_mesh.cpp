@@ -96,6 +96,43 @@ TEST(CartesianHMesh, mpi_topology_2d) {
     }
   }
 
+  // test vtk coordinates for boundary face cells.
+  const int face_cell_count = 2 * dims[0] * std::pow(2, subdivision_order) +
+                              2 * dims[1] * std::pow(2, subdivision_order);
+
+  INT face_index_tuple[3] = {0, 0, 0};
+
+  const REAL e0 = dims[0] * cell_extent;
+  const REAL e1 = dims[1] * cell_extent;
+
+  for (int cx = 0; cx < face_cell_count; cx++) {
+    auto to_test = mesh->get_vtk_face_cell_points(cx);
+    mesh->get_face_id_as_tuple(cx, face_index_tuple);
+    const auto fx = face_index_tuple[0];
+    const auto l0 = face_index_tuple[1];
+
+    std::vector<double> correct;
+
+    if (fx == 0) {
+      correct = {l0 * width, 0.0, 0.0, l0 * width + width, 0.0, 0.0};
+    }
+    if (fx == 1) {
+      correct = {e0, l0 * width, 0.0, e0, l0 * width + width, 0.0};
+    }
+    if (fx == 2) {
+      correct = {l0 * width, e1, 0.0, l0 * width + width, e1, 0.0};
+    }
+    if (fx == 3) {
+      correct = {
+          0.0, l0 * width, 0.0, 0.0, l0 * width + width, 0.0,
+      };
+    }
+
+    for (int ix = 0; ix < 6; ix++) {
+      ASSERT_NEAR(correct.at(ix), to_test.at(ix), 1.0e-14);
+    }
+  }
+
   // std::vector<VTK::UnstructuredCell> vtk_cell_data =
   // mesh->get_vtk_cell_data(); for(int cx=0 ; cx<cell_count ; cx++){
   //   vtk_cell_data.at(cx).cell_data["rank"] = rank;
@@ -220,6 +257,81 @@ TEST(CartesianHMesh, mpi_topology_3d) {
 
     for (int ix = 0; ix < 24; ix++) {
       ASSERT_NEAR(to_test.at(ix), correct.at(ix), 1.0e-14);
+    }
+  }
+
+  // test vtk coordinates for boundary face cells.
+  const int face_cell_count =
+      2 * dims[0] * dims[2] * std::pow(2, subdivision_order * 2) +
+      2 * dims[1] * dims[2] * std::pow(2, subdivision_order * 2) +
+      2 * dims[0] * dims[1] * std::pow(2, subdivision_order * 2);
+
+  INT face_index_tuple[3] = {0, 0, 0};
+
+  const REAL e0 = dims[0] * cell_extent;
+  const REAL e1 = dims[1] * cell_extent;
+  const REAL e2 = dims[2] * cell_extent;
+
+  for (int cx = 0; cx < face_cell_count; cx++) {
+    auto to_test = mesh->get_vtk_face_cell_points(cx);
+    mesh->get_face_id_as_tuple(cx, face_index_tuple);
+    const auto fx = face_index_tuple[0];
+    const double l0 = face_index_tuple[1];
+    const double l1 = face_index_tuple[2];
+
+    std::vector<double> correct;
+
+    if (fx == 0) {
+      correct = {
+          l0 * width,         0.0, l1 * width,
+          l0 * width + width, 0.0, l1 * width,
+          l0 * width + width, 0.0, l1 * width + width,
+          l0 * width,         0.0, l1 * width + width,
+      };
+    }
+    if (fx == 1) {
+      correct = {
+          e0, l0 * width,         l1 * width,
+          e0, l0 * width + width, l1 * width,
+          e0, l0 * width + width, l1 * width + width,
+          e0, l0 * width,         l1 * width + width,
+      };
+    }
+    if (fx == 2) {
+      correct = {
+          l0 * width,         e1, l1 * width,
+          l0 * width + width, e1, l1 * width,
+          l0 * width + width, e1, l1 * width + width,
+          l0 * width,         e1, l1 * width + width,
+      };
+    }
+    if (fx == 3) {
+      correct = {
+          0.0, l0 * width,         l1 * width,
+          0.0, l0 * width + width, l1 * width,
+          0.0, l0 * width + width, l1 * width + width,
+          0.0, l0 * width,         l1 * width + width,
+      };
+    }
+    if (fx == 4) {
+      correct = {
+          l0 * width,         l1 * width,         0.0,
+          l0 * width + width, l1 * width,         0.0,
+          l0 * width + width, l1 * width + width, 0.0,
+          l0 * width,         l1 * width + width, 0.0,
+      };
+    }
+    if (fx == 5) {
+      correct = {
+          l0 * width,         l1 * width,         e2,
+          l0 * width + width, l1 * width,         e2,
+          l0 * width + width, l1 * width + width, e2,
+          l0 * width,         l1 * width + width, e2,
+      };
+    }
+
+    for (int ix = 0; ix < 12; ix++) {
+      ASSERT_NEAR(correct.at(ix), to_test.at(ix), 1.0e-14);
     }
   }
 
