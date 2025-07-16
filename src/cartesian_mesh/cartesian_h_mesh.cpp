@@ -457,4 +457,50 @@ int CartesianHMesh::get_face_id_owning_rank(const int face_id) {
   return this->map_face_id_to_rank[face_id];
 }
 
+std::vector<double> CartesianHMesh::get_vtk_cell_points(const int index) {
+
+  std::vector<std::array<int, 3>> offsets;
+  offsets.reserve(1 << this->ndim);
+
+  // The ordering matters here for VTK.
+  offsets.push_back({0, 0, 0});
+  offsets.push_back({1, 0, 0});
+  if (this->ndim > 1) {
+    offsets.push_back({1, 1, 0});
+    offsets.push_back({0, 1, 0});
+  }
+  if (this->ndim > 2) {
+    offsets.push_back({0, 0, 1});
+    offsets.push_back({1, 0, 1});
+    offsets.push_back({1, 1, 1});
+    offsets.push_back({0, 1, 1});
+  }
+
+  std::vector<double> points;
+  points.reserve(3 * (1 << this->ndim));
+  auto cell_tuple = this->get_global_cell_tuple_index(index);
+  const auto width = this->cell_width_fine;
+
+  for (auto &ox : offsets) {
+    // The VTK interface is in R^3.
+    for (int dx = 0; dx < 3; dx++) {
+      points.push_back(cell_tuple[dx] * width + ox[dx] * width);
+    }
+  }
+
+  return points;
+}
+
+std::vector<VTK::UnstructuredCell> CartesianHMesh::get_vtk_cell_data() {
+  std::vector<VTK::UnstructuredCell> vtk_cell_data(this->cell_count);
+  for (int cx = 0; cx < this->cell_count; cx++) {
+    vtk_cell_data.at(cx).num_points = this->ndim == 2 ? 4 : 8;
+    vtk_cell_data.at(cx).points = this->get_vtk_cell_points(cx);
+    vtk_cell_data.at(cx).cell_type =
+        this->ndim == 2 ? VTK::CellType::quadrilateral : VTK::CellType::hex;
+  }
+
+  return vtk_cell_data;
+}
+
 } // namespace NESO::Particles

@@ -78,6 +78,33 @@ TEST(CartesianHMesh, mpi_topology_2d) {
     ASSERT_EQ(correct, to_test);
   }
 
+  // test the vtk coordinates
+  REAL width = mesh->get_mesh_hierarchy()->cell_width_fine;
+  for (int cx = 0; cx < cell_count; cx++) {
+    auto to_test = mesh->get_vtk_cell_points(cx);
+    ASSERT_EQ(to_test.size(), 12);
+    auto c = mesh->get_global_cell_tuple_index(cx);
+
+    std::vector<double> correct = {
+        c[0] * width,         c[1] * width,         0.0,
+        c[0] * width + width, c[1] * width,         0.0,
+        c[0] * width + width, c[1] * width + width, 0.0,
+        c[0] * width,         c[1] * width + width, 0.0};
+
+    for (int ix = 0; ix < 12; ix++) {
+      ASSERT_NEAR(to_test.at(ix), correct.at(ix), 1.0e-14);
+    }
+  }
+
+  // std::vector<VTK::UnstructuredCell> vtk_cell_data =
+  // mesh->get_vtk_cell_data(); for(int cx=0 ; cx<cell_count ; cx++){
+  //   vtk_cell_data.at(cx).cell_data["rank"] = rank;
+  // }
+  //
+  // VTK::VTKHDF vtkhdf("mesh2d.vtkhdf", comm);
+  // vtkhdf.write(vtk_cell_data);
+  // vtkhdf.close();
+
   mesh->free();
 }
 
@@ -173,6 +200,37 @@ TEST(CartesianHMesh, mpi_topology_3d) {
 
     ASSERT_EQ(correct, to_test);
   }
+
+  // test the vtk coordinates
+  REAL width = mesh->get_mesh_hierarchy()->cell_width_fine;
+  for (int cx = 0; cx < cell_count; cx++) {
+    auto to_test = mesh->get_vtk_cell_points(cx);
+    ASSERT_EQ(to_test.size(), 24);
+    auto c = mesh->get_global_cell_tuple_index(cx);
+
+    std::vector<double> correct = {
+        c[0] * width,         c[1] * width,         c[2] * width,
+        c[0] * width + width, c[1] * width,         c[2] * width,
+        c[0] * width + width, c[1] * width + width, c[2] * width,
+        c[0] * width,         c[1] * width + width, c[2] * width,
+        c[0] * width,         c[1] * width,         c[2] * width + width,
+        c[0] * width + width, c[1] * width,         c[2] * width + width,
+        c[0] * width + width, c[1] * width + width, c[2] * width + width,
+        c[0] * width,         c[1] * width + width, c[2] * width + width};
+
+    for (int ix = 0; ix < 24; ix++) {
+      ASSERT_NEAR(to_test.at(ix), correct.at(ix), 1.0e-14);
+    }
+  }
+
+  // std::vector<VTK::UnstructuredCell> vtk_cell_data =
+  // mesh->get_vtk_cell_data(); for(int cx=0 ; cx<cell_count ; cx++){
+  //   vtk_cell_data.at(cx).cell_data["rank"] = rank;
+  // }
+  //
+  // VTK::VTKHDF vtkhdf("mesh3d.vtkhdf", comm);
+  // vtkhdf.write(vtk_cell_data);
+  // vtkhdf.close();
 
   mesh->free();
 }

@@ -2,6 +2,7 @@
 #define _NESO_PARTICLES_CARTESIAN_MESH_CARTESIAN_H_MESH_HPP_
 #include "../mesh_interface.hpp"
 
+#include "../external_interfaces/vtk/vtk.hpp"
 #include <array>
 #include <cstdint>
 #include <cstdlib>
@@ -183,6 +184,22 @@ public:
    * @param[in, out] Mesh tuple that describes the cell which owns the face.
    */
   void get_mesh_tuple_owning_face_tuple(INT *face_index_tuple, INT *mesh_tuple);
+
+  /**
+   * Get the coordinates of the vertices of a cell in a form that can be passed
+   * directly to NESO::Particles::VTK::UnstructuredCell.
+   *
+   * @param index Local index of cell to collect vertex coordinates for.
+   */
+  std::vector<double> get_vtk_cell_points(const int index);
+
+  /**
+   * Get VTK data for all cells.
+   *
+   * @returns Vector of VTK data which can be passed to our VTKHDF
+   * implementation.
+   */
+  std::vector<VTK::UnstructuredCell> get_vtk_cell_data();
 };
 
 typedef std::shared_ptr<CartesianHMesh> CartesianHMeshSharedPtr;
