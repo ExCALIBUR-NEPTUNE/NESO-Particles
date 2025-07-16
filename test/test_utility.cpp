@@ -99,3 +99,20 @@ TEST(Utility, decomp_1d) {
     ASSERT_TRUE(ix < rend);
   }
 }
+
+TEST(Utility, flatten_map) {
+
+  std::set<int> s, t;
+  std::map<int, int> m;
+  for (int ix = 0; ix < 37; ix++) {
+    s.insert(ix + 100);
+    m[ix] = ix + 100;
+  }
+
+  auto n = flatten_map(m);
+  for (int nx : n) {
+    t.insert(nx);
+  }
+
+  ASSERT_EQ(s, t);
+}
