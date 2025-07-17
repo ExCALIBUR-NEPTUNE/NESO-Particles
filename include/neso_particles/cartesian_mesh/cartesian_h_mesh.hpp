@@ -272,10 +272,10 @@ public:
   /**
    * Get VTK data for all face cells.
    *
-   * @returns Vector of VTK data which can be passed to our VTKHDF
-   * implementation.
+   * @returns Map from face linear INX to VTK data which can be passed to our
+   * VTKHDF implementation once linearised into a vector (see flatten_map).
    */
-  std::vector<VTK::UnstructuredCell> get_vtk_face_cell_data();
+  std::map<INT, VTK::UnstructuredCell> get_vtk_face_cell_data();
 
   /**
    * @returns A MPI communicator containing ranks that own face cells. This

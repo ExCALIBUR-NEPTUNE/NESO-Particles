@@ -646,18 +646,20 @@ const std::vector<INT> &CartesianHMesh::get_owned_face_cells() {
   return this->owned_face_indices;
 }
 
-std::vector<VTK::UnstructuredCell> CartesianHMesh::get_vtk_face_cell_data() {
-  std::vector<VTK::UnstructuredCell> output_data(
-      this->owned_face_indices.size());
+std::map<INT, VTK::UnstructuredCell> CartesianHMesh::get_vtk_face_cell_data() {
+  std::map<INT, VTK::UnstructuredCell> output_data;
 
-  int index = 0;
   for (auto ix : this->owned_face_indices) {
-    output_data.at(index).num_points = this->ndim == 2 ? 2 : 4;
-    output_data.at(index).points = this->get_vtk_face_cell_points(ix);
-    output_data.at(index).cell_type =
+
+    VTK::UnstructuredCell tmp;
+
+    tmp.num_points = this->ndim == 2 ? 2 : 4;
+    tmp.points = this->get_vtk_face_cell_points(ix);
+    tmp.cell_type =
         this->ndim == 2 ? VTK::CellType::line : VTK::CellType::quadrilateral;
 
-    index++;
+    tmp.cell_data["face_cell_index"] = ix;
+    output_data[ix] = tmp;
   }
 
   return output_data;
