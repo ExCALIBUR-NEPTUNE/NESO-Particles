@@ -133,14 +133,39 @@ TEST(CartesianHMesh, mpi_topology_2d) {
     }
   }
 
-  // std::vector<VTK::UnstructuredCell> vtk_cell_data =
-  // mesh->get_vtk_cell_data(); for(int cx=0 ; cx<cell_count ; cx++){
-  //   vtk_cell_data.at(cx).cell_data["rank"] = rank;
-  // }
-  //
-  // VTK::VTKHDF vtkhdf("mesh2d.vtkhdf", comm);
-  // vtkhdf.write(vtk_cell_data);
-  // vtkhdf.close();
+  auto owned_face_cells = mesh->get_owned_face_cells();
+
+  int num_local_owned_face_cells = static_cast<int>(owned_face_cells.size());
+  int total_found_face_cells = -1;
+  MPICHK(MPI_Allreduce(&num_local_owned_face_cells, &total_found_face_cells, 1,
+                       MPI_INT, MPI_SUM, mesh->get_comm()));
+
+  ASSERT_EQ(total_found_face_cells, face_cell_count);
+  for (INT ix : owned_face_cells) {
+    const int to_test_rank = mesh->get_face_id_owning_rank(ix);
+    ASSERT_EQ(to_test_rank, rank);
+  }
+
+  std::vector<VTK::UnstructuredCell> vtk_cell_data = mesh->get_vtk_cell_data();
+  for (int cx = 0; cx < cell_count; cx++) {
+    vtk_cell_data.at(cx).cell_data["rank"] = rank;
+  }
+
+  VTK::VTKHDF vtkhdf("mesh2d.vtkhdf", comm);
+  vtkhdf.write(vtk_cell_data);
+  vtkhdf.close();
+
+  std::vector<VTK::UnstructuredCell> vtk_face_cell_data =
+      mesh->get_vtk_face_cell_data();
+  const int num_faces = mesh->get_owned_face_cells().size();
+  nprint_variable(num_faces);
+  for (int cx = 0; cx < num_faces; cx++) {
+    vtk_face_cell_data.at(cx).cell_data["rank"] = rank;
+  }
+
+  VTK::VTKHDF vtkhdf_face("mesh2d_face.vtkhdf", comm);
+  vtkhdf_face.write(vtk_face_cell_data);
+  vtkhdf_face.close();
 
   mesh->free();
 }
@@ -333,6 +358,19 @@ TEST(CartesianHMesh, mpi_topology_3d) {
     for (int ix = 0; ix < 12; ix++) {
       ASSERT_NEAR(correct.at(ix), to_test.at(ix), 1.0e-14);
     }
+  }
+
+  auto owned_face_cells = mesh->get_owned_face_cells();
+
+  int num_local_owned_face_cells = static_cast<int>(owned_face_cells.size());
+  int total_found_face_cells = -1;
+  MPICHK(MPI_Allreduce(&num_local_owned_face_cells, &total_found_face_cells, 1,
+                       MPI_INT, MPI_SUM, mesh->get_comm()));
+
+  ASSERT_EQ(total_found_face_cells, face_cell_count);
+  for (INT ix : owned_face_cells) {
+    const int to_test_rank = mesh->get_face_id_owning_rank(ix);
+    ASSERT_EQ(to_test_rank, rank);
   }
 
   // std::vector<VTK::UnstructuredCell> vtk_cell_data =

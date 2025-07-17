@@ -222,6 +222,59 @@ CartesianHMesh::CartesianHMesh(MPI_Comm comm, const int ndim,
     total += this->num_geoms_per_face[ix];
     num_geoms_per_face_incscan[ix] = total;
   }
+
+  this->compute_owned_face_indices();
+}
+
+void CartesianHMesh::compute_owned_face_indices() {
+
+  NESOASSERT((1 < this->ndim) && (this->ndim < 4),
+             "Unexpected number of dimensions.");
+
+  // This is not amazing but is at least has a cost that is proportional to the
+  // size of the locally owned domain instead of scaling with the global size.
+
+  const int l0_starts[6] = {this->cell_starts[0], this->cell_starts[1],
+                            this->cell_starts[0], this->cell_starts[1],
+                            this->cell_starts[0], this->cell_starts[0]};
+
+  const int l0_ends[6] = {this->cell_ends[0], this->cell_ends[1],
+                          this->cell_ends[0], this->cell_ends[1],
+                          this->cell_ends[0], this->cell_ends[0]};
+
+  const int l1_starts[6] = {this->cell_starts[2], this->cell_starts[2],
+                            this->cell_starts[2], this->cell_starts[2],
+                            this->cell_starts[1], this->cell_starts[1]};
+
+  const int l1_ends[6] = {this->cell_ends[2], this->cell_ends[2],
+                          this->cell_ends[2], this->cell_ends[2],
+                          this->cell_ends[1], this->cell_ends[1]};
+
+  const int num_faces = this->ndim == 2 ? 4 : 6;
+  std::set<INT> owned_face_indices_set;
+
+  int rank;
+  MPICHK(MPI_Comm_rank(this->comm_cart, &rank));
+
+  for (INT fx = 0; fx < num_faces; fx++) {
+    for (INT l1 = l1_starts[fx]; l1 < l1_ends[fx]; l1++) {
+      for (INT l0 = l0_starts[fx]; l0 < l0_ends[fx]; l0++) {
+        INT index_tuple[3] = {fx, l0, l1};
+        const INT linear_face_index =
+            this->get_face_linear_index_from_tuple(index_tuple);
+        const int owning_rank =
+            this->get_face_id_owning_rank(linear_face_index);
+        if (owning_rank == rank) {
+          owned_face_indices_set.insert(linear_face_index);
+        }
+      }
+    }
+  }
+
+  this->owned_face_indices.reserve(owned_face_indices_set.size());
+  for (auto &ix : owned_face_indices_set) {
+    this->owned_face_indices.push_back(ix);
+  }
 }
 
 MPI_Comm CartesianHMesh::get_comm() { return this->comm_cart; }
@@ -350,7 +403,7 @@ int CartesianHMesh::get_mesh_tuple_owning_rank(const INT *index_mesh) {
   return owning_rank;
 }
 
-void CartesianHMesh::get_face_id_as_tuple(const int face_id,
+void CartesianHMesh::get_face_id_as_tuple(const INT face_id,
                                           INT *face_index_tuple) {
 
   const int num_faces = this->ndim == 2 ? 4 : 6;
@@ -424,7 +477,7 @@ void CartesianHMesh::get_mesh_tuple_owning_face_tuple(
   }
 }
 
-int CartesianHMesh::get_face_linear_index_from_tuple(
+INT CartesianHMesh::get_face_linear_index_from_tuple(
     const INT *face_index_tuple) {
 
   const INT offset = std::accumulate(
@@ -439,11 +492,11 @@ int CartesianHMesh::get_face_linear_index_from_tuple(
   }
 }
 
-int CartesianHMesh::get_face_id_owning_rank(const int face_id) {
+int CartesianHMesh::get_face_id_owning_rank(const INT face_id) {
   NESOASSERT(this->ndim == 2 || this->ndim == 3,
              "Unexpected number of dimensions.");
   NESOASSERT((0 <= face_id) && (face_id < this->num_face_geoms), "Bad face id");
-  if (!this->map_face_id_to_rank.count(face_id)) {
+  if (!this->cache_map_face_id_to_rank.count(face_id)) {
 
     INT face_tuple[3] = {0, 0, 0};
     INT mesh_tuple[3] = {0, 0, 0};
@@ -452,9 +505,9 @@ int CartesianHMesh::get_face_id_owning_rank(const int face_id) {
     this->get_mesh_tuple_owning_face_tuple(face_tuple, mesh_tuple);
     const int owning_rank = this->get_mesh_tuple_owning_rank(mesh_tuple);
 
-    this->map_face_id_to_rank[face_id] = owning_rank;
+    this->cache_map_face_id_to_rank[face_id] = owning_rank;
   }
-  return this->map_face_id_to_rank[face_id];
+  return this->cache_map_face_id_to_rank[face_id];
 }
 
 std::vector<double>
@@ -492,7 +545,7 @@ CartesianHMesh::get_vtk_cell_points(const INT *index_tuple) {
   return points;
 }
 
-std::vector<double> CartesianHMesh::get_vtk_cell_points(const int index) {
+std::vector<double> CartesianHMesh::get_vtk_cell_points(const INT index) {
 
   auto cell_tuple = this->get_global_cell_tuple_index(index);
   INT index_tuple[3] = {cell_tuple[0], cell_tuple[1], cell_tuple[2]};
@@ -571,7 +624,7 @@ CartesianHMesh::get_vtk_face_cell_points(const INT *face_index_tuple) {
 }
 
 std::vector<double>
-CartesianHMesh::get_vtk_face_cell_points(const int face_index) {
+CartesianHMesh::get_vtk_face_cell_points(const INT face_index) {
   NESOASSERT((0 <= face_index) &&
                  (face_index <
                   this->num_geoms_per_face_incscan[this->ndim == 2 ? 3 : 5]),
@@ -580,6 +633,27 @@ CartesianHMesh::get_vtk_face_cell_points(const int face_index) {
   INT face_index_tuple[3] = {0, 0, 0};
   this->get_face_id_as_tuple(face_index, face_index_tuple);
   return this->get_vtk_face_cell_points(face_index_tuple);
+}
+
+const std::vector<INT> &CartesianHMesh::get_owned_face_cells() {
+  return this->owned_face_indices;
+}
+
+std::vector<VTK::UnstructuredCell> CartesianHMesh::get_vtk_face_cell_data() {
+  std::vector<VTK::UnstructuredCell> output_data(
+      this->owned_face_indices.size());
+
+  int index = 0;
+  for (auto ix : this->owned_face_indices) {
+    output_data.at(index).num_points = this->ndim == 2 ? 2 : 4;
+    output_data.at(index).points = this->get_vtk_face_cell_points(ix);
+    output_data.at(index).cell_type =
+        this->ndim == 2 ? VTK::CellType::line : VTK::CellType::quadrilateral;
+
+    index++;
+  }
+
+  return output_data;
 }
 
 } // namespace NESO::Particles

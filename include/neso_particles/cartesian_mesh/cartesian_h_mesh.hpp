@@ -35,7 +35,10 @@ private:
   std::array<int, 6> num_geoms_per_face{0, 0, 0, 0, 0, 0};
   std::array<int, 6> num_geoms_per_face_incscan{0, 0, 0, 0, 0, 0};
   std::array<int, 6> num_geoms_per_face_exscan{0, 0, 0, 0, 0, 0};
-  std::unordered_map<int, int> map_face_id_to_rank;
+  std::unordered_map<int, int> cache_map_face_id_to_rank;
+  std::vector<INT> owned_face_indices;
+
+  void compute_owned_face_indices();
 
 public:
   /// Disable (implicit) copies.
@@ -152,7 +155,7 @@ public:
    * @param face_id Face id to compute owning rank for.
    * @returns Owning rank for passed face id.
    */
-  int get_face_id_owning_rank(const int face_id);
+  int get_face_id_owning_rank(const INT face_id);
 
   /**
    * @param index_mesh Cartesian mesh index to find owning rank for.
@@ -167,14 +170,14 @@ public:
    * @param[in] face_id Linear face id to convert.
    * @param[in, out] face_index_tuple Index of the face on which the cell lies.
    */
-  void get_face_id_as_tuple(const int face_id, INT *face_index_tuple);
+  void get_face_id_as_tuple(const INT face_id, INT *face_index_tuple);
 
   /**
    * Convert the face geom tuple id to a linear index.
    *
    * @param face_index_tuple Tuple describing the face geom.
    */
-  int get_face_linear_index_from_tuple(const INT *face_index_tuple);
+  INT get_face_linear_index_from_tuple(const INT *face_index_tuple);
 
   /**
    * Get the mesh cell as a mesh tuple which has the passed face geometry index
@@ -192,7 +195,7 @@ public:
    *
    * @param index Local index of cell to collect vertex coordinates for.
    */
-  std::vector<double> get_vtk_cell_points(const int index);
+  std::vector<double> get_vtk_cell_points(const INT index);
 
   /**
    * Get the coordinates of the vertices of a cell in a form that can be passed
@@ -225,7 +228,21 @@ public:
    * @param face_index Index of the face cell in linear form.
    * @returns Vertex coordinates in form VTK::UnstructuredCell can use.
    */
-  std::vector<double> get_vtk_face_cell_points(const int face_index);
+  std::vector<double> get_vtk_face_cell_points(const INT face_index);
+
+  /**
+   * @returns The linear face cell ids of the face cells this MPI rank owns.
+   *
+   */
+  const std::vector<INT> &get_owned_face_cells();
+
+  /**
+   * Get VTK data for all face cells.
+   *
+   * @returns Vector of VTK data which can be passed to our VTKHDF
+   * implementation.
+   */
+  std::vector<VTK::UnstructuredCell> get_vtk_face_cell_data();
 };
 
 typedef std::shared_ptr<CartesianHMesh> CartesianHMeshSharedPtr;
