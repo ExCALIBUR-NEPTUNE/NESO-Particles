@@ -49,6 +49,50 @@ namespace NESO::Particles {
  * is the coordinate in the first dimension of the face, e.g. x on face 0 and l1
  * is the second coordinate on the face, e.g. z on face 0.
  *
+ * In 2D the vertices of each cell are labelled as
+ *
+ *  3 - 2
+ *  |   |
+ *  0 - 1
+ *
+ *  and in 3D
+ *
+ *  Top
+ *   7 - 6
+ *   |   |
+ *   4 - 5
+ *  Bottom
+ *
+ *   3 - 2
+ *   |   |
+ *   0 - 1
+ *
+ *  y
+ *  ^
+ *  |
+ *   -> x
+ *
+ * When converting to VTK coordinates we extract vertices in the following
+ * order:
+ *
+ * 2D:
+ *
+ * Face    Vertices
+ *   0      0, 1
+ *   1      1, 2
+ *   2      3, 2
+ *   3      0, 3
+ *
+ * 3D
+ *
+ * Face    Vertices
+ *   0      0, 1, 5, 4
+ *   1      1, 2, 6, 5
+ *   2      3, 2, 6, 7
+ *   3      0, 3, 7, 4
+ *   4      0, 1, 2, 3
+ *   5      4, 5, 6, 7
+ *
  */
 class CartesianHMesh : public HMesh {
 private:
