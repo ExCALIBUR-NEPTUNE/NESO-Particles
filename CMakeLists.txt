@@ -61,6 +61,7 @@ set(SRC_FILES
     ${SRC_DIR}/external_interfaces/common/local_claim.cpp
     ${SRC_DIR}/external_interfaces/common/overlay_cartesian_mesh.cpp
     ${SRC_DIR}/external_interfaces/common/quadrature_point_mapper.cpp
+    ${SRC_DIR}/external_interfaces/vtk/vtk.cpp
     ${SRC_DIR}/boundary/boundary_interaction_specification.cpp
     ${SRC_DIR}/boundary/boundary_mesh_interface.cpp
     ${SRC_DIR}/boundary/boundary_reflection.cpp
