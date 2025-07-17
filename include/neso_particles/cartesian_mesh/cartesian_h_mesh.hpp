@@ -17,6 +17,38 @@ namespace NESO::Particles {
 /**
  * Example mesh that duplicates a MeshHierarchy as a HMesh for examples and
  * testing.
+ *
+ * This mesh consists of square or cube coarse cells with a given number per
+ * dimension. These coarse cells have the specified cell extent passed to the
+ * constructor. Each of these coarse cells is subdivided into smaller
+ * squares/cubes by the number of times specifed by the subdivision order. The
+ * resulting mesh of fine cells is distributed over an MPI Cartesian
+ * communicator.
+ *
+ * The sides of the mesh are labelled as follows in 2D:
+ *
+ *   - 2 -
+ *  3     1
+ *   - 0 -
+ *
+ *  y
+ *  |
+ *   -> x
+ *
+ *  In 3D the bottom face is labelled 4 and the top face is labelled 5.
+ *
+ * The face cells are given a contiguous linear index which is determined by
+ * computing the linear index on each face then adding an offset computed from
+ * the total number of face cells on all the preceeding faces. i.e. cells on
+ * face 0 are indexed in the xz plane with x as the fastest running dimension
+ * then z.
+ *
+ * Some of the face cell indexing methods in this class use a tuple form of
+ * indexing a face cell. In 2D this tuple is [face, l0] and in 3D this tuple is
+ * [face, l0, l1]. Here "face" is the index of the face the cell exists on. l0
+ * is the coordinate in the first dimension of the face, e.g. x on face 0 and l1
+ * is the second coordinate on the face, e.g. z on face 0.
+ *
  */
 class CartesianHMesh : public HMesh {
 private:

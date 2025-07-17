@@ -158,7 +158,6 @@ TEST(CartesianHMesh, mpi_topology_2d) {
   // std::vector<VTK::UnstructuredCell> vtk_face_cell_data =
   //     mesh->get_vtk_face_cell_data();
   // const int num_faces = mesh->get_owned_face_cells().size();
-  // nprint_variable(num_faces);
   // for (int cx = 0; cx < num_faces; cx++) {
   //   vtk_face_cell_data.at(cx).cell_data["rank"] = rank;
   // }
@@ -386,7 +385,6 @@ TEST(CartesianHMesh, mpi_topology_3d) {
   // std::vector<VTK::UnstructuredCell> vtk_face_cell_data =
   //     mesh->get_vtk_face_cell_data();
   // const int num_faces = mesh->get_owned_face_cells().size();
-  // nprint_variable(num_faces);
   // for (int cx = 0; cx < num_faces; cx++) {
   //   vtk_face_cell_data.at(cx).cell_data["rank"] = rank;
   // }
