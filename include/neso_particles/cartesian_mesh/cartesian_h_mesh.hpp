@@ -39,6 +39,7 @@ private:
   std::vector<INT> owned_face_indices;
 
   void compute_owned_face_indices();
+  MPI_Comm comm_faces{MPI_COMM_NULL};
 
 public:
   /// Disable (implicit) copies.
@@ -243,6 +244,12 @@ public:
    * implementation.
    */
   std::vector<VTK::UnstructuredCell> get_vtk_face_cell_data();
+
+  /**
+   * @returns A MPI communicator containing ranks that own face cells. This
+   * communicator is MPI_COMM_NULL on ranks that do not own face cells.
+   */
+  MPI_Comm get_face_owning_ranks_comm();
 };
 
 typedef std::shared_ptr<CartesianHMesh> CartesianHMeshSharedPtr;

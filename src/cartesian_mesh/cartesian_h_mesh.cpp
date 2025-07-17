@@ -224,6 +224,9 @@ CartesianHMesh::CartesianHMesh(MPI_Comm comm, const int ndim,
   }
 
   this->compute_owned_face_indices();
+  MPICHK(MPI_Comm_split(this->comm_cart,
+                        this->owned_face_indices.size() ? 0 : MPI_UNDEFINED, 0,
+                        &this->comm_faces));
 }
 
 void CartesianHMesh::compute_owned_face_indices() {
@@ -322,6 +325,10 @@ void CartesianHMesh::free() {
   int flag;
   MPICHK(MPI_Initialized(&flag))
   if (allocated && flag) {
+    if (this->comm_faces != MPI_COMM_NULL) {
+      MPICHK(MPI_Comm_free(&this->comm_faces));
+    }
+
     MPICHK(MPI_Comm_free(&this->comm_cart))
     this->comm_cart = MPI_COMM_NULL;
   }
@@ -654,6 +661,10 @@ std::vector<VTK::UnstructuredCell> CartesianHMesh::get_vtk_face_cell_data() {
   }
 
   return output_data;
+}
+
+MPI_Comm CartesianHMesh::get_face_owning_ranks_comm() {
+  return this->comm_faces;
 }
 
 } // namespace NESO::Particles

@@ -146,26 +146,27 @@ TEST(CartesianHMesh, mpi_topology_2d) {
     ASSERT_EQ(to_test_rank, rank);
   }
 
-  std::vector<VTK::UnstructuredCell> vtk_cell_data = mesh->get_vtk_cell_data();
-  for (int cx = 0; cx < cell_count; cx++) {
-    vtk_cell_data.at(cx).cell_data["rank"] = rank;
-  }
-
-  VTK::VTKHDF vtkhdf("mesh2d.vtkhdf", comm);
-  vtkhdf.write(vtk_cell_data);
-  vtkhdf.close();
-
-  std::vector<VTK::UnstructuredCell> vtk_face_cell_data =
-      mesh->get_vtk_face_cell_data();
-  const int num_faces = mesh->get_owned_face_cells().size();
-  nprint_variable(num_faces);
-  for (int cx = 0; cx < num_faces; cx++) {
-    vtk_face_cell_data.at(cx).cell_data["rank"] = rank;
-  }
-
-  VTK::VTKHDF vtkhdf_face("mesh2d_face.vtkhdf", comm);
-  vtkhdf_face.write(vtk_face_cell_data);
-  vtkhdf_face.close();
+  // std::vector<VTK::UnstructuredCell> vtk_cell_data =
+  // mesh->get_vtk_cell_data(); for (int cx = 0; cx < cell_count; cx++) {
+  //   vtk_cell_data.at(cx).cell_data["rank"] = rank;
+  // }
+  //
+  // VTK::VTKHDF vtkhdf("mesh2d.vtkhdf", comm);
+  // vtkhdf.write(vtk_cell_data);
+  // vtkhdf.close();
+  //
+  // std::vector<VTK::UnstructuredCell> vtk_face_cell_data =
+  //     mesh->get_vtk_face_cell_data();
+  // const int num_faces = mesh->get_owned_face_cells().size();
+  // nprint_variable(num_faces);
+  // for (int cx = 0; cx < num_faces; cx++) {
+  //   vtk_face_cell_data.at(cx).cell_data["rank"] = rank;
+  // }
+  //
+  // VTK::VTKHDF vtkhdf_face("mesh2d_face.vtkhdf",
+  //                         mesh->get_face_owning_ranks_comm());
+  // vtkhdf_face.write(vtk_face_cell_data);
+  // vtkhdf_face.close();
 
   mesh->free();
 }
@@ -374,13 +375,26 @@ TEST(CartesianHMesh, mpi_topology_3d) {
   }
 
   // std::vector<VTK::UnstructuredCell> vtk_cell_data =
-  // mesh->get_vtk_cell_data(); for(int cx=0 ; cx<cell_count ; cx++){
+  // mesh->get_vtk_cell_data(); for (int cx = 0; cx < cell_count; cx++) {
   //   vtk_cell_data.at(cx).cell_data["rank"] = rank;
   // }
   //
   // VTK::VTKHDF vtkhdf("mesh3d.vtkhdf", comm);
   // vtkhdf.write(vtk_cell_data);
   // vtkhdf.close();
+  //
+  // std::vector<VTK::UnstructuredCell> vtk_face_cell_data =
+  //     mesh->get_vtk_face_cell_data();
+  // const int num_faces = mesh->get_owned_face_cells().size();
+  // nprint_variable(num_faces);
+  // for (int cx = 0; cx < num_faces; cx++) {
+  //   vtk_face_cell_data.at(cx).cell_data["rank"] = rank;
+  // }
+  //
+  // VTK::VTKHDF vtkhdf_face("mesh3d_face.vtkhdf",
+  //                         mesh->get_face_owning_ranks_comm());
+  // vtkhdf_face.write(vtk_face_cell_data);
+  // vtkhdf_face.close();
 
   mesh->free();
 }
