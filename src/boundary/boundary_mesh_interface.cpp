@@ -3,7 +3,7 @@
 
 namespace NESO::Particles {
 
-void BoundaryMeshInterface::boundary_init(MPI_Comm comm) {
+BoundaryMeshInterface::BoundaryMeshInterface(MPI_Comm comm) {
   this->boundary.comm = comm;
 
   MPICHK(MPI_Dist_graph_create(this->boundary.comm, 0, nullptr, nullptr,

@@ -63,7 +63,6 @@ public:
 
   } boundary;
 
-  void boundary_init(MPI_Comm comm);
   void boundary_free();
 
   template <typename T>
@@ -107,6 +106,13 @@ public:
   }
 
 public:
+  BoundaryMeshInterface() = default;
+
+  /**
+   * @param comm MPI communicator for mesh.
+   */
+  BoundaryMeshInterface(MPI_Comm comm);
+
   /**
    * Indicate to the implementation that communication patterns should be set up
    * with the owning ranks of geometry objects. This function must be called

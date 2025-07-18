@@ -4,8 +4,7 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
 
   MPI_Comm comm = MPI_COMM_WORLD;
 
-  BoundaryMeshInterface bmi;
-  bmi.boundary_init(comm);
+  BoundaryMeshInterface bmi(comm);
   const int ncomp = 7;
 
   int rank = -1;
