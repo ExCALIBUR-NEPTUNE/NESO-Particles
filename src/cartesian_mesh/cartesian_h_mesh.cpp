@@ -389,7 +389,6 @@ CartesianHMesh::get_global_cell_tuple_index(const INT linear_cell_index) {
 }
 
 int CartesianHMesh::get_mesh_tuple_owning_rank(const INT *index_mesh) {
-
   std::vector<int> coords_tmp(this->ndim);
 
   for (int dx = 0; dx < this->ndim; dx++) {

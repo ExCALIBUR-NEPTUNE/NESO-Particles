@@ -73,6 +73,10 @@ void CartesianTrajectoryIntersection::setup() {
   this->inverse_cell_width_fine = mh->inverse_cell_width_fine;
 }
 
+CartesianTrajectoryIntersection::~CartesianTrajectoryIntersection() {
+  this->free();
+}
+
 CartesianTrajectoryIntersection::CartesianTrajectoryIntersection(
     SYCLTargetSharedPtr sycl_target, CartesianHMeshSharedPtr mesh,
     std::map<int, std::vector<int>> boundary_groups, REAL tolerance)
@@ -82,12 +86,26 @@ CartesianTrajectoryIntersection::CartesianTrajectoryIntersection(
   NESOASSERT(k_ndim == 2 || k_ndim == 3,
              "This method is only implemented in 2D and 3D.");
   this->setup();
+
+  for (const auto &gx : boundary_groups) {
+    this->map_groups_boundary_interface[gx.first] =
+        std::make_shared<BoundaryMeshInterface>(mesh->get_comm());
+    this->map_groups_unseen_value_extractor[gx.first] =
+        std::make_shared<UnseenValueExtractor>(this->sycl_target);
+  }
 }
 
 void CartesianTrajectoryIntersection::prepare_particle_group(
     ParticleGroupSharedPtr particle_group) {
   this->check_dat(particle_group, this->previous_position_sym,
                   this->mesh->get_ndim());
+}
+
+void CartesianTrajectoryIntersection::free() {
+  for (const auto &gx : this->map_groups_boundary_interface) {
+    gx.second->free();
+  }
+  this->map_groups_boundary_interface.clear();
 }
 
 template void CartesianTrajectoryIntersection::pre_integration_inner(

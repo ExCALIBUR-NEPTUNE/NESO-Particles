@@ -63,10 +63,8 @@ public:
 
   } boundary;
 
-  void boundary_free();
-
   template <typename T>
-  const AllToAllWArgs &boundary_get_alltoallw_args(const int ncomp) {
+  const AllToAllWArgs &get_alltoallw_args(const int ncomp) {
     if (!this->boundary.map_typencomp_alltoallwargs.count({typeid(T), ncomp})) {
 
       AllToAllWArgs args;
@@ -121,7 +119,7 @@ public:
    * @param rank_geom_ids Vector of {<rank>, <geometry id>} pairs which this
    * rank has collected and may push data back to the original rank.
    */
-  void boundary_extend_exchange_pattern(
+  void extend_exchange_pattern(
       const std::vector<std::pair<int, int>> &rank_geom_ids);
 
   /**
@@ -136,11 +134,11 @@ public:
    * and ordering is defined by incoming_geom_ids.
    */
   template <typename T>
-  void boundary_exchange_surface(T *data, const int ncomp, T *data_gathered) {
+  void exchange_surface(T *data, const int ncomp, T *data_gathered) {
     if (ncomp < 1) {
       return;
     }
-    const AllToAllWArgs &args = this->boundary_get_alltoallw_args<T>(ncomp);
+    const AllToAllWArgs &args = this->get_alltoallw_args<T>(ncomp);
 
     T null_data = 0;
     T null_data_gathered = 0;
@@ -152,17 +150,23 @@ public:
         args.recvcounts.data(), args.rdispls.data(), args.recvtypes.data(),
         this->boundary.ncomm));
   }
+
+  /**
+   * Free underlying resource. Should be called collectively on the
+   * communicator.
+   */
+  void free();
 };
 
 extern template void
-BoundaryMeshInterface::boundary_exchange_surface(int *data, const int ncomp,
-                                                 int *data_gathered);
+BoundaryMeshInterface::exchange_surface(int *data, const int ncomp,
+                                        int *data_gathered);
 extern template void
-BoundaryMeshInterface::boundary_exchange_surface(INT *data, const int ncomp,
-                                                 INT *data_gathered);
+BoundaryMeshInterface::exchange_surface(INT *data, const int ncomp,
+                                        INT *data_gathered);
 extern template void
-BoundaryMeshInterface::boundary_exchange_surface(REAL *data, const int ncomp,
-                                                 REAL *data_gathered);
+BoundaryMeshInterface::exchange_surface(REAL *data, const int ncomp,
+                                        REAL *data_gathered);
 
 } // namespace NESO::Particles
 

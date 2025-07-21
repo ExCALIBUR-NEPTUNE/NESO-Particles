@@ -140,7 +140,7 @@ public:
   /// Number of dimensions of the mesh.
   const int ndim;
   /// Vector holding the number of coarse cells in each dimension.
-  std::vector<int> &dims;
+  std::vector<int> dims;
   /// Subdivision order to determine number of fine cells per coarse cell.
   const int subdivision_order;
   /// Width of coarse cells, uniform in all dimensions.

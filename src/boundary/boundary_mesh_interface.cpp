@@ -14,11 +14,11 @@ BoundaryMeshInterface::BoundaryMeshInterface(MPI_Comm comm) {
              "Failure to setup MPI graph topology.");
 }
 
-void BoundaryMeshInterface::boundary_free() {
+void BoundaryMeshInterface::free() {
   MPICHK(MPI_Comm_free(&this->boundary.ncomm));
 }
 
-void BoundaryMeshInterface::boundary_extend_exchange_pattern(
+void BoundaryMeshInterface::extend_exchange_pattern(
     const std::vector<std::pair<int, int>> &rank_geom_ids) {
 
   MPI_Comm comm = this->boundary.comm;
@@ -148,8 +148,8 @@ void BoundaryMeshInterface::boundary_extend_exchange_pattern(
     NESOASSERT(index == this->boundary.total_num_outgoing_geoms,
                "Bookkeeping error in indexing.");
 
-    this->boundary_exchange_surface(this->boundary.outgoing_geom_ids.data(), 1,
-                                    this->boundary.incoming_geom_ids.data());
+    this->exchange_surface(this->boundary.outgoing_geom_ids.data(), 1,
+                           this->boundary.incoming_geom_ids.data());
 
     // populate map_send_rank_to_geom_ids (this is mainly for testing/debugging)
     index = 0;
@@ -165,14 +165,14 @@ void BoundaryMeshInterface::boundary_extend_exchange_pattern(
   }
 }
 
-template void
-BoundaryMeshInterface::boundary_exchange_surface(int *data, const int ncomp,
-                                                 int *data_gathered);
-template void
-BoundaryMeshInterface::boundary_exchange_surface(INT *data, const int ncomp,
-                                                 INT *data_gathered);
-template void
-BoundaryMeshInterface::boundary_exchange_surface(REAL *data, const int ncomp,
-                                                 REAL *data_gathered);
+template void BoundaryMeshInterface::exchange_surface(int *data,
+                                                      const int ncomp,
+                                                      int *data_gathered);
+template void BoundaryMeshInterface::exchange_surface(INT *data,
+                                                      const int ncomp,
+                                                      INT *data_gathered);
+template void BoundaryMeshInterface::exchange_surface(REAL *data,
+                                                      const int ncomp,
+                                                      REAL *data_gathered);
 
 } // namespace NESO::Particles

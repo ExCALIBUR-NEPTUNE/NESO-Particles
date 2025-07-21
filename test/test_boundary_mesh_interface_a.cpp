@@ -62,7 +62,7 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
   MPICHK(MPI_Allreduce(correct_in_degree_t.data(), correct_in_degree.data(),
                        size, MPI_INT, MPI_SUM, comm));
 
-  bmi.boundary_extend_exchange_pattern(test_map[rank]);
+  bmi.extend_exchange_pattern(test_map[rank]);
 
   MPI_Comm ncomm = bmi.boundary.ncomm;
   ASSERT_NE(ncomm, MPI_COMM_NULL);
@@ -164,7 +164,7 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
   std::vector<REAL> indata(bmi.boundary.total_num_incoming_geoms * ncomp);
   std::fill(indata.begin(), indata.end(), -1.0);
 
-  bmi.boundary_exchange_surface(outdata.data(), ncomp, indata.data());
+  bmi.exchange_surface(outdata.data(), ncomp, indata.data());
 
   std::vector<REAL> indata_correct;
 
@@ -178,4 +178,6 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
   }
 
   ASSERT_EQ(indata, indata_correct);
+
+  bmi.free();
 }

@@ -1,18 +1,31 @@
 #ifndef _NESO_PARTICLES_CARTESIAN_MESH_CARTESIAN_TRAJECTORY_INTERSECTION_HPP_
 #define _NESO_PARTICLES_CARTESIAN_MESH_CARTESIAN_TRAJECTORY_INTERSECTION_HPP_
 
+#include "../algorithms/unseen_value_extractor.hpp"
 #include "../boundary/boundary_interaction_specification.hpp"
+#include "../boundary/boundary_mesh_interface.hpp"
 #include "../device_functions.hpp"
 #include "../particle_group_impl.hpp"
 #include "../particle_sub_group/particle_loop_sub_group_functions.hpp"
 #include "../particle_sub_group/particle_sub_group.hpp"
 #include "cartesian_h_mesh.hpp"
 #include <array>
+#include <map>
 
 namespace NESO::Particles {
 
 class CartesianTrajectoryIntersection {
 protected:
+  std::array<INT, 6> element_offsets;
+  std::array<INT, 6> element_strides0;
+  std::array<INT, 6> element_strides1;
+  REAL inverse_cell_width_fine;
+
+  std::map<int, std::shared_ptr<BoundaryMeshInterface>>
+      map_groups_boundary_interface;
+  std::map<int, std::shared_ptr<UnseenValueExtractor>>
+      map_groups_unseen_value_extractor;
+
   template <typename T>
   inline void check_dat(ParticleGroupSharedPtr particle_group, Sym<T> sym,
                         const int ncomp) {
@@ -25,11 +38,6 @@ protected:
               " exists already with an insufficient number of components");
     }
   }
-
-  std::array<INT, 6> element_offsets;
-  std::array<INT, 6> element_strides0;
-  std::array<INT, 6> element_strides1;
-  REAL inverse_cell_width_fine;
 
   void setup();
 
@@ -392,6 +400,20 @@ protected:
           Access::write(
               BoundaryInteractionSpecification::intersection_metadata))
           ->execute();
+
+      auto new_geoms =
+          this->map_groups_unseen_value_extractor.at(group.first)
+              ->extract(group.second,
+                        BoundaryInteractionSpecification::intersection_metadata,
+                        1, true);
+      std::vector<std::pair<int, int>> new_potentialy_hit_geoms;
+      new_potentialy_hit_geoms.reserve(new_geoms.size());
+      for (auto &geomx : new_geoms) {
+        const int owning_rank = this->mesh->get_face_id_owning_rank(geomx);
+        new_potentialy_hit_geoms.push_back({owning_rank, geomx});
+      }
+      this->map_groups_boundary_interface.at(group.first)
+          ->extend_exchange_pattern(new_potentialy_hit_geoms);
     }
 
     restore_resource(sycl_target->resource_stack_map,
@@ -410,7 +432,7 @@ public:
   /// Disable (implicit) copies.
   CartesianTrajectoryIntersection &
   operator=(CartesianTrajectoryIntersection const &a) = delete;
-  ~CartesianTrajectoryIntersection() = default;
+  ~CartesianTrajectoryIntersection();
 
   /// The Sym for the particle property which holds the position of each
   /// particle before the positions were updated in a time stepping loop. These
@@ -493,6 +515,13 @@ public:
    */
   [[nodiscard]] std::map<int, ParticleSubGroupSharedPtr>
   post_integration(std::shared_ptr<ParticleSubGroup> particles);
+
+  /**
+   * Explicitly free the resources, e.g. MPI communicators without relying on
+   * collective destructor calls. Should be called collectively on the
+   * communicator.
+   */
+  void free();
 };
 
 extern template std::map<int, ParticleSubGroupSharedPtr>
