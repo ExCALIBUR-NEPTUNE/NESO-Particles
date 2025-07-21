@@ -113,6 +113,7 @@ private:
   std::array<int, 6> num_geoms_per_face_exscan{0, 0, 0, 0, 0, 0};
   std::unordered_map<int, int> cache_map_face_id_to_rank;
   std::vector<INT> owned_face_indices;
+  std::map<INT, std::vector<INT>> map_faces_to_geoms;
 
   void compute_owned_face_indices();
   MPI_Comm comm_faces{MPI_COMM_NULL};
@@ -326,9 +327,38 @@ public:
    * communicator is MPI_COMM_NULL on ranks that do not own face cells.
    */
   MPI_Comm get_face_owning_ranks_comm();
+
+  /**
+   * Get the face cells which are owned by this MPI rank and exist on one of the
+   * given faces.
+   *
+   * @param faces Vector of faces to get all face cells for.
+   * @returns the Locally owned face cells which exist on given faces.
+   */
+  template <typename INT_TYPE>
+  std::vector<INT> get_face_cells(const std::vector<INT_TYPE> &faces) {
+    std::vector<INT> cells;
+    std::size_t s = 0;
+
+    for (auto &fx : faces) {
+      s += this->map_faces_to_geoms[fx].size();
+    }
+    cells.reserve(s);
+    for (auto &fx : faces) {
+      cells.insert(cells.end(), this->map_faces_to_geoms[fx].begin(),
+                   this->map_faces_to_geoms[fx].end());
+    }
+
+    return cells;
+  }
 };
 
 typedef std::shared_ptr<CartesianHMesh> CartesianHMeshSharedPtr;
+
+extern template std::vector<INT>
+CartesianHMesh::get_face_cells(const std::vector<INT> &faces);
+extern template std::vector<INT>
+CartesianHMesh::get_face_cells(const std::vector<int> &faces);
 
 } // namespace NESO::Particles
 

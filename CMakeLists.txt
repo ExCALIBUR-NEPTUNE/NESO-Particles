@@ -129,6 +129,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/reduce_dat_cellwise.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/unseen_value_extractor.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cartesian_mesh/cartesian_h_mesh.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/cartesian_mesh/cartesian_h_mesh_function.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cartesian_mesh/cartesian_cell_bin.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cartesian_mesh/cartesian_periodic.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cartesian_mesh/cartesian_trajectory_intersection.hpp

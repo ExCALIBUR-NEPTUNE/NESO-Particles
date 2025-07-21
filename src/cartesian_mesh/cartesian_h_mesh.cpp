@@ -277,6 +277,9 @@ void CartesianHMesh::compute_owned_face_indices() {
   this->owned_face_indices.reserve(owned_face_indices_set.size());
   for (auto &ix : owned_face_indices_set) {
     this->owned_face_indices.push_back(ix);
+    INT index_tuple[3] = {0, 0, 0};
+    this->get_face_id_as_tuple(ix, index_tuple);
+    this->map_faces_to_geoms[index_tuple[0]].push_back(ix);
   }
 }
 
@@ -667,5 +670,10 @@ std::map<INT, VTK::UnstructuredCell> CartesianHMesh::get_vtk_face_cell_data() {
 MPI_Comm CartesianHMesh::get_face_owning_ranks_comm() {
   return this->comm_faces;
 }
+
+template std::vector<INT>
+CartesianHMesh::get_face_cells(const std::vector<INT> &faces);
+template std::vector<INT>
+CartesianHMesh::get_face_cells(const std::vector<int> &faces);
 
 } // namespace NESO::Particles
