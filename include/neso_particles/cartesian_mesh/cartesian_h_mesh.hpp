@@ -337,6 +337,14 @@ public:
   MPI_Comm get_face_owning_ranks_comm();
 
   /**
+   * @param face_index Face index, e.g. [0,1,2,3] in 2D or [0,1,2,3,4,5] of face
+   * to get all owned face cells for.
+   * @returns All owned face cells, in linear index form, for the passed face
+   * index.
+   */
+  const std::vector<INT> &get_all_face_cells_on_face(const INT face_index);
+
+  /**
    * Get the face cells which are owned by this MPI rank and exist on one of the
    * given faces.
    *

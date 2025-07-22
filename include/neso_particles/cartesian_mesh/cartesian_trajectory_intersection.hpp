@@ -9,6 +9,7 @@
 #include "../particle_sub_group/particle_loop_sub_group_functions.hpp"
 #include "../particle_sub_group/particle_sub_group.hpp"
 #include "cartesian_h_mesh.hpp"
+#include "cartesian_h_mesh_function.hpp"
 #include <array>
 #include <map>
 
@@ -523,6 +524,34 @@ public:
    * communicator.
    */
   void free();
+
+  /**
+   * Create a function on a boundary group.
+   *
+   * @param group ID of boundary group to create function on.
+   * @param function_space Family of function to create, e.g. "DG".
+   * @param polynomial_order Order of function to create, e.g. 0.
+   * @returns Function object on boundary.
+   */
+  CartesianHMeshFunctionSharedPtr
+  create_function(const int group, const std::string function_space,
+                  const int polynomial_order);
+
+  /**
+   * Project particle data onto a function defined on the surface. Uses the
+   * standardarised boundary interface on the sub group.
+   *
+   * @param particle_sub_group ParticleSubGroup to project onto function.
+   * @param sym Sym<REAL> Particle property to use as source weights.
+   * @param component Component of particle property to use as source weights.
+   * @param is_ephemeral Indicate if the particle weights are in an EphemeralDat
+   * or ParticleDat.
+   * @param func Function to project onto.
+   */
+  void function_project(ParticleSubGroupSharedPtr particle_sub_group,
+                        Sym<REAL> sym, const int component,
+                        const bool is_ephemeral,
+                        CartesianHMeshFunctionSharedPtr func);
 };
 
 extern template std::map<int, ParticleSubGroupSharedPtr>

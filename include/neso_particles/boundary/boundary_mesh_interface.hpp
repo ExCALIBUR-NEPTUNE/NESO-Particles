@@ -2,6 +2,8 @@
 #define _NESO_PARTICLES_BOUNDARY_BOUNDARY_MESH_INTERFACE_HPP_
 
 #include "../communication.hpp"
+#include "../compute_target.hpp"
+#include "../containers/blocked_binary_tree.hpp"
 #include <map>
 #include <set>
 #include <typeindex>
@@ -28,6 +30,8 @@ public:
   struct {
     // Original MPI Communicator to use.
     MPI_Comm comm{MPI_COMM_NULL};
+    // Compute device.
+    SYCLTargetSharedPtr sycl_target;
     // Neighbour comm for boundary exchanges.
     MPI_Comm ncomm{MPI_COMM_NULL};
     // Map from remote MPI ranks to geometry ids that those remote ranks own but
@@ -50,6 +54,14 @@ public:
     std::vector<int> incoming_geom_ids;
     // Geometry ids of the outgoing data
     std::vector<int> outgoing_geom_ids;
+    // Counter to place an ordering on face geom ids;
+    INT geom_counter{0};
+    // Map from linear sequential index to geom id.
+    std::map<INT, INT> map_linear_index_to_geom_id;
+    // Map from geom id to linear sequential index.
+    std::map<INT, INT> map_geom_id_to_linear_index;
+    // Device map from geom id to linear sequential index.
+    std::shared_ptr<BlockedBinaryTree<INT, INT>> d_map_geom_id_to_linear_index;
 
     std::map<std::pair<std::type_index, int>, AllToAllWArgs>
         map_typencomp_alltoallwargs;
@@ -108,8 +120,9 @@ public:
 
   /**
    * @param comm MPI communicator for mesh.
+   * @param sycl_target Compute device for device maps.
    */
-  BoundaryMeshInterface(MPI_Comm comm);
+  BoundaryMeshInterface(MPI_Comm comm, SYCLTargetSharedPtr sycl_target);
 
   /**
    * Indicate to the implementation that communication patterns should be set up
@@ -150,6 +163,27 @@ public:
         args.recvcounts.data(), args.rdispls.data(), args.recvtypes.data(),
         this->boundary.ncomm));
   }
+
+  /**
+   * @param linear_seq_index Linear sequential index for a face geometry index.
+   * @returns Geometry ID index for passed index.
+   */
+  INT get_geom_id_from_seq_index(const INT linear_seq_index);
+
+  /**
+   * @param geom_id Linear sequential index for a face geometry index.
+   * @returns Geometry ID index for passed index.
+   */
+  INT get_seq_index_from_geom_id(const INT geom_id);
+
+  /**
+   * @returns The device map from geometry IDs to linear sequential indices and
+   * the number of linear IDs in the map.
+   */
+  std::tuple<
+      BlockedBinaryNode<INT, INT, NESO_PARTICLES_BLOCKED_BINARY_TREE_WIDTH> *,
+      INT>
+  get_device_geom_id_to_seq();
 
   /**
    * Free underlying resource. Should be called collectively on the

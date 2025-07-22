@@ -39,19 +39,7 @@ public:
   CartesianHMeshFunction(CartesianHMeshSharedPtr mesh,
                          SYCLTargetSharedPtr sycl_target, const int ndim,
                          const int cell_count, const std::string function_space,
-                         const int polynomial_order, const int element_group)
-      : mesh(mesh), sycl_target(sycl_target), ndim(ndim),
-        cell_count(cell_count), element_group(element_group) {
-    const int ndof_per_cell = std::pow(polynomial_order + 1, ndim);
-    this->d_dofs = std::make_shared<BufferDevice<REAL>>(
-        sycl_target, cell_count * ndof_per_cell);
-    NESOASSERT(ndim + 1 == mesh->get_ndim(),
-               "Only currently implemented for boundary functions.");
-    NESOASSERT(function_space == "DG",
-               "Only currently implemented for DG0 functions.");
-    NESOASSERT(polynomial_order == 0,
-               "Only currently implemented for DG0 functions.");
-  }
+                         const int polynomial_order, const int element_group);
 
 public:
   /// The mesh this function is defined on.
@@ -65,7 +53,7 @@ public:
   /// The type of function, e.g. "DG".
   std::string function_space;
   /// The polynomial order of the function.
-  int polynomial_order;
+  int polynomial_order{0};
   /// The cells this function is defined over if there is redirection from the
   /// entity index to the cell index.
   std::vector<INT> cells;
@@ -92,45 +80,17 @@ public:
                          SYCLTargetSharedPtr sycl_target, const int ndim,
                          const std::vector<INT> &cells,
                          const std::string function_space,
-                         const int polynomial_order, const int element_group)
-      : CartesianHMeshFunction(mesh, sycl_target, ndim, cells.size(),
-                               function_space, polynomial_order,
-                               element_group) {
-    this->cells = cells;
-  }
+                         const int polynomial_order, const int element_group);
 
   /**
    * Write the function to a vtkhdf file.
    *
    * @param filename Output file name which should have vtkhdf extension.
    */
-  inline void write_vtkhdf(const std::string filename) {
-
-    NESOASSERT(this->polynomial_order == 0, "Only implemented for DG0.");
-    NESOASSERT(this->ndim + 1 == this->mesh->get_ndim(),
-               "Only implemented for boundary cells.");
-
-    std::vector<REAL> h_dofs(this->d_dofs->size);
-    auto e0 = this->sycl_target->queue.memcpy(
-        h_dofs.data(), this->d_dofs->ptr, this->d_dofs->size * sizeof(REAL));
-
-    std::vector<VTK::UnstructuredCell> data;
-    data.reserve(this->cells.size());
-
-    e0.wait_and_throw();
-    std::size_t index = 0;
-    for (auto &cx : this->cells) {
-      auto vtkdata = this->mesh->get_vtk_face_cell_data(cx);
-      vtkdata.cell_data["u"] = h_dofs.at(index++);
-      data.push_back(vtkdata);
-    }
-
-    VTK::VTKHDF vtkhdf("mesh2d_face.vtkhdf", mesh->get_comm());
-    vtkhdf.write(data, {}, {"u"});
-    vtkhdf.close();
-  }
+  void write_vtkhdf(const std::string filename);
 };
 
+typedef std::shared_ptr<CartesianHMeshFunction> CartesianHMeshFunctionSharedPtr;
 } // namespace NESO::Particles
 
 #endif

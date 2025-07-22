@@ -71,6 +71,7 @@ set(SRC_FILES
     ${SRC_DIR}/cartesian_mesh.cpp
     ${SRC_DIR}/cartesian_mesh/cartesian_cell_bin.cpp
     ${SRC_DIR}/cartesian_mesh/cartesian_h_mesh.cpp
+    ${SRC_DIR}/cartesian_mesh/cartesian_h_mesh_function.cpp
     ${SRC_DIR}/cartesian_mesh/cartesian_periodic.cpp
     ${SRC_DIR}/cartesian_mesh/cartesian_trajectory_intersection.cpp
     ${SRC_DIR}/communication/communication_edges_counter.cpp

@@ -3,8 +3,12 @@
 
 namespace NESO::Particles {
 
-BoundaryMeshInterface::BoundaryMeshInterface(MPI_Comm comm) {
+BoundaryMeshInterface::BoundaryMeshInterface(MPI_Comm comm,
+                                             SYCLTargetSharedPtr sycl_target) {
   this->boundary.comm = comm;
+  this->boundary.sycl_target = sycl_target;
+  this->boundary.d_map_geom_id_to_linear_index =
+      std::make_shared<BlockedBinaryTree<INT, INT>>(sycl_target);
 
   MPICHK(MPI_Dist_graph_create(this->boundary.comm, 0, nullptr, nullptr,
                                nullptr, MPI_UNWEIGHTED, MPI_INFO_NULL, 0,
@@ -33,6 +37,13 @@ void BoundaryMeshInterface::extend_exchange_pattern(
     if (!this->boundary.map_recv_rank_to_geom_ids[rank].count(geom_id)) {
       map_is_modified_t = 1;
       this->boundary.map_recv_rank_to_geom_ids[rank].insert(geom_id);
+      const INT linear_seqential_index = this->boundary.geom_counter++;
+      this->boundary.map_linear_index_to_geom_id[linear_seqential_index] =
+          geom_id;
+      this->boundary.map_geom_id_to_linear_index[geom_id] =
+          linear_seqential_index;
+      this->boundary.d_map_geom_id_to_linear_index->add(geom_id,
+                                                        linear_seqential_index);
     }
   }
 
@@ -163,6 +174,24 @@ void BoundaryMeshInterface::extend_exchange_pattern(
       }
     }
   }
+}
+
+INT BoundaryMeshInterface::get_geom_id_from_seq_index(
+    const INT linear_seq_index) {
+  return this->boundary.map_linear_index_to_geom_id.at(linear_seq_index);
+}
+
+INT BoundaryMeshInterface::get_seq_index_from_geom_id(const INT geom_id) {
+  return this->boundary.map_geom_id_to_linear_index.at(geom_id);
+}
+
+std::tuple<
+    BlockedBinaryNode<INT, INT, NESO_PARTICLES_BLOCKED_BINARY_TREE_WIDTH> *,
+    INT>
+BoundaryMeshInterface::get_device_geom_id_to_seq() {
+
+  return {this->boundary.d_map_geom_id_to_linear_index->root,
+          this->boundary.geom_counter};
 }
 
 template void BoundaryMeshInterface::exchange_surface(int *data,

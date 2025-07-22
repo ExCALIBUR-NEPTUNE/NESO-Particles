@@ -1,0 +1,61 @@
+#include <neso_particles/cartesian_mesh/cartesian_h_mesh_function.hpp>
+
+namespace NESO::Particles {
+
+CartesianHMeshFunction::CartesianHMeshFunction(
+    CartesianHMeshSharedPtr mesh, SYCLTargetSharedPtr sycl_target,
+    const int ndim, const int cell_count, const std::string function_space,
+    const int polynomial_order, const int element_group)
+    : mesh(mesh), sycl_target(sycl_target), ndim(ndim), cell_count(cell_count),
+      function_space(function_space), polynomial_order(polynomial_order),
+      element_group(element_group) {
+  const int ndof_per_cell = std::pow(polynomial_order + 1, ndim);
+  this->d_dofs = std::make_shared<BufferDevice<REAL>>(
+      sycl_target, cell_count * ndof_per_cell);
+  NESOASSERT(ndim + 1 == mesh->get_ndim(),
+             "Only currently implemented for boundary functions.");
+  NESOASSERT(function_space == "DG",
+             "Only currently implemented for DG0 functions.");
+  NESOASSERT(polynomial_order == 0,
+             "Only currently implemented for DG0 functions.");
+}
+
+CartesianHMeshFunction::CartesianHMeshFunction(CartesianHMeshSharedPtr mesh,
+                                               SYCLTargetSharedPtr sycl_target,
+                                               const int ndim,
+                                               const std::vector<INT> &cells,
+                                               const std::string function_space,
+                                               const int polynomial_order,
+                                               const int element_group)
+    : CartesianHMeshFunction(mesh, sycl_target, ndim, cells.size(),
+                             function_space, polynomial_order, element_group) {
+  this->cells = cells;
+}
+
+void CartesianHMeshFunction::write_vtkhdf(const std::string filename) {
+
+  NESOASSERT(this->polynomial_order == 0, "Only implemented for DG0.");
+  NESOASSERT(this->ndim + 1 == this->mesh->get_ndim(),
+             "Only implemented for boundary cells.");
+
+  std::vector<REAL> h_dofs(this->d_dofs->size);
+  auto e0 = this->sycl_target->queue.memcpy(h_dofs.data(), this->d_dofs->ptr,
+                                            this->d_dofs->size * sizeof(REAL));
+
+  std::vector<VTK::UnstructuredCell> data;
+  data.reserve(this->cells.size());
+
+  e0.wait_and_throw();
+  std::size_t index = 0;
+  for (auto &cx : this->cells) {
+    auto vtkdata = this->mesh->get_vtk_face_cell_data(cx);
+    vtkdata.cell_data["u"] = h_dofs.at(index++);
+    data.push_back(vtkdata);
+  }
+
+  VTK::VTKHDF vtkhdf(filename, mesh->get_comm());
+  vtkhdf.write(data, {}, {"u"});
+  vtkhdf.close();
+}
+
+} // namespace NESO::Particles

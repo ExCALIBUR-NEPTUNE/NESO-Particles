@@ -673,6 +673,16 @@ MPI_Comm CartesianHMesh::get_face_owning_ranks_comm() {
   return this->comm_faces;
 }
 
+const std::vector<INT> &
+CartesianHMesh::get_all_face_cells_on_face(const INT face_index) {
+
+  const int num_faces = this->ndim == 2 ? 4 : 6;
+  NESOASSERT((0 <= face_index) && (face_index < num_faces),
+             "Bad linear face id passed.");
+
+  return this->map_faces_to_geoms[face_index];
+}
+
 template std::vector<INT>
 CartesianHMesh::get_face_cells(const std::vector<INT> &faces);
 template std::vector<INT>

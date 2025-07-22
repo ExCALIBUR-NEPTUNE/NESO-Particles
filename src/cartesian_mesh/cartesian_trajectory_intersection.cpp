@@ -89,7 +89,7 @@ CartesianTrajectoryIntersection::CartesianTrajectoryIntersection(
 
   for (const auto &gx : boundary_groups) {
     this->map_groups_boundary_interface[gx.first] =
-        std::make_shared<BoundaryMeshInterface>(mesh->get_comm());
+        std::make_shared<BoundaryMeshInterface>(mesh->get_comm(), sycl_target);
     this->map_groups_unseen_value_extractor[gx.first] =
         std::make_shared<UnseenValueExtractor>(this->sycl_target);
   }
@@ -107,6 +107,30 @@ void CartesianTrajectoryIntersection::free() {
   }
   this->map_groups_boundary_interface.clear();
 }
+
+CartesianHMeshFunctionSharedPtr
+CartesianTrajectoryIntersection::create_function(
+    const int group, const std::string function_space,
+    const int polynomial_order) {
+
+  NESOASSERT(this->boundary_groups.count(group),
+             "Passed group does not exist in boundary groups.");
+
+  std::vector<INT> cells;
+  for (auto &cx : this->boundary_groups.at(group)) {
+    auto tmp = this->mesh->get_all_face_cells_on_face(cx);
+    cells.insert(cells.end(), tmp.begin(), tmp.end());
+  }
+
+  return std::make_shared<CartesianHMeshFunction>(
+      this->mesh, this->sycl_target, this->mesh->get_ndim() - 1, cells,
+      function_space, polynomial_order, group);
+}
+
+void CartesianTrajectoryIntersection::function_project(
+    ParticleSubGroupSharedPtr particle_sub_group, Sym<REAL> sym,
+    const int component, const bool is_ephemeral,
+    CartesianHMeshFunctionSharedPtr func) {}
 
 template void CartesianTrajectoryIntersection::pre_integration_inner(
     std::shared_ptr<ParticleGroup> particles);

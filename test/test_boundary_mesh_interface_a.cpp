@@ -3,8 +3,9 @@
 TEST(BoundaryMeshInterface, mpi_neighbours) {
 
   MPI_Comm comm = MPI_COMM_WORLD;
+  auto sycl_target = std::make_shared<SYCLTarget>(0, comm);
 
-  BoundaryMeshInterface bmi(comm);
+  BoundaryMeshInterface bmi(comm, sycl_target);
   const int ncomp = 7;
 
   int rank = -1;
@@ -180,4 +181,5 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
   ASSERT_EQ(indata, indata_correct);
 
   bmi.free();
+  sycl_target->free();
 }
