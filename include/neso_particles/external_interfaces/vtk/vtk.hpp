@@ -10,6 +10,7 @@
 #include <iostream>
 #include <map>
 #include <memory>
+#include <set>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -171,8 +172,18 @@ public:
    * communicator.
    *
    * @param data Data to write to the file.
+   * @param point_data_keys Pass the point data keys for the UnstructuredCell
+   * point data. This is optional if all ranks have data as all the data must
+   * have the same keys. If some ranks may have no data then this must be set to
+   * the keys that the ranks that do have data have as keys.
+   * @param cell_data_keys Pass the point data keys for the UnstructuredCell
+   * cell data. This is optional if all ranks have data as all the data must
+   * have the same keys. If some ranks may have no data then this must be set to
+   * the keys that the ranks that do have data have as keys.
    */
-  void write(std::vector<UnstructuredCell> &data);
+  void write(std::vector<UnstructuredCell> &data,
+             std::set<std::string> point_data_keys = {},
+             std::set<std::string> cell_data_keys = {});
 };
 
 #else

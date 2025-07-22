@@ -315,6 +315,14 @@ public:
   const std::vector<INT> &get_owned_face_cells();
 
   /**
+   * Get VTK data for a face cell.
+   *
+   * @param face_cell Linear cell index of owned face cell.
+   * @returns VTK::UnstructuredCell data for requested cell.
+   */
+  VTK::UnstructuredCell get_vtk_face_cell_data(const INT face_cell);
+
+  /**
    * Get VTK data for all face cells.
    *
    * @returns Map from face linear INX to VTK data which can be passed to our

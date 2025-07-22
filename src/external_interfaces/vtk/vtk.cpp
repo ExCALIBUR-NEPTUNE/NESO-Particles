@@ -71,7 +71,9 @@ void VTKHDF::close() {
   }
 };
 
-void VTKHDF::write(std::vector<UnstructuredCell> &data) {
+void VTKHDF::write(std::vector<UnstructuredCell> &data,
+                   std::set<std::string> point_data_keys,
+                   std::set<std::string> cell_data_keys) {
   NESOASSERT(this->dataset_type == "UnstructuredGrid",
              "Attempting to write unstructured grid data to a file which is "
              "not set up for unstructured grid data.");
@@ -85,8 +87,16 @@ void VTKHDF::write(std::vector<UnstructuredCell> &data) {
     types.reserve(data.size());
     std::vector<int> connectivity;
     std::vector<int> offsets;
+
     std::map<std::string, std::vector<double>> point_data;
     std::map<std::string, std::vector<double>> cell_data;
+
+    for (auto &sx : point_data_keys) {
+      point_data[sx] = std::vector<REAL>();
+    }
+    for (auto &sx : cell_data_keys) {
+      cell_data[sx] = std::vector<REAL>();
+    }
 
     int point_index = 0;
     offsets.push_back(point_index);

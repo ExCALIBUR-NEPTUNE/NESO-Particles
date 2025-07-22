@@ -14,6 +14,10 @@
 
 namespace NESO::Particles {
 
+/**
+ * This type implements trajectory intersection detection between particles and
+ * a CartesianHMesh.
+ */
 class CartesianTrajectoryIntersection {
 protected:
   std::array<INT, 6> element_offsets;
@@ -450,12 +454,9 @@ public:
   REAL tolerance;
 
   /**
-   * Most simple constructor all boundary elements are considered in boundary
-   * group 0.
-   *
    * @param sycl_target Compute device to use for interactions.
    * @param mesh CartesianHMesh to detect intersections with.
-   * @param boundary_groups Map from boundarg group to edges/faces indices that
+   * @param boundary_groups Map from boundary group to edges/faces indices that
    * form the group.
    * @param tolerance Tolerance for intersection tests, default 1E-14.
    */

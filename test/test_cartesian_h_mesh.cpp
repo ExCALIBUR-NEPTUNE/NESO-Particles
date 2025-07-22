@@ -161,10 +161,12 @@ TEST(CartesianHMesh, mpi_topology_2d) {
   //   vtk_face_cell_data_map.at(cx).cell_data["rank"] = rank;
   // }
   //
+  //
   // VTK::VTKHDF vtkhdf_face("mesh2d_face.vtkhdf",
-  //                         mesh->get_face_owning_ranks_comm());
+  //                         mesh->get_comm()
+  //                         );
   // auto vtk_face_cell_data = flatten_map(vtk_face_cell_data_map);
-  // vtkhdf_face.write(vtk_face_cell_data);
+  // vtkhdf_face.write(vtk_face_cell_data, {}, {"rank"});
   // vtkhdf_face.close();
 
   mesh->free();
