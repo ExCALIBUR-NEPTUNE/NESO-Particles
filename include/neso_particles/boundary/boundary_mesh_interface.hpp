@@ -54,14 +54,18 @@ public:
     std::vector<int> incoming_geom_ids;
     // Geometry ids of the outgoing data
     std::vector<int> outgoing_geom_ids;
-    // Counter to place an ordering on face geom ids;
+    // Counter to place an ordering on face geom ids (outgoing)
     INT geom_counter{0};
-    // Map from linear sequential index to geom id.
+    // Map from linear sequential index to geom id (outgoing).
     std::map<INT, INT> map_linear_index_to_geom_id;
-    // Map from geom id to linear sequential index.
+    // Map from geom id to linear sequential index (outgoing).
     std::map<INT, INT> map_geom_id_to_linear_index;
     // Device map from geom id to linear sequential index.
     std::shared_ptr<BlockedBinaryTree<INT, INT>> d_map_geom_id_to_linear_index;
+    // Map from sequential linear index to packing index, -1 if not packed.
+    std::shared_ptr<BufferDevice<int>> d_outgoing_pack_index;
+    // Is device aware MPI enabled?
+    bool device_aware_mpi{false};
 
     std::map<std::pair<std::type_index, int>, AllToAllWArgs>
         map_typencomp_alltoallwargs;
@@ -190,6 +194,111 @@ public:
    * communicator.
    */
   void free();
+
+protected:
+#ifdef NESO_PARTICLES_TEST_COMPILATION
+public:
+#endif
+
+  template <typename T>
+  [[nodiscard]] sycl::event exchange_from_device_pack(T *d_src, const int ncomp,
+                                                      T *k_packed_out) {
+
+    auto sycl_target = this->boundary.sycl_target;
+    auto *k_outgoing_pack_index = this->boundary.d_outgoing_pack_index->ptr;
+
+    auto e0 = sycl_target->queue.parallel_for(
+        sycl::range<2>(this->boundary.geom_counter, ncomp),
+        [=](sycl::item<2> idx) {
+          const std::size_t idx_geom = idx.get_id(0);
+          const std::size_t idx_component = idx.get_id(1);
+          const int geom_dst = k_outgoing_pack_index[idx_geom];
+          k_packed_out[geom_dst * ncomp + idx_component] =
+              d_src[idx_geom * ncomp + idx_component];
+        });
+
+    return e0;
+  }
+
+  template <typename T>
+  [[nodiscard]] sycl::event
+  exchange_from_device_unpack(T *k_packed_in, const int ncomp, T *d_dst) {
+    auto sycl_target = this->boundary.sycl_target;
+
+    // TODO make maps for incoming geoms to linear ids
+  }
+
+public:
+  /**
+   * Pack and exchange DOFs supplied in a device buffer. DOFs for each geometry
+   * object are combined using addition.
+   *
+   * @param d_src Source data on device.
+   * @param ncomp Number of values that will be exchanged per geometry object.
+   * @param d_dst Destination buffer on device. This buffer will be incremented
+   * with the incoming values.
+   */
+  template <typename T>
+  void exchange_from_device(T *d_src, const int ncomp, T *d_dst) {
+    const std::size_t size_src = this->boundary.geom_counter * ncomp;
+    const std::size_t size_tmp_out =
+        this->boundary.total_num_outgoing_geoms * ncomp;
+    const std::size_t size_tmp_in =
+        this->boundary.total_num_incoming_geoms * ncomp;
+
+    auto sycl_target = this->boundary.sycl_target;
+
+    auto d_packed_out =
+        get_resource<BufferDevice<T>, ResourceStackInterfaceBufferDevice<T>>(
+            sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<T>{},
+            sycl_target);
+    d_packed_out->realloc_no_copy(size_tmp_out);
+    T *k_packed_out = d_packed_out->ptr;
+
+    auto e0 = this->exchange_from_device_pack(d_src, ncomp, k_packed_out);
+
+    auto d_packed_in =
+        get_resource<BufferDevice<T>, ResourceStackInterfaceBufferDevice<T>>(
+            sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<T>{},
+            sycl_target);
+    d_packed_in->realloc_no_copy(size_tmp_in);
+    T *k_packed_in = d_packed_in->ptr;
+
+    // Wait for the packing to finish.
+    e0.wait_and_throw();
+
+    std::vector<T> h_packed_out;
+    std::vector<T> h_packed_in;
+    T *m_packed_out = k_packed_out;
+    T *m_packed_in = k_packed_in;
+    if (!this->boundary.device_aware_mpi) {
+      h_packed_out.resize(size_tmp_out);
+      h_packed_in.resize(size_tmp_in);
+      m_packed_out = h_packed_out.data();
+      m_packed_in = h_packed_in.data();
+      sycl_target->queue
+          .memcpy(m_packed_out, k_packed_out, size_tmp_out * sizeof(T))
+          .wait_and_throw();
+    }
+    this->exchange_surface(m_packed_out, ncomp, m_packed_in);
+
+    h_packed_out = std::vector<T>{};
+    restore_resource(sycl_target->resource_stack_map,
+                     ResourceStackKeyBufferDevice<T>{}, d_packed_out);
+
+    if (!this->boundary.device_aware_mpi) {
+      sycl_target->queue
+          .memcpy(k_packed_in, m_packed_in, size_tmp_in * sizeof(T))
+          .wait_and_throw();
+    }
+    h_packed_in = std::vector<T>{};
+
+    this->exchange_from_device_unpack(k_packed_in, ncomp, d_dst)
+        .wait_and_throw();
+
+    restore_resource(sycl_target->resource_stack_map,
+                     ResourceStackKeyBufferDevice<T>{}, d_packed_in);
+  }
 };
 
 extern template void

@@ -16,6 +16,10 @@ BoundaryMeshInterface::BoundaryMeshInterface(MPI_Comm comm,
 
   NESOASSERT(this->boundary.ncomm != MPI_COMM_NULL,
              "Failure to setup MPI graph topology.");
+
+  this->boundary.d_outgoing_pack_index =
+      std::make_shared<BufferDevice<int>>(sycl_target, 8);
+  this->boundary.device_aware_mpi = device_aware_mpi_enabled();
 }
 
 void BoundaryMeshInterface::free() {
@@ -173,6 +177,28 @@ void BoundaryMeshInterface::extend_exchange_pattern(
         this->boundary.map_send_rank_to_geom_ids[src_rank].insert(gid);
       }
     }
+
+    // (Re)Create the device packing indices
+    this->boundary.d_outgoing_pack_index->realloc_no_copy(
+        this->boundary.geom_counter);
+    std::vector<int> h_outgoing_pack_index(this->boundary.geom_counter);
+    std::fill(h_outgoing_pack_index.begin(), h_outgoing_pack_index.end(), -1);
+    int pack_index = 0;
+    for (auto outgoing_geom : this->boundary.outgoing_geom_ids) {
+      const int seq_linear_index =
+          this->boundary.map_geom_id_to_linear_index.at(outgoing_geom);
+      h_outgoing_pack_index.at(seq_linear_index) = pack_index++;
+    }
+    auto e0 = this->boundary.sycl_target->queue.memcpy(
+        this->boundary.d_outgoing_pack_index->ptr, h_outgoing_pack_index.data(),
+        this->boundary.geom_counter * sizeof(int));
+
+    for (int ix = 0; ix < this->boundary.geom_counter; ix++) {
+      NESOASSERT(h_outgoing_pack_index[ix] != -1,
+                 "Expected all entries to be populated.");
+    }
+
+    e0.wait_and_throw();
   }
 }
 
