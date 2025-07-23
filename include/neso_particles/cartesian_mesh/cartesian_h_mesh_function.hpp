@@ -60,6 +60,10 @@ public:
   /// If this function corresponds to a boundary group then this entry records
   /// the boundary group.
   int element_group{0};
+  /// Number of locally owned DOFs
+  int local_dof_count{0};
+  /// Number of DOFs per cell.
+  int cell_dof_count{0};
 
   CartesianHMeshFunction() = default;
   ~CartesianHMeshFunction() = default;

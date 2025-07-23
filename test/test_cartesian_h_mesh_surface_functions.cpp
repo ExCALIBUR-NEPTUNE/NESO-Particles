@@ -19,6 +19,8 @@ TEST(CartesianHMesh, surface_functions_2d) {
                                 mesh->get_all_face_cells_on_face(2).size();
 
   ASSERT_EQ(u0->d_dofs->size, num_geoms);
+  ASSERT_EQ(u0->local_dof_count, num_geoms);
+  ASSERT_EQ(u0->cell_dof_count, 1);
   ASSERT_EQ(u0->mesh, mesh);
   ASSERT_EQ(u0->sycl_target, sycl_target);
   ASSERT_EQ(u0->ndim, 1);

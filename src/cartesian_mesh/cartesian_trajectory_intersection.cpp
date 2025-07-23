@@ -1,5 +1,6 @@
 #include <neso_particles/cartesian_mesh/cartesian_trajectory_intersection.hpp>
 #include <neso_particles/common_impl.hpp>
+#include <neso_particles/error_propagate.hpp>
 
 namespace NESO::Particles {
 
@@ -130,7 +131,79 @@ CartesianTrajectoryIntersection::create_function(
 void CartesianTrajectoryIntersection::function_project(
     ParticleSubGroupSharedPtr particle_sub_group, Sym<REAL> sym,
     const int component, const bool is_ephemeral,
-    CartesianHMeshFunctionSharedPtr func) {}
+    CartesianHMeshFunctionSharedPtr func) {
+
+  const int group = func->element_group;
+  auto &boundary_mesh_interface = this->map_groups_boundary_interface.at(group);
+
+  auto [d_tree_root, num_accessible_geoms] =
+      boundary_mesh_interface->get_device_geom_id_to_seq();
+
+  const std::size_t tmp_buffer_size =
+      num_accessible_geoms * func->cell_dof_count;
+  auto d_buffer = get_resource<BufferDevice<REAL>,
+                               ResourceStackInterfaceBufferDevice<REAL>>(
+      sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<REAL>{},
+      sycl_target);
+  d_buffer->realloc_no_copy(tmp_buffer_size);
+  REAL *k_buffer = d_buffer->ptr;
+
+  this->sycl_target->queue.fill(k_buffer, (REAL)0.0, tmp_buffer_size)
+      .wait_and_throw();
+
+  auto *k_tree_root = d_tree_root;
+  NESOASSERT(particle_sub_group->contains_ephemeral_dat(
+                 Sym<INT>("NESO_PARTICLES_BOUNDARY_METADATA")),
+             "Boundary metadata not found on ParticleSubGroup.");
+  NESOASSERT(
+      (get_particle_group(particle_sub_group)->contains_dat(sym) &&
+       (!is_ephemeral)) ||
+          (particle_sub_group->contains_ephemeral_dat(sym) && is_ephemeral),
+      "Source particle data not found.");
+
+  ErrorPropagate ep(this->sycl_target);
+  auto k_ep = ep.device_ptr();
+
+  if (is_ephemeral) {
+    particle_loop(
+        "CartesianHMeshFunction::function_project", particle_sub_group,
+        [=](auto BOUNDARY_METADATA, auto SYM) {
+          if (k_tree_root != nullptr) {
+            const INT *index;
+            const bool found =
+                k_tree_root->get(BOUNDARY_METADATA.at_ephemeral(1), &index);
+            NESO_KERNEL_ASSERT(found, k_ep);
+            if (found) {
+              atomic_fetch_add(&k_buffer[*index], SYM.at_ephemeral(component));
+            }
+          }
+        },
+        Access::read(Sym<INT>("NESO_PARTICLES_BOUNDARY_METADATA")),
+        Access::read(sym))
+        ->execute();
+  } else {
+    particle_loop(
+        "CartesianHMeshFunction::function_project", particle_sub_group,
+        [=](auto BOUNDARY_METADATA, auto SYM) {
+          if (k_tree_root != nullptr) {
+            const INT *index;
+            const bool found =
+                k_tree_root->get(BOUNDARY_METADATA.at_ephemeral(1), &index);
+            NESO_KERNEL_ASSERT(found, k_ep);
+            if (found) {
+              atomic_fetch_add(&k_buffer[*index], SYM.at(component));
+            }
+          }
+        },
+        Access::read(Sym<INT>("NESO_PARTICLES_BOUNDARY_METADATA")),
+        Access::read(sym))
+        ->execute();
+  }
+  NESOASSERT(!ep.get_flag(), "Failed to find index for hit geometry object.");
+
+  restore_resource(sycl_target->resource_stack_map,
+                   ResourceStackKeyBufferDevice<REAL>{}, d_buffer);
+}
 
 template void CartesianTrajectoryIntersection::pre_integration_inner(
     std::shared_ptr<ParticleGroup> particles);

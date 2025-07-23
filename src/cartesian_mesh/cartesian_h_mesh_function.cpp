@@ -10,8 +10,10 @@ CartesianHMeshFunction::CartesianHMeshFunction(
       function_space(function_space), polynomial_order(polynomial_order),
       element_group(element_group) {
   const int ndof_per_cell = std::pow(polynomial_order + 1, ndim);
-  this->d_dofs = std::make_shared<BufferDevice<REAL>>(
-      sycl_target, cell_count * ndof_per_cell);
+  this->cell_dof_count = ndof_per_cell;
+  this->local_dof_count = cell_count * ndof_per_cell;
+  this->d_dofs =
+      std::make_shared<BufferDevice<REAL>>(sycl_target, this->local_dof_count);
   NESOASSERT(ndim + 1 == mesh->get_ndim(),
              "Only currently implemented for boundary functions.");
   NESOASSERT(function_space == "DG",
