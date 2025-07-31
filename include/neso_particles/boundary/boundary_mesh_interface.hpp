@@ -238,15 +238,16 @@ public:
   template <typename T>
   [[nodiscard]] sycl::event
   exchange_from_device_unpack(T *k_packed_in, const int ncomp, T *d_dst) {
-    auto sycl_target = this->boundary.sycl_target;
-
-    int *k_incoming_geom_ids = this->boundary.d_incoming_geom_ids->ptr;
-    auto *k_map_owned_geom_id_to_linear_index =
-        this->boundary.d_map_owned_geom_id_to_linear_index->root;
     const std::size_t num_incoming_geom_ids =
         this->boundary.incoming_geom_ids.size();
 
     if (num_incoming_geom_ids) {
+      auto sycl_target = this->boundary.sycl_target;
+
+      int *k_incoming_geom_ids = this->boundary.d_incoming_geom_ids->ptr;
+      auto *k_map_owned_geom_id_to_linear_index =
+          this->boundary.d_map_owned_geom_id_to_linear_index->root;
+
       NESOASSERT(k_map_owned_geom_id_to_linear_index != nullptr,
                  "This map should contain geometry objects.");
 
@@ -346,6 +347,23 @@ BoundaryMeshInterface::exchange_surface(INT *data, const int ncomp,
 extern template void
 BoundaryMeshInterface::exchange_surface(REAL *data, const int ncomp,
                                         REAL *data_gathered);
+extern template void
+BoundaryMeshInterface::exchange_from_device(REAL *d_src, const int ncomp,
+                                            REAL *d_dst);
+extern template void
+BoundaryMeshInterface::exchange_from_device(INT *d_src, const int ncomp,
+                                            INT *d_dst);
+extern template sycl::event
+BoundaryMeshInterface::exchange_from_device_pack(REAL *k_packed_in,
+                                                 const int ncomp, REAL *d_dst);
+extern template sycl::event
+BoundaryMeshInterface::exchange_from_device_pack(INT *k_packed_in,
+                                                 const int ncomp, INT *d_dst);
+extern template sycl::event BoundaryMeshInterface::exchange_from_device_unpack(
+    REAL *k_packed_in, const int ncomp, REAL *d_dst);
+extern template sycl::event
+BoundaryMeshInterface::exchange_from_device_unpack(INT *k_packed_in,
+                                                   const int ncomp, INT *d_dst);
 
 } // namespace NESO::Particles
 

@@ -277,6 +277,73 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
     }
   }
 
+  std::mt19937 rng(1841 + rank);
+  // Test exchange from device
+  {
+    const std::size_t packed_data_length_src =
+        bmi.boundary.outgoing_geom_ids.size() * ncomp;
+    const std::size_t packed_data_length_dst =
+        bmi.boundary.owned_geom_ids.size() * ncomp;
+
+    std::vector<REAL> h_src(packed_data_length_src);
+    std::vector<REAL> h_dst(packed_data_length_dst);
+
+    std::uniform_real_distribution<REAL> uniform_dist(0.0, 1.0);
+    std::map<INT, std::vector<REAL>> map_geom_to_values;
+    for (auto gx : bmi.boundary.outgoing_geom_ids) {
+      std::vector<REAL> v(ncomp);
+      for (int cx = 0; cx < ncomp; cx++) {
+        v.at(cx) = uniform_dist(rng);
+      }
+      map_geom_to_values[gx] = v;
+
+      const auto index = bmi.boundary.map_geom_id_to_linear_index.at(gx);
+      for (int cx = 0; cx < ncomp; cx++) {
+        h_src.at(index * ncomp + cx) = v.at(cx);
+      }
+    }
+
+    BufferDevice<REAL> d_src(sycl_target, h_src);
+    BufferDevice<REAL> d_dst(sycl_target, h_dst);
+
+    bmi.exchange_from_device(d_src.ptr, ncomp, d_dst.ptr);
+    sycl_target->queue
+        .memcpy(h_dst.data(), d_dst.ptr, packed_data_length_dst * sizeof(REAL))
+        .wait_and_throw();
+
+    std::vector<REAL> send_stage(ncomp);
+    std::vector<REAL> recv_stage(ncomp);
+
+    for (int gx = 0; gx < num_owned_geoms * size; gx++) {
+      const int owning_rank = gx / num_owned_geoms;
+
+      std::fill(send_stage.begin(), send_stage.end(), 0.0);
+      std::fill(recv_stage.begin(), recv_stage.end(), 0.0);
+
+      if (map_geom_to_values.count(gx)) {
+        for (int cx = 0; cx < ncomp; cx++) {
+          send_stage.at(cx) = map_geom_to_values.at(gx).at(cx);
+        }
+      }
+
+      MPICHK(MPI_Reduce(send_stage.data(), recv_stage.data(), ncomp,
+                        map_ctype_mpi_type<REAL>(), MPI_SUM, owning_rank,
+                        comm));
+
+      if (rank == owning_rank) {
+        const auto index =
+            bmi.boundary.map_owned_geom_id_to_linear_index.at(gx);
+        for (int cx = 0; cx < ncomp; cx++) {
+          send_stage.at(cx) = h_dst.at(index * ncomp + cx);
+        }
+
+        for (int cx = 0; cx < ncomp; cx++) {
+          ASSERT_NEAR(send_stage.at(cx), recv_stage.at(cx), 1.0e-12);
+        }
+      }
+    }
+  }
+
   bmi.free();
   sycl_target->free();
 }

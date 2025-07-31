@@ -246,5 +246,22 @@ template void BoundaryMeshInterface::exchange_surface(INT *data,
 template void BoundaryMeshInterface::exchange_surface(REAL *data,
                                                       const int ncomp,
                                                       REAL *data_gathered);
+template void BoundaryMeshInterface::exchange_from_device(REAL *d_src,
+                                                          const int ncomp,
+                                                          REAL *d_dst);
+template void BoundaryMeshInterface::exchange_from_device(INT *d_src,
+                                                          const int ncomp,
+                                                          INT *d_dst);
+template sycl::event
+BoundaryMeshInterface::exchange_from_device_pack(REAL *k_packed_in,
+                                                 const int ncomp, REAL *d_dst);
+template sycl::event
+BoundaryMeshInterface::exchange_from_device_pack(INT *k_packed_in,
+                                                 const int ncomp, INT *d_dst);
+template sycl::event BoundaryMeshInterface::exchange_from_device_unpack(
+    REAL *k_packed_in, const int ncomp, REAL *d_dst);
+template sycl::event
+BoundaryMeshInterface::exchange_from_device_unpack(INT *k_packed_in,
+                                                   const int ncomp, INT *d_dst);
 
 } // namespace NESO::Particles
