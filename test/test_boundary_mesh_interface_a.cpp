@@ -4,16 +4,22 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
 
   MPI_Comm comm = MPI_COMM_WORLD;
   auto sycl_target = std::make_shared<SYCLTarget>(0, comm);
-
-  BoundaryMeshInterface bmi(comm, sycl_target);
-  const int ncomp = 7;
-
   int rank = -1;
   int size = -1;
   MPICHK(MPI_Comm_rank(comm, &rank));
   MPICHK(MPI_Comm_size(comm, &size));
 
   const int num_owned_geoms = 4;
+
+  std::vector<INT> owned_face_cells;
+  for (int ix = 0; ix < num_owned_geoms; ix++) {
+    owned_face_cells.push_back(rank * num_owned_geoms + ix);
+  }
+
+  BoundaryMeshInterface bmi(comm, sycl_target, owned_face_cells);
+  const int ncomp = 7;
+
+  ASSERT_EQ(owned_face_cells, bmi.boundary.owned_geom_ids);
 
   std::map<int, std::vector<std::pair<int, int>>> test_map;
   std::map<int, std::map<int, std::vector<REAL>>> test_data;
@@ -144,6 +150,23 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
   }
   ASSERT_EQ(incoming_geoms_to_test, incoming_geoms_correct);
 
+  const auto incoming_geom_ids_size = bmi.boundary.incoming_geom_ids.size();
+  std::vector<int> incoming_geoms_to_test_v(incoming_geom_ids_size);
+
+  if (incoming_geom_ids_size > 0) {
+    sycl_target->queue
+        .memcpy(incoming_geoms_to_test_v.data(),
+                bmi.boundary.d_incoming_geom_ids->ptr,
+                incoming_geom_ids_size * sizeof(int))
+        .wait_and_throw();
+  }
+  incoming_geoms_to_test.clear();
+  for (auto ix : incoming_geoms_to_test_v) {
+    incoming_geoms_to_test.insert(ix);
+  }
+
+  ASSERT_EQ(incoming_geoms_to_test, incoming_geoms_correct);
+
   for (int rx = 0; rx < size; rx++) {
     incoming_geoms_correct.clear();
     for (auto &rank_gid : test_map[rx]) {
@@ -179,6 +202,80 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
   }
 
   ASSERT_EQ(indata, indata_correct);
+
+  // Test the DOF packing loop
+  {
+    const std::size_t packed_data_length =
+        bmi.boundary.outgoing_geom_ids.size() * ncomp;
+
+    std::vector<REAL> h_src(packed_data_length);
+    std::vector<REAL> h_dst(packed_data_length);
+    std::fill(h_dst.begin(), h_dst.end(), 0.0);
+    for (std::size_t ix = 0; ix < packed_data_length; ix++) {
+      h_src[ix] = ix * 0.01;
+    }
+    BufferDevice<REAL> d_src(sycl_target, h_src);
+    BufferDevice<REAL> d_dst(sycl_target, h_dst);
+
+    bmi.exchange_from_device_pack(d_src.ptr, ncomp, d_dst.ptr).wait_and_throw();
+
+    sycl_target->queue
+        .memcpy(h_dst.data(), d_dst.ptr, packed_data_length * sizeof(REAL))
+        .wait_and_throw();
+
+    int index_dst = 0;
+    for (int gx : bmi.boundary.outgoing_geom_ids) {
+      const int index_src = bmi.boundary.map_geom_id_to_linear_index.at(gx);
+      for (int cx = 0; cx < ncomp; cx++) {
+        ASSERT_EQ(h_dst[index_dst * ncomp + cx], h_src[index_src * ncomp + cx]);
+      }
+      index_dst++;
+    }
+  }
+  // Test the DOF unpacking loop
+  {
+    const std::size_t packed_data_length_src =
+        bmi.boundary.incoming_geom_ids.size() * ncomp;
+    const std::size_t packed_data_length_dst =
+        bmi.boundary.owned_geom_ids.size() * ncomp;
+    ASSERT_EQ(bmi.boundary.owned_geom_ids.size(), num_owned_geoms);
+
+    if (packed_data_length_src > 0) {
+      std::vector<REAL> h_src(packed_data_length_src);
+      std::vector<REAL> h_dst(packed_data_length_dst);
+      std::fill(h_dst.begin(), h_dst.end(), 0.0);
+      for (std::size_t ix = 0; ix < packed_data_length_src; ix++) {
+        h_src[ix] = ix * 0.01;
+      }
+      BufferDevice<REAL> d_src(sycl_target, h_src);
+      BufferDevice<REAL> d_dst(sycl_target, h_dst);
+
+      bmi.exchange_from_device_unpack(d_src.ptr, ncomp, d_dst.ptr)
+          .wait_and_throw();
+
+      sycl_target->queue
+          .memcpy(h_dst.data(), d_dst.ptr,
+                  packed_data_length_dst * sizeof(REAL))
+          .wait_and_throw();
+
+      int dst_index = 0;
+      for (auto gx : owned_face_cells) {
+        for (int cx = 0; cx < ncomp; cx++) {
+          REAL correct = 0.0;
+
+          int src_index = 0;
+          for (auto hx : bmi.boundary.incoming_geom_ids) {
+            if (hx == gx) {
+              correct += h_src.at(src_index * ncomp + cx);
+            }
+            src_index++;
+          }
+          ASSERT_NEAR(h_dst.at(dst_index * ncomp + cx), correct, 1.0e-14);
+        }
+        dst_index++;
+      }
+    }
+  }
 
   bmi.free();
   sycl_target->free();

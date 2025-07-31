@@ -3,8 +3,9 @@
 
 namespace NESO::Particles {
 
-BoundaryMeshInterface::BoundaryMeshInterface(MPI_Comm comm,
-                                             SYCLTargetSharedPtr sycl_target) {
+BoundaryMeshInterface::BoundaryMeshInterface(
+    MPI_Comm comm, SYCLTargetSharedPtr sycl_target,
+    const std::vector<INT> &owned_face_cells) {
   this->boundary.comm = comm;
   this->boundary.sycl_target = sycl_target;
   this->boundary.d_map_geom_id_to_linear_index =
@@ -20,6 +21,18 @@ BoundaryMeshInterface::BoundaryMeshInterface(MPI_Comm comm,
   this->boundary.d_outgoing_pack_index =
       std::make_shared<BufferDevice<int>>(sycl_target, 8);
   this->boundary.device_aware_mpi = device_aware_mpi_enabled();
+
+  this->boundary.owned_geom_ids = owned_face_cells;
+  this->boundary.d_map_owned_geom_id_to_linear_index =
+      std::make_shared<BlockedBinaryTree<INT, INT>>(sycl_target);
+
+  INT owned_linear_index = 0;
+  for (const INT &gid : owned_face_cells) {
+    this->boundary.map_owned_geom_id_to_linear_index[gid] = owned_linear_index;
+    this->boundary.d_map_owned_geom_id_to_linear_index->add(gid,
+                                                            owned_linear_index);
+    owned_linear_index++;
+  }
 }
 
 void BoundaryMeshInterface::free() {
@@ -165,6 +178,10 @@ void BoundaryMeshInterface::extend_exchange_pattern(
 
     this->exchange_surface(this->boundary.outgoing_geom_ids.data(), 1,
                            this->boundary.incoming_geom_ids.data());
+
+    // Create the device side copy of the incoming ids.
+    this->boundary.d_incoming_geom_ids = std::make_shared<BufferDevice<int>>(
+        this->boundary.sycl_target, this->boundary.incoming_geom_ids);
 
     // populate map_send_rank_to_geom_ids (this is mainly for testing/debugging)
     index = 0;

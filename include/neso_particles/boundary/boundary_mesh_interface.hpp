@@ -52,6 +52,8 @@ public:
     int total_num_outgoing_geoms{0};
     // Geometry ids of the incoming data
     std::vector<int> incoming_geom_ids;
+    // Device side geometry ids of the incoming data.
+    std::shared_ptr<BufferDevice<int>> d_incoming_geom_ids;
     // Geometry ids of the outgoing data
     std::vector<int> outgoing_geom_ids;
     // Counter to place an ordering on face geom ids (outgoing)
@@ -60,12 +62,19 @@ public:
     std::map<INT, INT> map_linear_index_to_geom_id;
     // Map from geom id to linear sequential index (outgoing).
     std::map<INT, INT> map_geom_id_to_linear_index;
-    // Device map from geom id to linear sequential index.
+    // Device map from geom id to linear sequential index (outgoing).
     std::shared_ptr<BlockedBinaryTree<INT, INT>> d_map_geom_id_to_linear_index;
     // Map from sequential linear index to packing index, -1 if not packed.
     std::shared_ptr<BufferDevice<int>> d_outgoing_pack_index;
     // Is device aware MPI enabled?
     bool device_aware_mpi{false};
+    // Owned face geometry IDs (map from linear index to geometry ID)
+    std::vector<INT> owned_geom_ids;
+    // Map from an owned geometry ID to its linear index.
+    std::map<INT, INT> map_owned_geom_id_to_linear_index;
+    // Device map from owned geometry ID to linear index.
+    std::shared_ptr<BlockedBinaryTree<INT, INT>>
+        d_map_owned_geom_id_to_linear_index;
 
     std::map<std::pair<std::type_index, int>, AllToAllWArgs>
         map_typencomp_alltoallwargs;
@@ -123,10 +132,15 @@ public:
   BoundaryMeshInterface() = default;
 
   /**
+   * This constructor is collective on the communicator.
+   *
    * @param comm MPI communicator for mesh.
    * @param sycl_target Compute device for device maps.
+   * @param owned_face_cells The geometry IDs of boundary cells which this MPI
+   * ranks owns.
    */
-  BoundaryMeshInterface(MPI_Comm comm, SYCLTargetSharedPtr sycl_target);
+  BoundaryMeshInterface(MPI_Comm comm, SYCLTargetSharedPtr sycl_target,
+                        const std::vector<INT> &owned_face_cells);
 
   /**
    * Indicate to the implementation that communication patterns should be set up
@@ -140,7 +154,8 @@ public:
       const std::vector<std::pair<int, int>> &rank_geom_ids);
 
   /**
-   * Send data from each rank to the owning rank for the data.
+   * Send data from each rank to the owning rank for the data. Collective on the
+   * communicator.
    *
    * @param[in] data Data to send to owning ranks. num_geoms x ncomp sized array
    * ordered by component fastest followed by geometry index. Geometry object id
@@ -225,7 +240,29 @@ public:
   exchange_from_device_unpack(T *k_packed_in, const int ncomp, T *d_dst) {
     auto sycl_target = this->boundary.sycl_target;
 
-    // TODO make maps for incoming geoms to linear ids
+    int *k_incoming_geom_ids = this->boundary.d_incoming_geom_ids->ptr;
+    auto *k_map_owned_geom_id_to_linear_index =
+        this->boundary.d_map_owned_geom_id_to_linear_index->root;
+    const std::size_t num_incoming_geom_ids =
+        this->boundary.incoming_geom_ids.size();
+
+    if (num_incoming_geom_ids) {
+      NESOASSERT(k_map_owned_geom_id_to_linear_index != nullptr,
+                 "This map should contain geometry objects.");
+
+      return sycl_target->queue.parallel_for(
+          sycl::range<2>(num_incoming_geom_ids, ncomp), [=](sycl::item<2> idx) {
+            const INT *linear_index = 0;
+            const INT incoming_index = idx.get_id(0);
+            const INT gid = k_incoming_geom_ids[incoming_index];
+            const INT cx = idx.get_id(1);
+            k_map_owned_geom_id_to_linear_index->get(gid, &linear_index);
+            atomic_fetch_add(d_dst + ncomp * (*linear_index) + cx,
+                             k_packed_in[incoming_index * ncomp + cx]);
+          });
+    } else {
+      return sycl::event{};
+    }
   }
 
 public:
@@ -240,7 +277,6 @@ public:
    */
   template <typename T>
   void exchange_from_device(T *d_src, const int ncomp, T *d_dst) {
-    const std::size_t size_src = this->boundary.geom_counter * ncomp;
     const std::size_t size_tmp_out =
         this->boundary.total_num_outgoing_geoms * ncomp;
     const std::size_t size_tmp_in =

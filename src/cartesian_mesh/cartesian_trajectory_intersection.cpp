@@ -88,9 +88,18 @@ CartesianTrajectoryIntersection::CartesianTrajectoryIntersection(
              "This method is only implemented in 2D and 3D.");
   this->setup();
 
+  std::vector<INT> tmp_face_cells;
   for (const auto &gx : boundary_groups) {
+    tmp_face_cells.clear();
+    for (auto &fx : gx.second) {
+      auto face_cells = mesh->get_all_face_cells_on_face(fx);
+      tmp_face_cells.insert(tmp_face_cells.end(), face_cells.begin(),
+                            face_cells.end());
+    }
+
     this->map_groups_boundary_interface[gx.first] =
-        std::make_shared<BoundaryMeshInterface>(mesh->get_comm(), sycl_target);
+        std::make_shared<BoundaryMeshInterface>(mesh->get_comm(), sycl_target,
+                                                tmp_face_cells);
     this->map_groups_unseen_value_extractor[gx.first] =
         std::make_shared<UnseenValueExtractor>(this->sycl_target);
   }
