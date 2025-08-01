@@ -253,7 +253,7 @@ public:
 
       return sycl_target->queue.parallel_for(
           sycl::range<2>(num_incoming_geom_ids, ncomp), [=](sycl::item<2> idx) {
-            const INT *linear_index = 0;
+            const INT *linear_index = nullptr;
             const INT incoming_index = idx.get_id(0);
             const INT gid = k_incoming_geom_ids[incoming_index];
             const INT cx = idx.get_id(1);
@@ -337,6 +337,8 @@ public:
                      ResourceStackKeyBufferDevice<T>{}, d_packed_in);
   }
 };
+
+typedef std::shared_ptr<BoundaryMeshInterface> BoundaryMeshInterfaceSharedPtr;
 
 extern template void
 BoundaryMeshInterface::exchange_surface(int *data, const int ncomp,

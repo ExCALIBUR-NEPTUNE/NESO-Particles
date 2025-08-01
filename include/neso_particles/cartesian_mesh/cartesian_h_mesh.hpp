@@ -105,7 +105,6 @@ private:
   bool allocated = false;
   std::vector<int> neighbour_ranks;
 
-  int num_face_geoms{0};
   std::array<int, 6> face_strides0{0, 0, 0, 0, 0, 0};
   std::array<int, 6> face_strides1{0, 0, 0, 0, 0, 0};
   std::array<int, 6> num_geoms_per_face{0, 0, 0, 0, 0, 0};
@@ -158,6 +157,8 @@ public:
   const int ncells_fine;
   /// Is this mesh running in a mode where it exposes one NP cell per MPI rank.
   bool single_cell_mode;
+  /// The total number of ndim-1 cells on boundaries (global)
+  int ncells_face_global{0};
 
   /**
    * Construct a mesh over a given MPI communicator with a specified shape.

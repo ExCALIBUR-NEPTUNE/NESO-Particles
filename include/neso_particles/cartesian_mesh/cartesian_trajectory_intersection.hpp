@@ -21,6 +21,10 @@ namespace NESO::Particles {
  */
 class CartesianTrajectoryIntersection {
 protected:
+#ifdef NESO_PARTICLES_TEST_COMPILATION
+public:
+#endif
+
   std::array<INT, 6> element_offsets;
   std::array<INT, 6> element_strides0;
   std::array<INT, 6> element_strides1;

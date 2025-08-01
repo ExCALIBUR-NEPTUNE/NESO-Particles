@@ -92,6 +92,13 @@ public:
    * @param filename Output file name which should have vtkhdf extension.
    */
   void write_vtkhdf(const std::string filename);
+
+  /**
+   * Fill all the DOFs with a given value.
+   *
+   * @param value Value to assign to all DOFs.
+   */
+  void fill(const REAL value);
 };
 
 typedef std::shared_ptr<CartesianHMeshFunction> CartesianHMeshFunctionSharedPtr;

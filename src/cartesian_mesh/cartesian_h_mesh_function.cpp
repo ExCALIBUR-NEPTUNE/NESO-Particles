@@ -20,6 +20,7 @@ CartesianHMeshFunction::CartesianHMeshFunction(
              "Only currently implemented for DG0 functions.");
   NESOASSERT(polynomial_order == 0,
              "Only currently implemented for DG0 functions.");
+  this->fill(0.0);
 }
 
 CartesianHMeshFunction::CartesianHMeshFunction(CartesianHMeshSharedPtr mesh,
@@ -58,6 +59,13 @@ void CartesianHMeshFunction::write_vtkhdf(const std::string filename) {
   VTK::VTKHDF vtkhdf(filename, mesh->get_comm());
   vtkhdf.write(data, {}, {"u"});
   vtkhdf.close();
+}
+
+void CartesianHMeshFunction::fill(const REAL value) {
+  this->sycl_target->queue
+      .fill(static_cast<REAL *>(this->d_dofs->ptr), static_cast<REAL>(value),
+            this->local_dof_count)
+      .wait_and_throw();
 }
 
 } // namespace NESO::Particles

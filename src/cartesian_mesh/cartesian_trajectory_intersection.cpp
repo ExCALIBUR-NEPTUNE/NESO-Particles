@@ -173,6 +173,8 @@ void CartesianTrajectoryIntersection::function_project(
   ErrorPropagate ep(this->sycl_target);
   auto k_ep = ep.device_ptr();
 
+  const REAL k_inverse_width = func->mesh->inverse_cell_width_fine;
+
   if (is_ephemeral) {
     particle_loop(
         "CartesianHMeshFunction::function_project", particle_sub_group,
@@ -183,7 +185,8 @@ void CartesianTrajectoryIntersection::function_project(
                 k_tree_root->get(BOUNDARY_METADATA.at_ephemeral(1), &index);
             NESO_KERNEL_ASSERT(found, k_ep);
             if (found) {
-              atomic_fetch_add(&k_buffer[*index], SYM.at_ephemeral(component));
+              atomic_fetch_add(&k_buffer[*index],
+                               k_inverse_width * SYM.at_ephemeral(component));
             }
           }
         },
@@ -200,7 +203,8 @@ void CartesianTrajectoryIntersection::function_project(
                 k_tree_root->get(BOUNDARY_METADATA.at_ephemeral(1), &index);
             NESO_KERNEL_ASSERT(found, k_ep);
             if (found) {
-              atomic_fetch_add(&k_buffer[*index], SYM.at(component));
+              atomic_fetch_add(&k_buffer[*index],
+                               k_inverse_width * SYM.at(component));
             }
           }
         },
@@ -209,6 +213,9 @@ void CartesianTrajectoryIntersection::function_project(
         ->execute();
   }
   NESOASSERT(!ep.get_flag(), "Failed to find index for hit geometry object.");
+
+  boundary_mesh_interface->exchange_from_device(k_buffer, func->cell_dof_count,
+                                                func->d_dofs->ptr);
 
   restore_resource(sycl_target->resource_stack_map,
                    ResourceStackKeyBufferDevice<REAL>{}, d_buffer);

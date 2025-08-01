@@ -165,7 +165,7 @@ CartesianHMesh::CartesianHMesh(MPI_Comm comm, const int ndim,
     NESOASSERT(total_boundary_cells ==
                    ncells_dim_fine * (dims[0] + dims[1] + dims[0] + dims[1]),
                "Incorrect number of boundary cells.");
-    this->num_face_geoms = static_cast<int>(total_boundary_cells);
+    this->ncells_face_global = static_cast<int>(total_boundary_cells);
 
     this->face_strides0[0] = dims[0] * ncells_dim_fine;
     this->face_strides0[1] = dims[1] * ncells_dim_fine;
@@ -199,7 +199,7 @@ CartesianHMesh::CartesianHMesh(MPI_Comm comm, const int ndim,
                         dims[0] * dims[1] + dims[0] * dims[1]),
                "Incorrect number of boundary cells.");
 
-    this->num_face_geoms = static_cast<int>(total_boundary_cells);
+    this->ncells_face_global = static_cast<int>(total_boundary_cells);
 
     this->face_strides0[0] = dims[0] * ncells_dim_fine;
     this->face_strides0[1] = dims[1] * ncells_dim_fine;
@@ -504,7 +504,8 @@ INT CartesianHMesh::get_face_linear_index_from_tuple(
 int CartesianHMesh::get_face_id_owning_rank(const INT face_id) {
   NESOASSERT(this->ndim == 2 || this->ndim == 3,
              "Unexpected number of dimensions.");
-  NESOASSERT((0 <= face_id) && (face_id < this->num_face_geoms), "Bad face id");
+  NESOASSERT((0 <= face_id) && (face_id < this->ncells_face_global),
+             "Bad face id");
   if (!this->cache_map_face_id_to_rank.count(face_id)) {
 
     INT face_tuple[3] = {0, 0, 0};
