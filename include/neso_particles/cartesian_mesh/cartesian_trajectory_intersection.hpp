@@ -11,9 +11,14 @@
 #include "cartesian_h_mesh.hpp"
 #include "cartesian_h_mesh_function.hpp"
 #include <array>
+#include <limits>
 #include <map>
 
 namespace NESO::Particles {
+
+namespace Private {
+constexpr int CART_TRAJ_INT_MASK_VALUE = std::numeric_limits<int>::lowest();
+}
 
 /**
  * This type implements trajectory intersection detection between particles and
@@ -328,7 +333,10 @@ public:
     ep.check_and_throw(
         "Failed to find boundary information for departing particle.");
 
-    std::array<INT, 6> k_boundary_group_map;
+    std::array<INT, 6> k_boundary_group_map = {
+        Private::CART_TRAJ_INT_MASK_VALUE, Private::CART_TRAJ_INT_MASK_VALUE,
+        Private::CART_TRAJ_INT_MASK_VALUE, Private::CART_TRAJ_INT_MASK_VALUE,
+        Private::CART_TRAJ_INT_MASK_VALUE, Private::CART_TRAJ_INT_MASK_VALUE};
     const INT max_edge = (k_ndim == 2) ? 4 : 6;
     for (const auto &bx : this->boundary_groups) {
       const int group = bx.first;
@@ -409,20 +417,29 @@ public:
           Access::write(
               BoundaryInteractionSpecification::intersection_metadata))
           ->execute();
+    }
 
-      auto new_geoms =
-          this->map_groups_unseen_value_extractor.at(group.first)
-              ->extract(group.second,
-                        BoundaryInteractionSpecification::intersection_metadata,
-                        1, true);
+    for (const auto &boundary_group : this->boundary_groups) {
+      const auto group_id = boundary_group.first;
+
+      // Does this rank actually have any particles hitting that boundary group?
+      std::set<INT> new_geoms;
+      if (return_map.count(group_id)) {
+        new_geoms =
+            this->map_groups_unseen_value_extractor.at(group_id)->extract(
+                return_map.at(group_id),
+                BoundaryInteractionSpecification::intersection_metadata, 1,
+                true);
+      }
+
       std::vector<std::pair<int, int>> new_potentialy_hit_geoms;
       new_potentialy_hit_geoms.reserve(new_geoms.size());
       for (auto &geomx : new_geoms) {
         const int owning_rank = this->mesh->get_face_id_owning_rank(geomx);
         new_potentialy_hit_geoms.push_back({owning_rank, geomx});
       }
-      this->map_groups_boundary_interface.at(group.first)
-          ->extend_exchange_pattern(new_potentialy_hit_geoms);
+      this->map_groups_boundary_interface.at(group_id)->extend_exchange_pattern(
+          new_potentialy_hit_geoms);
     }
 
     restore_resource(sycl_target->resource_stack_map,

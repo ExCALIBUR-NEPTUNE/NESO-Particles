@@ -90,6 +90,8 @@ CartesianTrajectoryIntersection::CartesianTrajectoryIntersection(
 
   std::vector<INT> tmp_face_cells;
   for (const auto &gx : boundary_groups) {
+    NESOASSERT(gx.first != Private::CART_TRAJ_INT_MASK_VALUE,
+               "This boundary group label is reseverved.");
     tmp_face_cells.clear();
     for (auto &fx : gx.second) {
       auto face_cells = mesh->get_all_face_cells_on_face(fx);

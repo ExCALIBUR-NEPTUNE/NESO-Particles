@@ -134,11 +134,9 @@ void BoundaryMeshInterface::extend_exchange_pattern(
       const int dst_rank = this->boundary.graph.destinations.at(dst_rank_index);
       const int tmp_count =
           this->boundary.map_recv_rank_to_geom_ids[dst_rank].size();
-      nprint("dst_rank:", dst_rank, "count:", tmp_count);
       this->boundary.outgoing_geom_counts.at(dst_rank_index) = tmp_count;
       this->boundary.total_num_outgoing_geoms += tmp_count;
     }
-    nprint("-----------------------------------------------");
 
     // mpich complains that the input pointers are nullptr even if that data is
     // not accessed.
@@ -151,20 +149,8 @@ void BoundaryMeshInterface::extend_exchange_pattern(
                               ? this->boundary.incoming_geom_counts.data()
                               : &null_in;
 
-    for (int ix = 0; ix < this->boundary.graph.outdegree; ix++) {
-      nprint("before count exchange, ix:", ix,
-             "dst rank:", this->boundary.graph.destinations[ix],
-             "count:", out_data_counts[ix]);
-    }
-
     MPICHK(MPI_Neighbor_alltoall(out_data_counts, 1, MPI_INT, in_data_counts, 1,
                                  MPI_INT, this->boundary.ncomm));
-
-    for (int ix = 0; ix < this->boundary.graph.indegree; ix++) {
-      nprint("after count exchange, ix :", ix,
-             "src rank:", this->boundary.graph.sources[ix],
-             "count:", in_data_counts[ix]);
-    }
 
     // Send the geometry id to the corresponding owning rank such that the
     // owning rank knows which geometry object incoming data corresonds to.
@@ -184,13 +170,8 @@ void BoundaryMeshInterface::extend_exchange_pattern(
     for (int dst_rank_index = 0;
          dst_rank_index < this->boundary.graph.outdegree; dst_rank_index++) {
       const int dst_rank = this->boundary.graph.destinations.at(dst_rank_index);
-
-      nprint("dst_rank:", dst_rank,
-             "num:", this->boundary.map_recv_rank_to_geom_ids[dst_rank].size());
-
       for (int gx : this->boundary.map_recv_rank_to_geom_ids[dst_rank]) {
         this->boundary.outgoing_geom_ids.at(index++) = gx;
-        nprint("\t:", gx);
       }
     }
     NESOASSERT(index == this->boundary.total_num_outgoing_geoms,
@@ -203,15 +184,11 @@ void BoundaryMeshInterface::extend_exchange_pattern(
     this->boundary.d_incoming_geom_ids = std::make_shared<BufferDevice<int>>(
         this->boundary.sycl_target, this->boundary.incoming_geom_ids);
 
-    nprint("===============================================");
-
     // populate map_send_rank_to_geom_ids (this is mainly for testing/debugging)
     index = 0;
     for (int src_rank_index = 0; src_rank_index < this->boundary.graph.indegree;
          src_rank_index++) {
       const int src_rank = this->boundary.graph.sources[src_rank_index];
-      nprint("src_rank:", src_rank,
-             "counts:", this->boundary.incoming_geom_counts[src_rank_index]);
       for (int ix = 0; ix < this->boundary.incoming_geom_counts[src_rank_index];
            ix++) {
         const int gid = this->boundary.incoming_geom_ids[index++];

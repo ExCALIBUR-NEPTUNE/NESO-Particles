@@ -4,11 +4,12 @@ TEST(CartesianHMesh, surface_functions_2d) {
   const int ndim = 2;
   const REAL dt = 1000.0;
 
-  auto [A, sycl_target, cell_count_t] = particle_loop_common_2d(27, 16, 32);
-  auto mesh = std::dynamic_pointer_cast<CartesianHMesh>(A->domain->mesh);
+  const int ncellx = 16;
+  const int ncelly = 32;
 
-  nprint("rank:", sycl_target->comm_pair.rank_parent,
-         "owner:", mesh->get_face_id_owning_rank(0));
+  auto [A, sycl_target, cell_count_t] =
+      particle_loop_common_2d(27, ncellx, ncelly);
+  auto mesh = std::dynamic_pointer_cast<CartesianHMesh>(A->domain->mesh);
 
   std::map<int, std::vector<int>> boundary_groups;
   boundary_groups[0] = {0, 1, 2};
@@ -83,9 +84,13 @@ TEST(CartesianHMesh, surface_functions_2d) {
       ->execute();
 
   const auto ncells_face_global = mesh->ncells_face_global;
-  auto func_ga =
+  auto func_ga0 =
       std::make_shared<GlobalArray<REAL>>(sycl_target, ncells_face_global);
-  func_ga->fill(0.0);
+  func_ga0->fill(0.0);
+  auto func_ga1 =
+      std::make_shared<GlobalArray<REAL>>(sycl_target, ncells_face_global);
+  func_ga1->fill(0.0);
+
   auto groups = cti.post_integration(A);
 
   // Check all the particles made it to the wall.
@@ -98,18 +103,21 @@ TEST(CartesianHMesh, surface_functions_2d) {
     auto k_ep = ep.device_ptr();
     particle_loop(
         gx.second,
-        [=](auto META_EPH, auto Q, auto FUNC_GA) {
+        [=](auto META_EPH, auto Q, auto FUNC_GA0, auto FUNC_GA1) {
           const INT geom_id = META_EPH.at_ephemeral(1);
           const bool valid_geom_id =
               (-1 < geom_id) && (geom_id < ncells_face_global);
           NESO_KERNEL_ASSERT(valid_geom_id, k_ep);
           if (valid_geom_id) {
-            const REAL value = scaling * Q.at(0);
-            FUNC_GA.add(geom_id, value);
+            const REAL value0 = scaling * Q.at(0);
+            const REAL value1 = scaling * Q.at(1);
+            FUNC_GA0.add(geom_id, value0);
+            FUNC_GA1.add(geom_id, value1);
           }
         },
         Access::read(Sym<INT>("NESO_PARTICLES_BOUNDARY_METADATA")),
-        Access::read(Sym<REAL>("Q")), Access::add(func_ga))
+        Access::read(Sym<REAL>("Q")), Access::add(func_ga0),
+        Access::add(func_ga1))
         ->execute();
     ASSERT_FALSE(ep.get_flag());
   }
@@ -149,34 +157,76 @@ TEST(CartesianHMesh, surface_functions_2d) {
   auto func_0 = cti.create_function(0, "DG", 0);
   auto func_1 = cti.create_function(1, "DG", 0);
 
-  cti.function_project(groups.at(0), Sym<REAL>("Q"), 0, false, func_0);
-  cti.function_project(groups.at(1), Sym<REAL>("Q"), 0, false, func_1);
+  {
+    cti.function_project(groups.at(0), Sym<REAL>("Q"), 0, false, func_0);
+    cti.function_project(groups.at(1), Sym<REAL>("Q"), 0, false, func_1);
 
-  std::vector<std::pair<CartesianHMeshFunctionSharedPtr,
-                        BoundaryMeshInterfaceSharedPtr>>
-      rgroups = {{func_0, cti.map_groups_boundary_interface.at(0)},
-                 {func_1, cti.map_groups_boundary_interface.at(1)}};
+    std::vector<std::pair<CartesianHMeshFunctionSharedPtr,
+                          BoundaryMeshInterfaceSharedPtr>>
+        rgroups = {{func_0, cti.map_groups_boundary_interface.at(0)},
+                   {func_1, cti.map_groups_boundary_interface.at(1)}};
 
-  auto h_correct_dofs = func_ga->get();
+    auto h_correct_dofs = func_ga0->get();
 
-  for (auto &func_bmi : rgroups) {
-    auto func = func_bmi.first;
-    auto bmi = func_bmi.second;
+    for (auto &func_bmi : rgroups) {
+      auto func = func_bmi.first;
+      auto bmi = func_bmi.second;
 
-    std::vector<REAL> h_dofs(func->local_dof_count);
-    sycl_target->queue
-        .memcpy(h_dofs.data(), func->d_dofs->ptr,
-                func->local_dof_count * sizeof(REAL))
-        .wait_and_throw();
+      std::vector<REAL> h_dofs(func->local_dof_count);
+      sycl_target->queue
+          .memcpy(h_dofs.data(), func->d_dofs->ptr,
+                  func->local_dof_count * sizeof(REAL))
+          .wait_and_throw();
 
-    int index = 0;
-    for (auto gidx : bmi->boundary.owned_geom_ids) {
-      const REAL to_test = h_dofs.at(index);
-      const REAL correct = h_correct_dofs.at(gidx);
-      nprint("gid:", gidx, "error:", relative_error(correct, to_test), correct,
-             to_test);
-      // ASSERT_TRUE(relative_error(correct, to_test) < 1.0e-12);
-      index++;
+      int index = 0;
+      for (auto gidx : bmi->boundary.owned_geom_ids) {
+        const REAL to_test = h_dofs.at(index);
+        const REAL correct = h_correct_dofs.at(gidx);
+        ASSERT_TRUE(relative_error(correct, to_test) < 1.0e-12);
+        index++;
+      }
+    }
+  }
+
+  for (auto &gx : groups) {
+    gx.second->add_ephemeral_dat(Sym<REAL>("QE"), 2);
+    particle_loop(
+        gx.second, [=](auto Q, auto QE) { QE.at_ephemeral(1) = Q.at(1); },
+        Access::read(Sym<REAL>("Q")), Access::write(Sym<REAL>("QE")))
+        ->execute();
+  }
+
+  func_0->fill(0.0);
+  func_1->fill(0.0);
+
+  {
+    cti.function_project(groups.at(0), Sym<REAL>("QE"), 1, true, func_0);
+    cti.function_project(groups.at(1), Sym<REAL>("QE"), 1, true, func_1);
+
+    std::vector<std::pair<CartesianHMeshFunctionSharedPtr,
+                          BoundaryMeshInterfaceSharedPtr>>
+        rgroups = {{func_0, cti.map_groups_boundary_interface.at(0)},
+                   {func_1, cti.map_groups_boundary_interface.at(1)}};
+
+    auto h_correct_dofs = func_ga1->get();
+
+    for (auto &func_bmi : rgroups) {
+      auto func = func_bmi.first;
+      auto bmi = func_bmi.second;
+
+      std::vector<REAL> h_dofs(func->local_dof_count);
+      sycl_target->queue
+          .memcpy(h_dofs.data(), func->d_dofs->ptr,
+                  func->local_dof_count * sizeof(REAL))
+          .wait_and_throw();
+
+      int index = 0;
+      for (auto gidx : bmi->boundary.owned_geom_ids) {
+        const REAL to_test = h_dofs.at(index);
+        const REAL correct = h_correct_dofs.at(gidx);
+        ASSERT_TRUE(relative_error(correct, to_test) < 1.0e-12);
+        index++;
+      }
     }
   }
 
