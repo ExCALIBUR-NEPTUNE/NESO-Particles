@@ -1,14 +1,11 @@
 #include "include/test_neso_particles.hpp"
 
-TEST(CartesianHMesh, surface_functions_2d) {
-  const int ndim = 2;
-  const REAL dt = 1000.0;
-
+TEST(CartesianHMesh, surface_functions_setup) {
   const int ncellx = 16;
   const int ncelly = 32;
 
   auto [A, sycl_target, cell_count_t] =
-      particle_loop_common_2d(27, ncellx, ncelly);
+      particle_loop_common_2d(1, ncellx, ncelly);
   auto mesh = std::dynamic_pointer_cast<CartesianHMesh>(A->domain->mesh);
 
   std::map<int, std::vector<int>> boundary_groups;
@@ -36,6 +33,21 @@ TEST(CartesianHMesh, surface_functions_2d) {
   ASSERT_EQ(u0->cells.size(), num_geoms);
   ASSERT_EQ(u0->element_group, 0);
 
+  cti.free();
+  mesh->free();
+}
+
+namespace {
+
+void surface_functions_wrapper(ParticleGroupSharedPtr A,
+                               SYCLTargetSharedPtr sycl_target,
+                               CartesianHMeshSharedPtr mesh,
+                               std::map<int, std::vector<int>> &boundary_groups,
+                               const int ndim) {
+
+  CartesianTrajectoryIntersection cti(sycl_target, mesh, boundary_groups,
+                                      1.0e-14);
+
   // Move particles to the boundary
   cti.prepare_particle_group(A);
   cti.pre_integration(A);
@@ -61,7 +73,7 @@ TEST(CartesianHMesh, surface_functions_2d) {
 
         // update the positions
         for (int dx = 0; dx < ndim; dx++) {
-          P.at(dx) += dt * V.at(dx);
+          P.at(dx) += 1000.0 * V.at(dx);
         }
       },
       Access::write(Sym<REAL>("V")), Access::write(Sym<REAL>("P")))
@@ -126,31 +138,33 @@ TEST(CartesianHMesh, surface_functions_2d) {
   for (int gx : {0, 1}) {
     auto bmi = cti.map_groups_boundary_interface.at(gx);
 
-    const std::size_t num_incoming_geoms =
-        bmi->boundary.d_incoming_geom_ids->size;
+    if (bmi->boundary.d_incoming_geom_ids) {
+      const std::size_t num_incoming_geoms =
+          bmi->boundary.d_incoming_geom_ids->size;
 
-    if (num_incoming_geoms > 0) {
-      int *k_incoming_geom_ids = bmi->boundary.d_incoming_geom_ids->ptr;
-      auto *k_map_owned_geom_id_to_linear_index =
-          bmi->boundary.d_map_owned_geom_id_to_linear_index->root;
+      if (num_incoming_geoms > 0) {
+        int *k_incoming_geom_ids = bmi->boundary.d_incoming_geom_ids->ptr;
+        auto *k_map_owned_geom_id_to_linear_index =
+            bmi->boundary.d_map_owned_geom_id_to_linear_index->root;
 
-      ASSERT_NE(k_map_owned_geom_id_to_linear_index, nullptr);
+        ASSERT_NE(k_map_owned_geom_id_to_linear_index, nullptr);
 
-      ErrorPropagate ep(sycl_target);
-      auto k_ep = ep.device_ptr();
+        ErrorPropagate ep(sycl_target);
+        auto k_ep = ep.device_ptr();
 
-      sycl_target->queue
-          .parallel_for(sycl::range<1>(num_incoming_geoms),
-                        [=](auto idx) {
-                          const int gid = k_incoming_geom_ids[idx];
-                          const INT *linear_index = nullptr;
-                          const bool found =
-                              k_map_owned_geom_id_to_linear_index->get(
-                                  gid, &linear_index);
-                          NESO_KERNEL_ASSERT(found, k_ep);
-                        })
-          .wait_and_throw();
-      ASSERT_FALSE(ep.get_flag());
+        sycl_target->queue
+            .parallel_for(sycl::range<1>(num_incoming_geoms),
+                          [=](auto idx) {
+                            const int gid = k_incoming_geom_ids[idx];
+                            const INT *linear_index = nullptr;
+                            const bool found =
+                                k_map_owned_geom_id_to_linear_index->get(
+                                    gid, &linear_index);
+                            NESO_KERNEL_ASSERT(found, k_ep);
+                          })
+            .wait_and_throw();
+        ASSERT_FALSE(ep.get_flag());
+      }
     }
   }
 
@@ -231,5 +245,43 @@ TEST(CartesianHMesh, surface_functions_2d) {
   }
 
   cti.free();
+}
+
+} // namespace
+
+TEST(CartesianHMesh, surface_functions_2d) {
+  const int ndim = 2;
+  const int ncellx = 16;
+  const int ncelly = 32;
+
+  auto [A, sycl_target, cell_count_t] =
+      particle_loop_common_2d(27, ncellx, ncelly);
+  auto mesh = std::dynamic_pointer_cast<CartesianHMesh>(A->domain->mesh);
+
+  std::map<int, std::vector<int>> boundary_groups;
+  boundary_groups[0] = {0, 1, 2};
+  boundary_groups[1] = {3};
+
+  surface_functions_wrapper(A, sycl_target, mesh, boundary_groups, ndim);
+
+  mesh->free();
+}
+
+TEST(CartesianHMesh, surface_functions_3d) {
+  const int ndim = 2;
+  const int ncellx = 13;
+  const int ncelly = 5;
+  const int ncellz = 7;
+
+  auto [A, sycl_target, cell_count_t] =
+      particle_loop_common_3d(27, ncellx, ncelly, ncellz);
+  auto mesh = std::dynamic_pointer_cast<CartesianHMesh>(A->domain->mesh);
+
+  std::map<int, std::vector<int>> boundary_groups;
+  boundary_groups[0] = {0, 1, 2, 3};
+  boundary_groups[1] = {4, 5};
+
+  surface_functions_wrapper(A, sycl_target, mesh, boundary_groups, ndim);
+
   mesh->free();
 }
