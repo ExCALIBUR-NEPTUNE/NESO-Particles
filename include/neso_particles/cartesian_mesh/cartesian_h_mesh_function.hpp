@@ -99,6 +99,11 @@ public:
    * @param value Value to assign to all DOFs.
    */
   void fill(const REAL value);
+
+  /**
+   * @returns DOFs on host.
+   */
+  std::vector<REAL> get_dofs();
 };
 
 typedef std::shared_ptr<CartesianHMeshFunction> CartesianHMeshFunctionSharedPtr;

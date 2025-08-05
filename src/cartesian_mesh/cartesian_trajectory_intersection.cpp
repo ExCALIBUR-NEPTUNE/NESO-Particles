@@ -144,6 +144,8 @@ void CartesianTrajectoryIntersection::function_project(
     const int component, const bool is_ephemeral,
     CartesianHMeshFunctionSharedPtr func) {
 
+  const bool null_sub_group = particle_sub_group == nullptr;
+
   const int group = func->element_group;
   auto &boundary_mesh_interface = this->map_groups_boundary_interface.at(group);
 
@@ -164,60 +166,61 @@ void CartesianTrajectoryIntersection::function_project(
         .wait_and_throw();
   }
 
-  auto *k_tree_root = d_tree_root;
-  NESOASSERT(particle_sub_group->contains_ephemeral_dat(
-                 Sym<INT>("NESO_PARTICLES_BOUNDARY_METADATA")),
-             "Boundary metadata not found on ParticleSubGroup.");
-  NESOASSERT(
-      (get_particle_group(particle_sub_group)->contains_dat(sym) &&
-       (!is_ephemeral)) ||
-          (particle_sub_group->contains_ephemeral_dat(sym) && is_ephemeral),
-      "Source particle data not found.");
+  if (!null_sub_group) {
+    auto *k_tree_root = d_tree_root;
+    NESOASSERT(particle_sub_group->contains_ephemeral_dat(
+                   Sym<INT>("NESO_PARTICLES_BOUNDARY_METADATA")),
+               "Boundary metadata not found on ParticleSubGroup.");
+    NESOASSERT(
+        (get_particle_group(particle_sub_group)->contains_dat(sym) &&
+         (!is_ephemeral)) ||
+            (particle_sub_group->contains_ephemeral_dat(sym) && is_ephemeral),
+        "Source particle data not found.");
 
-  ErrorPropagate ep(this->sycl_target);
-  auto k_ep = ep.device_ptr();
+    ErrorPropagate ep(this->sycl_target);
+    auto k_ep = ep.device_ptr();
 
-  const REAL k_inverse_width = func->mesh->inverse_cell_width_fine;
+    const REAL k_inverse_width = func->mesh->inverse_cell_width_fine;
 
-  if (is_ephemeral) {
-    particle_loop(
-        "CartesianHMeshFunction::function_project", particle_sub_group,
-        [=](auto BOUNDARY_METADATA, auto SYM) {
-          if (k_tree_root != nullptr) {
-            const INT *index;
-            const bool found =
-                k_tree_root->get(BOUNDARY_METADATA.at_ephemeral(1), &index);
-            NESO_KERNEL_ASSERT(found, k_ep);
-            if (found) {
-              atomic_fetch_add(&k_buffer[*index],
-                               k_inverse_width * SYM.at_ephemeral(component));
+    if (is_ephemeral) {
+      particle_loop(
+          "CartesianHMeshFunction::function_project", particle_sub_group,
+          [=](auto BOUNDARY_METADATA, auto SYM) {
+            if (k_tree_root != nullptr) {
+              const INT *index;
+              const bool found =
+                  k_tree_root->get(BOUNDARY_METADATA.at_ephemeral(1), &index);
+              NESO_KERNEL_ASSERT(found, k_ep);
+              if (found) {
+                atomic_fetch_add(&k_buffer[*index],
+                                 k_inverse_width * SYM.at_ephemeral(component));
+              }
             }
-          }
-        },
-        Access::read(Sym<INT>("NESO_PARTICLES_BOUNDARY_METADATA")),
-        Access::read(sym))
-        ->execute();
-  } else {
-    particle_loop(
-        "CartesianHMeshFunction::function_project", particle_sub_group,
-        [=](auto BOUNDARY_METADATA, auto SYM) {
-          if (k_tree_root != nullptr) {
-            const INT *index;
-            const bool found =
-                k_tree_root->get(BOUNDARY_METADATA.at_ephemeral(1), &index);
-            NESO_KERNEL_ASSERT(found, k_ep);
-            if (found) {
-              atomic_fetch_add(&k_buffer[*index],
-                               k_inverse_width * SYM.at(component));
+          },
+          Access::read(Sym<INT>("NESO_PARTICLES_BOUNDARY_METADATA")),
+          Access::read(sym))
+          ->execute();
+    } else {
+      particle_loop(
+          "CartesianHMeshFunction::function_project", particle_sub_group,
+          [=](auto BOUNDARY_METADATA, auto SYM) {
+            if (k_tree_root != nullptr) {
+              const INT *index;
+              const bool found =
+                  k_tree_root->get(BOUNDARY_METADATA.at_ephemeral(1), &index);
+              NESO_KERNEL_ASSERT(found, k_ep);
+              if (found) {
+                atomic_fetch_add(&k_buffer[*index],
+                                 k_inverse_width * SYM.at(component));
+              }
             }
-          }
-        },
-        Access::read(Sym<INT>("NESO_PARTICLES_BOUNDARY_METADATA")),
-        Access::read(sym))
-        ->execute();
+          },
+          Access::read(Sym<INT>("NESO_PARTICLES_BOUNDARY_METADATA")),
+          Access::read(sym))
+          ->execute();
+    }
+    NESOASSERT(!ep.get_flag(), "Failed to find index for hit geometry object.");
   }
-  NESOASSERT(!ep.get_flag(), "Failed to find index for hit geometry object.");
-
   boundary_mesh_interface->exchange_from_device(k_buffer, func->cell_dof_count,
                                                 func->d_dofs->ptr);
 

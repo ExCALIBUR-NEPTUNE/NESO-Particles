@@ -74,4 +74,15 @@ void CartesianHMeshFunction::fill(const REAL value) {
   }
 }
 
+std::vector<REAL> CartesianHMeshFunction::get_dofs() {
+  std::vector<REAL> h_dofs(this->local_dof_count);
+  if (this->local_dof_count > 0) {
+    this->sycl_target->queue
+        .memcpy(h_dofs.data(), this->d_dofs->ptr,
+                this->local_dof_count * sizeof(REAL))
+        .wait_and_throw();
+  }
+  return h_dofs;
+}
+
 } // namespace NESO::Particles
