@@ -179,7 +179,8 @@ protected:
    */
   inline GlobalArrayImplGetT<T> impl_get() {
     NESOASSERT(this->d_stage_buffer != nullptr,
-               "Stage buffer has not been set correctly.");
+               "Stage buffer has not been set correctly. Make sure that the "
+               "GlobalArray is a shared_ptr.");
     return this->d_stage_buffer->ptr;
   }
 
@@ -211,7 +212,8 @@ protected:
    */
   inline void impl_post_loop_add() {
     NESOASSERT(this->d_stage_buffer != nullptr,
-               "Stage buffer has not been set correctly.");
+               "Stage buffer has not been set correctly. Make sure that the "
+               "GlobalArray is a shared_ptr.");
     auto d_acc_buffer =
         get_resource<BufferDevice<T>, ResourceStackInterfaceBufferDevice<T>>(
             sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<T>{},
