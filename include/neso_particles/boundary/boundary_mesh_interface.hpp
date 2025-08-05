@@ -219,20 +219,24 @@ public:
   [[nodiscard]] sycl::event exchange_from_device_pack(T *d_src, const int ncomp,
                                                       T *k_packed_out) {
 
-    auto sycl_target = this->boundary.sycl_target;
-    auto *k_outgoing_pack_index = this->boundary.d_outgoing_pack_index->ptr;
+    if (this->boundary.geom_counter) {
+      auto sycl_target = this->boundary.sycl_target;
+      auto *k_outgoing_pack_index = this->boundary.d_outgoing_pack_index->ptr;
 
-    auto e0 = sycl_target->queue.parallel_for(
-        sycl::range<2>(this->boundary.geom_counter, ncomp),
-        [=](sycl::item<2> idx) {
-          const std::size_t idx_geom = idx.get_id(0);
-          const std::size_t idx_component = idx.get_id(1);
-          const int geom_dst = k_outgoing_pack_index[idx_geom];
-          k_packed_out[geom_dst * ncomp + idx_component] =
-              d_src[idx_geom * ncomp + idx_component];
-        });
+      auto e0 = sycl_target->queue.parallel_for(
+          sycl::range<2>(this->boundary.geom_counter, ncomp),
+          [=](sycl::item<2> idx) {
+            const std::size_t idx_geom = idx.get_id(0);
+            const std::size_t idx_component = idx.get_id(1);
+            const int geom_dst = k_outgoing_pack_index[idx_geom];
+            k_packed_out[geom_dst * ncomp + idx_component] =
+                d_src[idx_geom * ncomp + idx_component];
+          });
 
-    return e0;
+      return e0;
+    } else {
+      return sycl::event{};
+    }
   }
 
   template <typename T>

@@ -42,13 +42,17 @@ void CartesianHMeshFunction::write_vtkhdf(const std::string filename) {
              "Only implemented for boundary cells.");
 
   std::vector<REAL> h_dofs(this->d_dofs->size);
-  auto e0 = this->sycl_target->queue.memcpy(h_dofs.data(), this->d_dofs->ptr,
-                                            this->d_dofs->size * sizeof(REAL));
+
+  if (this->d_dofs->size > 0) {
+    this->sycl_target->queue
+        .memcpy(h_dofs.data(), this->d_dofs->ptr,
+                this->d_dofs->size * sizeof(REAL))
+        .wait_and_throw();
+  }
 
   std::vector<VTK::UnstructuredCell> data;
   data.reserve(this->cells.size());
 
-  e0.wait_and_throw();
   std::size_t index = 0;
   for (auto &cx : this->cells) {
     auto vtkdata = this->mesh->get_vtk_face_cell_data(cx);
@@ -62,10 +66,12 @@ void CartesianHMeshFunction::write_vtkhdf(const std::string filename) {
 }
 
 void CartesianHMeshFunction::fill(const REAL value) {
-  this->sycl_target->queue
-      .fill(static_cast<REAL *>(this->d_dofs->ptr), static_cast<REAL>(value),
-            this->local_dof_count)
-      .wait_and_throw();
+  if (this->local_dof_count > 0) {
+    this->sycl_target->queue
+        .fill(static_cast<REAL *>(this->d_dofs->ptr), static_cast<REAL>(value),
+              this->local_dof_count)
+        .wait_and_throw();
+  }
 }
 
 } // namespace NESO::Particles

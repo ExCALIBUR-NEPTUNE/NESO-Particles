@@ -159,8 +159,10 @@ void CartesianTrajectoryIntersection::function_project(
   d_buffer->realloc_no_copy(tmp_buffer_size);
   REAL *k_buffer = d_buffer->ptr;
 
-  this->sycl_target->queue.fill(k_buffer, (REAL)0.0, tmp_buffer_size)
-      .wait_and_throw();
+  if (tmp_buffer_size > 0) {
+    this->sycl_target->queue.fill(k_buffer, (REAL)0.0, tmp_buffer_size)
+        .wait_and_throw();
+  }
 
   auto *k_tree_root = d_tree_root;
   NESOASSERT(particle_sub_group->contains_ephemeral_dat(
