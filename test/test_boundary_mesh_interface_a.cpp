@@ -344,6 +344,88 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
     }
   }
 
+  if (bmi.boundary.d_reverse_incoming_unpack_index) {
+
+    std::vector<int> h_reverse_incoming_unpack_index(
+        bmi.boundary.d_reverse_incoming_unpack_index->size);
+
+    sycl_target->queue
+        .memcpy(h_reverse_incoming_unpack_index.data(),
+                bmi.boundary.d_reverse_incoming_unpack_index->ptr,
+                bmi.boundary.d_reverse_incoming_unpack_index->size *
+                    sizeof(int))
+        .wait_and_throw();
+
+    int index = 0;
+    int pindex = 0;
+    for (int src_rank : bmi.boundary.graph.reverse_sources) {
+      std::set<int> geoms;
+      for (auto &[rx, gx] : test_map[rank]) {
+        if (rx == src_rank) {
+          geoms.insert(gx);
+        }
+      }
+
+      auto &gids = bmi.boundary.map_recv_rank_to_geom_ids.at(src_rank);
+      ASSERT_EQ(gids.size(), geoms.size());
+      std::set<int> geoms_to_test;
+      for (int gx : gids) {
+        geoms_to_test.insert(gx);
+      }
+      ASSERT_EQ(geoms_to_test, geoms);
+      ASSERT_EQ(geoms.size(), bmi.boundary.reverse_incoming_geom_counts[index]);
+
+      for (int gx : gids) {
+        const int correct =
+            static_cast<int>(bmi.boundary.map_geom_id_to_linear_index.at(gx));
+        ASSERT_EQ(correct, h_reverse_incoming_unpack_index.at(pindex));
+        pindex++;
+      }
+      index++;
+    }
+  }
+
+  if (bmi.boundary.d_reverse_outgoing_pack_index) {
+
+    std::vector<int> h_reverse_outgoing_pack_index(
+        bmi.boundary.d_reverse_outgoing_pack_index->size);
+
+    sycl_target->queue
+        .memcpy(h_reverse_outgoing_pack_index.data(),
+                bmi.boundary.d_reverse_outgoing_pack_index->ptr,
+                bmi.boundary.d_reverse_outgoing_pack_index->size * sizeof(int))
+        .wait_and_throw();
+
+    int index = 0;
+    int pindex = 0;
+    for (int dst_rank : bmi.boundary.graph.reverse_destinations) {
+      std::set<int> geoms;
+
+      for (auto &[rx, gx] : test_map[dst_rank]) {
+        if (rx == rank) {
+          geoms.insert(gx);
+        }
+      }
+
+      auto &gids = bmi.boundary.map_send_rank_to_geom_ids.at(dst_rank);
+      ASSERT_EQ(gids.size(), geoms.size());
+      std::set<int> geoms_to_test;
+      for (int gx : gids) {
+        geoms_to_test.insert(gx);
+      }
+      ASSERT_EQ(geoms_to_test, geoms);
+      ASSERT_EQ(geoms.size(), bmi.boundary.reverse_outgoing_geom_counts[index]);
+
+      for (int gx : gids) {
+        const int correct = static_cast<int>(
+            bmi.boundary.map_owned_geom_id_to_linear_index.at(gx));
+        ASSERT_EQ(correct, h_reverse_outgoing_pack_index.at(pindex));
+        pindex++;
+      }
+      index++;
+    }
+  }
+
   bmi.free();
   sycl_target->free();
 }
