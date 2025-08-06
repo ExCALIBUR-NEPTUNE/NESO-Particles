@@ -73,6 +73,7 @@ void BoundaryMeshInterface::extend_exchange_pattern(
   if (map_is_modified) {
     MPICHK(MPI_Comm_free(&this->boundary.ncomm));
     this->boundary.map_typencomp_alltoallwargs.clear();
+    this->boundary.reverse_map_typencomp_alltoallwargs.clear();
 
     // Create a distributed graph with the new topology.
     int rank = -1;
@@ -89,12 +90,18 @@ void BoundaryMeshInterface::extend_exchange_pattern(
       owned_geom_counts.push_back(static_cast<int>(rx.second.size()));
     }
 
+    // Graph for the projection direction
     MPICHK(MPI_Dist_graph_create(this->boundary.comm, 1, &rank, &degrees,
                                  destinations.data(), MPI_UNWEIGHTED,
                                  MPI_INFO_NULL, 0, &this->boundary.ncomm));
-
     NESOASSERT(this->boundary.ncomm != MPI_COMM_NULL,
                "Failure to setup MPI graph topology.");
+
+    // Graph for the evaluation direction
+    MPICHK(reverse_graph_edge_directions(
+        this->boundary.comm, this->boundary.ncomm, &this->boundary.rncomm));
+    NESOASSERT(this->boundary.rncomm != MPI_COMM_NULL,
+               "Failure to setup MPI graph topology (reverse direction).");
 
     // Extract the topology from the graph that was created.
     this->boundary.graph.indegree = -1;
@@ -184,7 +191,7 @@ void BoundaryMeshInterface::extend_exchange_pattern(
     this->boundary.d_incoming_geom_ids = std::make_shared<BufferDevice<int>>(
         this->boundary.sycl_target, this->boundary.incoming_geom_ids);
 
-    // populate map_send_rank_to_geom_ids (this is mainly for testing/debugging)
+    // populate map_send_rank_to_geom_ids
     index = 0;
     for (int src_rank_index = 0; src_rank_index < this->boundary.graph.indegree;
          src_rank_index++) {
@@ -219,6 +226,73 @@ void BoundaryMeshInterface::extend_exchange_pattern(
       NESOASSERT(h_outgoing_pack_index[ix] != -1,
                  "Expected all entries to be populated.");
     }
+
+    // Create the packing maps for the evaluation direction. We have to assume
+    // that MPI may have reordered the edges for each node in the graph.
+    this->boundary.graph.reverse_sources.resize(this->boundary.graph.outdegree);
+    this->boundary.graph.reverse_destinations.resize(
+        this->boundary.graph.indegree);
+    MPICHK(MPI_Dist_graph_neighbors(
+        this->boundary.rncomm, this->boundary.graph.outdegree,
+        this->boundary.graph.reverse_sources.data(), destweights.data(),
+        this->boundary.graph.indegree,
+        this->boundary.graph.reverse_destinations.data(),
+        sourcesweights.data()));
+
+    // Create the list of (linear) geom indices to pack in the order that they
+    // should be passed to MPI.
+    std::vector<int> eval_pack_indices;
+    eval_pack_indices.reserve(this->boundary.incoming_geom_ids.size());
+
+    index = 0;
+    this->boundary.reverse_outgoing_geom_counts.resize(
+        this->boundary.graph.reverse_destinations.size());
+    for (const int dst_rank : this->boundary.graph.reverse_destinations) {
+      for (const int gid :
+           this->boundary.map_send_rank_to_geom_ids.at(dst_rank)) {
+        // Get the linear source index from the geom id
+        const auto linear_index =
+            this->boundary.map_owned_geom_id_to_linear_index.at(gid);
+        eval_pack_indices.push_back(static_cast<int>(linear_index));
+      }
+      this->boundary.reverse_outgoing_geom_counts[index] =
+          this->boundary.map_send_rank_to_geom_ids.at(dst_rank).size();
+      index++;
+    }
+    this->boundary.d_reverse_outgoing_pack_index =
+        std::make_shared<BufferDevice<int>>(this->boundary.sycl_target,
+                                            eval_pack_indices);
+
+    // Create the map from the index DOFs were received on to the linear index
+    // for evaluation.
+    std::vector<int> eval_unpack_indices;
+    eval_unpack_indices.reserve(this->boundary.outgoing_geom_ids.size());
+
+    index = 0;
+    this->boundary.reverse_incoming_geom_counts.resize(
+        this->boundary.graph.reverse_sources.size());
+    for (const int src_rank : this->boundary.graph.reverse_sources) {
+      for (const int gid :
+           this->boundary.map_recv_rank_to_geom_ids.at(src_rank)) {
+        const auto linear_index =
+            this->boundary.map_geom_id_to_linear_index.at(gid);
+        eval_unpack_indices.push_back(static_cast<int>(linear_index));
+      }
+      this->boundary.reverse_incoming_geom_counts[index] =
+          this->boundary.map_recv_rank_to_geom_ids.at(src_rank).size();
+      index++;
+    }
+    this->boundary.d_reverse_incoming_unpack_index =
+        std::make_shared<BufferDevice<int>>(this->boundary.sycl_target,
+                                            eval_unpack_indices);
+
+    NESOASSERT(this->boundary.reverse_incoming_geom_counts.size() ==
+                   this->boundary.outgoing_geom_counts.size(),
+               "Missmatch in bookkeeping array sizes.");
+
+    NESOASSERT(this->boundary.reverse_outgoing_geom_counts.size() ==
+                   this->boundary.incoming_geom_counts.size(),
+               "Missmatch in bookkeeping array sizes.");
 
     e0.wait_and_throw();
   }
