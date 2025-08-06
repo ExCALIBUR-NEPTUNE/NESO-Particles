@@ -89,3 +89,70 @@ TEST(GlobalArray, repeat_kernel_add) {
   sycl_target->free();
   A->domain->mesh->free();
 }
+
+TEST(GlobalArray, pre_post_calls) {
+  auto [A, sycl_target, cell_count_t] = particle_loop_common_2d(27, 16, 32);
+
+  auto g0 = std::make_shared<GlobalArray<int>>(sycl_target, 1, 0);
+
+  int npart_local = A->get_npart_local();
+  int npart_total = -1;
+  MPICHK(MPI_Allreduce(&npart_local, &npart_total, 1, MPI_INT, MPI_SUM,
+                       MPI_COMM_WORLD));
+
+  g0->fill(0.0);
+  particle_loop(A, [=](auto GA) { GA.add(0, 1); }, Access::add(g0))->execute();
+  ASSERT_EQ(g0->get().at(0), npart_total);
+
+  g0->fill(0.0);
+  ParticleLoopReduction(
+      "foo", A, [=](auto GA) { GA.add(0, 1); }, Access::add(g0))
+      .execute();
+  ASSERT_EQ(g0->get().at(0), npart_total);
+
+  auto aa = particle_sub_group(
+      A, [=](auto ID) { return ID.at(0) % 2; }, Access::read(Sym<INT>("ID")));
+
+  int aa_npart_local = aa->get_npart_local();
+  int aa_npart_total = -1;
+  MPICHK(MPI_Allreduce(&aa_npart_local, &aa_npart_total, 1, MPI_INT, MPI_SUM,
+                       MPI_COMM_WORLD));
+
+  g0->fill(0.0);
+  particle_loop(aa, [=](auto GA) { GA.add(0, 1); }, Access::add(g0))->execute();
+  ASSERT_EQ(g0->get().at(0), aa_npart_total);
+
+  g0->fill(0.0);
+  ParticleLoopSubGroupReduction(
+      "foo", aa, [=](auto GA) { GA.add(0, 1); }, Access::add(g0))
+      .execute();
+  ASSERT_EQ(g0->get().at(0), aa_npart_total);
+
+  // Empty the ParticleGroup
+  A->clear();
+  ASSERT_EQ(A->get_npart_local(), 0);
+  ASSERT_EQ(aa->get_npart_local(), 0);
+
+  g0->fill(0.0);
+  particle_loop(A, [=](auto GA) { GA.add(0, 1); }, Access::add(g0))->execute();
+  ASSERT_EQ(g0->get().at(0), 0);
+
+  g0->fill(0.0);
+  ParticleLoopReduction(
+      "foo", A, [=](auto GA) { GA.add(0, 1); }, Access::add(g0))
+      .execute();
+  ASSERT_EQ(g0->get().at(0), 0);
+
+  g0->fill(0.0);
+  particle_loop(aa, [=](auto GA) { GA.add(0, 1); }, Access::add(g0))->execute();
+  ASSERT_EQ(g0->get().at(0), 0);
+
+  g0->fill(0.0);
+  ParticleLoopSubGroupReduction(
+      "foo", aa, [=](auto GA) { GA.add(0, 1); }, Access::add(g0))
+      .execute();
+  ASSERT_EQ(g0->get().at(0), 0);
+
+  sycl_target->free();
+  A->domain->mesh->free();
+}
