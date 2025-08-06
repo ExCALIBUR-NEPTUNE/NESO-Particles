@@ -164,3 +164,81 @@ TEST(communication_utility, all_gather_v) {
     }
   }
 }
+
+TEST(communication_utility, reverse_graph_edge_directions) {
+
+  int rank, size;
+  MPICHK(MPI_Comm_size(MPI_COMM_WORLD, &size));
+  MPICHK(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
+
+  MPI_Comm ncomm;
+
+  int degrees = 1;
+  int destinations = 0;
+
+  MPICHK(MPI_Dist_graph_create(MPI_COMM_WORLD, 1, &rank, &degrees,
+                               &destinations, MPI_UNWEIGHTED, MPI_INFO_NULL, 0,
+                               &ncomm));
+
+  {
+    int indegree = -1, outdegree = -1, weighted = -1;
+
+    MPICHK(MPI_Dist_graph_neighbors_count(ncomm, &indegree, &outdegree,
+                                          &weighted));
+
+    ASSERT_EQ(outdegree, 1);
+    ASSERT_EQ(indegree, rank == 0 ? size : 0);
+
+    std::vector<int> sources(indegree);
+    std::vector<int> sourcesweights(indegree);
+    std::vector<int> destinations(outdegree);
+    std::vector<int> destweights(outdegree);
+
+    MPICHK(MPI_Dist_graph_neighbors(ncomm, indegree, sources.data(),
+                                    sourcesweights.data(), outdegree,
+                                    destinations.data(), destweights.data()));
+
+    if (rank == 0) {
+      std::set<int> set_sources;
+      for (int ix : sources) {
+        set_sources.insert(ix);
+      }
+      ASSERT_EQ(set_sources.size(), size);
+    } else {
+      ASSERT_EQ(destinations.at(0), 0);
+    }
+  }
+
+  MPI_Comm rncomm;
+  ASSERT_EQ(reverse_graph_edge_directions(MPI_COMM_WORLD, ncomm, &rncomm),
+            MPI_SUCCESS);
+
+  {
+    int indegree = -1, outdegree = -1, weighted = -1;
+
+    MPICHK(MPI_Dist_graph_neighbors_count(rncomm, &indegree, &outdegree,
+                                          &weighted));
+
+    ASSERT_EQ(outdegree, rank == 0 ? size : 0);
+    ASSERT_EQ(indegree, 1);
+
+    std::vector<int> sources(indegree);
+    std::vector<int> sourcesweights(indegree);
+    std::vector<int> destinations(outdegree);
+    std::vector<int> destweights(outdegree);
+
+    MPICHK(MPI_Dist_graph_neighbors(rncomm, indegree, sources.data(),
+                                    sourcesweights.data(), outdegree,
+                                    destinations.data(), destweights.data()));
+
+    if (rank == 0) {
+      std::set<int> set_destinations;
+      for (int ix : destinations) {
+        set_destinations.insert(ix);
+      }
+      ASSERT_EQ(set_destinations.size(), size);
+    } else {
+      ASSERT_EQ(sources.at(0), 0);
+    }
+  }
+}
