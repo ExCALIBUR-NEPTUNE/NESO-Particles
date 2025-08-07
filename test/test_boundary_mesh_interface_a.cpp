@@ -178,30 +178,32 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
               bmi.boundary.map_send_rank_to_geom_ids[rx]);
   }
 
-  std::vector<REAL> outdata;
-  outdata.reserve(bmi.boundary.total_num_outgoing_geoms);
-  for (int gx : bmi.boundary.outgoing_geom_ids) {
-    outdata.insert(outdata.end(), test_data.at(rank).at(gx).begin(),
-                   test_data.at(rank).at(gx).end());
-  }
-
-  std::vector<REAL> indata(bmi.boundary.total_num_incoming_geoms * ncomp);
-  std::fill(indata.begin(), indata.end(), -1.0);
-
-  bmi.exchange_surface(outdata.data(), ncomp, indata.data());
-
-  std::vector<REAL> indata_correct;
-
-  indata_correct.reserve(bmi.boundary.total_num_incoming_geoms * ncomp);
-
-  for (int source_rank : bmi.boundary.graph.sources) {
-    for (int gid : bmi.boundary.map_send_rank_to_geom_ids.at(source_rank)) {
-      auto &tmp = test_data.at(source_rank).at(gid);
-      indata_correct.insert(indata_correct.end(), tmp.begin(), tmp.end());
+  {
+    std::vector<REAL> outdata;
+    outdata.reserve(bmi.boundary.total_num_outgoing_geoms);
+    for (int gx : bmi.boundary.outgoing_geom_ids) {
+      outdata.insert(outdata.end(), test_data.at(rank).at(gx).begin(),
+                     test_data.at(rank).at(gx).end());
     }
-  }
 
-  ASSERT_EQ(indata, indata_correct);
+    std::vector<REAL> indata(bmi.boundary.total_num_incoming_geoms * ncomp);
+    std::fill(indata.begin(), indata.end(), -1.0);
+
+    bmi.exchange_surface(outdata.data(), ncomp, indata.data());
+
+    std::vector<REAL> indata_correct;
+
+    indata_correct.reserve(bmi.boundary.total_num_incoming_geoms * ncomp);
+
+    for (int source_rank : bmi.boundary.graph.sources) {
+      for (int gid : bmi.boundary.map_send_rank_to_geom_ids.at(source_rank)) {
+        auto &tmp = test_data.at(source_rank).at(gid);
+        indata_correct.insert(indata_correct.end(), tmp.begin(), tmp.end());
+      }
+    }
+
+    ASSERT_EQ(indata, indata_correct);
+  }
 
   // Test the DOF packing loop
   {
@@ -344,9 +346,10 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
     }
   }
 
+  std::vector<int> h_reverse_incoming_unpack_index;
   if (bmi.boundary.d_reverse_incoming_unpack_index) {
 
-    std::vector<int> h_reverse_incoming_unpack_index(
+    h_reverse_incoming_unpack_index.resize(
         bmi.boundary.d_reverse_incoming_unpack_index->size);
 
     sycl_target->queue
@@ -385,9 +388,10 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
     }
   }
 
+  std::vector<int> h_reverse_outgoing_pack_index;
   if (bmi.boundary.d_reverse_outgoing_pack_index) {
 
-    std::vector<int> h_reverse_outgoing_pack_index(
+    h_reverse_outgoing_pack_index.resize(
         bmi.boundary.d_reverse_outgoing_pack_index->size);
 
     sycl_target->queue
@@ -423,6 +427,31 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
         pindex++;
       }
       index++;
+    }
+  }
+
+  // Test reverse exchange surface
+  {
+    const int outsize = h_reverse_outgoing_pack_index.size();
+    std::vector<int> outdata(outsize);
+    for (int ix = 0; ix < outsize; ix++) {
+      outdata[ix] = owned_face_cells[h_reverse_outgoing_pack_index[ix]];
+    }
+
+    const int geom_count = bmi.get_num_intersection_geoms();
+    std::vector<int> indata(geom_count);
+    bmi.reverse_exchange_surface(outdata.data(), 1, indata.data());
+
+    std::vector<int> indata_unpacked(geom_count);
+    for (int ix = 0; ix < geom_count; ix++) {
+      indata_unpacked.at(h_reverse_incoming_unpack_index.at(ix)) =
+          indata.at(ix);
+    }
+
+    for (int ix = 0; ix < geom_count; ix++) {
+      const int gid =
+          static_cast<int>(bmi.boundary.map_linear_index_to_geom_id.at(ix));
+      ASSERT_EQ(gid, indata.at(ix));
     }
   }
 

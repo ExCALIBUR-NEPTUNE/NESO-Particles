@@ -228,7 +228,7 @@ public:
    */
   template <typename T>
   void exchange_surface(T *data, const int ncomp, T *data_gathered) {
-    if (ncomp < 1) {
+    if (ncomp < 1 || this->boundary.ncomm == MPI_COMM_NULL) {
       return;
     }
     const AllToAllWArgs &args = this->get_alltoallw_args<T>(ncomp);
@@ -257,7 +257,7 @@ public:
    */
   template <typename T>
   void reverse_exchange_surface(T *data, const int ncomp, T *data_gathered) {
-    if (ncomp < 1) {
+    if (ncomp < 1 || this->boundary.rncomm == MPI_COMM_NULL) {
       return;
     }
     const AllToAllWArgs &args = this->get_reverse_alltoallw_args<T>(ncomp);
@@ -293,6 +293,12 @@ public:
       BlockedBinaryNode<INT, INT, NESO_PARTICLES_BLOCKED_BINARY_TREE_WIDTH> *,
       INT>
   get_device_geom_id_to_seq();
+
+  /**
+   * @returns The number of local faces plus remote faces that could be hit by
+   * particles.
+   */
+  int get_num_intersection_geoms() const;
 
   /**
    * Free underlying resource. Should be called collectively on the

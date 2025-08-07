@@ -35,6 +35,10 @@ BoundaryMeshInterface::BoundaryMeshInterface(
   }
 }
 
+int BoundaryMeshInterface::get_num_intersection_geoms() const {
+  return this->boundary.geom_counter;
+}
+
 void BoundaryMeshInterface::free() {
   MPICHK(MPI_Comm_free(&this->boundary.ncomm));
 }
