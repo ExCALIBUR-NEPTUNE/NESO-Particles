@@ -39,6 +39,10 @@ int BoundaryMeshInterface::get_num_intersection_geoms() const {
   return this->boundary.geom_counter;
 }
 
+int BoundaryMeshInterface::get_total_num_exported_geoms() const {
+  return static_cast<int>(this->boundary.d_reverse_outgoing_pack_index->size);
+}
+
 void BoundaryMeshInterface::free() {
   MPICHK(MPI_Comm_free(&this->boundary.ncomm));
 }

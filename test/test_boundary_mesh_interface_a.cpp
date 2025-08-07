@@ -386,6 +386,36 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
       }
       index++;
     }
+
+    std::vector<int> h_packed_src(
+        ncomp * bmi.boundary.d_reverse_incoming_unpack_index->size);
+    std::iota(h_packed_src.begin(), h_packed_src.end(), 0);
+    BufferDevice<int> d_packed_src(sycl_target, h_packed_src);
+    BufferDevice<int> d_unpacked_dst(
+        sycl_target,
+        ncomp * bmi.boundary.d_reverse_incoming_unpack_index->size);
+
+    bmi.reverse_exchange_from_device_unpack(d_packed_src.ptr, ncomp,
+                                            d_unpacked_dst.ptr)
+        .wait_and_throw();
+
+    auto h_unpacked_dst = d_unpacked_dst.get();
+    index = 0;
+    pindex = 0;
+    for (int src_rank : bmi.boundary.graph.reverse_sources) {
+      auto &gids = bmi.boundary.map_recv_rank_to_geom_ids.at(src_rank);
+      for (int gx : gids) {
+        const int correct =
+            static_cast<int>(bmi.boundary.map_geom_id_to_linear_index.at(gx));
+
+        for (int cx = 0; cx < ncomp; cx++) {
+          ASSERT_NEAR(h_packed_src.at(correct * ncomp + cx),
+                      h_unpacked_dst.at(pindex), 1.0e-12);
+          pindex++;
+        }
+      }
+      index++;
+    }
   }
 
   std::vector<int> h_reverse_outgoing_pack_index;
@@ -424,7 +454,38 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
         const int correct = static_cast<int>(
             bmi.boundary.map_owned_geom_id_to_linear_index.at(gx));
         ASSERT_EQ(correct, h_reverse_outgoing_pack_index.at(pindex));
+        ASSERT_TRUE(-1 < correct);
+        ASSERT_TRUE(correct < num_owned_geoms);
         pindex++;
+      }
+      index++;
+    }
+
+    std::vector<REAL> h_src_dofs(num_owned_geoms * ncomp);
+
+    const int gid_offset = rank * num_owned_geoms;
+    for (int gx = 0; gx < num_owned_geoms; gx++) {
+      for (int cx = 0; cx < ncomp; cx++) {
+        h_src_dofs.at(gx * ncomp + cx) = gid_offset + gx + 0.1 * cx;
+      }
+    }
+
+    BufferDevice<REAL> d_src_dofs(sycl_target, h_src_dofs);
+    BufferDevice<REAL> d_dst_dofs(sycl_target,
+                                  bmi.get_total_num_exported_geoms() * ncomp);
+    bmi.reverse_exchange_from_device_pack(d_src_dofs.ptr, ncomp, d_dst_dofs.ptr)
+        .wait_and_throw();
+
+    auto h_dst_dofs = d_dst_dofs.get();
+    index = 0;
+    pindex = 0;
+    for (int dst_rank : bmi.boundary.graph.reverse_destinations) {
+      auto &gids = bmi.boundary.map_send_rank_to_geom_ids.at(dst_rank);
+      for (int gx : gids) {
+        for (int cx = 0; cx < ncomp; cx++) {
+          ASSERT_NEAR(h_dst_dofs.at(pindex), gx + 0.1 * cx, 1.0e-10);
+          pindex++;
+        }
       }
       index++;
     }

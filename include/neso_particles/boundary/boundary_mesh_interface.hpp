@@ -301,6 +301,12 @@ public:
   int get_num_intersection_geoms() const;
 
   /**
+   * @returns The total number of exported geoms across all ranks (including the
+   * same geom sent to different ranks).
+   */
+  int get_total_num_exported_geoms() const;
+
+  /**
    * Free underlying resource. Should be called collectively on the
    * communicator.
    */
@@ -366,10 +372,67 @@ public:
     }
   }
 
+  template <typename T>
+  [[nodiscard]] sycl::event reverse_exchange_from_device_pack(T *d_src,
+                                                              const int ncomp,
+                                                              T *k_packed_out) {
+
+    const std::size_t num_incoming_geom_ids =
+        this->boundary.incoming_geom_ids.size();
+    // If there are incoming geoms for deposition then there are outgoing geoms
+    // for evaluation.
+    if (num_incoming_geom_ids) {
+
+      auto sycl_target = this->boundary.sycl_target;
+      auto *k_pack_index = this->boundary.d_reverse_outgoing_pack_index->ptr;
+
+      auto e0 = sycl_target->queue.parallel_for(
+          sycl::range<2>(this->boundary.d_reverse_outgoing_pack_index->size,
+                         ncomp),
+          [=](sycl::item<2> idx) {
+            const std::size_t idx_linear = idx.get_id(0);
+            const std::size_t idx_component = idx.get_id(1);
+            const int idx_map = k_pack_index[idx_linear];
+            k_packed_out[idx_linear * ncomp + idx_component] =
+                d_src[idx_map * ncomp + idx_component];
+          });
+
+      return e0;
+    } else {
+      return sycl::event{};
+    }
+  }
+
+  template <typename T>
+  [[nodiscard]] sycl::event reverse_exchange_from_device_unpack(T *k_packed_in,
+                                                                const int ncomp,
+                                                                T *d_dst) {
+
+    if (this->boundary.geom_counter) {
+      auto sycl_target = this->boundary.sycl_target;
+      auto *k_unpack_index =
+          this->boundary.d_reverse_incoming_unpack_index->ptr;
+
+      return sycl_target->queue.parallel_for(
+          sycl::range<2>(this->boundary.d_reverse_incoming_unpack_index->size,
+                         ncomp),
+          [=](sycl::item<2> idx) {
+            const std::size_t idx_linear = idx.get_id(0);
+            const std::size_t idx_component = idx.get_id(1);
+            const int idx_map = k_unpack_index[idx_linear];
+            d_dst[idx_map * ncomp + idx_component] =
+                k_packed_in[idx_linear * ncomp + idx_component];
+          });
+    } else {
+      return sycl::event{};
+    }
+  }
+
 public:
   /**
    * Pack and exchange DOFs supplied in a device buffer. DOFs for each geometry
-   * object are combined using addition.
+   * object are combined using addition. This is intended for the
+   * deposition/projection direction. Collective on the communicator.
    *
    * @param d_src Source data on device.
    * @param ncomp Number of values that will be exchanged per geometry object.
@@ -436,6 +499,19 @@ public:
     restore_resource(sycl_target->resource_stack_map,
                      ResourceStackKeyBufferDevice<T>{}, d_packed_in);
   }
+
+  /**
+   * Pack and exchange DOFs supplied in a device buffer. DOFs for each geometry
+   * object are combined using addition. This is intended for the
+   * evaluation direction. Collective on the communicator.
+   *
+   * @param d_src Source data on device.
+   * @param ncomp Number of values that will be exchanged per geometry object.
+   * @param d_dst Destination buffer on device. This buffer will be replaced
+   * with the incoming values.
+   */
+  template <typename T>
+  void reverse_exchange_from_device(T *d_src, const int ncomp, T *d_dst) {}
 };
 
 typedef std::shared_ptr<BoundaryMeshInterface> BoundaryMeshInterfaceSharedPtr;
