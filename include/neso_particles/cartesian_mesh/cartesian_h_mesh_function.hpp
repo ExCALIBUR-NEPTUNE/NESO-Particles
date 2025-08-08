@@ -104,6 +104,13 @@ public:
    * @returns DOFs on host.
    */
   std::vector<REAL> get_dofs();
+
+  /**
+   * Set the DOFs from a host vector.
+   *
+   * @param h_dofs Host std::vector of length local_dof_count.
+   */
+  void set_dofs(std::vector<REAL> &h_dofs);
 };
 
 typedef std::shared_ptr<CartesianHMeshFunction> CartesianHMeshFunctionSharedPtr;

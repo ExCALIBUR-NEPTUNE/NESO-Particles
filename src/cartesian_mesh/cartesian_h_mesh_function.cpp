@@ -85,4 +85,15 @@ std::vector<REAL> CartesianHMeshFunction::get_dofs() {
   return h_dofs;
 }
 
+void CartesianHMeshFunction::set_dofs(std::vector<REAL> &h_dofs) {
+  NESOASSERT(h_dofs.size() == this->local_dof_count,
+             "h_dofs has the incorrect number of components.");
+  if (this->local_dof_count > 0) {
+    this->sycl_target->queue
+        .memcpy(this->d_dofs->ptr, h_dofs.data(),
+                this->local_dof_count * sizeof(REAL))
+        .wait_and_throw();
+  }
+}
+
 } // namespace NESO::Particles

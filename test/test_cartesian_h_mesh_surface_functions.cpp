@@ -138,14 +138,13 @@ void surface_functions_wrapper(ParticleGroupSharedPtr A,
   for (int gx : {0, 1}) {
     auto bmi = cti.map_groups_boundary_interface.at(gx);
 
-    if (bmi->boundary.d_incoming_geom_ids) {
-      const std::size_t num_incoming_geoms =
-          bmi->boundary.d_incoming_geom_ids->size;
+    if (bmi->d_incoming_geom_ids) {
+      const std::size_t num_incoming_geoms = bmi->d_incoming_geom_ids->size;
 
       if (num_incoming_geoms > 0) {
-        int *k_incoming_geom_ids = bmi->boundary.d_incoming_geom_ids->ptr;
+        int *k_incoming_geom_ids = bmi->d_incoming_geom_ids->ptr;
         auto *k_map_owned_geom_id_to_linear_index =
-            bmi->boundary.d_map_owned_geom_id_to_linear_index->root;
+            bmi->d_map_owned_geom_id_to_linear_index->root;
 
         ASSERT_NE(k_map_owned_geom_id_to_linear_index, nullptr);
 
@@ -193,7 +192,7 @@ void surface_functions_wrapper(ParticleGroupSharedPtr A,
           .wait_and_throw();
 
       int index = 0;
-      for (auto gidx : bmi->boundary.owned_geom_ids) {
+      for (auto gidx : bmi->owned_geom_ids) {
         const REAL to_test = h_dofs.at(index);
         const REAL correct = h_correct_dofs.at(gidx);
         ASSERT_TRUE(relative_error(correct, to_test) < 1.0e-12);
@@ -235,7 +234,7 @@ void surface_functions_wrapper(ParticleGroupSharedPtr A,
           .wait_and_throw();
 
       int index = 0;
-      for (auto gidx : bmi->boundary.owned_geom_ids) {
+      for (auto gidx : bmi->owned_geom_ids) {
         const REAL to_test = h_dofs.at(index);
         const REAL correct = h_correct_dofs.at(gidx);
         ASSERT_TRUE(relative_error(correct, to_test) < 1.0e-12);
@@ -257,6 +256,60 @@ void surface_functions_wrapper(ParticleGroupSharedPtr A,
       const REAL to_test = h_dofs.at(ix);
       ASSERT_EQ(to_test, 0.0);
     }
+  }
+
+  // Test evaluation
+  {
+    auto h_dofs = func_0->get_dofs();
+    int index = 0;
+    for (INT cx : func_0->cells) {
+      h_dofs.at(index++) = cx;
+    }
+    func_0->set_dofs(h_dofs);
+    auto h_dofs2 = func_0->get_dofs();
+    ASSERT_EQ(h_dofs2, h_dofs);
+
+    cti.function_evaluate(groups.at(0), Sym<REAL>("QE"), 1, true, func_0);
+
+    ErrorPropagate ep(sycl_target);
+    auto k_ep = ep.device_ptr();
+    particle_loop(
+        groups.at(0),
+        [=](auto QE, auto META) {
+          const REAL geom_id_real = META.at_ephemeral(1);
+          NESO_KERNEL_ASSERT(
+              Kernel::abs(QE.at_ephemeral(1) - geom_id_real) < 1.0e-14, k_ep);
+        },
+        Access::read(Sym<REAL>("QE")),
+        Access::read(Sym<INT>("NESO_PARTICLES_BOUNDARY_METADATA")))
+        ->execute();
+    ASSERT_FALSE(ep.get_flag());
+  }
+  {
+    auto h_dofs = func_1->get_dofs();
+    int index = 0;
+    for (INT cx : func_1->cells) {
+      h_dofs.at(index++) = cx;
+    }
+    func_1->set_dofs(h_dofs);
+    auto h_dofs2 = func_1->get_dofs();
+    ASSERT_EQ(h_dofs2, h_dofs);
+
+    cti.function_evaluate(groups.at(1), Sym<REAL>("Q"), 0, false, func_1);
+
+    ErrorPropagate ep(sycl_target);
+    auto k_ep = ep.device_ptr();
+    particle_loop(
+        groups.at(1),
+        [=](auto Q, auto META) {
+          const REAL geom_id_real = META.at_ephemeral(1);
+          NESO_KERNEL_ASSERT(Kernel::abs(Q.at(0) - geom_id_real) < 1.0e-14,
+                             k_ep);
+        },
+        Access::read(Sym<REAL>("Q")),
+        Access::read(Sym<INT>("NESO_PARTICLES_BOUNDARY_METADATA")))
+        ->execute();
+    ASSERT_FALSE(ep.get_flag());
   }
 
   cti.free();
