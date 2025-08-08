@@ -511,7 +511,69 @@ public:
    * with the incoming values.
    */
   template <typename T>
-  void reverse_exchange_from_device(T *d_src, const int ncomp, T *d_dst) {}
+  void reverse_exchange_from_device(T *d_src, const int ncomp, T *d_dst) {
+
+    auto sycl_target = this->boundary.sycl_target;
+    const int packed_size =
+        this->boundary.d_reverse_outgoing_pack_index
+            ? this->boundary.d_reverse_outgoing_pack_index->size * ncomp
+            : 0;
+    const int unpacked_size =
+        this->boundary.d_reverse_incoming_unpack_index
+            ? this->boundary.d_reverse_incoming_unpack_index->size * ncomp
+            : 0;
+
+    auto d_packed =
+        get_resource<BufferDevice<T>, ResourceStackInterfaceBufferDevice<T>>(
+            sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<T>{},
+            sycl_target);
+    d_packed->realloc_no_copy(packed_size);
+    auto d_recv_packed =
+        get_resource<BufferDevice<T>, ResourceStackInterfaceBufferDevice<T>>(
+            sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<T>{},
+            sycl_target);
+    d_recv_packed->realloc_no_copy(unpacked_size);
+
+    this->reverse_exchange_from_device_pack(d_src, ncomp, d_packed->ptr)
+        .wait_and_throw();
+
+    T *m_packed = d_packed->ptr;
+    T *m_recvd_packed = d_recv_packed->ptr;
+
+    std::vector<T> h_packed;
+    std::vector<T> h_recv_packed;
+
+    if (!this->boundary.device_aware_mpi) {
+      h_packed.resize(packed_size);
+      h_recv_packed.resize(unpacked_size);
+      m_packed = h_packed.data();
+      m_recvd_packed = h_recv_packed.data();
+      if (packed_size > 0) {
+        sycl_target->queue
+            .memcpy(m_packed, d_packed->ptr, packed_size * sizeof(T))
+            .wait_and_throw();
+      }
+    }
+
+    reverse_exchange_surface(m_packed, ncomp, m_recvd_packed);
+
+    if (!this->boundary.device_aware_mpi) {
+      if (unpacked_size > 0) {
+        sycl_target->queue
+            .memcpy(d_recv_packed->ptr, m_recvd_packed,
+                    unpacked_size * sizeof(T))
+            .wait_and_throw();
+      }
+    }
+
+    this->reverse_exchange_from_device_unpack(m_recvd_packed, ncomp, d_dst)
+        .wait_and_throw();
+
+    restore_resource(sycl_target->resource_stack_map,
+                     ResourceStackKeyBufferDevice<T>{}, d_recv_packed);
+    restore_resource(sycl_target->resource_stack_map,
+                     ResourceStackKeyBufferDevice<T>{}, d_packed);
+  }
 };
 
 typedef std::shared_ptr<BoundaryMeshInterface> BoundaryMeshInterfaceSharedPtr;

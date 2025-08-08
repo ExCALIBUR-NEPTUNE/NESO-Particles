@@ -516,6 +516,57 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
     }
   }
 
+  // Test reverse surface exchange call
+  {
+    std::vector<int> h_src_dofs(num_owned_geoms);
+    for (int fx = 0; fx < num_owned_geoms; fx++) {
+      h_src_dofs.at(fx) = rank * num_owned_geoms + fx;
+    }
+    BufferDevice<int> d_src_dofs(sycl_target, h_src_dofs);
+    BufferDevice<int> d_dst_dofs(sycl_target, bmi.get_num_intersection_geoms());
+
+    ASSERT_EQ(bmi.get_num_intersection_geoms(),
+              bmi.boundary.map_linear_index_to_geom_id.size());
+
+    bmi.reverse_exchange_from_device(d_src_dofs.ptr, 1, d_dst_dofs.ptr);
+
+    auto h_dst_dofs = d_dst_dofs.get();
+
+    for (auto lx_gx : bmi.boundary.map_linear_index_to_geom_id) {
+      const int linear_index = static_cast<int>(lx_gx.first);
+      const int gid = static_cast<int>(lx_gx.second);
+      const REAL to_test = h_dst_dofs.at(linear_index);
+      const REAL correct = gid;
+      ASSERT_EQ(correct, to_test);
+    }
+  }
+  {
+    std::vector<REAL> h_src_dofs(num_owned_geoms * ncomp);
+    for (int fx = 0; fx < num_owned_geoms; fx++) {
+      for (int cx = 0; cx < ncomp; cx++) {
+        h_src_dofs.at(fx * ncomp + cx) = rank * num_owned_geoms + fx + 0.1 * cx;
+      }
+    }
+    BufferDevice<REAL> d_src_dofs(sycl_target, h_src_dofs);
+    BufferDevice<REAL> d_dst_dofs(sycl_target,
+                                  bmi.get_num_intersection_geoms() * ncomp);
+
+    bmi.reverse_exchange_from_device(d_src_dofs.ptr, ncomp, d_dst_dofs.ptr);
+
+    auto h_dst_dofs = d_dst_dofs.get();
+
+    for (auto lx_gx : bmi.boundary.map_linear_index_to_geom_id) {
+      const int linear_index = static_cast<int>(lx_gx.first);
+      const int gid = static_cast<int>(lx_gx.second);
+      for (int cx = 0; cx < ncomp; cx++) {
+        const REAL to_test = h_dst_dofs.at(linear_index * ncomp + cx);
+        const REAL correct = gid + 0.1 * cx;
+        // No arithmetic, should be identical.
+        ASSERT_EQ(correct, to_test);
+      }
+    }
+  }
+
   bmi.free();
   sycl_target->free();
 }
