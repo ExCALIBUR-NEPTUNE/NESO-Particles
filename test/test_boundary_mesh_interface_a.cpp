@@ -19,7 +19,7 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
   BoundaryMeshInterface bmi(comm, sycl_target, owned_face_cells);
   const int ncomp = 7;
 
-  ASSERT_EQ(owned_face_cells, bmi.boundary.owned_geom_ids);
+  ASSERT_EQ(owned_face_cells, bmi.owned_geom_ids);
 
   std::map<int, std::vector<std::pair<int, int>>> test_map;
   std::map<int, std::map<int, std::vector<REAL>>> test_data;
@@ -71,7 +71,7 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
 
   bmi.extend_exchange_pattern(test_map[rank]);
 
-  MPI_Comm ncomm = bmi.boundary.ncomm;
+  MPI_Comm ncomm = bmi.ncomm;
   ASSERT_NE(ncomm, MPI_COMM_NULL);
 
   int test_size = 0;
@@ -109,7 +109,7 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
   for (int dx = 0; dx < outdegree; dx++) {
     const int dest_rank = destinations.at(dx);
     ASSERT_TRUE((-1 < dest_rank) && (dest_rank < size));
-    ASSERT_TRUE(bmi.boundary.map_recv_rank_to_geom_ids.count(dest_rank));
+    ASSERT_TRUE(bmi.map_recv_rank_to_geom_ids.count(dest_rank));
   }
 
   for (int sx = 0; sx < indegree; sx++) {
@@ -125,7 +125,7 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
   // Test that the correct number of geoms were communicated
   for (int sx = 0; sx < indegree; sx++) {
     const int src_rank = sources.at(sx);
-    const int to_test_count = bmi.boundary.incoming_geom_counts.at(sx);
+    const int to_test_count = bmi.incoming_geom_counts.at(sx);
     int correct_count = 0;
     for (auto &rank_gid : test_map.at(src_rank)) {
       if (rank_gid.first == rank) {
@@ -145,18 +145,17 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
     }
   }
   std::set<int> incoming_geoms_to_test;
-  for (int gx : bmi.boundary.incoming_geom_ids) {
+  for (int gx : bmi.incoming_geom_ids) {
     incoming_geoms_to_test.insert(gx);
   }
   ASSERT_EQ(incoming_geoms_to_test, incoming_geoms_correct);
 
-  const auto incoming_geom_ids_size = bmi.boundary.incoming_geom_ids.size();
+  const auto incoming_geom_ids_size = bmi.incoming_geom_ids.size();
   std::vector<int> incoming_geoms_to_test_v(incoming_geom_ids_size);
 
   if (incoming_geom_ids_size > 0) {
     sycl_target->queue
-        .memcpy(incoming_geoms_to_test_v.data(),
-                bmi.boundary.d_incoming_geom_ids->ptr,
+        .memcpy(incoming_geoms_to_test_v.data(), bmi.d_incoming_geom_ids->ptr,
                 incoming_geom_ids_size * sizeof(int))
         .wait_and_throw();
   }
@@ -174,29 +173,28 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
         incoming_geoms_correct.insert(rank_gid.second);
       }
     }
-    ASSERT_EQ(incoming_geoms_correct,
-              bmi.boundary.map_send_rank_to_geom_ids[rx]);
+    ASSERT_EQ(incoming_geoms_correct, bmi.map_send_rank_to_geom_ids[rx]);
   }
 
   {
     std::vector<REAL> outdata;
-    outdata.reserve(bmi.boundary.total_num_outgoing_geoms);
-    for (int gx : bmi.boundary.outgoing_geom_ids) {
+    outdata.reserve(bmi.total_num_outgoing_geoms);
+    for (int gx : bmi.outgoing_geom_ids) {
       outdata.insert(outdata.end(), test_data.at(rank).at(gx).begin(),
                      test_data.at(rank).at(gx).end());
     }
 
-    std::vector<REAL> indata(bmi.boundary.total_num_incoming_geoms * ncomp);
+    std::vector<REAL> indata(bmi.total_num_incoming_geoms * ncomp);
     std::fill(indata.begin(), indata.end(), -1.0);
 
     bmi.exchange_surface(outdata.data(), ncomp, indata.data());
 
     std::vector<REAL> indata_correct;
 
-    indata_correct.reserve(bmi.boundary.total_num_incoming_geoms * ncomp);
+    indata_correct.reserve(bmi.total_num_incoming_geoms * ncomp);
 
-    for (int source_rank : bmi.boundary.graph.sources) {
-      for (int gid : bmi.boundary.map_send_rank_to_geom_ids.at(source_rank)) {
+    for (int source_rank : bmi.graph.sources) {
+      for (int gid : bmi.map_send_rank_to_geom_ids.at(source_rank)) {
         auto &tmp = test_data.at(source_rank).at(gid);
         indata_correct.insert(indata_correct.end(), tmp.begin(), tmp.end());
       }
@@ -207,8 +205,7 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
 
   // Test the DOF packing loop
   {
-    const std::size_t packed_data_length =
-        bmi.boundary.outgoing_geom_ids.size() * ncomp;
+    const std::size_t packed_data_length = bmi.outgoing_geom_ids.size() * ncomp;
 
     std::vector<REAL> h_src(packed_data_length);
     std::vector<REAL> h_dst(packed_data_length);
@@ -226,8 +223,8 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
         .wait_and_throw();
 
     int index_dst = 0;
-    for (int gx : bmi.boundary.outgoing_geom_ids) {
-      const int index_src = bmi.boundary.map_geom_id_to_linear_index.at(gx);
+    for (int gx : bmi.outgoing_geom_ids) {
+      const int index_src = bmi.map_geom_id_to_linear_index.at(gx);
       for (int cx = 0; cx < ncomp; cx++) {
         ASSERT_EQ(h_dst[index_dst * ncomp + cx], h_src[index_src * ncomp + cx]);
       }
@@ -237,10 +234,10 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
   // Test the DOF unpacking loop
   {
     const std::size_t packed_data_length_src =
-        bmi.boundary.incoming_geom_ids.size() * ncomp;
+        bmi.incoming_geom_ids.size() * ncomp;
     const std::size_t packed_data_length_dst =
-        bmi.boundary.owned_geom_ids.size() * ncomp;
-    ASSERT_EQ(bmi.boundary.owned_geom_ids.size(), num_owned_geoms);
+        bmi.owned_geom_ids.size() * ncomp;
+    ASSERT_EQ(bmi.owned_geom_ids.size(), num_owned_geoms);
 
     if (packed_data_length_src > 0) {
       std::vector<REAL> h_src(packed_data_length_src);
@@ -266,7 +263,7 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
           REAL correct = 0.0;
 
           int src_index = 0;
-          for (auto hx : bmi.boundary.incoming_geom_ids) {
+          for (auto hx : bmi.incoming_geom_ids) {
             if (hx == gx) {
               correct += h_src.at(src_index * ncomp + cx);
             }
@@ -283,23 +280,23 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
   // Test exchange from device
   {
     const std::size_t packed_data_length_src =
-        bmi.boundary.outgoing_geom_ids.size() * ncomp;
+        bmi.outgoing_geom_ids.size() * ncomp;
     const std::size_t packed_data_length_dst =
-        bmi.boundary.owned_geom_ids.size() * ncomp;
+        bmi.owned_geom_ids.size() * ncomp;
 
     std::vector<REAL> h_src(packed_data_length_src);
     std::vector<REAL> h_dst(packed_data_length_dst);
 
     std::uniform_real_distribution<REAL> uniform_dist(0.0, 1.0);
     std::map<INT, std::vector<REAL>> map_geom_to_values;
-    for (auto gx : bmi.boundary.outgoing_geom_ids) {
+    for (auto gx : bmi.outgoing_geom_ids) {
       std::vector<REAL> v(ncomp);
       for (int cx = 0; cx < ncomp; cx++) {
         v.at(cx) = uniform_dist(rng);
       }
       map_geom_to_values[gx] = v;
 
-      const auto index = bmi.boundary.map_geom_id_to_linear_index.at(gx);
+      const auto index = bmi.map_geom_id_to_linear_index.at(gx);
       for (int cx = 0; cx < ncomp; cx++) {
         h_src.at(index * ncomp + cx) = v.at(cx);
       }
@@ -333,8 +330,7 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
                         comm));
 
       if (rank == owning_rank) {
-        const auto index =
-            bmi.boundary.map_owned_geom_id_to_linear_index.at(gx);
+        const auto index = bmi.map_owned_geom_id_to_linear_index.at(gx);
         for (int cx = 0; cx < ncomp; cx++) {
           send_stage.at(cx) = h_dst.at(index * ncomp + cx);
         }
@@ -347,21 +343,20 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
   }
 
   std::vector<int> h_reverse_incoming_unpack_index;
-  if (bmi.boundary.d_reverse_incoming_unpack_index) {
+  if (bmi.d_reverse_incoming_unpack_index) {
 
     h_reverse_incoming_unpack_index.resize(
-        bmi.boundary.d_reverse_incoming_unpack_index->size);
+        bmi.d_reverse_incoming_unpack_index->size);
 
     sycl_target->queue
         .memcpy(h_reverse_incoming_unpack_index.data(),
-                bmi.boundary.d_reverse_incoming_unpack_index->ptr,
-                bmi.boundary.d_reverse_incoming_unpack_index->size *
-                    sizeof(int))
+                bmi.d_reverse_incoming_unpack_index->ptr,
+                bmi.d_reverse_incoming_unpack_index->size * sizeof(int))
         .wait_and_throw();
 
     int index = 0;
     int pindex = 0;
-    for (int src_rank : bmi.boundary.graph.reverse_sources) {
+    for (int src_rank : bmi.graph.reverse_sources) {
       std::set<int> geoms;
       for (auto &[rx, gx] : test_map[rank]) {
         if (rx == src_rank) {
@@ -369,31 +364,30 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
         }
       }
 
-      auto &gids = bmi.boundary.map_recv_rank_to_geom_ids.at(src_rank);
+      auto &gids = bmi.map_recv_rank_to_geom_ids.at(src_rank);
       ASSERT_EQ(gids.size(), geoms.size());
       std::set<int> geoms_to_test;
       for (int gx : gids) {
         geoms_to_test.insert(gx);
       }
       ASSERT_EQ(geoms_to_test, geoms);
-      ASSERT_EQ(geoms.size(), bmi.boundary.reverse_incoming_geom_counts[index]);
+      ASSERT_EQ(geoms.size(), bmi.reverse_incoming_geom_counts[index]);
 
       for (int gx : gids) {
         const int correct =
-            static_cast<int>(bmi.boundary.map_geom_id_to_linear_index.at(gx));
+            static_cast<int>(bmi.map_geom_id_to_linear_index.at(gx));
         ASSERT_EQ(correct, h_reverse_incoming_unpack_index.at(pindex));
         pindex++;
       }
       index++;
     }
 
-    std::vector<int> h_packed_src(
-        ncomp * bmi.boundary.d_reverse_incoming_unpack_index->size);
+    std::vector<int> h_packed_src(ncomp *
+                                  bmi.d_reverse_incoming_unpack_index->size);
     std::iota(h_packed_src.begin(), h_packed_src.end(), 0);
     BufferDevice<int> d_packed_src(sycl_target, h_packed_src);
     BufferDevice<int> d_unpacked_dst(
-        sycl_target,
-        ncomp * bmi.boundary.d_reverse_incoming_unpack_index->size);
+        sycl_target, ncomp * bmi.d_reverse_incoming_unpack_index->size);
 
     bmi.reverse_exchange_from_device_unpack(d_packed_src.ptr, ncomp,
                                             d_unpacked_dst.ptr)
@@ -402,11 +396,11 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
     auto h_unpacked_dst = d_unpacked_dst.get();
     index = 0;
     pindex = 0;
-    for (int src_rank : bmi.boundary.graph.reverse_sources) {
-      auto &gids = bmi.boundary.map_recv_rank_to_geom_ids.at(src_rank);
+    for (int src_rank : bmi.graph.reverse_sources) {
+      auto &gids = bmi.map_recv_rank_to_geom_ids.at(src_rank);
       for (int gx : gids) {
         const int correct =
-            static_cast<int>(bmi.boundary.map_geom_id_to_linear_index.at(gx));
+            static_cast<int>(bmi.map_geom_id_to_linear_index.at(gx));
 
         for (int cx = 0; cx < ncomp; cx++) {
           ASSERT_NEAR(h_packed_src.at(correct * ncomp + cx),
@@ -419,20 +413,20 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
   }
 
   std::vector<int> h_reverse_outgoing_pack_index;
-  if (bmi.boundary.d_reverse_outgoing_pack_index) {
+  if (bmi.d_reverse_outgoing_pack_index) {
 
     h_reverse_outgoing_pack_index.resize(
-        bmi.boundary.d_reverse_outgoing_pack_index->size);
+        bmi.d_reverse_outgoing_pack_index->size);
 
     sycl_target->queue
         .memcpy(h_reverse_outgoing_pack_index.data(),
-                bmi.boundary.d_reverse_outgoing_pack_index->ptr,
-                bmi.boundary.d_reverse_outgoing_pack_index->size * sizeof(int))
+                bmi.d_reverse_outgoing_pack_index->ptr,
+                bmi.d_reverse_outgoing_pack_index->size * sizeof(int))
         .wait_and_throw();
 
     int index = 0;
     int pindex = 0;
-    for (int dst_rank : bmi.boundary.graph.reverse_destinations) {
+    for (int dst_rank : bmi.graph.reverse_destinations) {
       std::set<int> geoms;
 
       for (auto &[rx, gx] : test_map[dst_rank]) {
@@ -441,18 +435,18 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
         }
       }
 
-      auto &gids = bmi.boundary.map_send_rank_to_geom_ids.at(dst_rank);
+      auto &gids = bmi.map_send_rank_to_geom_ids.at(dst_rank);
       ASSERT_EQ(gids.size(), geoms.size());
       std::set<int> geoms_to_test;
       for (int gx : gids) {
         geoms_to_test.insert(gx);
       }
       ASSERT_EQ(geoms_to_test, geoms);
-      ASSERT_EQ(geoms.size(), bmi.boundary.reverse_outgoing_geom_counts[index]);
+      ASSERT_EQ(geoms.size(), bmi.reverse_outgoing_geom_counts[index]);
 
       for (int gx : gids) {
-        const int correct = static_cast<int>(
-            bmi.boundary.map_owned_geom_id_to_linear_index.at(gx));
+        const int correct =
+            static_cast<int>(bmi.map_owned_geom_id_to_linear_index.at(gx));
         ASSERT_EQ(correct, h_reverse_outgoing_pack_index.at(pindex));
         ASSERT_TRUE(-1 < correct);
         ASSERT_TRUE(correct < num_owned_geoms);
@@ -479,8 +473,8 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
     auto h_dst_dofs = d_dst_dofs.get();
     index = 0;
     pindex = 0;
-    for (int dst_rank : bmi.boundary.graph.reverse_destinations) {
-      auto &gids = bmi.boundary.map_send_rank_to_geom_ids.at(dst_rank);
+    for (int dst_rank : bmi.graph.reverse_destinations) {
+      auto &gids = bmi.map_send_rank_to_geom_ids.at(dst_rank);
       for (int gx : gids) {
         for (int cx = 0; cx < ncomp; cx++) {
           ASSERT_NEAR(h_dst_dofs.at(pindex), gx + 0.1 * cx, 1.0e-10);
@@ -510,8 +504,7 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
     }
 
     for (int ix = 0; ix < geom_count; ix++) {
-      const int gid =
-          static_cast<int>(bmi.boundary.map_linear_index_to_geom_id.at(ix));
+      const int gid = static_cast<int>(bmi.map_linear_index_to_geom_id.at(ix));
       ASSERT_EQ(gid, indata.at(ix));
     }
   }
@@ -526,13 +519,13 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
     BufferDevice<int> d_dst_dofs(sycl_target, bmi.get_num_intersection_geoms());
 
     ASSERT_EQ(bmi.get_num_intersection_geoms(),
-              bmi.boundary.map_linear_index_to_geom_id.size());
+              bmi.map_linear_index_to_geom_id.size());
 
     bmi.reverse_exchange_from_device(d_src_dofs.ptr, 1, d_dst_dofs.ptr);
 
     auto h_dst_dofs = d_dst_dofs.get();
 
-    for (auto lx_gx : bmi.boundary.map_linear_index_to_geom_id) {
+    for (auto lx_gx : bmi.map_linear_index_to_geom_id) {
       const int linear_index = static_cast<int>(lx_gx.first);
       const int gid = static_cast<int>(lx_gx.second);
       const REAL to_test = h_dst_dofs.at(linear_index);
@@ -555,7 +548,7 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
 
     auto h_dst_dofs = d_dst_dofs.get();
 
-    for (auto lx_gx : bmi.boundary.map_linear_index_to_geom_id) {
+    for (auto lx_gx : bmi.map_linear_index_to_geom_id) {
       const int linear_index = static_cast<int>(lx_gx.first);
       const int gid = static_cast<int>(lx_gx.second);
       for (int cx = 0; cx < ncomp; cx++) {
