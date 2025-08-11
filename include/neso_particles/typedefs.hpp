@@ -465,7 +465,14 @@ inline bool is_power_of_two(const std::size_t n) {
 #endif
 
 #ifndef NESO_PARTICLES_LOOP_STRIDE
-#define NESO_PARTICLES_LOOP_STRIDE 4
+#define NESO_PARTICLES_LOOP_STRIDE 16
 #endif
+
+#ifndef NESO_PARTICLES_CACHELINE_NUM_BYTES
+#define NESO_PARTICLES_CACHELINE_NUM_BYTES 128
+#endif
+
+constexpr inline std::size_t NESO_PARTICLES_CACHELINE_NUM_int =
+    NESO_PARTICLES_CACHELINE_NUM_BYTES / sizeof(int);
 
 #endif

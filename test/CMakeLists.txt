@@ -23,12 +23,14 @@ set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(TEST_SRCS
     ${TEST_DIR}/test_algorithms_a.cpp
     ${TEST_DIR}/test_algorithms_b.cpp
+    ${TEST_DIR}/test_algorithms_c.cpp
     ${TEST_DIR}/test_boundary_pbc.cpp
     ${TEST_DIR}/test_boundary_truncation.cpp
     ${TEST_DIR}/test_boundary_reflection.cpp
     ${TEST_DIR}/test_buffers.cpp
     ${TEST_DIR}/test_cell_dat.cpp
     ${TEST_DIR}/test_communication.cpp
+    ${TEST_DIR}/test_copy_selector.cpp
     ${TEST_DIR}/test_device_functions.cpp
     ${TEST_DIR}/test_ephemeral_dats.cpp
     ${TEST_DIR}/test_error_propagate.cpp
@@ -87,6 +89,7 @@ set(TEST_SRCS
     ${TEST_DIR}/test_resource_stack.cpp
     ${TEST_DIR}/test_serial_container.cpp
     ${TEST_DIR}/test_selector_exclusive_scan.cpp
+    ${TEST_DIR}/test_selector_a.cpp
     ${TEST_DIR}/test_standard_boundary_a.cpp
     ${TEST_DIR}/test_standard_boundary_b.cpp
     ${TEST_DIR}/test_sycl_target.cpp

@@ -221,10 +221,11 @@ void *SYCLTarget::malloc_device(const std::size_t size_bytes,
   };
 
 #ifndef DEBUG_OOB_CHECK
-  return lambda_alloc(size_bytes);
+  void *ptr = lambda_alloc(size_bytes);
+  return ptr;
 #else
-  unsigned char *ptr = (unsigned char *)lambda_alloc(
-      size_bytes + 2 * DEBUG_OOB_WIDTH, this->queue);
+  unsigned char *ptr =
+      (unsigned char *)lambda_alloc(size_bytes + 2 * DEBUG_OOB_WIDTH);
 
   unsigned char *ptr_user = ptr + DEBUG_OOB_WIDTH;
   this->ptr_map[ptr_user] = size_bytes;
@@ -255,8 +256,8 @@ void *SYCLTarget::malloc_shared(const std::size_t size_bytes,
 #ifndef DEBUG_OOB_CHECK
   return lambda_alloc(size_bytes);
 #else
-  unsigned char *ptr = (unsigned char *)lambda_alloc(
-      size_bytes + 2 * DEBUG_OOB_WIDTH, this->queue);
+  unsigned char *ptr =
+      (unsigned char *)lambda_alloc(size_bytes + 2 * DEBUG_OOB_WIDTH);
 
   unsigned char *ptr_user = ptr + DEBUG_OOB_WIDTH;
   this->ptr_map[ptr_user] = size_bytes;
@@ -288,8 +289,8 @@ void *SYCLTarget::malloc_host(const std::size_t size_bytes,
   return lambda_alloc(size_bytes);
 #else
 
-  unsigned char *ptr = (unsigned char *)lambda_alloc(
-      size_bytes + 2 * DEBUG_OOB_WIDTH, this->queue);
+  unsigned char *ptr =
+      (unsigned char *)lambda_alloc(size_bytes + 2 * DEBUG_OOB_WIDTH);
   unsigned char *ptr_user = ptr + DEBUG_OOB_WIDTH;
   this->ptr_map[ptr_user] = size_bytes;
   NESOASSERT(ptr != nullptr, "pad pointer from malloc_host");

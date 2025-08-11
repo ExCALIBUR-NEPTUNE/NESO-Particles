@@ -76,7 +76,10 @@ protected:
   // collect the dependencies.
   inline void
   add_parent_dependencies([[maybe_unused]] ParticleGroupSharedPtr parent) {}
-  inline void add_parent_dependencies(std::shared_ptr<ParticleSubGroup> parent);
+  void add_parent_dependencies(std::shared_ptr<ParticleSubGroup> parent);
+  void add_parent_dependencies(
+      std::shared_ptr<ParticleSubGroupImplementation::SubGroupSelectorBase>
+          selector);
 
   void add_sym_dependency(Sym<INT> sym);
   void add_sym_dependency(Sym<REAL> sym);

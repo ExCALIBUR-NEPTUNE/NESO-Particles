@@ -56,6 +56,15 @@ protected:
   SubGroupSelector(std::shared_ptr<ParticleGroup> parent);
   SubGroupSelector(std::shared_ptr<ParticleSubGroup> parent);
 
+#ifdef NESO_PARTICLES_TEST_COMPILATION
+public:
+#endif
+
+  static void pre_process_npart_cell(SYCLTargetSharedPtr sycl_target,
+                                     const int cell_count, int *d_npart_cell);
+  static void post_process_npart_cell(SYCLTargetSharedPtr sycl_target,
+                                      const int cell_count, int *d_npart_cell);
+
 public:
   /**
    * Create a selector based on a kernel and arguments. The selector kernel
@@ -77,16 +86,19 @@ public:
 
     (this->check_read_access(args), ...);
 
+    const int cell_count =
+        get_particle_group(parent)->domain->mesh->get_cell_count();
     this->loop_0 = particle_loop(
         "sub_group_selector_0", parent,
         [=](auto loop_index, auto k_map_ptrs, auto... user_args) {
           const bool required = kernel(user_args...);
           const INT particle_linear_index = loop_index.get_local_linear_index();
           if (required) {
-            sycl::atomic_ref<int, sycl::memory_order::relaxed,
-                             sycl::memory_scope::device>
-                element_atomic(k_map_ptrs.at(1)[loop_index.cell]);
-            const int layer = element_atomic.fetch_add(1);
+            const int layer = atomic_fetch_add(
+                &(k_map_ptrs.at(
+                    1)[cell_count +
+                       loop_index.cell * NESO_PARTICLES_CACHELINE_NUM_int]),
+                1);
             k_map_ptrs.at(0)[particle_linear_index] = layer;
           } else {
             k_map_ptrs.at(0)[particle_linear_index] = -1;

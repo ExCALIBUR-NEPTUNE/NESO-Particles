@@ -135,11 +135,17 @@ SubGroupSelectorBase::SubGroupSelectorBase(
 }
 
 void SubGroupSelectorBase::add_parent_dependencies(
+    std::shared_ptr<ParticleSubGroupImplementation::SubGroupSelectorBase>
+        selector) {
+  for (const auto &dep : selector->particle_dat_versions) {
+    this->particle_dat_versions[dep.first] = 0;
+  }
+}
+
+void SubGroupSelectorBase::add_parent_dependencies(
     std::shared_ptr<ParticleSubGroup> parent) {
   if (parent != nullptr) {
-    for (const auto &dep : parent->selector->particle_dat_versions) {
-      this->particle_dat_versions[dep.first] = 0;
-    }
+    this->add_parent_dependencies(parent->selector);
   }
 }
 
