@@ -11,10 +11,8 @@ CartesianCellBin::get_loop(ParticleDatSharedPtr<REAL> position_dat,
   NESOASSERT(((k_ndim > 0) && (k_ndim < 4)), "Bad number of dimensions");
   auto k_inverse_cell_width_fine = this->mesh->inverse_cell_width_fine;
   auto k_cell_width_fine = this->mesh->cell_width_fine;
-
   auto k_cell_counts = this->d_cell_counts.ptr;
   auto k_cell_starts = this->d_cell_starts.ptr;
-  auto k_cell_ends = this->d_cell_ends.ptr;
 
   return particle_loop(
       "CartesianCellBin", position_dat,
@@ -26,8 +24,9 @@ CartesianCellBin::get_loop(ParticleDatSharedPtr<REAL> position_dat,
               positions[dimx] - k_cell_starts[dimx] * k_cell_width_fine;
           int cell_tmp = ((REAL)pos * k_inverse_cell_width_fine);
           cell_tmp = (cell_tmp < 0) ? 0 : cell_tmp;
-          cell_tmp = (cell_tmp >= k_cell_ends[dimx]) ? k_cell_ends[dimx] - 1
-                                                     : cell_tmp;
+
+          cell_tmp = (cell_tmp >= k_cell_counts[dimx]) ? k_cell_counts[dimx] - 1
+                                                       : cell_tmp;
           cell_tmps[dimx] = cell_tmp;
         }
 

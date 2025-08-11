@@ -96,8 +96,9 @@ public:
         [=](auto P) {
           bool outside_domain = false;
           for (int dimx = 0; dimx < k_ndim; dimx++) {
-            outside_domain = outside_domain || ((P.at(dimx) < 0.0) ||
-                                                (P.at(dimx) > k_extents[dimx]));
+            outside_domain =
+                outside_domain ||
+                ((P.at(dimx) <= 0.0) || (P.at(dimx) >= k_extents[dimx]));
           }
           return outside_domain;
         },

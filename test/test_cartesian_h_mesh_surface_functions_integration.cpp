@@ -82,9 +82,7 @@ void mass_conservation_wrapper(const int ndim) {
     auto groups = cti->post_integration(A);
 
     cti->function_project(groups[0], Sym<REAL>("MASS"), 0, false, func_mass);
-    if (groups.count(0)) {
-      A->remove_particles(groups.at(0));
-    }
+    A->remove_particles(groups.at(0));
 
     mass_particle_system = lambda_get_particle_mass();
     mass_boundary_function = lambda_get_boundary_mass();
@@ -149,7 +147,7 @@ void reflection_evaluation_wrapper(const int ndim) {
   }
 
   auto cti = std::make_shared<CartesianTrajectoryIntersection>(
-      sycl_target, mesh, boundary_groups, 1.0e-14);
+      sycl_target, mesh, boundary_groups, 1.0e-10);
   cti->prepare_particle_group(A);
 
   std::map<int, CartesianHMeshFunctionSharedPtr> funcs;
@@ -164,13 +162,14 @@ void reflection_evaluation_wrapper(const int ndim) {
     funcs[gx.first] = func_gid;
   }
 
-  auto reflection = std::make_shared<BoundaryReflection>(ndim, 1.0e-10);
+  auto reflection = std::make_shared<BoundaryReflection>(ndim, 1.0e-8);
 
   auto lambda_apply_boundary_conditions = [&](auto aa) {
     auto sub_groups = cti->post_integration(aa);
     for (auto &gx : sub_groups) {
       reflection->execute(gx.second, Sym<REAL>("P"), Sym<REAL>("V"),
                           Sym<REAL>("TSP"), cti->previous_position_sym);
+
       cti->function_evaluate(gx.second, Sym<REAL>("Q"), 0, false,
                              funcs.at(gx.first));
 
@@ -223,7 +222,7 @@ void reflection_evaluation_wrapper(const int ndim) {
         Access::read(Sym<REAL>("TSP")));
   };
   auto lambda_partial_moves_remaining = [&](auto aa) -> bool {
-    const int size = aa->get_npart_local();
+    const int size = get_npart_global(aa);
     return size > 0;
   };
   auto lambda_apply_timestep = [&](auto aa) {
@@ -240,21 +239,35 @@ void reflection_evaluation_wrapper(const int ndim) {
     }
   };
 
-  // uncomment to write a trajectory
-  H5Part h5part("traj_reflection_surface_evaluation.h5part", A, Sym<REAL>("P"),
-                Sym<REAL>("V"), Sym<REAL>("Q"));
-  for (int stepx = 0; stepx < Nsteps; stepx++) {
-    nprint(stepx);
-    lambda_apply_timestep(static_particle_sub_group(A));
-    A->hybrid_move();
-    A->cell_move();
+  auto loop_perturb = particle_loop(
+      A,
+      [=](auto V, auto P) {
+        for (int dx = 0; dx < ndim; dx++) {
+          V.at(dx) += 0.1 * P.at(dx);
+        }
+      },
+      Access::write(Sym<REAL>("V")), Access::read(Sym<REAL>("P")));
 
+  // funcs[0]->write_vtkhdf("func_gid_" + std::to_string(ndim) +
+  //                         "d.vtkhdf");
+
+  // uncomment to write a trajectory
+  // H5Part h5part("traj_reflection_surface_evaluation.h5part", A,
+  // Sym<REAL>("P"),
+  //              Sym<REAL>("V"), Sym<REAL>("Q"));
+  for (int stepx = 0; stepx < Nsteps; stepx++) {
+    lambda_apply_timestep(static_particle_sub_group(A));
     // uncomment to write a trajectory
-    h5part.write();
+    // h5part.write();
+
+    A->hybrid_move();
+    ccb->execute();
+    A->cell_move();
+    loop_perturb->execute();
   }
 
   // uncomment to write a trajectory
-  h5part.close();
+  // h5part.close();
 
   cti->free();
   mesh->free();
