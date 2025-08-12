@@ -614,6 +614,149 @@ get_cell_vertices_cdc(SYCLTargetSharedPtr sycl_target,
   return d;
 }
 
+
+bool check_cell_vertex_ordering(DM dm, const bool verbose){
+
+
+  PetscInt point_start = 0;
+  PetscInt point_end = 0;
+
+  PETSCCHK(DMPlexGetHeightStratum(dm, 0, &point_start, &point_end));
+
+  for(PetscInt point=point_start ; point<point_end ; point++){
+    DMPolytopeType cell_type;
+    PETSCCHK(DMPlexGetCellType(dm, point, &cell_type));
+    if (cell_type == DM_POLYTOPE_QUADRILATERAL) {
+
+      std::set<std::pair<PetscInt, PetscInt>> edge_set;
+      std::set<PetscInt> vertex_set;
+
+      PetscInt num_edges = 0;
+      PETSCCHK(DMPlexGetConeSize(dm, point, &num_edges));
+
+      NESOASSERT(num_edges == 4, "Expected quad to have four edges.");
+      const PetscInt * edge_points = nullptr;
+      PETSCCHK(DMPlexGetCone(dm, point, &edge_points));
+      
+      // Push the edges from the quad into the set
+      for(int edgex=0 ; edgex<num_edges ; edgex++){
+        const PetscInt edge_point = edge_points[edgex];
+        PetscInt num_vertices = 0;
+        PETSCCHK(DMPlexGetConeSize(dm, edge_point, &num_vertices));
+        NESOASSERT(num_vertices == 2, "Expected edge to have two vertices.");
+        
+        const PetscInt * vertices;
+        PETSCCHK(DMPlexGetCone(dm, edge_point, &vertices));
+        edge_set.insert({vertices[0], vertices[1]});
+        vertex_set.insert(vertices[0]);
+        vertex_set.insert(vertices[1]);
+      }
+      
+      // Surely there's a better way to do this
+      std::map<std::vector<PetscScalar>, PetscInt> map_coords_to_vertex;
+
+      for(PetscInt vertex_point : vertex_set){
+        const PetscScalar *tmp;
+        PetscScalar *coords = nullptr;
+        PetscInt num_crossings = 0, num_coords;
+        PetscBool is_dg;
+
+        PETSCCHK(DMPlexGetCellCoordinates(dm, vertex_point, &is_dg, &num_coords,
+                                          &tmp, &coords));
+
+        map_coords_to_vertex[{coords[0], coords[1]}] = vertex_point;
+        NESOASSERT(num_coords == 2, "Expected 2 coordinates.");
+
+        PETSCCHK(DMPlexRestoreCellCoordinates(dm, vertex_point, &is_dg,
+                                              &num_coords, &tmp, &coords));
+      }
+
+      {
+
+        const PetscScalar *tmp;
+        PetscScalar *vertices = nullptr;
+        PetscInt num_crossings = 0, num_coords;
+        PetscBool is_dg;
+
+        PETSCCHK(DMPlexGetCellCoordinates(dm, point, &is_dg, &num_coords, &tmp,
+                                          &vertices));
+
+        bool PX = false;
+        for (int facex = 0; facex < 4; facex++) {
+          REAL xi = vertices[facex * 2 + 0];
+          REAL yi = vertices[facex * 2 + 1];
+          if ((Kernel::abs(xi - 0.220839) < 0.001) &&
+              (Kernel::abs(yi - 0.443746) < 0.001)) {
+            PX = true;
+          }
+        }
+
+        int faces[8] = {0, 1, 1, 2, 2, 3, 3, 0};
+
+        
+        auto lambda_print_ordering = [&](){
+          for (int facex = 0; facex < 4; facex++) {
+            const int v0 = faces[2 * facex + 0];
+            const int v1 = faces[2 * facex + 1];
+            REAL xi = vertices[faces[2 * facex + 0] * 2 + 0];
+            REAL yi = vertices[faces[2 * facex + 0] * 2 + 1];
+            REAL xj = vertices[faces[2 * facex + 1] * 2 + 0];
+            REAL yj = vertices[faces[2 * facex + 1] * 2 + 1];
+
+            nprint(v0, "-", v1);
+            nprint("(", xi, yi, ")", "-", v1, "(", xj, yj, ")");
+          }
+        };
+
+        if (PX){
+          nprint("FOUND POSSIBLE GEOM");
+          lambda_print_ordering();
+        }
+        
+        bool printed = false;
+        for (int facex = 0; facex < 4; facex++) {
+          REAL xi = vertices[faces[2 * facex + 0] * 2 + 0];
+          REAL yi = vertices[faces[2 * facex + 0] * 2 + 1];
+          REAL xj = vertices[faces[2 * facex + 1] * 2 + 0];
+          REAL yj = vertices[faces[2 * facex + 1] * 2 + 1];
+
+          PetscInt vertex_i = map_coords_to_vertex.at({xi, yi});
+          PetscInt vertex_j = map_coords_to_vertex.at({xj, yj});
+
+          const bool is_edge_a = edge_set.count({vertex_i, vertex_j});
+          const bool is_edge_b = edge_set.count({vertex_j, vertex_i});
+          const bool is_problem = !(is_edge_a || is_edge_b);
+
+          //if (is_problem){
+          //  nprint("PROBLEM START");
+          //  nprint(vertex_i, vertex_j, is_edge_a || is_edge_b, is_edge_a,
+          //         is_edge_b);
+          //  lambda_print_ordering();
+          //  nprint("PROBLEM END");
+          //}
+          
+          if (PX && is_problem && (!printed)){
+
+            nprint("PROBLEM START");
+            nprint(vertex_i, vertex_j, is_edge_a, is_edge_b);
+            lambda_print_ordering();
+            nprint("PROBLEM END");
+            printed = true;
+          }
+        }
+
+        PETSCCHK(DMPlexRestoreCellCoordinates(dm, point, &is_dg, &num_coords,
+                                              &tmp, &vertices));
+      }
+
+    } else if (verbose && (cell_type != DM_POLYTOPE_TRIANGLE)){
+      nprint("Cell point index Is NOT quad/Triangle");
+    }
+  }
+
+  return true;
+}
+
 } // namespace NESO::Particles::PetscInterface
 
 #endif

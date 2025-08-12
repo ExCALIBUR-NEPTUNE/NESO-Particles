@@ -368,6 +368,30 @@ TEST(PETScBoundary2D, reflection_advection) {
   PETSCCHK(PetscFinalize());
 }
 
+TEST(PETScBoundary2D, foo) {
+  PETSCCHK(PetscInitializeNoArguments());
+  std::string mesh_file;
+  GET_TEST_RESOURCE(mesh_file, "dmplex/mesh_hypnotoad.msh");
+  // // uncomment for test with a .h5 input
+  // GET_TEST_RESOURCE(mesh_file, "dmplex/mesh_hypnotoad.h5");
+  if (mesh_file.size()) {
+
+    DM dm;
+    PETSCCHK(DMPlexCreateGmshFromFile(MPI_COMM_WORLD, mesh_file.c_str(),
+                                      (PetscBool)1, &dm));
+    // // uncomment to read from a .h5 file
+    // PETSCCHK(DMPlexCreateFromFile(MPI_COMM_WORLD, mesh_file.c_str(), NULL,
+    //                                   (PetscBool)1, &dm));
+
+    PetscInterface::generic_distribute(&dm);
+
+    PetscInterface::check_cell_vertex_ordering(dm, true);
+
+  }
+
+  PETSCCHK(PetscFinalize());
+}
+
 TEST(PETScBoundary2D, reflection_advection_hypnotoad) {
   PETSCCHK(PetscInitializeNoArguments());
   std::string mesh_file;
@@ -388,6 +412,7 @@ TEST(PETScBoundary2D, reflection_advection_hypnotoad) {
     //                                   (PetscBool)1, &dm));
 
     PetscInterface::generic_distribute(&dm);
+
     // give this mesh a boundary here for now as we have not
     // yet created the boundary labels inside "dmplex/mesh_hypnotoad.msh"
     // comment this out if "Face Sets" label is already set in the DMPlex
@@ -396,6 +421,14 @@ TEST(PETScBoundary2D, reflection_advection_hypnotoad) {
     auto A = particle_loop_common(dm, 2048);
     auto mesh = std::dynamic_pointer_cast<PetscInterface::DMPlexInterface>(
         A->domain->mesh);
+
+
+    nprint("owned");
+    PetscInterface::check_cell_vertex_ordering(mesh->dmh->dm, true);
+    nprint("halo");
+    PetscInterface::check_cell_vertex_ordering(mesh->dmh_halo->dm, true);
+
+
     auto sycl_target = A->sycl_target;
 
     std::map<PetscInt, std::vector<PetscInt>> boundary_groups;

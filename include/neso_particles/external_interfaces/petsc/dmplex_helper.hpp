@@ -403,6 +403,16 @@ std::tuple<std::shared_ptr<CellDatConst<int>>,
 get_cell_vertices_cdc(SYCLTargetSharedPtr sycl_target,
                       std::shared_ptr<DMPlexHelper> dmh);
 
+/**
+ * Test if cell vertices are in order for a 2D mesh.
+ *
+ * @param dm DMPlex to inspect vertex ordering of.
+ * @param verbose Print non-ordered information to stdout.
+ * @returns True if all found cells have a clockwise or anti-clockwise vertex
+ * ordering.
+ */
+bool check_cell_vertex_ordering(DM dm, const bool verbose); 
+
 } // namespace NESO::Particles::PetscInterface
 
 #endif
