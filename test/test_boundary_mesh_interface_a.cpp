@@ -21,7 +21,7 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
 
   ASSERT_EQ(owned_face_cells, bmi.owned_geom_ids);
 
-  std::map<int, std::vector<std::pair<int, int>>> test_map;
+  std::map<int, std::vector<std::pair<int, INT>>> test_map;
   std::map<int, std::map<int, std::vector<REAL>>> test_data;
   std::map<int, int> test_num_neighbours;
 

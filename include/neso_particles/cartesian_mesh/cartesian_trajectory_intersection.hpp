@@ -433,7 +433,7 @@ public:
                 true);
       }
 
-      std::vector<std::pair<int, int>> new_potentialy_hit_geoms;
+      std::vector<std::pair<int, INT>> new_potentialy_hit_geoms;
       new_potentialy_hit_geoms.reserve(new_geoms.size());
       for (auto &geomx : new_geoms) {
         const int owning_rank = this->mesh->get_face_id_owning_rank(geomx);

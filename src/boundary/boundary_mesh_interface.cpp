@@ -8,14 +8,14 @@ BoundaryMeshInterface::BoundaryMeshInterface(
     const std::vector<INT> &owned_face_cells) {
   this->comm = comm;
   this->sycl_target = sycl_target;
-  this->d_map_geom_id_to_linear_index =
-      std::make_shared<BlockedBinaryTree<INT, INT>>(sycl_target);
 
   MPICHK(MPI_Dist_graph_create(this->comm, 0, nullptr, nullptr, nullptr,
                                MPI_UNWEIGHTED, MPI_INFO_NULL, 0, &this->ncomm));
-
   NESOASSERT(this->ncomm != MPI_COMM_NULL,
              "Failure to setup MPI graph topology.");
+
+  this->d_map_geom_id_to_linear_index =
+      std::make_shared<BlockedBinaryTree<INT, INT>>(sycl_target);
 
   this->d_outgoing_pack_index =
       std::make_shared<BufferDevice<int>>(sycl_target, 8);
@@ -33,22 +33,19 @@ BoundaryMeshInterface::BoundaryMeshInterface(
   }
 }
 
-int BoundaryMeshInterface::get_num_intersection_geoms() const {
+INT BoundaryMeshInterface::get_num_intersection_geoms() const {
   return this->geom_counter;
 }
 
-int BoundaryMeshInterface::get_total_num_exported_geoms() const {
-  return static_cast<int>(this->d_reverse_outgoing_pack_index->size);
+INT BoundaryMeshInterface::get_total_num_exported_geoms() const {
+  return static_cast<INT>(this->d_reverse_outgoing_pack_index->size);
 }
 
 void BoundaryMeshInterface::free() { MPICHK(MPI_Comm_free(&this->ncomm)); }
 
 void BoundaryMeshInterface::extend_exchange_pattern(
-    const std::vector<std::pair<int, int>> &rank_geom_ids) {
+    const std::vector<std::pair<int, INT>> &rank_geom_ids) {
 
-  MPI_Comm comm = this->comm;
-  NESOASSERT(comm != MPI_COMM_NULL,
-             "BoundaryMeshInterface::boundary_init has not been called.");
   NESOASSERT(this->comm != MPI_COMM_NULL,
              "BoundaryMeshInterface::boundary_init has not been called.");
 
@@ -72,7 +69,9 @@ void BoundaryMeshInterface::extend_exchange_pattern(
   // If no rank actually has any new geoms to inform the owner about then there
   // is nothing to do.
   if (map_is_modified) {
-    MPICHK(MPI_Comm_free(&this->ncomm));
+    if (this->ncomm != MPI_COMM_NULL) {
+      MPICHK(MPI_Comm_free(&this->ncomm));
+    }
     this->map_typencomp_alltoallwargs.clear();
     this->reverse_map_typencomp_alltoallwargs.clear();
 
@@ -98,6 +97,9 @@ void BoundaryMeshInterface::extend_exchange_pattern(
                "Failure to setup MPI graph topology.");
 
     // Graph for the evaluation direction
+    if (this->rncomm != MPI_COMM_NULL) {
+      MPICHK(MPI_Comm_free(&this->rncomm));
+    }
     MPICHK(
         reverse_graph_edge_directions(this->comm, this->ncomm, &this->rncomm));
     NESOASSERT(this->rncomm != MPI_COMM_NULL,

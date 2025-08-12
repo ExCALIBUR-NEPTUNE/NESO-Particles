@@ -188,9 +188,12 @@ void CartesianTrajectoryIntersection::function_project(
           [=](auto BOUNDARY_METADATA, auto SYM) {
             if (k_tree_root != nullptr) {
               const INT *index;
-              const bool found =
+              bool found = false;
+              found =
                   k_tree_root->get(BOUNDARY_METADATA.at_ephemeral(1), &index);
+#ifndef NDEBUG
               NESO_KERNEL_ASSERT(found, k_ep);
+#endif
               if (found) {
                 atomic_fetch_add(&k_buffer[*index],
                                  k_inverse_width * SYM.at_ephemeral(component));
@@ -206,9 +209,13 @@ void CartesianTrajectoryIntersection::function_project(
           [=](auto BOUNDARY_METADATA, auto SYM) {
             if (k_tree_root != nullptr) {
               const INT *index;
-              const bool found =
+              bool found = false;
+              found =
                   k_tree_root->get(BOUNDARY_METADATA.at_ephemeral(1), &index);
+#ifndef NDEBUG
               NESO_KERNEL_ASSERT(found, k_ep);
+#endif
+
               if (found) {
                 atomic_fetch_add(&k_buffer[*index],
                                  k_inverse_width * SYM.at(component));
@@ -272,9 +279,12 @@ void CartesianTrajectoryIntersection::function_evaluate(
           [=](auto BOUNDARY_METADATA, auto SYM) {
             if (k_tree_root != nullptr) {
               const INT *index;
-              const bool found =
+              bool found = false;
+              found =
                   k_tree_root->get(BOUNDARY_METADATA.at_ephemeral(1), &index);
+#ifndef NDEBUG
               NESO_KERNEL_ASSERT(found, k_ep);
+#endif
               if (found) {
                 SYM.at_ephemeral(component) = k_buffer[*index];
               }
@@ -289,9 +299,12 @@ void CartesianTrajectoryIntersection::function_evaluate(
           [=](auto BOUNDARY_METADATA, auto SYM) {
             if (k_tree_root != nullptr) {
               const INT *index;
-              const bool found =
+              bool found = false;
+              found =
                   k_tree_root->get(BOUNDARY_METADATA.at_ephemeral(1), &index);
+#ifndef NDEBUG
               NESO_KERNEL_ASSERT(found, k_ep);
+#endif
               if (found) {
                 SYM.at(component) = k_buffer[*index];
               }

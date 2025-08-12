@@ -206,7 +206,7 @@ public:
    * rank has collected and may push data back to the original rank.
    */
   void extend_exchange_pattern(
-      const std::vector<std::pair<int, int>> &rank_geom_ids);
+      const std::vector<std::pair<int, INT>> &rank_geom_ids);
 
   /**
    * Send data from each rank to the owning rank for the data. Collective on the
@@ -292,13 +292,13 @@ public:
    * @returns The number of local faces plus remote faces that could be hit by
    * particles.
    */
-  int get_num_intersection_geoms() const;
+  INT get_num_intersection_geoms() const;
 
   /**
    * @returns The total number of exported geoms across all ranks (including the
    * same geom sent to different ranks).
    */
-  int get_total_num_exported_geoms() const;
+  INT get_total_num_exported_geoms() const;
 
   /**
    * Free underlying resource. Should be called collectively on the
@@ -477,7 +477,7 @@ public:
           .memcpy(k_packed_in, m_packed_in, size_tmp_in * sizeof(T))
           .wait_and_throw();
     }
-    h_packed_in = std::vector<T>{};
+    h_packed_in.clear();
 
     this->exchange_from_device_unpack(k_packed_in, ncomp, d_dst)
         .wait_and_throw();
