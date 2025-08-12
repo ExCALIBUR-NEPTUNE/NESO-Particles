@@ -15,8 +15,8 @@ namespace NESO::Particles {
  * @param[in, out] output_vector Output vector to gather input vectors on.
  */
 template <typename T>
-inline void gather_v(std::vector<T> &input_vector, MPI_Comm comm,
-                     const int root, std::vector<T> &output_vector) {
+void gather_v(std::vector<T> &input_vector, MPI_Comm comm, const int root,
+              std::vector<T> &output_vector) {
 
   int size, rank;
   MPICHK(MPI_Comm_size(comm, &size));
@@ -47,6 +47,13 @@ inline void gather_v(std::vector<T> &input_vector, MPI_Comm comm,
                      comm));
 }
 
+extern template void gather_v(std::vector<REAL> &input_vector, MPI_Comm comm,
+                              const int root, std::vector<REAL> &output_vector);
+extern template void gather_v(std::vector<INT> &input_vector, MPI_Comm comm,
+                              const int root, std::vector<INT> &output_vector);
+extern template void gather_v(std::vector<int> &input_vector, MPI_Comm comm,
+                              const int root, std::vector<int> &output_vector);
+
 /**
  * MPI_Allgatherv for std::vector. Collective on the communicator.
  *
@@ -55,8 +62,8 @@ inline void gather_v(std::vector<T> &input_vector, MPI_Comm comm,
  * @param[in, out] output_vector Output vector to gather input vectors on.
  */
 template <typename T>
-inline void all_gather_v(std::vector<T> &input_vector, MPI_Comm comm,
-                         std::vector<T> &output_vector) {
+void all_gather_v(std::vector<T> &input_vector, MPI_Comm comm,
+                  std::vector<T> &output_vector) {
 
   int size, rank;
   MPICHK(MPI_Comm_size(comm, &size));
@@ -81,6 +88,29 @@ inline void all_gather_v(std::vector<T> &input_vector, MPI_Comm comm,
                         recv_counts.data(), displacements.data(),
                         map_ctype_mpi_type<T>(), comm));
 }
+
+extern template void all_gather_v(std::vector<REAL> &input_vector,
+                                  MPI_Comm comm,
+                                  std::vector<REAL> &output_vector);
+extern template void all_gather_v(std::vector<INT> &input_vector, MPI_Comm comm,
+                                  std::vector<INT> &output_vector);
+extern template void all_gather_v(std::vector<int> &input_vector, MPI_Comm comm,
+                                  std::vector<int> &output_vector);
+
+/**
+ * Create a new graph communicator identical to an existing graph communicator
+ * except the edge directions are reversed. Collective on the communicators.
+ *
+ * @param[in] comm Original communicator graph_comm is created from.
+ * @param[in] graph_comm Graph communicator to duplicate with edge direction
+ * swapped.
+ * @param[in, out] reverse_graph_comm New graph communicator with the same edges
+ * as comm but with the directions reversed.
+ * @returns MPI_SUCCESS on success.
+ */
+[[nodiscard]] int reverse_graph_edge_directions(MPI_Comm comm,
+                                                MPI_Comm graph_comm,
+                                                MPI_Comm *reverse_graph_comm);
 
 } // namespace NESO::Particles
 

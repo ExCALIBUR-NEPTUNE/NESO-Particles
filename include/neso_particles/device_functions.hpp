@@ -607,6 +607,42 @@ VALUE_TYPE joint_reduce(GROUP_TYPE group, VALUE_TYPE *d_first,
 #endif
 }
 
+/**
+ * In place bitonic sort of 8 elements. See the following reference for more
+ * details.
+ *
+ * A Novel Hybrid Quicksort Algorithm Vectorized using AVX-512 on Intel Skylake
+ * DOI: 10.14569/IJACSA.2017.081044
+ *
+ * @param group SYCL group.
+ * @param s_ptr kernel shared memory containing eight values to sort.
+ */
+template <typename GROUP_TYPE, typename VALUE_TYPE>
+inline void bitonic8(GROUP_TYPE group, VALUE_TYPE *s_ptr) {
+  const int i0 = static_cast<int>(group.get_local_id()) % 8;
+
+  constexpr int indices[6][8] = {
+      {1, 0, 3, 2, 5, 4, 7, 6}, {3, 2, 1, 0, 7, 6, 5, 4},
+      {1, 0, 3, 2, 5, 4, 7, 6}, {7, 6, 5, 4, 3, 2, 1, 0},
+      {2, 3, 0, 1, 6, 7, 4, 5}, {1, 0, 3, 2, 5, 4, 7, 6}};
+
+  sycl::group_barrier(group);
+  VALUE_TYPE v0 = s_ptr[i0];
+
+  for (int stagex = 0; stagex < 6; stagex++) {
+    const int i1 = indices[stagex][i0];
+
+    sycl::group_barrier(group);
+    const VALUE_TYPE v1 = s_ptr[i1];
+    const VALUE_TYPE vmax = v1 < v0 ? v0 : v1;
+    const VALUE_TYPE vmin = v1 < v0 ? v1 : v0;
+    v0 = i0 < i1 ? vmin : vmax;
+
+    sycl::group_barrier(group);
+    s_ptr[i0] = v0;
+  }
+}
+
 } // namespace Kernel
 
 } // namespace NESO::Particles

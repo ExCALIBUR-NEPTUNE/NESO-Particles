@@ -57,6 +57,7 @@ TEST(BoundaryTruncation, 2d) {
 
   constexpr REAL reset_distance = std::numeric_limits<REAL>::epsilon();
   auto truncation = std::make_shared<BoundaryTruncation>(2, reset_distance);
+
   truncation->execute(groups.at(0), Sym<REAL>("P"), Sym<REAL>("TSP"),
                       cartesian_trajectory_intersection->previous_position_sym);
 

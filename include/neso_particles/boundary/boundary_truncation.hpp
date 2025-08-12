@@ -26,12 +26,10 @@ inline void truncate_trajectory(
     const REAL k_reset_distance, Access::ParticleDat::Write<REAL> P,
     Access::ParticleDat::Write<REAL> TSP, Access::ParticleDat::Read<REAL> PP,
     Access::ParticleDat::Read<REAL> INTERSECTION_POINT,
-    Access::ParticleDat::Read<REAL> INTERSECTION_NORMAL) {
-  REAL n[3] = {0.0, 0.0, 0.0};
+    [[maybe_unused]] Access::ParticleDat::Read<REAL> INTERSECTION_NORMAL) {
   REAL p[3] = {0.0, 0.0, 0.0};
 
   for (int dx = 0; dx < k_ndim; dx++) {
-    n[dx] = INTERSECTION_NORMAL.at_ephemeral(dx);
     p[dx] = P.at(dx);
   }
 
@@ -62,6 +60,7 @@ inline void truncate_trajectory(
     np[dx] =
         small_move ? PP.at(dx) : INTERSECTION_POINT.at_ephemeral(dx) + o[dx];
   }
+
   // Detect if we moved the particle back past the previous position
   // Both PP - np and PP - IP should have the same sign
   bool moved_past_pp = false;

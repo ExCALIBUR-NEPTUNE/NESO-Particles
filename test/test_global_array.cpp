@@ -1,8 +1,4 @@
-#include <gtest/gtest.h>
-#include <neso_particles.hpp>
-#include <vector>
-
-using namespace NESO::Particles;
+#include "include/test_neso_particles.hpp"
 
 namespace {
 
@@ -13,7 +9,8 @@ public:
       : GlobalArray<T>(sycl_target, size, init_value) {}
 
   inline void test_reduction_set(std::vector<T> &data) {
-    T *d_ptr = this->buffer->d_buffer.ptr;
+    this->impl_pre_loop_add();
+    T *d_ptr = this->d_stage_buffer->ptr;
     const std::size_t size_bytes = sizeof(T) * this->size;
     this->sycl_target->queue.memcpy(d_ptr, data.data(), size_bytes)
         .wait_and_throw();
@@ -68,4 +65,94 @@ TEST(GlobalArray, kernel_add) {
   }
 
   sycl_target->free();
+}
+
+TEST(GlobalArray, repeat_kernel_add) {
+  auto [A, sycl_target, cell_count_t] = particle_loop_common_2d(27, 16, 32);
+
+  auto g0 = std::make_shared<GlobalArray<int>>(sycl_target, 1, 0);
+  g0->fill(0);
+
+  int npart_local = A->get_npart_local();
+  int npart_total = -1;
+  MPICHK(MPI_Allreduce(&npart_local, &npart_total, 1, MPI_INT, MPI_SUM,
+                       MPI_COMM_WORLD));
+
+  auto loop0 =
+      particle_loop(A, [=](auto GA) { GA.add(0, 1); }, Access::add(g0));
+
+  loop0->execute();
+  ASSERT_EQ(g0->get().at(0), npart_total);
+  loop0->execute();
+  ASSERT_EQ(g0->get().at(0), 2 * npart_total);
+
+  sycl_target->free();
+  A->domain->mesh->free();
+}
+
+TEST(GlobalArray, pre_post_calls) {
+  auto [A, sycl_target, cell_count_t] = particle_loop_common_2d(27, 16, 32);
+
+  auto g0 = std::make_shared<GlobalArray<int>>(sycl_target, 1, 0);
+
+  int npart_local = A->get_npart_local();
+  int npart_total = -1;
+  MPICHK(MPI_Allreduce(&npart_local, &npart_total, 1, MPI_INT, MPI_SUM,
+                       MPI_COMM_WORLD));
+
+  g0->fill(0.0);
+  particle_loop(A, [=](auto GA) { GA.add(0, 1); }, Access::add(g0))->execute();
+  ASSERT_EQ(g0->get().at(0), npart_total);
+
+  g0->fill(0.0);
+  ParticleLoopReduction(
+      "foo", A, [=](auto GA) { GA.add(0, 1); }, Access::add(g0))
+      .execute();
+  ASSERT_EQ(g0->get().at(0), npart_total);
+
+  auto aa = particle_sub_group(
+      A, [=](auto ID) { return ID.at(0) % 2; }, Access::read(Sym<INT>("ID")));
+
+  int aa_npart_local = aa->get_npart_local();
+  int aa_npart_total = -1;
+  MPICHK(MPI_Allreduce(&aa_npart_local, &aa_npart_total, 1, MPI_INT, MPI_SUM,
+                       MPI_COMM_WORLD));
+
+  g0->fill(0.0);
+  particle_loop(aa, [=](auto GA) { GA.add(0, 1); }, Access::add(g0))->execute();
+  ASSERT_EQ(g0->get().at(0), aa_npart_total);
+
+  g0->fill(0.0);
+  ParticleLoopSubGroupReduction(
+      "foo", aa, [=](auto GA) { GA.add(0, 1); }, Access::add(g0))
+      .execute();
+  ASSERT_EQ(g0->get().at(0), aa_npart_total);
+
+  // Empty the ParticleGroup
+  A->clear();
+  ASSERT_EQ(A->get_npart_local(), 0);
+  ASSERT_EQ(aa->get_npart_local(), 0);
+
+  g0->fill(0.0);
+  particle_loop(A, [=](auto GA) { GA.add(0, 1); }, Access::add(g0))->execute();
+  ASSERT_EQ(g0->get().at(0), 0);
+
+  g0->fill(0.0);
+  ParticleLoopReduction(
+      "foo", A, [=](auto GA) { GA.add(0, 1); }, Access::add(g0))
+      .execute();
+  ASSERT_EQ(g0->get().at(0), 0);
+
+  g0->fill(0.0);
+  particle_loop(aa, [=](auto GA) { GA.add(0, 1); }, Access::add(g0))->execute();
+  ASSERT_EQ(g0->get().at(0), 0);
+
+  g0->fill(0.0);
+  ParticleLoopSubGroupReduction(
+      "foo", aa, [=](auto GA) { GA.add(0, 1); }, Access::add(g0))
+      .execute();
+  ASSERT_EQ(g0->get().at(0), 0);
+
+  sycl_target->free();
+  A->domain->mesh->free();
 }
