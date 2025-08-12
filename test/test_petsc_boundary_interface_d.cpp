@@ -231,7 +231,7 @@ TEST(PETScBoundary2D, reflection_truncated) {
         Access::read(Sym<REAL>("TSP")));
   };
   auto lambda_partial_moves_remaining = [&](auto aa) -> bool {
-    const int size = aa->get_npart_local();
+    const int size = get_npart_global(aa);
     return size > 0;
   };
   auto lambda_apply_timestep = [&](auto aa) {
@@ -329,7 +329,7 @@ TEST(PETScBoundary2D, reflection_advection) {
           Access::read(Sym<REAL>("TSP")));
     };
     auto lambda_partial_moves_remaining = [&](auto aa) -> bool {
-      const int size = aa->get_npart_local();
+      const int size = get_npart_global(aa);
       return size > 0;
     };
     auto lambda_apply_timestep = [&](auto aa) {

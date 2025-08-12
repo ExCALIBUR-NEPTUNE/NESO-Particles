@@ -165,13 +165,14 @@ protected:
     const bool all_cells = determine_iteration_set(
         this->ncell, cell_start, cell_end, &cell_start_v, &cell_end_v);
 
+    global_info = this->create_global_info(cell_start, cell_end);
+    this->apply_pre_loop(global_info);
+
+    // This early exit is after the pre loop calls as other ranks may have a
+    // non-empty iteration set and collective setup operations in the pre loop.
     if (this->iteration_set_is_empty(cell_start, cell_end)) {
       return false;
     }
-
-    auto t0 = profile_timestamp();
-    global_info = this->create_global_info(cell_start, cell_end);
-    this->apply_pre_loop(global_info);
 
     auto &is = this->iteration_set->iteration_set;
 
@@ -190,8 +191,6 @@ protected:
     }
 
     this->profiling_region_metrics(this->iteration_set->iteration_set_size);
-    this->sycl_target->profile_map.inc(
-        "ParticleLoop", "Init", 1, profile_elapsed(t0, profile_timestamp()));
     return true;
   }
 

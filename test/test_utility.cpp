@@ -66,3 +66,53 @@ TEST(Utility, normal_distribution) {
     ASSERT_TRUE(u0[0][0] == u1[0][0]);
   }
 }
+
+TEST(Utility, decomp_1d) {
+
+  std::size_t N_compute_units = 7;
+  std::size_t N_work_items = 31;
+
+  for (std::size_t ix = 0; ix < N_work_items; ix++) {
+    const std::size_t computed_work_unit =
+        get_decomp_1d_inverse(N_compute_units, N_work_items, ix);
+
+    std::size_t rstart, rend;
+    get_decomp_1d(N_compute_units, N_work_items, computed_work_unit, &rstart,
+                  &rend);
+
+    ASSERT_TRUE(rstart <= ix);
+    ASSERT_TRUE(ix < rend);
+  }
+
+  N_compute_units = 8;
+  N_work_items = 32;
+
+  for (std::size_t ix = 0; ix < N_work_items; ix++) {
+    const std::size_t computed_work_unit =
+        get_decomp_1d_inverse(N_compute_units, N_work_items, ix);
+
+    std::size_t rstart, rend;
+    get_decomp_1d(N_compute_units, N_work_items, computed_work_unit, &rstart,
+                  &rend);
+
+    ASSERT_TRUE(rstart <= ix);
+    ASSERT_TRUE(ix < rend);
+  }
+}
+
+TEST(Utility, flatten_map) {
+
+  std::set<int> s, t;
+  std::map<int, int> m;
+  for (int ix = 0; ix < 37; ix++) {
+    s.insert(ix + 100);
+    m[ix] = ix + 100;
+  }
+
+  auto n = flatten_map(m);
+  for (int nx : n) {
+    t.insert(nx);
+  }
+
+  ASSERT_EQ(s, t);
+}

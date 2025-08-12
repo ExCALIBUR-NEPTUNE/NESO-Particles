@@ -18,18 +18,12 @@ template <typename T> struct AtomicBlockRNG {
   int *RESTRICT counter;
   T const *RESTRICT d_ptr;
   inline T at(const Access::LoopIndex::Read &, const int, bool *valid_sample) {
-    sycl::atomic_ref<int, sycl::memory_order::relaxed,
-                     sycl::memory_scope::device>
-        element_atomic(this->counter[0]);
-    const int index = element_atomic.fetch_add(1);
+    const int index = atomic_fetch_add(&this->counter[0], 1);
     bool valid_tmp = (index < buffer_size) && (0 <= index);
 
-    sycl::atomic_ref<int, sycl::memory_order::relaxed,
-                     sycl::memory_scope::device>
-        poison_atomic(this->counter[1]);
-
     const int to_poison_int = static_cast<int>(!valid_tmp);
-    const int already_poisoned_int = poison_atomic.fetch_max(to_poison_int);
+    const int already_poisoned_int =
+        atomic_fetch_max(&this->counter[1], to_poison_int);
 
     valid_tmp = valid_tmp && (!already_poisoned_int);
     *valid_sample = valid_tmp;
@@ -288,13 +282,16 @@ public:
  *
  * @param func Host function which takes no arguments and returns a single
  * value of type T when called.
+ * @param num_components Number of samples required per particle in the kernel.
  * @param block_size Optional block size to sample RNG values and copy to the
  * device in.
  */
 template <typename T, typename FUNC_TYPE>
 inline std::shared_ptr<HostAtomicBlockKernelRNG<T>>
-host_atomic_block_kernel_rng(FUNC_TYPE func, const int block_size = 8192) {
-  return std::make_shared<HostAtomicBlockKernelRNG<T>>(func, block_size);
+host_atomic_block_kernel_rng(FUNC_TYPE func, const int num_components,
+                             const int block_size = 8192) {
+  return std::make_shared<HostAtomicBlockKernelRNG<T>>(func, num_components,
+                                                       block_size);
 }
 
 } // namespace NESO::Particles

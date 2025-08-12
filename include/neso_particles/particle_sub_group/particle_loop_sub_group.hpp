@@ -80,7 +80,6 @@ protected:
       ParticleLoopImplementation::ParticleLoopGlobalInfo &global_info,
       const std::optional<int> cell_start = std::nullopt,
       const std::optional<int> cell_end = std::nullopt) {
-    auto t0 = profile_timestamp();
     this->profiling_region_init();
 
     // If the loop is called cell wise asynchronously then the call over cell i
@@ -100,10 +99,6 @@ protected:
     const bool all_cells = determine_iteration_set(
         this->ncell, cell_start, cell_end, &cell_start_v, &cell_end_v);
 
-    if (this->iteration_set_is_empty(cell_start, cell_end)) {
-      return false;
-    }
-
     auto selection = this->particle_sub_group->get_selection();
     this->setup_subgroup_is(selection);
     k_map_cells_to_particles = selection.d_map_cells_to_particles;
@@ -111,6 +106,12 @@ protected:
     global_info = this->create_global_info(cell_start, cell_end);
     global_info.particle_sub_group = this->particle_sub_group.get();
     this->apply_pre_loop(global_info);
+
+    // This early exit is after the pre loop calls as other ranks may have a
+    // non-empty iteration set and collective setup operations in the pre loop.
+    if (this->iteration_set_is_empty(cell_start, cell_end)) {
+      return false;
+    }
 
     this->profiling_region_metrics(this->iteration_set->iteration_set_size);
 
@@ -128,10 +129,6 @@ protected:
                                                global_info.local_size, 0,
                                                this->iteration_set_stride);
     }
-
-    this->sycl_target->profile_map.inc(
-        "ParticleLoopSubGroup", "Init", 1,
-        profile_elapsed(t0, profile_timestamp()));
 
     return true;
   }

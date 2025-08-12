@@ -82,7 +82,9 @@ inline std::string get_test_root_file(std::string name) {
   {                                                                            \
     x = get_test_resource(y);                                                  \
     if (x.empty()) {                                                           \
-      GTEST_SKIP() << "Skipping test as resource missing: " << y;              \
+      GTEST_SKIP()                                                             \
+          << "Skipping test as resource missing: " << y                        \
+          << "See environment variable NESO_PARTICLES_TEST_RESOURCES_DIR.";    \
     }                                                                          \
   }
 #endif

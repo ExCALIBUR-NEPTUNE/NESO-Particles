@@ -92,11 +92,13 @@ void CellSubGroupSelector::create(Selection *created_selection) {
     std::vector<int *> tmp = {pg_map_layers->ptr, d_npart_cell_ptr};
     this->map_ptrs->set(tmp);
 
+    this->pre_process_npart_cell(sycl_target, cell_count, d_npart_cell_ptr);
     if (range_cell_count == 1) {
       this->loop_0->execute(this->cell_start);
     } else {
       this->loop_0->execute(this->cell_start, this->cell_end);
     }
+    this->post_process_npart_cell(sycl_target, cell_count, d_npart_cell_ptr);
 
     if (range_cell_count > 0) {
       sycl_target->queue

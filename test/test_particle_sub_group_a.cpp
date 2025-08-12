@@ -209,7 +209,7 @@ TEST(ParticleSubGroup, particle_loop) {
   auto aa = std::make_shared<ParticleSubGroup>(
       A, [=](auto ID) { return ID[0] == 2; }, Access::read(Sym<INT>("ID")));
 
-  GlobalArray<int> counter(sycl_target, 1, 0);
+  auto counter = std::make_shared<GlobalArray<int>>(sycl_target, 1, 0);
 
   auto pl_counter = particle_loop(
       aa, [=](Access::GlobalArray::Add<int> G1) { G1.add(0, 1); },
@@ -217,7 +217,7 @@ TEST(ParticleSubGroup, particle_loop) {
 
   pl_counter->execute();
 
-  auto vector_c = counter.get();
+  auto vector_c = counter->get();
   EXPECT_EQ(vector_c.at(0), 1);
 
   auto bb = std::make_shared<TestParticleSubGroup>(
