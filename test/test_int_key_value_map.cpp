@@ -232,7 +232,7 @@ TEST(LookupTable, particle_loop) {
         .parallel_for(sycl::range<1>(Nkeys + 8),
                       [=](auto idx) {
                         const int key = static_cast<int>(idx) - 4;
-                        const ValueType *v;
+                        const ValueType *v = nullptr;
                         const bool exists = k_lut->get(key, &v);
 
                         if ((-1 < key) && (key < Nkeys) && (key % 2 == 0)) {
@@ -326,7 +326,7 @@ TEST(BlockedBinaryTree, particle_loop) {
         .parallel_for(sycl::range<1>(Nkeys + 8),
                       [=](auto idx) {
                         const int key = static_cast<int>(idx) - 4;
-                        const ValueType *v;
+                        const ValueType *v = nullptr;
                         const bool exists = k_bbt->get(key, &v);
 
                         if ((-1 < key) && (key < Nkeys) && (key % 2 == 0)) {
