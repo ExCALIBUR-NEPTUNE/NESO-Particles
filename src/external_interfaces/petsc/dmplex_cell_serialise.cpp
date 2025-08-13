@@ -21,6 +21,7 @@ void CellSTDRepresentation::traverse_cell_specification(
   const PetscInt *cone;
   PETSCCHK(DMPlexGetCone(dm, index, &cone));
 
+
   for (int cx = 0; cx < cone_size; cx++) {
     const PetscInt child_index = cone[cx];
     traverse_cell_specification(dm, child_index, map_per_height);
@@ -44,11 +45,18 @@ CellSTDRepresentation::CellSTDRepresentation(
       PetscInt cone_size;
       PETSCCHK(DMPlexGetConeSize(dm, ix, &cone_size));
       const PetscInt *cone;
-      PETSCCHK(DMPlexGetCone(dm, ix, &cone));
+      const PetscInt *ornt;
+
+      PETSCCHK(DMPlexGetOrientedCone(dm, ix, &cone, &ornt));
+
       this->point_specs[point_rename].reserve(cone_size);
+      this->cone_orientations[point_rename].reserve(cone_size);
       for (PetscInt px = 0; px < cone_size; px++) {
         this->point_specs[point_rename].push_back(rename_function(cone[px]));
+        this->cone_orientations[point_rename].push_back(ornt[px]);
       }
+
+      PETSCCHK(DMPlexRestoreOrientedCone(dm, ix, &cone, &ornt));
     }
   }
 
@@ -66,6 +74,26 @@ CellSTDRepresentation::CellSTDRepresentation(
     PETSCCHK(
         DMPlexRestoreCellCoordinates(dm, vx, &is_dg, &nc, &array, &coords));
   }
+  
+  if (rename_function(index) == 27){
+    nprint("prining packed 27");
+    this->print();
+
+
+  const PetscInt *ornt;
+  const PetscInt *cone;
+  PetscInt cone_size;
+
+  PETSCCHK(DMPlexGetConeSize(dm, index, &cone_size));
+  PETSCCHK(DMPlexGetOrientedCone(dm, index, &cone, &ornt));
+  for(int cx=0 ; cx<cone_size ; cx++){
+    nprint("height:", height, "cx:", cx, "cone local:", cone[cx], "cone global:", rename_function(cone[cx]), "orient:", ornt[cx]);
+  }
+  PETSCCHK(DMPlexRestoreOrientedCone(dm, index, &cone, &ornt));
+
+  }
+
+
 }
 
 PetscInt CellSTDRepresentation::get_point_depth(const PetscInt point) {
@@ -123,6 +151,9 @@ void CellSTDRepresentation::serialise(std::vector<std::byte> &buffer) {
     buffer_int.push_back(point_spec.first);
     buffer_int.push_back(point_spec.second.size());
     for (auto spec : point_spec.second) {
+      buffer_int.push_back(spec);
+    }
+    for (auto spec : this->cone_orientations.at(point_spec.first)) {
       buffer_int.push_back(spec);
     }
   }
@@ -185,6 +216,14 @@ void CellSTDRepresentation::deserialise(const std::vector<std::byte> &buffer) {
       cone_elements.push_back(child_index);
     }
     this->point_specs[point] = cone_elements;
+
+    std::vector<PetscInt> orientation_elements;
+    orientation_elements.reserve(cone_size);
+    for (int cx = 0; cx < cone_size; cx++) {
+      const PetscInt ornt = buffer_int.at(index++);
+      orientation_elements.push_back(ornt);
+    }
+    this->cone_orientations[point] = orientation_elements;
   }
 
   size_t index_scalar = 0;

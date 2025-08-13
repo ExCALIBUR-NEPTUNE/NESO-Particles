@@ -80,6 +80,10 @@ bool dm_from_serialised_cells(
 
   if (num_cells > 0) {
 
+
+    // TODO REMOVE
+    std::set<PetscInt> gids = {27, 663, 424, 671, 432, 1373, 904, 920, 921};
+
     PetscInt tmp_int;
     PETSCCHK(DMGetDimension(dm_prototype, &tmp_int));
     PETSCCHK(DMSetDimension(dm, tmp_int));
@@ -100,6 +104,11 @@ bool dm_from_serialised_cells(
               index_mapper.get_local_point_index(global_point);
           const PetscInt cone_size = point_spec.second.size();
           PETSCCHK(DMPlexSetConeSize(dm, local_point, cone_size));
+
+          if (gids.count(global_point)) {
+              nprint("I: global:", global_point,
+                     "local:", index_mapper.get_local_point_index(global_point));
+          }
         }
       }
     }
@@ -120,7 +129,21 @@ bool dm_from_serialised_cells(
           for (auto gx : cone_global) {
             cone_local.push_back(index_mapper.get_local_point_index(gx));
           }
+          // TODO
+          if (global_point == 27){
+            nprint("unpack cone 27:");
+            for (auto gx : cone_global) {
+              nprint("global:", gx,
+                     "local:", index_mapper.get_local_point_index(gx));
+            }
+            std_cell.print();
+          }
+
           PETSCCHK(DMPlexSetCone(dm, local_point, cone_local.data()));
+          PETSCCHK(DMPlexSetConeOrientation(
+              dm, local_point,
+              std_cell.cone_orientations.at(global_point).data()));
+
           if (!map_local_lid_remote_lid.count(local_point)) {
             map_local_lid_remote_lid[local_point] = {-1, -1, global_point};
           }
@@ -131,6 +154,26 @@ bool dm_from_serialised_cells(
     PETSCCHK(DMPlexSymmetrize(dm));
     PETSCCHK(DMPlexStratify(dm));
 
+    {
+    nprint("TEST LOCAL CONE ORENT START");
+
+
+    PetscInt cone_size;
+    const PetscInt *cone;
+    PetscInt index = 247;
+    
+    PETSCCHK(DMPlexGetConeSize(dm, index, &cone_size));
+    const PetscInt *ornt;
+    PETSCCHK(DMPlexGetOrientedCone(dm, index, &cone, &ornt));
+    for(int cx=0 ; cx<cone_size ; cx++){
+      nprint("cx:", cx, "cone:", cone[cx], "orient:", ornt[cx]);
+    }
+    PETSCCHK(DMPlexRestoreOrientedCone(dm, index, &cone, &ornt));
+
+    nprint("TEST LOCAL CONE ORENT END");
+    }
+    
+
     PetscInt vertex_start, vertex_end;
     index_mapper.get_depth_stratum(0, &vertex_start, &vertex_end);
     setup_coordinate_section(dm, vertex_start, vertex_end);
@@ -139,16 +182,26 @@ bool dm_from_serialised_cells(
     PetscInterface::setup_local_coordinate_vector(dm, coordinates);
     PETSCCHK(VecGetArray(coordinates, &coords));
 
+    points_set.clear();
     // write coordinates of vertices
     for (auto &std_cell : std_rep_cells) {
       for (const auto &point_vertex : std_cell.vertices) {
         const PetscInt global_point = point_vertex.first;
-        const PetscInt local_point =
-            index_mapper.get_local_point_index(global_point);
-        const PetscInt vertex_index = local_point - vertex_start;
-        for (PetscInt dimx = 0; dimx < ndim_coord; dimx++) {
-          const PetscScalar value = point_vertex.second.at(dimx);
-          coords[vertex_index * ndim_coord + dimx] = value;
+        if (!points_set.count(global_point)) {
+          points_set.insert(global_point);
+          const PetscInt local_point =
+              index_mapper.get_local_point_index(global_point);
+          const PetscInt vertex_index = local_point - vertex_start;
+          for (PetscInt dimx = 0; dimx < ndim_coord; dimx++) {
+            const PetscScalar value = point_vertex.second.at(dimx);
+            coords[vertex_index * ndim_coord + dimx] = value;
+          }
+          if (gids.count(global_point)) {
+            nprint(global_point, "->", coords[vertex_index * ndim_coord + 0],
+                   coords[vertex_index * ndim_coord + 1]);
+              nprint("global:", global_point,
+                     "local:", index_mapper.get_local_point_index(global_point));
+          }
         }
       }
     }
@@ -156,6 +209,25 @@ bool dm_from_serialised_cells(
     PETSCCHK(VecRestoreArray(coordinates, &coords));
     PETSCCHK(DMSetCoordinatesLocal(dm, coordinates));
     PETSCCHK(VecDestroy(&coordinates));
+  }
+  {
+  const PetscInt petsc_index = 247;
+  const PetscScalar *tmp;
+  PetscScalar *vertices = nullptr;
+  PetscInt num_crossings = 0, num_coords;
+  PetscBool is_dg;
+
+  PETSCCHK(DMPlexGetCellCoordinates(dm, petsc_index, &is_dg, &num_coords, &tmp,
+                                    &vertices));
+  
+  nprint("coords:");
+  for(int px=0 ; px<4 ; px++){
+    nprint(vertices[2 * px + 0], vertices[2 * px + 1]);
+  }
+
+  PETSCCHK(DMPlexRestoreCellCoordinates(dm, petsc_index, &is_dg, &num_coords,
+                                        &tmp, &vertices));
+
   }
 
   return num_cells > 0;
@@ -709,7 +781,7 @@ bool check_cell_vertex_ordering(DM dm, const bool verbose){
         };
 
         if (PX){
-          nprint("FOUND POSSIBLE GEOM");
+          nprint("FOUND POSSIBLE GEOM", point, is_dg == PETSC_TRUE);
           lambda_print_ordering();
         }
         
@@ -736,8 +808,8 @@ bool check_cell_vertex_ordering(DM dm, const bool verbose){
           //}
           
           if (PX && is_problem && (!printed)){
-
             nprint("PROBLEM START");
+            nprint("point index:", point);
             nprint(vertex_i, vertex_j, is_edge_a, is_edge_b);
             lambda_print_ordering();
             nprint("PROBLEM END");

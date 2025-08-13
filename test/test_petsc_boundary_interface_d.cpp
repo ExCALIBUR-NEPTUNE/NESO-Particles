@@ -281,6 +281,11 @@ TEST(PETScBoundary2D, reflection_advection) {
         A->domain->mesh);
     auto sycl_target = A->sycl_target;
 
+    nprint("owned");
+    PetscInterface::check_cell_vertex_ordering(mesh->dmh->dm, true);
+    nprint("halo");
+    PetscInterface::check_cell_vertex_ordering(mesh->dmh_halo->dm, true);
+
     std::map<PetscInt, std::vector<PetscInt>> boundary_groups;
     boundary_groups[1] = {1, 2, 3, 4};
 
@@ -395,7 +400,8 @@ TEST(PETScBoundary2D, foo) {
 TEST(PETScBoundary2D, reflection_advection_hypnotoad) {
   PETSCCHK(PetscInitializeNoArguments());
   std::string mesh_file;
-  GET_TEST_RESOURCE(mesh_file, "dmplex/mesh_hypnotoad.msh");
+  //GET_TEST_RESOURCE(mesh_file, "dmplex/mesh_hypnotoad.msh");
+  GET_TEST_RESOURCE(mesh_file, "dmplex/mesh_hypnotoad_anticlockwise_vertices.msh");
   // // uncomment for test with a .h5 input
   // GET_TEST_RESOURCE(mesh_file, "dmplex/mesh_hypnotoad.h5");
   if (mesh_file.size()) {
@@ -422,6 +428,33 @@ TEST(PETScBoundary2D, reflection_advection_hypnotoad) {
     auto mesh = std::dynamic_pointer_cast<PetscInterface::DMPlexInterface>(
         A->domain->mesh);
 
+    nprint("petsc check owned");
+    PETSCCHK(DMPlexCheckFaces(mesh->dmh->dm, 0));
+    //nprint("petsc check halo");
+    //PETSCCHK(DMPlexCheckFaces(mesh->dmh_halo->dm, 0));
+
+    std::function<PetscInt(PetscInt)> identity_rename = [](auto ix){
+      return ix;
+    };
+
+    nprint("point27 START");
+    PetscInterface::CellSTDRepresentation point27(
+      mesh->dmh->dm,
+      27,
+      identity_rename
+    );
+
+    point27.print();
+
+    nprint("point27 END");
+
+    nprint("local to global ------------- start");
+    nprint(27, "->", mesh->dmh->get_point_global_index(27));
+    nprint(129, "->", mesh->dmh->get_point_global_index(129));
+    nprint(130, "->", mesh->dmh->get_point_global_index(130));
+    nprint(139, "->", mesh->dmh->get_point_global_index(139));
+    nprint(140, "->", mesh->dmh->get_point_global_index(140));
+    nprint("local to global ------------- end");
 
     nprint("owned");
     PetscInterface::check_cell_vertex_ordering(mesh->dmh->dm, true);
