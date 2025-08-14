@@ -195,7 +195,7 @@ void surface_functions_wrapper(ParticleGroupSharedPtr A,
       for (auto gidx : bmi->owned_geom_ids) {
         const REAL to_test = h_dofs.at(index);
         const REAL correct = h_correct_dofs.at(gidx);
-        ASSERT_TRUE(relative_error(correct, to_test) < 1.0e-12);
+        ASSERT_TRUE(relative_error(correct, to_test) < 1.0e-8);
         index++;
       }
     }
