@@ -97,7 +97,7 @@ struct HaloDMIndexMapper {
 
       std::map<PetscInt, std::set<PetscInt>> map_depth_to_points;
       for (auto &cx : cells) {
-        for (auto &px : cx.point_specs) {
+        for (auto &px : cx.point_cones) {
           const auto point = px.first;
           const auto depth = cx.get_point_depth(point);
           map_depth_to_points[depth].insert(point);

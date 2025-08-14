@@ -44,11 +44,18 @@ CellSTDRepresentation::CellSTDRepresentation(
       PetscInt cone_size;
       PETSCCHK(DMPlexGetConeSize(dm, ix, &cone_size));
       const PetscInt *cone;
-      PETSCCHK(DMPlexGetCone(dm, ix, &cone));
-      this->point_specs[point_rename].reserve(cone_size);
+      const PetscInt *ornt;
+
+      PETSCCHK(DMPlexGetOrientedCone(dm, ix, &cone, &ornt));
+
+      this->point_cones[point_rename].reserve(cone_size);
+      this->point_cone_orientations[point_rename].reserve(cone_size);
       for (PetscInt px = 0; px < cone_size; px++) {
-        this->point_specs[point_rename].push_back(rename_function(cone[px]));
+        this->point_cones[point_rename].push_back(rename_function(cone[px]));
+        this->point_cone_orientations[point_rename].push_back(ornt[px]);
       }
+
+      PETSCCHK(DMPlexRestoreOrientedCone(dm, ix, &cone, &ornt));
     }
   }
 
@@ -69,11 +76,11 @@ CellSTDRepresentation::CellSTDRepresentation(
 }
 
 PetscInt CellSTDRepresentation::get_point_depth(const PetscInt point) {
-  NESOASSERT(point_specs.count(point), "Unknown point index.");
+  NESOASSERT(point_cones.count(point), "Unknown point index.");
   if (this->map_to_depth.count(point)) {
     return this->map_to_depth.at(point);
-  } else if (point_specs.at(point).size()) {
-    const PetscInt d = this->get_point_depth(point_specs.at(point).at(0)) + 1;
+  } else if (point_cones.at(point).size()) {
+    const PetscInt d = this->get_point_depth(point_cones.at(point).at(0)) + 1;
     this->map_to_depth[point] = d;
     return d;
   } else {
@@ -85,7 +92,7 @@ PetscInt CellSTDRepresentation::get_point_depth(const PetscInt point) {
 PetscInt CellSTDRepresentation::get_depth() {
   PetscInt d_max = std::numeric_limits<PetscInt>::lowest();
   PetscInt d_min = std::numeric_limits<PetscInt>::max();
-  for (const auto &point : this->point_specs) {
+  for (const auto &point : this->point_cones) {
     const auto d = this->get_point_depth(point.first);
     d_max = std::max(d_max, d);
     d_min = std::min(d_min, d);
@@ -96,7 +103,7 @@ PetscInt CellSTDRepresentation::get_depth() {
 
 void CellSTDRepresentation::print() {
   nprint("specification:");
-  for (auto hx : point_specs) {
+  for (auto hx : point_cones) {
     nprint(std::to_string(hx.first) + ":");
     for (auto px : hx.second) {
       nprint("  ", px);
@@ -118,11 +125,14 @@ void CellSTDRepresentation::serialise(std::vector<std::byte> &buffer) {
   std::vector<PetscScalar> buffer_scalar;
 
   // push the point specifications
-  buffer_int.push_back(this->point_specs.size());
-  for (auto point_spec : this->point_specs) {
+  buffer_int.push_back(this->point_cones.size());
+  for (auto point_spec : this->point_cones) {
     buffer_int.push_back(point_spec.first);
     buffer_int.push_back(point_spec.second.size());
     for (auto spec : point_spec.second) {
+      buffer_int.push_back(spec);
+    }
+    for (auto spec : this->point_cone_orientations.at(point_spec.first)) {
       buffer_int.push_back(spec);
     }
   }
@@ -184,7 +194,15 @@ void CellSTDRepresentation::deserialise(const std::vector<std::byte> &buffer) {
       const PetscInt child_index = buffer_int.at(index++);
       cone_elements.push_back(child_index);
     }
-    this->point_specs[point] = cone_elements;
+    this->point_cones[point] = cone_elements;
+
+    std::vector<PetscInt> orientation_elements;
+    orientation_elements.reserve(cone_size);
+    for (int cx = 0; cx < cone_size; cx++) {
+      const PetscInt ornt = buffer_int.at(index++);
+      orientation_elements.push_back(ornt);
+    }
+    this->point_cone_orientations[point] = orientation_elements;
   }
 
   size_t index_scalar = 0;
