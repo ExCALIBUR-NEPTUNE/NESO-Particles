@@ -30,7 +30,9 @@ protected:
 
 public:
   /// Map from a point to the points that form the cone for the point.
-  std::map<PetscInt, std::vector<PetscInt>> point_specs;
+  std::map<PetscInt, std::vector<PetscInt>> point_cones;
+  /// Map from a point to the orientations for each point in the cone.
+  std::map<PetscInt, std::vector<PetscInt>> point_cone_orientations;
   /// Map from points which are vertices to the coordinates.
   std::map<PetscInt, std::vector<PetscScalar>> vertices;
 

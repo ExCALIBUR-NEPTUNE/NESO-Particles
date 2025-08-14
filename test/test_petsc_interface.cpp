@@ -383,7 +383,8 @@ TEST(PETSc, dm_cell_linearise) {
   spec_copy.deserialise(spec_buffer);
 
   ASSERT_EQ(spec.vertices, spec_copy.vertices);
-  ASSERT_EQ(spec.point_specs, spec_copy.point_specs);
+  ASSERT_EQ(spec.point_cones, spec_copy.point_cones);
+  ASSERT_EQ(spec.point_cone_orientations, spec_copy.point_cone_orientations);
 
   PETSCCHK(DMDestroy(&dm));
   PETSCCHK(PetscFinalize());

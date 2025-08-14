@@ -92,7 +92,7 @@ bool dm_from_serialised_cells(
 
     std::set<PetscInt> points_set;
     for (auto &std_cell : std_rep_cells) {
-      for (auto &point_spec : std_cell.point_specs) {
+      for (auto &point_spec : std_cell.point_cones) {
         const PetscInt global_point = point_spec.first;
         if (!points_set.count(global_point)) {
           points_set.insert(global_point);
@@ -108,7 +108,7 @@ bool dm_from_serialised_cells(
     std::vector<PetscInt> cone_local;
     points_set.clear();
     for (auto &std_cell : std_rep_cells) {
-      for (auto &point_spec : std_cell.point_specs) {
+      for (auto &point_spec : std_cell.point_cones) {
         const PetscInt global_point = point_spec.first;
         if (!points_set.count(global_point)) {
           points_set.insert(global_point);
@@ -121,6 +121,9 @@ bool dm_from_serialised_cells(
             cone_local.push_back(index_mapper.get_local_point_index(gx));
           }
           PETSCCHK(DMPlexSetCone(dm, local_point, cone_local.data()));
+          PETSCCHK(DMPlexSetConeOrientation(
+              dm, local_point,
+              std_cell.point_cone_orientations.at(global_point).data()));
           if (!map_local_lid_remote_lid.count(local_point)) {
             map_local_lid_remote_lid[local_point] = {-1, -1, global_point};
           }
