@@ -6,6 +6,62 @@
 
 using namespace NESO::Particles;
 
+TEST(DeviceFunctions, consistent_line_orientation_2d) {
+
+  REAL ax, ay, bx, by;
+  REAL ix, iy, jx, jy;
+  {
+    ax = 1.0;
+    ay = 2.0;
+    bx = 3.0;
+    by = 4.0;
+    consistent_line_orientation_2d(ax, ay, bx, by, &ix, &iy, &jx, &jy);
+    ASSERT_EQ(ax, ix);
+    ASSERT_EQ(ay, iy);
+    ASSERT_EQ(bx, jx);
+    ASSERT_EQ(by, jy);
+    consistent_line_orientation_2d(bx, by, ax, ay, &ix, &iy, &jx, &jy);
+    ASSERT_EQ(ax, ix);
+    ASSERT_EQ(ay, iy);
+    ASSERT_EQ(bx, jx);
+    ASSERT_EQ(by, jy);
+  }
+
+  {
+    ax = 1.0;
+    ay = 4.0;
+    bx = 1.0;
+    by = 2.0;
+    consistent_line_orientation_2d(ax, ay, bx, by, &ix, &iy, &jx, &jy);
+    ASSERT_EQ(bx, ix);
+    ASSERT_EQ(by, iy);
+    ASSERT_EQ(ax, jx);
+    ASSERT_EQ(ay, jy);
+    consistent_line_orientation_2d(bx, by, ax, ay, &ix, &iy, &jx, &jy);
+    ASSERT_EQ(bx, ix);
+    ASSERT_EQ(by, iy);
+    ASSERT_EQ(ax, jx);
+    ASSERT_EQ(ay, jy);
+  }
+
+  {
+    ax = 1.0;
+    ay = 2.0;
+    bx = 3.0;
+    by = 2.0;
+    consistent_line_orientation_2d(ax, ay, bx, by, &ix, &iy, &jx, &jy);
+    ASSERT_EQ(ax, ix);
+    ASSERT_EQ(ay, iy);
+    ASSERT_EQ(bx, jx);
+    ASSERT_EQ(by, jy);
+    consistent_line_orientation_2d(bx, by, ax, ay, &ix, &iy, &jx, &jy);
+    ASSERT_EQ(ax, ix);
+    ASSERT_EQ(ay, iy);
+    ASSERT_EQ(bx, jx);
+    ASSERT_EQ(by, jy);
+  }
+}
+
 TEST(DeviceFunctions, line_segment_intersection_inner) {
 
   REAL l0, l1;

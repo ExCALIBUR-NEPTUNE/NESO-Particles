@@ -448,10 +448,18 @@ bool DMPlexHelper::cell_contains_point(const PetscInt index,
   }
 
   for (int facex = 0; facex < num_faces; facex++) {
-    REAL xi = vertices[faces[2 * facex + 0] * 2 + 0];
-    REAL yi = vertices[faces[2 * facex + 0] * 2 + 1];
-    REAL xj = vertices[faces[2 * facex + 1] * 2 + 0];
-    REAL yj = vertices[faces[2 * facex + 1] * 2 + 1];
+    const REAL xi_t = vertices[faces[2 * facex + 0] * 2 + 0];
+    const REAL yi_t = vertices[faces[2 * facex + 0] * 2 + 1];
+    const REAL xj_t = vertices[faces[2 * facex + 1] * 2 + 0];
+    const REAL yj_t = vertices[faces[2 * facex + 1] * 2 + 1];
+
+    REAL xi = 0.0;
+    REAL yi = 0.0;
+    REAL xj = 0.0;
+    REAL yj = 0.0;
+
+    consistent_line_orientation_2d(xi_t, yi_t, xj_t, yj_t, &xi, &yi, &xj, &yj);
+
     // Is the point in a corner
     if ((x0 == xj) && (x1 == yj)) {
       num_crossings = 1;

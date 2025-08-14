@@ -87,6 +87,34 @@ template <int N, typename T> inline T dot_product(const T *a, const T *b) {
 } // namespace Kernel
 
 /**
+ * For a line segment [ax, ay] - [bx, by] return ix,iy,jx,jy such that [ix, iy]
+ * - [jx, jy] is the same line segment as [ax, ay] - [bx, by] but the outputs
+ * are independent of the order in which a and b are specified. i.e. the
+ * direction of the output line segment is always in the same direction.
+ *
+ * @param[in] ax First point of line segment, x coordinate.
+ * @param[in] ay First point of line segment, y coordinate.
+ * @param[in] bx Second point of line segment, x coordinate.
+ * @param[in] by Second point of line segment, y coordinate.
+ * @param[in, out] ix First point of output line segment, x coordinate.
+ * @param[in, out] iy First point of output line segment, y coordinate.
+ * @param[in, out] jx Second point of output line segment, x coordinate.
+ * @param[in, out] jy Second point of output line segment, y coordinate.
+ */
+inline void consistent_line_orientation_2d(const REAL ax, const REAL ay,
+                                           const REAL bx, const REAL by,
+                                           REAL *ix, REAL *iy, REAL *jx,
+                                           REAL *jy) {
+  const bool axfirst = ax < bx;
+  const bool ayfirst = ay < by;
+  const bool afirst = ax == bx ? ayfirst : axfirst;
+  *ix = afirst ? ax : bx;
+  *iy = afirst ? ay : by;
+  *jx = afirst ? bx : ax;
+  *jy = afirst ? by : ay;
+}
+
+/**
  * Compute the intersection point parameter (lambda0, lambda1) for the lines
  * [(xa, ya), (xb, yb)] and [(x0, y0), (x1, y1)].
  * Assuming that x1 - x0 != 0 and that the lines are not parallel.
