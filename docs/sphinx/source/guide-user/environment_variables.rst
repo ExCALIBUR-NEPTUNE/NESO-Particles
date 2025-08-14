@@ -29,3 +29,5 @@ The behaviour of NESO-Particles can be configured at runtime by various environm
      - Allows the tests to be ran from a different directory. By default NESO-Particles is built and installed with the test binaries. These binaries are installed in a different location to the test resources and hence cannot find the test resources. This variable should be set to an absolute path to a copy of `test/test_resources`.
    * - ``NESO_PARTICLES_TEST_TMP_DIR``
      - Configures which directory should be used as a temporary directory for running tests. This directory should be visible from all MPI ranks and hence on a distributed memory system will probably need to be set to run the tests in a multinode configuration. The default setting is the value returned from `std::filesystem::current_path()`.
+   * - ``NESO_PARTICLES_DMPLEX_CHECK_FACES``
+     - Default 1. When set to a non-zero value enables self checking of the vertex ordering in DMPlex meshes passed to the DMPlexInterface and the generated halo DMPlex.

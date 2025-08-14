@@ -202,6 +202,13 @@ DMPlexInterface::DMPlexInterface(DM dm, const int subdivision_order_offset,
   ExternalCommon::MHGeomMap mh_element_map;
   this->claim_mesh_hierarchy_cells(mh_element_map);
   this->create_halos(mh_element_map);
+
+  if (get_env_size_t("NESO_PARTICLES_DMPLEX_CHECK_FACES", 1)) {
+    PETSCCHK(DMPlexCheckFaces(this->dmh->dm, 0));
+    if (this->dmh_halo != nullptr) {
+      PETSCCHK(DMPlexCheckFaces(this->dmh_halo->dm, 0));
+    }
+  }
 }
 
 void DMPlexInterface::free() {
