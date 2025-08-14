@@ -24,11 +24,16 @@ set(TEST_SRCS
     ${TEST_DIR}/test_algorithms_a.cpp
     ${TEST_DIR}/test_algorithms_b.cpp
     ${TEST_DIR}/test_algorithms_c.cpp
+    ${TEST_DIR}/test_algorithms_unseen_value_extractor.cpp
+    ${TEST_DIR}/test_boundary_mesh_interface_a.cpp
     ${TEST_DIR}/test_boundary_pbc.cpp
     ${TEST_DIR}/test_boundary_truncation.cpp
     ${TEST_DIR}/test_boundary_reflection.cpp
     ${TEST_DIR}/test_buffers.cpp
     ${TEST_DIR}/test_cell_dat.cpp
+    ${TEST_DIR}/test_cartesian_h_mesh.cpp
+    ${TEST_DIR}/test_cartesian_h_mesh_surface_functions.cpp
+    ${TEST_DIR}/test_cartesian_h_mesh_surface_functions_integration.cpp
     ${TEST_DIR}/test_communication.cpp
     ${TEST_DIR}/test_copy_selector.cpp
     ${TEST_DIR}/test_device_functions.cpp

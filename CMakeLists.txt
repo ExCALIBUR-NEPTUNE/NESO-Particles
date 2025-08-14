@@ -47,6 +47,7 @@ set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set(SRC_FILES
     ${SRC_DIR}/algorithms/particle_data_movement.cpp
     ${SRC_DIR}/algorithms/reduce_dat_cellwise.cpp
+    ${SRC_DIR}/algorithms/unseen_value_extractor.cpp
     ${SRC_DIR}/external_interfaces/petsc/boundary_interaction/boundary_interaction_2d.cpp
     ${SRC_DIR}/external_interfaces/petsc/boundary_interaction/boundary_interaction_common.cpp
     ${SRC_DIR}/external_interfaces/petsc/dmplex_cell_serialise.cpp
@@ -61,16 +62,20 @@ set(SRC_FILES
     ${SRC_DIR}/external_interfaces/common/local_claim.cpp
     ${SRC_DIR}/external_interfaces/common/overlay_cartesian_mesh.cpp
     ${SRC_DIR}/external_interfaces/common/quadrature_point_mapper.cpp
+    ${SRC_DIR}/external_interfaces/vtk/vtk.cpp
     ${SRC_DIR}/boundary/boundary_interaction_specification.cpp
+    ${SRC_DIR}/boundary/boundary_mesh_interface.cpp
     ${SRC_DIR}/boundary/boundary_reflection.cpp
     ${SRC_DIR}/boundary/boundary_truncation.cpp
     ${SRC_DIR}/particle_io.cpp
     ${SRC_DIR}/cartesian_mesh.cpp
     ${SRC_DIR}/cartesian_mesh/cartesian_cell_bin.cpp
     ${SRC_DIR}/cartesian_mesh/cartesian_h_mesh.cpp
+    ${SRC_DIR}/cartesian_mesh/cartesian_h_mesh_function.cpp
     ${SRC_DIR}/cartesian_mesh/cartesian_periodic.cpp
     ${SRC_DIR}/cartesian_mesh/cartesian_trajectory_intersection.cpp
     ${SRC_DIR}/communication/communication_edges_counter.cpp
+    ${SRC_DIR}/communication/communication_utility.cpp
     ${SRC_DIR}/compute_target.cpp
     ${SRC_DIR}/containers/cell_dat.cpp
     ${SRC_DIR}/containers/cell_dat_const.cpp
@@ -124,11 +129,14 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/algorithms.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/particle_data_movement.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/reduce_dat_cellwise.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/unseen_value_extractor.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cartesian_mesh/cartesian_h_mesh.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/cartesian_mesh/cartesian_h_mesh_function.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cartesian_mesh/cartesian_cell_bin.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cartesian_mesh/cartesian_periodic.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cartesian_mesh/cartesian_trajectory_intersection.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/boundary/boundary_interaction_specification.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/boundary/boundary_mesh_interface.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/boundary/boundary_reflection.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/boundary/boundary_truncation.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cartesian_mesh.hpp

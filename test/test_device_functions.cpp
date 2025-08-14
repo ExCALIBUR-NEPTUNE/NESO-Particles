@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <gtest/gtest.h>
 #include <memory>
 #include <neso_particles.hpp>
@@ -299,4 +300,83 @@ TEST(DeviceFunctions, plane_intersection_3d_xy_plane_aligned) {
   lambda_test(0.2, 0.3, 0.5, 0.2, 0.3, 0.0, 0.1, 0.2, 0.2, 1.1, 1.2, true);
 
   lambda_test(0.2, 0.3, -0.5, 0.7, 0.6, 0.4, 0.1, 0.2, 0.2, 1.1, 1.2, true);
+}
+
+TEST(DeviceFunctions, bitonic8) {
+
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+
+  const int size = sycl_target->comm_pair.size_parent;
+  const int rank = sycl_target->comm_pair.rank_parent;
+
+  std::vector<int> s(8);
+  std::iota(s.begin(), s.end(), 0);
+
+  std::vector<int> t;
+  const int num_permutations = 8 * 7 * 6 * 5 * 4 * 3 * 2;
+  t.reserve(num_permutations / size);
+
+  int rstart = 0;
+  int rend = 0;
+  get_decomp_1d(size, num_permutations, rank, &rstart, &rend);
+
+  for (int px = 1; px < rstart; px++) {
+    std::next_permutation(s.begin(), s.end());
+  }
+  for (int px = rstart; px < rend; px++) {
+    t.insert(t.begin(), s.begin(), s.end());
+    std::next_permutation(s.begin(), s.end());
+  }
+
+  ASSERT_EQ(t.size() % 8, 0);
+
+  BufferDevice<int> d_t(sycl_target, t);
+
+  std::size_t local_size =
+      sycl_target->parameters->template get<SizeTParameter>("LOOP_LOCAL_SIZE")
+          ->value;
+
+  const std::size_t num_elements = t.size();
+  local_size = std::max((std::size_t)8, (local_size / 8) * 8);
+  std::size_t global_size = get_next_multiple(num_elements, local_size);
+  int *k_t = d_t.ptr;
+
+  sycl_target->queue
+      .submit([&](sycl::handler &cgh) {
+        sycl::local_accessor<int> la(sycl::range<1>(local_size), cgh);
+
+        cgh.parallel_for(
+            sycl::nd_range<1>(sycl::range<1>(global_size),
+                              sycl::range<1>(local_size)),
+            [=](sycl::nd_item<1> idx) {
+              const std::size_t local_id = idx.get_local_linear_id();
+              const std::size_t global_id = idx.get_global_linear_id();
+              if (global_id < num_elements) {
+                la[local_id] = k_t[global_id];
+              }
+
+              Kernel::bitonic8(idx.get_group(), &la[(local_id / 8) * 8]);
+
+              if (global_id < num_elements) {
+                k_t[global_id] = la[local_id];
+              }
+            });
+      })
+      .wait_and_throw();
+
+  auto h_t = d_t.get();
+
+  std::vector<int> u(8);
+  std::iota(s.begin(), s.end(), 0);
+
+  std::size_t index = 0;
+  while (index < h_t.size()) {
+    for (std::size_t ix = 0; ix < 8; ix++) {
+      u.at(ix) = h_t.at(index + ix);
+    }
+    ASSERT_EQ(u, s);
+    index += 8;
+  }
+
+  sycl_target->free();
 }

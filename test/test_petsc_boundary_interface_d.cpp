@@ -231,7 +231,7 @@ TEST(PETScBoundary2D, reflection_truncated) {
         Access::read(Sym<REAL>("TSP")));
   };
   auto lambda_partial_moves_remaining = [&](auto aa) -> bool {
-    const int size = aa->get_npart_local();
+    const int size = get_npart_global(aa);
     return size > 0;
   };
   auto lambda_apply_timestep = [&](auto aa) {
@@ -329,7 +329,7 @@ TEST(PETScBoundary2D, reflection_advection) {
           Access::read(Sym<REAL>("TSP")));
     };
     auto lambda_partial_moves_remaining = [&](auto aa) -> bool {
-      const int size = aa->get_npart_local();
+      const int size = get_npart_global(aa);
       return size > 0;
     };
     auto lambda_apply_timestep = [&](auto aa) {
@@ -372,6 +372,8 @@ TEST(PETScBoundary2D, reflection_advection_hypnotoad) {
   PETSCCHK(PetscInitializeNoArguments());
   std::string mesh_file;
   GET_TEST_RESOURCE(mesh_file, "dmplex/mesh_hypnotoad.msh");
+  // // uncomment for test with a .h5 input
+  // GET_TEST_RESOURCE(mesh_file, "dmplex/mesh_hypnotoad.h5");
   if (mesh_file.size()) {
 
     DM dm;
@@ -381,10 +383,14 @@ TEST(PETScBoundary2D, reflection_advection_hypnotoad) {
 
     PETSCCHK(DMPlexCreateGmshFromFile(MPI_COMM_WORLD, mesh_file.c_str(),
                                       (PetscBool)1, &dm));
+    // // uncomment to read from a .h5 file
+    // PETSCCHK(DMPlexCreateFromFile(MPI_COMM_WORLD, mesh_file.c_str(), NULL,
+    //                                   (PetscBool)1, &dm));
 
     PetscInterface::generic_distribute(&dm);
     // give this mesh a boundary here for now as we have not
     // yet created the boundary labels inside "dmplex/mesh_hypnotoad.msh"
+    // comment this out if "Face Sets" label is already set in the DMPlex
     PetscInterface::label_all_dmplex_boundaries(
       dm, PetscInterface::face_sets_label, 100);
     auto A = particle_loop_common(dm, 2048);

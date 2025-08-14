@@ -161,7 +161,8 @@ TEST(ParticleLoop, range_execute_loop_index) {
             // for each dimension
             ASSERT_EQ(loop_index->at(rowx, 0), cellx);
             ASSERT_EQ(loop_index->at(rowx, 1), rowx);
-            ASSERT_EQ(loop_index->at(rowx, 2), row_index); // fails randomly?
+            ASSERT_EQ(loop_index->at(rowx, 2),
+                      row_index); // fails randomly (cuda generic acpp?) TODO?
             ASSERT_EQ(loop_index->at(rowx, 3),
                       (cellx / range_size) * range_size);
             ASSERT_EQ(loop_index->at(rowx, 4), local_linear_index);

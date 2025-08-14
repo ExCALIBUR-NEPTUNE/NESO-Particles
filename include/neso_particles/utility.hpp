@@ -133,6 +133,25 @@ inline INT get_npart_global(std::shared_ptr<GROUP_TYPE> particle_group) {
   return npart_global;
 }
 
+/**
+ * Flatten map values into a vector.
+ *
+ * @param input_map Map to flatten.
+ * @returns std vector of item values.
+ */
+template <typename KEY_TYPE, typename VALUE_TYPE>
+inline std::vector<VALUE_TYPE>
+flatten_map(const std::map<KEY_TYPE, VALUE_TYPE> &input_map) {
+
+  std::vector<VALUE_TYPE> output_vector;
+  output_vector.reserve(input_map.size());
+  for (auto &ix : input_map) {
+    output_vector.push_back(ix.second);
+  }
+
+  return output_vector;
+}
+
 } // namespace NESO::Particles
 
 #endif

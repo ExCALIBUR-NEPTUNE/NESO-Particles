@@ -1,18 +1,45 @@
 #ifndef _NESO_PARTICLES_CARTESIAN_MESH_CARTESIAN_TRAJECTORY_INTERSECTION_HPP_
 #define _NESO_PARTICLES_CARTESIAN_MESH_CARTESIAN_TRAJECTORY_INTERSECTION_HPP_
 
+#include "../algorithms/unseen_value_extractor.hpp"
 #include "../boundary/boundary_interaction_specification.hpp"
+#include "../boundary/boundary_mesh_interface.hpp"
 #include "../device_functions.hpp"
 #include "../particle_group_impl.hpp"
 #include "../particle_sub_group/particle_loop_sub_group_functions.hpp"
 #include "../particle_sub_group/particle_sub_group.hpp"
 #include "cartesian_h_mesh.hpp"
+#include "cartesian_h_mesh_function.hpp"
 #include <array>
+#include <limits>
+#include <map>
 
 namespace NESO::Particles {
 
+namespace Private {
+constexpr int CART_TRAJ_INT_MASK_VALUE = std::numeric_limits<int>::lowest();
+}
+
+/**
+ * This type implements trajectory intersection detection between particles and
+ * a CartesianHMesh.
+ */
 class CartesianTrajectoryIntersection {
 protected:
+#ifdef NESO_PARTICLES_TEST_COMPILATION
+public:
+#endif
+
+  std::array<INT, 6> element_offsets;
+  std::array<INT, 6> element_strides0;
+  std::array<INT, 6> element_strides1;
+  REAL inverse_cell_width_fine;
+
+  std::map<int, std::shared_ptr<BoundaryMeshInterface>>
+      map_groups_boundary_interface;
+  std::map<int, std::shared_ptr<UnseenValueExtractor>>
+      map_groups_unseen_value_extractor;
+
   template <typename T>
   inline void check_dat(ParticleGroupSharedPtr particle_group, Sym<T> sym,
                         const int ncomp) {
@@ -25,11 +52,6 @@ protected:
               " exists already with an insufficient number of components");
     }
   }
-
-  std::array<INT, 6> element_offsets;
-  std::array<INT, 6> element_strides0;
-  std::array<INT, 6> element_strides1;
-  REAL inverse_cell_width_fine;
 
   void setup();
 
@@ -74,8 +96,9 @@ protected:
         [=](auto P) {
           bool outside_domain = false;
           for (int dimx = 0; dimx < k_ndim; dimx++) {
-            outside_domain = outside_domain || ((P.at(dimx) < 0.0) ||
-                                                (P.at(dimx) > k_extents[dimx]));
+            outside_domain =
+                outside_domain ||
+                ((P.at(dimx) <= 0.0) || (P.at(dimx) >= k_extents[dimx]));
           }
           return outside_domain;
         },
@@ -311,7 +334,10 @@ protected:
     ep.check_and_throw(
         "Failed to find boundary information for departing particle.");
 
-    std::array<INT, 6> k_boundary_group_map;
+    std::array<INT, 6> k_boundary_group_map = {
+        Private::CART_TRAJ_INT_MASK_VALUE, Private::CART_TRAJ_INT_MASK_VALUE,
+        Private::CART_TRAJ_INT_MASK_VALUE, Private::CART_TRAJ_INT_MASK_VALUE,
+        Private::CART_TRAJ_INT_MASK_VALUE, Private::CART_TRAJ_INT_MASK_VALUE};
     const INT max_edge = (k_ndim == 2) ? 4 : 6;
     for (const auto &bx : this->boundary_groups) {
       const int group = bx.first;
@@ -394,6 +420,29 @@ protected:
           ->execute();
     }
 
+    for (const auto &boundary_group : this->boundary_groups) {
+      const auto group_id = boundary_group.first;
+
+      // Does this rank actually have any particles hitting that boundary group?
+      std::set<INT> new_geoms;
+      if (return_map.count(group_id)) {
+        new_geoms =
+            this->map_groups_unseen_value_extractor.at(group_id)->extract(
+                return_map.at(group_id),
+                BoundaryInteractionSpecification::intersection_metadata, 1,
+                true);
+      }
+
+      std::vector<std::pair<int, INT>> new_potentialy_hit_geoms;
+      new_potentialy_hit_geoms.reserve(new_geoms.size());
+      for (auto &geomx : new_geoms) {
+        const int owning_rank = this->mesh->get_face_id_owning_rank(geomx);
+        new_potentialy_hit_geoms.push_back({owning_rank, geomx});
+      }
+      this->map_groups_boundary_interface.at(group_id)->extend_exchange_pattern(
+          new_potentialy_hit_geoms);
+    }
+
     restore_resource(sycl_target->resource_stack_map,
                      ResourceStackKeyBufferDevice<INT>{}, d_lut);
     restore_resource(sycl_target->resource_stack_map,
@@ -410,7 +459,7 @@ public:
   /// Disable (implicit) copies.
   CartesianTrajectoryIntersection &
   operator=(CartesianTrajectoryIntersection const &a) = delete;
-  ~CartesianTrajectoryIntersection() = default;
+  ~CartesianTrajectoryIntersection();
 
   /// The Sym for the particle property which holds the position of each
   /// particle before the positions were updated in a time stepping loop. These
@@ -428,12 +477,9 @@ public:
   REAL tolerance;
 
   /**
-   * Most simple constructor all boundary elements are considered in boundary
-   * group 0.
-   *
    * @param sycl_target Compute device to use for interactions.
    * @param mesh CartesianHMesh to detect intersections with.
-   * @param boundary_groups Map from boundarg group to edges/faces indices that
+   * @param boundary_groups Map from boundary group to edges/faces indices that
    * form the group.
    * @param tolerance Tolerance for intersection tests, default 1E-14.
    */
@@ -493,6 +539,59 @@ public:
    */
   [[nodiscard]] std::map<int, ParticleSubGroupSharedPtr>
   post_integration(std::shared_ptr<ParticleSubGroup> particles);
+
+  /**
+   * Explicitly free the resources, e.g. MPI communicators without relying on
+   * collective destructor calls. Should be called collectively on the
+   * communicator.
+   */
+  void free();
+
+  /**
+   * Create a function on a boundary group.
+   *
+   * @param group ID of boundary group to create function on.
+   * @param function_space Family of function to create, e.g. "DG".
+   * @param polynomial_order Order of function to create, e.g. 0.
+   * @returns Function object on boundary.
+   */
+  CartesianHMeshFunctionSharedPtr
+  create_function(const int group, const std::string function_space,
+                  const int polynomial_order);
+
+  /**
+   * Project particle data onto a function defined on the surface. Uses the
+   * standardarised boundary interface on the sub group.
+   *
+   * @param particle_sub_group ParticleSubGroup to project onto function.
+   * @param sym Sym<REAL> Particle property to use as source weights.
+   * @param component Component of particle property to use as source weights.
+   * @param is_ephemeral Indicate if the particle weights are in an EphemeralDat
+   * or ParticleDat.
+   * @param func Function to project onto.
+   */
+  void function_project(ParticleSubGroupSharedPtr particle_sub_group,
+                        Sym<REAL> sym, const int component,
+                        const bool is_ephemeral,
+                        CartesianHMeshFunctionSharedPtr func);
+
+  /**
+   * Evaluate particle data from a function defined on the surface. Uses the
+   * standardarised boundary interface on the sub group.
+   *
+   * @param particle_sub_group ParticleSubGroup to containing destination
+   * particles for evaluation.
+   * @param sym Sym<REAL> Particle property to overwrite with function
+   * evaluations.
+   * @param component Component of particle property to write evalauations to.
+   * @param is_ephemeral Indicate if the particle evaluations are in an
+   * EphemeralDat or ParticleDat.
+   * @param func Function to evaluate at particle locations.
+   */
+  void function_evaluate(ParticleSubGroupSharedPtr particle_sub_group,
+                         Sym<REAL> sym, const int component,
+                         const bool is_ephemeral,
+                         CartesianHMeshFunctionSharedPtr func);
 };
 
 extern template std::map<int, ParticleSubGroupSharedPtr>

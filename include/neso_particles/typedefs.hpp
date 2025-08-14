@@ -186,6 +186,22 @@ inline void get_decomp_1d(const std::size_t N_compute_units,
   *rend = end;
 }
 
+inline std::size_t get_decomp_1d_inverse(const std::size_t N_compute_units,
+                                         const std::size_t N_work_items,
+                                         const std::size_t work_unit) {
+  const auto pq = std::div(static_cast<long long>(N_work_items),
+                           static_cast<long long>(N_compute_units));
+  const std::size_t p = pq.quot;
+  const std::size_t q = pq.rem;
+  const std::size_t nlower = p + 1;
+  const std::size_t cutoff = nlower * q;
+  if (work_unit < cutoff) {
+    return work_unit / nlower;
+  } else {
+    return q + (work_unit - cutoff) / p;
+  }
+}
+
 template <typename T>
 inline T get_min_power_of_two(const T N_work_items, const size_t max_size) {
   const int base_two_power =

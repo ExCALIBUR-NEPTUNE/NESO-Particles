@@ -3,5 +3,6 @@
 
 #include "particle_data_movement.hpp"
 #include "reduce_dat_cellwise.hpp"
+#include "unseen_value_extractor.hpp"
 
 #endif
