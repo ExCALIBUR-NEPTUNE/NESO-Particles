@@ -10,23 +10,10 @@ The time taken for user written loops can also be recorded.
 For these recorded times to make much sense it is beneficial to given ParticleLoops a meaningful name.
 Furthermore code regions, which do not have to be ParticleLoops, can also be added to the set of recorded regions by using the ProfileRegion class.
 
-.. warning::
-    Profiling of regions is disabled unless `NESO_PARTICLES_PROFILING_REGION` is defined.
-
-
-To enable built in profiling of regions the preprocessor variable `NESO_PARTICLES_PROFILING_REGION` must be defined. 
-If this variable is not defined then the profiling functions and methods become no-ops.
-This variable can be defined by compiler flags or defined before including NP as follows.
-
-.. code-block:: cpp
-
-    #define NESO_PARTICLES_PROFILING_REGION
-    #include <neso_particles.hpp>
-
-
 The `ProfileRegion` class records the time taken for a specific piece of code. 
 These regions are recorded within a `ProfileMap` instance. 
 There is a `ProfileMap` member within the `SYCLTarget` type which records the regions for ParticleLoops which execute on that compute device.
+`ProfileMap::enable` should be called before adding regions.
 
 In the following code snippet we demonstrate how to profile ParticleLoops and user defined regions.
 Finally this profiling data is written to a JSON file by each rank. 

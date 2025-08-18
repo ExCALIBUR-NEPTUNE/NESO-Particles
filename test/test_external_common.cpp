@@ -1,11 +1,6 @@
-#include <gtest/gtest.h>
-#include <memory>
-#include <neso_particles.hpp>
-#include <neso_particles/external_interfaces/common/overlay_cartesian_mesh.hpp>
-#include <string>
-#include <vector>
-
-using namespace NESO::Particles;
+#include "include/test_neso_particles.hpp"
+#include "neso_particles/external_interfaces/common/common.hpp"
+#include "neso_particles/external_interfaces/vtk/vtk.hpp"
 
 TEST(ExternalCommon, overlay_cartesian_mesh) {
   auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
@@ -701,7 +696,8 @@ TEST(ExternalCommon, cartesian_to_barycentric_quad) {
 }
 
 TEST(VTK, VTKHDF) {
-  VTK::VTKHDF vtkhdf("test_external_common.vtkhdf", MPI_COMM_WORLD);
+  VTK::VTKHDF vtkhdf(get_test_root_file("test_external_common.vtkhdf"),
+                     MPI_COMM_WORLD);
   int rank;
   MPICHK(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
   std::vector<VTK::UnstructuredCell> data(2);

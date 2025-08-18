@@ -21,13 +21,26 @@ endif()
 
 set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(TEST_SRCS
+    ${TEST_DIR}/test_algorithms_a.cpp
+    ${TEST_DIR}/test_algorithms_b.cpp
+    ${TEST_DIR}/test_algorithms_c.cpp
+    ${TEST_DIR}/test_algorithms_unseen_value_extractor.cpp
+    ${TEST_DIR}/test_boundary_mesh_interface_a.cpp
     ${TEST_DIR}/test_boundary_pbc.cpp
+    ${TEST_DIR}/test_boundary_truncation.cpp
+    ${TEST_DIR}/test_boundary_reflection.cpp
     ${TEST_DIR}/test_buffers.cpp
     ${TEST_DIR}/test_cell_dat.cpp
+    ${TEST_DIR}/test_cartesian_h_mesh.cpp
+    ${TEST_DIR}/test_cartesian_h_mesh_surface_functions.cpp
+    ${TEST_DIR}/test_cartesian_h_mesh_surface_functions_integration.cpp
     ${TEST_DIR}/test_communication.cpp
+    ${TEST_DIR}/test_copy_selector.cpp
     ${TEST_DIR}/test_device_functions.cpp
+    ${TEST_DIR}/test_ephemeral_dats.cpp
     ${TEST_DIR}/test_error_propagate.cpp
     ${TEST_DIR}/test_examples.cpp
+    ${TEST_DIR}/test_examples_b.cpp
     ${TEST_DIR}/test_external_common.cpp
     ${TEST_DIR}/test_global_array.cpp
     ${TEST_DIR}/test_int_key_value_map.cpp
@@ -36,12 +49,17 @@ set(TEST_SRCS
     ${TEST_DIR}/test_mesh_hierarchy.cpp
     ${TEST_DIR}/test_parallel_initialisation.cpp
     ${TEST_DIR}/test_petsc_interface.cpp
-    ${TEST_DIR}/test_petsc_boundary_interface.cpp
+    ${TEST_DIR}/test_petsc_interface_from_plex.cpp
+    ${TEST_DIR}/test_petsc_boundary_interface_a.cpp
+    ${TEST_DIR}/test_petsc_boundary_interface_b.cpp
+    ${TEST_DIR}/test_petsc_boundary_interface_c.cpp
+    ${TEST_DIR}/test_petsc_boundary_interface_d.cpp
     ${TEST_DIR}/test_petsc_project_evaluate.cpp
     ${TEST_DIR}/test_petsc_utility.cpp
     ${TEST_DIR}/test_particle_dat.cpp
     ${TEST_DIR}/test_particle_group_cell_move.cpp
     ${TEST_DIR}/test_particle_group.cpp
+    ${TEST_DIR}/test_particle_group_b.cpp
     ${TEST_DIR}/test_particle_group_global_move.cpp
     ${TEST_DIR}/test_particle_group_hybrid_move.cpp
     ${TEST_DIR}/test_particle_group_local_move.cpp
@@ -49,18 +67,36 @@ set(TEST_SRCS
     ${TEST_DIR}/test_particle_h5part.cpp
     ${TEST_DIR}/test_particle_loop.cpp
     ${TEST_DIR}/test_particle_loop_cell_info.cpp
+    ${TEST_DIR}/test_particle_loop_direct.cpp
     ${TEST_DIR}/test_particle_loop_iteration_set.cpp
     ${TEST_DIR}/test_particle_loop_local_array.cpp
     ${TEST_DIR}/test_particle_loop_local_memory.cpp
     ${TEST_DIR}/test_particle_loop_range_execute.cpp
+    ${TEST_DIR}/test_particle_loop_reduction_a.cpp
     ${TEST_DIR}/test_particle_loop_rng.cpp
+    ${TEST_DIR}/test_particle_loop_rng_device_block.cpp
     ${TEST_DIR}/test_particle_loop_sym_vector.cpp
     ${TEST_DIR}/test_particle_remover.cpp
     ${TEST_DIR}/test_particle_set.cpp
-    ${TEST_DIR}/test_particle_sub_group.cpp
+    ${TEST_DIR}/test_particle_set_device.cpp
+    ${TEST_DIR}/test_particle_sub_group_a.cpp
+    ${TEST_DIR}/test_particle_sub_group_b.cpp
+    ${TEST_DIR}/test_particle_sub_group_c.cpp
+    ${TEST_DIR}/test_particle_sub_group_d.cpp
+    ${TEST_DIR}/test_particle_sub_group_e.cpp
+    ${TEST_DIR}/test_particle_sub_group_f.cpp
+    ${TEST_DIR}/test_particle_sub_group_g.cpp
+    ${TEST_DIR}/test_particle_sub_group_h.cpp
+    ${TEST_DIR}/test_particle_sub_group_partition_a.cpp
+    ${TEST_DIR}/test_particle_sub_group_partition_b.cpp
+    ${TEST_DIR}/test_particle_sub_group_partition_c.cpp
     ${TEST_DIR}/test_product_matrix.cpp
     ${TEST_DIR}/test_resource_stack.cpp
     ${TEST_DIR}/test_serial_container.cpp
+    ${TEST_DIR}/test_selector_exclusive_scan.cpp
+    ${TEST_DIR}/test_selector_a.cpp
+    ${TEST_DIR}/test_standard_boundary_a.cpp
+    ${TEST_DIR}/test_standard_boundary_b.cpp
     ${TEST_DIR}/test_sycl_target.cpp
     ${TEST_DIR}/test_tuple.cpp
     ${TEST_DIR}/test_utility.cpp)
@@ -86,8 +122,14 @@ foreach(TEST ${TEST_SRCS})
   add_executable(${TEST_NAME} ${TEST_SOURCES})
   target_link_libraries(${TEST_NAME} PRIVATE NESO-Particles GTest::gtest)
   target_compile_definitions(${TEST_NAME} PRIVATE GPU_SELECTOR=0)
+  target_compile_definitions(${TEST_NAME}
+                             PRIVATE NESO_PARTICLES_TEST_COMPILATION)
   target_compile_definitions(
     ${TEST_NAME} PRIVATE CMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX})
+  if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_compile_definitions(${TEST_NAME}
+                               PRIVATE NESO_PARTICLES_SINGLE_COMPILED_LOOP)
+  endif()
   target_compile_options(${TEST_NAME} PRIVATE "-Wpedantic;-Wall;-Wextra")
   # exclude from all so indiviual tests aren't built for install
   set_target_properties(${TEST_NAME} PROPERTIES EXCLUDE_FROM_ALL TRUE)
@@ -110,7 +152,13 @@ add_executable(${EXECUTABLE} ${TEST_MAIN} ${TEST_LIST})
 target_link_libraries(${EXECUTABLE} PRIVATE NESO-Particles GTest::gtest)
 target_compile_definitions(${EXECUTABLE} PRIVATE GPU_SELECTOR=0)
 target_compile_definitions(${EXECUTABLE}
+                           PRIVATE NESO_PARTICLES_TEST_COMPILATION)
+target_compile_definitions(${EXECUTABLE}
                            PRIVATE CMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX})
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+  target_compile_definitions(${EXECUTABLE}
+                             PRIVATE NESO_PARTICLES_SINGLE_COMPILED_LOOP)
+endif()
 target_compile_options(${EXECUTABLE} PRIVATE "-Wpedantic;-Wall;-Wextra")
 
 set_target_properties(

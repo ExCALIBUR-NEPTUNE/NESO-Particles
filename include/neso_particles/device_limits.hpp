@@ -1,8 +1,11 @@
 #ifndef _NESO_PARTICLES_COMPUTE_TARGET_DEVICE_LIMITS_HPP_
 #define _NESO_PARTICLES_COMPUTE_TARGET_DEVICE_LIMITS_HPP_
 
+#include "device_atomic_sanity_check.hpp"
 #include "sycl_typedefs.hpp"
 #include "typedefs.hpp"
+#include <set>
+#include <vector>
 
 namespace NESO::Particles {
 
@@ -37,54 +40,14 @@ class DeviceLimits {
 protected:
   Private::WorkGroupLimits wgl;
 
-  inline void setup_env() {
-    auto current_limits = Private::get_max_global_workgroup<3>(wgl);
-    const std::size_t env_max_0 = get_env_size_t(
-        "NESO_PARTICLES_DEVICE_LIMIT_GLOBAL_SIZE_S0", current_limits.get(2));
-    const std::size_t env_max_1 = get_env_size_t(
-        "NESO_PARTICLES_DEVICE_LIMIT_GLOBAL_SIZE_S1", current_limits.get(1));
-    const std::size_t env_max_2 = get_env_size_t(
-        "NESO_PARTICLES_DEVICE_LIMIT_GLOBAL_SIZE_S2", current_limits.get(0));
-    this->local_mem_size = get_env_size_t(
-        "NESO_PARTICLES_DEVICE_LIMIT_LOCAL_MEM_SIZE", this->local_mem_size);
-
-    this->wgl.max_global_workgroup_1 = sycl::range<1>(env_max_0);
-    this->wgl.max_global_workgroup_2 = sycl::range<2>(env_max_1, env_max_0);
-    this->wgl.max_global_workgroup_3 =
-        sycl::range<3>(env_max_2, env_max_1, env_max_0);
-    this->wgl.max_work_group_size =
-        get_env_size_t("NESO_PARTICLES_DEVICE_LIMIT_WORK_GROUP_SIZE",
-                       this->wgl.max_work_group_size);
-  }
-
-  inline void setup_generic() {
-    constexpr std::size_t max_size_t = std::numeric_limits<std::size_t>::max();
-    this->wgl.max_global_workgroup_1 = sycl::range<1>(max_size_t);
-    this->wgl.max_global_workgroup_2 = sycl::range<2>(max_size_t, max_size_t);
-    this->wgl.max_global_workgroup_3 =
-        sycl::range<3>(max_size_t, max_size_t, max_size_t);
-    this->wgl.max_work_group_size =
-        device.get_info<sycl::info::device::max_work_group_size>();
-
-    auto local_mem_exists =
-        device.get_info<sycl::info::device::local_mem_type>() !=
-        sycl::info::local_mem_type::none;
-
-    NESOASSERT(local_mem_exists, "Local memory does not exist.");
-    this->local_mem_size =
-        device.get_info<sycl::info::device::local_mem_size>();
-  }
-
-  inline void setup_nvidia() {
-    this->wgl.max_global_workgroup_1 = sycl::range<1>(2147483647);
-    this->wgl.max_global_workgroup_2 = sycl::range<2>(65535, 2147483647);
-    this->wgl.max_global_workgroup_3 = sycl::range<3>(65535, 65535, 2147483647);
-    this->wgl.max_work_group_size = 1024;
-  }
+  void setup_env();
+  void setup_generic();
+  void setup_nvidia();
 
 public:
   sycl::device device;
   std::size_t local_mem_size;
+  std::set<std::vector<std::size_t>> validated_types;
 
   DeviceLimits() = default;
   DeviceLimits(sycl::device device) : device(device) {
@@ -96,23 +59,19 @@ public:
     this->setup_env();
   }
 
-  inline void print() {
-    nprint("Using global workgroup limits:");
-    auto d1 = Private::get_max_global_workgroup<1>(this->wgl);
-    nprint("1D:", d1.get(0));
-    auto d2 = Private::get_max_global_workgroup<2>(this->wgl);
-    nprint("2D:", d2.get(0), d2.get(1));
-    auto d3 = Private::get_max_global_workgroup<3>(this->wgl);
-    nprint("3D:", d3.get(0), d3.get(1), d3.get(2));
-    nprint("Workgroup size limit:", this->wgl.max_work_group_size);
-    auto local_mem_exists =
-        this->device.get_info<sycl::info::device::local_mem_type>() !=
-        sycl::info::local_mem_type::none;
-    nprint("Local memory exists:", static_cast<int>(local_mem_exists));
-    auto local_mem_size_device =
-        device.get_info<sycl::info::device::local_mem_size>();
-    nprint("Local memory size  :", local_mem_size_device);
-    nprint("Local memory in use:", this->local_mem_size);
+  void print();
+
+  /**
+   * @returns The native vector width for REAL.
+   */
+  inline std::size_t get_native_vector_width_real() {
+    if constexpr (std::is_same_v<REAL, double>) {
+      return static_cast<std::size_t>(
+          device.get_info<sycl::info::device::native_vector_width_double>());
+    } else {
+      return static_cast<std::size_t>(
+          device.get_info<sycl::info::device::native_vector_width_float>());
+    }
   }
 
   /**
@@ -189,6 +148,26 @@ public:
     }
     return is;
   }
+
+  /**
+   * Check atomics pass basic functionality tests.
+   *
+   * @param queue sycl::queue to run tests on.
+   * @param fatal Call NESOASSERT if any of the tests fail, default true.
+   * @returns True if tests pass.
+   */
+  bool check_atomics_sanity(sycl::queue queue, const bool fatal = true);
+
+  /**
+   * Get the cacheline size in either bytes or as a rounded up multiple of a
+   * number of bytes.
+   *
+   * @param num_bytes Default 1, optionally specify a factor such that if the
+   * cacheline is N bytes then this function returns M such that M * num_bytes
+   * >= N.
+   * @returns Cacheline size in bytes or multiple of provided factor.
+   */
+  std::size_t get_cacheline_size(const std::size_t num_bytes = 1);
 };
 
 } // namespace NESO::Particles

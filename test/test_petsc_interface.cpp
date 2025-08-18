@@ -3,6 +3,7 @@
 #include "include/test_neso_particles.hpp"
 #include <gtest/gtest.h>
 #include <memory>
+#include <neso_particles/external_interfaces/petsc/petsc_interface.hpp>
 #include <string>
 
 using namespace NESO::Particles;
@@ -69,7 +70,7 @@ TEST_P(PETSC_NDIM, init) {
   PETSCCHK(PetscFinalize());
 }
 
-TEST(PETSC, create_dm) {
+TEST(PETSc, create_dm) {
 
   PETSCCHK(PetscInitializeNoArguments());
 
@@ -351,7 +352,7 @@ inline DM get_simple_square() {
 
 } // namespace
 
-TEST(PETSC, dm_triangle_mapping) {
+TEST(PETSc, dm_triangle_mapping) {
   PETSCCHK(PetscInitializeNoArguments());
   auto dm = get_simple_triangle();
   PetscInterface::DMPlexHelper dmh(MPI_COMM_WORLD, dm);
@@ -365,7 +366,7 @@ TEST(PETSC, dm_triangle_mapping) {
   PETSCCHK(PetscFinalize());
 }
 
-TEST(PETSC, dm_cell_linearise) {
+TEST(PETSc, dm_cell_linearise) {
 
   PETSCCHK(PetscInitializeNoArguments());
   DM dm = get_simple_square();
@@ -382,7 +383,8 @@ TEST(PETSC, dm_cell_linearise) {
   spec_copy.deserialise(spec_buffer);
 
   ASSERT_EQ(spec.vertices, spec_copy.vertices);
-  ASSERT_EQ(spec.point_specs, spec_copy.point_specs);
+  ASSERT_EQ(spec.point_cones, spec_copy.point_cones);
+  ASSERT_EQ(spec.point_cone_orientations, spec_copy.point_cone_orientations);
 
   PETSCCHK(DMDestroy(&dm));
   PETSCCHK(PetscFinalize());
@@ -579,7 +581,7 @@ TEST_P(PETSC_HALO_OVERLAP, dm_halos) {
 }
 INSTANTIATE_TEST_SUITE_P(init, PETSC_HALO_OVERLAP, testing::Values(0, 1));
 
-TEST(PETSC, dmplex_volume) {
+TEST(PETSc, dmplex_volume) {
   std::filesystem::path gmsh_filepath;
   GET_TEST_RESOURCE(gmsh_filepath, "gmsh/reference_all_types_square_0.2.msh");
 

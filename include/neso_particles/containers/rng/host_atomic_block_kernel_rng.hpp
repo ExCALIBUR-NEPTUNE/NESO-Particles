@@ -18,18 +18,12 @@ template <typename T> struct AtomicBlockRNG {
   int *RESTRICT counter;
   T const *RESTRICT d_ptr;
   inline T at(const Access::LoopIndex::Read &, const int, bool *valid_sample) {
-    sycl::atomic_ref<int, sycl::memory_order::relaxed,
-                     sycl::memory_scope::device>
-        element_atomic(this->counter[0]);
-    const int index = element_atomic.fetch_add(1);
+    const int index = atomic_fetch_add(&this->counter[0], 1);
     bool valid_tmp = (index < buffer_size) && (0 <= index);
 
-    sycl::atomic_ref<int, sycl::memory_order::relaxed,
-                     sycl::memory_scope::device>
-        poison_atomic(this->counter[1]);
-
     const int to_poison_int = static_cast<int>(!valid_tmp);
-    const int already_poisoned_int = poison_atomic.fetch_max(to_poison_int);
+    const int already_poisoned_int =
+        atomic_fetch_max(&this->counter[1], to_poison_int);
 
     valid_tmp = valid_tmp && (!already_poisoned_int);
     *valid_sample = valid_tmp;
@@ -140,13 +134,18 @@ public:
               : static_cast<std::size_t>(num_particles) *
                     static_cast<std::size_t>(this->num_components);
 
+      NESOASSERT(static_cast<std::size_t>(num_particles) *
+                         static_cast<std::size_t>(this->num_components) <
+                     static_cast<std::size_t>(std::numeric_limits<int>::max()),
+                 "Number of RNG samples required exceeds int max.");
+
       bool reallocated;
       auto d_ptr =
           this->allocate(sycl_target, num_random_numbers, &reallocated);
 
       if (reallocated) {
-        draw_random_samples(sycl_target, this->generation_function, d_ptr,
-                            num_random_numbers, this->block_size);
+        this->generation_function->draw_random_samples(
+            sycl_target, d_ptr, num_random_numbers, this->block_size);
         this->set_num_values(sycl_target, num_random_numbers);
       } else {
         bool tmp_bool;
@@ -156,8 +155,8 @@ public:
         if (current_count > 0) {
           std::size_t num_required =
               std::min(num_random_numbers, current_count);
-          draw_random_samples(sycl_target, this->generation_function, d_ptr,
-                              num_required, this->block_size);
+          this->generation_function->draw_random_samples(
+              sycl_target, d_ptr, num_required, this->block_size);
           if (num_required < current_count) {
             this->set_num_values(sycl_target, num_required);
           }
@@ -168,8 +167,8 @@ public:
         const int new_end = static_cast<int>(num_random_numbers);
         const int count_diff = new_end - previous_end;
         if (count_diff > 0) {
-          draw_random_samples(
-              sycl_target, this->generation_function, d_ptr + previous_end,
+          this->generation_function->draw_random_samples(
+              sycl_target, d_ptr + previous_end,
               static_cast<std::size_t>(count_diff), this->block_size);
           this->set_num_values(sycl_target, new_end);
         }
@@ -206,9 +205,6 @@ public:
     }
   }
 
-  /// The function pointer which returns samples when called.
-  std::function<T()> generation_function;
-
   HostAtomicBlockKernelRNG() : BlockKernelRNGBase<T>() {}
 
   virtual ~HostAtomicBlockKernelRNG() = default;
@@ -228,9 +224,35 @@ public:
   template <typename FUNC_TYPE>
   HostAtomicBlockKernelRNG(FUNC_TYPE func, const int num_components,
                            const int block_size = 8192)
-      : BlockKernelRNGBase<T>(num_components, block_size), internal_state(0),
-        num_random_numbers_override(-1), internal_state_is_valid(true),
-        suppress_warnings(false), generation_function(func) {
+      : BlockKernelRNGBase<T>(
+            std::make_shared<HostRNGGenerationFunction<T>>(func),
+            num_components, block_size),
+        internal_state(0), num_random_numbers_override(-1),
+        internal_state_is_valid(true), suppress_warnings(false) {
+    NESOASSERT(num_components >= 0, "Cannot have a RNG for " +
+                                        std::to_string(num_components) +
+                                        " components.");
+  }
+
+  /**
+   * Create a KernelRNG from a RNGGenerationFunction which returns values
+   * of type T when called. For each loop invocation the implementation will
+   * allocate a buffer equal to the number of particles in the loop times the
+   * number of components per particle. The entries in this buffer are
+   * allocated sequentially by atomically incrementing a counter for each call.
+   *
+   * @param generation_function Instance of RNGGenerationFunction<T> to use to
+   * draw samples.
+   * @param num_components Number of RNG values required per particle
+   * (estimated maximum).
+   * @param block_size Optional block size.
+   */
+  HostAtomicBlockKernelRNG(
+      std::shared_ptr<RNGGenerationFunction<T>> generation_function,
+      const int num_components, const int block_size = 8192)
+      : BlockKernelRNGBase<T>(generation_function, num_components, block_size),
+        internal_state(0), num_random_numbers_override(-1),
+        internal_state_is_valid(true), suppress_warnings(false) {
     NESOASSERT(num_components >= 0, "Cannot have a RNG for " +
                                         std::to_string(num_components) +
                                         " components.");
@@ -260,13 +282,16 @@ public:
  *
  * @param func Host function which takes no arguments and returns a single
  * value of type T when called.
+ * @param num_components Number of samples required per particle in the kernel.
  * @param block_size Optional block size to sample RNG values and copy to the
  * device in.
  */
 template <typename T, typename FUNC_TYPE>
 inline std::shared_ptr<HostAtomicBlockKernelRNG<T>>
-host_atomic_block_kernel_rng(FUNC_TYPE func, const int block_size = 8192) {
-  return std::make_shared<HostAtomicBlockKernelRNG<T>>(func, block_size);
+host_atomic_block_kernel_rng(FUNC_TYPE func, const int num_components,
+                             const int block_size = 8192) {
+  return std::make_shared<HostAtomicBlockKernelRNG<T>>(func, num_components,
+                                                       block_size);
 }
 
 } // namespace NESO::Particles

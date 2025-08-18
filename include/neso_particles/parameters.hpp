@@ -57,6 +57,15 @@ struct Parameters {
     NESOASSERT(v != nullptr, "Could not set parameter with name: " + name);
     this->values[name] = v;
   }
+
+  /**
+   * Test if key exists.
+   * @param name Key to test existance of.
+   * @returns True if key exists in the map.
+   */
+  inline bool contains(const std::string name) {
+    return static_cast<bool>(this->values.count(name));
+  }
 };
 
 } // namespace NESO::Particles

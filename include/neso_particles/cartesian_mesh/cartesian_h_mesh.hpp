@@ -1,0 +1,382 @@
+#ifndef _NESO_PARTICLES_CARTESIAN_MESH_CARTESIAN_H_MESH_HPP_
+#define _NESO_PARTICLES_CARTESIAN_MESH_CARTESIAN_H_MESH_HPP_
+#include "../mesh_interface.hpp"
+
+#include "../external_interfaces/vtk/vtk.hpp"
+#include <array>
+#include <cstdint>
+#include <cstdlib>
+#include <memory>
+#include <mpi.h>
+#include <set>
+#include <unordered_map>
+#include <vector>
+
+namespace NESO::Particles {
+
+/**
+ * Example mesh that duplicates a MeshHierarchy as a HMesh for examples and
+ * testing.
+ *
+ * This mesh consists of square or cube coarse cells with a given number per
+ * dimension. These coarse cells have the specified cell extent passed to the
+ * constructor. Each of these coarse cells is subdivided into smaller
+ * squares/cubes by the number of times specifed by the subdivision order. The
+ * resulting mesh of fine cells is distributed over an MPI Cartesian
+ * communicator.
+ *
+ * The sides of the mesh are labelled as follows in 2D:
+ *
+ *   - 2 -
+ *  3     1
+ *   - 0 -
+ *
+ *  y
+ *  |
+ *   -> x
+ *
+ *  In 3D the bottom face is labelled 4 and the top face is labelled 5.
+ *
+ * The face cells are given a contiguous linear index which is determined by
+ * computing the linear index on each face then adding an offset computed from
+ * the total number of face cells on all the preceeding faces. i.e. cells on
+ * face 0 are indexed in the xz plane with x as the fastest running dimension
+ * then z.
+ *
+ * Some of the face cell indexing methods in this class use a tuple form of
+ * indexing a face cell. In 2D this tuple is [face, l0] and in 3D this tuple is
+ * [face, l0, l1]. Here "face" is the index of the face the cell exists on. l0
+ * is the coordinate in the first dimension of the face, e.g. x on face 0 and l1
+ * is the second coordinate on the face, e.g. z on face 0.
+ *
+ * In 2D the vertices of each cell are labelled as
+ *
+ *  3 - 2
+ *  |   |
+ *  0 - 1
+ *
+ *  and in 3D
+ *
+ *  Top
+ *   7 - 6
+ *   |   |
+ *   4 - 5
+ *  Bottom
+ *
+ *   3 - 2
+ *   |   |
+ *   0 - 1
+ *
+ *  y
+ *  ^
+ *  |
+ *   -> x
+ *
+ * When converting to VTK coordinates we extract vertices in the following
+ * order:
+ *
+ * 2D:
+ *
+ * Face    Vertices
+ *   0      0, 1
+ *   1      1, 2
+ *   2      3, 2
+ *   3      0, 3
+ *
+ * 3D
+ *
+ * Face    Vertices
+ *   0      0, 1, 5, 4
+ *   1      1, 2, 6, 5
+ *   2      3, 2, 6, 7
+ *   3      0, 3, 7, 4
+ *   4      0, 1, 2, 3
+ *   5      4, 5, 6, 7
+ *
+ */
+class CartesianHMesh : public HMesh {
+private:
+  int cell_count;
+  MPI_Comm comm_cart;
+  int periods[3] = {1, 1, 1};
+  int coords[3] = {0, 0, 0};
+  int mpi_dims[3] = {0, 0, 0};
+  std::shared_ptr<MeshHierarchy> mesh_hierarchy;
+  bool allocated = false;
+  std::vector<int> neighbour_ranks;
+
+  std::array<int, 6> face_strides0{0, 0, 0, 0, 0, 0};
+  std::array<int, 6> face_strides1{0, 0, 0, 0, 0, 0};
+  std::array<int, 6> num_geoms_per_face{0, 0, 0, 0, 0, 0};
+  std::array<int, 6> num_geoms_per_face_incscan{0, 0, 0, 0, 0, 0};
+  std::array<int, 6> num_geoms_per_face_exscan{0, 0, 0, 0, 0, 0};
+  std::unordered_map<int, int> cache_map_face_id_to_rank;
+  std::vector<INT> owned_face_indices;
+  std::map<INT, std::vector<INT>> map_faces_to_geoms;
+
+  void compute_owned_face_indices();
+  MPI_Comm comm_faces{MPI_COMM_NULL};
+
+public:
+  /// Disable (implicit) copies.
+  CartesianHMesh(const CartesianHMesh &st) = delete;
+  /// Disable (implicit) copies.
+  CartesianHMesh &operator=(CartesianHMesh const &a) = delete;
+
+  virtual ~CartesianHMesh() = default;
+
+  /// Holds the first cell this rank owns in each dimension.
+  int cell_starts[3] = {0, 0, 0};
+  /// Holds the last cell+1 this ranks owns in each dimension.
+  int cell_ends[3] = {1, 1, 1};
+  /// Global number of cells in each dimension.
+  std::vector<int> cell_counts = {0, 0, 0};
+  /// Local number of cells in each dimension.
+  int cell_counts_local[3] = {0, 0, 0};
+  /// Global extents of the mesh.
+  double global_extents[3] = {0.0, 0.0, 0.0};
+  /// Width of the stencil used to determine which MPI ranks are neighbours.
+  int stencil_width;
+  /// Number of dimensions of the mesh.
+  const int ndim;
+  /// Vector holding the number of coarse cells in each dimension.
+  std::vector<int> dims;
+  /// Subdivision order to determine number of fine cells per coarse cell.
+  const int subdivision_order;
+  /// Width of coarse cells, uniform in all dimensions.
+  const double cell_width_coarse;
+  /// Width of fine cells, uniform in all dimensions.
+  const double cell_width_fine;
+  /// Inverse of the coarse cell width.
+  const double inverse_cell_width_coarse;
+  /// Inverse of the fine cell width.
+  const double inverse_cell_width_fine;
+  /// Global number of coarse cells.
+  const int ncells_coarse;
+  /// Number of coarse cells per fine cell.
+  const int ncells_fine;
+  /// Is this mesh running in a mode where it exposes one NP cell per MPI rank.
+  bool single_cell_mode;
+  /// The total number of ndim-1 cells on boundaries (global)
+  int ncells_face_global{0};
+
+  /**
+   * Construct a mesh over a given MPI communicator with a specified shape.
+   *
+   * @param comm MPI Communicator to use for decomposition.
+   * @param ndim Number of dimensions.
+   * @param dims Number of coarse cells in each dimension.
+   * @param extent Width of each coarse cell in each dimension.
+   * @param subdivision_order Number of times to subdivide each coarse cell to
+   * produce the fine cells.
+   * @param stencil_width Width of the stencil, in number of cells, used to
+   * determine MPI neighbours.
+   */
+  CartesianHMesh(MPI_Comm comm, const int ndim, std::vector<int> &dims,
+                 const double extent = 1.0, const int subdivision_order = 1,
+                 const int stencil_width = 0);
+
+  MPI_Comm get_comm();
+  int get_ndim();
+  std::vector<int> &get_dims();
+  int get_subdivision_order();
+  double get_cell_width_coarse();
+  double get_cell_width_fine();
+  double get_inverse_cell_width_coarse();
+  double get_inverse_cell_width_fine();
+  int get_ncells_coarse();
+  int get_ncells_fine();
+  std::vector<int> &get_local_communication_neighbours();
+  void get_point_in_subdomain(double *point);
+  std::shared_ptr<MeshHierarchy> get_mesh_hierarchy();
+
+  /**
+   * @returns The number of "cell" NESO-Particles should consider.
+   */
+  int get_cell_count();
+
+  /**
+   * @returns The number of Cartesian cells owned by this MPI rank.
+   */
+  int get_cart_cell_count();
+
+  /**
+   * Convert a mesh index (index_x, index_y, ...) for this cartesian mesh to
+   * the format for a MeshHierarchy: (coarse_x, coarse_y,.., fine_x,
+   * fine_y,...).
+   *
+   * @param index_mesh Input tuple index on mesh.
+   * @param index_mh Output tuple index on MeshHierarchy.
+   */
+  void mesh_tuple_to_mh_tuple(const INT *index_mesh, INT *index_mh);
+
+  /**
+   *  Free the mesh and any associated communicators.
+   */
+  void free();
+
+  /**
+   * Get a vector of the cells owned by this MPI rank.
+   *
+   * @returns vector of owned cells in order of the cell ids of the cells.
+   */
+  std::vector<std::array<int, 3>> get_owned_cells();
+
+  /**
+   * Get the global index in tuple form from a local linear cell id.
+   *
+   * @param linear_cell_index Local linear cell index.
+   * @returns Global tuple of cell index.
+   */
+  std::array<int, 3> get_global_cell_tuple_index(const INT linear_cell_index);
+
+  /**
+   * @param face_id Face id to compute owning rank for.
+   * @returns Owning rank for passed face id.
+   */
+  int get_face_id_owning_rank(const INT face_id);
+
+  /**
+   * @param index_mesh Cartesian mesh index to find owning rank for.
+   * @returns Owning rank of passed mesh index.
+   */
+  int get_mesh_tuple_owning_rank(const INT *index_mesh);
+
+  /**
+   * Convert a face cell id into a face index and local coordinate index for the
+   * face.
+   *
+   * @param[in] face_id Linear face id to convert.
+   * @param[in, out] face_index_tuple Index of the face on which the cell lies.
+   */
+  void get_face_id_as_tuple(const INT face_id, INT *face_index_tuple);
+
+  /**
+   * Convert the face geom tuple id to a linear index.
+   *
+   * @param face_index_tuple Tuple describing the face geom.
+   */
+  INT get_face_linear_index_from_tuple(const INT *face_index_tuple);
+
+  /**
+   * Get the mesh cell as a mesh tuple which has the passed face geometry index
+   * as a face.
+   *
+   * @param[in] face_tuple Tuple which desribes the cell on the face.
+   * @param[in, out] Mesh tuple that describes the cell which owns the face.
+   */
+  void get_mesh_tuple_owning_face_tuple(const INT *face_index_tuple,
+                                        INT *mesh_tuple);
+
+  /**
+   * Get the coordinates of the vertices of a cell in a form that can be passed
+   * directly to NESO::Particles::VTK::UnstructuredCell.
+   *
+   * @param index Local index of cell to collect vertex coordinates for.
+   */
+  std::vector<double> get_vtk_cell_points(const INT index);
+
+  /**
+   * Get the coordinates of the vertices of a cell in a form that can be passed
+   * directly to NESO::Particles::VTK::UnstructuredCell.
+   *
+   * @param index_tuple Global index in tuple form of cell to collect vertex
+   * coordinates for.
+   */
+  std::vector<double> get_vtk_cell_points(const INT *index_tuple);
+
+  /**
+   * Get VTK data for all cells.
+   *
+   * @returns Vector of VTK data which can be passed to our VTKHDF
+   * implementation.
+   */
+  std::vector<VTK::UnstructuredCell> get_vtk_cell_data();
+
+  /**
+   * Get the VTK data for a single face cell.
+   *
+   * @param face_index_tuple Index of the face cell in tuple form.
+   * @returns Vertex coordinates in form VTK::UnstructuredCell can use.
+   */
+  std::vector<double> get_vtk_face_cell_points(const INT *face_index_tuple);
+
+  /**
+   * Get the VTK data for a single face cell.
+   *
+   * @param face_index Index of the face cell in linear form.
+   * @returns Vertex coordinates in form VTK::UnstructuredCell can use.
+   */
+  std::vector<double> get_vtk_face_cell_points(const INT face_index);
+
+  /**
+   * @returns The linear face cell ids of the face cells this MPI rank owns.
+   *
+   */
+  const std::vector<INT> &get_owned_face_cells();
+
+  /**
+   * Get VTK data for a face cell.
+   *
+   * @param face_cell Linear cell index of owned face cell.
+   * @returns VTK::UnstructuredCell data for requested cell.
+   */
+  VTK::UnstructuredCell get_vtk_face_cell_data(const INT face_cell);
+
+  /**
+   * Get VTK data for all face cells.
+   *
+   * @returns Map from face linear INX to VTK data which can be passed to our
+   * VTKHDF implementation once linearised into a vector (see flatten_map).
+   */
+  std::map<INT, VTK::UnstructuredCell> get_vtk_face_cell_data();
+
+  /**
+   * @returns A MPI communicator containing ranks that own face cells. This
+   * communicator is MPI_COMM_NULL on ranks that do not own face cells.
+   */
+  MPI_Comm get_face_owning_ranks_comm();
+
+  /**
+   * @param face_index Face index, e.g. [0,1,2,3] in 2D or [0,1,2,3,4,5] of face
+   * to get all owned face cells for.
+   * @returns All owned face cells, in linear index form, for the passed face
+   * index.
+   */
+  const std::vector<INT> &get_all_face_cells_on_face(const INT face_index);
+
+  /**
+   * Get the face cells which are owned by this MPI rank and exist on one of the
+   * given faces.
+   *
+   * @param faces Vector of faces to get all face cells for.
+   * @returns the Locally owned face cells which exist on given faces.
+   */
+  template <typename INT_TYPE>
+  std::vector<INT> get_face_cells(const std::vector<INT_TYPE> &faces) {
+    std::vector<INT> cells;
+    std::size_t s = 0;
+
+    for (auto &fx : faces) {
+      s += this->map_faces_to_geoms[fx].size();
+    }
+    cells.reserve(s);
+    for (auto &fx : faces) {
+      cells.insert(cells.end(), this->map_faces_to_geoms[fx].begin(),
+                   this->map_faces_to_geoms[fx].end());
+    }
+
+    return cells;
+  }
+};
+
+typedef std::shared_ptr<CartesianHMesh> CartesianHMeshSharedPtr;
+
+extern template std::vector<INT>
+CartesianHMesh::get_face_cells(const std::vector<INT> &faces);
+extern template std::vector<INT>
+CartesianHMesh::get_face_cells(const std::vector<int> &faces);
+
+} // namespace NESO::Particles
+
+#endif

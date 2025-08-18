@@ -14,7 +14,7 @@ class DescendantProducts;
 
 struct DescendantProductsGet {
   ProductMatrixGet product_matrix_get;
-  int num_particles;
+  int num_parent_particles;
   INT *d_parent_cells;
   INT *d_parent_layers;
 };
@@ -34,7 +34,7 @@ struct Write {
   int const *offsets_real;
   int const *offsets_int;
   int num_products;
-  int num_particles;
+  int num_parent_particles;
   INT *d_parent_cells;
   INT *d_parent_layers;
 
@@ -52,7 +52,7 @@ struct Write {
   REAL &at_real(const LoopIndex::Read &particle_index, const int product,
                 const int property, const int component) {
     const int sub_index = particle_index.get_loop_linear_index();
-    const int matrix_row = sub_index + product * num_particles;
+    const int matrix_row = sub_index + product * num_parent_particles;
     return ptr_real[(offsets_real[property] + component) * num_products +
                     matrix_row];
   }
@@ -71,7 +71,7 @@ struct Write {
   INT &at_int(const LoopIndex::Read &particle_index, const int product,
               const int property, const int component) {
     const int sub_index = particle_index.get_loop_linear_index();
-    const int matrix_row = sub_index + product * num_particles;
+    const int matrix_row = sub_index + product * num_parent_particles;
     return ptr_int[(offsets_int[property] + component) * num_products +
                    matrix_row];
   }
@@ -85,7 +85,7 @@ struct Write {
   inline void set_parent(const LoopIndex::Read &particle_index,
                          const int product) {
     const int sub_index = particle_index.get_loop_linear_index();
-    const int matrix_row = sub_index + product * num_particles;
+    const int matrix_row = sub_index + product * num_parent_particles;
     this->d_parent_cells[matrix_row] = particle_index.cell;
     this->d_parent_layers[matrix_row] = particle_index.layer;
   }
@@ -118,7 +118,7 @@ create_kernel_arg([[maybe_unused]] ParticleLoopIteration &iterationx,
   lhs.offsets_real = rhs.product_matrix_get.offsets_real;
   lhs.offsets_int = rhs.product_matrix_get.offsets_int;
   lhs.num_products = rhs.product_matrix_get.num_products;
-  lhs.num_particles = rhs.num_particles;
+  lhs.num_parent_particles = rhs.num_parent_particles;
   lhs.d_parent_cells = rhs.d_parent_cells;
   lhs.d_parent_layers = rhs.d_parent_layers;
 }
@@ -146,24 +146,18 @@ protected:
   std::shared_ptr<BufferDevice<INT>> d_parent_cells;
   std::shared_ptr<BufferDevice<INT>> d_parent_layers;
 
-  inline DescendantProductsGet impl_get() {
-    DescendantProductsGet dpg;
-    dpg.product_matrix_get = ProductMatrix::impl_get();
-    dpg.num_particles = this->num_particles;
-    dpg.d_parent_cells = this->d_parent_cells->ptr;
-    dpg.d_parent_layers = this->d_parent_layers->ptr;
-    return dpg;
-  }
+  DescendantProductsGet impl_get();
 
 public:
+  virtual ~DescendantProducts() = default;
   DescendantProducts() = default;
   DescendantProducts &operator=(const DescendantProducts &) = default;
 
   /// The number of products this data structure is expecting per parent
   /// particle.
   int num_products_per_parent;
-  /// The current number of parent particles the container is allocated for.
-  int num_particles;
+  /// The number of parent particles this data structure is allocated for.
+  int num_parent_particles;
 
   /**
    * Create an instance from a ProductMatrixSpec that defines which particle
@@ -177,32 +171,16 @@ public:
    */
   DescendantProducts(SYCLTargetSharedPtr sycl_target,
                      std::shared_ptr<ProductMatrixSpec> spec,
-                     const int num_products_per_parent)
-      : ProductMatrix(sycl_target, spec),
-        num_products_per_parent(num_products_per_parent), num_particles(0) {
-    this->d_parent_cells = std::make_shared<BufferDevice<INT>>(sycl_target, 1);
-    this->d_parent_layers = std::make_shared<BufferDevice<INT>>(sycl_target, 1);
-  }
+                     const int num_products_per_parent);
 
   /**
    * Resize the container to hold space for the products of a number of parent
    * particles.
    *
-   * @param num_particles Number of parent particles space is required for.
+   * @param num_parent_particles Number of parent particles space is required
+   * for.
    */
-  virtual inline void reset(const int num_particles) override {
-    this->num_particles = num_particles;
-    const int num_products = num_particles * num_products_per_parent;
-    ProductMatrix::reset(num_products);
-    this->d_parent_cells->realloc_no_copy(num_products);
-    this->d_parent_layers->realloc_no_copy(num_products);
-    auto e0 = this->sycl_target->queue.fill(this->d_parent_cells->ptr,
-                                            static_cast<INT>(-1), num_products);
-    auto e1 = this->sycl_target->queue.fill(this->d_parent_layers->ptr,
-                                            static_cast<INT>(-1), num_products);
-    e0.wait_and_throw();
-    e1.wait_and_throw();
-  };
+  virtual void reset(const int num_parent_particles) override;
 };
 
 namespace ParticleLoopImplementation {

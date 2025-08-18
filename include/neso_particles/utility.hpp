@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "access.hpp"
+#include "cartesian_mesh/cartesian_h_mesh.hpp"
 #include "compute_target.hpp"
 #include "mesh_interface.hpp"
 #include "particle_spec.hpp"
@@ -77,11 +78,8 @@ normal_distribution(const int N, const int ndim, const double mu,
  *  @param extents Extent of each of the dimensions.
  *  @returns (N)x(ndim) set of positions stored for each column.
  */
-inline std::vector<std::vector<double>>
-uniform_within_extents(const int N, const int ndim, const double *extents) {
-  std::mt19937 rng = std::mt19937(std::random_device{}());
-  return uniform_within_extents(N, ndim, extents, rng);
-}
+std::vector<std::vector<double>>
+uniform_within_extents(const int N, const int ndim, const double *extents);
 
 /**
  *  Create (N)x(ndim) set of samples from a Gaussian distribution.
@@ -92,12 +90,10 @@ uniform_within_extents(const int N, const int ndim, const double *extents) {
  *  @param sigma Sigma to use for Gaussian distribution.
  *  @returns (N)x(ndim) set of samples stored per column.
  */
-inline std::vector<std::vector<double>>
-normal_distribution(const int N, const int ndim, const double mu,
-                    const double sigma) {
-  std::mt19937 rng = std::mt19937(std::random_device{}());
-  return normal_distribution(N, ndim, mu, sigma, rng);
-}
+std::vector<std::vector<double>> normal_distribution(const int N,
+                                                     const int ndim,
+                                                     const double mu,
+                                                     const double sigma);
 
 /**
  * Helper function to quickly initialise a uniform distribution of particles on
@@ -111,63 +107,49 @@ normal_distribution(const int N, const int ndim, const double mu,
  * @param[in, out] cells Ouput particle cell ids indexed by particle.
  * @param[in] rng_in Optional input RNG to use.
  */
-inline void uniform_within_cartesian_cells(
+void uniform_within_cartesian_cells(
     CartesianHMeshSharedPtr mesh, const int npart_per_cell,
     std::vector<std::vector<double>> &positions, std::vector<int> &cells,
-    std::optional<std::mt19937> rng_in = std::nullopt) {
+    std::optional<std::mt19937> rng_in = std::nullopt);
 
-  std::mt19937 rng;
-  if (!rng_in) {
-    rng = std::mt19937(std::random_device{}());
-  } else {
-    rng = rng_in.value();
+/**
+ *  Get the total number of particles. This method must be called collectively
+ * on the communicator.
+ *
+ * @param particle_group ParticleGroup or ParticleSubGroup to sum local particle
+ * counts of.
+ * @returns Global particle count.
+ */
+template <typename GROUP_TYPE>
+inline INT get_npart_global(std::shared_ptr<GROUP_TYPE> particle_group) {
+  const INT npart_local = static_cast<INT>(particle_group->get_npart_local());
+  INT npart_global = 0;
+  MPI_Comm comm =
+      get_particle_group(particle_group)->sycl_target->comm_pair.comm_parent;
+
+  MPICHK(MPI_Allreduce(&npart_local, &npart_global, 1,
+                       map_ctype_mpi_type<INT>(), MPI_SUM, comm));
+
+  return npart_global;
+}
+
+/**
+ * Flatten map values into a vector.
+ *
+ * @param input_map Map to flatten.
+ * @returns std vector of item values.
+ */
+template <typename KEY_TYPE, typename VALUE_TYPE>
+inline std::vector<VALUE_TYPE>
+flatten_map(const std::map<KEY_TYPE, VALUE_TYPE> &input_map) {
+
+  std::vector<VALUE_TYPE> output_vector;
+  output_vector.reserve(input_map.size());
+  for (auto &ix : input_map) {
+    output_vector.push_back(ix.second);
   }
-  const int ndim = mesh->get_ndim();
-  std::vector<double> extents(ndim);
 
-  const double cell_width_fine = mesh->get_cell_width_fine();
-  for (int dx = 0; dx < ndim; dx++) {
-    extents.at(dx) = cell_width_fine;
-  }
-  const int cell_count = mesh->get_cart_cell_count();
-  const int npart_total = npart_per_cell * cell_count;
-  positions.resize(ndim);
-  cells.resize(npart_total);
-  for (int dimx = 0; dimx < ndim; dimx++) {
-    positions[dimx] = std::vector<double>(npart_total);
-  }
-  std::vector<double> origin(ndim);
-  for (int dx = 0; dx < ndim; dx++) {
-    origin.at(dx) = mesh->get_mesh_hierarchy()->origin.at(dx);
-  }
-
-  auto mesh_cells = mesh->get_owned_cells();
-  const bool single_cell_mode = mesh->single_cell_mode;
-
-  for (int cx = 0; cx < cell_count; cx++) {
-    const int index_start = cx * npart_per_cell;
-    const int index_end = (cx + 1) * npart_per_cell;
-    for (int ex = index_start; ex < index_end; ex++) {
-      cells.at(ex) = single_cell_mode ? 0 : cx;
-    }
-    auto positions_ref_cell =
-        uniform_within_extents(npart_per_cell, ndim, extents.data(), rng);
-
-    std::vector<double> offset(ndim);
-    for (int dx = 0; dx < ndim; dx++) {
-      offset.at(dx) =
-          origin.at(dx) + mesh_cells.at(cx).at(dx) * cell_width_fine;
-    }
-
-    int index = 0;
-    for (int ex = index_start; ex < index_end; ex++) {
-      for (int dx = 0; dx < ndim; dx++) {
-        positions.at(dx).at(ex) =
-            offset.at(dx) + positions_ref_cell.at(dx).at(index);
-      }
-      index++;
-    }
-  }
+  return output_vector;
 }
 
 } // namespace NESO::Particles

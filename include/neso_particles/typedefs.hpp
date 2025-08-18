@@ -12,6 +12,15 @@
 
 namespace NESO::Particles {
 
+#define NESO_PARTICLES
+
+/**
+ * Reduce values via multiplication.
+ *
+ * @param nel Number of elements.
+ * @param values Vector of at least nel elements.
+ * @returns Elements in values multiplied together.
+ */
 inline int reduce_mul(const int nel, std::vector<int> &values) {
   int v = 1;
   for (int ex = 0; ex < nel; ex++) {
@@ -19,6 +28,21 @@ inline int reduce_mul(const int nel, std::vector<int> &values) {
   }
   return v;
 }
+
+/**
+ * Allow the function called by NESOASSERT to be overridden by setting this
+ * macro. This macro should be set to the name of a function with the following
+ * signature
+ *
+ * template<typename T>
+ * void(const char *, bool, const char *, int,  T &&)
+ *
+ * See the function neso_particles_assert for a reference to what these
+ * arguments do.
+ */
+#ifndef NESOASSERT_FUNCTION
+#define NESOASSERT_FUNCTION NESO::Particles::neso_particles_assert
+#endif
 
 /**
  * \def NESOASSERT(expr, msg)
@@ -30,7 +54,7 @@ inline int reduce_mul(const int nel, std::vector<int> &values) {
  * To check conditionals within their code.
  */
 #define NESOASSERT(expr, msg)                                                  \
-  NESO::Particles::neso_particles_assert(#expr, expr, __FILE__, __LINE__, msg)
+  NESOASSERT_FUNCTION(#expr, expr, __FILE__, __LINE__, msg)
 
 /**
  * This is a helper function to assert conditions are satisfied and terminate
@@ -61,7 +85,6 @@ inline void neso_particles_assert(const char *expr_str, bool expr,
     int flag = 0;
     MPI_Initialized(&flag);
     if (flag) {
-      std::abort();
       MPI_Abort(MPI_COMM_WORLD, -1);
     } else {
       std::abort();
@@ -161,6 +184,22 @@ inline void get_decomp_1d(const std::size_t N_compute_units,
 
   *rstart = start;
   *rend = end;
+}
+
+inline std::size_t get_decomp_1d_inverse(const std::size_t N_compute_units,
+                                         const std::size_t N_work_items,
+                                         const std::size_t work_unit) {
+  const auto pq = std::div(static_cast<long long>(N_work_items),
+                           static_cast<long long>(N_compute_units));
+  const std::size_t p = pq.quot;
+  const std::size_t q = pq.rem;
+  const std::size_t nlower = p + 1;
+  const std::size_t cutoff = nlower * q;
+  if (work_unit < cutoff) {
+    return work_unit / nlower;
+  } else {
+    return q + (work_unit - cutoff) / p;
+  }
 }
 
 template <typename T>
@@ -323,6 +362,32 @@ inline std::size_t get_env_size_t(const std::string key,
   }
 }
 
+/**
+ * Helper function to retrive string values from environment variables.
+ *
+ * @param key Name of environment variable.
+ * @param default_value Default value to return if the key is not found.
+ * @returns Value from environment variable.
+ */
+inline std::string get_env_string(const std::string key,
+                                  std::string default_value) {
+  char *var_char;
+  const bool var_exists = (var_char = std::getenv(key.c_str())) != nullptr;
+  if (var_exists) {
+    try {
+      std::string value = var_char;
+      return value;
+    } catch (...) {
+      nprint("Could not read", key,
+             "and convert to int. Value of environment variable is:", var_char,
+             "Will return the default value of:", default_value);
+      return default_value;
+    }
+  } else {
+    return default_value;
+  }
+}
+
 namespace Debug {
 constexpr static inline std::size_t MOVEMENT_LEVEL = 2;
 
@@ -345,8 +410,12 @@ constexpr
  * @param threshold
  * @returns True if debug level greater than threshold.
  */
-inline std::size_t enabled(const std::size_t threshold) {
-  return get_level() > threshold;
+inline bool enabled([[maybe_unused]] const std::size_t threshold) {
+#ifdef NDEBUG
+  return false;
+#else
+  return get_env_size_t("NESO_PARTICLES_DEBUG_LEVEL", 0) > threshold;
+#endif
 }
 
 } // namespace Debug
@@ -383,6 +452,14 @@ inline bool device_aware_mpi_enabled() {
   return enabled;
 }
 
+/**
+ * @param n Positive integer to check.
+ * @returns True if n is a power of two.
+ */
+inline bool is_power_of_two(const std::size_t n) {
+  return (n > 0) ? !(n & (n - 1)) : false;
+}
+
 } // namespace NESO::Particles
 
 // HDF5 includes if it exists.
@@ -402,5 +479,16 @@ inline bool device_aware_mpi_enabled() {
 #endif
 #endif
 #endif
+
+#ifndef NESO_PARTICLES_LOOP_STRIDE
+#define NESO_PARTICLES_LOOP_STRIDE 16
+#endif
+
+#ifndef NESO_PARTICLES_CACHELINE_NUM_BYTES
+#define NESO_PARTICLES_CACHELINE_NUM_BYTES 128
+#endif
+
+constexpr inline std::size_t NESO_PARTICLES_CACHELINE_NUM_int =
+    NESO_PARTICLES_CACHELINE_NUM_BYTES / sizeof(int);
 
 #endif

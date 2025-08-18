@@ -2,7 +2,7 @@
 #define _NESO_PARTICLES_PETSC_BOUNDARY_INTERACTION_BOUNDARY_INTERACTION_COMMON_HPP_
 
 #include "../../../containers/blocked_binary_tree.hpp"
-#include "../../../loop/particle_loop.hpp"
+#include "../../../loop/particle_loop_functions.hpp"
 #include "../../../particle_sub_group/particle_sub_group.hpp"
 #include "../dmplex_interface.hpp"
 #include <map>
@@ -21,32 +21,7 @@ namespace NESO::Particles::PetscInterface {
  */
 class BoundaryInteractionCommon {
 protected:
-  inline ParticleGroupSharedPtr
-  get_particle_group(ParticleGroupSharedPtr iteration_set) {
-    return iteration_set;
-  }
-  inline ParticleGroupSharedPtr
-  get_particle_group(ParticleSubGroupSharedPtr iteration_set) {
-    return iteration_set->get_particle_group();
-  }
-
-  template <typename T>
-  inline void check_dat(ParticleGroupSharedPtr particle_group, Sym<T> sym,
-                        const int ncomp) {
-    if (!particle_group->contains_dat(sym)) {
-      ParticleProp prop(sym, ncomp);
-      particle_group->add_particle_dat(
-          ParticleDat(this->sycl_target, prop, this->mesh->get_cell_count()));
-    } else {
-      NESOASSERT(
-          particle_group->get_dat(sym)->ncomp >= ncomp,
-          "Requested dat with sym " + sym.name +
-              " exists already with an insufficient number of components");
-    }
-  }
-
   std::map<PetscInt, PetscInt> map_label_to_groups;
-
   std::unique_ptr<MeshHierarchyMapper> mesh_hierarchy_mapper;
   std::unique_ptr<BufferDeviceHost<int>> dh_max_box_size;
   std::unique_ptr<BufferDevice<int>> d_cell_bounds;
@@ -56,16 +31,7 @@ protected:
   std::set<INT> required_mh_cells;
   std::set<INT> collected_mh_cells;
 
-  template <typename T>
-  inline void prepare_particle_group(std::shared_ptr<T> particle_sub_group) {
-    auto particle_group = this->get_particle_group(particle_sub_group);
-    NESOASSERT(particle_group->sycl_target == this->sycl_target,
-               "Missmatch of sycl targets.");
-    const int ndim = this->mesh->get_ndim();
-    this->check_dat(particle_group, this->previous_position_sym, ndim);
-    this->check_dat(particle_group, this->boundary_position_sym, ndim);
-    this->check_dat(particle_group, this->boundary_label_sym, 3);
-  }
+  void prepare_particle_group(ParticleGroupSharedPtr particle_group);
 
   inline std::set<PetscInt> get_labels() const {
     std::map<PetscInt, std::set<PetscInt>> bl;
@@ -90,9 +56,10 @@ protected:
 
   template <typename T, typename U>
   inline void find_intersections_inner(std::shared_ptr<T> particle_sub_group,
-                                       const U &intersect_object) {
+                                       const U &intersect_object, REAL *d_real,
+                                       INT *d_int) {
     if (intersect_object.boundary_elements_exist()) {
-      auto particle_group = this->get_particle_group(particle_sub_group);
+      auto particle_group = get_particle_group(particle_sub_group);
       const auto k_ndim = particle_group->position_dat->ncomp;
 
       auto mesh_hierarchy_device_mapper =
@@ -102,7 +69,7 @@ protected:
       particle_loop(
           "BoundaryInteractionCommon::find_intersections_inner",
           particle_sub_group,
-          [=](auto B_C, auto B_P, auto PREV_POS, auto CURR_POS) {
+          [=](auto INDEX, auto PREV_POS, auto CURR_POS) {
             // Get the cells containing the start and end points
             REAL curr_position[3];
             REAL prev_position[3];
@@ -145,6 +112,10 @@ protected:
             REAL current_distance;
             intersect_object.reset(current_distance);
 
+            REAL k_intersection_point[2] = {0.0, 0.0};
+            REAL k_intersection_normal[2] = {0.0, 0.0};
+            INT k_intersection_metadata[3] = {0, 0, 0};
+
             // loop over the grid of MH cells
             INT cell_index[3];
             for (cell_index[2] = cell_starts[2]; cell_index[2] < cell_ends[2];
@@ -163,15 +134,32 @@ protected:
                   const INT linear_index =
                       mesh_hierarchy_device_mapper.tuple_to_linear_global(
                           mh_tuple);
-                  intersect_object.find(linear_index, prev_position,
-                                        curr_position, current_distance, B_P,
-                                        B_C);
+                  intersect_object.find(
+                      linear_index, prev_position, curr_position,
+                      current_distance, k_intersection_point,
+                      k_intersection_normal, k_intersection_metadata);
                 }
               }
             }
+            // If an intersection was found
+            if (k_intersection_metadata[0]) {
+              // TODO make this ordering better
+              d_int[INDEX.get_local_linear_index() * 3 + 0] = 1;
+              d_int[INDEX.get_local_linear_index() * 3 + 1] =
+                  k_intersection_metadata[1];
+              d_int[INDEX.get_local_linear_index() * 3 + 2] =
+                  k_intersection_metadata[2];
+              d_real[INDEX.get_local_linear_index() * 4 + 0] =
+                  k_intersection_point[0];
+              d_real[INDEX.get_local_linear_index() * 4 + 1] =
+                  k_intersection_point[1];
+              d_real[INDEX.get_local_linear_index() * 4 + 2] =
+                  k_intersection_normal[0];
+              d_real[INDEX.get_local_linear_index() * 4 + 3] =
+                  k_intersection_normal[1];
+            }
           },
-          Access::write(this->boundary_label_sym),
-          Access::write(this->boundary_position_sym),
+          Access::read(ParticleLoopIndex{}),
           Access::read(this->previous_position_sym),
           Access::read(particle_group->position_dat))
           ->execute();
@@ -189,7 +177,7 @@ protected:
     const int k_INT_MIN = std::numeric_limits<int>::lowest();
     this->cdc_mh_min->fill(k_INT_MAX);
     this->cdc_mh_max->fill(k_INT_MIN);
-    auto particle_group = this->get_particle_group(particle_sub_group);
+    auto particle_group = get_particle_group(particle_sub_group);
     const auto mesh_hierarchy_device_mapper =
         this->mesh_hierarchy_mapper->get_device_mapper();
     const int k_ndim = this->mesh->get_ndim();
@@ -339,59 +327,7 @@ protected:
   BoundaryInteractionCommon(
       SYCLTargetSharedPtr sycl_target, DMPlexInterfaceSharedPtr mesh,
       std::map<PetscInt, std::vector<PetscInt>> &boundary_groups,
-      std::optional<Sym<REAL>> previous_position_sym = std::nullopt,
-      std::optional<Sym<REAL>> boundary_position_sym = std::nullopt,
-      std::optional<Sym<INT>> boundary_label_sym = std::nullopt)
-      : sycl_target(sycl_target), mesh(mesh), boundary_groups(boundary_groups) {
-
-    for (auto &bx : boundary_groups) {
-      NESOASSERT(bx.first >= 0, "Group id cannot be negative.");
-      for (auto &lx : bx.second) {
-        this->map_label_to_groups[lx] = bx.first;
-      }
-    }
-
-    auto assign_sym = [=](auto &output_sym, auto &input_sym, auto default_sym) {
-      if (input_sym != std::nullopt) {
-        output_sym = input_sym.value();
-      } else {
-        output_sym = default_sym;
-      }
-    };
-    assign_sym(this->previous_position_sym, previous_position_sym,
-               Sym<REAL>("NESO_PARTICLES_DMPLEX_BOUNDARY_PREV_POS"));
-    assign_sym(this->boundary_position_sym, boundary_position_sym,
-               Sym<REAL>("NESO_PARTICLES_DMPLEX_BOUNDARY_POS"));
-    assign_sym(this->boundary_label_sym, boundary_label_sym,
-               Sym<INT>("NESO_PARTICLES_DMPLEX_BOUNDARY_LABEL"));
-
-    const int k_ndim = this->mesh->get_ndim();
-    const int k_cell_count = this->mesh->get_cell_count();
-    this->cdc_mh_min = std::make_shared<CellDatConst<int>>(
-        this->sycl_target, k_cell_count, k_ndim, 1);
-    this->cdc_mh_max = std::make_shared<CellDatConst<int>>(
-        this->sycl_target, k_cell_count, k_ndim, 1);
-
-    this->mesh_hierarchy_mapper = std::make_unique<MeshHierarchyMapper>(
-        this->sycl_target, this->mesh->get_mesh_hierarchy());
-    this->dh_max_box_size =
-        std::make_unique<BufferDeviceHost<int>>(this->sycl_target, 1);
-
-    const auto mesh_hierarchy_host_mapper =
-        this->mesh_hierarchy_mapper->get_host_mapper();
-
-    std::vector<int> h_cell_bounds = {0, 0, 0};
-    for (int dimx = 0; dimx < k_ndim; dimx++) {
-      const int max_possible_cell = mesh_hierarchy_host_mapper.dims[dimx] *
-                                    mesh_hierarchy_host_mapper.ncells_dim_fine;
-      h_cell_bounds.at(dimx) = max_possible_cell;
-    }
-
-    this->d_cell_bounds =
-        std::make_unique<BufferDevice<int>>(this->sycl_target, h_cell_bounds);
-    this->dh_mh_cells =
-        std::make_unique<BufferDeviceHost<INT>>(this->sycl_target, 1024);
-  }
+      std::optional<Sym<REAL>> previous_position_sym = std::nullopt);
 
 public:
   /// The compute device used to find intersections.
@@ -405,17 +341,6 @@ public:
   /// particle before the positions were updated in a time stepping loop. These
   /// positions are populated on call to @ref pre_integration.
   Sym<REAL> previous_position_sym;
-  /// The Sym for the intersection point for the particle trajectory and the
-  /// boundary. This property is populated if an intersection is discovered in
-  /// a call to @ref post_integration.
-  Sym<REAL> boundary_position_sym;
-  /// The Sym which holds the metadata information for the intersection point
-  /// between the trajectory and the boundary. Component 0 holds a 1 if an
-  /// intersection is found. Component 1 holds the group ID identifed for the
-  /// intersection. Component 2 holds the global ID of the boundary element for
-  /// which the intersection was identified between trajectory and the
-  /// boundary.
-  Sym<INT> boundary_label_sym;
 
   /**
    * This method should be called with a collection of particles prior to
@@ -424,28 +349,16 @@ public:
    * @param particles ParticleGroup or ParticleSubGroup of particles whose
    * positions are about to be updated, e.g. in a time stepping operation.
    */
-  template <typename T>
-  inline void pre_integration(std::shared_ptr<T> particles) {
-    prepare_particle_group(particles);
-    auto particle_group = this->get_particle_group(particles);
-    auto position_dat = particle_group->position_dat;
-    const int k_ncomp = position_dat->ncomp;
-    const int k_ndim = this->mesh->get_ndim();
-    NESOASSERT(
-        k_ncomp >= k_ndim,
-        "Positions ncomp is smaller than the number of mesh dimensions.");
+  void pre_integration(std::shared_ptr<ParticleGroup> particles);
 
-    particle_loop(
-        "BoundaryInteractionCommon::pre_integration", particles,
-        [=](auto P, auto PP) {
-          for (int dimx = 0; dimx < k_ndim; dimx++) {
-            PP.at(dimx) = P.at(dimx);
-          }
-        },
-        Access::read(position_dat->sym),
-        Access::write(this->previous_position_sym))
-        ->execute();
-  }
+  /**
+   * This method should be called with a collection of particles prior to
+   * updating the positions of these particles.
+   *
+   * @param particles ParticleGroup or ParticleSubGroup of particles whose
+   * positions are about to be updated, e.g. in a time stepping operation.
+   */
+  void pre_integration(std::shared_ptr<ParticleSubGroup> particles);
 };
 
 } // namespace NESO::Particles::PetscInterface

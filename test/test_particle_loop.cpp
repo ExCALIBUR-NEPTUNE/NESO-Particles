@@ -322,7 +322,7 @@ TEST(ParticleLoop, global_array) {
   const int size = sycl_target->comm_pair.size_parent;
 
   const int N = 3;
-  GlobalArray<REAL> g0(sycl_target, N, 53);
+  auto g0 = std::make_shared<GlobalArray<REAL>>(sycl_target, N, 53);
 
   ParticleLoop pl(
       A,
@@ -348,7 +348,7 @@ TEST(ParticleLoop, global_array) {
     }
   }
 
-  GlobalArray<int> g1(sycl_target, N, 0);
+  auto g1 = std::make_shared<GlobalArray<int>>(sycl_target, N, 0);
 
   ParticleLoop pl_add(
       A,
@@ -361,7 +361,7 @@ TEST(ParticleLoop, global_array) {
 
   pl_add.execute();
 
-  auto d1 = g1.get();
+  auto d1 = g1->get();
 
   const int N_total = N_per_rank * size;
   ASSERT_EQ(d1.at(0), N_total);
@@ -587,9 +587,8 @@ TEST(ParticleLoop, cell_dat_const) {
   }
 
   inner_cell_dat_min_max<int>(sycl_target, A, cell_count);
-  // Issues with atomic_max/atomic_min with adaptivecpp cuda-nvcxx
-  // inner_cell_dat_min_max<INT>(sycl_target, A, cell_count);
-  // inner_cell_dat_min_max<REAL>(sycl_target, A, cell_count);
+  inner_cell_dat_min_max<INT>(sycl_target, A, cell_count);
+  inner_cell_dat_min_max<REAL>(sycl_target, A, cell_count);
 
   particle_loop(
       A,

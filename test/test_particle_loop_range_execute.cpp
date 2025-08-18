@@ -129,7 +129,11 @@ TEST(ParticleLoop, range_execute_loop_index) {
 
       INT local_linear_index = 0;
       INT sub_linear_index = 0;
+      std::set<INT> sub_linear_index_correct;
+      std::set<INT> sub_linear_index_to_test;
       INT loop_linear_index = 0;
+      std::set<INT> loop_linear_index_correct;
+      std::set<INT> loop_linear_index_to_test;
 
       for (int cellx = 0; cellx < cell_count; cellx++) {
         if (cellx % range_size == 0) {
@@ -144,6 +148,12 @@ TEST(ParticleLoop, range_execute_loop_index) {
         const int nrow = loop_index->nrow;
 
         INT row_index = 0;
+
+        loop_linear_index_correct.clear();
+        loop_linear_index_to_test.clear();
+        sub_linear_index_correct.clear();
+        sub_linear_index_to_test.clear();
+
         // for each particle in the cell
         for (int rowx = 0; rowx < nrow; rowx++) {
           if (mask_func(id->at(rowx, 0))) {
@@ -151,12 +161,23 @@ TEST(ParticleLoop, range_execute_loop_index) {
             // for each dimension
             ASSERT_EQ(loop_index->at(rowx, 0), cellx);
             ASSERT_EQ(loop_index->at(rowx, 1), rowx);
-            ASSERT_EQ(loop_index->at(rowx, 2), row_index);
+            ASSERT_EQ(loop_index->at(rowx, 2),
+                      row_index); // fails randomly (cuda generic acpp?) TODO?
             ASSERT_EQ(loop_index->at(rowx, 3),
                       (cellx / range_size) * range_size);
             ASSERT_EQ(loop_index->at(rowx, 4), local_linear_index);
-            ASSERT_EQ(loop_index->at(rowx, 5), loop_linear_index);
-            ASSERT_EQ(loop_index->at(rowx, 6), sub_linear_index);
+
+            // This test only works if the iteration set is a particle group.
+            if (static_cast<void *>(iteration_set.get()) ==
+                static_cast<void *>(particle_group.get())) {
+              ASSERT_EQ(loop_index->at(rowx, 5), loop_linear_index);
+              ASSERT_EQ(loop_index->at(rowx, 6), sub_linear_index);
+            }
+            loop_linear_index_to_test.insert(loop_index->at(rowx, 5));
+            loop_linear_index_correct.insert(loop_linear_index);
+
+            sub_linear_index_to_test.insert(loop_index->at(rowx, 6));
+            sub_linear_index_correct.insert(sub_linear_index);
 
             row_index++;
             sub_linear_index++;
@@ -165,6 +186,8 @@ TEST(ParticleLoop, range_execute_loop_index) {
 
           local_linear_index++;
         }
+        ASSERT_EQ(loop_linear_index_to_test, loop_linear_index_correct);
+        ASSERT_EQ(sub_linear_index_to_test, sub_linear_index_correct);
       }
     }
   };

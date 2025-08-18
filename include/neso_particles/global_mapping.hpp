@@ -3,6 +3,7 @@
 
 #include <mpi.h>
 
+#include "device_buffers.hpp"
 #include "domain.hpp"
 #include "error_propagate.hpp"
 #include "particle_dat.hpp"
@@ -98,7 +99,7 @@ public:
    * a local owner obtain the MPI rank that owns the global cell which contains
    * the particle.
    */
-  inline void execute();
+  void execute();
 };
 
 /**
@@ -106,7 +107,7 @@ public:
  *
  *  @param mpi_rank_dat ParticleDat containing MPI ranks to reset.
  */
-inline void reset_mpi_ranks(ParticleDatSharedPtr<INT> mpi_rank_dat);
+void reset_mpi_ranks(ParticleDatSharedPtr<INT> mpi_rank_dat);
 
 } // namespace NESO::Particles
 #endif

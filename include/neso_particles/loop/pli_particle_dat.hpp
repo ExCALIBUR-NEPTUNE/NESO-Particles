@@ -15,21 +15,33 @@ namespace NESO::Particles::Access::ParticleDat {
 template <typename T> struct Read {
   /// Pointer to underlying data for a cell.
   T const *RESTRICT const *RESTRICT ptr;
-  /// Stores which particle in the cell this instance refers to.
-  int layer;
-  T const &operator[](const int component) {
-    return ptr[component][this->layer];
+  /// The iteration information.
+  ParticleLoopImplementation::ParticleLoopIteration const *iterationx;
+  T const &operator[](const int component) const {
+    return ptr[component][this->iterationx->layerx];
   }
-  T const &at(const int component) { return ptr[component][this->layer]; }
+  T const &at(const int component) const {
+    return ptr[component][this->iterationx->layerx];
+  }
+  T const &at_ephemeral(const int component) const {
+    return ptr[component][this->iterationx->loop_layerx];
+  }
 };
 
 template <typename T> struct Write {
   /// Pointer to underlying data for a cell.
-  T *RESTRICT *RESTRICT ptr;
-  /// Stores which particle in the cell this instance refers to.
-  int layer;
-  T &operator[](const int component) { return ptr[component][this->layer]; }
-  T &at(const int component) { return ptr[component][this->layer]; }
+  T *RESTRICT const *RESTRICT ptr;
+  /// The iteration information.
+  ParticleLoopImplementation::ParticleLoopIteration const *iterationx;
+  T &operator[](const int component) const {
+    return ptr[component][this->iterationx->layerx];
+  }
+  T &at(const int component) const {
+    return ptr[component][this->iterationx->layerx];
+  }
+  T &at_ephemeral(const int component) const {
+    return ptr[component][this->iterationx->loop_layerx];
+  }
 };
 
 } // namespace NESO::Particles::Access::ParticleDat
@@ -91,11 +103,7 @@ template <typename T> struct KernelParameter<Access::Write<ParticleDatT<T>>> {
 template <typename T>
 inline ParticleDatImplGetConstT<T>
 create_loop_arg(ParticleLoopGlobalInfo *global_info,
-                [[maybe_unused]] sycl::handler &cgh,
-                Access::Read<Sym<T> *> &a) {
-  auto sym = *a.obj;
-  return global_info->particle_group->get_dat(sym)->impl_get_const();
-}
+                [[maybe_unused]] sycl::handler &cgh, Access::Read<Sym<T> *> &a);
 /**
  * Method to compute access to a particle dat (write) - via Sym
  */
@@ -103,30 +111,38 @@ template <typename T>
 inline ParticleDatImplGetT<T>
 create_loop_arg(ParticleLoopGlobalInfo *global_info,
                 [[maybe_unused]] sycl::handler &cgh,
-                Access::Write<Sym<T> *> &a) {
-  auto sym = *a.obj;
-  return global_info->particle_group->get_dat(sym)->impl_get();
-}
+                Access::Write<Sym<T> *> &a);
+
 /**
  * Method to compute access to a particle dat (read).
  */
-template <typename T>
-inline ParticleDatImplGetConstT<T>
+ParticleDatImplGetConstT<REAL>
 create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
                 [[maybe_unused]] sycl::handler &cgh,
-                Access::Read<ParticleDatT<T> *> &a) {
-  return a.obj->impl_get_const();
-}
+                Access::Read<ParticleDatT<REAL> *> &a);
 /**
  * Method to compute access to a particle dat (write).
  */
-template <typename T>
-inline ParticleDatImplGetT<T>
+ParticleDatImplGetT<REAL>
 create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
                 [[maybe_unused]] sycl::handler &cgh,
-                Access::Write<ParticleDatT<T> *> &a) {
-  return a.obj->impl_get();
-}
+                Access::Write<ParticleDatT<REAL> *> &a);
+
+/**
+ * Method to compute access to a particle dat (read).
+ */
+ParticleDatImplGetConstT<INT>
+create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
+                [[maybe_unused]] sycl::handler &cgh,
+                Access::Read<ParticleDatT<INT> *> &a);
+
+/**
+ * Method to compute access to a particle dat (write).
+ */
+ParticleDatImplGetT<INT>
+create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
+                [[maybe_unused]] sycl::handler &cgh,
+                Access::Write<ParticleDatT<INT> *> &a);
 
 /**
  *  Function to create the kernel argument for ParticleDat read access.
@@ -135,7 +151,7 @@ template <typename T>
 inline void create_kernel_arg(ParticleLoopIteration &iterationx,
                               T *const *const *rhs,
                               Access::ParticleDat::Read<T> &lhs) {
-  lhs.layer = iterationx.layerx;
+  lhs.iterationx = &iterationx;
   lhs.ptr = rhs[iterationx.cellx];
 }
 /**
@@ -144,7 +160,7 @@ inline void create_kernel_arg(ParticleLoopIteration &iterationx,
 template <typename T>
 inline void create_kernel_arg(ParticleLoopIteration &iterationx, T ***rhs,
                               Access::ParticleDat::Write<T> &lhs) {
-  lhs.layer = iterationx.layerx;
+  lhs.iterationx = &iterationx;
   lhs.ptr = rhs[iterationx.cellx];
 }
 

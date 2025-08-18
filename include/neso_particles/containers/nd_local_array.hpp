@@ -62,11 +62,8 @@ template <typename T, std::size_t N> struct Add {
     const auto index =
         Tuple::apply_truncated<N>(lambda_index_wrapper, tuple_index);
 
-    sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>
-        element_atomic(ptr[index]);
-
     const T value = Tuple::get_last_arg(ix...);
-    return element_atomic.fetch_add(value);
+    return atomic_fetch_add(&ptr[index], value);
   }
 };
 
@@ -243,6 +240,7 @@ public:
     this->size = this->index.size();
     this->buffer =
         std::make_shared<BufferDevice<T>>(this->sycl_target, this->size);
+    this->fill(T());
   }
 
   /**
@@ -252,7 +250,9 @@ public:
    */
   inline void fill(const T value) {
     T *ptr = this->buffer->ptr;
-    sycl_target->queue.fill(ptr, value, this->size).wait_and_throw();
+    if (this->size > 0) {
+      sycl_target->queue.fill(ptr, value, this->size).wait_and_throw();
+    }
   }
 
   /**

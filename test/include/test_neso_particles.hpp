@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <gtest/gtest.h>
 #include <memory>
+#include <streambuf>
 #include <string>
 
 #ifndef TO_STRING_MACRO
@@ -58,12 +59,32 @@ inline std::filesystem::path get_test_resource(std::string resource_name) {
   return path;
 }
 
+inline std::filesystem::path get_test_tmp_directory() {
+  const std::string default_directory =
+      std::filesystem::current_path().string();
+  const std::string configured_directory =
+      get_env_string("NESO_PARTICLES_TEST_TMP_DIR", default_directory);
+  auto path = std::filesystem::path(configured_directory);
+  if (!std::filesystem::exists(path)) {
+    std::filesystem::create_directories(path);
+  }
+  NESOASSERT(std::filesystem::exists(path),
+             "Fatal could not create or access:" + path.string());
+  return path;
+}
+
+inline std::string get_test_root_file(std::string name) {
+  return (get_test_tmp_directory() / std::filesystem::path(name)).string();
+}
+
 #ifndef GET_TEST_RESOURCE
 #define GET_TEST_RESOURCE(x, y)                                                \
   {                                                                            \
     x = get_test_resource(y);                                                  \
     if (x.empty()) {                                                           \
-      GTEST_SKIP() << "Skipping test as resource missing: " << y;              \
+      GTEST_SKIP()                                                             \
+          << "Skipping test as resource missing: " << y                        \
+          << "See environment variable NESO_PARTICLES_TEST_RESOURCES_DIR.";    \
     }                                                                          \
   }
 #endif
@@ -96,6 +117,12 @@ inline std::filesystem::path get_test_resource(std::string resource_name) {
 #define MAKE_GETTER_METHOD(member_variable)                                    \
   auto &get_##member_variable() { return member_variable; }
 #endif
+
+inline REAL relative_error(const REAL correct, const REAL to_test) {
+  const REAL abs_error = Kernel::abs(correct - to_test);
+  const REAL abs_correct = Kernel::abs(correct);
+  return abs_correct > 0.0 ? abs_error / abs_correct : abs_error;
+}
 
 } // namespace NESO::Particles
 

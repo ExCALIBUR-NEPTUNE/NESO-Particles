@@ -433,6 +433,33 @@ struct DescendantProductsTest : public DescendantProducts {
   inline std::vector<INT> get_layers() { return this->d_parent_layers->get(); }
 };
 
+TEST(DescendantProducts, reset) {
+
+  auto product_spec = product_matrix_spec(ParticleSpec(
+      ParticleProp(Sym<REAL>("P2"), ndim), ParticleProp(Sym<INT>("MARKER"), 2),
+      ParticleProp(Sym<INT>("PARENT"), 2)));
+
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+
+  const int num_products_per_particle = 7;
+  auto dp = std::make_shared<DescendantProductsTest>(sycl_target, product_spec,
+                                                     num_products_per_particle);
+  ASSERT_EQ(dp->num_particles, 0);
+  ASSERT_EQ(dp->num_products, 0);
+
+  dp->reset(9);
+  ASSERT_EQ(dp->num_parent_particles, 9);
+  ASSERT_EQ(dp->num_particles, 9 * 7);
+  ASSERT_EQ(dp->num_products, 9 * 7);
+
+  dp->reset(0);
+  ASSERT_EQ(dp->num_parent_particles, 0);
+  ASSERT_EQ(dp->num_particles, 0);
+  ASSERT_EQ(dp->num_products, 0);
+
+  sycl_target->free();
+}
+
 TEST(DescendantProducts, parents) {
   auto A = particle_loop_common();
   auto domain = A->domain;
@@ -464,7 +491,7 @@ TEST(DescendantProducts, parents) {
 
   const int npart_local = A->get_npart_local();
   dp->reset(npart_local);
-  ASSERT_EQ(npart_local, dp->num_particles);
+  ASSERT_EQ(npart_local, dp->num_parent_particles);
 
   std::vector<INT> cells = dp->get_cells();
   std::vector<INT> layers = dp->get_layers();

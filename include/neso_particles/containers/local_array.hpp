@@ -50,9 +50,7 @@ template <typename T> struct Add {
    * meaningful value.
    */
   inline T fetch_add(const int component, const T value) {
-    sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>
-        element_atomic(ptr[component]);
-    return element_atomic.fetch_add(value);
+    return atomic_fetch_add(&ptr[component], value);
   }
 };
 
@@ -229,6 +227,8 @@ public:
     this->buffer = std::make_shared<BufferDevice<T>>(sycl_target, size);
     if (init_value) {
       this->fill(init_value.value());
+    } else {
+      this->fill(T());
     }
   }
 
@@ -239,7 +239,9 @@ public:
    */
   inline void fill(const T value) {
     T *ptr = this->buffer->ptr;
-    sycl_target->queue.fill(ptr, value, size).wait_and_throw();
+    if (size) {
+      sycl_target->queue.fill(ptr, value, size).wait_and_throw();
+    }
   }
 
   /**
@@ -334,6 +336,10 @@ public:
 
 template <typename T>
 using LocalArraySharedPtr = std::shared_ptr<LocalArray<T>>;
+
+extern template class LocalArray<REAL>;
+extern template class LocalArray<INT>;
+extern template class LocalArray<int>;
 
 } // namespace NESO::Particles
 

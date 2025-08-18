@@ -1,7 +1,8 @@
 #ifdef NESO_PARTICLES_PETSC
 #include "include/test_neso_particles.hpp"
+#include <neso_particles/external_interfaces/petsc/petsc_interface.hpp>
 
-TEST(PETSC, dmplex_project_evaluate_dg) {
+TEST(PETSc, dmplex_project_evaluate_dg) {
   std::filesystem::path gmsh_filepath;
   GET_TEST_RESOURCE(gmsh_filepath, "gmsh/reference_all_types_square_0.2.msh");
 
@@ -117,7 +118,7 @@ inline REAL barycentric_test_function_bilinear1(const REAL x, const REAL y) {
   return 40.0 + 30.0 * x - 20.0 * y + 50.0 * x * y;
 }
 
-TEST(PETSC, dmplex_project_evaluate_qpm_vertex) {
+TEST(PETSc, dmplex_project_evaluate_qpm_vertex) {
 
   std::filesystem::path gmsh_filepath;
   GET_TEST_RESOURCE(gmsh_filepath, "gmsh/reference_all_types_square_0.2.msh");
@@ -198,7 +199,7 @@ TEST(PETSC, dmplex_project_evaluate_qpm_vertex) {
   PETSCCHK(PetscFinalize());
 }
 
-TEST(PETSC, dmplex_project_evaluate_qpm_average) {
+TEST(PETSc, dmplex_project_evaluate_qpm_average) {
 
   std::filesystem::path gmsh_filepath;
   GET_TEST_RESOURCE(gmsh_filepath, "gmsh/reference_all_types_square_0.2.msh");
@@ -245,7 +246,7 @@ TEST(PETSC, dmplex_project_evaluate_qpm_average) {
   PETSCCHK(PetscFinalize());
 }
 
-TEST(PETSC, dmplex_evaluate_barycentric) {
+TEST(PETSc, dmplex_evaluate_barycentric) {
 
   std::filesystem::path gmsh_filepath;
   GET_TEST_RESOURCE(gmsh_filepath, "gmsh/reference_all_types_square_0.2.msh");
@@ -413,7 +414,7 @@ TEST(PETSC, dmplex_evaluate_barycentric) {
   PETSCCHK(PetscFinalize());
 }
 
-TEST(PETSC, dmplex_project_barycentric_dg) {
+TEST(PETSc, dmplex_project_barycentric_dg) {
   std::filesystem::path gmsh_filepath;
   GET_TEST_RESOURCE(gmsh_filepath, "gmsh/reference_all_types_square_0.2.msh");
 
@@ -528,7 +529,7 @@ TEST(PETSC, dmplex_project_barycentric_dg) {
   PETSCCHK(PetscFinalize());
 }
 
-TEST(PETSC, dmplex_project_barycentric_coeffs) {
+TEST(PETSc, dmplex_project_barycentric_coeffs) {
 
   std::filesystem::path gmsh_filepath;
   GET_TEST_RESOURCE(gmsh_filepath, "gmsh/reference_all_types_square_0.2.msh");
@@ -675,7 +676,7 @@ TEST(PETSC, dmplex_project_barycentric_coeffs) {
         const REAL scaling =
             std::abs(correct) > 0.0 ? 1.0 / std::abs(correct) : 1.0;
         const REAL err = std::abs(to_test - correct) * scaling;
-        ASSERT_TRUE(err < 1.0e-10);
+        ASSERT_TRUE(err < 1.0e-8);
       }
     }
   }

@@ -1,5 +1,7 @@
 #ifndef _NESO_PARTICLES_ACCESS_DESCRIPTORS_H_
 #define _NESO_PARTICLES_ACCESS_DESCRIPTORS_H_
+#include <type_traits>
+
 /**
  *  Types and functions relating to access descriptors for loops.
  */
@@ -9,6 +11,7 @@ namespace NESO::Particles::Access {
  * Generic base type for an access descriptor around an object of type T.
  */
 template <typename T> struct AccessGeneric {
+  // The underlying object which is being accessed.
   T obj;
 };
 
@@ -36,6 +39,14 @@ template <typename T> struct Min : AccessGeneric<T> {};
  *  Atomic max access descriptor.
  */
 template <typename T> struct Max : AccessGeneric<T> {};
+
+/**
+ * Generic reduction access descriptor.
+ */
+template <typename T, typename OP> struct Reduction : AccessGeneric<T> {
+  // The binary operation for the reduction.
+  OP binop;
+};
 
 /**
  *  Helper function that allows a loop to be constructed with a read-only
@@ -91,6 +102,32 @@ template <typename T> inline Min<T> min(T t) { return Min<T>{t}; }
  * @returns Access::Max object that wraps passed object.
  */
 template <typename T> inline Max<T> max(T t) { return Max<T>{t}; }
+
+/**
+ *  Helper function that allows a loop to be constructed with a reduction
+ *  argument like
+ *
+ *    Access::reduce(object, binop)
+ *
+ * @param t Object to reduce values into.
+ * @param binop Binary operation to use for reduction, e.g. Kernel::plus<REAL>.
+ * @returns Access::Max object that wraps passed object.
+ */
+template <typename T, typename OP>
+inline Reduction<T, OP> reduce(T t, OP binop) {
+  return Reduction<T, OP>{{t}, binop};
+}
+
+template <typename T> struct IsReduction {
+  using flag = std::false_type;
+};
+template <typename T, typename OP> struct IsReduction<Reduction<T, OP>> {
+  using flag = std::true_type;
+};
+template <typename... ARGS> struct HasReduction {
+  static constexpr bool value{(
+      std::is_same_v<std::true_type, typename IsReduction<ARGS>::flag> || ...)};
+};
 
 } // namespace NESO::Particles::Access
 

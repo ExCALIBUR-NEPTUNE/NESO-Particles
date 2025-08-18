@@ -50,7 +50,7 @@ We provide a class `H5Part` to facilitate writing particle properties to file at
 
     H5Part h5part(
         "particle_trajectory.h5part", 
-        particle_group, 
+        particle_group,  // ParticleGroup or ParticleSubGroup.
         Sym<REAL>("P"),  // The positions are always recorded as part of the 
                          // format. Passing them again here may trade space
                          // for convenience.
@@ -72,6 +72,12 @@ We provide a class `H5Part` to facilitate writing particle properties to file at
 
 The `write` call may optionally be passed an integer to indicate the time step, this may be incompatible with the native H5Part reader in Paraview.
 Note that the `close` method must be called for the file to be readable.
+It is permissible to call `close` between calls to `write` to ensure that there is readable output in the event of a simulation crash.
+
+.. warning::
+   Particle data is unordered between written steps. To track a particle between time steps write a unique identifier for the particle at each step.
+
+Here is an example script that may be used to read the written data into Python using the Python `h5py` library.
 
 .. code-block:: python
    :caption: Prototype Python implementation to read H5Part files for post processing.
@@ -103,13 +109,35 @@ Note that the `close` method must be called for the file to be readable.
        # the particle system has a unique ID for particles.
        array_x = np.array(hx.get("V_0"))
 
+Particle data stored in a H5Part file can be read into a `ParticleSet` by specifying the properties to read.
+See the `set` method of `ParticleSet` for more information about how to use the read particle data to set particle properties in another `ParticleSet` before adding the new particles to a `ParticleGroup` with `add_particles_local`.
+
+.. code-block:: cpp
+   :caption: Example reading a H5Part trajectory. 
+
+    H5Part h5part("trajectory.h5part", sycl_target);
+
+    // These properties must match those written to the H5Part trajectory.
+    ParticleSpec particle_spec_read(
+      ParticleProp(Sym<REAL>("P"), ndim, true), 
+      ParticleProp(Sym<REAL>("V"), 3),
+      ParticleProp(Sym<INT>("ID"), 1)
+    );
+
+    auto particle_set_read = h5part.read(
+      particle_spec_read, // The properties to read.
+      0,                  // The step to read.
+      true                // Enables using the x,y,z data in the H5Part 
+                          // specification to populate the position property.
+    );
 
 Paraview
 ========
 
 H5Part trajectories can be natively opened in Paraview. 
 Opening a ``.h5part`` file should only involve opening the file in the Paraview file open dialogue or passing the file as a command line argument to Paraview. 
-Note that by default the render view in Paraview may select a 3D view for a 2D simulation, in this case toggle the render view into 2D mode by clicking the small button with the text "3D" at the top left of the rendered view (on the toolbar directly below the tab bar).
+Trajectory files that have the extension ``.h5`` may not be recognised as H5Part by Paraview and a non-suitable file reader may be selected.
+Note that by default the render view in Paraview may select a 3D view for a 2D simulation, in this case toggle the render view into 2D mode by clicking the small button with the text "3D" at the top left of the rendered view (on the toolbar directly below the tab bar). 
 
 
 .. [H5PART] H5Part: A Portable High Performance Parallel Data Interface for Particle Simulations, doi: 10.1109/PAC.2005.1591740. `IEEE <https://ieeexplore.ieee.org/document/1591740>`_ `CERN <https://accelconf.web.cern.ch/p05/papers/fpat083.pdf>`_.

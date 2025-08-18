@@ -4,6 +4,7 @@
 #include "../compute_target.hpp"
 #include "../device_buffers.hpp"
 #include "access_descriptors.hpp"
+#include "particle_loop_iteration_set.hpp"
 #include <memory>
 #include <optional>
 #include <type_traits>
@@ -26,9 +27,9 @@ struct ParticleLoopGlobalInfo {
   ParticleSubGroup *particle_sub_group;
   // Is the loop over all cells
   bool all_cells;
-  int *d_npart_cell_lb;
-  INT *d_npart_cell_es;
-  INT *d_npart_cell_es_lb;
+  int const *d_npart_cell_lb;
+  INT const *d_npart_cell_es;
+  INT const *d_npart_cell_es_lb;
   // The starting cell is only set for calls to create_loop_args.
   int starting_cell;
   // Last cell plus one. Only set for calls to create_loop_args.
@@ -63,6 +64,8 @@ struct KernelParameter; // { using type = void; };
 struct ParticleLoopIteration {
   /// The local index in the sycl nd range.
   std::size_t local_sycl_index;
+  /// The range of the local work item in the sycl nd range.
+  std::size_t local_sycl_range;
   /// The cell the particle resides in.
   int cellx;
   /// The layer (row) the particle resides in.
@@ -127,7 +130,31 @@ inline std::size_t get_kernel_num_flops([[maybe_unused]] T &kernel) {
   return 0;
 }
 
+/**
+ * The Reduction ParticleLoop implementations will call reduction_initialise for
+ * all SYCL work items before the kernel is launched.
+ */
+template <typename T>
+inline void reduction_initialise(sycl::nd_item<2> &, ParticleLoopIteration &,
+                                 T) {}
+
+/**
+ * The Reduction ParticleLoop implementations will call reduction_finalise for
+ * all SYCL work items after kernels have launched.
+ */
+template <typename T>
+inline void reduction_finalise(sycl::nd_item<2> &, ParticleLoopIteration &, T) {
+}
+
 } // namespace ParticleLoopImplementation
+
+/**
+ * @returns True if the iteration set is all cells.
+ */
+bool determine_iteration_set(const int ncell,
+                             const std::optional<int> cell_start,
+                             const std::optional<int> cell_end,
+                             int *cell_start_v, int *cell_end_v);
 
 /**
  * Abstract base class for ParticleLoop such that the templated ParticleLoop
@@ -135,6 +162,81 @@ inline std::size_t get_kernel_num_flops([[maybe_unused]] T &kernel) {
  */
 class ParticleLoopBase {
 public:
+  std::shared_ptr<ParticleGroup> particle_group_shrptr{nullptr};
+  std::shared_ptr<ParticleSubGroup> particle_sub_group_shrptr{nullptr};
+  ParticleGroup *particle_group_ptr = {nullptr};
+  SYCLTargetSharedPtr sycl_target{nullptr};
+  /// This stores the particle dat the loop was created with to prevent use
+  /// after free errors in the case when the ParticleLoop is created with a
+  /// ParticleDat.
+  std::shared_ptr<void> particle_dat_init{nullptr};
+  std::unique_ptr<ParticleLoopImplementation::ParticleLoopBlockIterationSet>
+      iteration_set{nullptr};
+  std::size_t iteration_set_stride{1};
+  std::string loop_type;
+  std::string name;
+  EventStack event_stack;
+  bool loop_running = {false};
+  // The actual number of particles in the cell
+  int *d_npart_cell{nullptr};
+  int *h_npart_cell_lb{nullptr};
+  // The number of particles in the cell from the loop bounds point of view.
+  int *d_npart_cell_lb{nullptr};
+  // Exclusive sum of the actual number of particles in the cell.
+  INT *d_npart_cell_es{nullptr};
+  // Exclusive sum of the number of particles in the cell from the loop bounds
+  // point of view.
+  INT *d_npart_cell_es_lb{nullptr};
+  int ncell{0};
+
+  ProfileRegion profile_region;
+
+  void init_from_particle_dat(std::shared_ptr<ParticleDatT<REAL>> particle_dat);
+  void init_from_particle_dat(std::shared_ptr<ParticleDatT<INT>> particle_dat);
+
+  virtual inline std::size_t get_local_size() = 0;
+
+  bool iteration_set_is_empty(const std::optional<int> cell_start,
+                              const std::optional<int> cell_end);
+
+  virtual inline int get_loop_type_int() { return 0; }
+
+  inline ParticleLoopImplementation::ParticleLoopGlobalInfo
+  create_global_info(const std::optional<int> cell_start = std::nullopt,
+                     const std::optional<int> cell_end = std::nullopt) {
+
+    int cell_start_v = -1;
+    int cell_end_v = -1;
+    const bool all_cells = determine_iteration_set(
+        this->ncell, cell_start, cell_end, &cell_start_v, &cell_end_v);
+
+    ParticleLoopImplementation::ParticleLoopGlobalInfo global_info;
+    global_info.particle_group = this->particle_group_ptr;
+    global_info.particle_sub_group = this->particle_sub_group_shrptr.get();
+    global_info.d_npart_cell_lb = this->d_npart_cell_lb;
+    global_info.d_npart_cell_es = this->d_npart_cell_es;
+    global_info.d_npart_cell_es_lb = this->d_npart_cell_es_lb;
+    global_info.all_cells = all_cells;
+    global_info.starting_cell = cell_start_v;
+    global_info.bounding_cell = cell_end_v;
+    global_info.loop_type_int = this->get_loop_type_int();
+    global_info.local_size = this->get_local_size();
+    return global_info;
+  }
+
+  void profiling_region_init();
+  virtual inline void profiling_region_metrics(const std::size_t size) = 0;
+
+  void profile_region_finalise();
+
+  ParticleLoopBase(const std::string name,
+                   std::shared_ptr<ParticleGroup> particle_group)
+      : particle_group_shrptr(particle_group), name(name) {}
+
+public:
+  virtual ~ParticleLoopBase() = default;
+  ParticleLoopBase() = default;
+
   /**
    *  Execute the ParticleLoop and block until execution is complete. Must be
    *  called collectively on the MPI communicator associated with the

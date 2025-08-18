@@ -3,6 +3,7 @@
 
 #include "sycl_typedefs.hpp"
 #include "typedefs.hpp"
+#include <limits>
 
 namespace NESO::Particles {
 
@@ -35,6 +36,12 @@ template <typename T> inline auto rsqrt(const T x) { return sycl::rsqrt(x); }
 template <typename T> inline auto sin(const T x) { return sycl::sin(x); }
 template <typename T> inline auto cos(const T x) { return sycl::cos(x); }
 template <typename T> inline auto tan(const T x) { return sycl::tan(x); }
+template <typename T> inline auto log(const T x) { return sycl::log(x); }
+template <typename T> inline auto log2(const T x) { return sycl::log2(x); }
+template <typename T> inline auto log10(const T x) { return sycl::log10(x); }
+template <typename T> inline auto round(const T x) { return sycl::round(x); }
+template <typename T> inline auto tgamma(const T x) { return sycl::tgamma(x); }
+template <typename T> inline auto trunc(const T x) { return sycl::trunc(x); }
 
 namespace Private {
 // ACPP does not seem to define a sycl::sincos(REAL, REAL*)
@@ -63,7 +70,49 @@ inline auto sincos(const T x, T *cosval) {
   return sycl::sin(x);
 }
 
+template <typename T> inline auto dot_product_2d(const T *a, const T *b) {
+  return a[0] * b[0] + a[1] * b[1];
+}
+template <typename T> inline auto dot_product_3d(const T *a, const T *b) {
+  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+template <int N, typename T> inline T dot_product(const T *a, const T *b) {
+  T value = static_cast<T>(0);
+  for (int ix = 0; ix < N; ix++) {
+    value += a[ix] * b[ix];
+  }
+  return value;
+}
+
 } // namespace Kernel
+
+/**
+ * For a line segment [ax, ay] - [bx, by] return ix,iy,jx,jy such that [ix, iy]
+ * - [jx, jy] is the same line segment as [ax, ay] - [bx, by] but the outputs
+ * are independent of the order in which a and b are specified. i.e. the
+ * direction of the output line segment is always in the same direction.
+ *
+ * @param[in] ax First point of line segment, x coordinate.
+ * @param[in] ay First point of line segment, y coordinate.
+ * @param[in] bx Second point of line segment, x coordinate.
+ * @param[in] by Second point of line segment, y coordinate.
+ * @param[in, out] ix First point of output line segment, x coordinate.
+ * @param[in, out] iy First point of output line segment, y coordinate.
+ * @param[in, out] jx Second point of output line segment, x coordinate.
+ * @param[in, out] jy Second point of output line segment, y coordinate.
+ */
+inline void consistent_line_orientation_2d(const REAL ax, const REAL ay,
+                                           const REAL bx, const REAL by,
+                                           REAL *ix, REAL *iy, REAL *jx,
+                                           REAL *jy) {
+  const bool axfirst = ax < bx;
+  const bool ayfirst = ay < by;
+  const bool afirst = ax == bx ? ayfirst : axfirst;
+  *ix = afirst ? ax : bx;
+  *iy = afirst ? ay : by;
+  *jx = afirst ? bx : ax;
+  *jy = afirst ? by : ay;
+}
 
 /**
  * Compute the intersection point parameter (lambda0, lambda1) for the lines
@@ -171,6 +220,138 @@ inline bool line_segment_intersection_2d(const REAL &xa, const REAL &ya,
 }
 
 /**
+ * Compute the intersection point of two line segments
+ * [(xa, ya), (xb, yb)] and [(x0, y0), (x1, y0)].
+ *
+ * Note that the second line segment, (x,y) is aligned with the x-axis and we
+ * assume that !(ya == y0 && yb == y0).
+ *
+ * param[in] xa Input coordinate for point a.
+ * param[in] ya Input coordinate for point a.
+ * param[in] xb Input coordinate for point b.
+ * param[in] yb Input coordinate for point b.
+ * param[in] x0 Input coordinate for point x0.
+ * param[in] y0 Input coordinate for point y0.
+ * param[in] x1 Input coordinate for point x0.
+ * param[in, out] xi Output intersection point if it exists.
+ * param[in, out] yi Output intersection point if it exists.
+ * param[in] tol Tolerance for intersection, e.g. how closely do the lines pass
+ * at the ends default 0.0.
+ * @returns True if the line segments intersect otherwise false.
+ */
+inline bool line_segment_intersection_2d_x_axis_aligned(
+    const REAL &xa, const REAL &ya, const REAL &xb, const REAL &yb,
+    const REAL &x0, const REAL &y0, const REAL &x1, REAL &xi, REAL &yi,
+    const REAL tol = 0.0) {
+
+  const REAL diff_a = ya - y0;
+  const REAL diff_b = yb - y0;
+  const bool is_crossed = (0 >= (diff_a * diff_b));
+
+  const REAL abs_diff_a = Kernel::abs(diff_a);
+  const REAL abs_diff_b = Kernel::abs(diff_b);
+  const REAL width = (abs_diff_a + abs_diff_b);
+  const bool colocated = (width == 0.0);
+  const REAL ratio = (!colocated) ? abs_diff_a / width : 0.0;
+
+  xi = xa + ratio * (xb - xa);
+  yi = y0;
+
+  const bool in_bounds = (((x0 - tol) <= xi) && (xi <= (x1 + tol))) ||
+                         (((x1 - tol) <= xi) && (xi <= (x0 + tol)));
+
+  return is_crossed && (!colocated) && in_bounds;
+}
+
+/**
+ * Compute the intersection point of two line segments
+ * [(xa, ya), (xb, yb)] and [(x0, y0), (x0, y1)].
+ *
+ * Note that the second line segment, (x,y) is aligned with the y-axis and we
+ * assume that !(xa == x0 && xb == x0).
+ *
+ * param[in] xa Input coordinate for point a.
+ * param[in] ya Input coordinate for point a.
+ * param[in] xb Input coordinate for point b.
+ * param[in] yb Input coordinate for point b.
+ * param[in] x0 Input coordinate for point x0.
+ * param[in] y0 Input coordinate for point y0.
+ * param[in] y1 Input coordinate for point y0.
+ * param[in, out] xi Output intersection point if it exists.
+ * param[in, out] yi Output intersection point if it exists.
+ * param[in] tol Tolerance for intersection, e.g. how closely do the lines pass
+ * at the ends default 0.0.
+ * @returns True if the line segments intersect otherwise false.
+ */
+inline bool line_segment_intersection_2d_y_axis_aligned(
+    const REAL &xa, const REAL &ya, const REAL &xb, const REAL &yb,
+    const REAL &x0, const REAL &y0, const REAL &y1, REAL &xi, REAL &yi,
+    const REAL tol = 0.0) {
+  return line_segment_intersection_2d_x_axis_aligned(ya, xa, yb, xb, y0, x0, y1,
+                                                     yi, xi, tol);
+}
+
+/**
+ * Intersection of line segment
+ *
+ *  [(ax, ay, az), (bx, by, bz)]
+ *
+ * with the plane segment
+ *
+ * (p0x, p2y, p0z)    (p1x, p2y, p0z)
+ *               ------   y
+ *              |      |  ^
+ *              |      |  |
+ *               ------   ---> x
+ * (p0x, p0y, p0z)    (p1x, p0y, p0z)
+ *
+ * Assumes that the line does not lie in the plane.
+ *
+ * param[in] ax Input coordinate for point a.
+ * param[in] ay Input coordinate for point a.
+ * param[in] az Input coordinate for point a.
+ * param[in] bx Input coordinate for point b.
+ * param[in] by Input coordinate for point b.
+ * param[in] bz Input coordinate for point b.
+ * param[in] p0x Input coordinate for plane.
+ * param[in] p0y Input coordinate for plane.
+ * param[in] p0z Input coordinate for plane.
+ * param[in] p1x Input coordinate for plane.
+ * param[in] p2y Input coordinate for plane.
+ * param[in, out] xi Output intersection point if it exists.
+ * param[in, out] yi Output intersection point if it exists.
+ * param[in, out] zi Output intersection point if it exists.
+ * param[in] tol Tolerance for intersection, e.g. how closely do the lines pass
+ * at the ends default 0.0.
+ * @returns True if the line segments intersect otherwise false.
+ */
+inline bool plane_intersection_3d_xy_plane_aligned(
+    const REAL &ax, const REAL &ay, const REAL &az, const REAL &bx,
+    const REAL &by, const REAL &bz, const REAL &p0x, const REAL &p0y,
+    const REAL &p0z, const REAL &p1x, const REAL &p2y, REAL &xi, REAL &yi,
+    REAL &zi, const REAL tol = 0.0) {
+  const REAL diff_a = az - p0z;
+  const REAL diff_b = bz - p0z;
+  const bool is_crossed = (0 >= (diff_a * diff_b));
+  const REAL abs_diff_a = Kernel::abs(diff_a);
+  const REAL abs_diff_b = Kernel::abs(diff_b);
+  const REAL width = (abs_diff_a + abs_diff_b);
+  const bool colocated = (width == 0.0);
+  const REAL ratio = (!colocated) ? abs_diff_a / width : 0.0;
+
+  xi = ax + ratio * (bx - ax);
+  yi = ay + ratio * (by - ay);
+  zi = p0z;
+
+  const bool in_bounds_x = (((p0x - tol) <= xi) && (xi <= (p1x + tol))) ||
+                           (((p1x - tol) <= xi) && (xi <= (p0x + tol)));
+  const bool in_bounds_y = (((p0y - tol) <= yi) && (yi <= (p2y + tol))) ||
+                           (((p2y - tol) <= yi) && (yi <= (p0y + tol)));
+
+  return is_crossed && (!colocated) && in_bounds_x && in_bounds_y;
+}
+
+/**
  * Naively invert a matrix. The error bars on this call may be quite large.
  * This function uses row-major format.
  *
@@ -263,6 +444,234 @@ inline void naive_matrix_inverse<4>(const REAL *RESTRICT M, REAL *RESTRICT L) {
            M[1] * M[6] * M[8] + M[2] * M[4] * M[9] - M[2] * M[5] * M[8]) *
           inverse_factor;
 }
+
+/**
+ * Wrapper to perform fetch_max on an address and return the previous value,
+ * i.e.
+ *
+ * max(current, value). This implementation uses strong CAS.
+ *
+ * @param ptr Address to contiainng current value.
+ * @param value Value to perform operation with.
+ * @returns Original value before new value was reduced.
+ */
+template <typename T>
+inline T atomic_fetch_max_cas_strong(T *ptr, const T value) {
+
+  sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>
+      element_atomic(*ptr);
+  // This implementation deliberately avoids issuing an atomic load.
+  T expected = std::numeric_limits<T>::min();
+  T desired;
+  do {
+    desired = sycl::max(value, expected);
+  } while ((!element_atomic.compare_exchange_strong(expected, desired) &&
+            (expected < value)));
+
+  return expected;
+}
+
+/**
+ * Wrapper to perform fetch_min on an address and return the previous value,
+ * i.e.
+ *
+ * min(current, value). This implementation uses strong CAS.
+ *
+ * @param ptr Address to contiainng current value.
+ * @param value Value to perform operation with.
+ * @returns Original value before new value was reduced.
+ */
+template <typename T>
+inline T atomic_fetch_min_cas_strong(T *ptr, const T value) {
+
+  sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>
+      element_atomic(*ptr);
+  // This implementation deliberately avoids issuing an atomic load.
+  T expected = std::numeric_limits<T>::max();
+  T desired;
+  do {
+    desired = sycl::min(value, expected);
+  } while ((!element_atomic.compare_exchange_strong(expected, desired) &&
+            (expected > value)));
+
+  return expected;
+}
+
+/**
+ * Wrapper to perform fetch_add on an address and return the value.
+ *
+ * @param ptr Address to atomically increment.
+ * @param value Value to increment by.
+ * @returns Original value before new value was incremented.
+ */
+template <typename T> inline T atomic_fetch_add(T *ptr, const T value) {
+  sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>
+      a_ref(*ptr);
+  return a_ref.fetch_add(value);
+}
+
+/**
+ * Wrapper to perform fetch_min on an address and return the previous value,
+ * i.e.
+ *
+ * min(current, value).
+ *
+ * @param ptr Address to contiainng current value.
+ * @param value Value to perform operation with.
+ * @returns Original value before new value was reduced.
+ */
+template <typename T> inline T atomic_fetch_min(T *ptr, const T value) {
+  sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>
+      a_ref(*ptr);
+  return a_ref.fetch_min(value);
+}
+
+/**
+ * Wrapper to perform fetch_max on an address and return the previous value,
+ * i.e.
+ *
+ * max(current, value).
+ *
+ * @param ptr Address to contiainng current value.
+ * @param value Value to perform operation with.
+ * @returns Original value before new value was reduced.
+ */
+template <typename T> inline T atomic_fetch_max(T *ptr, const T value) {
+  sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>
+      a_ref(*ptr);
+  return a_ref.fetch_max(value);
+}
+
+// Are we using an AdaptiveCpp CUDA pass?
+#ifdef __ACPP_ENABLE_CUDA_TARGET__
+// Is this the nvcxx backend?
+#ifdef __NVCOMPILER
+
+inline INT atomic_fetch_min(INT *ptr, const INT value) {
+  return atomic_fetch_min_cas_strong(ptr, value);
+}
+#define NESO_PARTICLES_CAS_MIN_INT
+inline INT atomic_fetch_max(INT *ptr, const INT value) {
+  return atomic_fetch_max_cas_strong(ptr, value);
+}
+#define NESO_PARTICLES_CAS_MAX_INT
+
+#else // Assume that if we are not using the nvcxx backend then it is the clang
+      // cuda backend.
+
+inline REAL atomic_fetch_min(REAL *ptr, const REAL value) {
+  return atomic_fetch_min_cas_strong(ptr, value);
+}
+#define NESO_PARTICLES_CAS_MIN_REAL
+inline REAL atomic_fetch_max(REAL *ptr, const REAL value) {
+  return atomic_fetch_max_cas_strong(ptr, value);
+}
+#define NESO_PARTICLES_CAS_MAX_REAL
+
+inline INT atomic_fetch_min(INT *ptr, const INT value) {
+  return atomic_fetch_min_cas_strong(ptr, value);
+}
+#define NESO_PARTICLES_CAS_MIN_INT
+inline INT atomic_fetch_max(INT *ptr, const INT value) {
+  return atomic_fetch_max_cas_strong(ptr, value);
+}
+#define NESO_PARTICLES_CAS_MAX_INT
+
+#endif
+#endif
+
+namespace Kernel {
+
+template <typename T> using plus = sycl::plus<T>;
+template <typename T> using minimum = sycl::minimum<T>;
+template <typename T> using maximum = sycl::maximum<T>;
+
+template <typename T> constexpr T get_identity(sycl::plus<T>) {
+  return static_cast<T>(0.0);
+}
+template <typename T> constexpr T get_identity(sycl::minimum<T>) {
+  return static_cast<T>(std::numeric_limits<T>::max());
+}
+template <typename T> constexpr T get_identity(sycl::maximum<T>) {
+  return static_cast<T>(std::numeric_limits<T>::lowest());
+}
+
+template <typename T>
+inline void atomic_reduce(sycl::plus<T>, T *ptr, const T value) {
+  atomic_fetch_add(ptr, value);
+}
+template <typename T>
+inline void atomic_reduce(sycl::minimum<T>, T *ptr, const T value) {
+  atomic_fetch_min(ptr, value);
+}
+template <typename T>
+inline void atomic_reduce(sycl::maximum<T>, T *ptr, const T value) {
+  atomic_fetch_max(ptr, value);
+}
+
+/**
+ * Wrapper around joint_reduce for buggy implementations.
+ *
+ * @param group SYCL group.
+ * @param d_first Pointer to first element.
+ * @param d_last Pointer to element after last element.
+ * @param binary_op Binary operation for reduction.
+ * @returns Reduced value.
+ */
+template <typename GROUP_TYPE, typename VALUE_TYPE, typename OP_TYPE>
+VALUE_TYPE joint_reduce(GROUP_TYPE group, VALUE_TYPE *d_first,
+                        VALUE_TYPE *d_last, OP_TYPE binary_op) {
+#ifdef __INTEL_LLVM_COMPILER
+  return sycl::joint_reduce(group, d_first, d_last, binary_op);
+#else
+  VALUE_TYPE value = get_identity(binary_op);
+  d_first += group.get_local_id(1);
+  while (d_first < d_last) {
+    value = binary_op(value, *d_first);
+    d_first += group.get_local_range(1);
+  }
+  value = sycl::reduce_over_group(group, value, binary_op);
+  return value;
+#endif
+}
+
+/**
+ * In place bitonic sort of 8 elements. See the following reference for more
+ * details.
+ *
+ * A Novel Hybrid Quicksort Algorithm Vectorized using AVX-512 on Intel Skylake
+ * DOI: 10.14569/IJACSA.2017.081044
+ *
+ * @param group SYCL group.
+ * @param s_ptr kernel shared memory containing eight values to sort.
+ */
+template <typename GROUP_TYPE, typename VALUE_TYPE>
+inline void bitonic8(GROUP_TYPE group, VALUE_TYPE *s_ptr) {
+  const int i0 = static_cast<int>(group.get_local_id()) % 8;
+
+  constexpr int indices[6][8] = {
+      {1, 0, 3, 2, 5, 4, 7, 6}, {3, 2, 1, 0, 7, 6, 5, 4},
+      {1, 0, 3, 2, 5, 4, 7, 6}, {7, 6, 5, 4, 3, 2, 1, 0},
+      {2, 3, 0, 1, 6, 7, 4, 5}, {1, 0, 3, 2, 5, 4, 7, 6}};
+
+  sycl::group_barrier(group);
+  VALUE_TYPE v0 = s_ptr[i0];
+
+  for (int stagex = 0; stagex < 6; stagex++) {
+    const int i1 = indices[stagex][i0];
+
+    sycl::group_barrier(group);
+    const VALUE_TYPE v1 = s_ptr[i1];
+    const VALUE_TYPE vmax = v1 < v0 ? v0 : v1;
+    const VALUE_TYPE vmin = v1 < v0 ? v1 : v0;
+    v0 = i0 < i1 ? vmin : vmax;
+
+    sycl::group_barrier(group);
+    s_ptr[i0] = v0;
+  }
+}
+
+} // namespace Kernel
 
 } // namespace NESO::Particles
 

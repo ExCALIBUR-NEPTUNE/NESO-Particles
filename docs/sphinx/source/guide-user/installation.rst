@@ -6,9 +6,10 @@ Dependencies
 ============
 
 * CMake 3.24+.
-* SYCL 2020 with USM support: Tested with hipsycl 0.9.4 or Intel DPCPP 2024.1.0.
-* MPI 3.0: Tested with MPICH 4.0 or IntelMPI 2021.6. See known issues for Ubuntu 22.03 mpich.
-* HDF5 (parallel): (optional see CMake variable ``NESO_PARTICLES_ENABLE_HDF5``) If particle trajectories are required - will execute without.
+* SYCL 2020 with USM support: e.g. AdaptiveCpp 24.10.0 or Intel DPCPP 2024.2.1. Please read the section on known issues and workarounds before choosing a SYCL implementation.
+* MPI 3.0: e.g. MPICH 4.0 or IntelMPI 2021.6. See known issues for Ubuntu 22.03 mpich.
+* HDF5 (parallel): (optional) See CMake variable ``NESO_PARTICLES_ENABLE_HDF5`` if particle trajectories are required - will execute without.
+* PETSc: (optional) See CMake variable ``NESO_PARTICLES_ENABLE_PETSC`` if PETSc DMPlex support is required.
 
 Using with CMake 
 ================
@@ -22,7 +23,6 @@ To use NESO-Particles in package form projects should involve CMake implementati
     target_link_libraries(${EXECUTABLE} PUBLIC NESO-Particles::NESO-Particles)
     ...
     add_sycl_to_target(TARGET ${EXECUTABLE} SOURCES ${EXECUTABLE_SOURCE})
-
  
 To use NESO-Particles from a submodule within your project replace the ``find_package`` call as follows:
 ::
@@ -124,3 +124,20 @@ Two possible solutions are as follows
 #. Build a separate installation of MPICH (ideally with the same compiler as used by the SYCL implementation).
 #. Clear the offending variables from the CMake cache by first running CMake as normal then rerunning CMake as ``cmake -DMPI_CXX_COMPILE_OPTIONS="" -DMPI_CXX_COMPILE_OPTIONS="" ..``.
 
+AdaptiveCpp
+-----------
+
+As the AdaptiveCpp ``generic`` implementation uses just-in-time (JIT) compilation, initial runs and time steps may be slower than desired as the parallel loops are compiled.
+Subsequent execution of the same parallel loops should be much faster.
+
+When running the tests setting ``ACPP_PERSISTENT_RUNTIME=1`` will prevent issues and errors relating to cached JIT compiled objects.
+For MPI execution setting ``ACPP_APPDB_DIR`` to a directory on the parallel storage or node local and ``ACPP_RT_NO_JIT_CACHE_POPULATION=1`` may also be beneficial.
+Please visit the AdaptiveCpp documentation for more information and latest guidance.
+The tests may take a long time to run with the default AdaptiveCpp adaptivity settings.
+Setting ``ACPP_ADAPTIVITY_LEVEL=0`` will speed up the test execution (note that the AdaptiveCpp authors do not recommend changing this value).
+
+Intel SYCL
+----------
+
+With the Intel SYCL implementation, currently branded as oneAPI, users may observe illegal instructions. Typically these are a ``vgatherdpd`` like instruction.
+Currently the known workaround is to set the environment variable ``CL_CONFIG_CPU_TARGET_ARCH=corei7-avx``.

@@ -107,16 +107,18 @@ public:
         this->departing_identify.dh_send_counts_all_ranks.d_buffer.ptr;
     sycl_target->profile_map.inc("GlobalMove", "move_stage_b", 1,
                                  profile_elapsed(t0, profile_timestamp()));
-    this->sycl_target->queue
-        .submit([&](sycl::handler &cgh) {
-          cgh.parallel_for<>(sycl::range<1>(num_remote_send_ranks),
-                             [=](sycl::id<1> idx) {
-                               const int rank = k_send_ranks[idx];
-                               const int npart = k_send_counts_all_ranks[rank];
-                               k_send_rank_npart[idx] = npart;
-                             });
-        })
-        .wait_and_throw();
+
+    if (num_remote_send_ranks > 0) {
+      this->sycl_target->queue
+          .parallel_for(sycl::range<1>(num_remote_send_ranks),
+                        [=](sycl::id<1> idx) {
+                          const int rank = k_send_ranks[idx];
+                          const int npart = k_send_counts_all_ranks[rank];
+                          k_send_rank_npart[idx] = npart;
+                        })
+          .wait_and_throw();
+    }
+
     this->dh_send_rank_npart.device_to_host();
 
     sycl_target->profile_map.inc("GlobalMove", "move_stage_c", 1,

@@ -79,7 +79,6 @@ public:
  */
 class ParticleSpec {
 private:
-  template <typename... T> void push(T... args) { this->push(args...); }
   template <typename... T> void push(ParticleProp<REAL> pp, T... args) {
     this->properties_real.push_back(pp);
     this->push(args...);
@@ -111,6 +110,28 @@ public:
   std::vector<ParticleProp<REAL>> properties_real;
   /// Collection of INT ParticleProp
   std::vector<ParticleProp<INT>> properties_int;
+
+  /**
+   * @returns The maximum number of components of INT properties.
+   */
+  inline int get_max_ncomp_int() {
+    int max_ncomp = 0;
+    for (auto &px : this->properties_int) {
+      max_ncomp = std::max(max_ncomp, px.ncomp);
+    }
+    return max_ncomp;
+  }
+
+  /**
+   * @returns The maximum number of components of REAL properties.
+   */
+  inline int get_max_ncomp_real() {
+    int max_ncomp = 0;
+    for (auto &px : this->properties_real) {
+      max_ncomp = std::max(max_ncomp, px.ncomp);
+    }
+    return max_ncomp;
+  }
 
   /**
    *  Constructor to create a particle specification.
@@ -195,9 +216,6 @@ public:
  */
 class SymStore {
 private:
-  template <typename... T> void push(T &&...args) {
-    this->push(std::forward<T>(args)...);
-  }
   void push(Sym<REAL> pp) { this->syms_real.push_back(pp); }
   void push(Sym<INT> pp) { this->syms_int.push_back(pp); }
   template <typename... T> void push(Sym<REAL> pp, T &&...args) {
@@ -228,6 +246,7 @@ public:
   std::vector<Sym<REAL>> syms_real;
   /// Container of Sym<INT> symbols.
   std::vector<Sym<INT>> syms_int;
+
   /**
    *  Constructor for SymStore should be called with a list of arguments which
    *  are Sym instances.
@@ -237,6 +256,30 @@ public:
    */
   template <typename... T> SymStore(T &&...args) {
     this->push(std::forward<T>(args)...);
+  }
+
+  /**
+   * @param sym_store SymStore to copy.
+   */
+  SymStore(SymStore &sym_store) {
+    for (auto &sym : sym_store.syms_real) {
+      this->push(sym);
+    }
+    for (auto &sym : sym_store.syms_int) {
+      this->push(sym);
+    }
+  }
+
+  /**
+   * @param particle_spec ParticleSpec instance to create SymStore from.
+   */
+  SymStore(ParticleSpec &particle_spec) {
+    for (auto &prop : particle_spec.properties_real) {
+      this->push(prop.sym);
+    }
+    for (auto &prop : particle_spec.properties_int) {
+      this->push(prop.sym);
+    }
   }
 
   SymStore(){};

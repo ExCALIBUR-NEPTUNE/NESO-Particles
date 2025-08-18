@@ -1,13 +1,5 @@
 // clang-format off
 
-/*
-NESO_PARTICLES_PROFILING_REGION should be defined before NESO-Particles is 
-included.
-
-#define NESO_PARTICLES_PROFILING_REGION
-#include <neso_particles.hpp>
-*/
-
 inline void profile_regions_example(
     // Input ParticleGroup - we will loop over all particles in this
     // ParticleGroup.

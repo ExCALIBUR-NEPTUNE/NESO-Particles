@@ -1,6 +1,5 @@
 #include <gtest/gtest.h>
 
-// #define NESO_PARTICLES_PROFILING_REGION
 #include <neso_particles.hpp>
 #include <random>
 #include <type_traits>
@@ -89,6 +88,7 @@ particle_loop_common(const int N = 10930, const int sx = 4, const int sy = 8) {
 #include "example_sources/example_particle_loop_global_array.hpp"
 #include "example_sources/example_particle_loop_index.hpp"
 #include "example_sources/example_particle_loop_local_array.hpp"
+#include "example_sources/example_particle_loop_low_level_0.hpp"
 #include "example_sources/example_particle_loop_nd_local_array.hpp"
 #include "example_sources/example_particle_loop_rng.hpp"
 #include "example_sources/example_particle_loop_sym_vector.hpp"
@@ -99,6 +99,7 @@ TEST(Examples, particle_loop_base) {
   auto A = particle_loop_common();
 
   advection_example(A);
+  advection_example_low_level(A);
   advection_example_no_comments(A);
   local_array_example(A);
   nd_local_array_example(A);

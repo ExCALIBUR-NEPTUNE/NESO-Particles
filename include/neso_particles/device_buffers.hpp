@@ -2,6 +2,7 @@
 #define _NESO_PARTICLES_DEVICE_BUFFERS_HPP_
 
 #include "compute_target.hpp"
+#include <optional>
 
 namespace NESO::Particles {
 
@@ -9,6 +10,11 @@ template <typename T> class BufferBase {
 protected:
   virtual inline T *malloc_wrapper(const std::size_t num_bytes) = 0;
   virtual inline void free_wrapper(T *ptr) = 0;
+  virtual inline void memcpy_wrapper(T *ptr_dst, const T *const ptr_src,
+                                     const std::size_t num_elements) {
+    this->sycl_target->queue.memcpy(ptr_dst, ptr_src, num_elements * sizeof(T))
+        .wait_and_throw();
+  }
 
   inline void generic_init() {
     NESOASSERT(this->ptr == nullptr, "Buffer is already allocated.");
@@ -80,6 +86,38 @@ public:
       this->free_wrapper(this->ptr);
       this->ptr = this->malloc_wrapper(size * sizeof(T));
       this->size = size;
+    }
+    return this->size;
+  }
+
+  /**
+   * Reallocate the buffer to hold at least the requested number of elements.
+   * May or may not reduce the buffer size if called with a size less than the
+   * current allocation. Current contents is copied to the new buffer.
+   *
+   * @param size Minimum number of elements this buffer should be able to hold.
+   * @param max_size_factor (Optional) Specify a ratio, if the underlying
+   * buffer is larger than the requested ammount times this ratio then free the
+   * buffer and reallocate.
+   */
+  inline int realloc(const std::size_t size,
+                     const std::optional<REAL> max_size_factor = std::nullopt) {
+    if (size == 0) {
+      return this->size;
+    }
+
+    const std::size_t max_size = std::max(
+        size, (std::size_t)(max_size_factor != std::nullopt
+                                ? max_size_factor.value() * ((REAL)size)
+                                : this->size));
+
+    if ((size > this->size) || (this->size > max_size)) {
+      this->assert_allocated();
+      auto ptr_old = this->ptr;
+      this->ptr = this->malloc_wrapper(size * sizeof(T));
+      this->size = size;
+      this->memcpy_wrapper(this->ptr, ptr_old, size);
+      this->free_wrapper(ptr_old);
     }
     return this->size;
   }
@@ -165,6 +203,16 @@ protected:
   }
   virtual inline void free_wrapper(T *ptr) override {
     this->sycl_target->free(ptr);
+  }
+  virtual inline void memcpy_wrapper(T *ptr_dst, const T *const ptr_src,
+                                     const std::size_t num_elements) override {
+    if (num_elements > 0) {
+      this->sycl_target->queue
+          .parallel_for(this->sycl_target->device_limits.validate_range_global(
+                            sycl::range<1>(num_elements)),
+                        [=](sycl::id<1> idx) { ptr_dst[idx] = ptr_src[idx]; })
+          .wait_and_throw();
+    }
   }
 
 public:
@@ -301,6 +349,10 @@ protected:
   }
   virtual inline void free_wrapper(T *ptr) override {
     this->sycl_target->free(ptr);
+  }
+  virtual inline void memcpy_wrapper(T *ptr_dst, const T *const ptr_src,
+                                     const std::size_t num_elements) override {
+    std::memcpy(ptr_dst, ptr_src, num_elements * sizeof(T));
   }
 
 public:
@@ -458,22 +510,45 @@ public:
 
   /**
    * Copy the contents of the host buffer to the device buffer.
+   *
+   * @param num_elements Optional number of elements to move, default entire
+   * buffer.
    */
-  inline void host_to_device() {
-    if (this->size_bytes() > 0) {
+  inline void
+  host_to_device(std::optional<std::size_t> num_elements = std::nullopt) {
+
+    std::size_t num_bytes = 0;
+    if (num_elements != std::nullopt) {
+      num_bytes = num_elements.value() * sizeof(T);
+    } else {
+      num_bytes = this->size_bytes();
+    }
+
+    if (num_bytes > 0) {
       this->sycl_target->queue
-          .memcpy(this->d_buffer.ptr, this->h_buffer.ptr, this->size_bytes())
-          .wait();
+          .memcpy(this->d_buffer.ptr, this->h_buffer.ptr, num_bytes)
+          .wait_and_throw();
     }
   }
   /**
    * Copy the contents of the device buffer to the host buffer.
+   *
+   * @param num_elements Optional number of elements to move, default entire
+   * buffer.
    */
-  inline void device_to_host() {
-    if (this->size_bytes() > 0) {
+  inline void
+  device_to_host(std::optional<std::size_t> num_elements = std::nullopt) {
+    std::size_t num_bytes = 0;
+    if (num_elements != std::nullopt) {
+      num_bytes = num_elements.value() * sizeof(T);
+    } else {
+      num_bytes = this->size_bytes();
+    }
+
+    if (num_bytes > 0) {
       this->sycl_target->queue
-          .memcpy(this->h_buffer.ptr, this->d_buffer.ptr, this->size_bytes())
-          .wait();
+          .memcpy(this->h_buffer.ptr, this->d_buffer.ptr, num_bytes)
+          .wait_and_throw();
     }
   }
   /**

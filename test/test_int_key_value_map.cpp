@@ -1,10 +1,4 @@
-#include <gtest/gtest.h>
-#include <map>
-#include <neso_particles.hpp>
-#include <random>
-#include <set>
-
-using namespace NESO::Particles;
+#include "include/test_neso_particles.hpp"
 
 TEST(BlockedBinaryTree, indexing) {
   INT to_test;
@@ -159,4 +153,195 @@ TEST(LookupTable, device) {
     ASSERT_NEAR(dh_values->h_buffer.ptr[ix], 1.0 / (ix + 1), 1.0e-14);
   }
   sycl_target->free();
+}
+
+TEST(LookupTable, particle_loop) {
+  auto [A_t, sycl_target_t, cell_count_t] = particle_loop_common_2d(20, 12, 7);
+
+  auto sycl_target = sycl_target_t;
+  auto A = A_t;
+
+  auto ep = ErrorPropagate(sycl_target_t);
+  auto k_ep = ep.device_ptr();
+
+  const int Nkeys = 16;
+  struct ValueType {
+    int a;
+  };
+
+  {
+    // ValueType can be any type usable on device.
+    auto lut =
+        std::make_shared<LookupTable<int, ValueType>>(sycl_target, Nkeys);
+
+    // push data into the LUT
+    for (int ix = 0; ix < Nkeys; ix++) {
+      lut->add(ix,                 // key
+               {(ix + 123123) % 7} // value, this is an instance of ValueType.
+      );
+
+      // Can get the values on the host
+      ValueType v;
+      lut->host_get(ix, &v);
+      ASSERT_EQ(v.a, (ix + 123123) % 7);
+    }
+
+    // Device pointer to the root of the LUT
+    auto k_lut = lut->root;
+
+    particle_loop(
+        A,
+        [=](auto ID) {
+          // Pointer to the device type (note the const)
+          const ValueType *v = nullptr;
+          // Populate the pointer to the entry if the key is in the LUT.
+          const bool exists = k_lut->get(ID.at(0) % Nkeys, // index key
+                                         &v // pointer to populate
+          );
+
+          NESO_KERNEL_ASSERT(exists, k_ep);
+          if (exists) {
+            NESO_KERNEL_ASSERT((((ID.at(0) % Nkeys) + 123123) % 7) == v->a,
+                               k_ep);
+          }
+        },
+        Access::read(Sym<INT>("ID")))
+        ->execute();
+
+    ASSERT_FALSE(ep.get_flag());
+  }
+
+  {
+
+    auto lut =
+        std::make_shared<LookupTable<int, ValueType>>(sycl_target, Nkeys);
+
+    // push data into the LUT
+    for (int ix = 0; ix < Nkeys; ix++) {
+      if (ix % 2 == 0) {
+        lut->add(ix,                 // key
+                 {(ix + 123123) % 7} // value, this is an instance of ValueType.
+        );
+      }
+    }
+
+    auto k_lut = lut->root;
+
+    // Test the out of bounds behaviour.
+    sycl_target->queue
+        .parallel_for(sycl::range<1>(Nkeys + 8),
+                      [=](auto idx) {
+                        const int key = static_cast<int>(idx) - 4;
+                        const ValueType *v = nullptr;
+                        const bool exists = k_lut->get(key, &v);
+
+                        if ((-1 < key) && (key < Nkeys) && (key % 2 == 0)) {
+                          NESO_KERNEL_ASSERT(exists, k_ep);
+                          NESO_KERNEL_ASSERT(((key + 123123) % 7) == v->a,
+                                             k_ep);
+                        } else {
+                          NESO_KERNEL_ASSERT(!exists, k_ep);
+                        }
+                      })
+        .wait_and_throw();
+
+    ASSERT_FALSE(ep.get_flag());
+  }
+
+  sycl_target->free();
+  A_t->domain->mesh->free();
+}
+
+TEST(BlockedBinaryTree, particle_loop) {
+  auto [A_t, sycl_target_t, cell_count_t] = particle_loop_common_2d(20, 12, 7);
+
+  auto sycl_target = sycl_target_t;
+  auto A = A_t;
+
+  auto ep = ErrorPropagate(sycl_target_t);
+  auto k_ep = ep.device_ptr();
+
+  const int Nkeys = 16;
+  struct ValueType {
+    int a;
+  };
+
+  // ValueType can be any type usable on device. Note that there is a default
+  // template argument here for the block width, i.e. the full type is
+  // BlockedBinaryTree<int, ValueType, NESO_PARTICLES_BLOCKED_BINARY_TREE_WIDTH>
+  auto bbt = std::make_shared<BlockedBinaryTree<int, ValueType>>(sycl_target);
+
+  // push data into the Tree
+  for (int ix = 0; ix < Nkeys; ix++) {
+    bbt->add(ix,                 // key
+             {(ix + 123123) % 7} // value, this is an instance of ValueType.
+    );
+
+    // Can get the values on the host
+    ValueType v;
+    bbt->host_get(ix, &v);
+    ASSERT_EQ(v.a, (ix + 123123) % 7);
+  }
+
+  // Device pointer to the root of the Tree, note we get this pointer after
+  // adding data to the tree as there is no root before data is added.
+  auto k_bbt = bbt->root;
+
+  particle_loop(
+      A,
+      [=](auto ID) {
+        // Pointer to the device type (note the const)
+        const ValueType *v = nullptr;
+        // Populate the pointer to the entry if the key is in the bbt.
+        const bool exists = k_bbt->get(ID.at(0) % Nkeys, // index key
+                                       &v                // pointer to populate
+        );
+
+        NESO_KERNEL_ASSERT(exists, k_ep);
+        if (exists) {
+          NESO_KERNEL_ASSERT((((ID.at(0) % Nkeys) + 123123) % 7) == v->a, k_ep);
+        }
+      },
+      Access::read(Sym<INT>("ID")))
+      ->execute();
+
+  ASSERT_FALSE(ep.get_flag());
+
+  {
+
+    auto bbt = std::make_shared<BlockedBinaryTree<int, ValueType>>(sycl_target);
+
+    for (int ix = 0; ix < Nkeys; ix++) {
+      if (ix % 2 == 0) {
+        bbt->add(ix,                 // key
+                 {(ix + 123123) % 7} // value, this is an instance of ValueType.
+        );
+      }
+    }
+
+    auto k_bbt = bbt->root;
+
+    // Test the out of bounds behaviour.
+    sycl_target->queue
+        .parallel_for(sycl::range<1>(Nkeys + 8),
+                      [=](auto idx) {
+                        const int key = static_cast<int>(idx) - 4;
+                        const ValueType *v = nullptr;
+                        const bool exists = k_bbt->get(key, &v);
+
+                        if ((-1 < key) && (key < Nkeys) && (key % 2 == 0)) {
+                          NESO_KERNEL_ASSERT(exists, k_ep);
+                          NESO_KERNEL_ASSERT(((key + 123123) % 7) == v->a,
+                                             k_ep);
+                        } else {
+                          NESO_KERNEL_ASSERT(!exists, k_ep);
+                        }
+                      })
+        .wait_and_throw();
+
+    ASSERT_FALSE(ep.get_flag());
+  }
+
+  sycl_target->free();
+  A_t->domain->mesh->free();
 }

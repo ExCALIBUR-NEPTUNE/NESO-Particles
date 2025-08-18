@@ -23,17 +23,48 @@ class ParticleGroup;
 // Forward declaration of ParticleLoop such that LocalArray can define
 // ParticleLoop as a friend class.
 template <typename KERNEL, typename... ARGS> class ParticleLoop;
+class ParticleLoopBase;
 template <typename T> class SymVector;
 template <typename T> class SymVectorPointerCache;
+
+class EphemeralDats;
+class ParticleSubGroup;
 class MeshHierarchyGlobalMap;
 class CellMove;
 class LayerCompressor;
 class ParticlePacker;
 class ParticleUnpacker;
+class ParticleGroupPointerMap;
+struct TestParticleGroup;
 
 template <typename T> using ParticleDatImplGetT = T ***;
 template <typename T> using ParticleDatImplGetConstT = T *const *const *;
 class ParticleGroup;
+template <typename T> class ParticleDatT;
+template <typename T>
+using ParticleDatSharedPtr = std::shared_ptr<ParticleDatT<T>>;
+
+namespace Private {
+template <typename T>
+inline ParticleDatImplGetConstT<T>
+particle_dat_impl_get_const(ParticleDatSharedPtr<T> dat);
+}
+
+namespace Access {
+template <typename T>
+inline ParticleDatImplGetConstT<T>
+direct_get(Access::Read<ParticleDatSharedPtr<T>> dat_access);
+template <typename T>
+inline ParticleDatImplGetT<T>
+direct_get(Access::Write<ParticleDatSharedPtr<T>> dat_access);
+template <typename T>
+inline void direct_restore(Access::Read<ParticleDatSharedPtr<T>> dat_access,
+                           ParticleDatImplGetConstT<T> &data);
+template <typename T>
+inline void direct_restore(Access::Write<ParticleDatSharedPtr<T>> dat_access,
+                           ParticleDatImplGetT<T> &data);
+
+} // namespace Access
 
 namespace ParticleLoopImplementation {
 
@@ -54,18 +85,27 @@ create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
 /**
  * Method to compute access to a particle dat (read).
  */
-template <typename T>
-inline ParticleDatImplGetConstT<T>
+ParticleDatImplGetConstT<REAL>
 create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
-                Access::Read<ParticleDatT<T> *> &a);
+                Access::Read<ParticleDatT<REAL> *> &a);
 /**
  * Method to compute access to a particle dat (write).
  */
-template <typename T>
-inline ParticleDatImplGetT<T>
+ParticleDatImplGetT<REAL>
 create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
-                Access::Write<ParticleDatT<T> *> &a);
-
+                Access::Write<ParticleDatT<REAL> *> &a);
+/**
+ * Method to compute access to a particle dat (read).
+ */
+ParticleDatImplGetConstT<INT>
+create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
+                Access::Read<ParticleDatT<INT> *> &a);
+/**
+ * Method to compute access to a particle dat (write).
+ */
+ParticleDatImplGetT<INT> create_loop_arg(ParticleLoopGlobalInfo *global_info,
+                                         sycl::handler &cgh,
+                                         Access::Write<ParticleDatT<INT> *> &a);
 } // namespace ParticleLoopImplementation
 
 /**
@@ -74,6 +114,7 @@ create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
 template <typename T> class ParticleDatT {
   // This allows the ParticleLoop to access the implementation methods.
   template <typename KERNEL, typename... ARGS> friend class ParticleLoop;
+  friend class ParticleLoopBase;
   friend class SymVector<T>;
   friend class SymVectorPointerCache<T>;
   friend class ParticleGroup;
@@ -82,6 +123,15 @@ template <typename T> class ParticleDatT {
   friend class LayerCompressor;
   friend class ParticlePacker;
   friend class ParticleUnpacker;
+  friend class ParticleGroupPointerMap;
+  friend struct TestParticleGroup;
+  friend class EphemeralDats;
+  friend class ParticleSubGroup;
+
+  template <typename U>
+  friend ParticleDatImplGetConstT<U>
+  Private::particle_dat_impl_get_const(ParticleDatSharedPtr<U> dat);
+
   friend ParticleDatImplGetConstT<T>
   ParticleLoopImplementation::create_loop_arg<T>(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
@@ -90,16 +140,39 @@ template <typename T> class ParticleDatT {
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
       sycl::handler &cgh, Access::Write<Sym<T> *> &a);
 
-  friend ParticleDatImplGetConstT<T>
-  ParticleLoopImplementation::create_loop_arg<T>(
+  friend ParticleDatImplGetConstT<REAL>
+  ParticleLoopImplementation::create_loop_arg(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
-      sycl::handler &cgh, Access::Read<ParticleDatT<T> *> &a);
-  friend ParticleDatImplGetT<T> ParticleLoopImplementation::create_loop_arg<T>(
+      sycl::handler &cgh, Access::Read<ParticleDatT<REAL> *> &a);
+  friend ParticleDatImplGetT<REAL> ParticleLoopImplementation::create_loop_arg(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
-      sycl::handler &cgh, Access::Write<ParticleDatT<T> *> &a);
+      sycl::handler &cgh, Access::Write<ParticleDatT<REAL> *> &a);
+  friend ParticleDatImplGetConstT<INT>
+  ParticleLoopImplementation::create_loop_arg(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      sycl::handler &cgh, Access::Read<ParticleDatT<INT> *> &a);
+  friend ParticleDatImplGetT<INT> ParticleLoopImplementation::create_loop_arg(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      sycl::handler &cgh, Access::Write<ParticleDatT<INT> *> &a);
 
-private:
+  friend ParticleDatImplGetConstT<T>
+  Access::direct_get<T>(Access::Read<ParticleDatSharedPtr<T>> dat_access);
+
+  friend ParticleDatImplGetT<T>
+  Access::direct_get<T>(Access::Write<ParticleDatSharedPtr<T>> dat_access);
+
+  friend void
+  Access::direct_restore<T>(Access::Read<ParticleDatSharedPtr<T>> dat_access,
+                            ParticleDatImplGetConstT<T> &data);
+  friend void
+  Access::direct_restore<T>(Access::Write<ParticleDatSharedPtr<T>> dat_access,
+                            ParticleDatImplGetT<T> &data);
+
 protected:
+  inline bool check_ptr_is_same(ParticleDatImplGetT<T> &data) {
+    return data == this->cell_dat.d_ptr;
+  }
+
   std::function<void(const Sym<T> &, const int)> write_callback;
 
   inline void
@@ -151,6 +224,27 @@ protected:
     return this->cell_dat.col_device_ptr(cell, col);
   }
 
+  ParticleDatT(SYCLTargetSharedPtr sycl_target, const Sym<T> sym, int ncomp,
+               int ncell, bool positions, bool fixed_size)
+      : sym(sym), cell_dat(CellDat<T>(sycl_target)), ncomp(ncomp), ncell(ncell),
+        positions(positions), sycl_target(sycl_target), fixed_size(fixed_size) {
+  }
+
+  /**
+   * Constructor for EphemeralDats.
+   */
+  ParticleDatT(SYCLTargetSharedPtr sycl_target, const Sym<T> sym, int ncomp,
+               int ncell, const INT npart_local, int *h_npart_cell,
+               int *d_npart_cell, INT *d_npart_cell_es)
+      : ParticleDatT(sycl_target, sym, ncomp, ncell, false, true) {
+
+    this->cell_dat.create_fixed_size(ncell, ncomp, npart_local, h_npart_cell,
+                                     d_npart_cell, d_npart_cell_es);
+
+    this->d_npart_cell = d_npart_cell;
+    this->h_npart_cell = h_npart_cell;
+  }
+
 public:
   /// Disable (implicit) copies.
   ParticleDatT(const ParticleDatT &st) = delete;
@@ -169,13 +263,13 @@ public:
   const int ncomp;
   /// Number of cells this ParticleDat is defined on.
   const int ncell;
-  /// Flat to indicate if this ParticleDat is to hold particle positions or
+  /// Flag to indicate if this ParticleDat is to hold particle positions or
   // cell ids.
   const bool positions;
-  /// Label given to the ParticleDat.
-  const std::string name;
   /// Compute device used by the instance.
   SYCLTargetSharedPtr sycl_target;
+  /// Is this ParticleDat of fixed size?
+  bool fixed_size;
 
   /**
    * Create a new ParticleDat.
@@ -188,10 +282,9 @@ public:
    */
   ParticleDatT(SYCLTargetSharedPtr sycl_target, const Sym<T> sym, int ncomp,
                int ncell, bool positions = false)
-      : sym(sym), cell_dat(CellDat<T>(sycl_target, ncell, ncomp)), ncomp(ncomp),
-        ncell(ncell), positions(positions), name(sym.name),
-        sycl_target(sycl_target) {
+      : ParticleDatT(sycl_target, sym, ncomp, ncell, positions, false) {
 
+    this->cell_dat.create(ncell, ncomp);
     this->cell_dat.add_write_callback(std::bind(
         &ParticleDatT<T>::write_callback_wrapper, this, std::placeholders::_1));
 
@@ -199,16 +292,18 @@ public:
         sycl::malloc_host<int>(this->ncell, this->sycl_target->queue);
     this->d_npart_cell =
         sycl::malloc_device<int>(this->ncell, this->sycl_target->queue);
-    for (int cellx = 0; cellx < this->ncell; cellx++) {
-      this->h_npart_cell[cellx] = 0;
-    }
-    this->npart_host_to_device();
+
+    auto e0 = this->sycl_target->queue.fill(this->d_npart_cell, 0, this->ncell);
+    std::fill(this->h_npart_cell, this->h_npart_cell + this->ncell, 0);
+    e0.wait();
   }
 
   /**
    *  Copy cell particle counts from host buffer to device buffer.
    */
   inline void npart_host_to_device() {
+    NESOASSERT(!this->fixed_size,
+               "This call does not make sense for a fixed sized ParticleDat.");
     if (this->ncell > 0) {
       this->sycl_target->queue
           .memcpy(this->d_npart_cell, this->h_npart_cell,
@@ -223,6 +318,8 @@ public:
    *  @returns sycl::event for copy operation.
    */
   inline sycl::event async_npart_host_to_device() {
+    NESOASSERT(!this->fixed_size,
+               "This call does not make sense for a fixed sized ParticleDat.");
     NESOASSERT(this->ncell > 0, "Zero sized memcpy issued");
     return this->sycl_target->queue.memcpy(
         this->d_npart_cell, this->h_npart_cell, this->ncell * sizeof(int));
@@ -231,6 +328,8 @@ public:
    *  Copy cell particle counts from device buffer to host buffer.
    */
   inline void npart_device_to_host() {
+    NESOASSERT(!this->fixed_size,
+               "This call does not make sense for a fixed sized ParticleDat.");
     if (this->ncell > 0) {
       this->sycl_target->queue
           .memcpy(this->h_npart_cell, this->d_npart_cell,
@@ -245,14 +344,18 @@ public:
    *  @returns sycl::event for copy operation.
    */
   inline sycl::event async_npart_device_to_host() {
+    NESOASSERT(!this->fixed_size,
+               "This call does not make sense for a fixed sized ParticleDat.");
     NESOASSERT(this->ncell > 0, "Zero sized memcpy issued");
     return this->sycl_target->queue.memcpy(
         this->h_npart_cell, this->d_npart_cell, this->ncell * sizeof(int));
   }
 
   ~ParticleDatT() {
-    sycl::free(this->h_npart_cell, this->sycl_target->queue);
-    sycl::free(this->d_npart_cell, this->sycl_target->queue);
+    if (!this->fixed_size) {
+      sycl::free(this->h_npart_cell, this->sycl_target->queue);
+      sycl::free(this->d_npart_cell, this->sycl_target->queue);
+    }
   }
 
   /**
@@ -325,9 +428,11 @@ public:
     T ***d_cell_dat_ptr = this->impl_get();
     const int ncomp = this->ncomp;
 
-    sycl::event event =
-        this->sycl_target->queue.submit([&](sycl::handler &cgh) {
-          cgh.parallel_for<>(sycl::range<1>(npart_s), [=](sycl::id<1> idx) {
+    sycl::event event;
+
+    if (npart_s > 0) {
+      event = this->sycl_target->queue.parallel_for(
+          sycl::range<1>(npart_s), [=](sycl::id<1> idx) {
             const INT cell_oldx = d_cells_old[idx];
             // remove particles currently masks of elements using -1
             if (cell_oldx > -1) {
@@ -342,8 +447,7 @@ public:
               }
             }
           });
-        });
-
+    }
     return event;
   }
 
@@ -373,11 +477,9 @@ public:
     this->write_callback_wrapper(0);
     const size_t ncell = static_cast<size_t>(this->ncell);
     int *k_npart_cell = this->d_npart_cell;
-    sycl::event event =
-        this->sycl_target->queue.submit([&](sycl::handler &cgh) {
-          cgh.parallel_for<>(sycl::range<1>(ncell), [=](sycl::id<1> idx) {
-            k_npart_cell[idx] = static_cast<int>(d_npart_cell_in[idx]);
-          });
+    sycl::event event = this->sycl_target->queue.parallel_for(
+        sycl::range<1>(ncell), [=](sycl::id<1> idx) {
+          k_npart_cell[idx] = static_cast<int>(d_npart_cell_in[idx]);
         });
     return event;
   }
@@ -390,6 +492,8 @@ public:
    */
   template <typename U>
   inline void set_npart_cells_host(const U *h_npart_cell_in) {
+    NESOASSERT(!this->fixed_size,
+               "This call does not make sense for a fixed sized ParticleDat.");
     this->write_callback_wrapper(0);
     for (int cellx = 0; cellx < this->ncell; cellx++) {
       this->h_npart_cell[cellx] = h_npart_cell_in[cellx];
@@ -403,6 +507,8 @@ public:
    *  @param npart New particle count for cell.
    */
   inline void set_npart_cell(const INT cell, const int npart) {
+    NESOASSERT(!this->fixed_size,
+               "This call does not make sense for a fixed sized ParticleDat.");
     this->write_callback_wrapper(0);
     this->h_npart_cell[cell] = npart;
     this->sycl_target->queue
@@ -418,6 +524,8 @@ public:
    *  @param npart std::vector of new particle counts per cell.
    */
   inline void set_npart_cells(std::vector<INT> &npart) {
+    NESOASSERT(!this->fixed_size,
+               "This call does not make sense for a fixed sized ParticleDat.");
     this->write_callback_wrapper(0);
     NESOASSERT(npart.size() >= this->ncell, "bad vector size");
     for (int cellx = 0; cellx < this->ncell; cellx++) {
@@ -435,6 +543,8 @@ public:
    */
   template <typename U>
   inline void set_npart_cells(const BufferHost<U> &h_npart_cell_in) {
+    NESOASSERT(!this->fixed_size,
+               "This call does not make sense for a fixed sized ParticleDat.");
     this->write_callback_wrapper(0);
     NESOASSERT(h_npart_cell_in.size >= this->ncell, "bad BufferHost size");
     for (int cellx = 0; cellx < this->ncell; cellx++) {
@@ -454,6 +564,8 @@ public:
   template <typename U>
   inline sycl::event
   async_set_npart_cells(const BufferHost<U> &h_npart_cell_in) {
+    NESOASSERT(!this->fixed_size,
+               "This call does not make sense for a fixed sized ParticleDat.");
     this->write_callback_wrapper(0);
     NESOASSERT(h_npart_cell_in.size >= static_cast<std::size_t>(this->ncell),
                "bad BufferHost size");
@@ -552,9 +664,6 @@ public:
 };
 
 template <typename T>
-using ParticleDatSharedPtr = std::shared_ptr<ParticleDatT<T>>;
-
-template <typename T>
 inline ParticleDatSharedPtr<T> ParticleDat(SYCLTargetSharedPtr sycl_target,
                                            const Sym<T> sym, int ncomp,
                                            int ncell, bool positions = false) {
@@ -601,6 +710,8 @@ inline void ParticleDatT<T>::realloc(const int cell, const int npart_cell_new) {
 }
 
 template <typename T> inline void ParticleDatT<T>::trim_cell_dat_rows() {
+  NESOASSERT(!this->fixed_size,
+             "This call does not make sense for a fixed sized ParticleDat.");
   this->cell_dat.reduce_nrow(this->h_npart_cell);
   this->write_callback_wrapper(0);
 }
@@ -616,7 +727,8 @@ inline void ParticleDatT<T>::append_particle_data(
     const std::shared_ptr<BufferDevice<INT>> d_cells,
     const std::shared_ptr<BufferDevice<INT>> d_layers,
     const std::shared_ptr<BufferDevice<T>> d_data, EventStack &es) {
-
+  NESOASSERT(!this->fixed_size,
+             "This call does not make sense for a fixed sized ParticleDat.");
   if (npart_new == 0) {
     return;
   }
@@ -677,7 +789,8 @@ inline void ParticleDatT<T>::append_particle_data(
     ParticleDatSharedPtr<T> particle_dat,
     const std::vector<INT> &h_npart_cell_existing,
     const std::vector<INT> &h_npart_cell_to_add, EventStack &es) {
-
+  NESOASSERT(!this->fixed_size,
+             "This call does not make sense for a fixed sized ParticleDat.");
   if (particle_dat != nullptr) {
     NESOASSERT(
         this->ncell == particle_dat->ncell,
@@ -710,6 +823,9 @@ inline void ParticleDatT<T>::append_particle_data(
     }
   }
 }
+
+extern template class ParticleDatT<REAL>;
+extern template class ParticleDatT<INT>;
 
 } // namespace NESO::Particles
 

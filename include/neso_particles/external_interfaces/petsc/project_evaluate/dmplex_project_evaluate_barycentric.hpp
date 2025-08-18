@@ -131,10 +131,8 @@ protected:
     // Add the particle property for the Barycentric coordinates if it does not
     // exist already.
     if (!particle_group->contains_dat(sym_barycentric_coords)) {
-      particle_group->add_particle_dat(ParticleDat(
-          particle_group->sycl_target,
-          ParticleProp(sym_barycentric_coords, ncomp_barycentric_coords),
-          particle_group->domain->mesh->get_cell_count()));
+      particle_group->add_particle_dat(sym_barycentric_coords,
+                                       ncomp_barycentric_coords);
     }
     // Compute the Barycentric coordinates for all the particles in the
     // ParticleGroup.
@@ -224,13 +222,14 @@ protected:
               for (int cx = 0; cx < ncomp; cx++) {
                 const REAL value = SRC.at(cx);
                 const REAL weight = MATRIX.at(vx, quad_index) * value;
-                DST.fetch_add(cx, vx, weight);
+                DST.combine(cx, vx, weight);
               }
             }
           }
         },
         Access::read(this->cdc_num_vertices), Access::read(this->cdc_matrices),
-        Access::read(source_dat), Access::add(this->cdc_project),
+        Access::read(source_dat),
+        Access::reduce(this->cdc_project, Kernel::plus<REAL>()),
         Access::read(Sym<INT>("ADDING_RANK_INDEX")))
         ->execute();
 
@@ -273,13 +272,13 @@ protected:
           for (int vx = 0; vx < num_vertices; vx++) {
             for (int cx = 0; cx < ncomp; cx++) {
               const REAL lx = B.at(vx);
-              DST.fetch_add(cx, vx, lx * SRC.at(cx));
+              DST.combine(cx, vx, lx * SRC.at(cx));
             }
           }
         },
         Access::read(sym_barycentric_coords),
         Access::read(this->cdc_num_vertices), Access::read(sym),
-        Access::add(this->cdc_project))
+        Access::reduce(this->cdc_project, Kernel::plus<REAL>()))
         ->execute();
 
     // Read the CellDatConst values onto the quadrature point values
@@ -314,9 +313,9 @@ public:
   int polynomial_order;
   virtual ~DMPlexProjectEvaluateBarycentric() = default;
   DMPlexProjectEvaluateBarycentric() = default;
-  inline const static Sym<REAL> sym_barycentric_coords =
+  static inline const Sym<REAL> sym_barycentric_coords =
       Sym<REAL>("NESO_PARTICLES_DMPLEX_PROJ_EVAL_BARY_COORDS");
-  inline constexpr static int ncomp_barycentric_coords = 4;
+  static inline constexpr int ncomp_barycentric_coords = 4;
 
   /**
    * Get a representation of the internal state which can be passed to the
@@ -324,36 +323,7 @@ public:
    *
    * @returns Data for VTKHDF unstructured grid writer.
    */
-  virtual inline std::vector<VTK::UnstructuredCell> get_vtk_data() override {
-    const int cell_count = this->mesh->get_cell_count();
-    std::vector<VTK::UnstructuredCell> data(cell_count);
-    std::vector<std::vector<REAL>> vertices;
-    const int ndim = mesh->get_ndim();
-    for (int cellx = 0; cellx < cell_count; cellx++) {
-      vertices.clear();
-      mesh->dmh->get_cell_vertices(cellx, vertices);
-      auto values = this->cdc_project->get_cell(cellx);
-      auto inverse_volumes = this->cdc_volumes->get_value(cellx, 0, 0);
-      const int num_vertices = vertices.size();
-      data.at(cellx).num_points = num_vertices;
-      data.at(cellx).cell_type = num_vertices == 3
-                                     ? VTK::CellType::triangle
-                                     : VTK::CellType::quadrilateral;
-      data.at(cellx).points.reserve(num_vertices * 3);
-      data.at(cellx).point_data["value"].reserve(num_vertices);
-      for (int vx = 0; vx < num_vertices; vx++) {
-        for (int dx = 0; dx < ndim; dx++) {
-          data.at(cellx).points.push_back(vertices.at(vx).at(dx));
-        }
-        for (int dx = ndim; dx < 3; dx++) {
-          data.at(cellx).points.push_back(0.0);
-        }
-        data.at(cellx).point_data["value"].push_back(values->at(0, vx) *
-                                                     inverse_volumes);
-      }
-    }
-    return data;
-  }
+  virtual std::vector<VTK::UnstructuredCell> get_vtk_data() override;
 
   /**
    * Create a DG1 project/evaluate instance from a QuadraturePointMapper which
@@ -366,65 +336,7 @@ public:
   DMPlexProjectEvaluateBarycentric(
       ExternalCommon::QuadraturePointMapperSharedPtr qpm,
       std::string function_space, int polynomial_order,
-      const bool testing = false)
-      : qpm(qpm), function_space(function_space),
-        polynomial_order(polynomial_order) {
-
-    std::map<std::string, std::pair<int, int>> map_allowed;
-    map_allowed["Barycentric"] = {1, 1};
-
-    NESOASSERT(this->qpm != nullptr, "QuadraturePointMapper is nullptr");
-    NESOASSERT(map_allowed.count(function_space),
-               "Only function space: " + function_space + " not recognised.");
-    const int p_min = map_allowed.at(function_space).first;
-    const int p_max = map_allowed.at(function_space).second;
-    NESOASSERT(((p_min <= polynomial_order) && (polynomial_order <= p_max)),
-               "Polynomial order " + std::to_string(polynomial_order) +
-                   " outside of acceptable range [" + std::to_string(p_min) +
-                   ", " + std::to_string(p_max) + "] for function space " +
-                   function_space + ".");
-
-    this->mesh = std::dynamic_pointer_cast<PetscInterface::DMPlexInterface>(
-        this->qpm->domain->mesh);
-    NESOASSERT(this->mesh != nullptr,
-               "Mesh is not descendent from PetscInterface::DMPlexInterface");
-    NESOASSERT(this->mesh->get_ndim() == 2, "Only implemented for 2D domains.");
-
-    const int cell_count = this->qpm->domain->mesh->get_cell_count();
-    this->cdc_project = std::make_shared<CellDatConst<REAL>>(
-        this->qpm->sycl_target, cell_count, 1, 4);
-    this->cdc_num_vertices = std::make_shared<CellDatConst<int>>(
-        this->qpm->sycl_target, cell_count, 1, 1);
-    this->cdc_vertices = std::make_shared<CellDatConst<REAL>>(
-        this->qpm->sycl_target, cell_count, 4, 2);
-    this->cdc_matrices = nullptr;
-
-    // For each cell record the verticies.
-    std::vector<std::vector<REAL>> vertices;
-    for (int cx = 0; cx < cell_count; cx++) {
-      this->mesh->dmh->get_cell_vertices(cx, vertices);
-      const int num_verts = vertices.size();
-      NESOASSERT(testing || ((2 < num_verts) && (num_verts < 5)),
-                 "Unexpected number of vertices (expected 3 or 4).");
-      this->cdc_num_vertices->set_value(cx, 0, 0, num_verts);
-      for (int vx = 0; vx < num_verts; vx++) {
-        for (int dx = 0; dx < 2; dx++) {
-          this->cdc_vertices->set_value(cx, vx, dx, vertices.at(vx).at(dx));
-        }
-      }
-    }
-    this->cdc_volumes = std::make_shared<CellDatConst<REAL>>(
-        this->qpm->sycl_target, cell_count, 1, 1);
-
-    // For each cell record the volume.
-    for (int cx = 0; cx < cell_count; cx++) {
-      const auto volume = this->mesh->dmh->get_cell_volume(cx);
-      this->cdc_volumes->set_value(
-          cx, 0, 0, this->cdc_num_vertices->get_value(cx, 0, 0) / volume);
-    }
-
-    this->setup_matrices();
-  }
+      const bool testing = false);
 
   /**
    * Projects values from particle data onto the values in the
@@ -436,10 +348,8 @@ public:
    * projects into the QuadraturePointMapper particle group into the particle
    * properties given by calling QuadraturePointMapper::get_sym(ncomp).
    */
-  virtual inline void project(ParticleGroupSharedPtr particle_group,
-                              Sym<REAL> sym) override {
-    this->project_inner(particle_group, sym);
-  }
+  virtual void project(ParticleGroupSharedPtr particle_group,
+                       Sym<REAL> sym) override;
 
   /**
    * Projects values from particle data onto the values in the
@@ -451,10 +361,8 @@ public:
    * projects into the QuadraturePointMapper particle group into the particle
    * properties given by calling QuadraturePointMapper::get_sym(ncomp).
    */
-  virtual inline void project(ParticleSubGroupSharedPtr particle_sub_group,
-                              Sym<REAL> sym) override {
-    this->project_inner(particle_sub_group, sym);
-  }
+  virtual void project(ParticleSubGroupSharedPtr particle_sub_group,
+                       Sym<REAL> sym) override;
 
   /**
    * If the output sym has ncomp components then this method evaluates the
@@ -465,10 +373,8 @@ public:
    * at.
    * @param sym Output particle property on which to place evaluations.
    */
-  virtual inline void evaluate(ParticleGroupSharedPtr particle_group,
-                               Sym<REAL> sym) override {
-    this->evaluate_inner(particle_group, sym);
-  }
+  virtual void evaluate(ParticleGroupSharedPtr particle_group,
+                        Sym<REAL> sym) override;
   /**
    * If the output sym has ncomp components then this method evaluates the
    * function defined in the point properties given by
@@ -478,10 +384,8 @@ public:
    * function at.
    * @param sym Output particle property on which to place evaluations.
    */
-  virtual inline void evaluate(ParticleSubGroupSharedPtr particle_sub_group,
-                               Sym<REAL> sym) override {
-    this->evaluate_inner(particle_sub_group, sym);
-  }
+  virtual void evaluate(ParticleSubGroupSharedPtr particle_sub_group,
+                        Sym<REAL> sym) override;
 };
 
 } // namespace NESO::Particles::PetscInterface
