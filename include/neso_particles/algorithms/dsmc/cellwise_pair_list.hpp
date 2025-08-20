@@ -13,7 +13,7 @@ namespace NESO::Particles::DSMC {
 /**
  * Device type for CellwisePairList.
  */
-struct CellWisePairListDevice {
+struct CellwisePairListDevice {
   int ***pair_list;
   int *pair_counts;
 };
@@ -68,7 +68,7 @@ public:
    * @returns PairListDevice describing all the particle pairs. The returned
    * object must have a lifetime equal or shorter than this host instance.
    */
-  CellWisePairListDevice get();
+  CellwisePairListDevice get();
 
   /**
    * Get a description of the pair list accessible on the host.

@@ -72,5 +72,21 @@ TEST(DSMC, cellwise_pair_list) {
     }
   }
 
+  {
+    h_c.resize(0);
+    h_i.resize(0);
+    h_j.resize(0);
+    cellwise_pair_list->push_back(h_c, h_i, h_j);
+  }
+
+  {
+    auto h_list = cellwise_pair_list->host_get();
+    ASSERT_EQ(h_list.size(), cell_count);
+    for (int cx = 0; cx < cell_count; cx++) {
+      ASSERT_EQ(h_list.at(cx).first.size(), 0);
+      ASSERT_EQ(h_list.at(cx).second.size(), 0);
+    }
+  }
+
   sycl_target->free();
 }

@@ -18,6 +18,9 @@ void CellwisePairList::push_back(const std::vector<int> &c,
   const auto n = c.size();
   NESOASSERT(n == i.size(), "Input size missmatch.");
   NESOASSERT(n == j.size(), "Input size missmatch.");
+  if (n == 0) {
+    return;
+  }
 
   std::vector<int> layers(n);
 
@@ -65,13 +68,15 @@ void CellwisePairList::push_back(const std::vector<int> &c,
 }
 
 void CellwisePairList::clear() {
-  this->sycl_target->queue
-      .fill(this->d_pair_counts->ptr, static_cast<int>(0), this->cell_count)
-      .wait_and_throw();
+  if (this->cell_count > 0) {
+    this->sycl_target->queue
+        .fill(this->d_pair_counts->ptr, static_cast<int>(0), this->cell_count)
+        .wait_and_throw();
+  }
 }
 
-CellWisePairListDevice CellwisePairList::get() {
-  CellWisePairListDevice l = {this->d_pair_list->device_ptr(),
+CellwisePairListDevice CellwisePairList::get() {
+  CellwisePairListDevice l = {this->d_pair_list->device_ptr(),
                               this->d_pair_counts->ptr};
 
   return l;
