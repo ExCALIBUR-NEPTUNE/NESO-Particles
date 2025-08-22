@@ -225,38 +225,53 @@ TEST(DSMC, all_to_all_looping_host) {
 TEST(DSMC, all_to_all_looping_device) {
   auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
 
-  const int workgroup_size = sycl_target->device.is_cpu() ? 32 : 256;
-  const int num_particles = 64;
+#ifdef __ACPP__
+  const int cpu_workgroup_size = 1;
+  const bool use_barrier = sycl_target->device.is_cpu() ? false : true;
+#else
+  const int cpu_workgroup_size = 32;
+  constexpr bool use_barrier = true;
+#endif
 
-  std::vector<int> seen_entries(num_particles * num_particles);
-  std::fill(seen_entries.begin(), seen_entries.end(), 0);
-  BufferDevice<int> d_seen_entries(sycl_target, seen_entries);
-  auto k_seen_entries = d_seen_entries.ptr;
+  const int workgroup_size =
+      sycl_target->device.is_cpu() ? cpu_workgroup_size : 256;
 
-  sycl_target->queue
-      .parallel_for(sycl::nd_range<1>(sycl::range<1>(workgroup_size),
-                                      sycl::range<1>(workgroup_size)),
-                    [=](sycl::nd_item<1> idx) {
-                      CellwiseAllToAll loop_context(idx.get_local_range(0),
-                                                    idx.get_local_id(0));
+  for (int num_particles : {0, 1, 3, 4, 7, 8, 31, 255, 1023, 1024}) {
 
-                      loop_context.apply(
-                          num_particles,
-                          [&](auto i, auto j) {
-                            k_seen_entries[i + num_particles * j]++;
-                            k_seen_entries[j + num_particles * i]++;
-                          },
-                          [&]() { sycl::group_barrier(idx.get_group()); });
-                    })
-      .wait_and_throw();
+    std::vector<int> seen_entries(num_particles * num_particles);
+    std::fill(seen_entries.begin(), seen_entries.end(), 0);
+    BufferDevice<int> d_seen_entries(sycl_target, seen_entries);
+    auto k_seen_entries = d_seen_entries.ptr;
 
-  seen_entries = d_seen_entries.get();
+    sycl_target->queue
+        .parallel_for(sycl::nd_range<1>(sycl::range<1>(workgroup_size),
+                                        sycl::range<1>(workgroup_size)),
+                      [=](sycl::nd_item<1> idx) {
+                        CellwiseAllToAll loop_context(idx.get_local_range(0),
+                                                      idx.get_local_id(0));
 
-  for (int rowx = 0; rowx < num_particles; rowx++) {
-    for (int colx = 0; colx < num_particles; colx++) {
-      std::cout << seen_entries.at(rowx + num_particles * colx);
+                        loop_context.apply(
+                            num_particles,
+                            [&](auto i, auto j) {
+                              k_seen_entries[i + num_particles * j]++;
+                              k_seen_entries[j + num_particles * i]++;
+                            },
+                            [=]() {
+                              if (use_barrier) {
+                                sycl::group_barrier(idx.get_group());
+                              }
+                            });
+                      })
+        .wait_and_throw();
+
+    seen_entries = d_seen_entries.get();
+
+    for (int rowx = 0; rowx < num_particles; rowx++) {
+      for (int colx = 0; colx < num_particles; colx++) {
+        ASSERT_EQ(seen_entries.at(rowx + num_particles * colx),
+                  rowx == colx ? 0 : 1);
+      }
     }
-    std::cout << std::endl;
   }
 
   sycl_target->free();
