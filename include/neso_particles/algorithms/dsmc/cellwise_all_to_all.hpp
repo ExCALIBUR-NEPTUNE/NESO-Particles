@@ -2,11 +2,6 @@
 #define __NESO_PARTICLES_ALGORITHMS_DSMC_CELLWISE_ALL_TO_ALL_HPP_
 
 #include "../../compute_target.hpp"
-#include "../../containers/cell_dat.hpp"
-#include "../../device_buffers.hpp"
-
-#include <map>
-#include <vector>
 
 namespace NESO::Particles::DSMC {
 
@@ -47,6 +42,7 @@ struct CellwiseAllToAll {
       }
     }
   }
+
   template <typename KERNEL_FUNC_TYPE, typename SYNC_FUNC_TYPE>
   inline void apply_diagonal(const int n, const int block_offset,
                              KERNEL_FUNC_TYPE &kernel_func,
@@ -71,6 +67,7 @@ struct CellwiseAllToAll {
       size /= 2;
     }
   }
+
   template <typename KERNEL_FUNC_TYPE, typename SYNC_FUNC_TYPE>
   inline void apply(const int n, KERNEL_FUNC_TYPE kernel_func,
                     SYNC_FUNC_TYPE sync_func) const {
@@ -103,6 +100,7 @@ struct CellwiseAllToAll {
     }
   }
 };
+
 
 } // namespace NESO::Particles::DSMC
 
