@@ -2,7 +2,7 @@
 
 namespace NESO::Particles::ExternalCommon {
 
-void LocalClaim::claim(const int64_t index, const int weight,
+void LocalClaim::claim(const std::int64_t index, const int weight,
                        const double weightf) {
   if (weight > 0.0) {
     this->claim_cells.insert(index);
@@ -34,7 +34,7 @@ double overlap_1d(const double lhs, const double rhs, const int cell,
   return (area > 0.0) ? area : 0.0;
 }
 
-void mesh_tuple_to_mh_tuple(const int ndim, const int64_t *index_mesh,
+void mesh_tuple_to_mh_tuple(const int ndim, const std::int64_t *index_mesh,
                             std::shared_ptr<MeshHierarchy> mesh_hierarchy,
                             INT *index_mh) {
   for (int dimx = 0; dimx < ndim; dimx++) {
@@ -68,7 +68,7 @@ void bounding_box_map(BoundingBoxSharedPtr element_bounding_box,
     int lhs_cell = lhs_point * mesh_hierarchy->inverse_cell_width_fine;
     int rhs_cell = rhs_point * mesh_hierarchy->inverse_cell_width_fine + 1;
 
-    const int64_t ncells_dim_fine =
+    const std::int64_t ncells_dim_fine =
         mesh_hierarchy->ncells_dim_fine * mesh_hierarchy->dims[dimx];
 
     lhs_cell = (lhs_cell < 0) ? 0 : lhs_cell;
@@ -83,7 +83,7 @@ void bounding_box_map(BoundingBoxSharedPtr element_bounding_box,
   const double cell_width_fine = mesh_hierarchy->cell_width_fine;
 
   // mesh tuple index
-  int64_t index_mesh[3];
+  std::int64_t index_mesh[3];
   // mesh_hierarchy tuple index
   INT index_mh[6];
 

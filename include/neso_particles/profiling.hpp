@@ -43,7 +43,7 @@ profile_elapsed(std::chrono::high_resolution_clock::time_point time_start,
  */
 struct ProfileEntry {
   /// Integral value stored on the entry.
-  int64_t value_integral = 0;
+  std::int64_t value_integral = 0;
   /// Floating point value stored on the entry.
   double value_real = 0.0;
 };
@@ -129,7 +129,8 @@ public:
    * @param value_real Floating point value for the entry.
    */
   inline void set(const std::string key1, const std::string key2,
-                  const int64_t value_integral, const double value_real = 0.0) {
+                  const std::int64_t value_integral,
+                  const double value_real = 0.0) {
     if (this->enabled) {
       this->profile[key1][key2].value_integral = value_integral;
       this->profile[key1][key2].value_real = value_real;
@@ -146,7 +147,8 @@ public:
    * value.
    */
   inline void inc(const std::string key1, const std::string key2,
-                  const int64_t value_integral, const double value_real = 0.0) {
+                  const std::int64_t value_integral,
+                  const double value_real = 0.0) {
     if (this->enabled) {
       this->profile[key1][key2].value_integral += value_integral;
       this->profile[key1][key2].value_real += value_real;
