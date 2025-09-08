@@ -34,6 +34,7 @@ void mass_conservation_wrapper(const int ndim) {
   cti->prepare_particle_group(A);
 
   auto func_mass = cti->create_function(0, "DG", 0);
+  auto func_mass_contrib = cti->create_function(0, "DG", 0);
 
   auto lambda_get_boundary_mass = [&]() -> REAL {
     REAL local_mass = 0.0;
@@ -82,6 +83,23 @@ void mass_conservation_wrapper(const int ndim) {
     auto groups = cti->post_integration(A);
 
     cti->function_project(groups[0], Sym<REAL>("MASS"), 0, false, func_mass);
+
+    groups.at(0)->add_ephemeral_dat(Sym<REAL>("EPH_MASS"), 1);
+    particle_loop(
+        groups.at(0),
+        [=](auto MASS, auto EPH_MASS) {
+          EPH_MASS.at_ephemeral(0) = MASS.at(0);
+        },
+        Access::read(Sym<REAL>("MASS")), Access::write(Sym<REAL>("EPH_MASS")))
+        ->execute();
+
+    cti->function_project_initialise(func_mass_contrib);
+    cti->function_project_contribute(groups[0], Sym<REAL>("MASS"), 0, false,
+                                     func_mass_contrib);
+    cti->function_project_contribute(groups[0], Sym<REAL>("EPH_MASS"), 0, true,
+                                     func_mass_contrib);
+    cti->function_project_finalise(func_mass_contrib);
+
     A->remove_particles(groups.at(0));
 
     mass_particle_system = lambda_get_particle_mass();
@@ -89,6 +107,15 @@ void mass_conservation_wrapper(const int ndim) {
     const REAL mass_diff =
         mass_total - mass_boundary_function - mass_particle_system;
     ASSERT_NEAR(mass_diff, 0.0, 1.0e-10);
+
+    auto h_dofs_mass = func_mass->get_dofs();
+    auto h_dofs_mass_contrib = func_mass_contrib->get_dofs();
+
+    for (std::size_t ix = 0; ix < h_dofs_mass.size(); ix++) {
+      const REAL correct = h_dofs_mass[ix] * 2.0;
+      const REAL to_test = h_dofs_mass_contrib[ix];
+      ASSERT_NEAR(correct, to_test, 1.0e-14);
+    }
 
     // func_mass->write_vtkhdf("trajectory_surface_" + std::to_string(ndim) +
     //                         "d_" + std::to_string(stepx) + ".vtkhdf");
