@@ -286,47 +286,38 @@ void CartesianTrajectoryIntersection::function_evaluate(
     ErrorPropagate ep(this->sycl_target);
     auto k_ep = ep.device_ptr();
 
+    auto lambda_dispatch = [&](auto set_quantity) {
+      particle_loop(
+          "CartesianHMeshFunction::function_evaluate", particle_sub_group,
+          [=](auto BOUNDARY_METADATA, auto SYM) {
+            if (k_tree_root != nullptr) {
+              const INT *index;
+              bool found = false;
+              found =
+                  k_tree_root->get(BOUNDARY_METADATA.at_ephemeral(1), &index);
+#ifndef NDEBUG
+              NESO_KERNEL_ASSERT(found, k_ep);
+#endif
+              if (found) {
+                set_quantity(SYM, component, k_buffer[*index]);
+              }
+            }
+          },
+          Access::read(Sym<INT>("NESO_PARTICLES_BOUNDARY_METADATA")),
+          Access::write(sym))
+          ->execute();
+    };
+
     if (is_ephemeral) {
-      particle_loop(
-          "CartesianHMeshFunction::function_evaluate", particle_sub_group,
-          [=](auto BOUNDARY_METADATA, auto SYM) {
-            if (k_tree_root != nullptr) {
-              const INT *index;
-              bool found = false;
-              found =
-                  k_tree_root->get(BOUNDARY_METADATA.at_ephemeral(1), &index);
-#ifndef NDEBUG
-              NESO_KERNEL_ASSERT(found, k_ep);
-#endif
-              if (found) {
-                SYM.at_ephemeral(component) = k_buffer[*index];
-              }
-            }
-          },
-          Access::read(Sym<INT>("NESO_PARTICLES_BOUNDARY_METADATA")),
-          Access::write(sym))
-          ->execute();
+      lambda_dispatch([](auto &SYM, const int component, const REAL value) {
+        SYM.at_ephemeral(component) = value;
+      });
     } else {
-      particle_loop(
-          "CartesianHMeshFunction::function_evaluate", particle_sub_group,
-          [=](auto BOUNDARY_METADATA, auto SYM) {
-            if (k_tree_root != nullptr) {
-              const INT *index;
-              bool found = false;
-              found =
-                  k_tree_root->get(BOUNDARY_METADATA.at_ephemeral(1), &index);
-#ifndef NDEBUG
-              NESO_KERNEL_ASSERT(found, k_ep);
-#endif
-              if (found) {
-                SYM.at(component) = k_buffer[*index];
-              }
-            }
-          },
-          Access::read(Sym<INT>("NESO_PARTICLES_BOUNDARY_METADATA")),
-          Access::write(sym))
-          ->execute();
+      lambda_dispatch([](auto &SYM, const int component, const REAL value) {
+        SYM.at(component) = value;
+      });
     }
+
     NESOASSERT(!ep.get_flag(), "Failed to find index for hit geometry object.");
   }
 }
