@@ -48,7 +48,7 @@ public:
    * MeshHierarchy to claim the cell.
    *  @param weightf Floating point weight for reference/testing.
    */
-  void claim(const int64_t index, const int weight, const double weightf);
+  void claim(const std::int64_t index, const int weight, const double weightf);
 };
 
 /**
@@ -73,7 +73,7 @@ double overlap_1d(const double lhs, const double rhs, const int cell,
  * @param mesh_hierarchy MeshHierarchy instance.
  * @param index_mh Output index in the MeshHierarchy.
  */
-void mesh_tuple_to_mh_tuple(const int ndim, const int64_t *index_mesh,
+void mesh_tuple_to_mh_tuple(const int ndim, const std::int64_t *index_mesh,
                             std::shared_ptr<MeshHierarchy> mesh_hierarchy,
                             INT *index_mh);
 

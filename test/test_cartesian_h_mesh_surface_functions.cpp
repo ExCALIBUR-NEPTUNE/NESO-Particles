@@ -31,7 +31,7 @@ TEST(CartesianHMesh, surface_functions_setup) {
   ASSERT_EQ(u0->function_space, "DG");
   ASSERT_EQ(u0->polynomial_order, 0);
   ASSERT_EQ(u0->cells.size(), num_geoms);
-  ASSERT_EQ(u0->element_group, 0);
+  ASSERT_EQ(u0->boundary_group, 0);
 
   cti.free();
   mesh->free();

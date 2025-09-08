@@ -17,10 +17,10 @@ template <typename T> inline MPI_Datatype map_ctype_mpi_type_inner() {
 template <> inline MPI_Datatype map_ctype_mpi_type_inner<int>() {
   return MPI_INT;
 }
-template <> inline MPI_Datatype map_ctype_mpi_type_inner<int64_t>() {
+template <> inline MPI_Datatype map_ctype_mpi_type_inner<std::int64_t>() {
   return MPI_INT64_T;
 }
-template <> inline MPI_Datatype map_ctype_mpi_type_inner<uint64_t>() {
+template <> inline MPI_Datatype map_ctype_mpi_type_inner<std::uint64_t>() {
   return MPI_UINT64_T;
 }
 template <> inline MPI_Datatype map_ctype_mpi_type_inner<double>() {

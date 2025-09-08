@@ -142,7 +142,7 @@ struct TestParticleGroup : public ParticleGroup {
   inline auto get_particle_group_version() {
     return this->particle_group_version;
   }
-  inline bool wrap_check_validation(int64_t &to_check) {
+  inline bool wrap_check_validation(std::int64_t &to_check) {
     return this->check_validation(to_check);
   }
 

@@ -48,7 +48,7 @@ private:
    */
   template <typename GROUP_TYPE, typename T>
   inline void write_dat_column_wise(std::shared_ptr<GROUP_TYPE> parent,
-                                    const int64_t npart_local,
+                                    const std::int64_t npart_local,
                                     ParticleDatSharedPtr<T> dat, hid_t dxpl,
                                     hid_t group_step, hid_t memspace,
                                     hid_t filespace, bool is_position) {
@@ -109,10 +109,11 @@ private:
    *  array.
    */
   template <typename GROUP_TYPE, typename T>
-  inline void write_dat_2d(std::shared_ptr<GROUP_TYPE> parent,
-                           const int64_t npart_total, const int64_t npart_local,
-                           const int64_t offset, ParticleDatSharedPtr<T> dat,
-                           hid_t group_step, hid_t dxpl) {
+  inline void
+  write_dat_2d(std::shared_ptr<GROUP_TYPE> parent,
+               const std::int64_t npart_total, const std::int64_t npart_local,
+               const std::int64_t offset, ParticleDatSharedPtr<T> dat,
+               hid_t group_step, hid_t dxpl) {
 
     auto sycl_target = get_particle_group(parent)->sycl_target;
     const int ncomp = dat->ncomp;
@@ -245,12 +246,12 @@ private:
                                  H5P_DEFAULT, H5P_DEFAULT);
 
     // Perform the bookkeeping logic once for all ParticleDats
-    const int64_t npart_local = group->get_npart_local();
-    int64_t offset;
+    const std::int64_t npart_local = group->get_npart_local();
+    std::int64_t offset;
     MPICHK(MPI_Scan(&npart_local, &offset, 1, MPI_INT64_T, MPI_SUM,
                     this->comm_pair.comm_parent));
 
-    int64_t npart_total = offset;
+    std::int64_t npart_total = offset;
     MPICHK(MPI_Bcast(&npart_total, 1, MPI_INT64_T,
                      this->comm_pair.size_parent - 1,
                      this->comm_pair.comm_parent));
@@ -424,37 +425,37 @@ extern template void
 H5Part::write_inner<ParticleSubGroup>(std::shared_ptr<ParticleSubGroup> group);
 
 extern template void H5Part::write_dat_2d<ParticleGroup, REAL>(
-    std::shared_ptr<ParticleGroup> parent, const int64_t npart_total,
-    const int64_t npart_local, const int64_t offset,
+    std::shared_ptr<ParticleGroup> parent, const std::int64_t npart_total,
+    const std::int64_t npart_local, const std::int64_t offset,
     ParticleDatSharedPtr<REAL> dat, hid_t group_step, hid_t dxpl);
 extern template void H5Part::write_dat_2d<ParticleGroup, INT>(
-    std::shared_ptr<ParticleGroup> parent, const int64_t npart_total,
-    const int64_t npart_local, const int64_t offset,
+    std::shared_ptr<ParticleGroup> parent, const std::int64_t npart_total,
+    const std::int64_t npart_local, const std::int64_t offset,
     ParticleDatSharedPtr<INT> dat, hid_t group_step, hid_t dxpl);
 extern template void H5Part::write_dat_2d<ParticleSubGroup, REAL>(
-    std::shared_ptr<ParticleSubGroup> parent, const int64_t npart_total,
-    const int64_t npart_local, const int64_t offset,
+    std::shared_ptr<ParticleSubGroup> parent, const std::int64_t npart_total,
+    const std::int64_t npart_local, const std::int64_t offset,
     ParticleDatSharedPtr<REAL> dat, hid_t group_step, hid_t dxpl);
 extern template void H5Part::write_dat_2d<ParticleSubGroup, INT>(
-    std::shared_ptr<ParticleSubGroup> parent, const int64_t npart_total,
-    const int64_t npart_local, const int64_t offset,
+    std::shared_ptr<ParticleSubGroup> parent, const std::int64_t npart_total,
+    const std::int64_t npart_local, const std::int64_t offset,
     ParticleDatSharedPtr<INT> dat, hid_t group_step, hid_t dxpl);
 
 extern template void H5Part::write_dat_column_wise<ParticleGroup, REAL>(
-    std::shared_ptr<ParticleGroup> parent, const int64_t npart_local,
+    std::shared_ptr<ParticleGroup> parent, const std::int64_t npart_local,
     ParticleDatSharedPtr<REAL> dat, hid_t dxpl, hid_t group_step,
     hid_t memspace, hid_t filespace, bool is_position);
 extern template void H5Part::write_dat_column_wise<ParticleGroup, INT>(
-    std::shared_ptr<ParticleGroup> parent, const int64_t npart_local,
+    std::shared_ptr<ParticleGroup> parent, const std::int64_t npart_local,
     ParticleDatSharedPtr<INT> dat, hid_t dxpl, hid_t group_step, hid_t memspace,
     hid_t filespace, bool is_position);
 
 extern template void H5Part::write_dat_column_wise<ParticleSubGroup, REAL>(
-    std::shared_ptr<ParticleSubGroup> parent, const int64_t npart_local,
+    std::shared_ptr<ParticleSubGroup> parent, const std::int64_t npart_local,
     ParticleDatSharedPtr<REAL> dat, hid_t dxpl, hid_t group_step,
     hid_t memspace, hid_t filespace, bool is_position);
 extern template void H5Part::write_dat_column_wise<ParticleSubGroup, INT>(
-    std::shared_ptr<ParticleSubGroup> parent, const int64_t npart_local,
+    std::shared_ptr<ParticleSubGroup> parent, const std::int64_t npart_local,
     ParticleDatSharedPtr<INT> dat, hid_t dxpl, hid_t group_step, hid_t memspace,
     hid_t filespace, bool is_position);
 #else

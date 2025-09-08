@@ -5,14 +5,17 @@
 using namespace NESO::Particles;
 
 TEST(Tuple, tuple) {
-  using Tuple0 = Tuple::Tuple<int, int64_t, double>;
+  using Tuple0 = Tuple::Tuple<int, std::int64_t, double>;
   static_assert(std::is_trivially_copyable<Tuple0>::value == true);
-  static_assert(std::is_same<Tuple::GetIndexType<0, int, int64_t, double>::type,
-                             int>::value == true);
-  static_assert(std::is_same<Tuple::GetIndexType<1, int, int64_t, double>::type,
-                             int64_t>::value == true);
-  static_assert(std::is_same<Tuple::GetIndexType<2, int, int64_t, double>::type,
-                             double>::value == true);
+  static_assert(
+      std::is_same<Tuple::GetIndexType<0, int, std::int64_t, double>::type,
+                   int>::value == true);
+  static_assert(
+      std::is_same<Tuple::GetIndexType<1, int, std::int64_t, double>::type,
+                   std::int64_t>::value == true);
+  static_assert(
+      std::is_same<Tuple::GetIndexType<2, int, std::int64_t, double>::type,
+                   double>::value == true);
 
   Tuple0 t;
 
@@ -34,18 +37,18 @@ TEST(Tuple, tuple) {
 }
 
 TEST(Tuple, apply) {
-  using Tuple0 = Tuple::Tuple<int, int64_t, double>;
+  using Tuple0 = Tuple::Tuple<int, std::int64_t, double>;
   Tuple0 t;
   Tuple::get<0>(t) = -42;
   Tuple::get<1>(t) = 43;
   Tuple::get<2>(t) = 3.141;
 
   int aa;
-  int64_t bb;
+  std::int64_t bb;
   double cc;
 
   const int to_test = Tuple::apply(
-      [&](const int a, const int64_t b, const double c) {
+      [&](const int a, const std::int64_t b, const double c) {
         aa = a;
         bb = b;
         cc = c;

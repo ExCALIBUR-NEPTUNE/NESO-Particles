@@ -132,8 +132,8 @@ protected:
   // This type should be replaceable with typedef std::variant<Sym<INT>,
   // Sym<REAL>> ParticleDatVersion; But we see issues with nvc++.
   typedef ParticleDatVersionT ParticleDatVersion;
-  typedef int64_t ParticleGroupVersion;
-  typedef std::map<ParticleDatVersion, int64_t> ParticleDatVersionTracker;
+  typedef std::int64_t ParticleGroupVersion;
+  typedef std::map<ParticleDatVersion, std::int64_t> ParticleDatVersionTracker;
 
   REAL zero_value_real{0.0};
   INT zero_value_int{0};
@@ -250,7 +250,8 @@ public:
 
 protected:
   // This member tracks the versions of the particle dat data
-  std::map<ParticleDatVersion, std::tuple<int64_t, bool>> particle_dat_versions;
+  std::map<ParticleDatVersion, std::tuple<std::int64_t, bool>>
+      particle_dat_versions;
   // This member tracks the versions of the particle dat structure, which is
   // also the version of the particle group itself. Calls to methods which
   // modify the number of cells or layers will increment this value.
