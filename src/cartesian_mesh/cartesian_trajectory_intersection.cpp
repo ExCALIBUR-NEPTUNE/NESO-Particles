@@ -146,7 +146,7 @@ void CartesianTrajectoryIntersection::function_project(
 
   const bool null_sub_group = particle_sub_group == nullptr;
 
-  const int group = func->element_group;
+  const int group = func->boundary_group;
   auto &boundary_mesh_interface = this->map_groups_boundary_interface.at(group);
 
   auto [d_tree_root, num_accessible_geoms] =
@@ -154,12 +154,9 @@ void CartesianTrajectoryIntersection::function_project(
 
   const std::size_t tmp_buffer_size =
       num_accessible_geoms * func->cell_dof_count;
-  auto d_buffer = get_resource<BufferDevice<REAL>,
-                               ResourceStackInterfaceBufferDevice<REAL>>(
-      sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<REAL>{},
-      sycl_target);
-  d_buffer->realloc_no_copy(tmp_buffer_size);
-  REAL *k_buffer = d_buffer->ptr;
+
+  func->d_dofs_stage->realloc_no_copy(tmp_buffer_size);
+  REAL *k_buffer = func->d_dofs_stage->ptr;
 
   if (tmp_buffer_size > 0) {
     this->sycl_target->queue.fill(k_buffer, (REAL)0.0, tmp_buffer_size)
@@ -230,9 +227,8 @@ void CartesianTrajectoryIntersection::function_project(
   }
   boundary_mesh_interface->exchange_from_device(k_buffer, func->cell_dof_count,
                                                 func->d_dofs->ptr);
-
-  restore_resource(sycl_target->resource_stack_map,
-                   ResourceStackKeyBufferDevice<REAL>{}, d_buffer);
+  func->reset_version();
+  NESOASSERT(func->version == 0, "Expected a version reset.");
 }
 
 void CartesianTrajectoryIntersection::function_evaluate(
@@ -241,24 +237,25 @@ void CartesianTrajectoryIntersection::function_evaluate(
     CartesianHMeshFunctionSharedPtr func) {
 
   const bool null_sub_group = particle_sub_group == nullptr;
-  const int group = func->element_group;
+  const int group = func->boundary_group;
   auto &boundary_mesh_interface = this->map_groups_boundary_interface.at(group);
 
   auto [d_tree_root, num_accessible_geoms] =
       boundary_mesh_interface->get_device_geom_id_to_seq();
 
-  const std::size_t tmp_buffer_size =
-      num_accessible_geoms * func->cell_dof_count;
-  auto d_buffer = get_resource<BufferDevice<REAL>,
-                               ResourceStackInterfaceBufferDevice<REAL>>(
-      sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<REAL>{},
-      sycl_target);
-  d_buffer->realloc_no_copy(tmp_buffer_size);
-  REAL *k_buffer = d_buffer->ptr;
+  const auto boundary_mesh_interface_version =
+      boundary_mesh_interface->get_version_function_handle()();
 
-  boundary_mesh_interface->reverse_exchange_from_device(
-      func->d_dofs->ptr, func->cell_dof_count, k_buffer);
+  if (func->version < boundary_mesh_interface_version) {
+    const std::size_t tmp_buffer_size =
+        num_accessible_geoms * func->cell_dof_count;
+    func->d_dofs_stage->realloc_no_copy(tmp_buffer_size);
+    boundary_mesh_interface->reverse_exchange_from_device(
+        func->d_dofs->ptr, func->cell_dof_count, func->d_dofs_stage->ptr);
+    func->version = boundary_mesh_interface_version;
+  }
 
+  REAL *k_buffer = func->d_dofs_stage->ptr;
   if (!null_sub_group) {
     auto *k_tree_root = d_tree_root;
     NESOASSERT(particle_sub_group->contains_ephemeral_dat(
@@ -316,9 +313,6 @@ void CartesianTrajectoryIntersection::function_evaluate(
     }
     NESOASSERT(!ep.get_flag(), "Failed to find index for hit geometry object.");
   }
-
-  restore_resource(sycl_target->resource_stack_map,
-                   ResourceStackKeyBufferDevice<REAL>{}, d_buffer);
 }
 
 template void CartesianTrajectoryIntersection::pre_integration_inner(

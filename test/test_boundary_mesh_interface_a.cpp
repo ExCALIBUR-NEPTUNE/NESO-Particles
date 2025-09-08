@@ -69,7 +69,16 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
   MPICHK(MPI_Allreduce(correct_in_degree_t.data(), correct_in_degree.data(),
                        size, MPI_INT, MPI_SUM, comm));
 
+  auto version_handle = bmi.get_version_function_handle();
+  auto v0 = version_handle();
+  auto v1 = version_handle();
+  ASSERT_EQ(v0, v1);
   bmi.extend_exchange_pattern(test_map[rank]);
+  auto v2 = version_handle();
+
+  if (sycl_target->comm_pair.size_parent > 1) {
+    ASSERT_EQ(v1 + 1, v2);
+  }
 
   MPI_Comm ncomm = bmi.ncomm;
   ASSERT_NE(ncomm, MPI_COMM_NULL);

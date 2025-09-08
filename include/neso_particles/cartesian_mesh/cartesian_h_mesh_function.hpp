@@ -23,6 +23,9 @@ public:
 #endif
 
   std::shared_ptr<BufferDevice<REAL>> d_dofs;
+  std::shared_ptr<BufferDevice<REAL>> d_dofs_stage;
+  std::int64_t version{0};
+  void reset_version();
 
   /**
    * Create a function on a mesh.
@@ -33,13 +36,13 @@ public:
    * @param cell_count Number of locally owned cells on the mesh.
    * @param function_space Type of function to create.
    * @param polynomial_order Polynomial order of function to create.
-   * @param element_group Label, e.g. boundary group, for subset of the mesh
+   * @param boundary_group Label, e.g. boundary group, for subset of the mesh
    * this function is defined over.
    */
   CartesianHMeshFunction(CartesianHMeshSharedPtr mesh,
                          SYCLTargetSharedPtr sycl_target, const int ndim,
                          const int cell_count, const std::string function_space,
-                         const int polynomial_order, const int element_group);
+                         const int polynomial_order, const int boundary_group);
 
 public:
   /// The mesh this function is defined on.
@@ -59,7 +62,7 @@ public:
   std::vector<INT> cells;
   /// If this function corresponds to a boundary group then this entry records
   /// the boundary group.
-  int element_group{0};
+  int boundary_group{0};
   /// Number of locally owned DOFs
   int local_dof_count{0};
   /// Number of DOFs per cell.
@@ -77,14 +80,14 @@ public:
    * @param cells Locally owned mesh entities to create function over.
    * @param function_space Type of function to create.
    * @param polynomial_order Polynomial order of function to create.
-   * @param element_group Label, e.g. boundary group, for subset of the mesh
+   * @param boundary_group Label, e.g. boundary group, for subset of the mesh
    * this function is defined over.
    */
   CartesianHMeshFunction(CartesianHMeshSharedPtr mesh,
                          SYCLTargetSharedPtr sycl_target, const int ndim,
                          const std::vector<INT> &cells,
                          const std::string function_space,
-                         const int polynomial_order, const int element_group);
+                         const int polynomial_order, const int boundary_group);
 
   /**
    * Write the function to a vtkhdf file.
