@@ -90,7 +90,8 @@ public:
                          const int polynomial_order, const int boundary_group);
 
   /**
-   * Write the function to a vtkhdf file.
+   * Write the function to a vtkhdf file. This function must be called
+   * collectively on the communicator.
    *
    * @param filename Output file name which should have vtkhdf extension.
    */
@@ -109,7 +110,8 @@ public:
   std::vector<REAL> get_dofs();
 
   /**
-   * Set the DOFs from a host vector.
+   * Set the DOFs from a host vector. This function must be called collectively
+   * on the communicator.
    *
    * @param h_dofs Host std::vector of length local_dof_count.
    */

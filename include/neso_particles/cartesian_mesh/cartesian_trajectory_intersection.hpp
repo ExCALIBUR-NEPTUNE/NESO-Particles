@@ -490,7 +490,8 @@ public:
 
   /**
    * Prepare a ParticleGroup such that it, or sub groups based on it, can be
-   * passed to pre_integration and post_integration.
+   * passed to pre_integration and post_integration. Must be called collectively
+   * on the communicator.
    *
    * @param particle_group ParticleGroup to prepare.
    */
@@ -498,7 +499,8 @@ public:
 
   /**
    * This method should be called with a collection of particles prior to
-   * updating the positions of these particles.
+   * updating the positions of these particles. Must be called collectively on
+   * the communicator.
    *
    * @param particles ParticleGroup or ParticleSubGroup of particles whose
    * positions are about to be updated, e.g. in a time stepping operation.
@@ -507,7 +509,8 @@ public:
 
   /**
    * This method should be called with a collection of particles prior to
-   * updating the positions of these particles.
+   * updating the positions of these particles. Must be called collectively on
+   * the communicator.
    *
    * @param particles ParticleGroup or ParticleSubGroup of particles whose
    * positions are about to be updated, e.g. in a time stepping operation.
@@ -516,7 +519,7 @@ public:
 
   /**
    * Call after updating to find particles whose trajectories intersect the
-   * CartesianHMesh boundary.
+   * CartesianHMesh boundary. Must be called collectively on the communicator.
    *
    * @param particles Collection of particles, either a ParticleGroup or
    * ParticleSubGroup, to identify trajectory-boundary intersections of.
@@ -529,7 +532,7 @@ public:
 
   /**
    * Call after updating to find particles whose trajectories intersect the
-   * CartesianHMesh boundary.
+   * CartesianHMesh boundary. Must be called collectively on the communicator.
    *
    * @param particles Collection of particles, either a ParticleGroup or
    * ParticleSubGroup, to identify trajectory-boundary intersections of.
@@ -548,7 +551,8 @@ public:
   void free();
 
   /**
-   * Create a function on a boundary group.
+   * Create a function on a boundary group. Must be called collectively on the
+   * communicator.
    *
    * @param group ID of boundary group to create function on.
    * @param function_space Family of function to create, e.g. "DG".
@@ -568,6 +572,8 @@ public:
    * function_project_contribute(particle_sub_group, sym, component,
    *                             is_ephemeral, func);
    * function_project_finalise(func);
+   *
+   * Must be called collectively on the communicator.
    *
    * @param particle_sub_group ParticleSubGroup to project onto function.
    * @param sym Sym<REAL> Particle property to use as source weights.
@@ -589,7 +595,8 @@ public:
    *                             is_ephemeral, func);
    * function_project_finalise(func);
    *
-   * This method initialises the destination function for projection.
+   * This method initialises the destination function for projection. Must be
+   * called collectively on the communicator.
    *
    * @param func Function to project onto.
    */
@@ -604,7 +611,8 @@ public:
    * function_project_finalise(func);
    *
    * This method adds the contributions from the particles in the
-   * particle_sub_group to the projection.
+   * particle_sub_group to the projection. Must be called collectively on the
+   * communicator.
    *
    * @param particle_sub_group ParticleSubGroup to project onto function.
    * @param sym Sym<REAL> Particle property to use as source weights.
@@ -627,7 +635,8 @@ public:
    * function_project_finalise(func);
    *
    * This method must be called after all contributions to the projection have
-   * been made with function_project_contribute.
+   * been made with function_project_contribute. Must be called collectively on
+   * the communicator.
    *
    * @param func Function to project onto.
    */
@@ -635,7 +644,8 @@ public:
 
   /**
    * Evaluate particle data from a function defined on the surface. Uses the
-   * standardarised boundary interface on the sub group.
+   * standardarised boundary interface on the sub group. Must be called
+   * collectively on the communicator.
    *
    * @param particle_sub_group ParticleSubGroup to containing destination
    * particles for evaluation.
