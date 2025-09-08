@@ -282,6 +282,9 @@ void BoundaryMeshInterface::extend_exchange_pattern(
                "Missmatch in bookkeeping array sizes.");
 
     e0.wait_and_throw();
+
+    // As the exchange maps have been updated then update the version.
+    this->version++;
   }
 }
 
@@ -300,6 +303,12 @@ std::tuple<
 BoundaryMeshInterface::get_device_geom_id_to_seq() {
 
   return {this->d_map_geom_id_to_linear_index->root, this->geom_counter};
+}
+
+std::function<std::int64_t()>
+BoundaryMeshInterface::get_version_function_handle() {
+
+  return [&]() -> std::int64_t { return this->version; };
 }
 
 template void BoundaryMeshInterface::exchange_surface(REAL *data,

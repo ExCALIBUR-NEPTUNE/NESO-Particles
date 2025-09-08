@@ -769,7 +769,7 @@ TEST(ParticleGroup, structure_version) {
     initial_distribution[Sym<INT>("ID")][px][0] = px;
   }
 
-  int64_t version = 0;
+  std::int64_t version = 0;
   A->wrap_check_validation(version);
   ASSERT_TRUE(version != 0);
 

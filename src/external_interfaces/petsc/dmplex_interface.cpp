@@ -30,16 +30,16 @@ void DMPlexInterface::create_mesh_hierarchy() {
   std::vector<int> dims(this->ndim);
   std::vector<double> origin(this->ndim);
 
-  int64_t hm_cell_count = 1;
+  std::int64_t hm_cell_count = 1;
   for (int dimx = 0; dimx < this->ndim; dimx++) {
     origin[dimx] = global_min[dimx];
     const int tmp_dim = std::ceil(global_extents[dimx] / coarse_cell_size);
     dims[dimx] = tmp_dim;
-    hm_cell_count *= ((int64_t)tmp_dim);
+    hm_cell_count *= ((std::int64_t)tmp_dim);
   }
 
-  int64_t global_num_elements;
-  int64_t local_num_elements = this->cell_count;
+  std::int64_t global_num_elements;
+  std::int64_t local_num_elements = this->cell_count;
   MPICHK(MPI_Allreduce(&local_num_elements, &global_num_elements, 1,
                        MPI_INT64_T, MPI_SUM, this->comm));
 
