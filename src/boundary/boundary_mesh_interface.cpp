@@ -59,6 +59,7 @@ void BoundaryMeshInterface::extend_exchange_pattern(
       this->map_linear_index_to_geom_id[linear_seqential_index] = geom_id;
       this->map_geom_id_to_linear_index[geom_id] = linear_seqential_index;
       this->d_map_geom_id_to_linear_index->add(geom_id, linear_seqential_index);
+      this->extended_pattern_geom_ids.insert(geom_id);
     }
   }
 
@@ -309,6 +310,10 @@ std::function<std::int64_t()>
 BoundaryMeshInterface::get_version_function_handle() {
 
   return [&]() -> std::int64_t { return this->version; };
+}
+
+std::set<INT> BoundaryMeshInterface::get_extended_pattern_geom_ids() {
+  return this->extended_pattern_geom_ids;
 }
 
 template void BoundaryMeshInterface::exchange_surface(REAL *data,

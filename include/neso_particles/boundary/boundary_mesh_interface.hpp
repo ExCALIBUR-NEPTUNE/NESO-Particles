@@ -67,6 +67,8 @@ public:
   std::vector<int> outgoing_geom_ids;
   // Counter to place an ordering on face geom ids (outgoing)
   INT geom_counter{0};
+  // Set of geometry IDs which have been passed to extend_exchange_pattern.
+  std::set<INT> extended_pattern_geom_ids;
   // Map from linear sequential index to geom id (outgoing).
   std::map<INT, INT> map_linear_index_to_geom_id;
   // Map from geom id to linear sequential index (outgoing).
@@ -313,6 +315,12 @@ public:
    * communicator.
    */
   void free();
+
+  /**
+   * @returns The geometry IDs that have been passed to extend_exchange_pattern
+   * on this MPI rank.
+   */
+  std::set<INT> get_extended_pattern_geom_ids();
 
   /**
    * @details Downstream objects that use this class may want to implement
