@@ -343,7 +343,7 @@ void BoundaryMeshInterface::print_reverse_info() {
                 h_reverse_outgoing_pack_index.at(pack_index_dst);
             const INT geom_id = this->owned_geom_ids.at(source_index);
             nprint("\t\t\t", "pack index:", pack_index_dst,
-                   "geom id:", geom_id);
+                   "source index:", source_index, "geom id:", geom_id);
             pack_index_dst++;
           }
         }
