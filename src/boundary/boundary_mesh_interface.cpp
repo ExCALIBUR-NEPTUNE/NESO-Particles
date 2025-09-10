@@ -316,6 +316,72 @@ std::set<INT> BoundaryMeshInterface::get_extended_pattern_geom_ids() {
   return this->extended_pattern_geom_ids;
 }
 
+void BoundaryMeshInterface::print_reverse_info() {
+
+  const int rank = this->sycl_target->comm_pair.rank_parent;
+  const int size = this->sycl_target->comm_pair.size_parent;
+
+  for (int rankx = 0; rankx < size; rankx++) {
+    if (rankx == rank) {
+      nprint("rank:", rank);
+      nprint("\tSENDING:");
+      const int num_destinations =
+          static_cast<int>(this->graph.reverse_destinations.size());
+
+      if (num_destinations) {
+        auto h_reverse_outgoing_pack_index =
+            this->d_reverse_outgoing_pack_index->get();
+
+        int pack_index_dst = 0;
+        for (int dx = 0; dx < num_destinations; dx++) {
+          const int dest_rank = this->graph.reverse_destinations.at(dx);
+          const int geom_count = this->reverse_outgoing_geom_counts[dx];
+          nprint("\t\t", "destination rank:", dest_rank,
+                 "num geoms:", geom_count);
+          for (int gx = 0; gx < geom_count; gx++) {
+            const auto source_index =
+                h_reverse_outgoing_pack_index.at(pack_index_dst);
+            const INT geom_id = this->owned_geom_ids.at(source_index);
+            nprint("\t\t\t", "pack index:", pack_index_dst,
+                   "geom id:", geom_id);
+            pack_index_dst++;
+          }
+        }
+      }
+
+      nprint("\tRECVING:");
+      const int num_sources =
+          static_cast<int>(this->graph.reverse_sources.size());
+      if (num_sources) {
+
+        auto h_reverse_incoming_unpack_index =
+            d_reverse_incoming_unpack_index->get();
+
+        int pack_index_src = 0;
+        for (int sx = 0; sx < num_sources; sx++) {
+          const int src_rank = this->graph.reverse_sources.at(sx);
+          const int geom_count = reverse_incoming_geom_counts.at(sx);
+          nprint("\t\t", "source rank:", src_rank, "num geoms:", geom_count);
+          for (int gx = 0; gx < geom_count; gx++) {
+            const auto dst_index =
+                h_reverse_incoming_unpack_index[pack_index_src];
+            const INT geom_id = map_linear_index_to_geom_id.at(dst_index);
+
+            nprint("\t\t\t", "src index:", pack_index_src,
+                   "linear_stage_index:", dst_index, "geom id:", geom_id);
+            pack_index_src++;
+          }
+        }
+      }
+
+      std::cout << std::flush;
+    }
+    MPICHK(MPI_Barrier(this->sycl_target->comm_pair.comm_parent));
+    std::cout << std::flush;
+    MPICHK(MPI_Barrier(this->sycl_target->comm_pair.comm_parent));
+  }
+}
+
 template void BoundaryMeshInterface::exchange_surface(REAL *data,
                                                       const int ncomp,
                                                       REAL *data_gathered);

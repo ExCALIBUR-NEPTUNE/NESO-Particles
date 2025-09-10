@@ -338,6 +338,11 @@ public:
    */
   std::function<std::int64_t()> get_version_function_handle();
 
+  /**
+   * Print topology information for debugging evaluation direction.
+   */
+  void print_reverse_info();
+
 protected:
 #ifdef NESO_PARTICLES_TEST_COMPILATION
 public:
