@@ -242,3 +242,90 @@ TEST(communication_utility, reverse_graph_edge_directions) {
     }
   }
 }
+
+TEST(communication_utility, set_communication_pairwise) {
+  int rank = 0;
+  int size = 0;
+
+  MPICHK(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
+  MPICHK(MPI_Comm_size(MPI_COMM_WORLD, &size));
+
+  if (size % 2 == 0) {
+
+    std::set<int> correct;
+    for (int ix = 0; ix < rank; ix++) {
+      correct.insert((ix + 3) % 7);
+    }
+
+    const bool is_sending_rank = rank % 2 == 0;
+
+    if (is_sending_rank) {
+      const int recv_rank = rank + 1;
+
+      set_send(correct, recv_rank, 4, MPI_COMM_WORLD);
+      auto to_test = set_recv<int>(recv_rank, 5, MPI_COMM_WORLD);
+      ASSERT_EQ(correct, to_test);
+    } else {
+      const int send_rank = rank - 1;
+
+      auto set_incomming = set_recv<int>(send_rank, 4, MPI_COMM_WORLD);
+      set_send(set_incomming, send_rank, 5, MPI_COMM_WORLD);
+    }
+  }
+}
+
+TEST(communication_utility, set_communication_bcast) {
+  int rank = 0;
+  int size = 0;
+
+  MPICHK(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
+  MPICHK(MPI_Comm_size(MPI_COMM_WORLD, &size));
+
+  std::set<int> correct;
+
+  for (int ix = 0; ix < 100; ix++) {
+    correct.insert((ix * 7 + 9) % 13);
+  }
+
+  auto to_test = set_bcast(correct, size - 1, MPI_COMM_WORLD);
+
+  ASSERT_EQ(correct, to_test);
+}
+
+TEST(communication_utility, set_reduce_union) {
+  int rank = 0;
+  int size = 0;
+
+  MPICHK(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
+  MPICHK(MPI_Comm_size(MPI_COMM_WORLD, &size));
+
+  auto lambda_get_contrib = [](int rank) {
+    std::set<INT> c;
+    for (int ix = 0; ix < 19; ix++) {
+      c.insert((rank * 17 + 21 + ix) % 137);
+    }
+    return c;
+  };
+
+  std::set<INT> contrib = lambda_get_contrib(rank);
+
+  std::set<INT> correct;
+  for (int rx = 0; rx < size; rx++) {
+    auto tmp = lambda_get_contrib(rx);
+    for (int ix : tmp) {
+      correct.insert(ix);
+    }
+  }
+
+  for (int root = 0; root < size; root++) {
+    auto to_test = set_reduce_union(contrib, root, MPI_COMM_WORLD);
+    if (rank == root) {
+      ASSERT_EQ(to_test, correct);
+    } else {
+      ASSERT_EQ(to_test, std::set<INT>{});
+    }
+  }
+
+  auto to_test = set_all_reduce_union(contrib, MPI_COMM_WORLD);
+  ASSERT_EQ(correct, to_test);
+}
