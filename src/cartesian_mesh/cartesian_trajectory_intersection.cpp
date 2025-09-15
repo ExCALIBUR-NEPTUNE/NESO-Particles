@@ -230,6 +230,7 @@ void CartesianTrajectoryIntersection::function_project_finalise(
 
   const int group = func->boundary_group;
   auto &boundary_mesh_interface = this->map_groups_boundary_interface.at(group);
+  func->fill(0.0);
   boundary_mesh_interface->exchange_from_device(
       func->d_dofs_stage->ptr, func->cell_dof_count, func->d_dofs->ptr);
   func->reset_version();
