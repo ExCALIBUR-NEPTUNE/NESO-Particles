@@ -140,7 +140,7 @@ void set_send(std::set<T> &send_set, const int dest, const int tag,
 }
 
 /**
- * Recieve the contents of a std::set from another MPI rank.
+ * Receive the contents of a std::set from another MPI rank.
  *
  * @param source Sending MPI rank that must call set_send.
  * @param tag Tag for MPI send operation.
