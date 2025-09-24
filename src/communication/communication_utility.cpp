@@ -39,4 +39,12 @@ int reverse_graph_edge_directions(MPI_Comm comm, MPI_Comm graph_comm,
                                         MPI_INFO_NULL, 0, reverse_graph_comm);
 }
 
+template std::set<int> set_recv(const int source, const int tag, MPI_Comm comm);
+template std::set<int> set_bcast(std::set<int> &bcast_set, int root,
+                                 MPI_Comm comm);
+template std::set<int> set_reduce_union(std::set<int> &set_input, int root,
+                                        MPI_Comm comm);
+template std::set<int> set_all_reduce_union(std::set<int> &set_input,
+                                            MPI_Comm comm);
+
 } // namespace NESO::Particles

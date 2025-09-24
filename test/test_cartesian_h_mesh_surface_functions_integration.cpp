@@ -103,7 +103,7 @@ void mass_conservation_wrapper(const int ndim) {
     A->remove_particles(groups.at(0));
 
     mass_particle_system = lambda_get_particle_mass();
-    mass_boundary_function = lambda_get_boundary_mass();
+    mass_boundary_function += lambda_get_boundary_mass();
     const REAL mass_diff =
         mass_total - mass_boundary_function - mass_particle_system;
     ASSERT_NEAR(mass_diff, 0.0, 1.0e-10);

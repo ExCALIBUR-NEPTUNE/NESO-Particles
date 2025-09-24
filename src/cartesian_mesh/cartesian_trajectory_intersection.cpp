@@ -158,6 +158,7 @@ void CartesianTrajectoryIntersection::function_project_initialise(
     this->sycl_target->queue.fill(k_buffer, (REAL)0.0, tmp_buffer_size)
         .wait_and_throw();
   }
+  func->fill(0.0);
 }
 
 void CartesianTrajectoryIntersection::function_project_contribute(
