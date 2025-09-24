@@ -158,6 +158,7 @@ void CartesianTrajectoryIntersection::function_project_initialise(
     this->sycl_target->queue.fill(k_buffer, (REAL)0.0, tmp_buffer_size)
         .wait_and_throw();
   }
+  func->fill(0.0);
 }
 
 void CartesianTrajectoryIntersection::function_project_contribute(
@@ -230,7 +231,6 @@ void CartesianTrajectoryIntersection::function_project_finalise(
 
   const int group = func->boundary_group;
   auto &boundary_mesh_interface = this->map_groups_boundary_interface.at(group);
-  func->fill(0.0);
   boundary_mesh_interface->exchange_from_device(
       func->d_dofs_stage->ptr, func->cell_dof_count, func->d_dofs->ptr);
   func->reset_version();
