@@ -7,7 +7,12 @@ namespace NESO::Particles::PetscInterface {
 
 /**
  * Implementation to deposit particle data into and evalute from DG0 function
- * spaces.
+ * spaces. This implementation has an internal state (cdc_project) which is a
+ * CellDatConst that holds the DOFs. This cell dat is resized whenever set_dofs
+ * is called with a greater number of components or when project is called with
+ * a greater number of components. Calling project or set_dofs will overwrite
+ * the existing DOFs. Calling get_dofs or evaluate will use or retrieve the
+ * existing DOFs.
  */
 class DMPlexProjectEvaluateDG : public DMPlexProjectEvaluateBase {
 protected:
@@ -16,20 +21,8 @@ protected:
   DMPlexInterfaceSharedPtr mesh;
   SYCLTargetSharedPtr sycl_target;
 
-  inline void check_setup() {
-    if (this->qpm != nullptr) {
-      NESOASSERT(this->qpm->points_added(),
-                 "QuadraturePointMapper needs points adding to it.");
-    }
-  }
-
-  inline void check_ncomp(const int ncomp) {
-    if (this->cdc_project->nrow < ncomp) {
-      const int cell_count = this->mesh->get_cell_count();
-      this->cdc_project = std::make_shared<CellDatConst<REAL>>(
-          this->sycl_target, cell_count, ncomp, 1);
-    }
-  }
+  void check_setup();
+  void check_ncomp(const int ncomp);
 
   template <typename T>
   inline void project_inner(std::shared_ptr<T> particle_sub_group,
@@ -43,13 +36,15 @@ protected:
     this->cdc_project->fill(0.0);
     particle_loop(
         "DMPlexProjectEvaluateDG::project_0", particle_sub_group,
-        [=](auto SRC, auto DST) {
+        [=](auto SRC, auto DST, auto VOLS) {
+          const REAL iv = VOLS.at(0, 0);
           for (int cx = 0; cx < ncomp; cx++) {
-            DST.combine(cx, 0, SRC.at(cx));
+            DST.combine(cx, 0, SRC.at(cx) * iv);
           }
         },
         Access::read(sym),
-        Access::reduce(this->cdc_project, Kernel::plus<REAL>()))
+        Access::reduce(this->cdc_project, Kernel::plus<REAL>()),
+        Access::read(this->cdc_volumes))
         ->execute();
 
     if (this->qpm != nullptr) {
@@ -57,14 +52,12 @@ protected:
       auto destination_dat = this->qpm->get_sym(ncomp);
       particle_loop(
           "DMPlexProjectEvaluateDG::project_1", this->qpm->particle_group,
-          [=](auto VOLS, auto SRC, auto DST) {
-            const REAL iv = VOLS.at(0, 0);
+          [=](auto SRC, auto DST) {
             for (int cx = 0; cx < ncomp; cx++) {
-              DST.at(cx) = SRC.at(cx, 0) * iv;
+              DST.at(cx) = SRC.at(cx, 0);
             }
           },
-          Access::read(this->cdc_volumes), Access::read(this->cdc_project),
-          Access::write(destination_dat))
+          Access::read(this->cdc_project), Access::write(destination_dat))
           ->execute();
     }
   }
@@ -223,6 +216,31 @@ public:
    */
   virtual void evaluate(ParticleSubGroupSharedPtr particle_sub_group,
                         Sym<REAL> sym) override;
+
+  /**
+   * Get the DOFs for all cells and all components from the last project or
+   * set_dofs call. DOF ordering is the per cell components running fastest then
+   * cells.
+   *
+   * @param ncomp[in] Number of components/functions to retrieve DOFs for. e.g.
+   * if project has been called for a particle property with two components then
+   * there are two DOFs per cell in the internal representation.
+   * @param[in, out] DOFs in std::vector<REAL> form. This array may be resized
+   * and zeroed by the implementation.
+   */
+  void get_dofs(const int ncomp, std::vector<REAL> &dofs);
+
+  /**
+   * Set the DOFs for the internal representation, e.g. prior to an evaluate
+   * call. DOF ordering is the per cell components running fastest then
+   * cells.
+   *
+   * @param ncomp[in] Number of components/functions to retrieve DOFs for. e.g.
+   * if project has been called for a particle property with two components then
+   * there are two DOFs per cell in the internal representation.
+   * @param[in] DOFs in std::vector<REAL> form.
+   */
+  void set_dofs(const int ncomp, const std::vector<REAL> &dofs);
 };
 
 } // namespace NESO::Particles::PetscInterface

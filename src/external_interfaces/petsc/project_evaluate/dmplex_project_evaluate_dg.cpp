@@ -5,6 +5,21 @@
 
 namespace NESO::Particles::PetscInterface {
 
+void DMPlexProjectEvaluateDG::check_setup() {
+  if (this->qpm != nullptr) {
+    NESOASSERT(this->qpm->points_added(),
+               "QuadraturePointMapper needs points adding to it.");
+  }
+}
+
+void DMPlexProjectEvaluateDG::check_ncomp(const int ncomp) {
+  if (this->cdc_project->nrow < ncomp) {
+    const int cell_count = this->mesh->get_cell_count();
+    this->cdc_project = std::make_shared<CellDatConst<REAL>>(
+        this->sycl_target, cell_count, ncomp, 1);
+  }
+}
+
 DMPlexProjectEvaluateDG::DMPlexProjectEvaluateDG(
     ExternalCommon::QuadraturePointMapperSharedPtr qpm,
     std::string function_space, int polynomial_order)
@@ -70,6 +85,65 @@ void DMPlexProjectEvaluateDG::evaluate(ParticleGroupSharedPtr particle_group,
 void DMPlexProjectEvaluateDG::evaluate(
     ParticleSubGroupSharedPtr particle_sub_group, Sym<REAL> sym) {
   this->evaluate_inner(particle_sub_group, sym);
+}
+
+void DMPlexProjectEvaluateDG::get_dofs(const int ncomp,
+                                       std::vector<REAL> &dofs) {
+
+  if (ncomp > 0) {
+    NESOASSERT(this->cdc_project->nrow >= ncomp,
+               "Requested more components than there are components in the "
+               "internal representation.");
+
+    auto h_dofs = this->cdc_project->get_all_cells();
+    const int ncells = this->cdc_project->ncells;
+    dofs.resize(ncells * ncomp);
+
+    for (int cx = 0; cx < ncells; cx++) {
+      for (int nx = 0; nx < ncomp; nx++) {
+        dofs[cx * ncomp + nx] = h_dofs[cx]->at(nx, 0);
+      }
+    }
+  } else {
+    NESOWARN(false, "Number of components passed results in a no-op.");
+    dofs.resize(0);
+  }
+}
+
+void DMPlexProjectEvaluateDG::set_dofs(const int ncomp,
+                                       const std::vector<REAL> &dofs) {
+  if (ncomp > 0) {
+    this->check_ncomp(ncomp);
+
+    const int ncells = this->cdc_project->ncells;
+    const int ncomp_dat = this->cdc_project->nrow;
+
+    std::vector<CellData<REAL>> cell_data;
+    cell_data.reserve(ncells);
+
+    NESOASSERT(dofs.size() >= ncells * ncomp,
+               "Passed DOF vector is too small for the number of cells and "
+               "components.");
+
+    for (int cellx = 0; cellx < ncells; cellx++) {
+      cell_data.push_back(
+          std::make_shared<CellDataT<REAL>>(this->sycl_target, ncomp_dat, 1));
+    }
+
+    for (int cx = 0; cx < ncells; cx++) {
+      for (int nx = 0; nx < ncomp; nx++) {
+        cell_data[cx]->at(nx, 0) = dofs[cx * ncomp + nx];
+      }
+      for (int nx = ncomp; nx < ncomp_dat; nx++) {
+        cell_data[cx]->at(nx, 0) = 0.0;
+      }
+    }
+
+    this->cdc_project->set_all_cells(cell_data);
+
+  } else {
+    NESOWARN(false, "Number of components passed results in a no-op.");
+  }
 }
 
 } // namespace NESO::Particles::PetscInterface
