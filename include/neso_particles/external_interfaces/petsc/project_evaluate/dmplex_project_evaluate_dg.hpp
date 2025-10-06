@@ -14,17 +14,20 @@ protected:
   std::shared_ptr<CellDatConst<REAL>> cdc_project;
   std::shared_ptr<CellDatConst<REAL>> cdc_volumes;
   DMPlexInterfaceSharedPtr mesh;
+  SYCLTargetSharedPtr sycl_target;
 
   inline void check_setup() {
-    NESOASSERT(this->qpm->points_added(),
-               "QuadraturePointMapper needs points adding to it.");
+    if (this->qpm != nullptr) {
+      NESOASSERT(this->qpm->points_added(),
+                 "QuadraturePointMapper needs points adding to it.");
+    }
   }
 
   inline void check_ncomp(const int ncomp) {
     if (this->cdc_project->nrow < ncomp) {
-      const int cell_count = this->qpm->domain->mesh->get_cell_count();
+      const int cell_count = this->mesh->get_cell_count();
       this->cdc_project = std::make_shared<CellDatConst<REAL>>(
-          this->qpm->sycl_target, cell_count, ncomp, 1);
+          this->sycl_target, cell_count, ncomp, 1);
     }
   }
 
@@ -35,7 +38,6 @@ protected:
     auto dat = particle_group->get_dat(sym);
     const int ncomp = dat->ncomp;
     this->check_ncomp(ncomp);
-    auto destination_dat = this->qpm->get_sym(ncomp);
 
     // DG0 projection onto the CellDatConst
     this->cdc_project->fill(0.0);
@@ -50,18 +52,21 @@ protected:
         Access::reduce(this->cdc_project, Kernel::plus<REAL>()))
         ->execute();
 
-    // Read the CellDatConst values onto the quadrature point values
-    particle_loop(
-        "DMPlexProjectEvaluateDG::project_1", this->qpm->particle_group,
-        [=](auto VOLS, auto SRC, auto DST) {
-          const REAL iv = VOLS.at(0, 0);
-          for (int cx = 0; cx < ncomp; cx++) {
-            DST.at(cx) = SRC.at(cx, 0) * iv;
-          }
-        },
-        Access::read(this->cdc_volumes), Access::read(this->cdc_project),
-        Access::write(destination_dat))
-        ->execute();
+    if (this->qpm != nullptr) {
+      // Read the CellDatConst values onto the quadrature point values
+      auto destination_dat = this->qpm->get_sym(ncomp);
+      particle_loop(
+          "DMPlexProjectEvaluateDG::project_1", this->qpm->particle_group,
+          [=](auto VOLS, auto SRC, auto DST) {
+            const REAL iv = VOLS.at(0, 0);
+            for (int cx = 0; cx < ncomp; cx++) {
+              DST.at(cx) = SRC.at(cx, 0) * iv;
+            }
+          },
+          Access::read(this->cdc_volumes), Access::read(this->cdc_project),
+          Access::write(destination_dat))
+          ->execute();
+    }
   }
 
   template <typename T>
@@ -72,21 +77,23 @@ protected:
     auto dat = particle_group->get_dat(sym);
     const int ncomp = dat->ncomp;
     this->check_ncomp(ncomp);
-    auto source_dat = this->qpm->get_sym(ncomp);
 
-    // Copy from the quadrature point values into the CellDatConst
-    particle_loop(
-        "DMPlexProjectEvaluateDG::evaluate_0", this->qpm->particle_group,
-        [=](auto SRC, auto DST, auto MASK) {
-          if (MASK.at(3) == 0) {
-            for (int cx = 0; cx < ncomp; cx++) {
-              DST.at(cx, 0) = SRC.at(cx);
+    if (this->qpm != nullptr) {
+      // Copy from the quadrature point values into the CellDatConst
+      auto source_dat = this->qpm->get_sym(ncomp);
+      particle_loop(
+          "DMPlexProjectEvaluateDG::evaluate_0", this->qpm->particle_group,
+          [=](auto SRC, auto DST, auto MASK) {
+            if (MASK.at(3) == 0) {
+              for (int cx = 0; cx < ncomp; cx++) {
+                DST.at(cx, 0) = SRC.at(cx);
+              }
             }
-          }
-        },
-        Access::read(source_dat), Access::write(this->cdc_project),
-        Access::read(Sym<INT>("ADDING_RANK_INDEX")))
-        ->execute();
+          },
+          Access::read(source_dat), Access::write(this->cdc_project),
+          Access::read(Sym<INT>("ADDING_RANK_INDEX")))
+          ->execute();
+    }
 
     // Copy from the CellDatConst to the output particle group
     particle_loop(
@@ -150,6 +157,21 @@ public:
    * @param polynomial_order Should be 0.
    */
   DMPlexProjectEvaluateDG(ExternalCommon::QuadraturePointMapperSharedPtr qpm,
+                          std::string function_space, int polynomial_order);
+
+  /**
+   * Create a DG project/evaluate instance on a mesh. This constructor will
+   * create an instance that assumes that the MPI rank that owns a cell also
+   * owns all DOFs associated with that cell. i.e. there is no
+   * QuadraturePointMapper moving values around.
+   *
+   * @param mesh DMPlexInterface mesh object to use as domain for functions.
+   * @param sycl_target Compute device that will be used.
+   * @param function_space Function space to use, e.g. "DG".
+   * @param polynomial_order Polynomial order to use, e.g. 0.
+   */
+  DMPlexProjectEvaluateDG(DMPlexInterfaceSharedPtr mesh,
+                          SYCLTargetSharedPtr sycl_target,
                           std::string function_space, int polynomial_order);
 
   /**
