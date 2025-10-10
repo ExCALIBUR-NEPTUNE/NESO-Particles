@@ -18,6 +18,10 @@ namespace Access::TupleRNG {
  */
 template <typename... KERNELRNGS> struct Read {
   Tuple::Tuple<KERNELRNGS...> rngs;
+
+  template <std::size_t INDEX> inline auto &get() {
+    return Tuple::get<INDEX>(this->rngs);
+  }
 };
 
 } // namespace Access::TupleRNG
@@ -44,7 +48,8 @@ template <typename... RNGPTRS> struct GetTupleRNGDeviceTypes {
 } // namespace Private
 
 /**
- * TODO
+ * Container type which holds multiple RNG types which inherit from KernelRNG or
+ * are also TupleRNG instances.
  */
 template <typename... RNGPTRS> class TupleRNG {
 protected:
@@ -58,9 +63,67 @@ public:
   TupleRNG() = default;
 
   /**
-   * TODO
+   * Constructor to create a tuple of KernelRNG/TupleRNG instances.
+   *
+   * @param args Shared pointers to instances of KernelRNG descendent types and
+   * TupleRNG instances.
    */
   TupleRNG(RNGPTRS... args) { this->rng_ptrs = Tuple::to_tuple(args...); }
+
+protected:
+  template <std::size_t RX>
+  inline void impl_get_const_inner(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      KernelType *kernel_type) {
+
+    Tuple::get<RX>(kernel_type->rngs) =
+        Tuple::get<RX>(this->rng_ptrs)->impl_get_const(global_info);
+    if constexpr ((RX + 1) < (sizeof...(RNGPTRS))) {
+      this->impl_get_const_inner<RX + 1>(global_info, kernel_type);
+    }
+  }
+
+public:
+  /**
+   * Called by ParticleLoop to create the loop arguments.
+   *
+   * @param global_info Global information for the loop which is to be executed.
+   */
+  inline KernelType impl_get_const(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info) {
+
+    KernelType r;
+    this->impl_get_const_inner<0>(global_info, &r);
+    return r;
+  }
+
+  /**
+   * Executed by the loop pre execution.
+   * @param global_info Global information for the loop which is to be executed.
+   */
+  inline void impl_pre_loop_read(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info) {
+
+    auto lambda_apply_pre_loop = [&](auto &rng) {
+      rng->impl_pre_loop_read(global_info);
+    };
+    Tuple::apply([&](auto... ptrs) { (lambda_apply_pre_loop(ptrs), ...); },
+                 this->rng_ptrs);
+  }
+
+  /**
+   * Executed by the loop post execution.
+   * @param global_info Global information for the loop which completed.
+   */
+  void impl_post_loop_read(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info) {
+
+    auto lambda_apply_post_loop = [&](auto &rng) {
+      rng->impl_post_loop_read(global_info);
+    };
+    Tuple::apply([&](auto... ptrs) { (lambda_apply_post_loop(ptrs), ...); },
+                 this->rng_ptrs);
+  }
 };
 
 namespace ParticleLoopImplementation {
@@ -86,11 +149,7 @@ inline typename TupleRNG<T...>::KernelType
 create_loop_arg(ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
                 [[maybe_unused]] sycl::handler &cgh,
                 Access::Read<TupleRNG<T...> *> &a) {
-
-  // TODO
-  typename TupleRNG<T...>::KernelType b;
-
-  return b;
+  return a.obj->impl_get_const(global_info);
 }
 
 /**
@@ -104,10 +163,33 @@ create_kernel_arg([[maybe_unused]] ParticleLoopIteration &iterationx,
   lhs = rhs;
 }
 
+/**
+ * The function called before the ParticleLoop is executed.
+ */
+template <typename... T>
+inline void pre_loop(ParticleLoopGlobalInfo *global_info,
+                     Access::Read<TupleRNG<T...> *> &arg) {
+  arg.obj->impl_pre_loop_read(global_info);
+}
+
+/**
+ * The function called after the ParticleLoop is executed.
+ */
+template <typename... T>
+inline void post_loop(ParticleLoopGlobalInfo *global_info,
+                      Access::Read<TupleRNG<T...> *> &arg) {
+  arg.obj->impl_post_loop_read(global_info);
+}
+
 } // namespace ParticleLoopImplementation
 
 /**
- * TODO
+ * Helper function to create a tuple of KernelRNG/TupleRNG instances.
+ *
+ * @param args Shared pointers to instances of KernelRNG descendent types and
+ * TupleRNG instances.
+ * @returns New TupleRNG instance which can be passed to a particle loop with
+ * read access.
  */
 template <typename... RNGPTRS> auto tuple_rng(RNGPTRS... rng_ptrs) {
   return std::make_shared<TupleRNG<RNGPTRS...>>(rng_ptrs...);

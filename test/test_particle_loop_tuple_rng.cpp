@@ -80,17 +80,16 @@ TEST(ParticleLoopRNG, tuple_rng_a) {
   auto A = particle_loop_common();
   auto domain = A->domain;
   auto mesh = domain->mesh;
-  const int cell_count = mesh->get_cell_count();
   auto sycl_target = A->sycl_target;
 
-  INT count_a = 0;
-  INT count_b = 0;
-  INT count_c = 0;
-  INT count_d = 0;
-  auto seq_lambda_a = [&]() -> INT { return count_a++; };
-  auto seq_lambda_b = [&]() -> INT { return count_b++; };
-  auto seq_lambda_c = [&]() -> INT { return count_c++; };
-  auto seq_lambda_d = [&]() -> INT { return count_d++; };
+  INT count_a = 1;
+  INT count_b = 2;
+  INT count_c = 3;
+  INT count_d = 4;
+  auto seq_lambda_a = [&]() -> INT { return count_a; };
+  auto seq_lambda_b = [&]() -> INT { return count_b; };
+  auto seq_lambda_c = [&]() -> INT { return count_c; };
+  auto seq_lambda_d = [&]() -> INT { return count_d; };
 
   auto seq_kernel_a = host_per_particle_block_rng<INT>(seq_lambda_a, 1);
   auto seq_kernel_b = host_atomic_block_kernel_rng<INT>(seq_lambda_b, 1);
@@ -101,19 +100,47 @@ TEST(ParticleLoopRNG, tuple_rng_a) {
 
   auto trng1 = tuple_rng(seq_kernel_c, seq_kernel_d, trng0);
 
+  ErrorPropagate ep(sycl_target);
+  auto k_ep = ep.device_ptr();
+
   auto l0 = particle_loop(
       A,
-      [=](auto TRNG) {
-
+      [=](auto INDEX, auto TRNG) {
+        bool valid = false;
+        NESO_KERNEL_ASSERT(TRNG.template get<0>().at(INDEX, 0, &valid) == 1,
+                           k_ep);
+        NESO_KERNEL_ASSERT(valid, k_ep);
+        NESO_KERNEL_ASSERT(TRNG.template get<1>().at(INDEX, 0, &valid) == 2,
+                           k_ep);
+        NESO_KERNEL_ASSERT(valid, k_ep);
       },
-      Access::read(trng0));
+      Access::read(ParticleLoopIndex{}), Access::read(trng0));
 
   auto l1 = particle_loop(
       A,
-      [=](auto TRNG) {
-
+      [=](auto INDEX, auto TRNG) {
+        bool valid = false;
+        NESO_KERNEL_ASSERT(TRNG.template get<0>().at(INDEX, 0, &valid) == 3,
+                           k_ep);
+        NESO_KERNEL_ASSERT(valid, k_ep);
+        NESO_KERNEL_ASSERT(TRNG.template get<1>().at(INDEX, 0, &valid) == 4,
+                           k_ep);
+        NESO_KERNEL_ASSERT(valid, k_ep);
+        NESO_KERNEL_ASSERT(
+            TRNG.template get<2>().template get<0>().at(INDEX, 0, &valid) == 1,
+            k_ep);
+        NESO_KERNEL_ASSERT(valid, k_ep);
+        NESO_KERNEL_ASSERT(
+            TRNG.template get<2>().template get<1>().at(INDEX, 0, &valid) == 2,
+            k_ep);
+        NESO_KERNEL_ASSERT(valid, k_ep);
       },
-      Access::read(trng1));
+      Access::read(ParticleLoopIndex{}), Access::read(trng1));
+
+  l0->execute();
+  ASSERT_FALSE(ep.get_flag());
+  l1->execute();
+  ASSERT_FALSE(ep.get_flag());
 
   A->free();
   sycl_target->free();
