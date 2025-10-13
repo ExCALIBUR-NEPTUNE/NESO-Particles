@@ -63,7 +63,7 @@ template <typename T>
 class HostPerParticleBlockRNG : public KernelRNG<PerParticleBlockRNG<T>>,
                                 public BlockKernelRNGBase<T> {
 protected:
-  int internal_state;
+  int internal_state{0};
 
 public:
   HostPerParticleBlockRNG() : BlockKernelRNGBase<T>() {}
