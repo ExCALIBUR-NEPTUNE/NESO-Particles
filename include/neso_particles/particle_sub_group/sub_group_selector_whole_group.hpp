@@ -33,6 +33,12 @@ public:
    */
   virtual inline void create(Selection *created_selection) override {
     auto &cell_id_dat = this->particle_group->cell_id_dat;
+
+    /**
+     * If the below selection is made more complicated then the CopySelector
+     * also may need revisiting for the case where the selection is the whole
+     * ParticleGroup.
+     */
     Selection s;
     s.npart_local = this->particle_group->get_npart_local();
     s.ncell = this->particle_group->domain->mesh->get_cell_count();
