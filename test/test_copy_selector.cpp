@@ -115,3 +115,60 @@ TEST(ParticleSubGroup, copy_selector_static) {
   sycl_target->free();
   mesh->free();
 }
+
+TEST(ParticleSubGroup, copy_selector_whole_group) {
+  auto A = subgroup_test_common();
+  auto mesh = A->domain->mesh;
+  auto sycl_target = A->sycl_target;
+
+  auto aa = particle_sub_group(A);
+  auto bb = particle_sub_group(aa);
+
+  ASSERT_TRUE(bb->is_entire_particle_group());
+
+  A->add_particle_dat(Sym<INT>("FOO"), 2);
+
+  auto lambda_do_test = [&]() {
+    particle_loop(
+        A,
+        [=](auto ID, auto FOO) {
+          FOO.at(0) = ID.at(0);
+          FOO.at(1) = -1;
+        },
+        Access::read(Sym<INT>("ID")), Access::write(Sym<INT>("FOO")))
+        ->execute();
+
+    particle_loop(
+        bb, [=](auto ID, auto FOO) { FOO.at(1) = ID.at(0); },
+        Access::read(Sym<INT>("ID")), Access::write(Sym<INT>("FOO")))
+        ->execute();
+
+    ErrorPropagate ep(sycl_target);
+    auto k_ep = ep.device_ptr();
+
+    particle_loop(
+        A, [=](auto FOO) { NESO_KERNEL_ASSERT(FOO.at(0) == FOO.at(1), k_ep); },
+        Access::read(Sym<INT>("FOO")))
+        ->execute();
+
+    ASSERT_FALSE(ep.get_flag());
+  };
+
+  lambda_do_test();
+
+  const int cell_count = mesh->get_cell_count();
+  particle_loop(
+      A,
+      [=](auto CELL_ID) {
+        const INT cx = CELL_ID.at(0);
+        CELL_ID.at(0) = (cx + 1) % cell_count;
+      },
+      Access::write(Sym<INT>("CELL_ID")))
+      ->execute();
+
+  A->cell_move();
+  lambda_do_test();
+
+  sycl_target->free();
+  mesh->free();
+}
