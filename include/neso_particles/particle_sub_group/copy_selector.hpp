@@ -19,17 +19,14 @@ protected:
   std::shared_ptr<ParticleSubGroup> parent;
 
 public:
+  virtual ~CopySelector() = default;
+
   /**
    * Create selector from an existing sub group.
    *
    * @param parent ParticleSubGroup to duplicate.
    */
-  CopySelector(std::shared_ptr<ParticleSubGroup> parent)
-      : SubGroupSelectorBase(parent), parent(parent) {
-    this->add_parent_dependencies(parent);
-  }
-
-  virtual ~CopySelector() = default;
+  CopySelector(std::shared_ptr<ParticleSubGroup> parent);
 
   /**
    * Create the selection.
