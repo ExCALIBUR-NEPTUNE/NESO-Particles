@@ -107,11 +107,11 @@ TEST(ParticleLoopRNG, tuple_rng_a) {
       A,
       [=](auto INDEX, auto TRNG) {
         bool valid = false;
-        NESO_KERNEL_ASSERT(TRNG.template get<0>().at(INDEX, 0, &valid) == 1,
-                           k_ep);
+        NESO_KERNEL_ASSERT(
+            Access::TupleRNG::get<0>(TRNG).at(INDEX, 0, &valid) == 1, k_ep);
         NESO_KERNEL_ASSERT(valid, k_ep);
-        NESO_KERNEL_ASSERT(TRNG.template get<1>().at(INDEX, 0, &valid) == 2,
-                           k_ep);
+        NESO_KERNEL_ASSERT(
+            Access::TupleRNG::get<1>(TRNG).at(INDEX, 0, &valid) == 2, k_ep);
         NESO_KERNEL_ASSERT(valid, k_ep);
       },
       Access::read(ParticleLoopIndex{}), Access::read(trng0));
@@ -141,6 +141,62 @@ TEST(ParticleLoopRNG, tuple_rng_a) {
   ASSERT_FALSE(ep.get_flag());
   l1->execute();
   ASSERT_FALSE(ep.get_flag());
+
+  particle_loop(
+      A,
+      [=](auto INDEX, auto TRNG) {
+        bool valid = false;
+        // Trying to test valid here would be a race condition.
+        Access::TupleRNG::get<0>(TRNG).at(INDEX, 0, &valid);
+        Access::TupleRNG::get<1>(TRNG).at(INDEX, 0, &valid);
+        Access::TupleRNG::get<0>(Access::TupleRNG::get<2>(TRNG))
+            .at(INDEX, 0, &valid);
+        Access::TupleRNG::get<1>(Access::TupleRNG::get<2>(TRNG))
+            .at(INDEX, 0, &valid);
+        Access::TupleRNG::get<0>(TRNG).at(INDEX, 0, &valid);
+        Access::TupleRNG::get<1>(TRNG).at(INDEX, 0, &valid);
+        Access::TupleRNG::get<0>(Access::TupleRNG::get<2>(TRNG))
+            .at(INDEX, 0, &valid);
+        Access::TupleRNG::get<1>(Access::TupleRNG::get<2>(TRNG))
+            .at(INDEX, 0, &valid);
+      },
+      Access::read(ParticleLoopIndex{}), Access::read(trng1))
+      ->execute();
+
+  // Tests that post loop is getting called
+  ASSERT_FALSE(seq_kernel_b->valid_internal_state());
+  ASSERT_FALSE(seq_kernel_d->valid_internal_state());
+
+  // test chaining
+  {
+    auto trng3 = tuple_rng(seq_kernel_d);
+    auto trng2 = tuple_rng(seq_kernel_c, trng3);
+    auto trng1 = tuple_rng(seq_kernel_b, trng2);
+    auto trng0 = tuple_rng(seq_kernel_a, trng1);
+
+    particle_loop(
+        A,
+        [=](auto INDEX, auto TRNG) {
+          bool valid = false;
+          NESO_KERNEL_ASSERT(
+              Access::TupleRNG::get<0>(TRNG).at(INDEX, 0, &valid) == 1, k_ep);
+          auto &TRNG1 = Access::TupleRNG::get<1>(TRNG);
+          NESO_KERNEL_ASSERT(
+              Access::TupleRNG::get<0>(TRNG1).at(INDEX, 0, &valid) == 2, k_ep);
+          NESO_KERNEL_ASSERT(valid, k_ep);
+          auto &TRNG2 = Access::TupleRNG::get<1>(TRNG1);
+          NESO_KERNEL_ASSERT(
+              Access::TupleRNG::get<0>(TRNG2).at(INDEX, 0, &valid) == 3, k_ep);
+          auto &TRNG3 = Access::TupleRNG::get<1>(TRNG2);
+          NESO_KERNEL_ASSERT(
+              Access::TupleRNG::get<0>(TRNG3).at(INDEX, 0, &valid) == 4, k_ep);
+          NESO_KERNEL_ASSERT(valid, k_ep);
+        },
+        Access::read(ParticleLoopIndex{}), Access::read(trng0))
+        ->execute();
+
+    ASSERT_FALSE(ep.get_flag());
+  }
 
   A->free();
   sycl_target->free();

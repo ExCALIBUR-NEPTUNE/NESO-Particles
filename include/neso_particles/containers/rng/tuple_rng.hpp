@@ -24,6 +24,18 @@ template <typename... KERNELRNGS> struct Read {
   }
 };
 
+/**
+ * Helper function that calls Access::TupleRNG::get in a way that avoids using
+ * ".template".
+ *
+ * @param tuple_rng Access::TupleRNG::Read instance to access.
+ * @returns The reference returned by Access::TupleRNG::Read::get.
+ */
+template <std::size_t INDEX, typename... KERNELRNGS>
+auto &get(Read<KERNELRNGS...> &tuple_rng) {
+  return tuple_rng.template get<INDEX>();
+}
+
 } // namespace Access::TupleRNG
 
 namespace Private {
