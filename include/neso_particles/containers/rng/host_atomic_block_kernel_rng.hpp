@@ -285,6 +285,8 @@ public:
  * @param num_components Number of samples required per particle in the kernel.
  * @param block_size Optional block size to sample RNG values and copy to the
  * device in.
+ * @returns New atomic block RNG instance that can be passed as a ParticleLoop
+ * argument.
  */
 template <typename T, typename FUNC_TYPE>
 inline std::shared_ptr<HostAtomicBlockKernelRNG<T>>

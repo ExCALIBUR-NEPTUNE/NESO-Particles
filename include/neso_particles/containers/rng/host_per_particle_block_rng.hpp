@@ -134,7 +134,6 @@ public:
    * Create the loop arguments for the RNG implementation.
    *
    * @param global_info Global information for the loop about to be executed.
-   * @returns Pointer to the device data that contains the RNG data.
    */
   virtual inline void impl_pre_loop_read(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info)
@@ -187,6 +186,7 @@ public:
  * @param num_components Number of samples required per particle in the kernel.
  * @param block_size Optional block size to sample RNG values and copy to the
  * device in.
+ * @returns New per particle RNG instance that can be passed as a ParticleLoop
  */
 template <typename T, typename FUNC_TYPE>
 inline std::shared_ptr<HostPerParticleBlockRNG<T>>
