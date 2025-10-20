@@ -84,13 +84,17 @@ struct ParticleLoopIteration {
  */
 template <typename T>
 inline void pre_loop([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
-                     [[maybe_unused]] T &arg) {}
+                     [[maybe_unused]] T &arg) {
+  // nprint("Default pre_loop called on type:", typeid(T).name());
+}
 /**
  * Default post loop execution function.
  */
 template <typename T>
 inline void post_loop([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
-                      [[maybe_unused]] T &arg) {}
+                      [[maybe_unused]] T &arg) {
+  // nprint("Default post_loop called on type:", typeid(T).name());
+}
 /**
  * Default function to determine how much local space a type needs per particle.
  */
