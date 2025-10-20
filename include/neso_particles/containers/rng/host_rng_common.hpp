@@ -210,9 +210,9 @@ public:
   /// Implementation to generate samples.
   std::shared_ptr<RNGGenerationFunction<T>> generation_function;
   /// The number of RNG values required per particle.
-  int num_components;
+  int num_components{0};
   /// RNG values are sampled and copied to the device in this block size.
-  int block_size;
+  int block_size{0};
   /// Factor for allocation
   std::optional<REAL> max_factor;
 

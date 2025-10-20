@@ -165,6 +165,8 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/rng/host_rng_common.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/rng/host_per_particle_block_rng.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/rng/host_atomic_block_kernel_rng.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/containers/rng/null_kernel_rng.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/containers/rng/tuple_rng.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/descendant_products.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/global_array.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/local_array.hpp
