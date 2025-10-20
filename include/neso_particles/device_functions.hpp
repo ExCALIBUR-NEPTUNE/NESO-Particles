@@ -625,10 +625,10 @@ VALUE_TYPE joint_reduce(GROUP_TYPE group, VALUE_TYPE *d_first,
   return sycl::joint_reduce(group, d_first, d_last, binary_op);
 #else
   VALUE_TYPE value = get_identity(binary_op);
-  d_first += group.get_local_id(1);
+  d_first += group.get_local_linear_id();
   while (d_first < d_last) {
     value = binary_op(value, *d_first);
-    d_first += group.get_local_range(1);
+    d_first += group.get_group_linear_range();
   }
   value = sycl::reduce_over_group(group, value, binary_op);
   return value;

@@ -14,8 +14,11 @@ namespace NESO::Particles::DSMC {
  * Device type for CellwisePairList.
  */
 struct CellwisePairListDevice {
-  int ***pair_list;
-  int *pair_counts;
+  int cell_count;
+  int ***d_pair_list;
+  int *d_pair_counts;
+  int *h_pair_counts;
+  int max_index;
 };
 
 /**
@@ -25,8 +28,12 @@ class CellwisePairList {
 protected:
   // The pair list itself.
   std::shared_ptr<CellDat<int>> d_pair_list;
-  // The number of pairs in each cell
+  // The number of pairs in each cell (device)
   std::shared_ptr<BufferDevice<int>> d_pair_counts;
+  // This number of pairs in each cell (host)
+  std::vector<int> h_pair_counts;
+  // The max index in the pair list
+  int max_index{-1};
 
 public:
   /// Compute device holding pairs.

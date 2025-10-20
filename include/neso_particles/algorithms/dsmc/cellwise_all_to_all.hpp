@@ -101,7 +101,6 @@ struct CellwiseAllToAll {
   }
 };
 
-
 } // namespace NESO::Particles::DSMC
 
 #endif

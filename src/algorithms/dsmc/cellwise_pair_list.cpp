@@ -7,7 +7,8 @@ CellwisePairList::CellwisePairList(SYCLTargetSharedPtr sycl_target,
     : d_pair_list(std::make_shared<CellDat<int>>(sycl_target, cell_count, 2)),
       d_pair_counts(
           std::make_shared<BufferDevice<int>>(sycl_target, cell_count)),
-      sycl_target(sycl_target), cell_count(cell_count) {
+      h_pair_counts(std::vector<int>(cell_count)), sycl_target(sycl_target),
+      cell_count(cell_count) {
   this->clear();
 }
 
@@ -23,18 +24,17 @@ void CellwisePairList::push_back(const std::vector<int> &c,
   }
 
   std::vector<int> layers(n);
-
-  auto h_pair_counts = this->d_pair_counts->get();
+  this->d_pair_counts->get(this->h_pair_counts);
 
   for (int ix = 0; ix < n; ix++) {
     NESOASSERT(0 <= c[ix] && c[ix] < this->cell_count, "Bad cell index.");
-    layers[ix] = h_pair_counts[c[ix]];
-    h_pair_counts[c[ix]]++;
+    layers[ix] = this->h_pair_counts[c[ix]];
+    this->h_pair_counts[c[ix]]++;
   }
 
   for (int cx = 0; cx < cell_count; cx++) {
     const auto current_size = static_cast<int>(this->d_pair_list->nrow[cx]);
-    const auto required_size = h_pair_counts[cx];
+    const auto required_size = this->h_pair_counts[cx];
     if (required_size > current_size) {
       this->d_pair_list->set_nrow(cx, required_size);
     }
@@ -63,21 +63,38 @@ void CellwisePairList::push_back(const std::vector<int> &c,
         k_cell_list[tc][1][tlayer] = tj;
       });
 
-  this->d_pair_counts->set(h_pair_counts);
+  BufferDevice<int> d_max_indices(this->sycl_target, 2);
+
+  auto e1 = reduce_values(this->sycl_target, i.size(), d_i.ptr,
+                          sycl::maximum<int>(), d_max_indices.ptr);
+
+  auto e2 = reduce_values(this->sycl_target, j.size(), d_j.ptr,
+                          sycl::maximum<int>(), d_max_indices.ptr + 1);
+
+  this->d_pair_counts->set(this->h_pair_counts);
+
   e0.wait_and_throw();
+  e1.wait_and_throw();
+  e2.wait_and_throw();
+
+  auto h_max_indicies = d_max_indices.get();
+  this->max_index = std::max(h_max_indicies[0], h_max_indicies[1]);
 }
 
 void CellwisePairList::clear() {
   if (this->cell_count > 0) {
-    this->sycl_target->queue
-        .fill(this->d_pair_counts->ptr, static_cast<int>(0), this->cell_count)
-        .wait_and_throw();
+    auto e0 = this->sycl_target->queue.fill(
+        this->d_pair_counts->ptr, static_cast<int>(0), this->cell_count);
+    std::fill(this->h_pair_counts.begin(), this->h_pair_counts.end(), 0);
+    e0.wait_and_throw();
   }
+  this->max_index = -1;
 }
 
 CellwisePairListDevice CellwisePairList::get() {
-  CellwisePairListDevice l = {this->d_pair_list->device_ptr(),
-                              this->d_pair_counts->ptr};
+  CellwisePairListDevice l = {this->cell_count, this->d_pair_list->device_ptr(),
+                              this->d_pair_counts->ptr,
+                              this->h_pair_counts.data(), this->max_index};
 
   return l;
 }
@@ -86,11 +103,9 @@ std::map<int, std::pair<std::vector<int>, std::vector<int>>>
 CellwisePairList::host_get() {
   std::map<int, std::pair<std::vector<int>, std::vector<int>>> l;
 
-  auto h_pair_counts = this->d_pair_counts->get();
-
   for (int cx = 0; cx < this->cell_count; cx++) {
     auto pairs = this->d_pair_list->get_cell(cx);
-    const auto pair_count = h_pair_counts[cx];
+    const auto pair_count = this->h_pair_counts[cx];
     l[cx].first.resize(pair_count);
     l[cx].second.resize(pair_count);
 
