@@ -89,6 +89,42 @@ template <typename OBJ> struct B {
   B(OBJ obj) : obj(obj) {}
 };
 
+/**
+ * Helper function for retrieving the underlying ParticleLoop argument wrapped
+ * in A,B.
+ *
+ * @param annotated_arg Argument potentially wrapped in Access::A or Access:B.
+ * @returns Underlying argument wrapped in the access descriptor.
+ */
+template <typename ARG>
+inline auto strip_pair_group_annotation(ARG &annotated_arg) {
+  return annotated_arg;
+}
+
+/**
+ * Helper function for retrieving the underlying ParticleLoop argument wrapped
+ * in A,B.
+ *
+ * @param annotated_arg Argument potentially wrapped in Access::A or Access:B.
+ * @returns Underlying argument wrapped in the access descriptor.
+ */
+template <typename ARG>
+inline auto strip_pair_group_annotation(A<ARG> &annotated_arg) {
+  return annotated_arg.obj;
+}
+
+/**
+ * Helper function for retrieving the underlying ParticleLoop argument wrapped
+ * in A,B.
+ *
+ * @param annotated_arg Argument potentially wrapped in Access::A or Access:B.
+ * @returns Underlying argument wrapped in the access descriptor.
+ */
+template <typename ARG>
+inline auto strip_pair_group_annotation(B<ARG> &annotated_arg) {
+  return annotated_arg.obj;
+}
+
 } // namespace Access
 
 } // namespace NESO::Particles

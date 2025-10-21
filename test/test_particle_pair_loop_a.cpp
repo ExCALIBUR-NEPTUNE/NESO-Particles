@@ -4,15 +4,20 @@ template <typename... ARGS>
 class ParticlePairLoopArgs : public ParticlePairLoopBase {
 protected:
   /// Tuple of the arguments passed to the ParticlePairLoop on construction.
+  std::tuple<ARGS...> annotated_args;
+  /// Tuple of the arguments with the A/B specification stripped away. These
+  /// should be the same types that would be passed to ParticleLoop.
   std::tuple<ARGS...> args;
 
   /// Recursively assemble the tuple args.
   template <size_t INDEX, typename U> inline void unpack_args(U a0) {
-    std::get<INDEX>(this->args) = a0;
+    std::get<INDEX>(this->annotated_args) = a0;
+    std::get<INDEX>(this->args) = Access::strip_pair_group_annotation(a0);
   }
   template <size_t INDEX, typename U, typename... V>
   inline void unpack_args(U a0, V... args) {
-    std::get<INDEX>(this->args) = a0;
+    std::get<INDEX>(this->annotated_args) = a0;
+    std::get<INDEX>(this->args) = Access::strip_pair_group_annotation(a0);
     this->unpack_args<INDEX + 1>(args...);
   }
 
@@ -83,12 +88,19 @@ TEST(ParticlePairLoop, base) {
   auto cellwise_pair_listA =
       std::make_shared<DSMC::CellwisePairList>(sycl_target, cell_count);
 
+  // TODO create some pairs here
+
   ParticlePairLoopCellwisePairList pl0(
       "particle_pair_loop_test",
       {CellwisePairListAbsolute<ParticleGroup>(A, A, cellwise_pair_listA)},
-      ParticlePairLoopKernel{[](auto NN_A, auto NN_B) {}},
+      ParticlePairLoopKernel{[](auto NN_A, auto NN_B) {
+        NN_A.at(0)++;
+        NN_B.at(0)++;
+      }},
       Access::A(Access::write(Sym<INT>("NUM_NEIGHBOURS"))),
       Access::B(Access::write(Sym<INT>("NUM_NEIGHBOURS"))));
+
+  pl0.execute();
 
   sycl_target->free();
 }
