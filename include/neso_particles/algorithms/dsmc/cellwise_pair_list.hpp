@@ -84,6 +84,9 @@ public:
    */
   std::map<int, std::pair<std::vector<int>, std::vector<int>>> host_get();
 };
+
+using CellwisePairListSharedPtr = std::shared_ptr<CellwisePairList>;
+
 } // namespace NESO::Particles::DSMC
 
 #endif
