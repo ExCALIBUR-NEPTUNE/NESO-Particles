@@ -229,6 +229,9 @@ public:
 
     ParticleLoopImplementation::ParticleLoopGlobalInfo global_info;
 
+    global_info.particle_group = get_particle_group(pair_lists[0].A).get();
+    global_info.particle_sub_group = nullptr;
+
     // END OF IMPLEMENTATION TO MOVE INTO A BASE CLASS
 
     e0.wait_and_throw();
@@ -300,10 +303,13 @@ TEST(ParticlePairLoop, base) {
       particle_loop_create_common(npart_cell, ndim, nx, ny, nz);
   A->add_particle_dat(Sym<INT>("NUM_NEIGHBOURS"), 1);
 
+  particle_loop(
+      A, [=](auto NN) { NN.at(0) = 0; },
+      Access::write(Sym<INT>("NUM_NEIGHBOURS")))
+      ->execute();
+
   auto cellwise_pair_listA =
       std::make_shared<DSMC::CellwisePairList>(sycl_target, cell_count);
-
-  // TODO create some pairs here
 
   std::vector<int> c = {0};
   std::vector<int> i = {0};
@@ -321,6 +327,9 @@ TEST(ParticlePairLoop, base) {
       Access::B(Access::write(Sym<INT>("NUM_NEIGHBOURS"))));
 
   pl0.execute();
+
+  auto NN = A->get_cell(Sym<INT>("NUM_NEIGHBOURS"), 0);
+  nprint(NN->at(0, 0), NN->at(1, 0));
 
   sycl_target->free();
 }
