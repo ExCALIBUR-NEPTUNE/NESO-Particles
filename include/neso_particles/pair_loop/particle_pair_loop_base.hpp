@@ -112,6 +112,56 @@ template <typename OBJ> struct B {
 };
 
 /**
+ * Metafunction for getting the unannotated loop type.
+ */
+template <typename ARG> struct StripPairGroupAnnotation {
+  using type = ARG;
+};
+/**
+ * Metafunction for getting the unannotated loop type.
+ */
+template <typename ARG> struct StripPairGroupAnnotation<A<ARG>> {
+  using type = ARG;
+};
+/**
+ * Metafunction for getting the unannotated loop type.
+ */
+template <typename ARG> struct StripPairGroupAnnotation<B<ARG>> {
+  using type = ARG;
+};
+
+struct MaskA {};
+struct MaskB {};
+struct MaskUndefined {};
+
+/**
+ * Metafunction for determining if the arg is annotated or not.
+ */
+template <typename ARG> struct GetAnotateMask {
+  using mask = MaskUndefined;
+};
+/**
+ * Metafunction for determining if the arg is annotated or not.
+ */
+template <typename ARG> struct GetAnotateMask<A<ARG>> {
+  using mask = MaskA;
+};
+/**
+ * Metafunction for determining if the arg is annotated or not.
+ */
+template <typename ARG> struct GetAnotateMask<B<ARG>> {
+  using mask = MaskB;
+};
+
+template <typename ARG> struct IsAnnotatedA {};
+template <> struct IsAnnotatedA<MaskA &> {
+  static constexpr bool value = true;
+};
+template <> struct IsAnnotatedA<MaskB &> {
+  static constexpr bool value = false;
+};
+
+/**
  * Helper function for retrieving the underlying ParticleLoop argument wrapped
  * in A,B.
  *
