@@ -128,8 +128,10 @@ set(HEADER_FILES
     ${INCLUDE_DIR}/neso_particles.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/access.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/algorithms.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/dsmc.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/cellwise_all_to_all.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/cellwise_pair_list.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/cellwise_pair_list_waves.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/particle_data_movement.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/reduce_dat_cellwise.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/unseen_value_extractor.hpp

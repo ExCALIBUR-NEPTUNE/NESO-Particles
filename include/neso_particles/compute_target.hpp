@@ -12,6 +12,7 @@
 
 #include "communication.hpp"
 #include "containers/resource_stack_map.hpp"
+#include "device_functions.hpp"
 #include "device_limits.hpp"
 #include "parameters.hpp"
 #include "profiling.hpp"
