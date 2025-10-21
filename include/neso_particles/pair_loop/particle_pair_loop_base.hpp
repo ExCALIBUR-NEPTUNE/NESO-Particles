@@ -67,6 +67,28 @@ template <typename KERNEL> struct ParticlePairLoopKernel {
   ParticlePairLoopKernel(KERNEL kernel) : kernel(kernel) {}
 };
 
+/**
+ * Wrap callable in ParticlePairLoopKernel if required.
+ *
+ * @param kernel Input kernel to wrap if required.
+ * @returns ParticlePairLoopKernel wrapping kernel.
+ */
+template <typename KERNEL>
+inline auto particle_pair_loop_kernel(KERNEL kernel) {
+  return ParticlePairLoopKernel(kernel);
+}
+
+/**
+ * Wrap callable in ParticlePairLoopKernel if required.
+ *
+ * @param kernel Input kernel to wrap if required.
+ * @returns ParticlePairLoopKernel wrapping kernel.
+ */
+template <typename KERNEL>
+inline auto particle_pair_loop_kernel(ParticlePairLoopKernel<KERNEL> kernel) {
+  return kernel;
+}
+
 namespace Access {
 
 /**

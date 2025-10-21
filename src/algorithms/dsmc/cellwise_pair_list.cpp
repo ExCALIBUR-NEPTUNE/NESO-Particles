@@ -26,10 +26,13 @@ void CellwisePairList::push_back(const std::vector<int> &c,
   std::vector<int> layers(n);
   this->d_pair_counts->get(this->h_pair_counts);
 
+  this->max_pair_count = -1;
   for (int ix = 0; ix < n; ix++) {
     NESOASSERT(0 <= c[ix] && c[ix] < this->cell_count, "Bad cell index.");
     layers[ix] = this->h_pair_counts[c[ix]];
     this->h_pair_counts[c[ix]]++;
+    this->max_pair_count =
+        std::max(this->max_pair_count, this->h_pair_counts[c[ix]]);
   }
 
   for (int cx = 0; cx < cell_count; cx++) {
@@ -89,12 +92,14 @@ void CellwisePairList::clear() {
     e0.wait_and_throw();
   }
   this->max_index = -1;
+  this->max_pair_count = -1;
 }
 
 CellwisePairListDevice CellwisePairList::get() {
-  CellwisePairListDevice l = {this->cell_count, this->d_pair_list->device_ptr(),
-                              this->d_pair_counts->ptr,
-                              this->h_pair_counts.data(), this->max_index};
+  CellwisePairListDevice l = {
+      this->cell_count,         this->d_pair_list->device_ptr(),
+      this->d_pair_counts->ptr, this->h_pair_counts.data(),
+      this->max_index,          this->max_pair_count};
 
   return l;
 }
