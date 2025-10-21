@@ -153,11 +153,14 @@ template <typename ARG> struct GetAnotateMask<B<ARG>> {
   using mask = MaskB;
 };
 
-template <typename ARG> struct IsAnnotatedA {};
-template <> struct IsAnnotatedA<MaskA &> {
+template <typename ARG> struct IsAnnotatedB {};
+template <> struct IsAnnotatedB<MaskB &> {
   static constexpr bool value = true;
 };
-template <> struct IsAnnotatedA<MaskB &> {
+template <> struct IsAnnotatedB<MaskA &> {
+  static constexpr bool value = false;
+};
+template <> struct IsAnnotatedB<MaskUndefined &> {
   static constexpr bool value = false;
 };
 

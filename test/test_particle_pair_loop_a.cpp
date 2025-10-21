@@ -16,7 +16,7 @@ protected:
 
   /// The mask types for the arguments passed to the kernel
   using KernelMasksType =
-      std::tuple<typename Access::GetAnotateMask<ARGS>::mask...>;
+      Tuple::Tuple<typename Access::GetAnotateMask<ARGS>::mask...>;
 
   /// Tuple of the arguments passed to the ParticlePairLoop on construction.
   std::tuple<ARGS...> annotated_args;
@@ -87,13 +87,13 @@ protected:
     if constexpr (INDEX < SIZE) {
       auto arg = Tuple::get<INDEX>(loop_args);
 
-      if constexpr (Access::IsAnnotatedA<decltype(std::get<INDEX>(
+      if constexpr (Access::IsAnnotatedB<decltype(Tuple::get<INDEX>(
                         kernel_masks_type))>::value) {
         ParticleLoopImplementation::create_kernel_arg(
-            iteration_A, arg, Tuple::get<INDEX>(kernel_args));
+            iteration_B, arg, Tuple::get<INDEX>(kernel_args));
       } else {
         ParticleLoopImplementation::create_kernel_arg(
-            iteration_B, arg, Tuple::get<INDEX>(kernel_args));
+            iteration_A, arg, Tuple::get<INDEX>(kernel_args));
       }
       create_kernel_args_inner<INDEX + 1, SIZE>(
           kernel_masks_type, iteration_A, iteration_B, loop_args, kernel_args);
