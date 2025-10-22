@@ -61,18 +61,35 @@ protected:
   /// Recursively assemble the outer loop arguments.
   template <size_t INDEX, size_t SIZE, typename PARAM>
   inline void create_loop_args_inner(
-      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      KernelMasksType &kernel_masks_type,
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info_A,
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info_B,
       sycl::handler &cgh, PARAM &loop_args) {
     if constexpr (INDEX < SIZE) {
-      Tuple::get<INDEX>(loop_args) =
-          create_loop_arg_cast(global_info, cgh, std::get<INDEX>(this->args));
-      create_loop_args_inner<INDEX + 1, SIZE>(global_info, cgh, loop_args);
+
+      if constexpr (Access::IsAnnotatedB<decltype(Tuple::get<INDEX>(
+                        kernel_masks_type))>::value) {
+        Tuple::get<INDEX>(loop_args) = create_loop_arg_cast(
+            global_info_B, cgh, std::get<INDEX>(this->args));
+      } else {
+        Tuple::get<INDEX>(loop_args) = create_loop_arg_cast(
+            global_info_A, cgh, std::get<INDEX>(this->args));
+      }
+
+      create_loop_args_inner<INDEX + 1, SIZE>(kernel_masks_type, global_info_A,
+                                              global_info_B, cgh, loop_args);
     }
   }
+
   inline void create_loop_args(
       sycl::handler &cgh, loop_parameter_type &loop_args,
-      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info) {
-    create_loop_args_inner<0, sizeof...(ARGS)>(global_info, cgh, loop_args);
+      KernelMasksType &kernel_masks_type,
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info_A,
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info_B
+
+  ) {
+    create_loop_args_inner<0, sizeof...(ARGS)>(kernel_masks_type, global_info_A,
+                                               global_info_B, cgh, loop_args);
   }
 
   /// recusively assemble the kernel arguments from the loop arguments
@@ -227,11 +244,13 @@ public:
     }
     const int cell_count_iteration = cell_end_actual - cell_start_actual;
 
-    ParticleLoopImplementation::ParticleLoopGlobalInfo global_info;
+    ParticleLoopImplementation::ParticleLoopGlobalInfo global_info_A;
+    ParticleLoopImplementation::ParticleLoopGlobalInfo global_info_B;
 
-    // TODO WE NEED TWO GLOBAL INFOS FOR A AND B
-    global_info.particle_group = get_particle_group(pair_lists[0].A).get();
-    global_info.particle_sub_group = nullptr;
+    global_info_A.particle_group = get_particle_group(pair_lists[0].A).get();
+    global_info_A.particle_sub_group = nullptr;
+    global_info_B.particle_group = get_particle_group(pair_lists[0].B).get();
+    global_info_B.particle_sub_group = nullptr;
 
     // END OF IMPLEMENTATION TO MOVE INTO A BASE CLASS
 
@@ -251,7 +270,9 @@ public:
       this->event_stack.push(
           this->sycl_target->queue.submit([&](sycl::handler &cgh) {
             loop_parameter_type loop_args;
-            this->create_loop_args(cgh, loop_args, &global_info);
+            KernelMasksType kernel_masks;
+            this->create_loop_args(cgh, loop_args, kernel_masks, &global_info_A,
+                                   &global_info_B);
 
             cgh.parallel_for(iteration_set, [=](sycl::item<3> idx) {
               const std::size_t index_cell = idx.get_id(0);
