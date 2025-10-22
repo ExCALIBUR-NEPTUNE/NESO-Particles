@@ -1,6 +1,6 @@
-#include <neso_particles/algorithms/dsmc/cellwise_pair_list.hpp>
+#include <neso_particles/pair_loop/cellwise_pair_list.hpp>
 
-namespace NESO::Particles::DSMC {
+namespace NESO::Particles {
 
 CellwisePairList::CellwisePairList(SYCLTargetSharedPtr sycl_target,
                                    const int cell_count)
@@ -159,4 +159,4 @@ CellwisePairList::host_get() {
 
   return l;
 }
-} // namespace NESO::Particles::DSMC
+} // namespace NESO::Particles

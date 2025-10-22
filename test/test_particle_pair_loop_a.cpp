@@ -11,7 +11,7 @@ template <typename GROUP_TYPE> struct CellwisePairListAbsolute;
 template <> struct CellwisePairListAbsolute<ParticleGroup> {
   ParticleGroupSharedPtr A;
   ParticleGroupSharedPtr B;
-  DSMC::CellwisePairListSharedPtr pair_list;
+  CellwisePairListSharedPtr pair_list;
   CellwisePairListAbsolute<ParticleGroup>() = default;
   ~CellwisePairListAbsolute<ParticleGroup>() = default;
 
@@ -23,9 +23,9 @@ template <> struct CellwisePairListAbsolute<ParticleGroup> {
    * @param B Second ParticleGroup which suppies the "j" particles.
    * @param pair_list Pair list of particle pairs.
    */
-  CellwisePairListAbsolute<ParticleGroup>(
-      ParticleGroupSharedPtr A, ParticleGroupSharedPtr B,
-      DSMC::CellwisePairListSharedPtr pair_list)
+  CellwisePairListAbsolute<ParticleGroup>(ParticleGroupSharedPtr A,
+                                          ParticleGroupSharedPtr B,
+                                          CellwisePairListSharedPtr pair_list)
       : A(A), B(B), pair_list(pair_list) {}
 };
 
@@ -49,9 +49,8 @@ protected:
   using ParticlePairLoopArgs<ARGS...>::create_loop_args;
   using ParticlePairLoopArgs<ARGS...>::create_kernel_args;
 
-  std::vector<DSMC::CellwisePairListDevice> h_pair_lists_device;
-  std::shared_ptr<BufferDevice<DSMC::CellwisePairListDevice>>
-      d_pair_lists_device;
+  std::vector<CellwisePairListDevice> h_pair_lists_device;
+  std::shared_ptr<BufferDevice<CellwisePairListDevice>> d_pair_lists_device;
   std::size_t num_pair_lists{0};
   int cell_count{0};
   EventStack event_stack;
@@ -84,7 +83,7 @@ public:
       this->cell_count = this->particle_group_A->domain->mesh->get_cell_count();
       NESOASSERT(this->sycl_target != nullptr, "Bad compute device found");
       this->d_pair_lists_device =
-          std::make_shared<BufferDevice<DSMC::CellwisePairListDevice>>(
+          std::make_shared<BufferDevice<CellwisePairListDevice>>(
               this->sycl_target, pair_lists.size());
       this->h_pair_lists_device.resize(pair_lists.size());
     }
@@ -189,6 +188,119 @@ public:
   virtual inline void wait() override { this->event_stack.wait(); }
 };
 
+TEST(ParticlePairLoop, cellwise_pair_list) {
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+
+  const int cell_count = 19;
+  auto cellwise_pair_list =
+      std::make_shared<CellwisePairList>(sycl_target, cell_count);
+
+  {
+    auto h_list = cellwise_pair_list->host_get();
+    ASSERT_EQ(h_list.size(), cell_count);
+    for (int cx = 0; cx < cell_count; cx++) {
+      ASSERT_EQ(h_list.at(cx).first.size(), 0);
+      ASSERT_EQ(h_list.at(cx).second.size(), 0);
+    }
+  }
+
+  std::mt19937 rng(522342);
+  std::uniform_int_distribution<int> dist(0, cell_count - 1);
+
+  const int num_samples = 100;
+
+  std::map<int, std::pair<std::vector<int>, std::vector<int>>> h_correct;
+  std::vector<int> h_c(num_samples);
+  std::vector<int> h_i(num_samples);
+  std::vector<int> h_j(num_samples);
+
+  int max_index = -1;
+  for (int ix = 0; ix < num_samples; ix++) {
+    h_c[ix] = dist(rng);
+    h_i[ix] = dist(rng);
+    h_j[ix] = dist(rng);
+    h_correct[h_c[ix]].first.push_back(h_i[ix]);
+    h_correct[h_c[ix]].second.push_back(h_j[ix]);
+    max_index = std::max(max_index, h_i[ix]);
+    max_index = std::max(max_index, h_j[ix]);
+  }
+
+  cellwise_pair_list->push_back(h_c, h_i, h_j);
+
+  {
+    auto h_to_test = cellwise_pair_list->host_get();
+    auto d_to_test = cellwise_pair_list->get();
+
+    int max_pair_count = 0;
+
+    std::vector<INT> h_pair_counts_es(cell_count);
+    sycl_target->queue
+        .memcpy(h_pair_counts_es.data(), d_to_test.d_pair_counts_es,
+                cell_count * sizeof(INT))
+        .wait_and_throw();
+
+    INT es_correct = 0;
+    for (int cx = 0; cx < cell_count; cx++) {
+      ASSERT_EQ(h_correct[cx], h_to_test[cx]);
+      max_pair_count = std::max(max_pair_count,
+                                static_cast<int>(h_to_test[cx].first.size()));
+      ASSERT_EQ(es_correct, h_pair_counts_es.at(cx));
+      es_correct += d_to_test.h_pair_counts[cx];
+    }
+
+    ASSERT_EQ(d_to_test.cell_count, cell_count);
+    ASSERT_EQ(d_to_test.max_index, max_index);
+    ASSERT_EQ(d_to_test.max_pair_count, max_pair_count);
+    ASSERT_EQ(d_to_test.pair_count, num_samples);
+  }
+
+  for (int ix = 0; ix < num_samples; ix++) {
+    h_c[ix] = dist(rng);
+    h_i[ix] = dist(rng);
+    h_j[ix] = dist(rng);
+    h_correct[h_c[ix]].first.push_back(h_i[ix]);
+    h_correct[h_c[ix]].second.push_back(h_j[ix]);
+  }
+
+  cellwise_pair_list->push_back(h_c, h_i, h_j);
+
+  {
+    auto h_to_test = cellwise_pair_list->host_get();
+
+    for (int cx = 0; cx < cell_count; cx++) {
+      ASSERT_EQ(h_correct[cx], h_to_test[cx]);
+    }
+  }
+
+  cellwise_pair_list->clear();
+  {
+    auto h_list = cellwise_pair_list->host_get();
+    ASSERT_EQ(h_list.size(), cell_count);
+    for (int cx = 0; cx < cell_count; cx++) {
+      ASSERT_EQ(h_list.at(cx).first.size(), 0);
+      ASSERT_EQ(h_list.at(cx).second.size(), 0);
+    }
+  }
+
+  {
+    h_c.resize(0);
+    h_i.resize(0);
+    h_j.resize(0);
+    cellwise_pair_list->push_back(h_c, h_i, h_j);
+  }
+
+  {
+    auto h_list = cellwise_pair_list->host_get();
+    ASSERT_EQ(h_list.size(), cell_count);
+    for (int cx = 0; cx < cell_count; cx++) {
+      ASSERT_EQ(h_list.at(cx).first.size(), 0);
+      ASSERT_EQ(h_list.at(cx).second.size(), 0);
+    }
+  }
+
+  sycl_target->free();
+}
+
 TEST(ParticlePairLoop, base) {
 
   int npart_cell = 10;
@@ -211,7 +323,7 @@ TEST(ParticlePairLoop, base) {
       ->execute();
 
   auto cellwise_pair_listA =
-      std::make_shared<DSMC::CellwisePairList>(sycl_target, cell_count);
+      std::make_shared<CellwisePairList>(sycl_target, cell_count);
 
   std::vector<int> c;
   std::vector<int> i;
@@ -298,7 +410,7 @@ TEST(ParticlePairLoop, foo) {
       ->execute();
 
   auto cellwise_pair_listA =
-      std::make_shared<DSMC::CellwisePairList>(sycl_target, cell_count);
+      std::make_shared<CellwisePairList>(sycl_target, cell_count);
 
   std::vector<int> c;
   std::vector<int> i;

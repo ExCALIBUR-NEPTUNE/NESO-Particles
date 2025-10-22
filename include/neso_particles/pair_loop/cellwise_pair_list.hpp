@@ -1,14 +1,14 @@
 #ifndef __NESO_PARTICLES_ALGORITHMS_DSMC_CELLWISE_PAIR_LIST_HPP_
 #define __NESO_PARTICLES_ALGORITHMS_DSMC_CELLWISE_PAIR_LIST_HPP_
 
-#include "../../compute_target.hpp"
-#include "../../containers/cell_dat.hpp"
-#include "../../device_buffers.hpp"
+#include "../compute_target.hpp"
+#include "../containers/cell_dat.hpp"
+#include "../device_buffers.hpp"
 
 #include <map>
 #include <vector>
 
-namespace NESO::Particles::DSMC {
+namespace NESO::Particles {
 
 /**
  * Device type for CellwisePairList.
@@ -96,6 +96,6 @@ public:
 
 using CellwisePairListSharedPtr = std::shared_ptr<CellwisePairList>;
 
-} // namespace NESO::Particles::DSMC
+} // namespace NESO::Particles
 
 #endif
