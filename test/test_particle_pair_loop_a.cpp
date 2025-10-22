@@ -197,6 +197,19 @@ TEST(ParticlePairLoop, base) {
     ASSERT_EQ(neighbour_i, id_j);
   }
 
+  cellwise_pair_listA->clear();
+  pl0->execute();
+  for (std::size_t pairx = 0; pairx < num_to_test; pairx++) {
+    const int cell = c.at(pairx);
+    auto NN = A->get_cell(Sym<INT>("NEIGHBOURS"), cell);
+
+    const int index_i = i.at(pairx);
+    const int index_j = j.at(pairx);
+
+    ASSERT_EQ(NN->at(index_i, 1), 2);
+    ASSERT_EQ(NN->at(index_j, 1), 2);
+  }
+
   sycl_target->free();
 }
 

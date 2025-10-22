@@ -8,7 +8,8 @@
 namespace NESO::Particles {
 
 /**
- * TODO Assumes all pairs are mutually exclusive.
+ * ParticlePairLoop from cellwise pair lists. Assumes all pairs are mutually
+ * exclusive.
  */
 template <typename KERNEL, typename... ARGS>
 class ParticlePairLoopCellwisePairList : public ParticlePairLoopArgs<ARGS...> {
@@ -38,7 +39,12 @@ public:
   typename GetParticlePairLoopKernelType<KERNEL>::type kernel;
 
   /**
-   * TODO
+   * Create a ParticlePairLoop from cellwise pair lists.
+   *
+   * @param name Name for ParticlePairLoop.
+   * @param pair_lists Vector of CellwisePairListAbsolute pair lists.
+   * @param kernel Kernel for pair loop.
+   * @param args... Arguments for pair loop.
    */
   ParticlePairLoopCellwisePairList(
       std::string name,
