@@ -218,7 +218,7 @@ public:
 
     // START OF IMPLEMENTATION TO MOVE INTO A BASE CLASS
     int cell_start_actual = 0;
-    int cell_end_actual = this->cell_count - 1;
+    int cell_end_actual = this->cell_count;
     if (cell_start != std::nullopt) {
       cell_start_actual = cell_start.value();
     }
@@ -229,6 +229,7 @@ public:
 
     ParticleLoopImplementation::ParticleLoopGlobalInfo global_info;
 
+    // TODO WE NEED TWO GLOBAL INFOS FOR A AND B
     global_info.particle_group = get_particle_group(pair_lists[0].A).get();
     global_info.particle_sub_group = nullptr;
 
@@ -293,43 +294,87 @@ public:
 
 TEST(ParticlePairLoop, base) {
 
-  const int npart_cell = 10;
+  int npart_cell = 10;
   const int ndim = 2;
   const int nx = 16;
-  const int ny = 32;
+  const int ny = 33;
   const int nz = 48;
 
   auto [A, sycl_target, cell_count] =
       particle_loop_create_common(npart_cell, ndim, nx, ny, nz);
-  A->add_particle_dat(Sym<INT>("NUM_NEIGHBOURS"), 1);
+  A->add_particle_dat(Sym<INT>("NEIGHBOURS"), 2);
 
   particle_loop(
-      A, [=](auto NN) { NN.at(0) = 0; },
-      Access::write(Sym<INT>("NUM_NEIGHBOURS")))
+      A,
+      [=](auto NN) {
+        NN.at(0) = 0;
+        NN.at(1) = 1;
+      },
+      Access::write(Sym<INT>("NEIGHBOURS")))
       ->execute();
 
   auto cellwise_pair_listA =
       std::make_shared<DSMC::CellwisePairList>(sycl_target, cell_count);
 
-  std::vector<int> c = {0};
-  std::vector<int> i = {0};
-  std::vector<int> j = {1};
+  std::vector<int> c;
+  std::vector<int> i;
+  std::vector<int> j;
+
+  c.reserve(cell_count * npart_cell / 2);
+  i.reserve(cell_count * npart_cell / 2);
+  j.reserve(cell_count * npart_cell / 2);
+
+  std::mt19937 rng(9124234 + sycl_target->comm_pair.rank_parent);
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    npart_cell = A->get_npart_cell(cellx);
+    std::vector<int> pairs(npart_cell);
+    std::iota(pairs.begin(), pairs.end(), 0);
+    std::shuffle(pairs.begin(), pairs.end(), rng);
+    for (int px = 0; px < (npart_cell / 2); px++) {
+      c.push_back(cellx);
+      i.push_back(pairs.at(2 * px));
+      j.push_back(pairs.at(2 * px + 1));
+    }
+  }
+
   cellwise_pair_listA->push_back(c, i, j);
 
   ParticlePairLoopCellwisePairList pl0(
       "particle_pair_loop_test",
       {CellwisePairListAbsolute<ParticleGroup>(A, A, cellwise_pair_listA)},
-      particle_pair_loop_kernel([](auto NN_A, auto NN_B) {
-        NN_A.at(0)++;
-        NN_B.at(0)++;
+      particle_pair_loop_kernel([](auto ID_A, auto ID_B, auto NN_A, auto NN_B) {
+        NN_A.at(0) = ID_B.at(0);
+        NN_B.at(0) = ID_A.at(0);
+        NN_A.at(1)++;
+        NN_B.at(1)++;
       }),
-      Access::A(Access::write(Sym<INT>("NUM_NEIGHBOURS"))),
-      Access::B(Access::write(Sym<INT>("NUM_NEIGHBOURS"))));
+      Access::A(Access::read(Sym<INT>("ID"))),
+      Access::B(Access::read(Sym<INT>("ID"))),
+      Access::A(Access::write(Sym<INT>("NEIGHBOURS"))),
+      Access::B(Access::write(Sym<INT>("NEIGHBOURS"))));
 
   pl0.execute();
 
-  auto NN = A->get_cell(Sym<INT>("NUM_NEIGHBOURS"), 0);
-  nprint(NN->at(0, 0), NN->at(1, 0));
+  const std::size_t num_to_test = c.size();
+  for (std::size_t pairx = 0; pairx < num_to_test; pairx++) {
+    const int cell = c.at(pairx);
+    auto ID = A->get_cell(Sym<INT>("ID"), cell);
+    auto NN = A->get_cell(Sym<INT>("NEIGHBOURS"), cell);
+
+    const int index_i = i.at(pairx);
+    const int index_j = j.at(pairx);
+
+    const INT id_i = ID->at(index_i, 0);
+    const INT id_j = ID->at(index_j, 0);
+    const INT neighbour_i = NN->at(index_i, 0);
+    const INT neighbour_j = NN->at(index_j, 0);
+
+    ASSERT_EQ(NN->at(index_i, 1), 2);
+    ASSERT_EQ(NN->at(index_j, 1), 2);
+    ASSERT_EQ(neighbour_j, id_i);
+    ASSERT_EQ(neighbour_i, id_j);
+  }
 
   sycl_target->free();
 }
