@@ -58,6 +58,8 @@ public:
   virtual inline void wait() = 0;
 };
 
+using ParticlePairLoopBaseSharedPtr = std::shared_ptr<ParticlePairLoopBase>;
+
 /**
  * Wrapper around a kernel for pair looping.
  */
@@ -89,6 +91,20 @@ template <typename KERNEL>
 inline auto particle_pair_loop_kernel(ParticlePairLoopKernel<KERNEL> kernel) {
   return kernel;
 }
+
+/**
+ * Metafunction for getting kernel type.
+ */
+template <typename KERNEL> struct GetParticlePairLoopKernelType {
+  using type = ParticlePairLoopKernel<KERNEL>;
+};
+/**
+ * Metafunction for getting kernel type.
+ */
+template <typename KERNEL>
+struct GetParticlePairLoopKernelType<ParticlePairLoopKernel<KERNEL>> {
+  using type = ParticlePairLoopKernel<KERNEL>;
+};
 
 namespace Access {
 
