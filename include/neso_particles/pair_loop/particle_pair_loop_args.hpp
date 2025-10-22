@@ -1,0 +1,210 @@
+#ifndef _NESO_PARTICLES_PAIR_LOOP_PAIR_LOOP_ARGS_HPP_
+#define _NESO_PARTICLES_PAIR_LOOP_PAIR_LOOP_ARGS_HPP_
+
+#include "../loop/particle_loop_args.hpp"
+#include "../particle_sub_group/particle_sub_group_base.hpp"
+#include "particle_pair_loop_base.hpp"
+
+namespace NESO::Particles {
+
+/**
+ * Base type for handling the arguments for a pair loop.
+ */
+template <typename... ARGS>
+class ParticlePairLoopArgs : public ParticlePairLoopBase {
+protected:
+  /// The types of the parameters for the outside loops.
+  using loop_parameter_type = Tuple::Tuple<loop_parameter_t<
+      typename Access::StripPairGroupAnnotation<ARGS>::type>...>;
+
+  /// The types of the arguments passed to the kernel.
+  using kernel_parameter_type = Tuple::Tuple<kernel_parameter_t<
+      typename Access::StripPairGroupAnnotation<ARGS>::type>...>;
+
+  /// The mask types for the arguments passed to the kernel
+  using KernelMasksType =
+      Tuple::Tuple<typename Access::GetAnotateMask<ARGS>::mask...>;
+
+  /// Tuple of the arguments passed to the ParticlePairLoop on construction.
+  std::tuple<ARGS...> annotated_args;
+  /// Tuple of the arguments with the A/B specification stripped away. These
+  /// should be the same types that would be passed to ParticleLoop.
+  std::tuple<typename Access::StripPairGroupAnnotation<ARGS>::type...> args;
+
+  /// Recursively assemble the tuple args.
+  template <size_t INDEX, typename U> inline void unpack_args(U a0) {
+    std::get<INDEX>(this->annotated_args) = a0;
+    std::get<INDEX>(this->args) = Access::strip_pair_group_annotation(a0);
+  }
+  template <size_t INDEX, typename U, typename... V>
+  inline void unpack_args(U a0, V... args) {
+    std::get<INDEX>(this->annotated_args) = a0;
+    std::get<INDEX>(this->args) = Access::strip_pair_group_annotation(a0);
+    this->unpack_args<INDEX + 1>(args...);
+  }
+
+  /**
+   * Method to compute access to a type wrapped in a shared_ptr.
+   */
+  template <template <typename> typename T, typename U>
+  inline auto create_loop_arg_cast(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      sycl::handler &cgh, T<std::shared_ptr<U>> a) {
+    T<U *> c = {a.obj.get()};
+    return ParticleLoopImplementation::create_loop_arg(global_info, cgh, c);
+  }
+
+  /**
+   * Method to compute access to a type not wrapper in a shared_ptr
+   */
+  template <template <typename> typename T, typename U>
+  inline auto create_loop_arg_cast(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      sycl::handler &cgh, T<U> a) {
+    T<U *> c = {&a.obj};
+    return ParticleLoopImplementation::create_loop_arg(global_info, cgh, c);
+  }
+
+  /// Recursively assemble the outer loop arguments.
+  template <size_t INDEX, size_t SIZE, typename PARAM>
+  inline void create_loop_args_inner(
+      KernelMasksType &kernel_masks_type,
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info_A,
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info_B,
+      sycl::handler &cgh, PARAM &loop_args) {
+    if constexpr (INDEX < SIZE) {
+
+      if constexpr (Access::IsAnnotatedB<decltype(Tuple::get<INDEX>(
+                        kernel_masks_type))>::value) {
+        Tuple::get<INDEX>(loop_args) = create_loop_arg_cast(
+            global_info_B, cgh, std::get<INDEX>(this->args));
+      } else {
+        Tuple::get<INDEX>(loop_args) = create_loop_arg_cast(
+            global_info_A, cgh, std::get<INDEX>(this->args));
+      }
+
+      create_loop_args_inner<INDEX + 1, SIZE>(kernel_masks_type, global_info_A,
+                                              global_info_B, cgh, loop_args);
+    }
+  }
+
+  inline void create_loop_args(
+      sycl::handler &cgh, loop_parameter_type &loop_args,
+      KernelMasksType &kernel_masks_type,
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info_A,
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info_B
+
+  ) {
+    create_loop_args_inner<0, sizeof...(ARGS)>(kernel_masks_type, global_info_A,
+                                               global_info_B, cgh, loop_args);
+  }
+
+  /// recusively assemble the kernel arguments from the loop arguments
+  template <size_t INDEX, size_t SIZE>
+  static inline void create_kernel_args_inner(
+      KernelMasksType &kernel_masks_type,
+      ParticleLoopImplementation::ParticleLoopIteration &iteration_A,
+      ParticleLoopImplementation::ParticleLoopIteration &iteration_B,
+      const loop_parameter_type &loop_args,
+      kernel_parameter_type &kernel_args) {
+
+    if constexpr (INDEX < SIZE) {
+      auto arg = Tuple::get<INDEX>(loop_args);
+
+      if constexpr (Access::IsAnnotatedB<decltype(Tuple::get<INDEX>(
+                        kernel_masks_type))>::value) {
+        ParticleLoopImplementation::create_kernel_arg(
+            iteration_B, arg, Tuple::get<INDEX>(kernel_args));
+      } else {
+        ParticleLoopImplementation::create_kernel_arg(
+            iteration_A, arg, Tuple::get<INDEX>(kernel_args));
+      }
+      create_kernel_args_inner<INDEX + 1, SIZE>(
+          kernel_masks_type, iteration_A, iteration_B, loop_args, kernel_args);
+    }
+  }
+
+  /// called before kernel execution to assemble the kernel arguments.
+  static inline void create_kernel_args(
+      KernelMasksType &kernel_masks_type,
+      ParticleLoopImplementation::ParticleLoopIteration &iteration_A,
+      ParticleLoopImplementation::ParticleLoopIteration &iteration_B,
+      const loop_parameter_type &loop_args,
+      kernel_parameter_type &kernel_args) {
+
+    create_kernel_args_inner<0, sizeof...(ARGS)>(
+        kernel_masks_type, iteration_A, iteration_B, loop_args, kernel_args);
+  }
+
+  ParticleGroupSharedPtr particle_group_A{nullptr};
+  ParticleGroupSharedPtr particle_group_B{nullptr};
+  ParticleSubGroupSharedPtr particle_sub_group_A{nullptr};
+  ParticleSubGroupSharedPtr particle_sub_group_B{nullptr};
+
+  inline void create_global_info(
+      const std::optional<int> cell_start = std::nullopt,
+      const std::optional<int> cell_end = std::nullopt,
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info_A =
+          nullptr,
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info_B =
+          nullptr) {
+
+    int cell_start_actual = 0;
+    int cell_end_actual =
+        this->particle_group_A->domain->mesh->get_cell_count();
+
+    bool all_cells = true;
+    if (cell_start != std::nullopt) {
+      cell_start_actual = cell_start.value();
+      all_cells = false;
+    }
+    if (cell_end != std::nullopt) {
+      cell_end_actual = cell_end.value();
+      all_cells = false;
+    }
+
+    const auto local_size =
+        this->sycl_target->parameters
+            ->template get<SizeTParameter>("LOOP_LOCAL_SIZE")
+            ->value;
+
+    global_info_A->particle_group = this->particle_group_A.get();
+    global_info_A->particle_sub_group =
+        this->particle_sub_group_A ? this->particle_sub_group_A.get() : nullptr;
+    global_info_A->all_cells = all_cells;
+    global_info_A->starting_cell = cell_start_actual;
+    global_info_A->bounding_cell = cell_end_actual;
+    global_info_A->local_size = local_size;
+
+    global_info_B->particle_group = this->particle_group_B.get();
+    global_info_B->particle_sub_group =
+        this->particle_sub_group_B ? this->particle_sub_group_B.get() : nullptr;
+    global_info_B->all_cells = all_cells;
+    global_info_B->starting_cell = cell_start_actual;
+    global_info_B->bounding_cell = cell_end_actual;
+    global_info_B->local_size = local_size;
+  }
+
+public:
+  SYCLTargetSharedPtr sycl_target{nullptr};
+  std::string name;
+  virtual ~ParticlePairLoopArgs<ARGS...>() = default;
+
+  ParticlePairLoopArgs<ARGS...>(SYCLTargetSharedPtr sycl_target,
+                                std::string &name,
+                                ParticleGroupSharedPtr particle_group_A,
+                                ParticleGroupSharedPtr particle_group_B,
+                                ParticleSubGroupSharedPtr particle_sub_group_A,
+                                ParticleSubGroupSharedPtr particle_sub_group_B,
+                                ARGS... args)
+      : particle_group_A(particle_group_A), particle_group_B(particle_group_B),
+        particle_sub_group_A(particle_sub_group_A),
+        particle_sub_group_B(particle_sub_group_B), sycl_target(sycl_target),
+        name(name) {
+    this->unpack_args<0>(args...);
+  }
+};
+
+} // namespace NESO::Particles
+
+#endif

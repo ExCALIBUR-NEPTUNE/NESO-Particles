@@ -17,9 +17,11 @@ struct CellwisePairListDevice {
   int cell_count{0};
   int ***d_pair_list{nullptr};
   int *d_pair_counts{nullptr};
+  INT *d_pair_counts_es{nullptr};
   int *h_pair_counts{nullptr};
   int max_index{0};
   int max_pair_count{0};
+  INT pair_count{0};
 };
 
 /**
@@ -31,12 +33,16 @@ protected:
   std::shared_ptr<CellDat<int>> d_pair_list;
   // The number of pairs in each cell (device)
   std::shared_ptr<BufferDevice<int>> d_pair_counts;
+  // Exclusive scan of the number of pairs in each cell.
+  std::shared_ptr<BufferDevice<INT>> d_pair_counts_es;
   // This number of pairs in each cell (host)
   std::vector<int> h_pair_counts;
   // The max index in the pair list
   int max_index{-1};
   // The max size of the pair lists across all cells.
   int max_pair_count{-1};
+  // The number of pairs.
+  INT pair_count{-1};
 
 public:
   /// Compute device holding pairs.

@@ -1,6 +1,7 @@
 #ifndef _NESO_PARTICLES_PAIR_LOOP_PAIR_LOOP_BASE_HPP_
 #define _NESO_PARTICLES_PAIR_LOOP_PAIR_LOOP_BASE_HPP_
 
+#include "../loop/particle_loop_base.hpp"
 #include <optional>
 
 namespace NESO::Particles {

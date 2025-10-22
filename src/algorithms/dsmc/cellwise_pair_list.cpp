@@ -7,6 +7,8 @@ CellwisePairList::CellwisePairList(SYCLTargetSharedPtr sycl_target,
     : d_pair_list(std::make_shared<CellDat<int>>(sycl_target, cell_count, 2)),
       d_pair_counts(
           std::make_shared<BufferDevice<int>>(sycl_target, cell_count)),
+      d_pair_counts_es(
+          std::make_shared<BufferDevice<INT>>(sycl_target, cell_count)),
       h_pair_counts(std::vector<int>(cell_count)), sycl_target(sycl_target),
       cell_count(cell_count) {
   this->clear();
@@ -75,6 +77,39 @@ void CellwisePairList::push_back(const std::vector<int> &c,
                           sycl::maximum<int>(), d_max_indices.ptr + 1);
 
   this->d_pair_counts->set(this->h_pair_counts);
+  auto k_pair_counts = this->d_pair_counts->ptr;
+
+  auto d_counts =
+      get_resource<BufferDevice<INT>, ResourceStackInterfaceBufferDevice<INT>>(
+          sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<INT>{},
+          sycl_target);
+  d_counts->realloc_no_copy(this->cell_count);
+  INT *k_counts = d_counts->ptr;
+
+  this->sycl_target->queue
+      .parallel_for(sycl::range<1>(this->cell_count),
+                    [=](auto idx) {
+                      k_counts[idx] = static_cast<INT>(k_pair_counts[idx]);
+                    })
+      .wait_and_throw();
+
+  auto e3 = joint_exclusive_scan(this->sycl_target, this->cell_count, k_counts,
+                                 this->d_pair_counts_es->ptr);
+  e3.wait_and_throw();
+
+  restore_resource(sycl_target->resource_stack_map,
+                   ResourceStackKeyBufferDevice<INT>{}, d_counts);
+
+  // Get the total number of pairs
+  INT last_es_count = -1;
+  this->sycl_target->queue
+      .memcpy(&last_es_count,
+              this->d_pair_counts_es->ptr + this->cell_count - 1, sizeof(INT))
+      .wait_and_throw();
+
+  NESOASSERT(last_es_count >= 0, "Bad last cell count.");
+
+  this->pair_count = last_es_count + this->h_pair_counts[this->cell_count - 1];
 
   e0.wait_and_throw();
   e1.wait_and_throw();
@@ -93,13 +128,15 @@ void CellwisePairList::clear() {
   }
   this->max_index = -1;
   this->max_pair_count = -1;
+  this->pair_count = -1;
 }
 
 CellwisePairListDevice CellwisePairList::get() {
   CellwisePairListDevice l = {
-      this->cell_count,         this->d_pair_list->device_ptr(),
-      this->d_pair_counts->ptr, this->h_pair_counts.data(),
-      this->max_index,          this->max_pair_count};
+      this->cell_count,           this->d_pair_list->device_ptr(),
+      this->d_pair_counts->ptr,   this->d_pair_counts_es->ptr,
+      this->h_pair_counts.data(), this->max_index,
+      this->max_pair_count,       this->pair_count};
 
   return l;
 }

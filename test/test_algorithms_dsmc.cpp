@@ -26,22 +26,44 @@ TEST(DSMC, cellwise_pair_list) {
   std::vector<int> h_i(num_samples);
   std::vector<int> h_j(num_samples);
 
+  int max_index = -1;
   for (int ix = 0; ix < num_samples; ix++) {
     h_c[ix] = dist(rng);
     h_i[ix] = dist(rng);
     h_j[ix] = dist(rng);
     h_correct[h_c[ix]].first.push_back(h_i[ix]);
     h_correct[h_c[ix]].second.push_back(h_j[ix]);
+    max_index = std::max(max_index, h_i[ix]);
+    max_index = std::max(max_index, h_j[ix]);
   }
 
   cellwise_pair_list->push_back(h_c, h_i, h_j);
 
   {
     auto h_to_test = cellwise_pair_list->host_get();
+    auto d_to_test = cellwise_pair_list->get();
 
+    int max_pair_count = 0;
+
+    std::vector<INT> h_pair_counts_es(cell_count);
+    sycl_target->queue
+        .memcpy(h_pair_counts_es.data(), d_to_test.d_pair_counts_es,
+                cell_count * sizeof(INT))
+        .wait_and_throw();
+
+    INT es_correct = 0;
     for (int cx = 0; cx < cell_count; cx++) {
       ASSERT_EQ(h_correct[cx], h_to_test[cx]);
+      max_pair_count = std::max(max_pair_count,
+                                static_cast<int>(h_to_test[cx].first.size()));
+      ASSERT_EQ(es_correct, h_pair_counts_es.at(cx));
+      es_correct += d_to_test.h_pair_counts[cx];
     }
+
+    ASSERT_EQ(d_to_test.cell_count, cell_count);
+    ASSERT_EQ(d_to_test.max_index, max_index);
+    ASSERT_EQ(d_to_test.max_pair_count, max_pair_count);
+    ASSERT_EQ(d_to_test.pair_count, num_samples);
   }
 
   for (int ix = 0; ix < num_samples; ix++) {
