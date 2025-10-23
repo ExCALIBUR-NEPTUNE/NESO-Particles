@@ -362,6 +362,152 @@ TEST(ParticlePairLoop, particle_pair_loop_index) {
   sycl_target->free();
 }
 
+TEST(ParticlePairLoop, kernel_rng_base) {
+
+  int npart_cell = 10;
+  const int ndim = 2;
+  const int nx = 16;
+  const int ny = 33;
+  const int nz = 48;
+
+  auto [A, sycl_target, cell_count] =
+      particle_loop_create_common(npart_cell, ndim, nx, ny, nz);
+  A->add_particle_dat(Sym<INT>("NEIGHBOURS"), 2);
+
+  auto reset_loop = particle_loop(
+      A,
+      [=](auto NN) {
+        NN.at(0) = 0;
+        NN.at(1) = 0;
+      },
+      Access::write(Sym<INT>("NEIGHBOURS")));
+
+  reset_loop->execute();
+
+  auto cellwise_pair_listA =
+      std::make_shared<CellwisePairList>(sycl_target, cell_count);
+
+  std::vector<int> c;
+  std::vector<int> i;
+  std::vector<int> j;
+
+  c.reserve(cell_count * npart_cell / 2);
+  i.reserve(cell_count * npart_cell / 2);
+  j.reserve(cell_count * npart_cell / 2);
+
+  std::mt19937 rng(9124234 + sycl_target->comm_pair.rank_parent);
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    npart_cell = A->get_npart_cell(cellx);
+    std::vector<int> pairs(npart_cell);
+    std::iota(pairs.begin(), pairs.end(), 0);
+    std::shuffle(pairs.begin(), pairs.end(), rng);
+    for (int px = 0; px < (npart_cell / 2); px++) {
+      c.push_back(cellx);
+      i.push_back(pairs.at(2 * px));
+      j.push_back(pairs.at(2 * px + 1));
+    }
+  }
+
+  cellwise_pair_listA->push_back(c, i, j);
+
+  INT rng_index = 1;
+  std::set<INT> sampled_values;
+  auto rng_lambda = [&]() -> INT {
+    INT value = rng_index++;
+    sampled_values.insert(value);
+    return value;
+  };
+
+  const int rng_ncomp = 2;
+  auto rng_block_kernel =
+      host_per_particle_block_rng<INT>(rng_lambda, rng_ncomp);
+
+  auto pl0 = particle_pair_loop(
+      "particle_pair_loop_test",
+      {CellwisePairListAbsolute<ParticleGroup>(A, A, cellwise_pair_listA)},
+      [](auto PAIR_INDEX, auto RNG, auto NN_i, auto NN_j) {
+        bool valid = true;
+        NN_i.at(0) = 1;
+        NN_i.at(1) = RNG.at(PAIR_INDEX, 0, &valid);
+        NN_j.at(0) = 1;
+        NN_j.at(1) = RNG.at(PAIR_INDEX, 1, &valid);
+      },
+      Access::read(ParticlePairLoopIndex{}), Access::read(rng_block_kernel),
+      Access::A(Access::write(Sym<INT>("NEIGHBOURS"))),
+      Access::B(Access::write(Sym<INT>("NEIGHBOURS"))));
+
+  pl0->execute();
+
+  std::set<INT> seen_rng_values;
+  const std::size_t num_to_test = c.size();
+  for (std::size_t pairx = 0; pairx < num_to_test; pairx++) {
+    const int cell = c.at(pairx);
+    auto NN = A->get_cell(Sym<INT>("NEIGHBOURS"), cell);
+
+    const int index_i = i.at(pairx);
+    const int index_j = j.at(pairx);
+
+    const INT NN_i0 = NN->at(index_i, 0);
+    const INT NN_j0 = NN->at(index_j, 0);
+    const INT NN_i1 = NN->at(index_i, 1);
+    const INT NN_j1 = NN->at(index_j, 1);
+
+    ASSERT_EQ(NN_i0, 1);
+    ASSERT_EQ(NN_j0, 1);
+
+    ASSERT_FALSE(seen_rng_values.count(NN_i1));
+    seen_rng_values.insert(NN_i1);
+    ASSERT_FALSE(seen_rng_values.count(NN_j1));
+    seen_rng_values.insert(NN_j1);
+  }
+
+  ASSERT_TRUE(rng_block_kernel->valid_internal_state());
+
+  auto rng_atomic_kernel =
+      host_atomic_block_kernel_rng<INT>(rng_lambda, rng_ncomp);
+  auto pl1 = particle_pair_loop(
+      "particle_pair_loop_test",
+      {CellwisePairListAbsolute<ParticleGroup>(A, A, cellwise_pair_listA)},
+      [](auto PAIR_INDEX, auto RNG, auto NN_i, auto NN_j) {
+        bool valid = true;
+        NN_i.at(0) = 1;
+        NN_i.at(1) = RNG.at(PAIR_INDEX, 0, &valid);
+        NN_j.at(0) = 1;
+        NN_j.at(1) = RNG.at(PAIR_INDEX, 1, &valid);
+      },
+      Access::read(ParticlePairLoopIndex{}), Access::read(rng_atomic_kernel),
+      Access::A(Access::write(Sym<INT>("NEIGHBOURS"))),
+      Access::B(Access::write(Sym<INT>("NEIGHBOURS"))));
+
+  pl1->execute();
+
+  for (std::size_t pairx = 0; pairx < num_to_test; pairx++) {
+    const int cell = c.at(pairx);
+    auto NN = A->get_cell(Sym<INT>("NEIGHBOURS"), cell);
+
+    const int index_i = i.at(pairx);
+    const int index_j = j.at(pairx);
+
+    const INT NN_i0 = NN->at(index_i, 0);
+    const INT NN_j0 = NN->at(index_j, 0);
+    const INT NN_i1 = NN->at(index_i, 1);
+    const INT NN_j1 = NN->at(index_j, 1);
+
+    ASSERT_EQ(NN_i0, 1);
+    ASSERT_EQ(NN_j0, 1);
+
+    ASSERT_FALSE(seen_rng_values.count(NN_i1));
+    seen_rng_values.insert(NN_i1);
+    ASSERT_FALSE(seen_rng_values.count(NN_j1));
+    seen_rng_values.insert(NN_j1);
+  }
+
+  ASSERT_TRUE(rng_atomic_kernel->valid_internal_state());
+
+  sycl_target->free();
+}
+
 TEST(ParticlePairLoop, foo) {
 
   int npart_cell = 1000;

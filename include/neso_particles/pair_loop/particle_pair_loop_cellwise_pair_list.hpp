@@ -45,6 +45,9 @@ protected:
     return num_pairs;
   }
 
+  ParticleLoopImplementation::ParticleLoopGlobalInfo global_info_A;
+  ParticleLoopImplementation::ParticleLoopGlobalInfo global_info_B;
+
 public:
   std::vector<CellwisePairListAbsolute<ParticleGroup>> pair_lists;
   typename GetParticlePairLoopKernelType<KERNEL>::type kernel;
@@ -119,12 +122,12 @@ public:
     this->event_stack.push(
         this->d_pair_list_counts_es->set_async(this->h_pair_list_counts_es));
 
-    ParticleLoopImplementation::ParticleLoopGlobalInfo global_info_A;
-    ParticleLoopImplementation::ParticleLoopGlobalInfo global_info_B;
-
     // Create global info needs to be called after h_pair_lists_device is set.
     this->create_global_info(cell_start, cell_end, &global_info_A,
                              &global_info_B);
+
+    // TODO dispatch with A and B?
+    this->apply_pre_loop(global_info_A);
 
     const auto cell_start_actual = global_info_A.starting_cell;
     const auto cell_end_actual = global_info_A.bounding_cell;
@@ -209,7 +212,14 @@ public:
     }
   }
 
-  virtual inline void wait() override { this->event_stack.wait(); }
+  virtual inline void wait() override {
+    this->event_stack.wait();
+    auto cast_wrapper = [&](auto t) {
+      this->post_loop_cast(&this->global_info_A, t);
+    };
+    auto post_loop_caller = [&](auto... as) { (cast_wrapper(as), ...); };
+    std::apply(post_loop_caller, this->args);
+  }
 };
 
 /**

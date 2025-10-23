@@ -1,6 +1,7 @@
 #ifndef _NESO_PARTICLES_PAIR_LOOP_PAIR_LOOP_ARGS_HPP_
 #define _NESO_PARTICLES_PAIR_LOOP_PAIR_LOOP_ARGS_HPP_
 
+#include "../containers/rng/kernel_rng.hpp"
 #include "../loop/particle_loop_args.hpp"
 #include "../particle_sub_group/particle_sub_group_base.hpp"
 #include "particle_pair_loop_base.hpp"
@@ -42,6 +43,55 @@ protected:
     std::get<INDEX>(this->annotated_args) = a0;
     std::get<INDEX>(this->args) = Access::strip_pair_group_annotation(a0);
     this->unpack_args<INDEX + 1>(args...);
+  }
+
+  /**
+   * Method to compute access to a type wrapped in a shared_ptr.
+   */
+  template <template <typename> typename T, typename U>
+  inline void
+  pre_loop_cast(ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+                T<std::shared_ptr<U>> a) {
+    T<U *> c = {a.obj.get()};
+    ParticleLoopImplementation::pre_loop(global_info, c);
+  }
+  /**
+   * Method to compute access to a type not wrapper in a shared_ptr
+   */
+  template <template <typename> typename T, typename U>
+  inline void
+  pre_loop_cast(ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+                T<U> a) {
+    T<U *> c = {&a.obj};
+    ParticleLoopImplementation::pre_loop(global_info, c);
+  }
+
+  inline void apply_pre_loop(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo &global_info) {
+    auto cast_wrapper = [&](auto t) { pre_loop_cast(&global_info, t); };
+    auto pre_loop_caller = [&](auto... as) { (cast_wrapper(as), ...); };
+    std::apply(pre_loop_caller, this->args);
+  }
+
+  /**
+   * Method to compute access to a type wrapped in a shared_ptr.
+   */
+  template <template <typename> typename T, typename U>
+  static inline auto post_loop_cast(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      T<std::shared_ptr<U>> a) {
+    T<U *> c = {a.obj.get()};
+    ParticleLoopImplementation::post_loop(global_info, c);
+  }
+
+  /**
+   * Method to compute access to a type not wrapper in a shared_ptr
+   */
+  template <template <typename> typename T, typename U>
+  static inline auto post_loop_cast(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info, T<U> a) {
+    T<U *> c = {&a.obj};
+    ParticleLoopImplementation::post_loop(global_info, c);
   }
 
   /**
