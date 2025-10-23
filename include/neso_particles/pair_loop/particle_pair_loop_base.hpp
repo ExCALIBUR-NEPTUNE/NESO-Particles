@@ -219,6 +219,20 @@ inline auto strip_pair_group_annotation(B<ARG> &annotated_arg) {
 
 } // namespace Access
 
+namespace ParticlePairLoopImplementation {
+
+/**
+ * The description of the iteration index for pair loops.
+ */
+struct ParticlePairLoopIteration {
+  /// index in the sycl nd range.
+  sycl::nd_item<3> *work_item{nullptr};
+  /// The linear index of the pair of particles.
+  INT pair_index{0};
+};
+
+} // namespace ParticlePairLoopImplementation
+
 } // namespace NESO::Particles
 
 #endif

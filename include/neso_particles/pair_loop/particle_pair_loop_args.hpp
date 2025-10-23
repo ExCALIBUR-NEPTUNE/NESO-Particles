@@ -102,6 +102,7 @@ protected:
   /// recusively assemble the kernel arguments from the loop arguments
   template <size_t INDEX, size_t SIZE>
   static inline void create_kernel_args_inner(
+      ParticlePairLoopImplementation::ParticlePairLoopIteration &iteration,
       KernelMasksType &kernel_masks_type,
       ParticleLoopImplementation::ParticleLoopIteration &iteration_A,
       ParticleLoopImplementation::ParticleLoopIteration &iteration_B,
@@ -113,27 +114,30 @@ protected:
 
       if constexpr (Access::IsAnnotatedB<decltype(Tuple::get<INDEX>(
                         kernel_masks_type))>::value) {
-        ParticleLoopImplementation::create_kernel_arg(
-            iteration_B, arg, Tuple::get<INDEX>(kernel_args));
+        ParticlePairLoopImplementation::create_kernel_arg(
+            iteration, iteration_B, arg, Tuple::get<INDEX>(kernel_args));
       } else {
-        ParticleLoopImplementation::create_kernel_arg(
-            iteration_A, arg, Tuple::get<INDEX>(kernel_args));
+        ParticlePairLoopImplementation::create_kernel_arg(
+            iteration, iteration_A, arg, Tuple::get<INDEX>(kernel_args));
       }
-      create_kernel_args_inner<INDEX + 1, SIZE>(
-          kernel_masks_type, iteration_A, iteration_B, loop_args, kernel_args);
+      create_kernel_args_inner<INDEX + 1, SIZE>(iteration, kernel_masks_type,
+                                                iteration_A, iteration_B,
+                                                loop_args, kernel_args);
     }
   }
 
   /// called before kernel execution to assemble the kernel arguments.
   static inline void create_kernel_args(
+      ParticlePairLoopImplementation::ParticlePairLoopIteration &iteration,
       KernelMasksType &kernel_masks_type,
       ParticleLoopImplementation::ParticleLoopIteration &iteration_A,
       ParticleLoopImplementation::ParticleLoopIteration &iteration_B,
       const loop_parameter_type &loop_args,
       kernel_parameter_type &kernel_args) {
 
-    create_kernel_args_inner<0, sizeof...(ARGS)>(
-        kernel_masks_type, iteration_A, iteration_B, loop_args, kernel_args);
+    create_kernel_args_inner<0, sizeof...(ARGS)>(iteration, kernel_masks_type,
+                                                 iteration_A, iteration_B,
+                                                 loop_args, kernel_args);
   }
 
   ParticleGroupSharedPtr particle_group_A{nullptr};

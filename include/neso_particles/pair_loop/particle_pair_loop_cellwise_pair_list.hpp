@@ -136,48 +136,57 @@ public:
           this->sycl_target->device_limits.validate_nd_range(
               sycl::nd_range<3>(global_iteration_set, local_iteration_set));
 
-      this->event_stack.push(
-          this->sycl_target->queue.submit([&](sycl::handler &cgh) {
-            loop_parameter_type loop_args;
+      this->event_stack.push(this->sycl_target->queue.submit([&](sycl::handler
+                                                                     &cgh) {
+        loop_parameter_type loop_args;
+        KernelMasksType kernel_masks;
+        this->create_loop_args(cgh, loop_args, kernel_masks, &global_info_A,
+                               &global_info_B);
+
+        cgh.parallel_for(nd_iteration_set, [=](sycl::nd_item<3> idx) {
+          const std::size_t index_cell =
+              idx.get_global_id(0) + cell_start_actual;
+          const std::size_t index_list = idx.get_global_id(1);
+          const std::size_t index_pair = idx.get_global_id(2);
+
+          const auto *pair_list = &k_pair_lists[index_list];
+          const auto num_pairs =
+              static_cast<std::size_t>(pair_list->d_pair_counts[index_cell]);
+
+          ParticlePairLoopImplementation::ParticlePairLoopIteration iteration;
+          iteration.work_item = &idx;
+          // TODO compute the pair index
+
+          ParticleLoopImplementation::ParticleLoopIteration iteration_A;
+          ParticleLoopImplementation::ParticleLoopIteration iteration_B;
+
+          if (index_pair < num_pairs) {
+            const int particle_index_a =
+                pair_list->d_pair_list[index_cell][0][index_pair];
+            const int particle_index_b =
+                pair_list->d_pair_list[index_cell][1][index_pair];
+
+            iteration_A.local_sycl_index = idx.get_local_linear_id();
+            iteration_A.local_sycl_range =
+                idx.get_group().get_local_linear_range();
+            iteration_A.cellx = index_cell;
+            iteration_A.layerx = particle_index_a;
+
+            iteration_B.local_sycl_index = idx.get_local_linear_id();
+            iteration_B.local_sycl_range =
+                idx.get_group().get_local_linear_range();
+            iteration_B.cellx = index_cell;
+            iteration_B.layerx = particle_index_b;
+
+            kernel_parameter_type kernel_args;
             KernelMasksType kernel_masks;
-            this->create_loop_args(cgh, loop_args, kernel_masks, &global_info_A,
-                                   &global_info_B);
 
-            cgh.parallel_for(nd_iteration_set, [=](sycl::nd_item<3> idx) {
-              const std::size_t index_cell =
-                  idx.get_global_id(0) + cell_start_actual;
-              const std::size_t index_list = idx.get_global_id(1);
-              const std::size_t index_pair = idx.get_global_id(2);
-
-              const auto *pair_list = &k_pair_lists[index_list];
-              const auto num_pairs = static_cast<std::size_t>(
-                  pair_list->d_pair_counts[index_cell]);
-
-              ParticleLoopImplementation::ParticleLoopIteration iteration_A;
-              ParticleLoopImplementation::ParticleLoopIteration iteration_B;
-
-              if (index_pair < num_pairs) {
-                const int particle_index_a =
-                    pair_list->d_pair_list[index_cell][0][index_pair];
-                const int particle_index_b =
-                    pair_list->d_pair_list[index_cell][1][index_pair];
-
-                // Now we can create the kernel args. We need to update the
-                // kernel arg creation to dispatch for A or B.
-                iteration_A.cellx = index_cell;
-                iteration_A.layerx = particle_index_a;
-                iteration_B.cellx = index_cell;
-                iteration_B.layerx = particle_index_b;
-
-                kernel_parameter_type kernel_args;
-                KernelMasksType kernel_masks;
-
-                create_kernel_args(kernel_masks, iteration_A, iteration_B,
-                                   loop_args, kernel_args);
-                Tuple::apply(k_kernel, kernel_args);
-              }
-            });
-          }));
+            create_kernel_args(iteration, kernel_masks, iteration_A,
+                               iteration_B, loop_args, kernel_args);
+            Tuple::apply(k_kernel, kernel_args);
+          }
+        });
+      }));
     }
   }
 
