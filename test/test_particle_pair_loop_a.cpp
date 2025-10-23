@@ -275,6 +275,93 @@ TEST(ParticlePairLoop, base) {
   sycl_target->free();
 }
 
+TEST(ParticlePairLoop, particle_pair_loop_index) {
+
+  int npart_cell = 10;
+  const int ndim = 2;
+  const int nx = 16;
+  const int ny = 33;
+  const int nz = 48;
+
+  auto [A, sycl_target, cell_count] =
+      particle_loop_create_common(npart_cell, ndim, nx, ny, nz);
+  A->add_particle_dat(Sym<INT>("NEIGHBOURS"), 2);
+
+  auto reset_loop = particle_loop(
+      A,
+      [=](auto NN) {
+        NN.at(0) = 0;
+        NN.at(1) = 0;
+      },
+      Access::write(Sym<INT>("NEIGHBOURS")));
+
+  reset_loop->execute();
+
+  auto cellwise_pair_listA =
+      std::make_shared<CellwisePairList>(sycl_target, cell_count);
+
+  std::vector<int> c;
+  std::vector<int> i;
+  std::vector<int> j;
+
+  c.reserve(cell_count * npart_cell / 2);
+  i.reserve(cell_count * npart_cell / 2);
+  j.reserve(cell_count * npart_cell / 2);
+
+  std::mt19937 rng(9124234 + sycl_target->comm_pair.rank_parent);
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    npart_cell = A->get_npart_cell(cellx);
+    std::vector<int> pairs(npart_cell);
+    std::iota(pairs.begin(), pairs.end(), 0);
+    std::shuffle(pairs.begin(), pairs.end(), rng);
+    for (int px = 0; px < (npart_cell / 2); px++) {
+      c.push_back(cellx);
+      i.push_back(pairs.at(2 * px));
+      j.push_back(pairs.at(2 * px + 1));
+    }
+  }
+
+  cellwise_pair_listA->push_back(c, i, j);
+
+  auto pl0 = particle_pair_loop(
+      "particle_pair_loop_test",
+      {CellwisePairListAbsolute<ParticleGroup>(A, A, cellwise_pair_listA)},
+      [](auto PAIR_INDEX, auto NN_i, auto NN_j) {
+        NN_i.at(0) = PAIR_INDEX.get_loop_linear_index();
+        NN_i.at(1) = 1;
+        NN_j.at(1) = 2;
+      },
+      Access::read(ParticlePairLoopIndex{}),
+      Access::A(Access::write(Sym<INT>("NEIGHBOURS"))),
+      Access::B(Access::write(Sym<INT>("NEIGHBOURS"))));
+
+  pl0->execute();
+
+  std::set<INT> linear_ids_to_test;
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto NN = A->get_cell(Sym<INT>("NEIGHBOURS"), cellx);
+    const int nrow = NN->nrow;
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      if (NN->at(rowx, 1) == 1) {
+        const INT linear_id = NN->at(rowx, 0);
+        ASSERT_FALSE(linear_ids_to_test.count(linear_id));
+        linear_ids_to_test.insert(linear_id);
+      }
+    }
+  }
+
+  std::vector<INT> stage_linear_indices(c.size());
+  std::iota(stage_linear_indices.begin(), stage_linear_indices.end(), 0);
+  std::set<INT> linear_ids_correct;
+  for (INT ix : stage_linear_indices) {
+    linear_ids_correct.insert(ix);
+  }
+  ASSERT_EQ(linear_ids_correct, linear_ids_to_test);
+
+  sycl_target->free();
+}
+
 TEST(ParticlePairLoop, foo) {
 
   int npart_cell = 1000;

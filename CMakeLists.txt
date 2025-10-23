@@ -249,8 +249,9 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/cellwise_pair_list.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/cellwise_pair_list_absolute.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/pair_loop.hpp
-    ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/particle_pair_loop_base.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/particle_pair_loop_args.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/particle_pair_loop_base.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/particle_pair_loop_index.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/particle_pair_loop_cellwise_pair_list.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/parallel_initialisation.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/parameters.hpp

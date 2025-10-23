@@ -34,6 +34,9 @@ protected:
   int cell_count{0};
   EventStack event_stack;
 
+  std::vector<INT> h_pair_list_counts_es;
+  std::shared_ptr<BufferDevice<INT>> d_pair_list_counts_es;
+
   virtual inline std::size_t get_iteration_set_size() override {
     std::size_t num_pairs = 0;
     for (const auto &ix : this->h_pair_lists_device) {
@@ -81,6 +84,9 @@ public:
           std::make_shared<BufferDevice<CellwisePairListDevice>>(
               this->sycl_target, pair_lists.size());
       this->h_pair_lists_device.resize(pair_lists.size());
+      this->h_pair_list_counts_es.resize(pair_lists.size());
+      this->d_pair_list_counts_es = std::make_shared<BufferDevice<INT>>(
+          this->sycl_target, pair_lists.size());
     }
   }
 
@@ -98,13 +104,20 @@ public:
              std::nullopt) override {
 
     int max_pair_count = 0;
+    INT pair_list_counts_es = 0;
     for (std::size_t listx = 0; listx < this->num_pair_lists; listx++) {
       this->h_pair_lists_device[listx] =
           this->pair_lists[listx].pair_list->get();
       max_pair_count = std::max(
           max_pair_count, this->h_pair_lists_device[listx].max_pair_count);
+      // Assemble the exclusive counts across the lists.
+      this->h_pair_list_counts_es[listx] = pair_list_counts_es;
+      pair_list_counts_es += this->h_pair_lists_device[listx].pair_count;
     }
-    auto e0 = this->d_pair_lists_device->set_async(this->h_pair_lists_device);
+    this->event_stack.push(
+        this->d_pair_lists_device->set_async(this->h_pair_lists_device));
+    this->event_stack.push(
+        this->d_pair_list_counts_es->set_async(this->h_pair_list_counts_es));
 
     ParticleLoopImplementation::ParticleLoopGlobalInfo global_info_A;
     ParticleLoopImplementation::ParticleLoopGlobalInfo global_info_B;
@@ -117,12 +130,13 @@ public:
     const auto cell_end_actual = global_info_A.bounding_cell;
     const int cell_count_iteration = cell_end_actual - cell_start_actual;
 
-    e0.wait_and_throw();
+    this->event_stack.wait();
     if ((max_pair_count > 0) && (this->num_pair_lists > 0) &&
         (cell_count_iteration > 0)) {
 
       auto k_kernel = this->kernel.kernel;
       auto k_pair_lists = this->d_pair_lists_device->ptr;
+      auto k_pair_list_counts_es = this->d_pair_list_counts_es->ptr;
       std::size_t local_size = global_info_A.local_size;
 
       sycl::range<3> local_iteration_set(1, 1, local_size);
@@ -153,6 +167,9 @@ public:
           const auto num_pairs =
               static_cast<std::size_t>(pair_list->d_pair_counts[index_cell]);
 
+          const INT offset_list = k_pair_list_counts_es[index_list];
+          const INT offset_cell = pair_list->d_pair_counts_es[index_cell];
+
           ParticlePairLoopImplementation::ParticlePairLoopIteration iteration;
           iteration.work_item = &idx;
           // TODO compute the pair index
@@ -165,6 +182,8 @@ public:
                 pair_list->d_pair_list[index_cell][0][index_pair];
             const int particle_index_b =
                 pair_list->d_pair_list[index_cell][1][index_pair];
+
+            iteration.pair_index = offset_list + offset_cell + index_pair;
 
             iteration_A.local_sycl_index = idx.get_local_linear_id();
             iteration_A.local_sycl_range =

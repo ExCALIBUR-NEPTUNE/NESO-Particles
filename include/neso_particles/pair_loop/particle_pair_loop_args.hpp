@@ -4,6 +4,7 @@
 #include "../loop/particle_loop_args.hpp"
 #include "../particle_sub_group/particle_sub_group_base.hpp"
 #include "particle_pair_loop_base.hpp"
+#include "particle_pair_loop_index.hpp"
 
 namespace NESO::Particles {
 
