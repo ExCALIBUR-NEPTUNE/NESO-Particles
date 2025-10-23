@@ -153,14 +153,15 @@ TEST(ParticlePairLoop, base) {
       particle_loop_create_common(npart_cell, ndim, nx, ny, nz);
   A->add_particle_dat(Sym<INT>("NEIGHBOURS"), 2);
 
-  particle_loop(
+  auto reset_loop = particle_loop(
       A,
       [=](auto NN) {
         NN.at(0) = 0;
         NN.at(1) = 1;
       },
-      Access::write(Sym<INT>("NEIGHBOURS")))
-      ->execute();
+      Access::write(Sym<INT>("NEIGHBOURS")));
+
+  reset_loop->execute();
 
   auto cellwise_pair_listA =
       std::make_shared<CellwisePairList>(sycl_target, cell_count);
@@ -225,6 +226,39 @@ TEST(ParticlePairLoop, base) {
     ASSERT_EQ(neighbour_i, id_j);
   }
 
+  reset_loop->execute();
+
+  const int cell_start = 1;
+  const int cell_end = std::max(cell_start, cell_count - 1);
+  pl0->execute(cell_start, cell_end);
+
+  for (std::size_t pairx = 0; pairx < num_to_test; pairx++) {
+    const int cell = c.at(pairx);
+    const int index_i = i.at(pairx);
+    const int index_j = j.at(pairx);
+
+    auto ID = A->get_cell(Sym<INT>("ID"), cell);
+    auto NN = A->get_cell(Sym<INT>("NEIGHBOURS"), cell);
+
+    if ((cell_start <= cell) && (cell < cell_end)) {
+      const INT id_i = ID->at(index_i, 0);
+      const INT id_j = ID->at(index_j, 0);
+      const INT neighbour_i = NN->at(index_i, 0);
+      const INT neighbour_j = NN->at(index_j, 0);
+
+      ASSERT_EQ(NN->at(index_i, 1), 2);
+      ASSERT_EQ(NN->at(index_j, 1), 2);
+      ASSERT_EQ(neighbour_j, id_i);
+      ASSERT_EQ(neighbour_i, id_j);
+    } else {
+      ASSERT_EQ(NN->at(index_i, 0), 0);
+      ASSERT_EQ(NN->at(index_j, 0), 0);
+      ASSERT_EQ(NN->at(index_i, 1), 1);
+      ASSERT_EQ(NN->at(index_j, 1), 1);
+    }
+  }
+
+  reset_loop->execute();
   cellwise_pair_listA->clear();
   pl0->execute();
   for (std::size_t pairx = 0; pairx < num_to_test; pairx++) {
@@ -234,8 +268,8 @@ TEST(ParticlePairLoop, base) {
     const int index_i = i.at(pairx);
     const int index_j = j.at(pairx);
 
-    ASSERT_EQ(NN->at(index_i, 1), 2);
-    ASSERT_EQ(NN->at(index_j, 1), 2);
+    ASSERT_EQ(NN->at(index_i, 1), 1);
+    ASSERT_EQ(NN->at(index_j, 1), 1);
   }
 
   sycl_target->free();
