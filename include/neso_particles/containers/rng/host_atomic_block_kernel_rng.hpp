@@ -123,7 +123,7 @@ public:
     this->internal_state = 1;
 
     if (this->num_components > 0) {
-      const auto num_particles = get_loop_npart(global_info);
+      const auto num_particles = get_loop_iteration_set_size(global_info);
       auto sycl_target = global_info->particle_group->sycl_target;
       auto t0 = profile_timestamp();
 

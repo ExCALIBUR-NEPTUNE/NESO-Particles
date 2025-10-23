@@ -113,6 +113,34 @@ TEST(ParticlePairLoop, cellwise_pair_list) {
   sycl_target->free();
 }
 
+TEST(ParticlePairLoop, iteration_set_size) {
+
+  int npart_cell = 10;
+  const int ndim = 2;
+  const int nx = 16;
+  const int ny = 33;
+  const int nz = 48;
+
+  auto [A, sycl_target, cell_count] =
+      particle_loop_create_common(npart_cell, ndim, nx, ny, nz);
+  ParticleLoopImplementation::ParticleLoopGlobalInfo global_info;
+
+  global_info.particle_group = A.get();
+  global_info.all_cells = true;
+  global_info.starting_cell = 0;
+  global_info.bounding_cell = cell_count;
+  ASSERT_EQ(get_loop_npart(&global_info), A->get_npart_local());
+  ASSERT_EQ(get_loop_iteration_set_size(&global_info), A->get_npart_local());
+  ASSERT_TRUE(global_info.provided_iteration_set_size);
+  ASSERT_EQ(global_info.iteration_set_size, A->get_npart_local());
+
+  global_info.iteration_set_size++;
+  ASSERT_EQ(get_loop_iteration_set_size(&global_info),
+            A->get_npart_local() + 1);
+
+  sycl_target->free();
+}
+
 TEST(ParticlePairLoop, base) {
 
   int npart_cell = 10;
