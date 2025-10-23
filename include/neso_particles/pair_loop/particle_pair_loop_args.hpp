@@ -141,6 +141,11 @@ protected:
   ParticleSubGroupSharedPtr particle_sub_group_A{nullptr};
   ParticleSubGroupSharedPtr particle_sub_group_B{nullptr};
 
+  /**
+   * @returns The number of pairs in the iteration set.
+   */
+  virtual inline std::size_t get_iteration_set_size() = 0;
+
   inline void create_global_info(
       const std::optional<int> cell_start = std::nullopt,
       const std::optional<int> cell_end = std::nullopt,
@@ -150,23 +155,27 @@ protected:
           nullptr) {
 
     int cell_start_actual = 0;
-    int cell_end_actual =
+    const int cell_count =
         this->particle_group_A->domain->mesh->get_cell_count();
+    int cell_end_actual = cell_count;
 
-    bool all_cells = true;
     if (cell_start != std::nullopt) {
       cell_start_actual = cell_start.value();
-      all_cells = false;
     }
     if (cell_end != std::nullopt) {
       cell_end_actual = cell_end.value();
-      all_cells = false;
     }
+
+    const bool default_start = cell_start_actual == 0;
+    const bool default_end = cell_end_actual == cell_count;
+    const bool all_cells = default_start && default_end;
 
     const auto local_size =
         this->sycl_target->parameters
             ->template get<SizeTParameter>("LOOP_LOCAL_SIZE")
             ->value;
+
+    const auto iteration_set_size = this->get_iteration_set_size();
 
     global_info_A->particle_group = this->particle_group_A.get();
     global_info_A->particle_sub_group =
@@ -175,6 +184,8 @@ protected:
     global_info_A->starting_cell = cell_start_actual;
     global_info_A->bounding_cell = cell_end_actual;
     global_info_A->local_size = local_size;
+    global_info_A->provided_iteration_set_size = true;
+    global_info_A->iteration_set_size = iteration_set_size;
 
     global_info_B->particle_group = this->particle_group_B.get();
     global_info_B->particle_sub_group =
@@ -183,6 +194,8 @@ protected:
     global_info_B->starting_cell = cell_start_actual;
     global_info_B->bounding_cell = cell_end_actual;
     global_info_B->local_size = local_size;
+    global_info_B->provided_iteration_set_size = true;
+    global_info_B->iteration_set_size = iteration_set_size;
   }
 
 public:

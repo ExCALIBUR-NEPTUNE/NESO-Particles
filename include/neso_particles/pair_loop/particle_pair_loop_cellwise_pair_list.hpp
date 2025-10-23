@@ -34,6 +34,14 @@ protected:
   int cell_count{0};
   EventStack event_stack;
 
+  virtual inline std::size_t get_iteration_set_size() override {
+    std::size_t num_pairs = 0;
+    for (const auto &ix : this->h_pair_lists_device) {
+      num_pairs += static_cast<std::size_t>(ix.pair_count);
+    }
+    return num_pairs;
+  }
+
 public:
   std::vector<CellwisePairListAbsolute<ParticleGroup>> pair_lists;
   typename GetParticlePairLoopKernelType<KERNEL>::type kernel;
@@ -101,6 +109,7 @@ public:
     ParticleLoopImplementation::ParticleLoopGlobalInfo global_info_A;
     ParticleLoopImplementation::ParticleLoopGlobalInfo global_info_B;
 
+    // Create global info needs to be called after h_pair_lists_device is set.
     this->create_global_info(cell_start, cell_end, &global_info_A,
                              &global_info_B);
 
