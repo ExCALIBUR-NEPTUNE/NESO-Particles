@@ -66,6 +66,7 @@ void CellSubGroupSelector::create(Selection *created_selection) {
       const auto k_npart_cell = d_npart_cell_ptr;
       const auto k_cell_starts =
           this->sub_group_particle_map->d_cell_starts->ptr;
+      const auto k_cell_start = this->cell_start;
 
       es.wait();
       es.push(sycl_target->queue.parallel_for(
@@ -73,7 +74,7 @@ void CellSubGroupSelector::create(Selection *created_selection) {
               sycl::nd_range<2>(sycl::range<2>(range_cell_count, range_cell),
                                 sycl::range<2>(1, local_size))),
           [=](sycl::nd_item<2> idx) {
-            const std::size_t index_cell = idx.get_global_id(0) + cell_start;
+            const std::size_t index_cell = idx.get_global_id(0) + k_cell_start;
             const std::size_t index_layer = idx.get_global_id(1);
             if (index_layer < k_npart_cell[index_cell]) {
               k_cell_starts[index_cell][index_layer] = index_layer;
@@ -139,6 +140,7 @@ void CellSubGroupSelector::create(Selection *created_selection) {
       const auto k_cell_starts =
           this->sub_group_particle_map->d_cell_starts->ptr;
       const auto k_parent_map = s_parent.d_map_cells_to_particles;
+      const auto k_cell_start = this->cell_start;
 
       es.wait();
       es.push(sycl_target->queue.parallel_for(
@@ -146,7 +148,7 @@ void CellSubGroupSelector::create(Selection *created_selection) {
               sycl::nd_range<2>(sycl::range<2>(range_cell_count, range_cell),
                                 sycl::range<2>(1, local_size))),
           [=](sycl::nd_item<2> idx) {
-            const std::size_t index_cell = idx.get_global_id(0) + cell_start;
+            const std::size_t index_cell = idx.get_global_id(0) + k_cell_start;
             const std::size_t index_layer = idx.get_global_id(1);
             if (index_layer < k_npart_cell[index_cell]) {
               k_cell_starts[index_cell][index_layer] =
