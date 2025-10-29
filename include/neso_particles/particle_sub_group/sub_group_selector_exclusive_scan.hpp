@@ -119,11 +119,15 @@ protected:
       e1.wait_and_throw();
       e2.wait_and_throw();
 
+      auto pr0 = ProfileRegion("SubGroupSelectorExclusiveScan",
+                               "joint_exclusive_scan_n_sum");
       joint_exclusive_scan_n_sum(sycl_target,
                                  static_cast<std::size_t>(cell_count),
                                  k_npart_cell_parent, k_npart_cell_es_parent,
                                  k_masks, k_masks_es, d_npart_cell_ptr)
           .wait_and_throw();
+      pr0.end();
+      sycl_target->profile_map.add_region(pr0);
 
       // Get the npart cell onto the host
       auto e3 = sycl_target->queue.memcpy(h_npart_cell_ptr, d_npart_cell_ptr,

@@ -49,7 +49,7 @@ public:
     this->parent_is_whole_group = this->get_parent_is_whole_group(parent);
     if (!this->parent_is_whole_group) {
       this->loop_0 = particle_loop(
-          "sub_group_selector_0", parent,
+          "cell_sub_group_selector_0", parent,
           [=](auto loop_index, auto k_map_ptrs) {
             const INT particle_linear_index =
                 loop_index.get_local_linear_index();

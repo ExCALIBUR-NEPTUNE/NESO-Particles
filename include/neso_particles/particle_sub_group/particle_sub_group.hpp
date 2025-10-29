@@ -181,6 +181,7 @@ template <typename PARENT>
 inline ParticleSubGroupSharedPtr
 particle_sub_group(std::shared_ptr<PARENT> parent, const int cell_start,
                    const int cell_end, const bool make_static = false) {
+  // TODO dispatch to a copy selector if the cell range is the entire domain
   auto selector = std::dynamic_pointer_cast<
       ParticleSubGroupImplementation::SubGroupSelector>(
       std::make_shared<ParticleSubGroupImplementation::CellSubGroupSelector>(

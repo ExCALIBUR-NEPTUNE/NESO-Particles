@@ -289,6 +289,8 @@ void ParticleGroup::add_particles_local(
     std::shared_ptr<ProductMatrix> product_matrix, const INT *d_cells,
     const INT *d_layers, ParticleGroup *source_particle_group) {
 
+  ProfileRegion pr0("ParticleGroup", "add_particles_local_product_matrix");
+
   NESOASSERT(((d_layers == nullptr) && (d_cells == nullptr)) ||
                  ((d_layers != nullptr) && (d_cells != nullptr)),
              "d_cells and d_layers must either both be nullptr or both be not "
@@ -454,6 +456,8 @@ void ParticleGroup::add_particles_local(
 
   restore_resource(sycl_target->resource_stack_map,
                    ResourceStackKeyBufferDevice<INT>{}, d_buffer);
+  pr0.end();
+  this->sycl_target->profile_map.add_region(pr0);
 }
 
 void ParticleGroup::add_particles_local(

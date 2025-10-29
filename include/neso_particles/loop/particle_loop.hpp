@@ -295,8 +295,13 @@ public:
     auto cast_wrapper = [&](auto t) {
       ParticleLoopArgs<ARGS...>::post_loop_cast(&global_info, t);
     };
+
+    auto pr = ProfileRegion(this->loop_type, "apply_post_loop");
     auto post_loop_caller = [&](auto... as) { (cast_wrapper(as), ...); };
     std::apply(post_loop_caller, this->args);
+    pr.end();
+    this->sycl_target->profile_map.add_region(pr);
+
     this->loop_running = false;
     this->profile_region_finalise();
   }

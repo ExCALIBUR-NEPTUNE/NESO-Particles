@@ -81,6 +81,7 @@ protected:
       const std::optional<int> cell_start = std::nullopt,
       const std::optional<int> cell_end = std::nullopt) {
     this->profiling_region_init();
+    auto pr = ProfileRegion(this->loop_type, "prepare_submit");
 
     // If the loop is called cell wise asynchronously then the call over cell i
     // could trigger a rebuild on cell i+1
@@ -90,9 +91,13 @@ protected:
 
     // If the loop is called cell wise asynchronously then the call over cell i
     // could trigger a rebuild on cell i+1
+
+    auto pr2 = ProfileRegion(this->loop_type, "create_if_required");
     if (!this->loop_running) {
       this->particle_sub_group->create_if_required();
     }
+    pr2.end();
+    this->sycl_target->profile_map.add_region(pr2);
     this->loop_running = true;
 
     int cell_start_v, cell_end_v;
@@ -105,7 +110,11 @@ protected:
 
     global_info = this->create_global_info(cell_start, cell_end);
     global_info.particle_sub_group = this->particle_sub_group.get();
+
+    auto pr1 = ProfileRegion(this->loop_type, "apply_pre_loop");
     this->apply_pre_loop(global_info);
+    pr1.end();
+    this->sycl_target->profile_map.add_region(pr1);
 
     // This early exit is after the pre loop calls as other ranks may have a
     // non-empty iteration set and collective setup operations in the pre loop.
@@ -130,6 +139,8 @@ protected:
                                                this->iteration_set_stride);
     }
 
+    pr.end();
+    this->sycl_target->profile_map.add_region(pr);
     return true;
   }
 
