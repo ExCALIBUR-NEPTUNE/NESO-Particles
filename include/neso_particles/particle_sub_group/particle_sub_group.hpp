@@ -6,6 +6,7 @@
 #include <type_traits>
 
 #include "cell_sub_group_selector.hpp"
+#include "copy_selector.hpp"
 #include "particle_group_partition.hpp"
 #include "particle_loop_sub_group.hpp"
 #include "particle_sub_group_base.hpp"
@@ -181,13 +182,44 @@ template <typename PARENT>
 inline ParticleSubGroupSharedPtr
 particle_sub_group(std::shared_ptr<PARENT> parent, const int cell_start,
                    const int cell_end, const bool make_static = false) {
-  // TODO dispatch to a copy selector if the cell range is the entire domain
-  auto selector = std::dynamic_pointer_cast<
-      ParticleSubGroupImplementation::SubGroupSelector>(
-      std::make_shared<ParticleSubGroupImplementation::CellSubGroupSelector>(
-          parent, cell_start, cell_end));
-  auto group = std::make_shared<ParticleSubGroup>(selector);
+
+  auto particle_group = get_particle_group(parent);
+  const int cell_count = particle_group->domain->mesh->get_cell_count();
+
+  ParticleSubGroupSharedPtr group = nullptr;
+
+  if ((cell_start == 0) && (cell_end == cell_count)) {
+
+    if constexpr (std::is_same<PARENT, ParticleSubGroup>::value == true) {
+
+      auto selector = std::dynamic_pointer_cast<
+          ParticleSubGroupImplementation::SubGroupSelectorBase>(
+          std::make_shared<ParticleSubGroupImplementation::CopySelector>(
+              parent));
+
+      group = std::make_shared<ParticleSubGroup>(selector);
+    } else {
+      auto selector = std::dynamic_pointer_cast<
+          ParticleSubGroupImplementation::SubGroupSelectorBase>(
+          std::make_shared<
+              ParticleSubGroupImplementation::SubGroupSelectorWholeGroup>(
+              parent));
+
+      group = std::make_shared<ParticleSubGroup>(selector);
+    }
+
+  } else {
+
+    auto selector = std::dynamic_pointer_cast<
+        ParticleSubGroupImplementation::SubGroupSelector>(
+        std::make_shared<ParticleSubGroupImplementation::CellSubGroupSelector>(
+            parent, cell_start, cell_end));
+
+    group = std::make_shared<ParticleSubGroup>(selector);
+  }
+
   group->static_status(make_static);
+
   return group;
 }
 
