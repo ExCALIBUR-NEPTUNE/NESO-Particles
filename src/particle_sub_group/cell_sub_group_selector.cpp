@@ -67,6 +67,7 @@ void CellSubGroupSelector::create(Selection *created_selection) {
       const auto k_cell_starts =
           this->sub_group_particle_map->d_cell_starts->ptr;
 
+      es.wait();
       es.push(sycl_target->queue.parallel_for(
           sycl_target->device_limits.validate_nd_range(
               sycl::nd_range<2>(sycl::range<2>(range_cell_count, range_cell),
