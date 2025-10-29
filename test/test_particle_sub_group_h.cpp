@@ -26,7 +26,15 @@ TEST(ParticleSubGroup, range_cell_base) {
 
   auto lambda_test_range = [&](auto parent, const int cell_start,
                                const int cell_end) {
-    auto aa = particle_sub_group(parent, cell_start, cell_end);
+    auto selector =
+        std::make_shared<ParticleSubGroupImplementation::CellSubGroupSelector>(
+            parent, cell_start, cell_end);
+    auto aa = std::make_shared<ParticleSubGroup>(
+        std::dynamic_pointer_cast<
+            ParticleSubGroupImplementation::SubGroupSelectorBase>(selector));
+
+    // This is what the user will write
+    // auto aa = particle_sub_group(parent, cell_start, cell_end);
 
     particle_loop(
         parent,

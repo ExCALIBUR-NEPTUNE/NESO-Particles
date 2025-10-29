@@ -96,72 +96,66 @@ void CellSubGroupSelector::create(Selection *created_selection) {
     pr0.end();
     sycl_target->profile_map.add_region(pr0);
   } else {
+    auto pr0 =
+        ProfileRegion("CellSubGroupSelector", "create_particle_sub_group");
 
     NESOASSERT(this->particle_sub_group != nullptr,
                "Parent is a sub group but we have no ParticleSubGroup.");
 
-    auto pr0 =
-        ProfileRegion("CellSubGroupSelector", "create_particle_sub_group");
-
-    auto pg_map_layers = get_resource<BufferDevice<int>,
-                                      ResourceStackInterfaceBufferDevice<int>>(
-        sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<int>{},
-        sycl_target);
-    pg_map_layers->realloc_no_copy(npart_local);
-
-    if (range_cell_count > 0) {
-      sycl_target->queue
-          .fill<int>(d_npart_cell_ptr + cell_start, 0, range_cell_count)
-          .wait_and_throw();
-    }
-    std::vector<int *> tmp = {pg_map_layers->ptr, d_npart_cell_ptr};
-    this->map_ptrs->set(tmp);
-
-    this->pre_process_npart_cell(sycl_target, cell_count, d_npart_cell_ptr);
-    if (range_cell_count == 1) {
-      this->loop_0->execute(this->cell_start);
-    } else {
-      this->loop_0->execute(this->cell_start, this->cell_end);
-    }
-    this->post_process_npart_cell(sycl_target, cell_count, d_npart_cell_ptr);
-
-    if (range_cell_count > 0) {
-      sycl_target->queue
-          .memcpy(h_npart_cell_ptr + cell_start, d_npart_cell_ptr + cell_start,
-                  range_cell_count * sizeof(int))
-          .wait_and_throw();
-    }
+    this->particle_sub_group->create_if_required();
+    auto s_parent = this->particle_sub_group->get_selection();
 
     INT es_tmp = 0;
+    INT max_occ = 0;
     for (int cell = cell_start; cell < cell_end; cell++) {
-      const INT nrow_required = static_cast<INT>(h_npart_cell_ptr[cell]);
+      const INT total = s_parent.h_npart_cell[cell];
+      max_occ = std::max(total, max_occ);
+      h_npart_cell_ptr[cell] = total;
       h_npart_cell_es_ptr[cell] = es_tmp;
-      es_tmp += nrow_required;
+      es_tmp += total;
     }
-    for (int cell = cell_end; cell < cell_count; cell++) {
-      h_npart_cell_es_ptr[cell] = es_tmp;
+
+    EventStack es;
+    if (range_cell_count > 0) {
+      es.push(sycl_target->queue.memcpy(d_npart_cell_es_ptr + cell_start,
+                                        h_npart_cell_es_ptr + cell_start,
+                                        sizeof(INT) * range_cell_count));
+      es.push(sycl_target->queue.memcpy(d_npart_cell_ptr + cell_start,
+                                        h_npart_cell_ptr + cell_start,
+                                        range_cell_count * sizeof(int)));
     }
 
     this->sub_group_particle_map->create(cell_start, cell_end, h_npart_cell_ptr,
                                          h_npart_cell_es_ptr);
-    auto d_cell_starts_ptr = this->sub_group_particle_map->d_cell_starts->ptr;
-    this->map_cell_to_particles_ptrs->set({d_cell_starts_ptr});
 
-    if (range_cell_count == 1) {
-      this->loop_1->submit(this->cell_start);
-    } else {
-      this->loop_1->submit(this->cell_start, this->cell_end);
+    if (range_cell_count > 0) {
+      const std::size_t local_size =
+          sycl_target->parameters
+              ->template get<SizeTParameter>("LOOP_LOCAL_SIZE")
+              ->value;
+      const std::size_t range_cell = get_next_multiple(max_occ, local_size);
+
+      const auto k_npart_cell = d_npart_cell_ptr;
+      const auto k_cell_starts =
+          this->sub_group_particle_map->d_cell_starts->ptr;
+      const auto k_parent_map = s_parent.d_map_cells_to_particles;
+
+      es.wait();
+      es.push(sycl_target->queue.parallel_for(
+          sycl_target->device_limits.validate_nd_range(
+              sycl::nd_range<2>(sycl::range<2>(range_cell_count, range_cell),
+                                sycl::range<2>(1, local_size))),
+          [=](sycl::nd_item<2> idx) {
+            const std::size_t index_cell = idx.get_global_id(0) + cell_start;
+            const std::size_t index_layer = idx.get_global_id(1);
+            if (index_layer < k_npart_cell[index_cell]) {
+              k_cell_starts[index_cell][index_layer] =
+                  k_parent_map.map_loop_layer_to_layer(index_cell, index_layer);
+            }
+          }));
     }
 
-    EventStack es;
-    es.push(sycl_target->queue.memcpy(d_npart_cell_es_ptr, h_npart_cell_es_ptr,
-                                      sizeof(INT) * cell_count));
-
-    this->loop_1->wait();
-
     es.wait();
-    restore_resource(sycl_target->resource_stack_map,
-                     ResourceStackKeyBufferDevice<int>{}, pg_map_layers);
 
     Selection s;
     s.npart_local = es_tmp;
