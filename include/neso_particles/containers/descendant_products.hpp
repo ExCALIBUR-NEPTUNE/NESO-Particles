@@ -148,8 +148,6 @@ protected:
 
   DescendantProductsGet impl_get();
 
-  EventStack event_stack;
-
 public:
   virtual ~DescendantProducts();
   DescendantProducts() = default;

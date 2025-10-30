@@ -429,14 +429,8 @@ struct DescendantProductsTest : public DescendantProducts {
                          const int num_products_per_parent)
       : DescendantProducts(sycl_target, spec, num_products_per_parent) {}
 
-  inline std::vector<INT> get_cells() {
-    this->event_stack.wait();
-    return this->d_parent_cells->get();
-  }
-  inline std::vector<INT> get_layers() {
-    this->event_stack.wait();
-    return this->d_parent_layers->get();
-  }
+  inline std::vector<INT> get_cells() { return this->d_parent_cells->get(); }
+  inline std::vector<INT> get_layers() { return this->d_parent_layers->get(); }
 };
 
 TEST(DescendantProducts, reset) {
@@ -462,6 +456,10 @@ TEST(DescendantProducts, reset) {
   ASSERT_EQ(dp->num_parent_particles, 0);
   ASSERT_EQ(dp->num_particles, 0);
   ASSERT_EQ(dp->num_products, 0);
+
+  auto dp0 =
+      std::make_shared<DescendantProductsTest>(sycl_target, product_spec, 0);
+  dp0->reset(0);
 
   sycl_target->free();
 }
