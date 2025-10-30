@@ -90,6 +90,7 @@ protected:
 
     // If the loop is called cell wise asynchronously then the call over cell i
     // could trigger a rebuild on cell i+1
+
     if (!this->loop_running) {
       this->particle_sub_group->create_if_required();
     }
@@ -105,6 +106,7 @@ protected:
 
     global_info = this->create_global_info(cell_start, cell_end);
     global_info.particle_sub_group = this->particle_sub_group.get();
+
     this->apply_pre_loop(global_info);
 
     // This early exit is after the pre loop calls as other ranks may have a

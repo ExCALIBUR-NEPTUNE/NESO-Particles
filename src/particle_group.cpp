@@ -289,6 +289,8 @@ void ParticleGroup::add_particles_local(
     std::shared_ptr<ProductMatrix> product_matrix, const INT *d_cells,
     const INT *d_layers, ParticleGroup *source_particle_group) {
 
+  ProfileRegion pr0("ParticleGroup", "add_particles_local_product_matrix");
+
   NESOASSERT(((d_layers == nullptr) && (d_cells == nullptr)) ||
                  ((d_layers != nullptr) && (d_cells != nullptr)),
              "d_cells and d_layers must either both be nullptr or both be not "
@@ -454,6 +456,8 @@ void ParticleGroup::add_particles_local(
 
   restore_resource(sycl_target->resource_stack_map,
                    ResourceStackKeyBufferDevice<INT>{}, d_buffer);
+  pr0.end();
+  this->sycl_target->profile_map.add_region(pr0);
 }
 
 void ParticleGroup::add_particles_local(
@@ -471,6 +475,8 @@ void ParticleGroup::add_particles_local(
 
 void ParticleGroup::add_particles_local(
     std::shared_ptr<ParticleGroup> particle_group) {
+
+  ProfileRegion pr0("ParticleGroup", "add_particles_local_particle_group");
 
   NESOASSERT(particle_group.get() != this,
              "Cannot add a ParticleGroup to itself.");
@@ -674,6 +680,9 @@ void ParticleGroup::add_particles_local(
              "Interals are not self consistent.");
   NESOASSERT(total_to_add == particle_group->get_npart_local(),
              "Source ParticleGroup is not self consistent.");
+
+  pr0.end();
+  this->sycl_target->profile_map.add_region(pr0);
 }
 
 void ParticleGroup::add_particles_local(
@@ -768,6 +777,7 @@ void ParticleGroup::add_particles_local(
 }
 
 void ParticleGroup::add_particles_local(ParticleSet &particle_data) {
+  ProfileRegion pr0("ParticleGroup", "add_particles_local_particle_set");
 
   this->invalidate_group_version();
   const std::size_t npart_new = static_cast<std::size_t>(particle_data.npart);
@@ -974,6 +984,8 @@ void ParticleGroup::add_particles_local(ParticleSet &particle_data) {
 
   es.wait();
   this->check_dats_and_group_agree();
+  pr0.end();
+  this->sycl_target->profile_map.add_region(pr0);
 }
 
 void ParticleGroup::add_particles_local(ParticleSetSharedPtr particle_data) {
