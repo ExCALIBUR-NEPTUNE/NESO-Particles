@@ -429,8 +429,14 @@ struct DescendantProductsTest : public DescendantProducts {
                          const int num_products_per_parent)
       : DescendantProducts(sycl_target, spec, num_products_per_parent) {}
 
-  inline std::vector<INT> get_cells() { return this->d_parent_cells->get(); }
-  inline std::vector<INT> get_layers() { return this->d_parent_layers->get(); }
+  inline std::vector<INT> get_cells() {
+    this->event_stack.wait();
+    return this->d_parent_cells->get();
+  }
+  inline std::vector<INT> get_layers() {
+    this->event_stack.wait();
+    return this->d_parent_layers->get();
+  }
 };
 
 TEST(DescendantProducts, reset) {

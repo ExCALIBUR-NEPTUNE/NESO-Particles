@@ -1,7 +1,11 @@
 #include <neso_particles/containers/descendant_products.hpp>
 
 namespace NESO::Particles {
+
+DescendantProducts::~DescendantProducts() { this->event_stack.wait(); }
+
 DescendantProductsGet DescendantProducts::impl_get() {
+  this->event_stack.wait();
   DescendantProductsGet dpg;
   dpg.product_matrix_get = ProductMatrix::impl_get();
   dpg.num_parent_particles = this->num_parent_particles;
@@ -25,15 +29,16 @@ void DescendantProducts::reset(const int num_parent_particles) {
   const int num_products = num_parent_particles * num_products_per_parent;
   this->num_parent_particles = num_parent_particles;
   ProductMatrix::reset(num_products);
-  if (num_parent_particles > 0) {
+  this->event_stack.wait();
+  if (num_products > 0) {
     this->d_parent_cells->realloc_no_copy(num_products);
     this->d_parent_layers->realloc_no_copy(num_products);
     auto e0 = this->sycl_target->queue.fill(this->d_parent_cells->ptr,
                                             static_cast<INT>(-1), num_products);
     auto e1 = this->sycl_target->queue.fill(this->d_parent_layers->ptr,
                                             static_cast<INT>(-1), num_products);
-    e0.wait_and_throw();
-    e1.wait_and_throw();
+    this->event_stack.push(e0);
+    this->event_stack.push(e1);
   }
 }
 

@@ -148,8 +148,10 @@ protected:
 
   DescendantProductsGet impl_get();
 
+  EventStack event_stack;
+
 public:
-  virtual ~DescendantProducts() = default;
+  virtual ~DescendantProducts();
   DescendantProducts() = default;
   DescendantProducts &operator=(const DescendantProducts &) = default;
 
