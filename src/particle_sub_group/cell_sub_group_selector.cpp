@@ -56,7 +56,7 @@ void CellSubGroupSelector::create(Selection *created_selection) {
     this->sub_group_particle_map->create(cell_start, cell_end, h_npart_cell_ptr,
                                          h_npart_cell_es_ptr);
 
-    if (range_cell_count > 0) {
+    if ((range_cell_count > 0) && (max_occ > 0)) {
       const std::size_t local_size =
           sycl_target->parameters
               ->template get<SizeTParameter>("LOOP_LOCAL_SIZE")
@@ -129,7 +129,7 @@ void CellSubGroupSelector::create(Selection *created_selection) {
     this->sub_group_particle_map->create(cell_start, cell_end, h_npart_cell_ptr,
                                          h_npart_cell_es_ptr);
 
-    if (range_cell_count > 0) {
+    if ((range_cell_count > 0) && (max_occ > 0)) {
       const std::size_t local_size =
           sycl_target->parameters
               ->template get<SizeTParameter>("LOOP_LOCAL_SIZE")
