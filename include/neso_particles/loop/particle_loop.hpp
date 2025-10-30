@@ -295,8 +295,10 @@ public:
     auto cast_wrapper = [&](auto t) {
       ParticleLoopArgs<ARGS...>::post_loop_cast(&global_info, t);
     };
+
     auto post_loop_caller = [&](auto... as) { (cast_wrapper(as), ...); };
     std::apply(post_loop_caller, this->args);
+
     this->loop_running = false;
     this->profile_region_finalise();
   }

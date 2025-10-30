@@ -91,7 +91,9 @@ protected:
 
 public:
   // The ParticleGroup this selector operates on.
-  ParticleGroupSharedPtr particle_group;
+  ParticleGroupSharedPtr particle_group{nullptr};
+  // The ParticleSubGroup this selector operates on.
+  std::shared_ptr<ParticleSubGroup> particle_sub_group{nullptr};
   // ParticleDat version tracking.
   ParticleGroup::ParticleDatVersionTracker particle_dat_versions;
   // ParticleGroup version tracking.
