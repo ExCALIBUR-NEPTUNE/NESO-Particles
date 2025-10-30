@@ -457,6 +457,10 @@ TEST(DescendantProducts, reset) {
   ASSERT_EQ(dp->num_particles, 0);
   ASSERT_EQ(dp->num_products, 0);
 
+  auto dp0 =
+      std::make_shared<DescendantProductsTest>(sycl_target, product_spec, 0);
+  dp0->reset(0);
+
   sycl_target->free();
 }
 
