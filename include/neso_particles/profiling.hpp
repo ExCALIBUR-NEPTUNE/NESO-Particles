@@ -7,6 +7,7 @@
 #include <list>
 #include <map>
 #include <mpi.h>
+#include <optional>
 #include <string>
 
 #include "typedefs.hpp"
@@ -67,6 +68,7 @@ struct ProfileRegion {
    *
    * @param key1 First key for ProfileRegion.
    * @param key2 Second key for ProfileRegion.
+   * @param level Optional level for region, default 0.
    */
   ProfileRegion(const std::string key1, const std::string key2,
                 const int level = 0)
@@ -198,6 +200,37 @@ public:
   inline void add_region([[maybe_unused]] ProfileRegion &profile_region) {
     if (this->enabled) {
       this->regions.push_back(profile_region);
+    }
+  }
+
+  /**
+   * Start a region if profiling is enabled.
+   *
+   * @param key1 First key for ProfileRegion.
+   * @param key2 Second key for ProfileRegion.
+   * @param level Optional level for region, default 0.
+   */
+  [[nodiscard]] inline std::optional<ProfileRegion>
+  start_region(const std::string &&key1, const std::string &&key2,
+               const int &&level = 0) {
+    if (this->enabled) {
+      return ProfileRegion(key1, key2, level);
+    } else {
+      return {};
+    }
+  }
+
+  /**
+   * End a region and add it to the profiling if profiling is enabled.
+   *
+   * @param key1 First key for ProfileRegion.
+   * @param key2 Second key for ProfileRegion.
+   * @param level Optional level for region, default 0.
+   */
+  inline void end_region(std::optional<ProfileRegion> &profile_region) {
+    if (this->enabled) {
+      profile_region.value().end();
+      this->regions.push_back(profile_region.value());
     }
   }
 
