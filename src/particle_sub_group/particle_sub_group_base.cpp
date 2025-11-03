@@ -164,7 +164,8 @@ ParticleSetSharedPtr ParticleSubGroup::get_particles(std::vector<INT> &cells,
   if (this->is_whole_particle_group) {
     return this->particle_group->get_particles(cells, layers);
   } else {
-
+    auto r0 = this->particle_group->sycl_target->profile_map.start_region(
+        "ParticleSubGroup", "get_particles");
     this->create_if_required();
     NESOASSERT(cells.size() == layers.size(),
                "Cells and layers vectors have different sizes.");
@@ -224,8 +225,10 @@ ParticleSetSharedPtr ParticleSubGroup::get_particles(std::vector<INT> &cells,
       restore_resource(sycl_target->resource_stack_map,
                        ResourceStackKeyBufferDeviceHost<INT>{}, tmp_buffer);
 
+      this->particle_group->sycl_target->profile_map.end_region(r0);
       return ps;
     } else {
+      this->particle_group->sycl_target->profile_map.end_region(r0);
       return std::make_shared<ParticleSet>(
           0, this->particle_group->get_particle_spec());
     }
