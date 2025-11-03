@@ -211,8 +211,8 @@ public:
    * @param level Optional level for region, default 0.
    */
   [[nodiscard]] inline std::optional<ProfileRegion>
-  start_region(const std::string &&key1, const std::string &&key2,
-               const int &&level = 0) {
+  start_region(const std::string key1, const std::string key2,
+               const int level = 0) {
     if (this->enabled) {
       return ProfileRegion(key1, key2, level);
     } else {

@@ -388,7 +388,9 @@ TEST(SYCLTarget, profile_region) {
 
   sycl_target->profile_map.enable();
 
-  auto r0 = sycl_target->profile_map.start_region("A", "B");
+  constexpr int level = 1024;
+  const std::string A = "A";
+  auto r0 = sycl_target->profile_map.start_region(A, "B", level);
 
   sycl_target->profile_map.end_region(r0);
 
