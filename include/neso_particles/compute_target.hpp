@@ -45,6 +45,7 @@ private:
 
   int num_devices{0};
   int local_rank{-1};
+  std::string auto_profiling_prefix{""};
 
   void print_info_inner();
 
