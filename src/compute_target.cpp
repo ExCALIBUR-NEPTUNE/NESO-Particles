@@ -158,6 +158,13 @@ SYCLTarget::SYCLTarget(const int gpu_device, MPI_Comm comm, int local_rank)
     this->print_world_device_info();
   }
 
+  this->auto_profiling_prefix =
+      get_env_string("NESO_PARTICLES_AUTO_PROFILE", "");
+
+  if (this->auto_profiling_prefix.size()) {
+    this->profile_map.enable();
+  }
+
 #ifdef DEBUG_OOB_CHECK
   for (int cx = 0; cx < DEBUG_OOB_WIDTH; cx++) {
     this->ptr_bit_mask[cx] = static_cast<unsigned char>(255);
@@ -204,6 +211,11 @@ void SYCLTarget::print_world_device_info() {
 }
 
 void SYCLTarget::free() {
+  if (this->auto_profiling_prefix.size()) {
+    this->profile_map.write_events_json(this->auto_profiling_prefix,
+                                        this->comm_pair.rank_parent);
+  }
+
   this->resource_stack_map->free();
   this->comm_pair.free();
 }

@@ -397,7 +397,7 @@ TEST(SYCLTarget, profile_region) {
   ASSERT_EQ(sycl_target->profile_map.regions.size(), 1);
   ASSERT_EQ(sycl_target->profile_map.regions.front().key1, "A");
   ASSERT_EQ(sycl_target->profile_map.regions.front().key2, "B");
-  ASSERT_EQ(sycl_target->profile_map.regions.front().level, 0);
+  ASSERT_EQ(sycl_target->profile_map.regions.front().level, level);
 
   sycl_target->profile_map.disable();
   auto r1 = sycl_target->profile_map.start_region("C", "D");
@@ -407,7 +407,7 @@ TEST(SYCLTarget, profile_region) {
   ASSERT_EQ(sycl_target->profile_map.regions.size(), 1);
   ASSERT_EQ(sycl_target->profile_map.regions.front().key1, "A");
   ASSERT_EQ(sycl_target->profile_map.regions.front().key2, "B");
-  ASSERT_EQ(sycl_target->profile_map.regions.front().level, 0);
+  ASSERT_EQ(sycl_target->profile_map.regions.front().level, level);
 
   sycl_target->profile_map.reset();
 
