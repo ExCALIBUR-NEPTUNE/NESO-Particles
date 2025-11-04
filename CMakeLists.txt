@@ -45,6 +45,7 @@ endif()
 
 set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set(SRC_FILES
+    ${SRC_DIR}/algorithms/cellwise_methods.cpp
     ${SRC_DIR}/algorithms/particle_data_movement.cpp
     ${SRC_DIR}/algorithms/reduce_dat_cellwise.cpp
     ${SRC_DIR}/algorithms/unseen_value_extractor.cpp
@@ -128,6 +129,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR}/neso_particles.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/access.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/algorithms.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/cellwise_methods.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/particle_data_movement.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/reduce_dat_cellwise.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/unseen_value_extractor.hpp
