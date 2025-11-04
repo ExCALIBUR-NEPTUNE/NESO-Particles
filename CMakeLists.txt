@@ -107,6 +107,7 @@ set(SRC_FILES
     ${SRC_DIR}/loop/pli_particle_dat.cpp
     ${SRC_DIR}/particle_sub_group/cell_sub_group_selector.cpp
     ${SRC_DIR}/particle_sub_group/truncate_sub_group_selector.cpp
+    ${SRC_DIR}/particle_sub_group/discard_sub_group_selector.cpp
     ${SRC_DIR}/particle_sub_group/copy_selector.cpp
     ${SRC_DIR}/particle_sub_group/particle_group_partition.cpp
     ${SRC_DIR}/particle_sub_group/particle_sub_group_base.cpp
@@ -274,6 +275,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/particle_loop_sub_group_functions.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/particle_loop_sub_group_reduction.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/cell_sub_group_selector.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/discard_sub_group_selector.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/truncate_sub_group_selector.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/profiling.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/sycl_typedefs.hpp

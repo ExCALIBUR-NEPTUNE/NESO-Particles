@@ -1,7 +1,7 @@
 #ifndef _NESO_PARTICLES_SYM_VECTOR_POINTER_CACHE_DISPATCH_IMPL_HPP_
 #define _NESO_PARTICLES_SYM_VECTOR_POINTER_CACHE_DISPATCH_IMPL_HPP_
 
-#include "../particle_sub_group/particle_sub_group.hpp"
+#include "../particle_sub_group/particle_sub_group_base.hpp"
 #include "sym_vector_pointer_cache_dispatch.hpp"
 
 namespace NESO::Particles {
