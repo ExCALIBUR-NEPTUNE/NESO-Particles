@@ -60,10 +60,12 @@ class ParticleGroup;
  *
  * @param parent Particle(Sub)Group which is the parent.
  * @param num_particles Number of particles to discard from each cell.
+ * @param make_static Make the ParticleSubGroup static (default false).
  */
 std::shared_ptr<ParticleSubGroup>
 particle_sub_group_discard(std::shared_ptr<ParticleGroup> particle_group,
-                           const int num_particles);
+                           const int num_particles,
+                           const bool make_static = false);
 
 /**
  * Create a ParticleSubGroup from a parent by discarding the first n
@@ -71,10 +73,12 @@ particle_sub_group_discard(std::shared_ptr<ParticleGroup> particle_group,
  *
  * @param parent Particle(Sub)Group which is the parent.
  * @param num_particles Number of particles to discard from each cell.
+ * @param make_static Make the ParticleSubGroup static (default false).
  */
 std::shared_ptr<ParticleSubGroup>
 particle_sub_group_discard(std::shared_ptr<ParticleSubGroup> particle_sub_group,
-                           const int num_particles);
+                           const int num_particles,
+                           const bool make_static = false);
 
 } // namespace NESO::Particles
 

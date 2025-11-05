@@ -54,8 +54,8 @@ void DiscardSubGroupSelector::create(Selection *created_selection) {
   sycl_target->queue
       .parallel_for(sycl::range<1>(cell_count),
                     [=](auto idx) {
-                      const int new_occupancy =
-                          sycl::min(k_num_particles, orig_d_npart_cell[idx]);
+                      const int new_occupancy = sycl::max(
+                          0, orig_d_npart_cell[idx] - k_num_particles);
                       k_npart_cell[idx] = new_occupancy;
                       k_INT[idx] = new_occupancy;
                     })
@@ -103,7 +103,8 @@ void DiscardSubGroupSelector::create(Selection *created_selection) {
                 const std::size_t index_cell = idx.get_global_id(0);
                 const std::size_t index_layer = idx.get_global_id(1);
                 if (index_layer < k_npart_cell[index_cell]) {
-                  k_cell_starts[index_cell][index_layer] = index_layer;
+                  k_cell_starts[index_cell][index_layer] =
+                      k_num_particles + index_layer;
                 }
               })
           .wait_and_throw();
@@ -118,8 +119,8 @@ void DiscardSubGroupSelector::create(Selection *created_selection) {
                 const std::size_t index_layer = idx.get_global_id(1);
                 if (index_layer < k_npart_cell[index_cell]) {
                   k_cell_starts[index_cell][index_layer] =
-                      k_parent_map.map_loop_layer_to_layer(index_cell,
-                                                           index_layer);
+                      k_parent_map.map_loop_layer_to_layer(
+                          index_cell, k_num_particles + index_layer);
                 }
               })
           .wait_and_throw();
@@ -151,18 +152,23 @@ namespace NESO::Particles {
  *
  * @param parent Particle(Sub)Group which is the parent.
  * @param num_particles Number of particles to discard from each cell.
+ * @param make_static Make the ParticleSubGroup static (default false).
  */
 std::shared_ptr<ParticleSubGroup>
 particle_sub_group_discard(std::shared_ptr<ParticleGroup> particle_group,
-                           const int num_particles) {
+                           const int num_particles, const bool make_static) {
 
   auto s =
       std::make_shared<ParticleSubGroupImplementation::DiscardSubGroupSelector>(
           particle_group, num_particles);
 
-  return std::make_shared<ParticleSubGroup>(
+  auto group = std::make_shared<ParticleSubGroup>(
       std::dynamic_pointer_cast<
           ParticleSubGroupImplementation::SubGroupSelector>(s));
+
+  group->static_status(make_static);
+
+  return group;
 }
 
 /**
@@ -171,18 +177,23 @@ particle_sub_group_discard(std::shared_ptr<ParticleGroup> particle_group,
  *
  * @param parent Particle(Sub)Group which is the parent.
  * @param num_particles Number of particles to discard from each cell.
+ * @param make_static Make the ParticleSubGroup static (default false).
  */
 std::shared_ptr<ParticleSubGroup>
 particle_sub_group_discard(std::shared_ptr<ParticleSubGroup> particle_sub_group,
-                           const int num_particles) {
+                           const int num_particles, const bool make_static) {
 
   auto s =
       std::make_shared<ParticleSubGroupImplementation::DiscardSubGroupSelector>(
           particle_sub_group, num_particles);
 
-  return std::make_shared<ParticleSubGroup>(
+  auto group = std::make_shared<ParticleSubGroup>(
       std::dynamic_pointer_cast<
           ParticleSubGroupImplementation::SubGroupSelector>(s));
+
+  group->static_status(make_static);
+
+  return group;
 }
 
 } // namespace NESO::Particles

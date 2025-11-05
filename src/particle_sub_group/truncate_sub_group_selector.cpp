@@ -151,18 +151,23 @@ namespace NESO::Particles {
  *
  * @param parent Particle(Sub)Group which is the parent.
  * @param num_particles Number of particles to keep from each cell.
+ * @param make_static Make the ParticleSubGroup static (default false).
  */
 std::shared_ptr<ParticleSubGroup>
 particle_sub_group_truncation(std::shared_ptr<ParticleGroup> particle_group,
-                              const int num_particles) {
+                              const int num_particles, const bool make_static) {
 
   auto s = std::make_shared<
       ParticleSubGroupImplementation::TruncateSubGroupSelector>(particle_group,
                                                                 num_particles);
 
-  return std::make_shared<ParticleSubGroup>(
+  auto group = std::make_shared<ParticleSubGroup>(
       std::dynamic_pointer_cast<
           ParticleSubGroupImplementation::SubGroupSelector>(s));
+
+  group->static_status(make_static);
+
+  return group;
 }
 
 /**
@@ -171,17 +176,22 @@ particle_sub_group_truncation(std::shared_ptr<ParticleGroup> particle_group,
  *
  * @param parent Particle(Sub)Group which is the parent.
  * @param num_particles Number of particles to keep from each cell.
+ * @param make_static Make the ParticleSubGroup static (default false).
  */
 std::shared_ptr<ParticleSubGroup> particle_sub_group_truncation(
     std::shared_ptr<ParticleSubGroup> particle_sub_group,
-    const int num_particles) {
+    const int num_particles, const bool make_static) {
 
   auto s = std::make_shared<
       ParticleSubGroupImplementation::TruncateSubGroupSelector>(
       particle_sub_group, num_particles);
 
-  return std::make_shared<ParticleSubGroup>(
+  auto group = std::make_shared<ParticleSubGroup>(
       std::dynamic_pointer_cast<
           ParticleSubGroupImplementation::SubGroupSelector>(s));
+
+  group->static_status(make_static);
+
+  return group;
 }
 } // namespace NESO::Particles
