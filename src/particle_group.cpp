@@ -143,6 +143,8 @@ ParticleGroup::get_particles(const std::size_t num_particles,
                              const INT *const d_cells,
                              const INT *const d_layers) {
   if (num_particles > 0) {
+    auto r0 = this->sycl_target->profile_map.start_region("ParticleGroup",
+                                                          "get_particles_0");
     auto dh_real = get_resource<BufferDeviceHost<REAL>,
                                 ResourceStackInterfaceBufferDeviceHost<REAL>>(
         sycl_target->resource_stack_map,
@@ -228,6 +230,7 @@ ParticleGroup::get_particles(const std::size_t num_particles,
                      ResourceStackKeyBufferDeviceHost<REAL>{}, dh_real);
     restore_resource(sycl_target->resource_stack_map,
                      ResourceStackKeyBufferDeviceHost<INT>{}, dh_int);
+    this->sycl_target->profile_map.end_region(r0);
     return ps;
   } else {
     return std::make_shared<ParticleSet>(0, this->particle_spec);
@@ -996,6 +999,8 @@ void ParticleGroup::remove_particles(const int npart,
                                      const std::vector<INT> &cells,
                                      const std::vector<INT> &layers) {
 
+  auto r0 = this->sycl_target->profile_map.start_region("ParticleGroup",
+                                                        "remove_particles_0");
   if (npart > 0) {
     auto d_buffer = get_resource<BufferDevice<INT>,
                                  ResourceStackInterfaceBufferDevice<INT>>(
@@ -1025,11 +1030,13 @@ void ParticleGroup::remove_particles(const int npart,
     restore_resource(sycl_target->resource_stack_map,
                      ResourceStackKeyBufferDevice<INT>{}, d_buffer);
   }
+  this->sycl_target->profile_map.end_region(r0);
 }
 
 void ParticleGroup::remove_particles(
     std::shared_ptr<ParticleSubGroup> particle_sub_group) {
-
+  auto r0 = this->sycl_target->profile_map.start_region("ParticleGroup",
+                                                        "remove_particles_1");
   NESOASSERT(particle_sub_group->particle_group.get() == this,
              "remove_particles called with a ParticleSubGroup which is not a "
              "sub group of the ParticleGroup");
@@ -1052,6 +1059,7 @@ void ParticleGroup::remove_particles(
     restore_resource(sycl_target->resource_stack_map,
                      ResourceStackKeyBufferDevice<INT>{}, d_buffer);
   }
+  this->sycl_target->profile_map.end_region(r0);
 }
 
 void ParticleGroup::global_move() {
@@ -1131,6 +1139,10 @@ void ParticleGroup::remove_particle_dat(Sym<INT> sym) {
 
 ParticleSetSharedPtr ParticleGroup::get_particles(std::vector<INT> &cells,
                                                   std::vector<INT> &layers) {
+
+  auto r0 = this->sycl_target->profile_map.start_region("ParticleGroup",
+                                                        "get_particles_1");
+
   NESOASSERT(cells.size() == layers.size(),
              "Cells and layers vectors have different sizes.");
   const int num_particles = cells.size();
@@ -1165,6 +1177,8 @@ ParticleSetSharedPtr ParticleGroup::get_particles(std::vector<INT> &cells,
 
   restore_resource(sycl_target->resource_stack_map,
                    ResourceStackKeyBufferDevice<INT>{}, d_buffer);
+
+  this->sycl_target->profile_map.end_region(r0);
   return ps;
 }
 

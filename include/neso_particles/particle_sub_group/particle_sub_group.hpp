@@ -7,6 +7,7 @@
 
 #include "cell_sub_group_selector.hpp"
 #include "copy_selector.hpp"
+#include "discard_sub_group_selector.hpp"
 #include "particle_group_partition.hpp"
 #include "particle_loop_sub_group.hpp"
 #include "particle_sub_group_base.hpp"
@@ -14,6 +15,7 @@
 #include "sub_group_selector.hpp"
 #include "sub_group_selector_base.hpp"
 #include "sub_group_selector_exclusive_scan.hpp"
+#include "truncate_sub_group_selector.hpp"
 
 namespace NESO::Particles {
 

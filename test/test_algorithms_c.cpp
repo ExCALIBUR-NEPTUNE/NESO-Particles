@@ -175,3 +175,34 @@ TEST(Algorithms, cellwise_broadcast) {
   sycl_target->free();
   A->domain->mesh->free();
 }
+
+TEST(Algorithms, get_npart_cell) {
+  auto [A, sycl_target, cell_count_t] = particle_loop_common_2d(27, 16, 32);
+  const int cell_count = cell_count_t;
+
+  auto cdc_a =
+      std::make_shared<CellDatConst<int>>(sycl_target, cell_count, 1, 1);
+  get_npart_cell(A, cdc_a);
+
+  auto h_cdc_a = cdc_a->get_all_cells();
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    ASSERT_EQ(h_cdc_a.at(cellx)->at(0, 0), A->get_npart_cell(cellx));
+  }
+
+  auto cdc_b =
+      std::make_shared<CellDatConst<INT>>(sycl_target, cell_count, 2, 3);
+
+  auto aa = particle_sub_group(
+      A, [=](auto ID) { return ID.at(0) % 2; }, Access::read(Sym<INT>("ID")));
+
+  get_npart_cell(aa, cdc_b, 1, 2);
+
+  auto h_cdc_b = cdc_b->get_all_cells();
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    ASSERT_EQ(h_cdc_b.at(cellx)->at(1, 2), aa->get_npart_cell(cellx));
+  }
+
+  sycl_target->free();
+  A->domain->mesh->free();
+}

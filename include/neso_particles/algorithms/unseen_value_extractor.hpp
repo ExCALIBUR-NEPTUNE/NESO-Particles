@@ -6,6 +6,9 @@
 #include "../loop/particle_loop.hpp"
 #include "../loop/particle_loop_impl.hpp"
 #include "../particle_group.hpp"
+#include "../particle_sub_group/particle_loop_sub_group_functions.hpp"
+#include "../particle_sub_group/particle_sub_group.hpp"
+
 #include <set>
 
 namespace NESO::Particles {

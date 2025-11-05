@@ -912,3 +912,39 @@ TEST(ParticleLoop, cell_dat) {
   sycl_target->free();
   mesh->free();
 }
+
+TEST(ParticleLoop, valid_local_size_range) {
+
+  const int npart_cell =
+      static_cast<int>(get_env_size_t("NESO_PARTICLES_LOOP_LOCAL_SIZE", 256)) +
+      4;
+  auto [A_t, sycl_target_t, cell_count_t] =
+      particle_loop_create_common(npart_cell, 2);
+
+  for (int local_size = 1; local_size < npart_cell; local_size *= 2) {
+
+    particle_loop(
+        A_t, [=](auto ID) { ID.at(0) = 0; }, Access::write(Sym<INT>("ID")))
+        ->execute();
+
+    sycl_target_t->parameters->set(
+        "LOOP_LOCAL_SIZE",
+        std::make_shared<SizeTParameter>(static_cast<std::size_t>(local_size)));
+
+    particle_loop(
+        A_t, [=](auto ID) { ID.at(0) = local_size; },
+        Access::write(Sym<INT>("ID")))
+        ->execute();
+
+    for (int cellx = 0; cellx < cell_count_t; cellx++) {
+      auto ID = A_t->get_cell(Sym<INT>("ID"), cellx);
+      const int nrow = ID->nrow;
+      for (int rowx = 0; rowx < nrow; rowx++) {
+        ASSERT_EQ(ID->at(rowx, 0), local_size);
+      }
+    }
+  }
+
+  sycl_target_t->free();
+  A_t->domain->mesh->free();
+}

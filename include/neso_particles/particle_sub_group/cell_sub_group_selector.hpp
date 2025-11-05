@@ -3,6 +3,7 @@
 
 #include "particle_loop_sub_group_functions.hpp"
 #include "particle_sub_group_base.hpp"
+#include "particle_sub_group_utility.hpp"
 #include "sub_group_selector.hpp"
 #include "sub_group_selector_base.hpp"
 
