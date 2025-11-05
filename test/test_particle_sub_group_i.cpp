@@ -132,19 +132,17 @@ TEST(ParticleSubGroup, truncate_selector) {
         ParticleSubGroupImplementation::get_host_map_cells_to_particles(
             sycl_target, s);
 
-    for (int cellx = 0; cellx < cell_count; cellx++) {
-      auto ID = A->get_cell(Sym<INT>("ID"), cellx);
-      const int nrow = ID->nrow;
+    auto s_aa = aa->get_selection();
+    auto h_map_aa =
+        ParticleSubGroupImplementation::get_host_map_cells_to_particles(
+            sycl_target, s_aa);
 
+    for (int cellx = 0; cellx < cell_count; cellx++) {
       std::set<INT> correct_layers;
-      int counter = 0;
+      const int nrow =
+          std::min(num_particles, static_cast<int>(h_map_aa[cellx].size()));
       for (int rowx = 0; rowx < nrow; rowx++) {
-        if (ID->at(rowx, 0) % 2) {
-          if (counter < num_particles) {
-            correct_layers.insert(rowx);
-          }
-          counter++;
-        }
+        correct_layers.insert(h_map_aa[cellx][rowx]);
       }
 
       std::set<INT> to_test_layers;
@@ -322,19 +320,18 @@ TEST(ParticleSubGroup, discard_selector) {
         ParticleSubGroupImplementation::get_host_map_cells_to_particles(
             sycl_target, s);
 
+    auto s_aa = aa->get_selection();
+    auto h_map_aa =
+        ParticleSubGroupImplementation::get_host_map_cells_to_particles(
+            sycl_target, s_aa);
+
     for (int cellx = 0; cellx < cell_count; cellx++) {
-      auto ID = A->get_cell(Sym<INT>("ID"), cellx);
-      const int nrow = ID->nrow;
+      const int nrow =
+          std::max(0, static_cast<int>(h_map_aa[cellx].size()) - num_particles);
 
       std::set<INT> correct_layers;
-      int counter = 0;
       for (int rowx = 0; rowx < nrow; rowx++) {
-        if (ID->at(rowx, 0) % 2) {
-          if (counter >= num_particles) {
-            correct_layers.insert(rowx);
-          }
-          counter++;
-        }
+        correct_layers.insert(h_map_aa[cellx][rowx + num_particles]);
       }
 
       std::set<INT> to_test_layers;
