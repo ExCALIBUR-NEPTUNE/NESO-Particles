@@ -83,6 +83,14 @@ template <int N, typename T> inline T dot_product(const T *a, const T *b) {
   }
   return value;
 }
+template <typename T>
+inline void cross_product(const T &a1, const T &a2, const T &a3, const T &b1,
+                          const T &b2, const T &b3, T *RESTRICT c1,
+                          T *RESTRICT c2, T *RESTRICT c3) {
+  *c1 = ((a2) * (b3)) - ((a3) * (b2));
+  *c2 = ((a3) * (b1)) - ((a1) * (b3));
+  *c3 = ((a1) * (b2)) - ((a2) * (b1));
+}
 
 } // namespace Kernel
 
