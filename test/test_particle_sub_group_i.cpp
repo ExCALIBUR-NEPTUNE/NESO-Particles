@@ -66,14 +66,14 @@ TEST(ParticleSubGroup, truncate_selector) {
       ASSERT_TRUE(h_map.at(cellx).size() <= num_particles);
     }
 
-    auto bb = particle_sub_group_truncation(A, 21);
+    auto bb = particle_sub_group_truncate(A, 21);
     for (int cellx = 0; cellx < cell_count; cellx++) {
       const int npart_cell = bb->get_npart_cell(cellx);
       ASSERT_TRUE(npart_cell <= 21);
     }
 
     auto AA = particle_sub_group(A);
-    auto cc = particle_sub_group_truncation(AA, num_particles, true);
+    auto cc = particle_sub_group_truncate(AA, num_particles, true);
 
     auto s2 = cc->get_selection();
     auto h_map2 =
@@ -152,14 +152,14 @@ TEST(ParticleSubGroup, truncate_selector) {
       ASSERT_EQ(to_test_layers, correct_layers);
       ASSERT_TRUE(h_map.at(cellx).size() <= num_particles);
     }
-    auto bb = particle_sub_group_truncation(A, 21);
+    auto bb = particle_sub_group_truncate(A, 21);
     for (int cellx = 0; cellx < cell_count; cellx++) {
       const int npart_cell = bb->get_npart_cell(cellx);
       ASSERT_TRUE(npart_cell <= 21);
     }
 
     auto AA = particle_sub_group(aa);
-    auto cc = particle_sub_group_truncation(AA, num_particles, true);
+    auto cc = particle_sub_group_truncate(AA, num_particles, true);
 
     auto s2 = cc->get_selection();
     auto h_map2 =
@@ -181,7 +181,7 @@ TEST(ParticleSubGroup, truncate_selector) {
 
   {
     A->clear();
-    auto aa = particle_sub_group_truncation(A, 2, true);
+    auto aa = particle_sub_group_truncate(A, 2, true);
     auto s = aa->get_selection();
     ASSERT_EQ(s.ncell, cell_count);
     ASSERT_EQ(s.npart_local, 0);

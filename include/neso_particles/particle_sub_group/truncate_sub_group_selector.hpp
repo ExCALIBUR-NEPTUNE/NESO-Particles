@@ -63,9 +63,9 @@ class ParticleGroup;
  * @param make_static Make the ParticleSubGroup static (default false).
  */
 std::shared_ptr<ParticleSubGroup>
-particle_sub_group_truncation(std::shared_ptr<ParticleGroup> particle_group,
-                              const int num_particles,
-                              const bool make_static = false);
+particle_sub_group_truncate(std::shared_ptr<ParticleGroup> particle_group,
+                            const int num_particles,
+                            const bool make_static = false);
 
 /**
  * Create a ParticleSubGroup from a parent by selecting only the first n
@@ -75,7 +75,7 @@ particle_sub_group_truncation(std::shared_ptr<ParticleGroup> particle_group,
  * @param num_particles Number of particles to keep from each cell.
  * @param make_static Make the ParticleSubGroup static (default false).
  */
-std::shared_ptr<ParticleSubGroup> particle_sub_group_truncation(
+std::shared_ptr<ParticleSubGroup> particle_sub_group_truncate(
     std::shared_ptr<ParticleSubGroup> particle_sub_group,
     const int num_particles, const bool make_static = false);
 } // namespace NESO::Particles

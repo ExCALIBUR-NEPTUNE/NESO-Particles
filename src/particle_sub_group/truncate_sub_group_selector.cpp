@@ -154,8 +154,8 @@ namespace NESO::Particles {
  * @param make_static Make the ParticleSubGroup static (default false).
  */
 std::shared_ptr<ParticleSubGroup>
-particle_sub_group_truncation(std::shared_ptr<ParticleGroup> particle_group,
-                              const int num_particles, const bool make_static) {
+particle_sub_group_truncate(std::shared_ptr<ParticleGroup> particle_group,
+                            const int num_particles, const bool make_static) {
 
   auto s = std::make_shared<
       ParticleSubGroupImplementation::TruncateSubGroupSelector>(particle_group,
@@ -178,7 +178,7 @@ particle_sub_group_truncation(std::shared_ptr<ParticleGroup> particle_group,
  * @param num_particles Number of particles to keep from each cell.
  * @param make_static Make the ParticleSubGroup static (default false).
  */
-std::shared_ptr<ParticleSubGroup> particle_sub_group_truncation(
+std::shared_ptr<ParticleSubGroup> particle_sub_group_truncate(
     std::shared_ptr<ParticleSubGroup> particle_sub_group,
     const int num_particles, const bool make_static) {
 
