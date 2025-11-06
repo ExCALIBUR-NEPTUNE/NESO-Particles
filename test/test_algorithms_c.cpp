@@ -122,3 +122,87 @@ TEST(Algorithms, copy_particle_dat_to_ephemeral_dat) {
   sycl_target->free();
   A->domain->mesh->free();
 }
+
+TEST(Algorithms, cellwise_broadcast) {
+  auto [A, sycl_target, cell_count_t] = particle_loop_common_2d(27, 16, 32);
+  const int cell_count = cell_count_t;
+
+  A->add_particle_dat(Sym<INT>("FOO"), 4);
+  A->add_particle_dat(Sym<REAL>("BAR"), 3);
+
+  auto lambda_test = [&](auto AA, auto sym, auto component, auto values,
+                         auto mask) {
+    cellwise_broadcast(AA, sym, component, values);
+    auto B = get_particle_group(AA);
+    for (int cx = 0; cx < cell_count; cx++) {
+      auto V = B->get_cell(sym, cx);
+      auto ID = B->get_cell(Sym<INT>("ID"), cx);
+      const int nrow = V->nrow;
+      for (int rx = 0; rx < nrow; rx++) {
+        if (mask && (ID->at(rx, 0) % 2)) {
+          ASSERT_EQ(V->at(rx, component), values.at(cx));
+        } else {
+          ASSERT_EQ(V->at(rx, component), values.at(cx));
+        }
+      }
+    }
+  };
+
+  std::vector<INT> values_INT(cell_count);
+  for (int cx = 0; cx < cell_count; cx++) {
+    values_INT[cx] = cx + 1;
+  }
+  std::vector<REAL> values_REAL(cell_count);
+  for (int cx = 0; cx < cell_count; cx++) {
+    values_REAL[cx] = cx + 0.123;
+  }
+  std::vector<int> values_int(cell_count);
+  for (int cx = 0; cx < cell_count; cx++) {
+    values_int[cx] = cx + 1;
+  }
+
+  lambda_test(A, Sym<INT>("FOO"), 1, values_INT, false);
+  lambda_test(A, Sym<INT>("FOO"), 0, values_int, false);
+  lambda_test(A, Sym<REAL>("BAR"), 1, values_REAL, false);
+
+  auto aa = particle_sub_group(
+      A, [=](auto ID) { return ID.at(0) % 2; }, Access::read(Sym<INT>("ID")));
+
+  lambda_test(aa, Sym<INT>("FOO"), 1, values_INT, true);
+  lambda_test(aa, Sym<INT>("FOO"), 0, values_int, true);
+  lambda_test(aa, Sym<REAL>("BAR"), 1, values_REAL, true);
+
+  sycl_target->free();
+  A->domain->mesh->free();
+}
+
+TEST(Algorithms, get_npart_cell) {
+  auto [A, sycl_target, cell_count_t] = particle_loop_common_2d(27, 16, 32);
+  const int cell_count = cell_count_t;
+
+  auto cdc_a =
+      std::make_shared<CellDatConst<int>>(sycl_target, cell_count, 1, 1);
+  get_npart_cell(A, cdc_a);
+
+  auto h_cdc_a = cdc_a->get_all_cells();
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    ASSERT_EQ(h_cdc_a.at(cellx)->at(0, 0), A->get_npart_cell(cellx));
+  }
+
+  auto cdc_b =
+      std::make_shared<CellDatConst<INT>>(sycl_target, cell_count, 2, 3);
+
+  auto aa = particle_sub_group(
+      A, [=](auto ID) { return ID.at(0) % 2; }, Access::read(Sym<INT>("ID")));
+
+  get_npart_cell(aa, cdc_b, 1, 2);
+
+  auto h_cdc_b = cdc_b->get_all_cells();
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    ASSERT_EQ(h_cdc_b.at(cellx)->at(1, 2), aa->get_npart_cell(cellx));
+  }
+
+  sycl_target->free();
+  A->domain->mesh->free();
+}

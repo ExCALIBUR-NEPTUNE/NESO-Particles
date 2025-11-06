@@ -115,8 +115,9 @@ public:
       this->assert_allocated();
       auto ptr_old = this->ptr;
       this->ptr = this->malloc_wrapper(size * sizeof(T));
+      const auto old_size = this->size;
       this->size = size;
-      this->memcpy_wrapper(this->ptr, ptr_old, size);
+      this->memcpy_wrapper(this->ptr, ptr_old, old_size);
       this->free_wrapper(ptr_old);
     }
     return this->size;

@@ -159,8 +159,11 @@ struct GenericDeviceRNGGenerationFunction : RNGGenerationFunction<T> {
   draw_random_samples([[maybe_unused]] SYCLTargetSharedPtr sycl_target,
                       T *d_ptr, const std::size_t num_numbers,
                       [[maybe_unused]] const int block_size) override {
+    auto r0 = sycl_target->profile_map.start_region(
+        "GenericDeviceRNGGenerationFunction", "draw_random_samples");
     NESOASSERT(this->generation_function(d_ptr, num_numbers) == 0,
                "Failed to draw random samples.");
+    sycl_target->profile_map.end_region(r0);
   }
 };
 

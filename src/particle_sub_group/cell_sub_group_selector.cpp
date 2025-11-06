@@ -24,7 +24,6 @@ void CellSubGroupSelector::create(Selection *created_selection) {
   auto [h_npart_cell_ptr, d_npart_cell_ptr, h_npart_cell_es_ptr,
         d_npart_cell_es_ptr] = this->sub_group_particle_map->get_helper_ptrs();
 
-  const auto npart_local = this->particle_group->get_npart_local();
   const int range_cell_count = this->cell_end - this->cell_start;
 
   std::fill(h_npart_cell_ptr, h_npart_cell_ptr + cell_count, 0);

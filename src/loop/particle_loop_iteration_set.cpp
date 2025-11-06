@@ -151,11 +151,19 @@ std::vector<ParticleLoopBlockHost> &ParticleLoopBlockIterationSet::get_generic(
   // Create an iteration block that covers all cells up to a multiple of the
   // local size.
   std::size_t min_occupancy = std::numeric_limits<std::size_t>::max();
+  std::size_t max_occupancy = 1;
   for (std::size_t cellx = cell_startv; cellx < cell_endv; cellx++) {
     const std::size_t occupancy =
         static_cast<std::size_t>(this->h_npart_cell[cellx]);
     min_occupancy = std::min(min_occupancy, occupancy);
+    max_occupancy = std::max(max_occupancy, occupancy);
   }
+
+  const std::size_t lower_local_size = 2 * get_prev_power_of_two(max_occupancy);
+  if (lower_local_size < local_size) {
+    local_size = lower_local_size;
+  }
+
   const std::size_t range_cell_count = cell_endv - cell_startv;
   if ((range_cell_count == 0) || (cell_endv <= cell_startv)) {
     return this->iteration_set;

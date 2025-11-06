@@ -415,3 +415,35 @@ TEST(SYCLTarget, buffer_max_int) {
 
   sycl_target->free();
 }
+
+TEST(SYCLTarget, profile_region) {
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+
+  sycl_target->profile_map.enable();
+
+  constexpr int level = 1024;
+  const std::string A = "A";
+  auto r0 = sycl_target->profile_map.start_region(A, "B", level);
+
+  sycl_target->profile_map.end_region(r0);
+
+  ASSERT_EQ(sycl_target->profile_map.regions.size(), 1);
+  ASSERT_EQ(sycl_target->profile_map.regions.front().key1, "A");
+  ASSERT_EQ(sycl_target->profile_map.regions.front().key2, "B");
+  ASSERT_EQ(sycl_target->profile_map.regions.front().level, level);
+
+  sycl_target->profile_map.disable();
+  auto r1 = sycl_target->profile_map.start_region("C", "D");
+
+  sycl_target->profile_map.end_region(r1);
+
+  ASSERT_EQ(sycl_target->profile_map.regions.size(), 1);
+  ASSERT_EQ(sycl_target->profile_map.regions.front().key1, "A");
+  ASSERT_EQ(sycl_target->profile_map.regions.front().key2, "B");
+  ASSERT_EQ(sycl_target->profile_map.regions.front().level, level);
+
+  sycl_target->profile_map.reset();
+
+  ASSERT_EQ(sycl_target->profile_map.regions.size(), 0);
+  sycl_target->free();
+}

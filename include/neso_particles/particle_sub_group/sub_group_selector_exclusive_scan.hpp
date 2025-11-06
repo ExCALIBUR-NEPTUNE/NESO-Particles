@@ -7,9 +7,11 @@
 #include "../loop/particle_loop_functions.hpp"
 #include "../loop/particle_loop_impl.hpp"
 #include "../loop/particle_loop_index.hpp"
+#include "particle_loop_sub_group_functions.hpp"
 #include "particle_sub_group_utility.hpp"
 #include "sub_group_selector_base.hpp"
 #include "sub_group_selector_utility.hpp"
+
 #include <functional>
 
 namespace NESO::Particles {

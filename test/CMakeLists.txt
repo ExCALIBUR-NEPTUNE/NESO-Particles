@@ -90,6 +90,7 @@ set(TEST_SRCS
     ${TEST_DIR}/test_particle_sub_group_f.cpp
     ${TEST_DIR}/test_particle_sub_group_g.cpp
     ${TEST_DIR}/test_particle_sub_group_h.cpp
+    ${TEST_DIR}/test_particle_sub_group_i.cpp
     ${TEST_DIR}/test_particle_sub_group_partition_a.cpp
     ${TEST_DIR}/test_particle_sub_group_partition_b.cpp
     ${TEST_DIR}/test_particle_sub_group_partition_c.cpp

@@ -436,3 +436,17 @@ TEST(DeviceFunctions, bitonic8) {
 
   sycl_target->free();
 }
+
+TEST(DeviceFunctions, cross_product_3d) {
+  const REAL a[3] = {1, 2, 3};
+  const REAL b[3] = {3, 4, 5};
+  REAL to_test[3] = {0, 0, 0};
+  const REAL correct[3] = {-2, 4, -2};
+
+  Kernel::cross_product(a[0], a[1], a[2], b[0], b[1], b[2], to_test,
+                        to_test + 1, to_test + 2);
+
+  ASSERT_EQ(correct[0], to_test[0]);
+  ASSERT_EQ(correct[1], to_test[1]);
+  ASSERT_EQ(correct[2], to_test[2]);
+}

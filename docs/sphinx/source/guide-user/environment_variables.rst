@@ -31,3 +31,5 @@ The behaviour of NESO-Particles can be configured at runtime by various environm
      - Configures which directory should be used as a temporary directory for running tests. This directory should be visible from all MPI ranks and hence on a distributed memory system will probably need to be set to run the tests in a multinode configuration. The default setting is the value returned from `std::filesystem::current_path()`.
    * - ``NESO_PARTICLES_DMPLEX_CHECK_FACES``
      - Default 1. When set to a non-zero value enables self checking of the vertex ordering in DMPlex meshes passed to the DMPlexInterface and the generated halo DMPlex.
+   * - ``NESO_PARTICLES_AUTO_PROFILE``
+     - Default empty string. When set to a file name prefix, e.g, foo, profiling will be enabled and events written to foo.<rank>json on call to free of the SYCLTarget.
