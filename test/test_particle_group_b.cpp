@@ -117,13 +117,32 @@ TEST(ParticleGroup, particle_group_pointer_map) {
     auto d_ptr_const_map = ptr_map->get_const();
     auto d_ptr_map = ptr_map->get();
 
+    std::vector<int> c_flattened_dat_index_real;
+    std::vector<int> c_flattened_dat_index_int;
+    std::vector<int> c_flattened_comp_index_real;
+    std::vector<int> c_flattened_comp_index_int;
+
     int ncomp_total_real_correct = 0;
+    int index = 0;
     for (auto &[sym, dat] : A->particle_dats_real) {
       ncomp_total_real_correct += dat->ncomp;
+      const int ncomp = dat->ncomp;
+      for (int cx = 0; cx < ncomp; cx++) {
+        c_flattened_dat_index_real.push_back(index);
+        c_flattened_comp_index_real.push_back(cx);
+      }
+      index++;
     }
     int ncomp_total_int_correct = 0;
+    index = 0;
     for (auto &[sym, dat] : A->particle_dats_int) {
       ncomp_total_int_correct += dat->ncomp;
+      const int ncomp = dat->ncomp;
+      for (int cx = 0; cx < ncomp; cx++) {
+        c_flattened_dat_index_int.push_back(index);
+        c_flattened_comp_index_int.push_back(cx);
+      }
+      index++;
     }
 
     ASSERT_EQ(d_ptr_const_map.d_ncomp_real, d_ptr_map.d_ncomp_real);
@@ -142,6 +161,95 @@ TEST(ParticleGroup, particle_group_pointer_map) {
     ASSERT_EQ(ncomp_total_int_correct, d_ptr_map.ncomp_total_int);
     ASSERT_EQ(d_ptr_const_map.ncomp_total_real, d_ptr_map.ncomp_total_real);
     ASSERT_EQ(d_ptr_const_map.ncomp_total_int, d_ptr_map.ncomp_total_int);
+
+    std::vector<int> d_flattened_dat_index_real(ncomp_total_real_correct);
+    std::vector<int> d_flattened_dat_index_int(ncomp_total_int_correct);
+    std::vector<int> d_flattened_comp_index_real(ncomp_total_real_correct);
+    std::vector<int> d_flattened_comp_index_int(ncomp_total_int_correct);
+
+    sycl_target->queue
+        .memcpy(d_flattened_dat_index_real.data(),
+                d_ptr_const_map.d_flattened_dat_index_real,
+                ncomp_total_real_correct * sizeof(int))
+        .wait_and_throw();
+
+    sycl_target->queue
+        .memcpy(d_flattened_comp_index_real.data(),
+                d_ptr_const_map.d_flattened_comp_index_real,
+                ncomp_total_real_correct * sizeof(int))
+        .wait_and_throw();
+
+    sycl_target->queue
+        .memcpy(d_flattened_dat_index_int.data(),
+                d_ptr_const_map.d_flattened_dat_index_int,
+                ncomp_total_int_correct * sizeof(int))
+        .wait_and_throw();
+
+    sycl_target->queue
+        .memcpy(d_flattened_comp_index_int.data(),
+                d_ptr_const_map.d_flattened_comp_index_int,
+                ncomp_total_int_correct * sizeof(int))
+        .wait_and_throw();
+
+    ASSERT_EQ(c_flattened_dat_index_real, d_flattened_dat_index_real);
+    ASSERT_EQ(c_flattened_comp_index_real, d_flattened_comp_index_real);
+    ASSERT_EQ(c_flattened_dat_index_int, d_flattened_dat_index_int);
+    ASSERT_EQ(c_flattened_comp_index_int, d_flattened_comp_index_int);
+
+    sycl_target->queue
+        .memcpy(d_flattened_dat_index_real.data(),
+                d_ptr_map.d_flattened_dat_index_real,
+                ncomp_total_real_correct * sizeof(int))
+        .wait_and_throw();
+
+    sycl_target->queue
+        .memcpy(d_flattened_comp_index_real.data(),
+                d_ptr_map.d_flattened_comp_index_real,
+                ncomp_total_real_correct * sizeof(int))
+        .wait_and_throw();
+
+    sycl_target->queue
+        .memcpy(d_flattened_dat_index_int.data(),
+                d_ptr_map.d_flattened_dat_index_int,
+                ncomp_total_int_correct * sizeof(int))
+        .wait_and_throw();
+
+    sycl_target->queue
+        .memcpy(d_flattened_comp_index_int.data(),
+                d_ptr_map.d_flattened_comp_index_int,
+                ncomp_total_int_correct * sizeof(int))
+        .wait_and_throw();
+
+    ASSERT_EQ(c_flattened_dat_index_real, d_flattened_dat_index_real);
+    ASSERT_EQ(c_flattened_comp_index_real, d_flattened_comp_index_real);
+    ASSERT_EQ(c_flattened_dat_index_int, d_flattened_dat_index_int);
+    ASSERT_EQ(c_flattened_comp_index_int, d_flattened_comp_index_int);
+
+    for (int ix = 0; ix < ncomp_total_real_correct; ix++) {
+      ASSERT_EQ(d_ptr_const_map.h_flattened_dat_index_real[ix],
+                c_flattened_dat_index_real.at(ix));
+      ASSERT_EQ(d_ptr_const_map.h_flattened_comp_index_real[ix],
+                c_flattened_comp_index_real.at(ix));
+    }
+    for (int ix = 0; ix < ncomp_total_int_correct; ix++) {
+      ASSERT_EQ(d_ptr_const_map.h_flattened_dat_index_int[ix],
+                c_flattened_dat_index_int.at(ix));
+      ASSERT_EQ(d_ptr_const_map.h_flattened_comp_index_int[ix],
+                c_flattened_comp_index_int.at(ix));
+    }
+
+    for (int ix = 0; ix < ncomp_total_real_correct; ix++) {
+      ASSERT_EQ(d_ptr_map.h_flattened_dat_index_real[ix],
+                c_flattened_dat_index_real.at(ix));
+      ASSERT_EQ(d_ptr_map.h_flattened_comp_index_real[ix],
+                c_flattened_comp_index_real.at(ix));
+    }
+    for (int ix = 0; ix < ncomp_total_int_correct; ix++) {
+      ASSERT_EQ(d_ptr_map.h_flattened_dat_index_int[ix],
+                c_flattened_dat_index_int.at(ix));
+      ASSERT_EQ(d_ptr_map.h_flattened_comp_index_int[ix],
+                c_flattened_comp_index_int.at(ix));
+    }
 
     const std::size_t ndat_real = A->particle_dats_real.size();
     const std::size_t ndat_int = A->particle_dats_int.size();
@@ -192,7 +300,7 @@ TEST(ParticleGroup, particle_group_pointer_map) {
                 ndat_int * sizeof(int))
         .wait_and_throw();
 
-    int index = 0;
+    index = 0;
     int total_ncomp = 0;
     for (auto [sym, dat] : A->particle_dats_real) {
       const int ncomp = dat->ncomp;

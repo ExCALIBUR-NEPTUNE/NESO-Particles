@@ -23,6 +23,14 @@ struct ParticleGroupPointerMapDeviceConst {
   int ndat_int;
   int ncomp_total_real;
   int ncomp_total_int;
+  int *d_flattened_dat_index_real;
+  int *d_flattened_dat_index_int;
+  int *d_flattened_comp_index_real;
+  int *d_flattened_comp_index_int;
+  int *h_flattened_dat_index_real;
+  int *h_flattened_dat_index_int;
+  int *h_flattened_comp_index_real;
+  int *h_flattened_comp_index_int;
 };
 
 struct ParticleGroupPointerMapDevice {
@@ -40,6 +48,14 @@ struct ParticleGroupPointerMapDevice {
   int ndat_int;
   int ncomp_total_real;
   int ncomp_total_int;
+  int *d_flattened_dat_index_real;
+  int *d_flattened_dat_index_int;
+  int *d_flattened_comp_index_real;
+  int *d_flattened_comp_index_int;
+  int *h_flattened_dat_index_real;
+  int *h_flattened_dat_index_int;
+  int *h_flattened_comp_index_real;
+  int *h_flattened_comp_index_int;
 };
 
 /**
@@ -51,7 +67,8 @@ protected:
   SYCLTargetSharedPtr sycl_target;
   std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> *particle_dats_real;
   std::map<Sym<INT>, ParticleDatSharedPtr<INT>> *particle_dats_int;
-  bool valid;
+  bool valid_const{false};
+  bool valid{false};
 
   std::shared_ptr<BufferDeviceHost<REAL *const *const *>> dh_dat_ptr_const_real;
   std::shared_ptr<BufferDeviceHost<INT *const *const *>> dh_dat_ptr_const_int;
@@ -63,11 +80,23 @@ protected:
   std::shared_ptr<BufferDeviceHost<int>> dh_dat_ncomp_exscan_real;
   std::shared_ptr<BufferDeviceHost<int>> dh_dat_ncomp_exscan_int;
 
+  std::shared_ptr<BufferDeviceHost<int>> dh_flattened_dat_index_real;
+  std::shared_ptr<BufferDeviceHost<int>> dh_flattened_dat_index_int;
+  std::shared_ptr<BufferDeviceHost<int>> dh_flattened_comp_index_real;
+  std::shared_ptr<BufferDeviceHost<int>> dh_flattened_comp_index_int;
+
   int ncomp_total_real;
   int ncomp_total_int;
 
-  ParticleGroupPointerMapDeviceConst d_cache_const;
-  ParticleGroupPointerMapDevice d_cache;
+  ParticleGroupPointerMapDeviceConst h_cache_const;
+  ParticleGroupPointerMapDevice h_cache;
+
+  std::shared_ptr<BufferDevice<ParticleGroupPointerMapDeviceConst>>
+      d_cache_const;
+  std::shared_ptr<BufferDevice<ParticleGroupPointerMapDevice>> d_cache;
+
+  void create_const();
+  void create();
 
 public:
   /// Disable (implicit) copies.
@@ -95,17 +124,30 @@ public:
   /**
    * Invalidate the cached values. Should be called when the maps are modified.
    */
-  inline void invalidate() { this->valid = false; }
+  inline void invalidate() {
+    this->valid_const = false;
+    this->valid = false;
+  }
 
   /**
    * @returns Device copyable type that describes read access to the dats.
    */
-  ParticleGroupPointerMapDeviceConst get_const();
+  ParticleGroupPointerMapDeviceConst &get_const();
 
   /**
    * @returns Device copyable type that describes write access to the dats.
    */
-  ParticleGroupPointerMapDevice get();
+  ParticleGroupPointerMapDevice &get();
+
+  /**
+   * @returns Device pointer that describes read access to the dats.
+   */
+  ParticleGroupPointerMapDeviceConst *get_const_device();
+
+  /**
+   * @returns Device pointer that describes write access to the dats.
+   */
+  ParticleGroupPointerMapDevice *get_device();
 };
 
 } // namespace NESO::Particles
