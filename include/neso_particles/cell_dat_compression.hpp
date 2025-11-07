@@ -11,6 +11,7 @@
 #include "compute_target.hpp"
 #include "loop/particle_loop_iteration_set.hpp"
 #include "particle_dat.hpp"
+#include "particle_group_pointer_map.hpp"
 #include "particle_set.hpp"
 #include "particle_spec.hpp"
 #include "profiling.hpp"
@@ -43,6 +44,8 @@ private:
   std::shared_ptr<ParticleLoopImplementation::ParticleLoopBlockIterationSet>
       iteration_set;
 
+  ParticleGroupPointerMapSharedPtr particle_group_pointer_map{nullptr};
+
 public:
   /// Disable (implicit) copies.
   LayerCompressor(const LayerCompressor &st) = delete;
@@ -63,11 +66,13 @@ public:
   LayerCompressor(
       SYCLTargetSharedPtr sycl_target, const int ncell,
       std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
-      std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int)
+      std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int,
+      ParticleGroupPointerMapSharedPtr particle_group_pointer_map)
       : sycl_target(sycl_target), ncell(ncell),
         h_npart_cell(sycl_target, ncell), d_npart_cell(sycl_target, ncell),
         particle_dats_real(particle_dats_real),
-        particle_dats_int(particle_dats_int) {
+        particle_dats_int(particle_dats_int),
+        particle_group_pointer_map(particle_group_pointer_map) {
     this->iteration_set = std::make_shared<
         ParticleLoopImplementation::ParticleLoopBlockIterationSet>(
         this->sycl_target, this->ncell, this->h_npart_cell.ptr,
@@ -613,6 +618,8 @@ protected:
   }
 
   bool test_mode{false};
+  bool test_mode_failure{false};
+
   std::function<void(int compress_npart, INT *k_compress_cells_old,
                      INT *k_compress_layers_old, INT *k_compress_layers_new,
                      int *k_npart_cell_new)>
@@ -634,8 +641,6 @@ protected:
     if (npart < 1) {
       return;
     }
-
-    auto t0 = profile_timestamp();
 
     auto d_compress_cells_old =
         get_resource<BufferDevice<INT>,
@@ -714,78 +719,164 @@ protected:
         npart, usm_cells, usm_layers, &compress_npart, k_compress_cells_old,
         k_compress_layers_old, k_compress_layers_new, k_npart_cell_new);
 
-    auto t1 = profile_timestamp();
-
     // do this d->h copy once for all dats
     if (this->ncell > 0) {
       this->event_stack.push(this->sycl_target->queue.memcpy(
           this->h_npart_cell.ptr, k_npart_cell_new, this->ncell * sizeof(int)));
     }
 
-    auto r = ProfileRegion("LayerCompressor", "data_movement");
-
-    std::size_t num_bytes = 0;
+    auto region_bookkeeping = this->sycl_target->profile_map.start_region(
+        "LayerCompressor", "set_npart_cells_device");
     for (auto &dat : particle_dats_real) {
-      this->event_stack.push(dat.second->copy_particle_data(
-          compress_npart, k_compress_cells_old, k_compress_cells_old,
-          k_compress_layers_old, k_compress_layers_new));
       this->event_stack.push(
           dat.second->set_npart_cells_device(k_npart_cell_new));
-      num_bytes += sizeof(REAL) * dat.second->ncomp;
     }
     for (auto &dat : particle_dats_int) {
-      this->event_stack.push(dat.second->copy_particle_data(
-          compress_npart, k_compress_cells_old, k_compress_cells_old,
-          k_compress_layers_old, k_compress_layers_new));
       this->event_stack.push(
           dat.second->set_npart_cells_device(k_npart_cell_new));
-      num_bytes += sizeof(INT) * dat.second->ncomp;
+    }
+    this->event_stack.wait();
+    this->sycl_target->profile_map.end_region(region_bookkeeping);
+
+    auto r = ProfileRegion("LayerCompressor", "data_movement");
+    auto &device_ptr_map = this->particle_group_pointer_map->get();
+    const int ncomp_total_real = device_ptr_map.ncomp_total_real;
+    const int ncomp_total_int = device_ptr_map.ncomp_total_int;
+
+    const int *RESTRICT k_flattened_dat_index_real =
+        device_ptr_map.d_flattened_dat_index_real;
+    const int *RESTRICT k_flattened_dat_index_int =
+        device_ptr_map.d_flattened_dat_index_int;
+    const int *RESTRICT k_flattened_comp_index_real =
+        device_ptr_map.d_flattened_comp_index_real;
+    const int *RESTRICT k_flattened_comp_index_int =
+        device_ptr_map.d_flattened_comp_index_int;
+
+    auto k_ptr_real = device_ptr_map.d_ptr_real;
+    auto k_ptr_int = device_ptr_map.d_ptr_int;
+
+    std::size_t num_bytes = 0;
+    num_bytes += ncomp_total_real * sizeof(REAL);
+    num_bytes += ncomp_total_int * sizeof(INT);
+
+    if ((ncomp_total_real > 0) && (compress_npart > 0)) {
+      this->event_stack.push(this->sycl_target->queue.parallel_for(
+          this->sycl_target->device_limits.validate_range_global(
+              sycl::range<2>(ncomp_total_real, compress_npart)),
+          [=](sycl::item<2> idx) {
+            const int dat = k_flattened_dat_index_real[idx.get_id(0)];
+            const int component = k_flattened_comp_index_real[idx.get_id(0)];
+            const int particle = idx.get_id(1);
+            const int cell = k_compress_cells_old[particle];
+            const int layer_old = k_compress_layers_old[particle];
+            const int layer_new = k_compress_layers_new[particle];
+            if (cell > -1) {
+              k_ptr_real[dat][cell][component][layer_new] =
+                  k_ptr_real[dat][cell][component][layer_old];
+            }
+          }));
+    }
+
+    if ((ncomp_total_int > 0) && (compress_npart > 0)) {
+      this->event_stack.push(this->sycl_target->queue.parallel_for(
+          this->sycl_target->device_limits.validate_range_global(
+              sycl::range<2>(ncomp_total_int, compress_npart)),
+          [=](sycl::item<2> idx) {
+            const int dat = k_flattened_dat_index_int[idx.get_id(0)];
+            const int component = k_flattened_comp_index_int[idx.get_id(0)];
+            const int particle = idx.get_id(1);
+            const int cell = k_compress_cells_old[particle];
+            const int layer_old = k_compress_layers_old[particle];
+            const int layer_new = k_compress_layers_new[particle];
+            if (cell > -1) {
+              k_ptr_int[dat][cell][component][layer_new] =
+                  k_ptr_int[dat][cell][component][layer_old];
+            }
+          }));
     }
 
     r.num_bytes = num_bytes * compress_npart;
     // the move and set_npart calls are async
     this->event_stack.wait();
 
+    if (this->test_mode) {
+
+      std::vector<INT> h_cells(compress_npart);
+      std::vector<INT> h_layers_old(compress_npart);
+      std::vector<INT> h_layers_new(compress_npart);
+
+      this->sycl_target->queue
+          .memcpy(h_cells.data(), k_compress_cells_old,
+                  compress_npart * sizeof(INT))
+          .wait_and_throw();
+      this->sycl_target->queue
+          .memcpy(h_layers_old.data(), k_compress_layers_old,
+                  compress_npart * sizeof(INT))
+          .wait_and_throw();
+      this->sycl_target->queue
+          .memcpy(h_layers_new.data(), k_compress_layers_new,
+                  compress_npart * sizeof(INT))
+          .wait_and_throw();
+
+      for (auto &dat : particle_dats_real) {
+        for (int px = 0; px < std::min(compress_npart, 16); px++) {
+          const INT cell = h_cells.at(px);
+          const INT layer_old = h_layers_old.at(px);
+          const INT layer_new = h_layers_new.at(px);
+          for (int cx = 0; cx < dat.second->ncomp; cx++) {
+            const auto vold =
+                dat.second->cell_dat.get_value(cell, layer_old, cx);
+            const auto vnew =
+                dat.second->cell_dat.get_value(cell, layer_new, cx);
+            if (!(vold == vnew)) {
+              this->test_mode_failure = true;
+            }
+          }
+        }
+      }
+      for (auto &dat : particle_dats_int) {
+        for (int px = 0; px < std::min(compress_npart, 16); px++) {
+          const INT cell = h_cells.at(px);
+          const INT layer_old = h_layers_old.at(px);
+          const INT layer_new = h_layers_new.at(px);
+          for (int cx = 0; cx < dat.second->ncomp; cx++) {
+            const auto vold =
+                dat.second->cell_dat.get_value(cell, layer_old, cx);
+            const auto vnew =
+                dat.second->cell_dat.get_value(cell, layer_new, cx);
+            if (!(vold == vnew)) {
+              this->test_mode_failure = true;
+            }
+          }
+        }
+      }
+    }
+
     r.end();
     this->sycl_target->profile_map.add_region(r);
-    sycl_target->profile_map.inc("LayerCompressor", "data_movement", 1,
-                                 profile_elapsed(t1, profile_timestamp()));
 
     r = ProfileRegion("LayerCompressor", "dat_bookkeeping");
 
-    auto t2 = profile_timestamp();
     for (auto &dat : particle_dats_real) {
       dat.second->set_npart_cells_host(this->h_npart_cell.ptr);
     }
     for (auto &dat : particle_dats_int) {
       dat.second->set_npart_cells_host(this->h_npart_cell.ptr);
     }
-    sycl_target->profile_map.inc("LayerCompressor", "host_npart_setting", 1,
-                                 profile_elapsed(t2, profile_timestamp()));
 
-    auto t3 = profile_timestamp();
     for (auto &dat : particle_dats_real) {
       dat.second->trim_cell_dat_rows();
     }
     for (auto &dat : particle_dats_int) {
       dat.second->trim_cell_dat_rows();
     }
-    sycl_target->profile_map.inc("LayerCompressor", "dat_trimming", 1,
-                                 profile_elapsed(t3, profile_timestamp()));
 
-    auto t4 = profile_timestamp();
     for (auto &dat : particle_dats_real) {
       dat.second->cell_dat.wait_set_nrow();
     }
     for (auto &dat : particle_dats_int) {
       dat.second->cell_dat.wait_set_nrow();
     }
-
-    sycl_target->profile_map.inc("LayerCompressor", "dat_trimming_wait", 1,
-                                 profile_elapsed(t4, profile_timestamp()));
-
-    sycl_target->profile_map.inc("LayerCompressor", "remove_particles", 1,
-                                 profile_elapsed(t0, profile_timestamp()));
 
     r.end();
     this->sycl_target->profile_map.add_region(r);

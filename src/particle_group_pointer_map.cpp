@@ -208,40 +208,35 @@ ParticleGroupPointerMap::ParticleGroupPointerMap(
     : sycl_target(sycl_target), particle_dats_real(particle_dats_real),
       particle_dats_int(particle_dats_int), valid_const(false) {
 
-  const std::size_t ndat_real =
-      std::max(this->particle_dats_real->size(), (std::size_t)1);
-  const std::size_t ndat_int =
-      std::max(this->particle_dats_int->size(), (std::size_t)2);
-
   this->dh_dat_ptr_const_real =
       std::make_shared<BufferDeviceHost<REAL *const *const *>>(
-          this->sycl_target, ndat_real);
+          this->sycl_target, 1);
   this->dh_dat_ptr_const_int =
       std::make_shared<BufferDeviceHost<INT *const *const *>>(this->sycl_target,
-                                                              ndat_int);
+                                                              1);
 
-  this->dh_dat_ptr_real = std::make_shared<BufferDeviceHost<REAL ***>>(
-      this->sycl_target, ndat_real);
+  this->dh_dat_ptr_real =
+      std::make_shared<BufferDeviceHost<REAL ***>>(this->sycl_target, 1);
   this->dh_dat_ptr_int =
-      std::make_shared<BufferDeviceHost<INT ***>>(this->sycl_target, ndat_int);
+      std::make_shared<BufferDeviceHost<INT ***>>(this->sycl_target, 1);
 
   this->dh_dat_ncomp_real =
-      std::make_shared<BufferDeviceHost<int>>(this->sycl_target, ndat_real);
+      std::make_shared<BufferDeviceHost<int>>(this->sycl_target, 1);
   this->dh_dat_ncomp_int =
-      std::make_shared<BufferDeviceHost<int>>(this->sycl_target, ndat_int);
+      std::make_shared<BufferDeviceHost<int>>(this->sycl_target, 1);
   this->dh_dat_ncomp_exscan_real =
-      std::make_shared<BufferDeviceHost<int>>(this->sycl_target, ndat_real);
+      std::make_shared<BufferDeviceHost<int>>(this->sycl_target, 1);
   this->dh_dat_ncomp_exscan_int =
-      std::make_shared<BufferDeviceHost<int>>(this->sycl_target, ndat_int);
+      std::make_shared<BufferDeviceHost<int>>(this->sycl_target, 1);
 
   this->dh_flattened_dat_index_real =
-      std::make_shared<BufferDeviceHost<int>>(this->sycl_target, ndat_real);
+      std::make_shared<BufferDeviceHost<int>>(this->sycl_target, 1);
   this->dh_flattened_dat_index_int =
-      std::make_shared<BufferDeviceHost<int>>(this->sycl_target, ndat_int);
+      std::make_shared<BufferDeviceHost<int>>(this->sycl_target, 1);
   this->dh_flattened_comp_index_real =
-      std::make_shared<BufferDeviceHost<int>>(this->sycl_target, ndat_real);
+      std::make_shared<BufferDeviceHost<int>>(this->sycl_target, 1);
   this->dh_flattened_comp_index_int =
-      std::make_shared<BufferDeviceHost<int>>(this->sycl_target, ndat_int);
+      std::make_shared<BufferDeviceHost<int>>(this->sycl_target, 1);
 
   this->d_cache_const =
       std::make_shared<BufferDevice<ParticleGroupPointerMapDeviceConst>>(
@@ -260,15 +255,20 @@ ParticleGroupPointerMapDevice &ParticleGroupPointerMap::get() {
   return this->h_cache;
 }
 
-ParticleGroupPointerMapDeviceConst *
-ParticleGroupPointerMap::get_const_device() {
+void ParticleGroupPointerMap::get_const_device(
+    ParticleGroupPointerMapDeviceConst **h_map,
+    ParticleGroupPointerMapDeviceConst **d_map) {
   this->create_const();
-  return this->d_cache_const->ptr;
+  *h_map = &this->h_cache_const;
+  *d_map = this->d_cache_const->ptr;
 }
 
-ParticleGroupPointerMapDevice *ParticleGroupPointerMap::get_device() {
+void ParticleGroupPointerMap::get_device(
+    ParticleGroupPointerMapDevice **h_map,
+    ParticleGroupPointerMapDevice **d_map) {
   this->create();
-  return this->d_cache->ptr;
+  *h_map = &this->h_cache;
+  *d_map = this->d_cache->ptr;
 }
 
 } // namespace NESO::Particles

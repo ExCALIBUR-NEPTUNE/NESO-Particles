@@ -75,10 +75,6 @@ bool ParticleGroup::check_validation(ParticleGroupVersion &to_check,
 void ParticleGroup::setup_internal(DomainSharedPtr domain,
                                    ParticleSpec &particle_spec,
                                    SYCLTargetSharedPtr sycl_target) {
-  // create the pointer map
-  this->particle_group_pointer_map = std::make_shared<ParticleGroupPointerMap>(
-      this->sycl_target, &this->particle_dats_real, &this->particle_dats_int);
-
   this->debug_sub_group_create =
       get_env_size_t("NESO_PARTICLES_DEBUG_SUB_GROUPS", 0);
 

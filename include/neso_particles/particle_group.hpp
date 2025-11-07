@@ -339,7 +339,7 @@ protected:
   std::size_t debug_sub_group_indent{0};
 
   // Helper type to hold pointers to the dats
-  std::shared_ptr<ParticleGroupPointerMap> particle_group_pointer_map;
+  ParticleGroupPointerMapSharedPtr particle_group_pointer_map;
 
   /**
    * Returns true if the passed version is behind and can be updated. By
@@ -438,9 +438,12 @@ public:
             layer_compressor, particle_dats_real, particle_dats_int),
         cell_move_ctx(sycl_target, this->ncell, layer_compressor,
                       particle_dats_real, particle_dats_int),
-        particle_group_version(1), domain(domain), sycl_target(sycl_target),
+        particle_group_version(1),
+        particle_group_pointer_map(std::make_shared<ParticleGroupPointerMap>(
+            sycl_target, &this->particle_dats_real, &this->particle_dats_int)),
+        domain(domain), sycl_target(sycl_target),
         layer_compressor(sycl_target, ncell, particle_dats_real,
-                         particle_dats_int) {
+                         particle_dats_int, particle_group_pointer_map) {
     if (!this->is_temporary) {
       const std::string name = "NESO_PARTICLES_NPART_CELL_HINT";
       if (!this->sycl_target->parameters->contains(name)) {

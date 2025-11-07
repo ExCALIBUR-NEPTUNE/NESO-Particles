@@ -140,15 +140,24 @@ public:
   ParticleGroupPointerMapDevice &get();
 
   /**
-   * @returns Device pointer that describes read access to the dats.
+   * @param[in, out] h_map Host pointer that describes read access to the dats.
+   * @param[in, out] d_map Device pointer that describes read access to the
+   * dats.
    */
-  ParticleGroupPointerMapDeviceConst *get_const_device();
+  void get_const_device(ParticleGroupPointerMapDeviceConst **h_map,
+                        ParticleGroupPointerMapDeviceConst **d_map);
 
   /**
-   * @returns Device pointer that describes write access to the dats.
+   * @param[in, out] h_map Host pointer that describes write access to the dats.
+   * @param[in, out] d_map Device pointer that describes write access to the
+   * dats.
    */
-  ParticleGroupPointerMapDevice *get_device();
+  void get_device(ParticleGroupPointerMapDevice **h_map,
+                  ParticleGroupPointerMapDevice **d_map);
 };
+
+using ParticleGroupPointerMapSharedPtr =
+    std::shared_ptr<ParticleGroupPointerMap>;
 
 } // namespace NESO::Particles
 
