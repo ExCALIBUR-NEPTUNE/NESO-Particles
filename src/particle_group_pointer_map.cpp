@@ -17,11 +17,18 @@ void ParticleGroupPointerMap::create_const() {
     this->dh_dat_ncomp_int->realloc_no_copy(ndat_int);
     this->dh_dat_ncomp_exscan_real->realloc_no_copy(ndat_real);
     this->dh_dat_ncomp_exscan_int->realloc_no_copy(ndat_int);
+    this->d_npart_cell_ptrs->realloc_no_copy(ndat_real + ndat_int);
 
+    this->h_npart_cell_ptrs.clear();
+    this->h_npart_cell_ptrs.reserve(ndat_real + ndat_int);
+
+    std::vector<int *> t_npart_cell_ptrs;
+    t_npart_cell_ptrs.reserve(ndat_real + ndat_int);
     this->ncomp_total_real = 0;
     int index = 0;
     for (auto [sym, dat] : *this->particle_dats_real) {
       const int ncomp = dat->ncomp;
+      this->cell_count = dat->ncell;
       this->dh_dat_ptr_const_real->h_buffer.ptr[index] = dat->impl_get_const();
       this->dh_dat_ncomp_real->h_buffer.ptr[index] = ncomp;
       this->dh_dat_ncomp_exscan_real->h_buffer.ptr[index] =
@@ -29,6 +36,12 @@ void ParticleGroupPointerMap::create_const() {
       this->ncomp_total_real += ncomp;
       this->map_index_to_sym_real.push_back(sym);
       this->map_sym_to_index_real[sym] = index;
+
+      auto h_npart_cell_ptr = dat->h_npart_cell;
+      auto d_npart_cell_ptr = dat->d_npart_cell;
+      this->h_npart_cell_ptrs.push_back(h_npart_cell_ptr);
+      t_npart_cell_ptrs.push_back(d_npart_cell_ptr);
+
       index++;
     }
 
@@ -58,6 +71,12 @@ void ParticleGroupPointerMap::create_const() {
       this->ncomp_total_int += ncomp;
       this->map_index_to_sym_int.push_back(sym);
       this->map_sym_to_index_int[sym] = index;
+
+      auto h_npart_cell_ptr = dat->h_npart_cell;
+      auto d_npart_cell_ptr = dat->d_npart_cell;
+      this->h_npart_cell_ptrs.push_back(h_npart_cell_ptr);
+      t_npart_cell_ptrs.push_back(d_npart_cell_ptr);
+
       index++;
     }
 
@@ -75,6 +94,11 @@ void ParticleGroupPointerMap::create_const() {
       }
       dat_index++;
     }
+
+    this->sycl_target->queue
+        .memcpy(this->d_npart_cell_ptrs->ptr, t_npart_cell_ptrs.data(),
+                (ndat_real + ndat_int) * sizeof(int *))
+        .wait_and_throw();
 
     this->dh_dat_ptr_const_real->host_to_device();
     this->dh_dat_ptr_const_int->host_to_device();
@@ -243,6 +267,9 @@ ParticleGroupPointerMap::ParticleGroupPointerMap(
           this->sycl_target, std::vector{this->h_cache_const});
   this->d_cache = std::make_shared<BufferDevice<ParticleGroupPointerMapDevice>>(
       this->sycl_target, std::vector{this->h_cache});
+
+  this->d_npart_cell_ptrs =
+      std::make_shared<BufferDevice<int *>>(this->sycl_target, 1);
 }
 
 ParticleGroupPointerMapDeviceConst &ParticleGroupPointerMap::get_const() {

@@ -725,19 +725,7 @@ protected:
           this->h_npart_cell.ptr, k_npart_cell_new, this->ncell * sizeof(int)));
     }
 
-    auto region_bookkeeping = this->sycl_target->profile_map.start_region(
-        "LayerCompressor", "set_npart_cells_device");
-    for (auto &dat : particle_dats_real) {
-      this->event_stack.push(
-          dat.second->set_npart_cells_device(k_npart_cell_new));
-    }
-    for (auto &dat : particle_dats_int) {
-      this->event_stack.push(
-          dat.second->set_npart_cells_device(k_npart_cell_new));
-    }
     this->event_stack.wait();
-    this->sycl_target->profile_map.end_region(region_bookkeeping);
-
     auto r = ProfileRegion("LayerCompressor", "data_movement");
     auto &device_ptr_map = this->particle_group_pointer_map->get();
     const int ncomp_total_real = device_ptr_map.ncomp_total_real;
@@ -796,7 +784,10 @@ protected:
     }
 
     r.num_bytes = num_bytes * compress_npart;
-    // the move and set_npart calls are async
+
+    this->particle_group_pointer_map->set_npart_cells_host_device(
+        this->h_npart_cell.ptr, k_npart_cell_new);
+
     this->event_stack.wait();
 
     if (this->test_mode) {
@@ -856,13 +847,6 @@ protected:
     this->sycl_target->profile_map.add_region(r);
 
     r = ProfileRegion("LayerCompressor", "dat_bookkeeping");
-
-    for (auto &dat : particle_dats_real) {
-      dat.second->set_npart_cells_host(this->h_npart_cell.ptr);
-    }
-    for (auto &dat : particle_dats_int) {
-      dat.second->set_npart_cells_host(this->h_npart_cell.ptr);
-    }
 
     for (auto &dat : particle_dats_real) {
       dat.second->trim_cell_dat_rows();

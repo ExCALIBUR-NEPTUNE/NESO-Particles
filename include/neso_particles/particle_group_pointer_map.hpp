@@ -98,6 +98,11 @@ protected:
   void create_const();
   void create();
 
+  // members for npart cell setting
+  std::size_t cell_count{0};
+  std::shared_ptr<BufferDevice<int *>> d_npart_cell_ptrs;
+  std::vector<int *> h_npart_cell_ptrs;
+
 public:
   /// Disable (implicit) copies.
   ParticleGroupPointerMap(const ParticleGroupPointerMap &st) = delete;
@@ -154,6 +159,51 @@ public:
    */
   void get_device(ParticleGroupPointerMapDevice **h_map,
                   ParticleGroupPointerMapDevice **d_map);
+
+  /**
+   * Async call to set d_npart_cells from a device buffer for all particle dats.
+   * npart_device_to_host  * must be called on event completion.
+   *
+   * @param h_npart_cell_in Host accessible pointer to an array containing new
+   * cell counts.
+   * @param d_npart_cell_in Device accessible pointer to an array containing new
+   * cell_counts.
+   */
+  template <typename U>
+  inline void set_npart_cells_host_device(const U *h_npart_cell,
+                                          const U *d_npart_cell) {
+    // If you edit how this works check that
+    // ParticleGroupPointerMap::set_npart_cells_device is still good.
+    this->create();
+
+    const std::size_t num_dats = this->h_npart_cell_ptrs.size();
+    int **k_npart_cell_ptrs = this->d_npart_cell_ptrs->ptr;
+
+    auto e0 = this->sycl_target->queue.parallel_for(
+        this->sycl_target->device_limits.validate_range_global(
+            sycl::range<2>(num_dats, this->cell_count)),
+        [=](sycl::item<2> idx) {
+          const std::size_t dat = idx.get_id(0);
+          const std::size_t cell = idx.get_id(1);
+          const int npart_cell = d_npart_cell[cell];
+          k_npart_cell_ptrs[dat][cell] = npart_cell;
+        });
+
+    for (auto [sym, dat] : *this->particle_dats_real) {
+      dat->write_callback_wrapper(0);
+    }
+    for (auto [sym, dat] : *this->particle_dats_int) {
+      dat->write_callback_wrapper(0);
+    }
+
+    for (std::size_t dx = 0; dx < num_dats; dx++) {
+      for (std::size_t cx = 0; cx < this->cell_count; cx++) {
+        this->h_npart_cell_ptrs[dx][cx] = h_npart_cell[cx];
+      }
+    }
+
+    e0.wait_and_throw();
+  }
 };
 
 using ParticleGroupPointerMapSharedPtr =
