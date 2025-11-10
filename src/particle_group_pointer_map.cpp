@@ -26,6 +26,8 @@ void ParticleGroupPointerMap::create_const() {
     t_npart_cell_ptrs.reserve(ndat_real + ndat_int);
     this->ncomp_total_real = 0;
     int index = 0;
+    this->num_bytes_per_particle = 0;
+
     for (auto [sym, dat] : *this->particle_dats_real) {
       const int ncomp = dat->ncomp;
       this->cell_count = dat->ncell;
@@ -41,6 +43,8 @@ void ParticleGroupPointerMap::create_const() {
       auto d_npart_cell_ptr = dat->d_npart_cell;
       this->h_npart_cell_ptrs.push_back(h_npart_cell_ptr);
       t_npart_cell_ptrs.push_back(d_npart_cell_ptr);
+
+      this->num_bytes_per_particle += ncomp * sizeof(REAL);
 
       index++;
     }
@@ -76,6 +80,8 @@ void ParticleGroupPointerMap::create_const() {
       auto d_npart_cell_ptr = dat->d_npart_cell;
       this->h_npart_cell_ptrs.push_back(h_npart_cell_ptr);
       t_npart_cell_ptrs.push_back(d_npart_cell_ptr);
+
+      this->num_bytes_per_particle += ncomp * sizeof(INT);
 
       index++;
     }
@@ -296,6 +302,16 @@ void ParticleGroupPointerMap::get_device(
   this->create();
   *h_map = &this->h_cache;
   *d_map = this->d_cache->ptr;
+}
+
+std::size_t ParticleGroupPointerMap::get_num_bytes_per_particle() {
+  this->create_const();
+  return this->num_bytes_per_particle;
+}
+
+int ParticleGroupPointerMap::get_cell_count() {
+  this->create_const();
+  return this->cell_count;
 }
 
 } // namespace NESO::Particles

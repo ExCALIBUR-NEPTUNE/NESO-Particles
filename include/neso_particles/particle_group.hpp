@@ -242,13 +242,6 @@ protected:
   // neighbour communication context
   std::unique_ptr<LocalMove> local_move_ctx;
 
-#ifdef NESO_PARTICLES_TEST_COMPILATION
-public:
-#endif
-  // members for moving particles between local cells
-  CellMove cell_move_ctx;
-
-protected:
   // This member tracks the versions of the particle dat data
   std::map<ParticleDatVersion, std::tuple<std::int64_t, bool>>
       particle_dat_versions;
@@ -414,6 +407,14 @@ public:
   /// Layer compression instance for dats when particles are removed from cells.
   LayerCompressor layer_compressor;
 
+protected:
+#ifdef NESO_PARTICLES_TEST_COMPILATION
+public:
+#endif
+  // members for moving particles between local cells
+  CellMove cell_move_ctx;
+
+public:
   /// Used to be required to be called. Kept to not break API.
   inline void free() {}
 
@@ -436,14 +437,14 @@ public:
             sycl_target,
             domain->mesh->get_mesh_hierarchy()->global_move_communication,
             layer_compressor, particle_dats_real, particle_dats_int),
-        cell_move_ctx(sycl_target, this->ncell, layer_compressor,
-                      particle_dats_real, particle_dats_int),
         particle_group_version(1),
         particle_group_pointer_map(std::make_shared<ParticleGroupPointerMap>(
             sycl_target, &this->particle_dats_real, &this->particle_dats_int)),
         domain(domain), sycl_target(sycl_target),
         layer_compressor(sycl_target, ncell, particle_dats_real,
-                         particle_dats_int, particle_group_pointer_map) {
+                         particle_dats_int, particle_group_pointer_map),
+        cell_move_ctx(sycl_target, layer_compressor,
+                      particle_group_pointer_map) {
     if (!this->is_temporary) {
       const std::string name = "NESO_PARTICLES_NPART_CELL_HINT";
       if (!this->sycl_target->parameters->contains(name)) {

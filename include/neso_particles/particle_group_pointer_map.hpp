@@ -63,10 +63,12 @@ struct ParticleGroupPointerMapDevice {
  * access.
  */
 class ParticleGroupPointerMap {
-protected:
+public:
   SYCLTargetSharedPtr sycl_target;
   std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> *particle_dats_real;
   std::map<Sym<INT>, ParticleDatSharedPtr<INT>> *particle_dats_int;
+
+protected:
   bool valid_const{false};
   bool valid{false};
 
@@ -102,6 +104,7 @@ protected:
   std::size_t cell_count{0};
   std::shared_ptr<BufferDevice<int *>> d_npart_cell_ptrs;
   std::vector<int *> h_npart_cell_ptrs;
+  std::size_t num_bytes_per_particle{0};
 
 public:
   /// Disable (implicit) copies.
@@ -161,8 +164,8 @@ public:
                   ParticleGroupPointerMapDevice **d_map);
 
   /**
-   * Async call to set d_npart_cells from a device buffer for all particle dats.
-   * npart_device_to_host  * must be called on event completion.
+   * Call to set h_npart_cells and d_npart_cells from a host and device buffer
+   * for all particle dats.
    *
    * @param h_npart_cell_in Host accessible pointer to an array containing new
    * cell counts.
@@ -204,6 +207,42 @@ public:
 
     e0.wait_and_throw();
   }
+
+  /**
+   * Call to set h_npart_cells and d_npart_cells from a host buffer for all
+   * particle dats.
+   *
+   * @param h_npart_cell_in Host accessible pointer to an array containing new
+   * cell counts.
+   */
+  template <typename U>
+  inline void set_npart_cells_host(const U *h_npart_cell) {
+    // This call ensures cell_count is set.
+    this->create_const();
+    auto d_npart_cell =
+        get_resource<BufferDevice<U>, ResourceStackInterfaceBufferDevice<U>>(
+            sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<U>{},
+            sycl_target);
+    d_npart_cell->realloc_no_copy(this->cell_count);
+    this->sycl_target->queue
+        .memcpy(d_npart_cell->ptr, h_npart_cell, this->cell_count * sizeof(U))
+        .wait_and_throw();
+
+    this->set_npart_cells_host_device(h_npart_cell, d_npart_cell->ptr);
+
+    restore_resource(sycl_target->resource_stack_map,
+                     ResourceStackKeyBufferDevice<U>{}, d_npart_cell);
+  }
+
+  /**
+   * @returns The number of bytes per particle.
+   */
+  std::size_t get_num_bytes_per_particle();
+
+  /**
+   * @returns The cell count.
+   */
+  int get_cell_count();
 };
 
 using ParticleGroupPointerMapSharedPtr =
