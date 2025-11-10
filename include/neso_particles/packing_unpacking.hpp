@@ -22,21 +22,7 @@ namespace NESO::Particles {
  */
 class ParticlePacker {
 private:
-  int num_dats_real = 0;
-  int num_dats_int = 0;
-  BufferDeviceHost<REAL *const *const *> dh_particle_dat_ptr_real;
-  BufferDeviceHost<INT *const *const *> dh_particle_dat_ptr_int;
-  BufferDeviceHost<int> dh_particle_dat_ncomp_real;
-  BufferDeviceHost<int> dh_particle_dat_ncomp_int;
   bool device_aware_mpi_enabled;
-
-  size_t particle_size(
-      std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
-      std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int);
-
-  void get_particle_dat_info(
-      std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
-      std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int);
 
   /// Required length of the send buffer.
   INT required_send_buffer_length;
@@ -67,11 +53,7 @@ public:
    * @param sycl_target SYCLTargetSharedPtr to use as compute device.
    */
   ParticlePacker(SYCLTargetSharedPtr sycl_target)
-      : dh_particle_dat_ptr_real(sycl_target, 1),
-        dh_particle_dat_ptr_int(sycl_target, 1),
-        dh_particle_dat_ncomp_real(sycl_target, 1),
-        dh_particle_dat_ncomp_int(sycl_target, 1),
-        device_aware_mpi_enabled(NESO::Particles::device_aware_mpi_enabled()),
+      : device_aware_mpi_enabled(NESO::Particles::device_aware_mpi_enabled()),
         h_send_pointers(sycl_target, 1),
         cell_dat(sycl_target, sycl_target->comm_pair.size_parent, 1),
         h_send_buffer(sycl_target, 1), h_send_offsets(sycl_target, 1),
@@ -87,34 +69,6 @@ public:
    */
   char **get_packed_pointers(const int num_remote_send_ranks,
                              const int *h_send_rank_npart_ptr);
-
-  /**
-   *  Pack particle data on the device.
-   *
-   * @param num_remote_send_ranks Number of remote ranks involved in send.
-   * @param h_send_rank_npart Host buffer holding the number of particles to be
-   * sent to each remote rank.
-   * @param dh_send_rank_map Maps MPI ranks to the cell in the packing CellDat.
-   * @param num_particles_leaving Total number of particles to pack.
-   * @param d_pack_cells BufferDevice holding the cells of particles to pack.
-   * @param d_pack_layers_src BufferDevice holding the layers(rows) of particles
-   * to pack.
-   * @param d_pack_layers_dst BufferDevice holding the destination layers in
-   * the packing CellDat.
-   * @param particle_dats_real Container of REAL ParticleDat instances to pack.
-   * @param particle_dats_int Container of INT ParticleDat instances to pack.
-   * @param rank_component Component of MPI rank ParticleDat to inspect for
-   * destination MPI rank.
-   * @returns sycl::event to wait on for packing completion.
-   */
-  sycl::event
-  pack(const int num_remote_send_ranks, BufferHost<int> &h_send_rank_npart,
-       BufferDeviceHost<int> &dh_send_rank_map, const int num_particles_leaving,
-       BufferDevice<int> &d_pack_cells, BufferDevice<int> &d_pack_layers_src,
-       BufferDevice<int> &d_pack_layers_dst,
-       std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
-       std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int,
-       const int rank_component = 0);
 
   /**
    *  Pack particle data on the device.

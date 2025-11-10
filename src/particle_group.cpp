@@ -106,7 +106,7 @@ void ParticleGroup::setup_internal(DomainSharedPtr domain,
   mpi_rank_dat =
       ParticleDat(sycl_target, ParticleProp(*mpi_rank_sym, 2), ncell);
   add_particle_dat(mpi_rank_dat);
-  this->global_move_ctx.set_mpi_rank_dat(mpi_rank_dat);
+  this->global_move_ctx->set_mpi_rank_dat(mpi_rank_dat);
 
   // Add the user added dats
   for (auto &property : particle_spec.properties_real) {
@@ -1085,7 +1085,7 @@ void ParticleGroup::remove_particles(
 }
 
 void ParticleGroup::global_move() {
-  this->global_move_ctx.move();
+  this->global_move_ctx->move();
   this->set_npart_cell_from_dat();
   this->invalidate_group_version();
 }
@@ -1102,7 +1102,7 @@ void ParticleGroup::hybrid_move() {
   this->mesh_hierarchy_global_map->execute();
 
   ProfileRegion r_global("hybrid_move", "global_move");
-  this->global_move_ctx.move();
+  this->global_move_ctx->move();
   this->set_npart_cell_from_dat();
   r_global.end();
   sycl_target->profile_map.add_region(r_global);
@@ -1119,14 +1119,7 @@ void ParticleGroup::hybrid_move() {
 }
 
 size_t ParticleGroup::particle_size() {
-  size_t s = 0;
-  for (auto &dat : this->particle_dats_real) {
-    s += dat.second->cell_dat.row_size();
-  }
-  for (auto &dat : this->particle_dats_int) {
-    s += dat.second->cell_dat.row_size();
-  }
-  return s;
+  return this->particle_group_pointer_map->get_num_bytes_per_particle();
 };
 
 void ParticleGroup::cell_move() {

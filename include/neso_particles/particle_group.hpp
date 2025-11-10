@@ -236,7 +236,7 @@ protected:
 
   // members for mpi communication
   // global communication context
-  GlobalMove global_move_ctx;
+  std::shared_ptr<GlobalMove> global_move_ctx;
   // method to map particle positions to global cells
   std::shared_ptr<MeshHierarchyGlobalMap> mesh_hierarchy_global_map;
   // neighbour communication context
@@ -432,12 +432,7 @@ public:
                 SYCLTargetSharedPtr sycl_target, const bool is_temporary)
       : is_temporary(is_temporary), ncell(domain->mesh->get_cell_count()),
         npart_local(0), h_npart_cell(sycl_target, 1),
-        d_npart_cell(sycl_target, 1),
-        global_move_ctx(
-            sycl_target,
-            domain->mesh->get_mesh_hierarchy()->global_move_communication,
-            layer_compressor, particle_dats_real, particle_dats_int),
-        particle_group_version(1),
+        d_npart_cell(sycl_target, 1), particle_group_version(1),
         particle_group_pointer_map(std::make_shared<ParticleGroupPointerMap>(
             sycl_target, &this->particle_dats_real, &this->particle_dats_int)),
         domain(domain), sycl_target(sycl_target),
@@ -455,6 +450,11 @@ public:
       auto v = this->sycl_target->parameters->get<SizeTParameter>(name);
       this->npart_cell_hint = v->value;
     }
+    this->global_move_ctx = std::make_shared<GlobalMove>(
+        sycl_target,
+        domain->mesh->get_mesh_hierarchy()->global_move_communication,
+        layer_compressor, particle_dats_real, particle_dats_int,
+        this->particle_group_pointer_map);
     this->setup_internal(domain, particle_spec, sycl_target);
   }
 
