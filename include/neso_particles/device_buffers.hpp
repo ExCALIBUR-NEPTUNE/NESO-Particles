@@ -130,8 +130,8 @@ public:
    * @returns Event to wait on before using new values in the buffer.
    */
   inline sycl::event set_async(const std::vector<T> &data) {
-    NESOASSERT(data.size() == this->size, "Input data is incorrectly sized.");
-    const std::size_t size_bytes = sizeof(T) * this->size;
+    NESOASSERT(data.size() <= this->size, "Input data is incorrectly sized.");
+    const std::size_t size_bytes = sizeof(T) * data.size();
     if (size_bytes) {
       NESOASSERT(this->ptr != nullptr, "Internal pointer is not allocated.");
       this->assert_allocated();
