@@ -118,6 +118,7 @@ void ParticleGroup::setup_internal(DomainSharedPtr domain,
 
   this->local_move_ctx = std::make_unique<LocalMove>(
       sycl_target, layer_compressor, particle_dats_real, particle_dats_int,
+      this->particle_group_pointer_map,
       domain->mesh->get_local_communication_neighbours().size(),
       domain->mesh->get_local_communication_neighbours().data());
   this->local_move_ctx->set_mpi_rank_dat(mpi_rank_dat);

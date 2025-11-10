@@ -10,6 +10,7 @@
 
 #include "compute_target.hpp"
 #include "particle_dat.hpp"
+#include "particle_group_pointer_map.hpp"
 #include "profiling.hpp"
 #include "sycl_typedefs.hpp"
 #include "typedefs.hpp"
@@ -114,6 +115,33 @@ public:
        std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
        std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int,
        const int rank_component = 0);
+
+  /**
+   *  Pack particle data on the device.
+   *
+   * @param num_remote_send_ranks Number of remote ranks involved in send.
+   * @param h_send_rank_npart Host buffer holding the number of particles to be
+   * sent to each remote rank.
+   * @param dh_send_rank_map Maps MPI ranks to the cell in the packing CellDat.
+   * @param num_particles_leaving Total number of particles to pack.
+   * @param d_pack_cells BufferDevice holding the cells of particles to pack.
+   * @param d_pack_layers_src BufferDevice holding the layers(rows) of particles
+   * to pack.
+   * @param d_pack_layers_dst BufferDevice holding the destination layers in
+   * the packing CellDat.
+   * @param particle_group_pointer_map ParticleGroupPointerMap describing
+   * ParticleDat information.
+   * @param event_stack EventStack to push events onto to wait on.
+   * @param rank_component Component of MPI rank ParticleDat to inspect for
+   * destination MPI rank.
+   */
+  void pack(const int num_remote_send_ranks, BufferHost<int> &h_send_rank_npart,
+            BufferDeviceHost<int> &dh_send_rank_map,
+            const int num_particles_leaving, BufferDevice<int> &d_pack_cells,
+            BufferDevice<int> &d_pack_layers_src,
+            BufferDevice<int> &d_pack_layers_dst,
+            ParticleGroupPointerMapSharedPtr particle_group_pointer_map,
+            EventStack &event_stack, const int rank_component = 0);
 };
 
 /**

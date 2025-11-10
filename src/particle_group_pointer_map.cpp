@@ -27,6 +27,8 @@ void ParticleGroupPointerMap::create_const() {
     this->ncomp_total_real = 0;
     int index = 0;
     this->num_bytes_per_particle = 0;
+    this->num_real_bytes_per_particle = 0;
+    this->num_int_bytes_per_particle = 0;
 
     for (auto [sym, dat] : *this->particle_dats_real) {
       const int ncomp = dat->ncomp;
@@ -45,6 +47,7 @@ void ParticleGroupPointerMap::create_const() {
       t_npart_cell_ptrs.push_back(d_npart_cell_ptr);
 
       this->num_bytes_per_particle += ncomp * sizeof(REAL);
+      this->num_real_bytes_per_particle += ncomp * sizeof(REAL);
 
       index++;
     }
@@ -82,6 +85,7 @@ void ParticleGroupPointerMap::create_const() {
       t_npart_cell_ptrs.push_back(d_npart_cell_ptr);
 
       this->num_bytes_per_particle += ncomp * sizeof(INT);
+      this->num_int_bytes_per_particle += ncomp * sizeof(INT);
 
       index++;
     }
@@ -307,6 +311,16 @@ void ParticleGroupPointerMap::get_device(
 std::size_t ParticleGroupPointerMap::get_num_bytes_per_particle() {
   this->create_const();
   return this->num_bytes_per_particle;
+}
+
+std::size_t ParticleGroupPointerMap::get_num_real_bytes_per_particle() {
+  this->create_const();
+  return this->num_real_bytes_per_particle;
+}
+
+std::size_t ParticleGroupPointerMap::get_num_int_bytes_per_particle() {
+  this->create_const();
+  return this->num_int_bytes_per_particle;
 }
 
 int ParticleGroupPointerMap::get_cell_count() {

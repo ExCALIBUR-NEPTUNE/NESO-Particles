@@ -10,6 +10,7 @@
 #include "compute_target.hpp"
 #include "departing_particle_identification.hpp"
 #include "packing_unpacking.hpp"
+#include "particle_group_pointer_map.hpp"
 #include "profiling.hpp"
 #include "sycl_typedefs.hpp"
 #include "typedefs.hpp"
@@ -49,6 +50,8 @@ private:
   int in_flight_sends;
   int in_flight_recvs;
 
+  ParticleGroupPointerMapSharedPtr particle_group_pointer_map;
+
 public:
   /// Disable (implicit) copies.
   LocalMove(const LocalMove &st) = delete;
@@ -81,6 +84,7 @@ public:
   LocalMove(SYCLTargetSharedPtr sycl_target, LayerCompressor &layer_compressor,
             std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
             std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int,
+            ParticleGroupPointerMapSharedPtr particle_group_pointer_map,
             const int nranks = 0, const int *ranks = nullptr)
       : sycl_target(sycl_target), particle_dats_real(particle_dats_real),
         particle_dats_int(particle_dats_int), particle_packer(sycl_target),
@@ -90,7 +94,8 @@ public:
         h_status(sycl_target, 1),
         dh_send_rank_map(sycl_target, sycl_target->comm_pair.size_parent),
         h_send_rank_npart(sycl_target, 1), h_recv_rank_npart(sycl_target, 1),
-        departing_identify(sycl_target) {
+        departing_identify(sycl_target),
+        particle_group_pointer_map(particle_group_pointer_map) {
     std::set<int> ranks_set{};
     const int rank = this->sycl_target->comm_pair.rank_parent;
     const int size = this->sycl_target->comm_pair.size_parent;
@@ -311,14 +316,17 @@ public:
         this->departing_identify.dh_num_particle_send.h_buffer.ptr[0];
 
     ProfileRegion r("local_move", "packing");
+    EventStack event_stack;
+
     // start the packing
-    auto global_pack_event = this->particle_packer.pack(
+    this->particle_packer.pack(
         this->num_remote_send_ranks, this->h_send_rank_npart,
         this->dh_send_rank_map, num_particles_leaving,
         this->departing_identify.d_pack_cells,
         this->departing_identify.d_pack_layers_src,
-        this->departing_identify.d_pack_layers_dst, this->particle_dats_real,
-        this->particle_dats_int, 1);
+        this->departing_identify.d_pack_layers_dst,
+        this->particle_group_pointer_map, event_stack, 1);
+
     r.end();
     this->sycl_target->profile_map.add_region(r);
 
@@ -334,7 +342,7 @@ public:
                             this->particle_dats_int);
 
     // wait for the local particles to be packed.
-    global_pack_event.wait_and_throw();
+    event_stack.wait();
 
     // send and recv packed particles from particle_packer.cell_dat to
     // particle_unpacker.h_recv_buffer using h_recv_offsets.

@@ -821,6 +821,7 @@ protected:
                 dat.second->cell_dat.get_value(cell, layer_new, cx);
             if (!(vold == vnew)) {
               this->test_mode_failure = true;
+              nprint(dat.first.name, cx, vold, "!=", vnew);
             }
           }
         }
@@ -837,6 +838,7 @@ protected:
                 dat.second->cell_dat.get_value(cell, layer_new, cx);
             if (!(vold == vnew)) {
               this->test_mode_failure = true;
+              nprint(dat.first.name, cx, vold, "!=", vnew);
             }
           }
         }

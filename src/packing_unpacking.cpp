@@ -89,6 +89,115 @@ char **ParticlePacker::get_packed_pointers(const int num_remote_send_ranks,
   return this->h_send_pointers.ptr;
 }
 
+void ParticlePacker::pack(
+    const int num_remote_send_ranks, BufferHost<int> &h_send_rank_npart,
+    BufferDeviceHost<int> &dh_send_rank_map, const int num_particles_leaving,
+    BufferDevice<int> &d_pack_cells, BufferDevice<int> &d_pack_layers_src,
+    BufferDevice<int> &d_pack_layers_dst,
+    ParticleGroupPointerMapSharedPtr particle_group_pointer_map,
+    EventStack &event_stack, const int rank_component) {
+
+  // Allocate enough space to store the particles to pack
+  const std::size_t k_num_bytes_per_particle =
+      particle_group_pointer_map->get_num_bytes_per_particle();
+  this->num_bytes_per_particle = k_num_bytes_per_particle;
+
+  const std::size_t k_num_real_bytes_per_particle =
+      particle_group_pointer_map->get_num_real_bytes_per_particle();
+
+  this->required_send_buffer_length = 0;
+  for (int rankx = 0; rankx < num_remote_send_ranks; rankx++) {
+    const int npart = h_send_rank_npart.ptr[rankx];
+    const INT rankx_contrib = npart * k_num_bytes_per_particle;
+    this->cell_dat.set_nrow(rankx, rankx_contrib);
+    this->required_send_buffer_length += rankx_contrib;
+  }
+  this->cell_dat.wait_set_nrow();
+
+  auto *particle_dats_int = particle_group_pointer_map->particle_dats_int;
+  const auto k_particle_dat_rank =
+      particle_dats_int->at(Sym<INT>("NESO_MPI_RANK"))->impl_get_const();
+  const auto k_send_rank_map = dh_send_rank_map.d_buffer.ptr;
+  const int k_rank_component = rank_component;
+
+  const auto k_pack_cells = d_pack_cells.ptr;
+  const auto k_pack_layers_src = d_pack_layers_src.ptr;
+  const auto k_pack_layers_dst = d_pack_layers_dst.ptr;
+  auto k_pack_cell_dat = this->cell_dat.device_ptr();
+
+  auto &device_ptr_map = particle_group_pointer_map->get();
+  const int ncomp_total_real = device_ptr_map.ncomp_total_real;
+  const int ncomp_total_int = device_ptr_map.ncomp_total_int;
+
+  const int *RESTRICT k_ncomp_exscan_real = device_ptr_map.d_ncomp_exscan_real;
+  const int *RESTRICT k_ncomp_exscan_int = device_ptr_map.d_ncomp_exscan_int;
+
+  const int *RESTRICT k_flattened_dat_index_real =
+      device_ptr_map.d_flattened_dat_index_real;
+  const int *RESTRICT k_flattened_dat_index_int =
+      device_ptr_map.d_flattened_dat_index_int;
+  const int *RESTRICT k_flattened_comp_index_real =
+      device_ptr_map.d_flattened_comp_index_real;
+  const int *RESTRICT k_flattened_comp_index_int =
+      device_ptr_map.d_flattened_comp_index_int;
+
+  auto k_ptr_real = device_ptr_map.d_ptr_real;
+  auto k_ptr_int = device_ptr_map.d_ptr_int;
+
+  if (num_particles_leaving <= 0) {
+    return;
+  }
+
+  event_stack.push(this->sycl_target->queue.parallel_for<>(
+      this->sycl_target->device_limits.validate_range_global(
+          sycl::range<2>(static_cast<std::size_t>(num_particles_leaving),
+                         static_cast<std::size_t>(ncomp_total_real))),
+      [=](sycl::item<2> idx) {
+        const std::size_t particle = idx.get_id(0);
+        const int dat = k_flattened_dat_index_real[idx.get_id(1)];
+        const int dat_component = k_flattened_comp_index_real[idx.get_id(1)];
+        const int index = k_ncomp_exscan_real[dat] + dat_component;
+
+        const int cell = k_pack_cells[particle];
+        const int layer_src = k_pack_layers_src[particle];
+        const int layer_dst = k_pack_layers_dst[particle];
+        const int rank = k_particle_dat_rank[cell][k_rank_component][layer_src];
+        const int rank_packing_cell = k_send_rank_map[rank];
+
+        char *base_pack_ptr =
+            &k_pack_cell_dat[rank_packing_cell][0]
+                            [layer_dst * k_num_bytes_per_particle];
+        REAL *pack_ptr_real = (REAL *)base_pack_ptr;
+        pack_ptr_real[index] = k_ptr_real[dat][cell][dat_component][layer_src];
+      }));
+
+  event_stack.push(this->sycl_target->queue.parallel_for<>(
+      this->sycl_target->device_limits.validate_range_global(
+          sycl::range<2>(static_cast<std::size_t>(num_particles_leaving),
+                         static_cast<std::size_t>(ncomp_total_int))),
+      [=](sycl::item<2> idx) {
+        const std::size_t particle = idx.get_id(0);
+        const int dat = k_flattened_dat_index_int[idx.get_id(1)];
+        const int dat_component = k_flattened_comp_index_int[idx.get_id(1)];
+        const int index = k_ncomp_exscan_int[dat] + dat_component;
+
+        const int cell = k_pack_cells[particle];
+        const int layer_src = k_pack_layers_src[particle];
+        const int layer_dst = k_pack_layers_dst[particle];
+        const int rank = k_particle_dat_rank[cell][k_rank_component][layer_src];
+        const int rank_packing_cell = k_send_rank_map[rank];
+
+        char *base_pack_ptr =
+            &k_pack_cell_dat[rank_packing_cell][0]
+                            [layer_dst * k_num_bytes_per_particle];
+        // offset for the REAL components
+        base_pack_ptr += k_num_real_bytes_per_particle;
+
+        INT *pack_ptr_int = (INT *)base_pack_ptr;
+        pack_ptr_int[index] = k_ptr_int[dat][cell][dat_component][layer_src];
+      }));
+}
+
 sycl::event ParticlePacker::pack(
     const int num_remote_send_ranks, BufferHost<int> &h_send_rank_npart,
     BufferDeviceHost<int> &dh_send_rank_map, const int num_particles_leaving,

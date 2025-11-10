@@ -105,6 +105,8 @@ protected:
   std::shared_ptr<BufferDevice<int *>> d_npart_cell_ptrs;
   std::vector<int *> h_npart_cell_ptrs;
   std::size_t num_bytes_per_particle{0};
+  std::size_t num_real_bytes_per_particle{0};
+  std::size_t num_int_bytes_per_particle{0};
 
 public:
   /// Disable (implicit) copies.
@@ -238,6 +240,16 @@ public:
    * @returns The number of bytes per particle.
    */
   std::size_t get_num_bytes_per_particle();
+
+  /**
+   * @returns The number of REAL bytes per particle.
+   */
+  std::size_t get_num_real_bytes_per_particle();
+
+  /**
+   * @returns The number of INT bytes per particle.
+   */
+  std::size_t get_num_int_bytes_per_particle();
 
   /**
    * @returns The cell count.

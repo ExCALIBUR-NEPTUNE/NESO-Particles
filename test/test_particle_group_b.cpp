@@ -115,13 +115,19 @@ TEST(ParticleGroup, particle_group_pointer_map) {
     auto ptr_map = AT->get_particle_group_pointer_map();
 
     std::size_t num_bytes = 0;
+    std::size_t num_real_bytes = 0;
+    std::size_t num_int_bytes = 0;
     for (auto [sym, dat] : A->particle_dats_real) {
       num_bytes += dat->ncomp * sizeof(REAL);
+      num_real_bytes += dat->ncomp * sizeof(REAL);
     }
     for (auto [sym, dat] : A->particle_dats_int) {
       num_bytes += dat->ncomp * sizeof(INT);
+      num_int_bytes += dat->ncomp * sizeof(INT);
     }
     ASSERT_EQ(num_bytes, ptr_map->get_num_bytes_per_particle());
+    ASSERT_EQ(num_real_bytes, ptr_map->get_num_real_bytes_per_particle());
+    ASSERT_EQ(num_int_bytes, ptr_map->get_num_int_bytes_per_particle());
 
     auto d_ptr_const_map = ptr_map->get_const();
     auto d_ptr_map = ptr_map->get();
