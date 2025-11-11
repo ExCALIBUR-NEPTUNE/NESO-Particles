@@ -24,8 +24,6 @@ class LocalMove {
 
 private:
   SYCLTargetSharedPtr sycl_target;
-  std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real;
-  std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int;
   ParticleDatSharedPtr<INT> mpi_rank_dat;
 
   ParticlePacker particle_packer;
@@ -82,12 +80,9 @@ public:
    * send to.
    */
   LocalMove(SYCLTargetSharedPtr sycl_target, LayerCompressor &layer_compressor,
-            std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
-            std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int,
             ParticleGroupPointerMapSharedPtr particle_group_pointer_map,
             const int nranks = 0, const int *ranks = nullptr)
-      : sycl_target(sycl_target), particle_dats_real(particle_dats_real),
-        particle_dats_int(particle_dats_int), particle_packer(sycl_target),
+      : sycl_target(sycl_target), particle_packer(sycl_target),
         particle_unpacker(sycl_target), layer_compressor(layer_compressor),
         h_send_ranks(sycl_target, 1), h_recv_ranks(sycl_target, 1),
         h_send_requests(sycl_target, 1), h_recv_requests(sycl_target, 1),
@@ -338,8 +333,8 @@ public:
 
     // allocate space to recv packed particles
     particle_unpacker.reset(this->num_remote_recv_ranks,
-                            this->h_recv_rank_npart, this->particle_dats_real,
-                            this->particle_dats_int);
+                            this->h_recv_rank_npart,
+                            this->particle_group_pointer_map);
 
     // wait for the local particles to be packed.
     event_stack.wait();
@@ -363,7 +358,7 @@ public:
 
     // Unpack the recv'd particles
     r = ProfileRegion("local_move", "unpack");
-    this->particle_unpacker.unpack(particle_dats_real, particle_dats_int);
+    this->particle_unpacker.unpack(this->particle_group_pointer_map);
     r.end();
     this->sycl_target->profile_map.add_region(r);
 

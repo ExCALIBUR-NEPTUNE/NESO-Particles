@@ -22,8 +22,6 @@ namespace NESO::Particles {
 class GlobalMove {
 
 private:
-  std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real;
-  std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int;
   ParticleDatSharedPtr<INT> mpi_rank_dat;
 
   ParticlePacker particle_packer;
@@ -61,16 +59,11 @@ public:
    * @param particle_dats_real Container of the REAL valued ParticleDats.
    * @param particle_dats_int Container of the INT valued ParticleDats.
    */
-  GlobalMove(
-      SYCLTargetSharedPtr sycl_target,
-      GlobalMoveCommunicationSharedPtr global_move_communication,
-      LayerCompressor &layer_compressor,
-      std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
-      std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int,
-      ParticleGroupPointerMapSharedPtr particle_group_pointer_map)
-      : particle_dats_real(particle_dats_real),
-        particle_dats_int(particle_dats_int), particle_packer(sycl_target),
-        particle_unpacker(sycl_target),
+  GlobalMove(SYCLTargetSharedPtr sycl_target,
+             GlobalMoveCommunicationSharedPtr global_move_communication,
+             LayerCompressor &layer_compressor,
+             ParticleGroupPointerMapSharedPtr particle_group_pointer_map)
+      : particle_packer(sycl_target), particle_unpacker(sycl_target),
         global_move_exchange(sycl_target, global_move_communication),
         departing_identify(sycl_target), layer_compressor(layer_compressor),
         dh_send_rank_npart(sycl_target, 1), sycl_target(sycl_target),
@@ -181,7 +174,7 @@ public:
     // allocate space to recv packed particles
     particle_unpacker.reset(this->global_move_exchange.num_remote_recv_ranks,
                             this->global_move_exchange.h_recv_rank_npart,
-                            this->particle_dats_real, this->particle_dats_int);
+                            this->particle_group_pointer_map);
 
     sycl_target->profile_map.inc("GlobalMove", "move_stage_h", 1,
                                  profile_elapsed(t0, profile_timestamp()));
@@ -213,7 +206,7 @@ public:
     this->global_move_exchange.exchange_finalise(this->particle_unpacker);
 
     // Unpack the recv'd particles
-    this->particle_unpacker.unpack(particle_dats_real, particle_dats_int);
+    this->particle_unpacker.unpack(this->particle_group_pointer_map);
     sycl_target->profile_map.inc("GlobalMove", "move", 1,
                                  profile_elapsed(t0, profile_timestamp()));
     sycl_target->profile_map.inc("GlobalMove", "send_count",

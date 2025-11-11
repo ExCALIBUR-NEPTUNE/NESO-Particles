@@ -134,8 +134,8 @@ struct TestParticleGroup : public ParticleGroup {
 
   inline void set_local_move_context(std::vector<int> &ranks) {
     this->local_move_ctx = std::make_unique<LocalMove>(
-        sycl_target, layer_compressor, particle_dats_real, particle_dats_int,
-        this->particle_group_pointer_map, ranks.size(), ranks.data());
+        sycl_target, layer_compressor, this->particle_group_pointer_map,
+        ranks.size(), ranks.data());
     this->local_move_ctx->set_mpi_rank_dat(mpi_rank_dat);
   }
 

@@ -226,8 +226,10 @@ char **ParticleUnpacker::get_recv_pointers(const int num_remote_recv_ranks) {
 
 void ParticleUnpacker::reset(
     const int num_remote_recv_ranks, BufferHost<int> &h_recv_rank_npart,
-    std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
-    std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int) {
+    ParticleGroupPointerMapSharedPtr particle_group_pointer_map) {
+
+  auto &particle_dats_int = *particle_group_pointer_map->particle_dats_int;
+  auto &particle_dats_real = *particle_group_pointer_map->particle_dats_real;
 
   // realloc the array that holds where in the recv buffer the data from each
   // remote rank should be placed
@@ -253,20 +255,20 @@ void ParticleUnpacker::reset(
 }
 
 void ParticleUnpacker::unpack(
-    std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
-    std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int) {
+    ParticleGroupPointerMapSharedPtr particle_group_pointer_map) {
 
-  auto t0 = profile_timestamp();
   auto r = ProfileRegion("unpack", "realloc");
 
   // copy packed data to device
-
   const int cpysize = this->npart_recv * this->num_bytes_per_particle;
   sycl::event event_memcpy;
   if ((cpysize > 0) && (!this->device_aware_mpi_enabled)) {
     event_memcpy = this->sycl_target->queue.memcpy(
         this->d_recv_buffer.ptr, this->h_recv_buffer.ptr, cpysize);
   }
+
+  auto &particle_dats_int = *particle_group_pointer_map->particle_dats_int;
+  auto &particle_dats_real = *particle_group_pointer_map->particle_dats_real;
 
   // old cell occupancy
   auto mpi_rank_dat = particle_dats_int[Sym<INT>("NESO_MPI_RANK")];
@@ -310,9 +312,6 @@ void ParticleUnpacker::unpack(
   const auto k_particle_dat_ncomp_int =
       this->dh_particle_dat_ncomp_int.d_buffer.ptr;
   char *k_recv_buffer = this->d_recv_buffer.ptr;
-
-  sycl_target->profile_map.inc("ParticleUnpacker", "unpack_prepare", 1,
-                               profile_elapsed(t0, profile_timestamp()));
 
   if ((cpysize > 0) && (!this->device_aware_mpi_enabled)) {
     event_memcpy.wait_and_throw();

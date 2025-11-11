@@ -453,8 +453,7 @@ public:
     this->global_move_ctx = std::make_shared<GlobalMove>(
         sycl_target,
         domain->mesh->get_mesh_hierarchy()->global_move_communication,
-        layer_compressor, particle_dats_real, particle_dats_int,
-        this->particle_group_pointer_map);
+        layer_compressor, this->particle_group_pointer_map);
     this->setup_internal(domain, particle_spec, sycl_target);
   }
 

@@ -173,26 +173,21 @@ public:
    * rank.
    *  @param h_recv_rank_npart Number of particles each rank will send to this
    * rank.
-   *  @param particle_dats_real Container of REAL ParticleDat instances to
-   * unpack.
-   *  @param particle_dats_int Container of INT ParticleDat instances to unpack.
+   * @param particle_group_pointer_map ParticleGroupPointer map to unpack data
+   * into.
    */
-  void
-  reset(const int num_remote_recv_ranks, BufferHost<int> &h_recv_rank_npart,
-        std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
-        std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int);
+  void reset(const int num_remote_recv_ranks,
+             BufferHost<int> &h_recv_rank_npart,
+             ParticleGroupPointerMapSharedPtr particle_group_pointer_map);
 
   /**
-   * Unpack the recv buffer into the particle group. Particles unpack into cell
-   * 0.
+   * Unpack particles into the ParticleDats specified by the
+   * ParticleGroupPointerMap.
    *
-   * @param particle_dats_real Container of REAL ParticleDat instances to
-   * unpack.
-   * @param particle_dats_int Container of INT ParticleDat instances to unpack.
+   * @param particle_group_pointer_map ParticleGroupPointer map to unpack data
+   * into.
    */
-  void
-  unpack(std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
-         std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int);
+  void unpack(ParticleGroupPointerMapSharedPtr particle_group_pointer_map);
 };
 
 } // namespace NESO::Particles
