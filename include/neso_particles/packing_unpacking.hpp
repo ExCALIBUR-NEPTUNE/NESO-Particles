@@ -103,24 +103,8 @@ public:
  */
 class ParticleUnpacker {
 private:
-  int num_dats_real = 0;
-  int num_dats_int = 0;
-
-  BufferDeviceHost<REAL ***> dh_particle_dat_ptr_real;
-  BufferDeviceHost<INT ***> dh_particle_dat_ptr_int;
-  BufferDeviceHost<int> dh_particle_dat_ncomp_real;
-  BufferDeviceHost<int> dh_particle_dat_ncomp_int;
   BufferDevice<char> d_recv_buffer;
-
   bool device_aware_mpi_enabled;
-
-  size_t particle_size(
-      std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
-      std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int);
-
-  void get_particle_dat_info(
-      std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
-      std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int);
 
   /// Pointers in which to recv data
   BufferHost<char *> h_recv_pointers;
@@ -151,11 +135,7 @@ public:
    * @param sycl_target SYCLTargetSharedPtr to use as compute device.
    */
   ParticleUnpacker(SYCLTargetSharedPtr sycl_target)
-      : dh_particle_dat_ptr_real(sycl_target, 1),
-        dh_particle_dat_ptr_int(sycl_target, 1),
-        dh_particle_dat_ncomp_real(sycl_target, 1),
-        dh_particle_dat_ncomp_int(sycl_target, 1),
-        d_recv_buffer(sycl_target, 1),
+      : d_recv_buffer(sycl_target, 1),
         device_aware_mpi_enabled(NESO::Particles::device_aware_mpi_enabled()),
         h_recv_pointers(sycl_target, 1), h_recv_buffer(sycl_target, 1),
         h_recv_offsets(sycl_target, 1), sycl_target(sycl_target){};

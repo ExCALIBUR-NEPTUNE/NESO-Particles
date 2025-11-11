@@ -76,7 +76,7 @@ void ParticlePacker::pack(
   const auto k_pack_layers_dst = d_pack_layers_dst.ptr;
   auto k_pack_cell_dat = this->cell_dat.device_ptr();
 
-  auto &device_ptr_map = particle_group_pointer_map->get();
+  auto &device_ptr_map = particle_group_pointer_map->get_const();
   const int ncomp_total_real = device_ptr_map.ncomp_total_real;
   const int ncomp_total_int = device_ptr_map.ncomp_total_int;
 
@@ -149,61 +149,6 @@ void ParticlePacker::pack(
       }));
 }
 
-size_t ParticleUnpacker::particle_size(
-    std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
-    std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int) {
-  size_t s = 0;
-  for (auto &dat : particle_dats_real) {
-    s += dat.second->cell_dat.row_size();
-  }
-  for (auto &dat : particle_dats_int) {
-    s += dat.second->cell_dat.row_size();
-  }
-  this->num_bytes_per_particle = s;
-  return s;
-}
-
-void ParticleUnpacker::get_particle_dat_info(
-    std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
-    std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int) {
-
-  auto r = ProfileRegion("ParticleUnpacker", "get_particle_dat_info");
-
-  num_dats_real = particle_dats_real.size();
-  dh_particle_dat_ptr_real.realloc_no_copy(num_dats_real);
-  dh_particle_dat_ncomp_real.realloc_no_copy(num_dats_real);
-
-  num_dats_int = particle_dats_int.size();
-  dh_particle_dat_ptr_int.realloc_no_copy(num_dats_int);
-  dh_particle_dat_ncomp_int.realloc_no_copy(num_dats_int);
-
-  int index = 0;
-  for (auto &dat : particle_dats_real) {
-    dh_particle_dat_ptr_real.h_buffer.ptr[index] = dat.second->impl_get();
-    dh_particle_dat_ncomp_real.h_buffer.ptr[index] = dat.second->ncomp;
-    index++;
-  }
-  auto e0 = dh_particle_dat_ptr_real.async_host_to_device();
-  auto e1 = dh_particle_dat_ncomp_real.async_host_to_device();
-  index = 0;
-  for (auto &dat : particle_dats_int) {
-    dh_particle_dat_ptr_int.h_buffer.ptr[index] = dat.second->impl_get();
-    dh_particle_dat_ncomp_int.h_buffer.ptr[index] = dat.second->ncomp;
-    index++;
-  }
-
-  auto e2 = dh_particle_dat_ptr_int.async_host_to_device();
-  auto e3 = dh_particle_dat_ncomp_int.async_host_to_device();
-
-  e0.wait();
-  e1.wait();
-  e2.wait();
-  e3.wait();
-
-  r.end();
-  this->sycl_target->profile_map.add_region(r);
-}
-
 char **ParticleUnpacker::get_recv_pointers(const int num_remote_recv_ranks) {
   this->h_recv_pointers.realloc_no_copy(num_remote_recv_ranks);
 
@@ -235,7 +180,7 @@ void ParticleUnpacker::reset(
   // remote rank should be placed
   this->h_recv_offsets.realloc_no_copy(num_remote_recv_ranks);
   this->num_bytes_per_particle =
-      this->particle_size(particle_dats_real, particle_dats_int);
+      particle_group_pointer_map->get_num_bytes_per_particle();
 
   // compute the offsets in the recv buffer
   this->npart_recv = 0;
@@ -257,8 +202,8 @@ void ParticleUnpacker::reset(
 void ParticleUnpacker::unpack(
     ParticleGroupPointerMapSharedPtr particle_group_pointer_map) {
 
-  auto r = ProfileRegion("unpack", "realloc");
-
+  auto r0 = this->sycl_target->profile_map.start_region("ParticleUnpacker",
+                                                        "unpack_realloc");
   // copy packed data to device
   const int cpysize = this->npart_recv * this->num_bytes_per_particle;
   sycl::event event_memcpy;
@@ -290,76 +235,83 @@ void ParticleUnpacker::unpack(
     dat.second->wait_realloc();
   }
 
-  r.end();
-  this->sycl_target->profile_map.add_region(r);
-
+  this->sycl_target->profile_map.end_region(r0);
   const int k_npart_recv = this->npart_recv;
 
-  // get the pointers to the particle dat data and the number of components in
-  // each dat
-  get_particle_dat_info(particle_dats_real, particle_dats_int);
-
-  // unpack into cell 0
+  auto &device_ptr_map = particle_group_pointer_map->get();
+  const int ncomp_total_real = device_ptr_map.ncomp_total_real;
+  const int ncomp_total_int = device_ptr_map.ncomp_total_int;
   const int k_num_bytes_per_particle = this->num_bytes_per_particle;
-  const int k_num_dats_real = this->num_dats_real;
-  const int k_num_dats_int = this->num_dats_int;
-  const auto k_particle_dat_ptr_real =
-      this->dh_particle_dat_ptr_real.d_buffer.ptr;
-  const auto k_particle_dat_ptr_int =
-      this->dh_particle_dat_ptr_int.d_buffer.ptr;
-  const auto k_particle_dat_ncomp_real =
-      this->dh_particle_dat_ncomp_real.d_buffer.ptr;
-  const auto k_particle_dat_ncomp_int =
-      this->dh_particle_dat_ncomp_int.d_buffer.ptr;
   char *k_recv_buffer = this->d_recv_buffer.ptr;
+  const std::size_t k_num_real_bytes_per_particle =
+      particle_group_pointer_map->get_num_real_bytes_per_particle();
+  this->num_bytes_per_particle = k_num_bytes_per_particle;
+
+  const int *RESTRICT k_ncomp_exscan_real = device_ptr_map.d_ncomp_exscan_real;
+  const int *RESTRICT k_ncomp_exscan_int = device_ptr_map.d_ncomp_exscan_int;
+
+  const int *RESTRICT k_flattened_dat_index_real =
+      device_ptr_map.d_flattened_dat_index_real;
+  const int *RESTRICT k_flattened_dat_index_int =
+      device_ptr_map.d_flattened_dat_index_int;
+  const int *RESTRICT k_flattened_comp_index_real =
+      device_ptr_map.d_flattened_comp_index_real;
+  const int *RESTRICT k_flattened_comp_index_int =
+      device_ptr_map.d_flattened_comp_index_int;
+
+  auto k_ptr_real = device_ptr_map.d_ptr_real;
+  auto k_ptr_int = device_ptr_map.d_ptr_int;
 
   if ((cpysize > 0) && (!this->device_aware_mpi_enabled)) {
     event_memcpy.wait_and_throw();
   }
 
-  r = ProfileRegion("unpack", "unpack_loop");
-
-  if (k_npart_recv > 0) {
-    this->sycl_target->queue
-        .parallel_for(
-            // for each new particle
-            sycl::range<1>(static_cast<size_t>(k_npart_recv)),
-            [=](sycl::id<1> idx) {
-              const int cell = 0;
-              // destination layer in the cell
-              const int layer = npart_cell_0_old + idx;
-              // source position in the packed buffer
-              const int offset = k_num_bytes_per_particle * idx;
-              char *unpack_base_ptr = k_recv_buffer + offset;
-              REAL *unpack_ptr_real = (REAL *)unpack_base_ptr;
-              // for each real dat
-              int index = 0;
-              for (int dx = 0; dx < k_num_dats_real; dx++) {
-                REAL ***dat_ptr = k_particle_dat_ptr_real[dx];
-                const int ncomp = k_particle_dat_ncomp_real[dx];
-                // for each component
-                for (int cx = 0; cx < ncomp; cx++) {
-                  dat_ptr[cell][cx][layer] = unpack_ptr_real[index + cx];
-                }
-                index += ncomp;
-              }
-              // for each int dat
-              INT *unpack_ptr_int = (INT *)(unpack_ptr_real + index);
-              index = 0;
-              for (int dx = 0; dx < k_num_dats_int; dx++) {
-                INT ***dat_ptr = k_particle_dat_ptr_int[dx];
-                const int ncomp = k_particle_dat_ncomp_int[dx];
-                // for each component
-                for (int cx = 0; cx < ncomp; cx++) {
-                  dat_ptr[cell][cx][layer] = unpack_ptr_int[index + cx];
-                }
-                index += ncomp;
-              }
-            })
-        .wait_and_throw();
+  if (k_npart_recv <= 0) {
+    return;
   }
-  r.end();
-  this->sycl_target->profile_map.add_region(r);
+  auto r1 = this->sycl_target->profile_map.start_region("ParticleUnpacker",
+                                                        "unpack_unpack");
+  EventStack event_stack;
+  event_stack.push(this->sycl_target->queue.parallel_for<>(
+      this->sycl_target->device_limits.validate_range_global(
+          sycl::range<2>(static_cast<std::size_t>(k_npart_recv),
+                         static_cast<std::size_t>(ncomp_total_real))),
+      [=](sycl::item<2> idx) {
+        const int particle = idx.get_id(0);
+        const int dat = k_flattened_dat_index_real[idx.get_id(1)];
+        const int dat_component = k_flattened_comp_index_real[idx.get_id(1)];
+        const int index = k_ncomp_exscan_real[dat] + dat_component;
+
+        const int layer = npart_cell_0_old + particle;
+        const int offset = k_num_bytes_per_particle * particle;
+
+        const char *const unpack_base_ptr = k_recv_buffer + offset;
+        const REAL *const unpack_ptr_real = (REAL *const)unpack_base_ptr;
+        k_ptr_real[dat][0][dat_component][layer] = unpack_ptr_real[index];
+      }));
+
+  event_stack.push(this->sycl_target->queue.parallel_for<>(
+      this->sycl_target->device_limits.validate_range_global(
+          sycl::range<2>(static_cast<std::size_t>(k_npart_recv),
+                         static_cast<std::size_t>(ncomp_total_int))),
+      [=](sycl::item<2> idx) {
+        const int particle = idx.get_id(0);
+        const int dat = k_flattened_dat_index_int[idx.get_id(1)];
+        const int dat_component = k_flattened_comp_index_int[idx.get_id(1)];
+        const int index = k_ncomp_exscan_int[dat] + dat_component;
+
+        const int layer = npart_cell_0_old + particle;
+        const int offset = k_num_bytes_per_particle * particle;
+
+        const char *const unpack_base_ptr =
+            k_recv_buffer + offset + k_num_real_bytes_per_particle;
+        const INT *const unpack_ptr_int = (INT *const)unpack_base_ptr;
+        k_ptr_int[dat][0][dat_component][layer] = unpack_ptr_int[index];
+      }));
+
+  event_stack.wait();
+
+  this->sycl_target->profile_map.end_region(r1);
 }
 
 } // namespace NESO::Particles
