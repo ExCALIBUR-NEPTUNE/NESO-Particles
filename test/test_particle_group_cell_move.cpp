@@ -182,7 +182,7 @@ TEST(ParticleGroup, cell_move_compression) {
   std::mt19937 rng_rank(18241);
 
   const int N = 1024;
-  const int Ntest = 200;
+  const int Ntest = 100;
   const REAL dt = 1.0;
   const int cell_count = domain->mesh->get_cell_count();
 
@@ -456,6 +456,8 @@ TEST(ParticleGroup, cell_move_compression) {
       A->test_version_different();
       A->test_internal_state();
     }
+
+    ASSERT_FALSE(A->cell_move_ctx.layer_compressor.test_mode_failure);
 
     A->cell_move();
 

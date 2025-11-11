@@ -75,10 +75,6 @@ bool ParticleGroup::check_validation(ParticleGroupVersion &to_check,
 void ParticleGroup::setup_internal(DomainSharedPtr domain,
                                    ParticleSpec &particle_spec,
                                    SYCLTargetSharedPtr sycl_target) {
-  // create the pointer map
-  this->particle_group_pointer_map = std::make_shared<ParticleGroupPointerMap>(
-      this->sycl_target, &this->particle_dats_real, &this->particle_dats_int);
-
   this->debug_sub_group_create =
       get_env_size_t("NESO_PARTICLES_DEBUG_SUB_GROUPS", 0);
 
@@ -110,7 +106,7 @@ void ParticleGroup::setup_internal(DomainSharedPtr domain,
   mpi_rank_dat =
       ParticleDat(sycl_target, ParticleProp(*mpi_rank_sym, 2), ncell);
   add_particle_dat(mpi_rank_dat);
-  this->global_move_ctx.set_mpi_rank_dat(mpi_rank_dat);
+  this->global_move_ctx->set_mpi_rank_dat(mpi_rank_dat);
 
   // Add the user added dats
   for (auto &property : particle_spec.properties_real) {
@@ -121,7 +117,7 @@ void ParticleGroup::setup_internal(DomainSharedPtr domain,
   }
 
   this->local_move_ctx = std::make_unique<LocalMove>(
-      sycl_target, layer_compressor, particle_dats_real, particle_dats_int,
+      sycl_target, layer_compressor, this->particle_group_pointer_map,
       domain->mesh->get_local_communication_neighbours().size(),
       domain->mesh->get_local_communication_neighbours().data());
   this->local_move_ctx->set_mpi_rank_dat(mpi_rank_dat);
@@ -248,14 +244,8 @@ void ParticleGroup::clear() {
   buffer_memcpy(this->d_npart_cell, this->h_npart_cell).wait_and_throw();
   this->recompute_npart_cell_es();
   this->realloc_all_dats();
-  EventStack es;
-  for (auto &dat : this->particle_dats_real) {
-    es.push(dat.second->async_set_npart_cells(this->h_npart_cell));
-  }
-  for (auto &dat : this->particle_dats_int) {
-    es.push(dat.second->async_set_npart_cells(this->h_npart_cell));
-  }
-  es.wait();
+  this->particle_group_pointer_map->set_npart_cells_host_device(
+      this->h_npart_cell.ptr, this->d_npart_cell.ptr);
   this->check_dats_and_group_agree();
   this->invalidate_group_version();
 }
@@ -445,12 +435,8 @@ void ParticleGroup::add_particles_local(
     lambda_dispatch(dat.second, d_pm.offsets_int, d_pm.ptr_int);
   }
   // launch the copies of the npart cells into the ParticleDats
-  for (auto &dat : this->particle_dats_real) {
-    es.push(dat.second->async_set_npart_cells(this->h_npart_cell));
-  }
-  for (auto &dat : this->particle_dats_int) {
-    es.push(dat.second->async_set_npart_cells(this->h_npart_cell));
-  }
+  this->particle_group_pointer_map->set_npart_cells_host_device(
+      this->h_npart_cell.ptr, this->d_npart_cell.ptr);
 
   // wait for the copy kernels
   es.wait();
@@ -480,6 +466,7 @@ void ParticleGroup::add_particles_local(
     std::shared_ptr<ParticleGroup> particle_group) {
 
   ProfileRegion pr0("ParticleGroup", "add_particles_local_particle_group");
+  EventStack es;
 
   NESOASSERT(particle_group.get() != this,
              "Cannot add a ParticleGroup to itself.");
@@ -528,12 +515,40 @@ void ParticleGroup::add_particles_local(
   NESOASSERT(npart_local_old + total_to_add == this->get_npart_local(),
              "Destination ParticleGroup is not self consistent.");
 
+  auto d_npart_cell_existing =
+      get_resource<BufferDevice<INT>, ResourceStackInterfaceBufferDevice<INT>>(
+          sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<INT>{},
+          sycl_target);
+  d_npart_cell_existing->realloc_no_copy(h_npart_cell_existing.size());
+  es.push(d_npart_cell_existing->set_async(h_npart_cell_existing));
+
   // Allocate space in all the dats for the new particles
   this->realloc_all_dats();
 
+  auto get_int_buffer = [&](const auto &h_tmp) {
+    auto d_tmp = get_resource<BufferDevice<int>,
+                              ResourceStackInterfaceBufferDevice<int>>(
+        sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<int>{},
+        sycl_target);
+    d_tmp->realloc_no_copy(h_tmp.size());
+    es.push(d_tmp->set_async(h_tmp));
+    return d_tmp;
+  };
+
+  auto restore_int_buffer = [&](auto &buffer) {
+    restore_resource(sycl_target->resource_stack_map,
+                     ResourceStackKeyBufferDevice<int>{}, buffer);
+  };
+
+  const std::size_t num_dats_real = this->particle_dats_real.size();
+  const std::size_t num_dats_int = this->particle_dats_int.size();
+
   std::vector<int> src_dat_index_real;
+  src_dat_index_real.reserve(num_dats_real);
   std::vector<int> dst_dat_index_real;
+  dst_dat_index_real.reserve(num_dats_real);
   std::vector<int> dst_dat_zero_index_real;
+  dst_dat_zero_index_real.reserve(num_dats_real);
   int index = 0;
   for (auto [sym, dat] : this->particle_dats_real) {
     if (particle_group->contains_dat(sym)) {
@@ -546,9 +561,17 @@ void ParticleGroup::add_particles_local(
     }
     index++;
   }
+
+  auto d_src_dat_index_real = get_int_buffer(src_dat_index_real);
+  auto d_dst_dat_index_real = get_int_buffer(dst_dat_index_real);
+  auto d_dst_dat_zero_index_real = get_int_buffer(dst_dat_zero_index_real);
+
   std::vector<int> src_dat_index_int;
+  src_dat_index_int.reserve(num_dats_int);
   std::vector<int> dst_dat_index_int;
+  dst_dat_index_int.reserve(num_dats_int);
   std::vector<int> dst_dat_zero_index_int;
+  dst_dat_zero_index_int.reserve(num_dats_int);
   index = 0;
   for (auto [sym, dat] : this->particle_dats_int) {
     if (particle_group->contains_dat(sym)) {
@@ -562,20 +585,9 @@ void ParticleGroup::add_particles_local(
     index++;
   }
 
-  auto d_npart_cell_existing = std::make_shared<BufferDevice<INT>>(
-      this->sycl_target, h_npart_cell_existing);
-  auto d_src_dat_index_real = std::make_shared<BufferDevice<int>>(
-      this->sycl_target, src_dat_index_real);
-  auto d_src_dat_index_int =
-      std::make_shared<BufferDevice<int>>(this->sycl_target, src_dat_index_int);
-  auto d_dst_dat_index_real = std::make_shared<BufferDevice<int>>(
-      this->sycl_target, dst_dat_index_real);
-  auto d_dst_dat_index_int =
-      std::make_shared<BufferDevice<int>>(this->sycl_target, dst_dat_index_int);
-  auto d_dst_dat_zero_index_real = std::make_shared<BufferDevice<int>>(
-      this->sycl_target, dst_dat_zero_index_real);
-  auto d_dst_dat_zero_index_int = std::make_shared<BufferDevice<int>>(
-      this->sycl_target, dst_dat_zero_index_int);
+  auto d_src_dat_index_int = get_int_buffer(src_dat_index_int);
+  auto d_dst_dat_index_int = get_int_buffer(dst_dat_index_int);
+  auto d_dst_dat_zero_index_int = get_int_buffer(dst_dat_zero_index_int);
 
   auto k_npart_cell_existing = d_npart_cell_existing->ptr;
   auto k_src_dat_index_real = d_src_dat_index_real->ptr;
@@ -589,8 +601,6 @@ void ParticleGroup::add_particles_local(
   const std::size_t k_num_int_copy = dst_dat_index_int.size();
   const std::size_t k_num_real_zero = dst_dat_zero_index_real.size();
   const std::size_t k_num_int_zero = dst_dat_zero_index_int.size();
-
-  EventStack es;
 
   // Create a ParticleLoop iteration set to loop over all the particles in the
   // source ParticleGroup.
@@ -614,6 +624,16 @@ void ParticleGroup::add_particles_local(
   const auto k_zero_value_real = this->zero_value_real;
   const auto k_zero_value_int = this->zero_value_int;
 
+  auto k_dst_map_ptrs_d_ncomp_real = k_dst_map_ptrs.d_ncomp_real;
+  auto k_dst_map_ptrs_d_ptr_real = k_dst_map_ptrs.d_ptr_real;
+  auto k_src_map_ptrs_d_ptr_real = k_src_map_ptrs.d_ptr_real;
+  auto k_dst_map_ptrs_d_ncomp_int = k_dst_map_ptrs.d_ncomp_int;
+  auto k_dst_map_ptrs_d_ptr_int = k_dst_map_ptrs.d_ptr_int;
+  auto k_src_map_ptrs_d_ptr_int = k_src_map_ptrs.d_ptr_int;
+
+  es.wait();
+  auto r1 = this->sycl_target->profile_map.start_region(
+      "ParticleGroup", "add_particles_local_particle_group_data_movement");
   for (auto &blockx : is) {
     const auto block_device = blockx.block_device;
     es.push(sycl_target->queue.parallel_for<>(
@@ -626,9 +646,9 @@ void ParticleGroup::add_particles_local(
             for (std::size_t dx = 0; dx < k_num_real_copy; dx++) {
               const int dst_dat_index = k_dst_dat_index_real[dx];
               const int src_dat_index = k_src_dat_index_real[dx];
-              const int ncomp = k_dst_map_ptrs.d_ncomp_real[dst_dat_index];
-              auto dst_ptrs = k_dst_map_ptrs.d_ptr_real[dst_dat_index];
-              auto src_ptrs = k_src_map_ptrs.d_ptr_real[src_dat_index];
+              const int ncomp = k_dst_map_ptrs_d_ncomp_real[dst_dat_index];
+              auto dst_ptrs = k_dst_map_ptrs_d_ptr_real[dst_dat_index];
+              auto src_ptrs = k_src_map_ptrs_d_ptr_real[src_dat_index];
               for (int cx = 0; cx < ncomp; cx++) {
                 dst_ptrs[cell][cx][dst_layer] = src_ptrs[cell][cx][src_layer];
               }
@@ -636,25 +656,25 @@ void ParticleGroup::add_particles_local(
             for (std::size_t dx = 0; dx < k_num_int_copy; dx++) {
               const int dst_dat_index = k_dst_dat_index_int[dx];
               const int src_dat_index = k_src_dat_index_int[dx];
-              const int ncomp = k_dst_map_ptrs.d_ncomp_int[dst_dat_index];
-              auto dst_ptrs = k_dst_map_ptrs.d_ptr_int[dst_dat_index];
-              auto src_ptrs = k_src_map_ptrs.d_ptr_int[src_dat_index];
+              const int ncomp = k_dst_map_ptrs_d_ncomp_int[dst_dat_index];
+              auto dst_ptrs = k_dst_map_ptrs_d_ptr_int[dst_dat_index];
+              auto src_ptrs = k_src_map_ptrs_d_ptr_int[src_dat_index];
               for (int cx = 0; cx < ncomp; cx++) {
                 dst_ptrs[cell][cx][dst_layer] = src_ptrs[cell][cx][src_layer];
               }
             }
             for (std::size_t dx = 0; dx < k_num_real_zero; dx++) {
               const int dst_dat_index = k_dst_dat_zero_index_real[dx];
-              const int ncomp = k_dst_map_ptrs.d_ncomp_real[dst_dat_index];
-              auto dst_ptrs = k_dst_map_ptrs.d_ptr_real[dst_dat_index];
+              const int ncomp = k_dst_map_ptrs_d_ncomp_real[dst_dat_index];
+              auto dst_ptrs = k_dst_map_ptrs_d_ptr_real[dst_dat_index];
               for (int cx = 0; cx < ncomp; cx++) {
                 dst_ptrs[cell][cx][dst_layer] = k_zero_value_real;
               }
             }
             for (std::size_t dx = 0; dx < k_num_int_zero; dx++) {
               const int dst_dat_index = k_dst_dat_zero_index_int[dx];
-              const int ncomp = k_dst_map_ptrs.d_ncomp_int[dst_dat_index];
-              auto dst_ptrs = k_dst_map_ptrs.d_ptr_int[dst_dat_index];
+              const int ncomp = k_dst_map_ptrs_d_ncomp_int[dst_dat_index];
+              auto dst_ptrs = k_dst_map_ptrs_d_ptr_int[dst_dat_index];
               for (int cx = 0; cx < ncomp; cx++) {
                 dst_ptrs[cell][cx][dst_layer] = k_zero_value_int;
               }
@@ -664,25 +684,34 @@ void ParticleGroup::add_particles_local(
   }
 
   // launch the copies of the npart cells into the ParticleDats
-  for (auto &dat : this->particle_dats_real) {
-    es.push(dat.second->async_set_npart_cells(this->h_npart_cell));
-  }
-  for (auto &dat : this->particle_dats_int) {
-    es.push(dat.second->async_set_npart_cells(this->h_npart_cell));
-  }
-  es.wait();
-  this->check_dats_and_group_agree();
-  this->invalidate_group_version();
+  this->particle_group_pointer_map->set_npart_cells_host_device(
+      this->h_npart_cell.ptr, this->d_npart_cell.ptr);
 
   INT total_added = 0;
   for (int cellx = 0; cellx < cell_count; cellx++) {
     const INT added = this->h_npart_cell.ptr[cellx];
     total_added += added;
   }
+
+  es.wait();
+
+  this->sycl_target->profile_map.end_region(r1);
+  this->check_dats_and_group_agree();
+  this->invalidate_group_version();
+
   NESOASSERT(this->get_npart_local() == total_added,
              "Interals are not self consistent.");
   NESOASSERT(total_to_add == particle_group->get_npart_local(),
              "Source ParticleGroup is not self consistent.");
+
+  restore_resource(sycl_target->resource_stack_map,
+                   ResourceStackKeyBufferDevice<INT>{}, d_npart_cell_existing);
+  restore_int_buffer(d_dst_dat_zero_index_int);
+  restore_int_buffer(d_dst_dat_zero_index_real);
+  restore_int_buffer(d_dst_dat_index_int);
+  restore_int_buffer(d_dst_dat_index_real);
+  restore_int_buffer(d_src_dat_index_int);
+  restore_int_buffer(d_src_dat_index_real);
 
   pr0.end();
   this->sycl_target->profile_map.add_region(pr0);
@@ -762,12 +791,8 @@ void ParticleGroup::add_particles_local(
         lambda_dispatch(dat.second);
       }
       // launch the copies of the npart cells into the ParticleDats
-      for (auto &dat : this->particle_dats_real) {
-        es.push(dat.second->async_set_npart_cells(this->h_npart_cell));
-      }
-      for (auto &dat : this->particle_dats_int) {
-        es.push(dat.second->async_set_npart_cells(this->h_npart_cell));
-      }
+      this->particle_group_pointer_map->set_npart_cells_host_device(
+          this->h_npart_cell.ptr, this->d_npart_cell.ptr);
 
       es.wait();
     }
@@ -978,12 +1003,8 @@ void ParticleGroup::add_particles_local(ParticleSet &particle_data) {
         }));
   }
   // launch the copies of the npart cells into the ParticleDats
-  for (auto &dat : this->particle_dats_real) {
-    es.push(dat.second->async_set_npart_cells(this->h_npart_cell));
-  }
-  for (auto &dat : this->particle_dats_int) {
-    es.push(dat.second->async_set_npart_cells(this->h_npart_cell));
-  }
+  this->particle_group_pointer_map->set_npart_cells_host_device(
+      this->h_npart_cell.ptr, this->d_npart_cell.ptr);
 
   es.wait();
   this->check_dats_and_group_agree();
@@ -1063,7 +1084,7 @@ void ParticleGroup::remove_particles(
 }
 
 void ParticleGroup::global_move() {
-  this->global_move_ctx.move();
+  this->global_move_ctx->move();
   this->set_npart_cell_from_dat();
   this->invalidate_group_version();
 }
@@ -1080,7 +1101,7 @@ void ParticleGroup::hybrid_move() {
   this->mesh_hierarchy_global_map->execute();
 
   ProfileRegion r_global("hybrid_move", "global_move");
-  this->global_move_ctx.move();
+  this->global_move_ctx->move();
   this->set_npart_cell_from_dat();
   r_global.end();
   sycl_target->profile_map.add_region(r_global);
@@ -1097,14 +1118,7 @@ void ParticleGroup::hybrid_move() {
 }
 
 size_t ParticleGroup::particle_size() {
-  size_t s = 0;
-  for (auto &dat : this->particle_dats_real) {
-    s += dat.second->cell_dat.row_size();
-  }
-  for (auto &dat : this->particle_dats_int) {
-    s += dat.second->cell_dat.row_size();
-  }
-  return s;
+  return this->particle_group_pointer_map->get_num_bytes_per_particle();
 };
 
 void ParticleGroup::cell_move() {

@@ -5,10 +5,10 @@ namespace NESO::Particles {
 
 void CellMove::move() {
   auto r = ProfileRegion("CellMove", "prepare");
-  auto t0 = profile_timestamp();
   // reset the particle counters on each cell
-  auto mpi_rank_dat = particle_dats_int[Sym<INT>("NESO_MPI_RANK")];
-  const auto k_ncell = this->ncell;
+  auto mpi_rank_dat = this->particle_group_pointer_map->particle_dats_int->at(
+      Sym<INT>("NESO_MPI_RANK"));
+  const auto k_ncell = this->particle_group_pointer_map->get_cell_count();
 
   auto d_npart_cell =
       get_resource<BufferDevice<int>, ResourceStackInterfaceBufferDevice<int>>(
@@ -17,9 +17,9 @@ void CellMove::move() {
 
   const std::size_t cacheline_pad_int =
       this->sycl_target->device_limits.get_cacheline_size(sizeof(int));
-  d_npart_cell->realloc_no_copy(this->ncell + this->ncell * cacheline_pad_int);
+  d_npart_cell->realloc_no_copy(k_ncell + k_ncell * cacheline_pad_int);
   auto k_npart_cell_seq = d_npart_cell->ptr;
-  auto k_npart_cell = k_npart_cell_seq + this->ncell;
+  auto k_npart_cell = k_npart_cell_seq + k_ncell;
 
   auto k_mpi_npart_cell = mpi_rank_dat->d_npart_cell;
   auto reset_event = this->sycl_target->queue.parallel_for(
@@ -42,6 +42,11 @@ void CellMove::move() {
       get_resource<BufferDevice<int>, ResourceStackInterfaceBufferDevice<int>>(
           sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<int>{},
           sycl_target);
+  auto h_npart_cell =
+      get_resource<BufferHost<int>, ResourceStackInterfaceBufferHost<int>>(
+          sycl_target->resource_stack_map, ResourceStackKeyBufferHost<int>{},
+          sycl_target);
+  h_npart_cell->realloc_no_copy(k_ncell);
 
   // space to store particles moving between cells
   const INT npart_local = mpi_rank_dat->get_npart_local();
@@ -118,9 +123,9 @@ void CellMove::move() {
       get_resource<BufferDevice<int>, ResourceStackInterfaceBufferDevice<int>>(
           sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<int>{},
           sycl_target);
-  d_tmp_cell_new_npart->realloc_no_copy((this->ncell + 1) * 2);
+  d_tmp_cell_new_npart->realloc_no_copy((k_ncell + 1) * 2);
   auto k_tmp_cell_new_npart = d_tmp_cell_new_npart->ptr;
-  auto k_npart_cell_exscan = k_tmp_cell_new_npart + this->ncell + 1;
+  auto k_npart_cell_exscan = k_tmp_cell_new_npart + k_ncell + 1;
 
   auto e0 = this->sycl_target->queue.parallel_for(
       sycl::range<1>(k_ncell), [=](sycl::id<1> idx) {
@@ -137,17 +142,16 @@ void CellMove::move() {
   e1.wait_and_throw();
 
   auto event_h_npart_cell = this->sycl_target->queue.memcpy(
-      this->h_npart_cell.ptr, k_npart_cell_seq, sizeof(int) * this->ncell);
+      h_npart_cell->ptr, k_npart_cell_seq, sizeof(int) * k_ncell);
 
-  joint_exclusive_scan(this->sycl_target,
-                       static_cast<std::size_t>(this->ncell + 1),
+  joint_exclusive_scan(this->sycl_target, static_cast<std::size_t>(k_ncell + 1),
                        k_tmp_cell_new_npart, k_npart_cell_exscan)
       .wait_and_throw();
 
   // get the npart to move on the host
   int move_count;
   auto event_move_count = this->sycl_target->queue.memcpy(
-      &move_count, k_npart_cell_exscan + this->ncell, sizeof(int));
+      &move_count, k_npart_cell_exscan + k_ncell, sizeof(int));
 
   event_move_count.wait_and_throw();
   NESOASSERT(move_count <= npart_local,
@@ -193,92 +197,90 @@ void CellMove::move() {
   k_npart_cell_exscan = nullptr;
 
   // Realloc the ParticleDat cells for the move
-  auto t0_realloc = profile_timestamp();
-  for (auto &dat : particle_dats_real) {
-    dat.second->realloc(this->h_npart_cell);
+  for (auto &dat : *this->particle_group_pointer_map->particle_dats_real) {
+    dat.second->realloc(*h_npart_cell);
   }
-  for (auto &dat : particle_dats_int) {
-    dat.second->realloc(this->h_npart_cell);
+  for (auto &dat : *this->particle_group_pointer_map->particle_dats_int) {
+    dat.second->realloc(*h_npart_cell);
   }
 
   // wait for the reallocs
-  for (auto &dat : particle_dats_real) {
+  for (auto &dat : *this->particle_group_pointer_map->particle_dats_real) {
     dat.second->wait_realloc();
   }
-  for (auto &dat : particle_dats_int) {
+  for (auto &dat : *this->particle_group_pointer_map->particle_dats_int) {
     dat.second->wait_realloc();
   }
-  sycl_target->profile_map.inc(
-      "CellMove", "realloc", 1,
-      profile_elapsed(t0_realloc, profile_timestamp()));
-
-  EventStack tmp_stack;
-  for (auto &dat : particle_dats_real) {
-    tmp_stack.push(dat.second->async_set_npart_cells(this->h_npart_cell));
-  }
-  for (auto &dat : particle_dats_int) {
-    tmp_stack.push(dat.second->async_set_npart_cells(this->h_npart_cell));
-  }
-  tmp_stack.wait();
 
   r.end();
   this->sycl_target->profile_map.add_region(r);
   r = ProfileRegion("CellMove", "move");
 
-  // get the pointers into the ParticleDats
-  this->get_particle_dat_info();
-
-  const int k_num_dats_real = this->num_dats_real;
-  const int k_num_dats_int = this->num_dats_int;
-  const auto k_particle_dat_ptr_real = this->d_particle_dat_ptr_real.ptr;
-  const auto k_particle_dat_ptr_int = this->d_particle_dat_ptr_int.ptr;
-  const auto k_particle_dat_ncomp_real = this->d_particle_dat_ncomp_real.ptr;
-  const auto k_particle_dat_ncomp_int = this->d_particle_dat_ncomp_int.ptr;
-
-  auto t1 = profile_timestamp();
   // copy from old cells/layers to new cells/layers
-  if (move_count > 0) {
-    this->sycl_target->queue
-        .parallel_for(sycl::range<1>(move_count),
-                      [=](sycl::id<1> idx) {
-                        const auto cell_old = k_cells_old[idx];
-                        const auto cell_new = k_cells_new[idx];
-                        const auto layer_old = k_layers_old[idx];
-                        const auto layer_new = k_layers_new[idx];
+  auto &device_ptr_map = this->particle_group_pointer_map->get();
+  const int ncomp_total_real = device_ptr_map.ncomp_total_real;
+  const int ncomp_total_int = device_ptr_map.ncomp_total_int;
 
-                        // loop over the ParticleDats and copy the data
-                        // for each real dat
-                        for (int dx = 0; dx < k_num_dats_real; dx++) {
-                          REAL ***dat_ptr = k_particle_dat_ptr_real[dx];
-                          const int ncomp = k_particle_dat_ncomp_real[dx];
-                          // for each component
-                          for (int cx = 0; cx < ncomp; cx++) {
-                            dat_ptr[cell_new][cx][layer_new] =
-                                dat_ptr[cell_old][cx][layer_old];
-                          }
-                        }
-                        // for each int dat
-                        for (int dx = 0; dx < k_num_dats_int; dx++) {
-                          INT ***dat_ptr = k_particle_dat_ptr_int[dx];
-                          const int ncomp = k_particle_dat_ncomp_int[dx];
-                          // for each component
-                          for (int cx = 0; cx < ncomp; cx++) {
-                            dat_ptr[cell_new][cx][layer_new] =
-                                dat_ptr[cell_old][cx][layer_old];
-                          }
-                        }
-                      })
-        .wait_and_throw();
+  const int *RESTRICT k_flattened_dat_index_real =
+      device_ptr_map.d_flattened_dat_index_real;
+  const int *RESTRICT k_flattened_dat_index_int =
+      device_ptr_map.d_flattened_dat_index_int;
+  const int *RESTRICT k_flattened_comp_index_real =
+      device_ptr_map.d_flattened_comp_index_real;
+  const int *RESTRICT k_flattened_comp_index_int =
+      device_ptr_map.d_flattened_comp_index_int;
+
+  auto k_ptr_real = device_ptr_map.d_ptr_real;
+  auto k_ptr_int = device_ptr_map.d_ptr_int;
+
+  EventStack event_stack;
+  if ((ncomp_total_real > 0) && (move_count > 0)) {
+    event_stack.push(this->sycl_target->queue.parallel_for(
+        this->sycl_target->device_limits.validate_range_global(
+            sycl::range<2>(ncomp_total_real, move_count)),
+        [=](sycl::item<2> idx) {
+          const int dat = k_flattened_dat_index_real[idx.get_id(0)];
+          const int component = k_flattened_comp_index_real[idx.get_id(0)];
+          const int particle = idx.get_id(1);
+
+          const auto cell_old = k_cells_old[particle];
+          const auto cell_new = k_cells_new[particle];
+          const auto layer_old = k_layers_old[particle];
+          const auto layer_new = k_layers_new[particle];
+
+          k_ptr_real[dat][cell_new][component][layer_new] =
+              k_ptr_real[dat][cell_old][component][layer_old];
+        }));
   }
 
+  if ((ncomp_total_int > 0) && (move_count > 0)) {
+    event_stack.push(this->sycl_target->queue.parallel_for(
+        this->sycl_target->device_limits.validate_range_global(
+            sycl::range<2>(ncomp_total_int, move_count)),
+        [=](sycl::item<2> idx) {
+          const int dat = k_flattened_dat_index_int[idx.get_id(0)];
+          const int component = k_flattened_comp_index_int[idx.get_id(0)];
+          const int particle = idx.get_id(1);
+
+          const auto cell_old = k_cells_old[particle];
+          const auto cell_new = k_cells_new[particle];
+          const auto layer_old = k_layers_old[particle];
+          const auto layer_new = k_layers_new[particle];
+
+          k_ptr_int[dat][cell_new][component][layer_new] =
+              k_ptr_int[dat][cell_old][component][layer_old];
+        }));
+  }
+
+  this->particle_group_pointer_map->set_npart_cells_host(h_npart_cell->ptr);
+
   r.end();
-  r.num_bytes = move_count * this->num_bytes_per_particle * 2;
+  event_stack.wait();
+
+  r.num_bytes = move_count *
+                this->particle_group_pointer_map->get_num_bytes_per_particle() *
+                2;
   this->sycl_target->profile_map.add_region(r);
-
-  sycl_target->profile_map.inc("CellMove", "cell_move", 1,
-                               profile_elapsed(t1, profile_timestamp()));
-
-  auto t2 = profile_timestamp();
 
   // compress the data by removing the old rows
   this->layer_compressor.remove_particles(move_count, k_cells_old,
@@ -292,11 +294,8 @@ void CellMove::move() {
                    ResourceStackKeyBufferDevice<int>{}, d_layers_old);
   restore_resource(sycl_target->resource_stack_map,
                    ResourceStackKeyBufferDevice<int>{}, d_layers_new);
-
-  sycl_target->profile_map.inc("CellMove", "remove_particles", 1,
-                               profile_elapsed(t2, profile_timestamp()));
-  sycl_target->profile_map.inc("CellMove", "move", 1,
-                               profile_elapsed(t0, profile_timestamp()));
+  restore_resource(sycl_target->resource_stack_map,
+                   ResourceStackKeyBufferHost<int>{}, h_npart_cell);
 }
 
 } // namespace NESO::Particles
