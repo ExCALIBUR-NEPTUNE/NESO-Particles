@@ -113,6 +113,7 @@ private:
   /// Offsets into the recv buffer for each remote rank that will send to this
   // rank.
   BufferHost<INT> h_recv_offsets;
+  int num_ranks_reset{-1};
 
 public:
   /// Disable (implicit) copies.

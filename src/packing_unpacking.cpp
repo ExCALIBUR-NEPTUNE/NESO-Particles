@@ -152,6 +152,9 @@ void ParticlePacker::pack(
 char **ParticleUnpacker::get_recv_pointers(const int num_remote_recv_ranks) {
   this->h_recv_pointers.realloc_no_copy(num_remote_recv_ranks);
 
+  NESOASSERT(this->num_ranks_reset == num_remote_recv_ranks,
+             "Missmatch in expected number of ranks. Was reset called?");
+
   if (this->device_aware_mpi_enabled) {
     for (int rankx = 0; rankx < num_remote_recv_ranks; rankx++) {
       const auto offset = this->h_recv_offsets.ptr[rankx];
@@ -172,9 +175,7 @@ char **ParticleUnpacker::get_recv_pointers(const int num_remote_recv_ranks) {
 void ParticleUnpacker::reset(
     const int num_remote_recv_ranks, BufferHost<int> &h_recv_rank_npart,
     ParticleGroupPointerMapSharedPtr particle_group_pointer_map) {
-
-  auto &particle_dats_int = *particle_group_pointer_map->particle_dats_int;
-  auto &particle_dats_real = *particle_group_pointer_map->particle_dats_real;
+  this->num_ranks_reset = num_remote_recv_ranks;
 
   // realloc the array that holds where in the recv buffer the data from each
   // remote rank should be placed
