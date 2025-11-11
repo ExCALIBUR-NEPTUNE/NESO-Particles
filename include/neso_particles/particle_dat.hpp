@@ -474,6 +474,8 @@ public:
    */
   template <typename U>
   inline sycl::event set_npart_cells_device(const U *d_npart_cell_in) {
+    // If you edit how this works check that
+    // ParticleGroupPointerMap::set_npart_cells_device is still good.
     this->write_callback_wrapper(0);
     const size_t ncell = static_cast<size_t>(this->ncell);
     int *k_npart_cell = this->d_npart_cell;
