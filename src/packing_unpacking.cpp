@@ -287,7 +287,8 @@ void ParticleUnpacker::unpack(
         const int offset = k_num_bytes_per_particle * particle;
 
         const char *const unpack_base_ptr = k_recv_buffer + offset;
-        const REAL *const unpack_ptr_real = (REAL *const)unpack_base_ptr;
+        const REAL *const unpack_ptr_real =
+            reinterpret_cast<const REAL *const>(unpack_base_ptr);
         k_ptr_real[dat][0][dat_component][layer] = unpack_ptr_real[index];
       }));
 
@@ -306,7 +307,8 @@ void ParticleUnpacker::unpack(
 
         const char *const unpack_base_ptr =
             k_recv_buffer + offset + k_num_real_bytes_per_particle;
-        const INT *const unpack_ptr_int = (INT *const)unpack_base_ptr;
+        const INT *const unpack_ptr_int =
+            reinterpret_cast<const INT *const>(unpack_base_ptr);
         k_ptr_int[dat][0][dat_component][layer] = unpack_ptr_int[index];
       }));
 

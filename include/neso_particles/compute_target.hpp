@@ -315,6 +315,10 @@ joint_exclusive_scan(SYCLTargetSharedPtr sycl_target, std::size_t N, T *d_src,
                        T *last = first + N;
                        sycl::joint_exclusive_scan(it.get_group(), first, last,
                                                   d_dst, sycl::plus<T>());
+                       sycl::group_barrier(it.get_group());
+                       if (it.get_global_linear_id() == 0) {
+                         d_dst[0] = 0;
+                       }
                      });
   });
 }
@@ -369,6 +373,10 @@ joint_exclusive_scan_n(SYCLTargetSharedPtr sycl_target, std::size_t N,
           T *last = first + num_elements;
           sycl::joint_exclusive_scan(it.get_group(), first, last,
                                      d_dst + start_index, sycl::plus<T>());
+          sycl::group_barrier(it.get_group());
+          if (it.get_local_linear_id() == 0) {
+            d_dst[start_index] = 0;
+          }
         }
       });
 }
