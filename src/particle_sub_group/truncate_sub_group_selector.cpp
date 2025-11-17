@@ -27,7 +27,6 @@ void TruncateSubGroupSelector::create(Selection *created_selection) {
   auto k_INT = d_INT->ptr;
 
   int *orig_d_npart_cell = nullptr;
-  int *orig_h_npart_cell = nullptr;
   int npart_local = -1;
   MapLoopLayerToLayer k_parent_map;
 
@@ -36,7 +35,6 @@ void TruncateSubGroupSelector::create(Selection *created_selection) {
 
     auto dat_cell_id = this->particle_group->cell_id_dat;
     orig_d_npart_cell = dat_cell_id->d_npart_cell;
-    orig_h_npart_cell = dat_cell_id->h_npart_cell;
 
   } else {
 
@@ -47,7 +45,6 @@ void TruncateSubGroupSelector::create(Selection *created_selection) {
     auto s_parent = this->particle_sub_group->get_selection();
 
     orig_d_npart_cell = s_parent.d_npart_cell;
-    orig_h_npart_cell = s_parent.h_npart_cell;
     k_parent_map = s_parent.d_map_cells_to_particles;
   }
 
