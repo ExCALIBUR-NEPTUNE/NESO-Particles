@@ -48,6 +48,7 @@ private:
   std::string auto_profiling_prefix{""};
 
   void print_info_inner();
+  std::size_t get_local_size();
 
 public:
   /// SYCL device in use.
