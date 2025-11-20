@@ -173,6 +173,17 @@ public:
 typedef std::shared_ptr<SubGroupSelectorBase> SubGroupSelectorBaseSharedPtr;
 } // namespace ParticleSubGroupImplementation
 
+/**
+ * @returns True.
+ */
+bool is_whole_group(ParticleGroupSharedPtr);
+
+/**
+ * @param parent ParticleSubGroup instance.
+ * @returns True if the parent of the sub group is an entire particle group.
+ */
+bool is_whole_group(std::shared_ptr<ParticleSubGroup> parent);
+
 } // namespace NESO::Particles
 
 #endif
