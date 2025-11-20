@@ -38,8 +38,10 @@ void DisjointUnionSubGroupSelector::create(Selection *created_selection) {
       "DisjointUnionSubGroupSelector", "create");
 
   std::vector<Selection> h_selections(sub_group_count);
+  int npart_local_test = 0;
   for (int px = 0; px < sub_group_count; px++) {
     this->parents[px]->create_if_required();
+    npart_local_test += this->parents[px]->get_npart_local();
     h_selections[px] = this->parents[px]->get_selection();
   }
 
@@ -59,10 +61,10 @@ void DisjointUnionSubGroupSelector::create(Selection *created_selection) {
         int new_occupancy = 0;
         INT new_es = 0;
         for (int px = 0; px < sub_group_count; px++) {
-          const int npart_cell = k_selections[px].d_npart_cell[px];
+          const int npart_cell = k_selections[px].d_npart_cell[idx];
           new_occupancy += npart_cell;
           if (npart_cell > 0) {
-            new_es += k_selections[px].d_npart_cell_es[px];
+            new_es += k_selections[px].d_npart_cell_es[idx];
           }
         }
         k_npart_cell[idx] = new_occupancy;
@@ -109,6 +111,10 @@ void DisjointUnionSubGroupSelector::create(Selection *created_selection) {
   const int npart_local =
       static_cast<int>(h_npart_cell_es_ptr[cell_count - 1]) +
       h_npart_cell_ptr[cell_count - 1];
+
+  NESOASSERT(npart_local == npart_local_test,
+             "Consistency check failed for particle count.");
+
   created_selection->npart_local = npart_local;
   created_selection->ncell = cell_count;
   created_selection->h_npart_cell = h_npart_cell_ptr;
@@ -135,9 +141,12 @@ std::shared_ptr<ParticleSubGroup> particle_sub_group_disjoint_union(
     // If there is only one sub group use the copy selector.
     sub_group = particle_sub_group(parents[0]);
   } else {
+
     for (auto &px : parents) {
-      NESOASSERT(!is_whole_group(px),
-                 "Source ParticleSubGroups are trivially not disjoint.");
+      NESOASSERT((!is_whole_group(px)),
+                 "Source ParticleSubGroups which are references to the whole "
+                 "ParticleGroup are not currently supported unless only one is "
+                 "passed, i.e. parents.size() == 1.");
     }
 
     auto s = std::make_shared<
