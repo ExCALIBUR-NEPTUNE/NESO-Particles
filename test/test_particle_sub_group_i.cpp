@@ -454,6 +454,15 @@ TEST(ParticleSubGroup, disjoint_union) {
         }
       }
 
+      std::vector<std::set<INT>> h_map_correct_set(cell_count);
+      for (int ix = 0; ix < 5; ix++) {
+        for (int cellx = 0; cellx < cell_count; cellx++) {
+          for (auto &l : h_maps_correct[ix][cellx]) {
+            h_map_correct_set[cellx].insert(l);
+          }
+        }
+      }
+
       // get the created maps
       aa->create_if_required();
       auto selection_to_test = aa->get_selection();
@@ -480,7 +489,22 @@ TEST(ParticleSubGroup, disjoint_union) {
 
       ASSERT_EQ(selection_to_test.npart_local, npart_local);
       ASSERT_EQ(selection_to_test.ncell, cell_count);
+
+      std::vector<std::set<INT>> h_map_to_test_set(cell_count);
+      for (int cellx = 0; cellx < cell_count; cellx++) {
+        for (auto &l : h_map_to_test[cellx]) {
+          h_map_to_test_set[cellx].insert(l);
+        }
+      }
+
+      for (int cellx = 0; cellx < cell_count; cellx++) {
+        ASSERT_EQ(h_map_to_test_set[cellx], h_map_correct_set[cellx]);
+      }
     }
+
+    A->clear();
+    ASSERT_TRUE(aa->create_if_required());
+    ASSERT_FALSE(aa->create_if_required());
   }
 
   A->free();
