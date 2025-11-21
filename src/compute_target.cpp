@@ -25,6 +25,22 @@ int get_local_mpi_rank(MPI_Comm comm, int default_rank) {
   return default_rank;
 }
 
+std::size_t SYCLTarget::get_local_size() {
+  const bool is_cpu = this->device.is_cpu();
+
+  if (!is_cpu) {
+    // If the device is a GPU then return 256 or the env size.
+    const std::size_t env_local_size =
+        get_env_size_t("NESO_PARTICLES_LOOP_LOCAL_SIZE", 256);
+    return env_local_size;
+  } else {
+    // If the device is a CPU then return 32 or the env size.
+    const std::size_t env_local_size =
+        get_env_size_t("NESO_PARTICLES_LOOP_LOCAL_SIZE", 32);
+    return env_local_size;
+  }
+}
+
 void SYCLTarget::print_info_inner() {
   std::string mods = "";
 
@@ -49,6 +65,9 @@ void SYCLTarget::print_info_inner() {
     mods += "device_aware_mpi ";
   }
 
+  std::size_t local_size =
+      this->parameters->get<SizeTParameter>("LOOP_LOCAL_SIZE")->value;
+
   std::cout << "Using " << this->device.get_info<sycl::info::device::name>()
             << std::endl;
   std::cout << "Version: " << NESO_PARTICLES_VERSION_MAJOR << "."
@@ -56,8 +75,10 @@ void SYCLTarget::print_info_inner() {
             << NESO_PARTICLES_VERSION_PATCH << std::endl;
   std::cout << "In order queue: " << this->queue.is_in_order() << std::endl;
   std::cout << "Mods: " << mods << std::endl;
-  std::cout << "MPI comm size: " << this->comm_pair.size_parent << std::endl;
-  std::cout << "MPI comm rank: " << this->comm_pair.rank_parent << std::endl;
+  std::cout << "MPI comm size      : " << this->comm_pair.size_parent
+            << std::endl;
+  std::cout << "MPI comm rank      : " << this->comm_pair.rank_parent
+            << std::endl;
   std::cout << "MPI inter-comm size: " << this->comm_pair.size_inter
             << std::endl;
   std::cout << "MPI inter-comm rank: " << this->comm_pair.rank_inter
@@ -66,9 +87,10 @@ void SYCLTarget::print_info_inner() {
             << std::endl;
   std::cout << "MPI intra-comm rank: " << this->comm_pair.rank_intra
             << std::endl;
-  std::cout << "MPI local rank: " << this->local_rank << std::endl;
+  std::cout << "MPI local rank     : " << this->local_rank << std::endl;
   std::cout << "SYCL device count: " << this->num_devices << std::endl;
   std::cout << "SYCL device index: " << this->device_index << std::endl;
+  std::cout << "SYCL nd_range local_size  : " << local_size << std::endl;
   std::cout << "SYCL device cacheline size: "
             << this->device_limits.get_cacheline_size() << std::endl;
   this->device_limits.print();
@@ -133,9 +155,8 @@ SYCLTarget::SYCLTarget(const int gpu_device, MPI_Comm comm, int local_rank)
 
     // Setup the parameter store
     this->parameters = std::make_shared<Parameters>();
-    this->parameters->set("LOOP_LOCAL_SIZE",
-                          std::make_shared<SizeTParameter>(get_env_size_t(
-                              "NESO_PARTICLES_LOOP_LOCAL_SIZE", 256)));
+    this->parameters->set("LOOP_LOCAL_SIZE", std::make_shared<SizeTParameter>(
+                                                 this->get_local_size()));
     this->parameters->set("LOOP_NBIN",
                           std::make_shared<SizeTParameter>(
                               get_env_size_t("NESO_PARTICLES_LOOP_NBIN", 4)));

@@ -13,11 +13,6 @@ namespace NESO::Particles::ParticleSubGroupImplementation {
  */
 class TruncateSubGroupSelector : public SubGroupSelector {
 protected:
-  inline bool get_parent_is_whole_group(ParticleGroupSharedPtr) { return true; }
-  inline bool get_parent_is_whole_group(ParticleSubGroupSharedPtr parent) {
-    return parent->is_entire_particle_group();
-  }
-
   bool parent_is_whole_group;
   int num_particles{0};
 
@@ -35,7 +30,7 @@ public:
       : SubGroupSelector(parent), num_particles(num_particles) {
 
     this->particle_group = get_particle_group(parent);
-    this->parent_is_whole_group = this->get_parent_is_whole_group(parent);
+    this->parent_is_whole_group = is_whole_group(parent);
     NESOASSERT(num_particles >= 0, "Truncation to below zero unsupported.");
   }
 
