@@ -384,6 +384,31 @@ TEST(ParticleSubGroup, disjoint_union) {
   auto [A, sycl_target, cell_count] =
       particle_loop_create_common(npart_cell, 2);
 
+  {
+
+    std::vector<ParticleSubGroupSharedPtr> groups = {particle_sub_group(A)};
+    auto aa = particle_sub_group_disjoint_union(groups);
+
+    ASSERT_NE(
+        std::dynamic_pointer_cast<ParticleSubGroupImplementation::CopySelector>(
+            aa->selector),
+        nullptr);
+  }
+
+  {
+
+    std::vector<ParticleSubGroupSharedPtr> groups = {
+        particle_sub_group(particle_sub_group(
+            A, [=](auto ID) { return ID.at(0) % 2; },
+            Access::read(Sym<INT>("ID"))))};
+    auto aa = particle_sub_group_disjoint_union(groups);
+
+    ASSERT_NE(
+        std::dynamic_pointer_cast<ParticleSubGroupImplementation::CopySelector>(
+            aa->selector),
+        nullptr);
+  }
+
   A->add_particle_dat(Sym<INT>("ID2"), 1);
   particle_loop(
       A, [=](auto ID, auto ID2) { ID2.at(0) = ID.at(0); },
