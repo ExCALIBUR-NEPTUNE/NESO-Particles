@@ -82,7 +82,7 @@ macro(find_sycl)
     endif()
     if (SYCL_FOUND) 
         message(STATUS "Found SYCL implimentation ${SYCL_IMPLEMENTATION}")
-    elseif()
+    else()
         message(WARNING "No SYCL implimentation found - "
             "Proceeding on the assumption that the CXX compiler is a SYCL2020 compiler")
     endif()

@@ -377,3 +377,162 @@ TEST(ParticleSubGroup, discard_selector) {
   sycl_target->free();
   A->domain->mesh->free();
 }
+
+TEST(ParticleSubGroup, disjoint_union) {
+
+  const int npart_cell = 211;
+  auto [A, sycl_target, cell_count] =
+      particle_loop_create_common(npart_cell, 2);
+
+  {
+
+    std::vector<ParticleSubGroupSharedPtr> groups = {particle_sub_group(A)};
+    auto aa = particle_sub_group_disjoint_union(groups);
+
+    ASSERT_NE(
+        std::dynamic_pointer_cast<ParticleSubGroupImplementation::CopySelector>(
+            aa->selector),
+        nullptr);
+  }
+
+  {
+
+    std::vector<ParticleSubGroupSharedPtr> groups = {
+        particle_sub_group(particle_sub_group(
+            A, [=](auto ID) { return ID.at(0) % 2; },
+            Access::read(Sym<INT>("ID"))))};
+    auto aa = particle_sub_group_disjoint_union(groups);
+
+    ASSERT_NE(
+        std::dynamic_pointer_cast<ParticleSubGroupImplementation::CopySelector>(
+            aa->selector),
+        nullptr);
+  }
+
+  A->add_particle_dat(Sym<INT>("ID2"), 1);
+  particle_loop(
+      A, [=](auto ID, auto ID2) { ID2.at(0) = ID.at(0); },
+      Access::read(Sym<INT>("ID")), Access::write(Sym<INT>("ID2")))
+      ->execute();
+
+  {
+    std::vector<ParticleSubGroupSharedPtr> groups;
+    for (int ix = 0; ix < 5; ix++) {
+      if (ix % 2 == 0) {
+        groups.push_back(particle_sub_group(
+            A, [=](auto ID) { return ID.at(0) % 5 == ix; },
+            Access::read(Sym<INT>("ID"))));
+      } else {
+        groups.push_back(particle_sub_group(
+            A, [=](auto ID) { return ID.at(0) % 5 == ix; },
+            Access::read(Sym<INT>("ID2"))));
+      }
+    }
+
+    auto aa = particle_sub_group_disjoint_union(groups);
+    ASSERT_EQ(aa->get_npart_local(), A->get_npart_local());
+
+    {
+      ASSERT_FALSE(aa->create_if_required());
+      auto d_ID = Access::direct_get(Access::write(A->get_dat(Sym<INT>("ID"))));
+      Access::direct_restore(Access::write(A->get_dat(Sym<INT>("ID"))), d_ID);
+      ASSERT_TRUE(aa->create_if_required());
+      ASSERT_FALSE(aa->create_if_required());
+      auto d_ID2 =
+          Access::direct_get(Access::write(A->get_dat(Sym<INT>("ID2"))));
+      Access::direct_restore(Access::write(A->get_dat(Sym<INT>("ID2"))), d_ID2);
+      ASSERT_TRUE(aa->create_if_required());
+      ASSERT_FALSE(aa->create_if_required());
+    }
+
+    {
+
+      int npart_local = 0;
+
+      std::vector<int> t_npart_cell(cell_count);
+      std::vector<int> h_npart_cell(cell_count);
+      std::vector<INT> t_npart_cell_es(cell_count);
+      std::vector<INT> h_npart_cell_es(cell_count);
+      std::fill(h_npart_cell.begin(), h_npart_cell.end(), 0);
+      std::fill(h_npart_cell_es.begin(), h_npart_cell_es.end(), 0);
+
+      // Get the original maps
+      std::vector<std::vector<std::vector<INT>>> h_maps_correct;
+      for (int ix = 0; ix < 5; ix++) {
+        groups.at(ix)->create_if_required();
+        auto selection = groups.at(ix)->get_selection();
+        npart_local += selection.npart_local;
+        ASSERT_EQ(selection.ncell, cell_count);
+        h_maps_correct.push_back(
+            get_host_map_cells_to_particles(sycl_target, selection));
+
+        sycl_target->queue
+            .memcpy(t_npart_cell_es.data(), selection.d_npart_cell_es,
+                    cell_count * sizeof(INT))
+            .wait_and_throw();
+
+        for (int cellx = 0; cellx < cell_count; cellx++) {
+          h_npart_cell.at(cellx) += selection.h_npart_cell[cellx];
+          if (selection.h_npart_cell[cellx] >= 0) {
+            h_npart_cell_es.at(cellx) += t_npart_cell_es[cellx];
+          }
+        }
+      }
+
+      std::vector<std::set<INT>> h_map_correct_set(cell_count);
+      for (int ix = 0; ix < 5; ix++) {
+        for (int cellx = 0; cellx < cell_count; cellx++) {
+          for (auto &l : h_maps_correct[ix][cellx]) {
+            h_map_correct_set[cellx].insert(l);
+          }
+        }
+      }
+
+      // get the created maps
+      aa->create_if_required();
+      auto selection_to_test = aa->get_selection();
+
+      sycl_target->queue
+          .memcpy(t_npart_cell_es.data(), selection_to_test.d_npart_cell_es,
+                  cell_count * sizeof(INT))
+          .wait_and_throw();
+
+      sycl_target->queue
+          .memcpy(t_npart_cell.data(), selection_to_test.d_npart_cell,
+                  cell_count * sizeof(int))
+          .wait_and_throw();
+
+      for (int cellx = 0; cellx < cell_count; cellx++) {
+        ASSERT_EQ(h_npart_cell.at(cellx),
+                  selection_to_test.h_npart_cell[cellx]);
+        ASSERT_EQ(h_npart_cell.at(cellx), t_npart_cell.at(cellx));
+        ASSERT_EQ(h_npart_cell_es.at(cellx), t_npart_cell_es.at(cellx));
+      }
+
+      std::vector<std::vector<INT>> h_map_to_test =
+          get_host_map_cells_to_particles(sycl_target, selection_to_test);
+
+      ASSERT_EQ(selection_to_test.npart_local, npart_local);
+      ASSERT_EQ(selection_to_test.ncell, cell_count);
+
+      std::vector<std::set<INT>> h_map_to_test_set(cell_count);
+      for (int cellx = 0; cellx < cell_count; cellx++) {
+        for (auto &l : h_map_to_test[cellx]) {
+          h_map_to_test_set[cellx].insert(l);
+        }
+      }
+
+      for (int cellx = 0; cellx < cell_count; cellx++) {
+        ASSERT_EQ(h_map_to_test_set[cellx], h_map_correct_set[cellx]);
+      }
+    }
+
+    A->clear();
+    ASSERT_TRUE(aa->create_if_required());
+    ASSERT_FALSE(aa->create_if_required());
+  }
+
+  A->free();
+  sycl_target->free();
+  A->domain->mesh->free();
+}
