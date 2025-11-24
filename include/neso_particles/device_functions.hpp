@@ -636,7 +636,7 @@ VALUE_TYPE joint_reduce(GROUP_TYPE group, VALUE_TYPE *d_first,
   d_first += group.get_local_linear_id();
   while (d_first < d_last) {
     value = binary_op(value, *d_first);
-    d_first += group.get_group_linear_range();
+    d_first += group.get_local_linear_range();
   }
   value = sycl::reduce_over_group(group, value, binary_op);
   return value;

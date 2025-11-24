@@ -1,10 +1,4 @@
-#include <algorithm>
-#include <gtest/gtest.h>
-#include <memory>
-#include <neso_particles.hpp>
-#include <vector>
-
-using namespace NESO::Particles;
+#include "include/test_neso_particles.hpp"
 
 TEST(DeviceFunctions, consistent_line_orientation_2d) {
 
@@ -449,4 +443,97 @@ TEST(DeviceFunctions, cross_product_3d) {
   ASSERT_EQ(correct[0], to_test[0]);
   ASSERT_EQ(correct[1], to_test[1]);
   ASSERT_EQ(correct[2], to_test[2]);
+}
+
+TEST(DeviceFunctions, joint_reduce) {
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+
+  const std::size_t local_size =
+      sycl_target->parameters->template get<SizeTParameter>("LOOP_LOCAL_SIZE")
+          ->value;
+
+  auto lambda_run_test = [&](auto to_test) {
+    using value_type = typename decltype(to_test)::value_type;
+    const auto correct = std::accumulate(to_test.begin(), to_test.end(),
+                                         static_cast<value_type>(0));
+    std::vector<value_type> output = {0};
+    BufferDevice d_output(sycl_target, output);
+    BufferDevice d_to_test(sycl_target, to_test);
+
+    auto *k_output = d_output.ptr;
+    auto *k_to_test = d_to_test.ptr;
+
+    const std::size_t k_n = to_test.size();
+
+    for (std::size_t ls = 1; ls <= local_size; ls *= 2) {
+
+      sycl_target->queue
+          .parallel_for(
+              sycl::nd_range<1>(sycl::range<1>(ls), sycl::range<1>(ls)),
+              [=](auto idx) {
+                auto v = Kernel::joint_reduce(idx.get_group(), k_to_test,
+                                              k_to_test + k_n,
+                                              Kernel::plus<value_type>{});
+
+                if (idx.get_local_id(0) == 0) {
+                  k_output[0] = v;
+                }
+              })
+          .wait_and_throw();
+
+      ASSERT_TRUE(relative_error(correct, d_output.get().at(0)) < 1.0e-8);
+    }
+  };
+
+  std::mt19937 rng(5234234 + sycl_target->comm_pair.rank_parent);
+  const int N = 18123;
+
+  {
+    std::vector<int> empty;
+    lambda_run_test(empty);
+
+    std::vector<int> small = {9, 2, 5};
+    lambda_run_test(small);
+
+    std::uniform_int_distribution<int> dist(-71, 72);
+    std::vector<int> large(N);
+    for (int ix = 0; ix < N; ix++) {
+      large[ix] = dist(rng);
+    }
+
+    lambda_run_test(large);
+  }
+  {
+    std::vector<INT> empty;
+    lambda_run_test(empty);
+
+    std::vector<INT> small = {9, 2, 5};
+    lambda_run_test(small);
+
+    std::uniform_int_distribution<INT> dist(-71, 72);
+    std::vector<INT> large(N);
+    for (int ix = 0; ix < N; ix++) {
+      large[ix] = dist(rng);
+    }
+
+    lambda_run_test(large);
+  }
+
+  {
+    std::vector<REAL> empty;
+    lambda_run_test(empty);
+
+    std::vector<REAL> small = {9, 2, 5};
+    lambda_run_test(small);
+
+    std::uniform_real_distribution<REAL> dist(-71, 72);
+    std::vector<REAL> large(N);
+    for (int ix = 0; ix < N; ix++) {
+      large[ix] = dist(rng);
+    }
+
+    lambda_run_test(large);
+  }
+
+  sycl_target->free();
 }
