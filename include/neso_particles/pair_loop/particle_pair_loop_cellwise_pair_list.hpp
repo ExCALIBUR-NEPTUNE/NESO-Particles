@@ -32,7 +32,6 @@ protected:
   std::shared_ptr<BufferDevice<CellwisePairListDevice>> d_pair_lists_device;
   std::size_t num_pair_lists{0};
   int cell_count{0};
-  EventStack event_stack;
 
   std::vector<INT> h_pair_list_counts_es;
   std::shared_ptr<BufferDevice<INT>> d_pair_list_counts_es;
@@ -44,9 +43,6 @@ protected:
     }
     return num_pairs;
   }
-
-  ParticleLoopImplementation::ParticleLoopGlobalInfo global_info_A;
-  ParticleLoopImplementation::ParticleLoopGlobalInfo global_info_B;
 
 public:
   std::vector<CellwisePairListAbsolute<ParticleGroup>> pair_lists;
@@ -123,14 +119,15 @@ public:
         this->d_pair_list_counts_es->set_async(this->h_pair_list_counts_es));
 
     // Create global info needs to be called after h_pair_lists_device is set.
-    this->create_global_info(cell_start, cell_end, &global_info_A,
-                             &global_info_B);
+    this->create_global_info(cell_start, cell_end, &this->global_info_A,
+                             &this->global_info_B);
 
-    // TODO dispatch with A and B?
-    this->apply_pre_loop(global_info_A);
+    KernelMasksType kernel_masks;
+    this->apply_pre_loop(kernel_masks, this->global_info_A,
+                         this->global_info_B);
 
-    const auto cell_start_actual = global_info_A.starting_cell;
-    const auto cell_end_actual = global_info_A.bounding_cell;
+    const auto cell_start_actual = this->global_info_A.starting_cell;
+    const auto cell_end_actual = this->global_info_A.bounding_cell;
     const int cell_count_iteration = cell_end_actual - cell_start_actual;
 
     this->event_stack.wait();
@@ -140,7 +137,7 @@ public:
       auto k_kernel = this->kernel.kernel;
       auto k_pair_lists = this->d_pair_lists_device->ptr;
       auto k_pair_list_counts_es = this->d_pair_list_counts_es->ptr;
-      std::size_t local_size = global_info_A.local_size;
+      std::size_t local_size = this->global_info_A.local_size;
 
       sycl::range<3> local_iteration_set(1, 1, local_size);
       sycl::range<3> global_iteration_set(
@@ -157,8 +154,8 @@ public:
                                                                      &cgh) {
         loop_parameter_type loop_args;
         KernelMasksType kernel_masks;
-        this->create_loop_args(cgh, loop_args, kernel_masks, &global_info_A,
-                               &global_info_B);
+        this->create_loop_args(cgh, loop_args, kernel_masks,
+                               &this->global_info_A, &this->global_info_B);
 
         cgh.parallel_for(nd_iteration_set, [=](sycl::nd_item<3> idx) {
           const std::size_t index_cell =
@@ -175,7 +172,6 @@ public:
 
           ParticlePairLoopImplementation::ParticlePairLoopIteration iteration;
           iteration.work_item = &idx;
-          // TODO compute the pair index
 
           ParticleLoopImplementation::ParticleLoopIteration iteration_A;
           ParticleLoopImplementation::ParticleLoopIteration iteration_B;
@@ -210,15 +206,6 @@ public:
         });
       }));
     }
-  }
-
-  virtual inline void wait() override {
-    this->event_stack.wait();
-    auto cast_wrapper = [&](auto t) {
-      this->post_loop_cast(&this->global_info_A, t);
-    };
-    auto post_loop_caller = [&](auto... as) { (cast_wrapper(as), ...); };
-    std::apply(post_loop_caller, this->args);
   }
 };
 

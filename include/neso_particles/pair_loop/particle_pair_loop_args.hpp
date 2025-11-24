@@ -33,6 +33,15 @@ protected:
   /// should be the same types that would be passed to ParticleLoop.
   std::tuple<typename Access::StripPairGroupAnnotation<ARGS>::type...> args;
 
+  ParticleLoopImplementation::ParticleLoopGlobalInfo global_info_A;
+  ParticleLoopImplementation::ParticleLoopGlobalInfo global_info_B;
+  ParticleGroupSharedPtr particle_group_A{nullptr};
+  ParticleGroupSharedPtr particle_group_B{nullptr};
+  ParticleSubGroupSharedPtr particle_sub_group_A{nullptr};
+  ParticleSubGroupSharedPtr particle_sub_group_B{nullptr};
+
+  EventStack event_stack;
+
   /// Recursively assemble the tuple args.
   template <size_t INDEX, typename U> inline void unpack_args(U a0) {
     std::get<INDEX>(this->annotated_args) = a0;
@@ -66,11 +75,56 @@ protected:
     ParticleLoopImplementation::pre_loop(global_info, c);
   }
 
+  template <size_t INDEX, size_t SIZE>
+  inline void apply_pre_loop_inner(
+      KernelMasksType &kernel_masks_type,
+      ParticleLoopImplementation::ParticleLoopGlobalInfo &global_info_A,
+      ParticleLoopImplementation::ParticleLoopGlobalInfo &global_info_B) {
+
+    if constexpr (INDEX < SIZE) {
+      if constexpr (Access::IsAnnotatedB<decltype(Tuple::get<INDEX>(
+                        kernel_masks_type))>::value) {
+        pre_loop_cast(&global_info_B, std::get<INDEX>(this->args));
+      } else {
+        pre_loop_cast(&global_info_A, std::get<INDEX>(this->args));
+      }
+      apply_pre_loop_inner<INDEX + 1, SIZE>(kernel_masks_type, global_info_A,
+                                            global_info_B);
+    }
+  }
+
   inline void apply_pre_loop(
-      ParticleLoopImplementation::ParticleLoopGlobalInfo &global_info) {
-    auto cast_wrapper = [&](auto t) { pre_loop_cast(&global_info, t); };
-    auto pre_loop_caller = [&](auto... as) { (cast_wrapper(as), ...); };
-    std::apply(pre_loop_caller, this->args);
+      KernelMasksType &kernel_masks_type,
+      ParticleLoopImplementation::ParticleLoopGlobalInfo &global_info_A,
+      ParticleLoopImplementation::ParticleLoopGlobalInfo &global_info_B) {
+    apply_pre_loop_inner<0, sizeof...(ARGS)>(kernel_masks_type, global_info_A,
+                                             global_info_B);
+  }
+
+  template <size_t INDEX, size_t SIZE>
+  inline void apply_post_loop_inner(
+      KernelMasksType &kernel_masks_type,
+      ParticleLoopImplementation::ParticleLoopGlobalInfo &global_info_A,
+      ParticleLoopImplementation::ParticleLoopGlobalInfo &global_info_B) {
+
+    if constexpr (INDEX < SIZE) {
+      if constexpr (Access::IsAnnotatedB<decltype(Tuple::get<INDEX>(
+                        kernel_masks_type))>::value) {
+        post_loop_cast(&global_info_B, std::get<INDEX>(this->args));
+      } else {
+        post_loop_cast(&global_info_A, std::get<INDEX>(this->args));
+      }
+      apply_post_loop_inner<INDEX + 1, SIZE>(kernel_masks_type, global_info_A,
+                                             global_info_B);
+    }
+  }
+
+  inline void apply_post_loop(
+      KernelMasksType &kernel_masks_type,
+      ParticleLoopImplementation::ParticleLoopGlobalInfo &global_info_A,
+      ParticleLoopImplementation::ParticleLoopGlobalInfo &global_info_B) {
+    apply_post_loop_inner<0, sizeof...(ARGS)>(kernel_masks_type, global_info_A,
+                                              global_info_B);
   }
 
   /**
@@ -191,11 +245,6 @@ protected:
                                                  loop_args, kernel_args);
   }
 
-  ParticleGroupSharedPtr particle_group_A{nullptr};
-  ParticleGroupSharedPtr particle_group_B{nullptr};
-  ParticleSubGroupSharedPtr particle_sub_group_A{nullptr};
-  ParticleSubGroupSharedPtr particle_sub_group_B{nullptr};
-
   /**
    * @returns The number of pairs in the iteration set.
    */
@@ -270,6 +319,14 @@ public:
         particle_sub_group_B(particle_sub_group_B), sycl_target(sycl_target),
         name(name) {
     this->unpack_args<0>(args...);
+  }
+
+  virtual inline void wait() override {
+    this->event_stack.wait();
+
+    KernelMasksType kernel_masks;
+    this->apply_post_loop(kernel_masks, this->global_info_A,
+                          this->global_info_B);
   }
 };
 
