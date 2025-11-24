@@ -164,7 +164,7 @@ public:
           const std::size_t index_pair = idx.get_global_id(2);
 
           const auto *pair_list = &k_pair_lists[index_list];
-          const int num_waves = pair_list->num_waves;
+          const int num_waves = pair_list->get_num_waves(index_cell);
           for (int wavex = 0; wavex < num_waves; wavex++) {
 
             const auto num_pairs = static_cast<std::size_t>(

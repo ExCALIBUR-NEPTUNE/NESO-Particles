@@ -18,14 +18,20 @@ struct CellwisePairListDevice {
   int cell_count{0};
 
   // These pointer types should be accessed through the methods not directly.
-  int ***d_pair_list{nullptr};
-  int *d_pair_counts{nullptr};
-  INT *d_pair_counts_es{nullptr};
-  int *h_pair_counts{nullptr};
+  int *const *const *d_pair_list{nullptr};
+  int const *d_pair_counts{nullptr};
+  INT const *d_pair_counts_es{nullptr};
+  int const *h_pair_counts{nullptr};
 
   int max_index{0};
   int max_pair_count{0};
   INT pair_count{0};
+
+  /**
+   * @param cell Cell to retrieve number of waves for.
+   * @returns The number of waves for the given cell.
+   */
+  inline int get_num_waves(const int cell) const { return this->num_waves; }
 
   /**
    * @param wave Wave to retreive number of pairs for.
