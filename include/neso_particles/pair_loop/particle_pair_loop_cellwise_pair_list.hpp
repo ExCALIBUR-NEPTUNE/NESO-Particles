@@ -164,44 +164,51 @@ public:
           const std::size_t index_pair = idx.get_global_id(2);
 
           const auto *pair_list = &k_pair_lists[index_list];
-          const auto num_pairs =
-              static_cast<std::size_t>(pair_list->d_pair_counts[index_cell]);
+          const int num_waves = pair_list->num_waves;
+          for (int wavex = 0; wavex < num_waves; wavex++) {
 
-          const INT offset_list = k_pair_list_counts_es[index_list];
-          const INT offset_cell = pair_list->d_pair_counts_es[index_cell];
+            const auto num_pairs = static_cast<std::size_t>(
+                pair_list->get_num_pairs(wavex, static_cast<int>(index_cell)));
 
-          ParticlePairLoopImplementation::ParticlePairLoopIteration iteration;
-          iteration.work_item = &idx;
+            const INT offset_list = k_pair_list_counts_es[index_list];
+            const INT offset_cell =
+                pair_list->get_pair_index_offset(wavex, index_cell);
 
-          ParticleLoopImplementation::ParticleLoopIteration iteration_A;
-          ParticleLoopImplementation::ParticleLoopIteration iteration_B;
+            ParticlePairLoopImplementation::ParticlePairLoopIteration iteration;
+            iteration.work_item = &idx;
 
-          if (index_pair < num_pairs) {
-            const int particle_index_a =
-                pair_list->d_pair_list[index_cell][0][index_pair];
-            const int particle_index_b =
-                pair_list->d_pair_list[index_cell][1][index_pair];
+            ParticleLoopImplementation::ParticleLoopIteration iteration_A;
+            ParticleLoopImplementation::ParticleLoopIteration iteration_B;
 
-            iteration.pair_index = offset_list + offset_cell + index_pair;
+            if (index_pair < num_pairs) {
+              const int particle_index_a = pair_list->get_particle_index_i(
+                  wavex, index_cell, index_pair);
+              const int particle_index_b = pair_list->get_particle_index_j(
+                  wavex, index_cell, index_pair);
 
-            iteration_A.local_sycl_index = idx.get_local_linear_id();
-            iteration_A.local_sycl_range =
-                idx.get_group().get_local_linear_range();
-            iteration_A.cellx = index_cell;
-            iteration_A.layerx = particle_index_a;
+              iteration.pair_index = offset_list + offset_cell + index_pair;
 
-            iteration_B.local_sycl_index = idx.get_local_linear_id();
-            iteration_B.local_sycl_range =
-                idx.get_group().get_local_linear_range();
-            iteration_B.cellx = index_cell;
-            iteration_B.layerx = particle_index_b;
+              iteration_A.local_sycl_index = idx.get_local_linear_id();
+              iteration_A.local_sycl_range =
+                  idx.get_group().get_local_linear_range();
+              iteration_A.cellx = index_cell;
+              iteration_A.layerx = particle_index_a;
 
-            kernel_parameter_type kernel_args;
-            KernelMasksType kernel_masks;
+              iteration_B.local_sycl_index = idx.get_local_linear_id();
+              iteration_B.local_sycl_range =
+                  idx.get_group().get_local_linear_range();
+              iteration_B.cellx = index_cell;
+              iteration_B.layerx = particle_index_b;
 
-            create_kernel_args(iteration, kernel_masks, iteration_A,
-                               iteration_B, loop_args, kernel_args);
-            Tuple::apply(k_kernel, kernel_args);
+              kernel_parameter_type kernel_args;
+              KernelMasksType kernel_masks;
+
+              create_kernel_args(iteration, kernel_masks, iteration_A,
+                                 iteration_B, loop_args, kernel_args);
+              Tuple::apply(k_kernel, kernel_args);
+            }
+
+            sycl::group_barrier(idx.get_group());
           }
         });
       }));

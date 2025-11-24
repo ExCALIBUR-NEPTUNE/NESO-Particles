@@ -117,6 +117,7 @@ void CellwisePairList::push_back(const std::vector<int> &c,
 
   auto h_max_indicies = d_max_indices.get();
   this->max_index = std::max(h_max_indicies[0], h_max_indicies[1]);
+  this->num_waves = 1;
 }
 
 void CellwisePairList::clear() {
@@ -132,11 +133,15 @@ void CellwisePairList::clear() {
 }
 
 CellwisePairListDevice CellwisePairList::get() {
-  CellwisePairListDevice l = {
-      this->cell_count,           this->d_pair_list->device_ptr(),
-      this->d_pair_counts->ptr,   this->d_pair_counts_es->ptr,
-      this->h_pair_counts.data(), this->max_index,
-      this->max_pair_count,       this->pair_count};
+  CellwisePairListDevice l = {this->num_waves,
+                              this->cell_count,
+                              this->d_pair_list->device_ptr(),
+                              this->d_pair_counts->ptr,
+                              this->d_pair_counts_es->ptr,
+                              this->h_pair_counts.data(),
+                              this->max_index,
+                              this->max_pair_count,
+                              this->pair_count};
 
   return l;
 }

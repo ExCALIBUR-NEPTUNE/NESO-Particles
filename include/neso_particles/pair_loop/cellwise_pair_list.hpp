@@ -14,14 +14,69 @@ namespace NESO::Particles {
  * Device type for CellwisePairList.
  */
 struct CellwisePairListDevice {
+  int num_waves{0};
   int cell_count{0};
+
+  // These pointer types should be accessed through the methods not directly.
   int ***d_pair_list{nullptr};
   int *d_pair_counts{nullptr};
   INT *d_pair_counts_es{nullptr};
   int *h_pair_counts{nullptr};
+
   int max_index{0};
   int max_pair_count{0};
   INT pair_count{0};
+
+  /**
+   * @param wave Wave to retreive number of pairs for.
+   * @param cell Cell to retrieve number of pairs for.
+   * @returns The number of pairs in the given wave and given cell.
+   */
+  inline int get_num_pairs(const int wave, const int cell) const {
+    return this->d_pair_counts[wave * this->cell_count + cell];
+  }
+
+  /**
+   * @param wave Wave to retreive number of pairs for.
+   * @param cell Cell to retrieve number of pairs for.
+   * @returns The number of pairs in the given wave and given cell.
+   */
+  inline int get_num_pairs_host(const int wave, const int cell) const {
+    return this->h_pair_counts[wave * this->cell_count + cell];
+  }
+
+  /**
+   *
+   * @param wave Wave to retreive offset for.
+   * @param cell Cell to retreive offset for.
+   * @returns The offset to add to the pair index to compute the pair index in
+   * this pair list.
+   */
+  inline int get_pair_index_offset(const int wave, const int cell) const {
+    return this->d_pair_counts_es[wave * this->cell_count + cell];
+  }
+
+  /**
+   * @param wave Wave to retrieve particle index for.
+   * @param cell Cell to retrieve particle index for.
+   * @param pair_index Pair index to retrieve particle index for.
+   * @returns First particle index in pair.
+   */
+  inline int get_particle_index_i(const int wave, const int cell,
+                                  const int pair_index) const {
+    return this->d_pair_list[cell][0][pair_index];
+  }
+
+  /**
+   * @param wave Wave to retrieve particle index for.
+   * @param cell Cell to retrieve particle index for.
+   * @param pair_index Pair index to retrieve particle index for.
+   * @returns Second particle index in pair.
+   */
+  inline int get_particle_index_j(const int wave, const int cell,
+                                  const int pair_index) const {
+    return this->d_pair_list[cell][1][pair_index];
+  }
 };
 
 /**
@@ -29,6 +84,8 @@ struct CellwisePairListDevice {
  */
 class CellwisePairList {
 protected:
+  // The number of waves. Pairs within a wave are independent.
+  int num_waves{0};
   // The pair list itself.
   std::shared_ptr<CellDat<int>> d_pair_list;
   // The number of pairs in each cell (device)
