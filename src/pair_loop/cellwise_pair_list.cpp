@@ -4,7 +4,9 @@ namespace NESO::Particles {
 
 CellwisePairList::CellwisePairList(SYCLTargetSharedPtr sycl_target,
                                    const int cell_count)
-    : d_pair_list(std::make_shared<CellDat<int>>(sycl_target, cell_count, 2)),
+    : h_num_waves(std::vector<int>(cell_count)),
+      d_num_waves(std::make_shared<BufferDevice<int>>(sycl_target, cell_count)),
+      d_pair_list(std::make_shared<CellDat<int>>(sycl_target, cell_count, 2)),
       d_pair_counts(
           std::make_shared<BufferDevice<int>>(sycl_target, cell_count)),
       d_pair_counts_es(
@@ -17,6 +19,10 @@ CellwisePairList::CellwisePairList(SYCLTargetSharedPtr sycl_target,
 void CellwisePairList::push_back(const std::vector<int> &c,
                                  const std::vector<int> &i,
                                  const std::vector<int> &j) {
+
+  NESOASSERT((this->mode == 0) || (this->mode == 1),
+             "push_back and push_back_waves cannot be used at the same time");
+  this->mode = 1;
 
   const auto n = c.size();
   NESOASSERT(n == i.size(), "Input size missmatch.");
@@ -111,29 +117,38 @@ void CellwisePairList::push_back(const std::vector<int> &c,
 
   this->pair_count = last_es_count + this->h_pair_counts[this->cell_count - 1];
 
+  auto e4 = this->sycl_target->queue.fill(
+      this->d_num_waves->ptr, static_cast<int>(1), this->cell_count);
+  std::fill(this->h_num_waves.begin(), this->h_num_waves.end(), 1);
+
   e0.wait_and_throw();
   e1.wait_and_throw();
   e2.wait_and_throw();
+  e4.wait_and_throw();
 
   auto h_max_indicies = d_max_indices.get();
   this->max_index = std::max(h_max_indicies[0], h_max_indicies[1]);
-  this->num_waves = 1;
 }
 
 void CellwisePairList::clear() {
   if (this->cell_count > 0) {
     auto e0 = this->sycl_target->queue.fill(
+        this->d_num_waves->ptr, static_cast<int>(0), this->cell_count);
+    auto e1 = this->sycl_target->queue.fill(
         this->d_pair_counts->ptr, static_cast<int>(0), this->cell_count);
+    std::fill(this->h_num_waves.begin(), this->h_num_waves.end(), 0);
     std::fill(this->h_pair_counts.begin(), this->h_pair_counts.end(), 0);
     e0.wait_and_throw();
+    e1.wait_and_throw();
   }
   this->max_index = -1;
   this->max_pair_count = -1;
   this->pair_count = -1;
+  this->mode = 0;
 }
 
 CellwisePairListDevice CellwisePairList::get() {
-  CellwisePairListDevice l = {this->num_waves,
+  CellwisePairListDevice l = {this->d_num_waves->ptr,
                               this->cell_count,
                               this->d_pair_list->device_ptr(),
                               this->d_pair_counts->ptr,

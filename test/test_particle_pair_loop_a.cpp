@@ -507,3 +507,39 @@ TEST(ParticlePairLoop, kernel_rng_base) {
 
   sycl_target->free();
 }
+
+TEST(CellwisePairListHost, base) {
+  const int cell_count = 7;
+  CellwisePairListHost cplh(cell_count);
+
+  ASSERT_EQ(cplh.get_next_wave(1, 2), 0);
+  cplh.set_next_wave(1, 2, 4);
+  ASSERT_EQ(cplh.get_next_wave(1, 2), 4);
+  cplh.clear();
+  ASSERT_EQ(cplh.get_next_wave(1, 2), 0);
+
+  cplh.push_back(0, 1, 2);
+  ASSERT_EQ(cplh.get_next_wave(0, 1), 1);
+  ASSERT_EQ(cplh.get_next_wave(0, 2), 1);
+
+  cplh.push_back(0, 4, 3);
+  ASSERT_EQ(cplh.get_next_wave(0, 4), 1);
+  ASSERT_EQ(cplh.get_next_wave(0, 3), 1);
+
+  cplh.push_back(0, 2, 3);
+  ASSERT_EQ(cplh.get_next_wave(0, 0), 0);
+  ASSERT_EQ(cplh.get_next_wave(0, 1), 1);
+  ASSERT_EQ(cplh.get_next_wave(0, 2), 2);
+  ASSERT_EQ(cplh.get_next_wave(0, 3), 2);
+  ASSERT_EQ(cplh.get_next_wave(0, 4), 1);
+  ASSERT_EQ(cplh.get_next_wave(0, 5), 0);
+
+  auto m = cplh.get();
+
+  ASSERT_EQ(m.count(1), 0);
+  ASSERT_EQ(m.at(0).at(0).first, std::vector<int>({1, 3}));
+  ASSERT_EQ(m.at(0).at(0).second, std::vector<int>({2, 4}));
+
+  ASSERT_EQ(m.at(0).at(1).first, std::vector<int>({2}));
+  ASSERT_EQ(m.at(0).at(1).second, std::vector<int>({3}));
+}
