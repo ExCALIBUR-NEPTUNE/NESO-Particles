@@ -64,7 +64,6 @@ public:
    * @param cell Cell of particles.
    * @param layer Layer of particle.
    * @param wave Next wave that can include the particle.
-   * @returns The previous next wave of the particle.
    */
   void set_next_wave(const int cell, const int layer, const int wave);
 

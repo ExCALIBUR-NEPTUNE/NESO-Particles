@@ -4,6 +4,7 @@
 #include "../compute_target.hpp"
 #include "../containers/cell_dat.hpp"
 #include "../device_buffers.hpp"
+#include "cellwise_pair_list_host.hpp"
 
 #include <map>
 #include <vector>
@@ -18,12 +19,13 @@ struct CellwisePairListDevice {
   int cell_count{0};
 
   // These pointer types should be accessed through the methods not directly.
+  int const *d_wave_offsets{nullptr};
   int *const *const *d_pair_list{nullptr};
   int const *d_pair_counts{nullptr};
   INT const *d_pair_counts_es{nullptr};
   int const *h_pair_counts{nullptr};
 
-  int max_index{0};
+  // max pair count of any wave
   int max_pair_count{0};
   INT pair_count{0};
 
@@ -36,7 +38,7 @@ struct CellwisePairListDevice {
   }
 
   /**
-   * @param wave Wave to retreive number of pairs for.
+   * @param wave Wave to retrieve number of pairs for.
    * @param cell Cell to retrieve number of pairs for.
    * @returns The number of pairs in the given wave and given cell.
    */
@@ -45,7 +47,7 @@ struct CellwisePairListDevice {
   }
 
   /**
-   * @param wave Wave to retreive number of pairs for.
+   * @param wave Wave to retrieve number of pairs for.
    * @param cell Cell to retrieve number of pairs for.
    * @returns The number of pairs in the given wave and given cell.
    */
@@ -54,14 +56,14 @@ struct CellwisePairListDevice {
   }
 
   /**
-   *
-   * @param wave Wave to retreive offset for.
-   * @param cell Cell to retreive offset for.
-   * @returns The offset to add to the pair index to compute the pair index in
-   * this pair list.
+   * @param wave Wave to retrieve offset for.
+   * @param cell Cell to retrieve offset for.
+   * @param pair_index Pair index to retrieve index for.
+   * @returns The linear index of the pair in this pair list.
    */
-  inline int get_pair_index_offset(const int wave, const int cell) const {
-    return this->d_pair_counts_es[wave * this->cell_count + cell];
+  inline int get_pair_linear_index(const int wave, const int cell,
+                                   const int pair_index) const {
+    return this->d_pair_counts_es[wave * this->cell_count + cell] + pair_index;
   }
 
   /**
@@ -72,7 +74,8 @@ struct CellwisePairListDevice {
    */
   inline int get_particle_index_i(const int wave, const int cell,
                                   const int pair_index) const {
-    return this->d_pair_list[cell][0][pair_index];
+    const int offset = this->d_wave_offsets[wave * this->cell_count + cell];
+    return this->d_pair_list[cell][0][offset + pair_index];
   }
 
   /**
@@ -83,7 +86,9 @@ struct CellwisePairListDevice {
    */
   inline int get_particle_index_j(const int wave, const int cell,
                                   const int pair_index) const {
-    return this->d_pair_list[cell][1][pair_index];
+
+    const int offset = this->d_wave_offsets[wave * this->cell_count + cell];
+    return this->d_pair_list[cell][1][offset + pair_index];
   }
 };
 
@@ -96,16 +101,18 @@ protected:
   std::vector<int> h_num_waves;
   // The number of waves. Pairs within a wave are independent.
   std::shared_ptr<BufferDevice<int>> d_num_waves;
+  // The offsets for each cell to the start of the wave in the pair list.
+  std::shared_ptr<BufferDevice<int>> d_wave_offsets;
+  std::vector<int> h_wave_offsets;
   // The pair list itself.
   std::shared_ptr<CellDat<int>> d_pair_list;
   // The number of pairs in each cell (device)
   std::shared_ptr<BufferDevice<int>> d_pair_counts;
   // Exclusive scan of the number of pairs in each cell.
   std::shared_ptr<BufferDevice<INT>> d_pair_counts_es;
+  std::vector<INT> h_pair_counts_es;
   // This number of pairs in each cell (host)
   std::vector<int> h_pair_counts;
-  // The max index in the pair list
-  int max_index{-1};
   // The max size of the pair lists across all cells.
   int max_pair_count{-1};
   // The number of pairs.
@@ -141,6 +148,13 @@ public:
    */
   void push_back(const std::vector<int> &c, const std::vector<int> &i,
                  const std::vector<int> &j);
+
+  /**
+   * Set the cell list from a host description of waves of pairs.
+   *
+   * @param pair_list Host description of pairs.
+   */
+  void set(CellwisePairListHostSharedPtr pair_list);
 
   /**
    * Empty the pair list.

@@ -26,15 +26,12 @@ TEST(ParticlePairLoop, cellwise_pair_list) {
   std::vector<int> h_i(num_samples);
   std::vector<int> h_j(num_samples);
 
-  int max_index = -1;
   for (int ix = 0; ix < num_samples; ix++) {
     h_c[ix] = dist(rng);
     h_i[ix] = dist(rng);
     h_j[ix] = dist(rng);
     h_correct[h_c[ix]].first.push_back(h_i[ix]);
     h_correct[h_c[ix]].second.push_back(h_j[ix]);
-    max_index = std::max(max_index, h_i[ix]);
-    max_index = std::max(max_index, h_j[ix]);
   }
 
   cellwise_pair_list->push_back(h_c, h_i, h_j);
@@ -61,7 +58,6 @@ TEST(ParticlePairLoop, cellwise_pair_list) {
     }
 
     ASSERT_EQ(d_to_test.cell_count, cell_count);
-    ASSERT_EQ(d_to_test.max_index, max_index);
     ASSERT_EQ(d_to_test.max_pair_count, max_pair_count);
     ASSERT_EQ(d_to_test.pair_count, num_samples);
   }
@@ -512,9 +508,10 @@ TEST(CellwisePairListHost, base) {
   const int cell_count = 7;
   CellwisePairListHost cplh(cell_count);
 
+  cplh.push_back(1, 6, 7);
   ASSERT_EQ(cplh.get_next_wave(1, 2), 0);
-  cplh.set_next_wave(1, 2, 4);
-  ASSERT_EQ(cplh.get_next_wave(1, 2), 4);
+  cplh.set_next_wave(1, 2, 1);
+  ASSERT_EQ(cplh.get_next_wave(1, 2), 1);
   cplh.clear();
   ASSERT_EQ(cplh.get_next_wave(1, 2), 0);
 

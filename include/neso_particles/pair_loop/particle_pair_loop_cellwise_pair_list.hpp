@@ -172,7 +172,7 @@ public:
 
             const INT offset_list = k_pair_list_counts_es[index_list];
             const INT offset_cell =
-                pair_list->get_pair_index_offset(wavex, index_cell);
+                pair_list->get_pair_linear_index(wavex, index_cell, index_pair);
 
             ParticlePairLoopImplementation::ParticlePairLoopIteration iteration;
             iteration.work_item = &idx;
@@ -186,7 +186,7 @@ public:
               const int particle_index_b = pair_list->get_particle_index_j(
                   wavex, index_cell, index_pair);
 
-              iteration.pair_index = offset_list + offset_cell + index_pair;
+              iteration.pair_index = offset_list + offset_cell;
 
               iteration_A.local_sycl_index = idx.get_local_linear_id();
               iteration_A.local_sycl_range =
