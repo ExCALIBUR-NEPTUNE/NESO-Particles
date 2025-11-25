@@ -179,7 +179,9 @@ void CellwisePairList::set(CellwisePairListHostSharedPtr pair_list) {
         num_pairs += num_pairs_wave;
         linear_offset += num_pairs_wave;
       }
-      this->d_pair_list->set_nrow(cellx, num_pairs);
+      if (num_pairs) {
+        this->d_pair_list->set_nrow(cellx, num_pairs);
+      }
     }
 
     if (max_num_waves) {
@@ -254,7 +256,8 @@ void CellwisePairList::clear() {
 }
 
 CellwisePairListDevice CellwisePairList::get() {
-  CellwisePairListDevice l = {this->d_num_waves->ptr,
+  CellwisePairListDevice l = {this->h_num_waves.data(),
+                              this->d_num_waves->ptr,
                               this->cell_count,
                               this->d_wave_offsets->ptr,
                               this->d_pair_list->device_ptr(),
@@ -267,19 +270,21 @@ CellwisePairListDevice CellwisePairList::get() {
   return l;
 }
 
-std::map<int, std::pair<std::vector<int>, std::vector<int>>>
-CellwisePairList::host_get() {
-  std::map<int, std::pair<std::vector<int>, std::vector<int>>> l;
+CellwisePairListHostMap CellwisePairList::host_get() {
+  CellwisePairListHostMap l;
 
   for (int cx = 0; cx < this->cell_count; cx++) {
     auto pairs = this->d_pair_list->get_cell(cx);
-    const auto pair_count = this->h_pair_counts[cx];
-    l[cx].first.resize(pair_count);
-    l[cx].second.resize(pair_count);
 
-    for (int rx = 0; rx < pair_count; rx++) {
-      l[cx].first[rx] = pairs->at(rx, 0);
-      l[cx].second[rx] = pairs->at(rx, 1);
+    const int num_waves = this->h_num_waves.at(cx);
+    int index = 0;
+    for (int wavex = 0; wavex < num_waves; wavex++) {
+      const auto pair_count = this->h_pair_counts[wavex * cell_count + cx];
+      for (int px = 0; px < pair_count; px++) {
+        l[cx][wavex].first.push_back(pairs->at(index, 0));
+        l[cx][wavex].second.push_back(pairs->at(index, 1));
+        index++;
+      }
     }
   }
 

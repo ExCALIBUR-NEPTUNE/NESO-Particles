@@ -9,10 +9,9 @@ TEST(ParticlePairLoop, cellwise_pair_list) {
 
   {
     auto h_list = cellwise_pair_list->host_get();
-    ASSERT_EQ(h_list.size(), cell_count);
     for (int cx = 0; cx < cell_count; cx++) {
-      ASSERT_EQ(h_list.at(cx).first.size(), 0);
-      ASSERT_EQ(h_list.at(cx).second.size(), 0);
+      ASSERT_EQ(h_list[cx][0].first.size(), 0);
+      ASSERT_EQ(h_list[cx][0].second.size(), 0);
     }
   }
 
@@ -50,9 +49,9 @@ TEST(ParticlePairLoop, cellwise_pair_list) {
 
     INT es_correct = 0;
     for (int cx = 0; cx < cell_count; cx++) {
-      ASSERT_EQ(h_correct[cx], h_to_test[cx]);
-      max_pair_count = std::max(max_pair_count,
-                                static_cast<int>(h_to_test[cx].first.size()));
+      ASSERT_EQ(h_correct[cx], h_to_test[cx][0]);
+      max_pair_count = std::max(
+          max_pair_count, static_cast<int>(h_to_test[cx][0].first.size()));
       ASSERT_EQ(es_correct, h_pair_counts_es.at(cx));
       es_correct += d_to_test.h_pair_counts[cx];
     }
@@ -76,17 +75,16 @@ TEST(ParticlePairLoop, cellwise_pair_list) {
     auto h_to_test = cellwise_pair_list->host_get();
 
     for (int cx = 0; cx < cell_count; cx++) {
-      ASSERT_EQ(h_correct[cx], h_to_test[cx]);
+      ASSERT_EQ(h_correct[cx], h_to_test[cx][0]);
     }
   }
 
   cellwise_pair_list->clear();
   {
     auto h_list = cellwise_pair_list->host_get();
-    ASSERT_EQ(h_list.size(), cell_count);
     for (int cx = 0; cx < cell_count; cx++) {
-      ASSERT_EQ(h_list.at(cx).first.size(), 0);
-      ASSERT_EQ(h_list.at(cx).second.size(), 0);
+      ASSERT_EQ(h_list[cx][0].first.size(), 0);
+      ASSERT_EQ(h_list[cx][0].second.size(), 0);
     }
   }
 
@@ -99,10 +97,9 @@ TEST(ParticlePairLoop, cellwise_pair_list) {
 
   {
     auto h_list = cellwise_pair_list->host_get();
-    ASSERT_EQ(h_list.size(), cell_count);
     for (int cx = 0; cx < cell_count; cx++) {
-      ASSERT_EQ(h_list.at(cx).first.size(), 0);
-      ASSERT_EQ(h_list.at(cx).second.size(), 0);
+      ASSERT_EQ(h_list[cx][0].first.size(), 0);
+      ASSERT_EQ(h_list[cx][0].second.size(), 0);
     }
   }
 
@@ -504,7 +501,7 @@ TEST(ParticlePairLoop, kernel_rng_base) {
   sycl_target->free();
 }
 
-TEST(CellwisePairListHost, base) {
+TEST(CellwisePairListHost, host) {
   const int cell_count = 7;
   CellwisePairListHost cplh(cell_count);
 
@@ -539,4 +536,36 @@ TEST(CellwisePairListHost, base) {
 
   ASSERT_EQ(m.at(0).at(1).first, std::vector<int>({2}));
   ASSERT_EQ(m.at(0).at(1).second, std::vector<int>({3}));
+}
+
+TEST(CellwisePairListHost, device) {
+
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+  const int cell_count = 7;
+  auto cplh = std::make_shared<CellwisePairListHost>(cell_count);
+  auto cpl = std::make_shared<CellwisePairList>(sycl_target, cell_count);
+
+  {
+    cpl->clear();
+    cpl->set(cplh);
+    auto m = cpl->get();
+    ASSERT_EQ(m.cell_count, cell_count);
+    ASSERT_EQ(m.max_pair_count, 0);
+    ASSERT_EQ(m.pair_count, 0);
+
+    std::vector<int> h_num_waves(cell_count);
+    sycl_target->queue
+        .memcpy(h_num_waves.data(), m.d_num_waves, cell_count * sizeof(int))
+        .wait_and_throw();
+
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      ASSERT_EQ(m.h_num_waves[cellx], 0);
+      ASSERT_EQ(m.h_pair_counts[cellx], 0);
+      ASSERT_EQ(h_num_waves[cellx], 0);
+    }
+  }
+
+  {}
+
+  sycl_target->free();
 }

@@ -15,6 +15,7 @@ namespace NESO::Particles {
  * Device type for CellwisePairList.
  */
 struct CellwisePairListDevice {
+  int const *h_num_waves{nullptr};
   int const *d_num_waves{nullptr};
   int cell_count{0};
 
@@ -174,7 +175,7 @@ public:
    *
    * @returns Container of pairs for each cell.
    */
-  std::map<int, std::pair<std::vector<int>, std::vector<int>>> host_get();
+  CellwisePairListHostMap host_get();
 };
 
 using CellwisePairListSharedPtr = std::shared_ptr<CellwisePairList>;
