@@ -705,3 +705,133 @@ TEST(CellwisePairListHost, device) {
 
   sycl_target->free();
 }
+
+TEST(ParticlePairLoop, cell_wise_pair_list_waves) {
+
+  int npart_cell = 10;
+  const int ndim = 2;
+  const int nx = 16;
+  const int ny = 33;
+  const int nz = 48;
+
+  auto [A, sycl_target, cell_count] =
+      particle_loop_create_common(npart_cell, ndim, nx, ny, nz);
+  A->add_particle_dat(Sym<INT>("NEIGHBOURS"), 1);
+
+  auto reset_loop = particle_loop(
+      A, [=](auto NN) { NN.at(0) = 0; }, Access::write(Sym<INT>("NEIGHBOURS")));
+
+  reset_loop->execute();
+
+  auto cellwise_pair_listA =
+      std::make_shared<CellwisePairList>(sycl_target, cell_count);
+
+  auto pl0 = particle_pair_loop(
+      "particle_pair_loop_test",
+      {CellwisePairListAbsolute<ParticleGroup>(A, A, cellwise_pair_listA)},
+      [](auto NN_i, auto NN_j) {
+        NN_i.at(0)++;
+        NN_j.at(0)++;
+      },
+      Access::A(Access::write(Sym<INT>("NEIGHBOURS"))),
+      Access::B(Access::write(Sym<INT>("NEIGHBOURS"))));
+
+  pl0->execute();
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto NN = A->get_cell(Sym<INT>("NEIGHBOURS"), cellx);
+    const int nrow = NN->nrow;
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      ASSERT_EQ(NN->at(rowx, 0), 0);
+    }
+  }
+
+  auto cplh = std::make_shared<CellwisePairListHost>(cell_count);
+
+  const int num_samples = 37000;
+  std::mt19937 rng(522342 + sycl_target->comm_pair.rank_parent);
+  std::uniform_int_distribution<int> dist_cell(0, cell_count - 1);
+  std::uniform_real_distribution<REAL> dist_row(0.0, 1.0);
+
+  std::vector<int> cells;
+  std::vector<int> pairs_i;
+  std::vector<int> pairs_j;
+
+  cells.reserve(num_samples);
+  pairs_i.reserve(num_samples);
+  pairs_j.reserve(num_samples);
+
+  std::map<std::tuple<int, int>, int> num_neighbours_correct;
+
+  for (int samplex = 0; samplex < num_samples; samplex++) {
+    bool valid = false;
+    const int cell = dist_cell(rng);
+    const int npart_cell = A->get_npart_cell(cell);
+
+    auto lambda_sample_index = [&]() -> int {
+      const REAL u = dist_row(rng);
+      const int row0 = u * npart_cell;
+      const int row1 = std::min(row0, npart_cell - 1);
+      return row1;
+    };
+
+    const int i = lambda_sample_index();
+    int j = -1;
+    do {
+      j = lambda_sample_index();
+      valid = i != j;
+    } while (!valid);
+    cplh->push_back(cell, i, j);
+    const int oi = i < j ? i : j;
+    const int oj = i < j ? j : i;
+    cells.push_back(cell);
+    pairs_i.push_back(oi);
+    pairs_j.push_back(oj);
+
+    std::tuple<int, int> key_i = {cell, i};
+    std::tuple<int, int> key_j = {cell, j};
+
+    for (auto k : {key_i, key_j}) {
+      if (num_neighbours_correct.count(k)) {
+        num_neighbours_correct[k]++;
+      } else {
+        num_neighbours_correct[k] = 1;
+      }
+    }
+  }
+
+  cellwise_pair_listA->set(cplh);
+  pl0->execute();
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto NN = A->get_cell(Sym<INT>("NEIGHBOURS"), cellx);
+    const int nrow = NN->nrow;
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      std::tuple<int, int> k = {cellx, rowx};
+      if (num_neighbours_correct.count(k)) {
+        ASSERT_EQ(NN->at(rowx, 0), num_neighbours_correct[k]);
+      } else {
+        ASSERT_EQ(NN->at(rowx, 0), 0);
+      }
+    }
+  }
+
+  std::vector<int> h_masks(num_samples);
+  std::fill(h_masks.begin(), h_masks.end(), 1);
+  BufferDevice d_masks(sycl_target, h_masks);
+  auto *k_masks = d_masks.ptr;
+
+  particle_pair_loop(
+      "particle_pair_loop_test",
+      {CellwisePairListAbsolute<ParticleGroup>(A, A, cellwise_pair_listA)},
+      [=](auto INDEX) { k_masks[INDEX.get_loop_linear_index()] += 1; },
+      Access::read(ParticlePairLoopIndex{}))
+      ->execute();
+
+  h_masks = d_masks.get();
+  for (int ix = 0; ix < num_samples; ix++) {
+    ASSERT_EQ(h_masks.at(ix), 2);
+  }
+
+  sycl_target->free();
+  A->domain->mesh->free();
+}
