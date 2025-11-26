@@ -143,75 +143,81 @@ public:
       sycl::range<3> global_iteration_set(
           static_cast<std::size_t>(cell_count_iteration),
           static_cast<std::size_t>(this->num_pair_lists),
-          static_cast<std::size_t>(
-              get_next_multiple(max_pair_count, local_size)));
+          static_cast<std::size_t>(local_size));
 
       sycl::nd_range<3> nd_iteration_set =
           this->sycl_target->device_limits.validate_nd_range(
               sycl::nd_range<3>(global_iteration_set, local_iteration_set));
 
-      this->event_stack.push(this->sycl_target->queue.submit([&](sycl::handler
-                                                                     &cgh) {
-        loop_parameter_type loop_args;
-        KernelMasksType kernel_masks;
-        this->create_loop_args(cgh, loop_args, kernel_masks,
-                               &this->global_info_A, &this->global_info_B);
+      this->event_stack.push(
+          this->sycl_target->queue.submit([&](sycl::handler &cgh) {
+            loop_parameter_type loop_args;
+            KernelMasksType kernel_masks;
+            this->create_loop_args(cgh, loop_args, kernel_masks,
+                                   &this->global_info_A, &this->global_info_B);
 
-        cgh.parallel_for(nd_iteration_set, [=](sycl::nd_item<3> idx) {
-          const std::size_t index_cell =
-              idx.get_global_id(0) + cell_start_actual;
-          const std::size_t index_list = idx.get_global_id(1);
-          const std::size_t index_pair = idx.get_global_id(2);
-
-          const auto *pair_list = &k_pair_lists[index_list];
-          const int num_waves = pair_list->get_num_waves(index_cell);
-          for (int wavex = 0; wavex < num_waves; wavex++) {
-
-            const auto num_pairs = static_cast<std::size_t>(
-                pair_list->get_num_pairs(wavex, static_cast<int>(index_cell)));
-
-            const INT offset_list = k_pair_list_counts_es[index_list];
-            const INT offset_cell =
-                pair_list->get_pair_linear_index(wavex, index_cell, index_pair);
-
-            ParticlePairLoopImplementation::ParticlePairLoopIteration iteration;
-            iteration.work_item = &idx;
-
-            ParticleLoopImplementation::ParticleLoopIteration iteration_A;
-            ParticleLoopImplementation::ParticleLoopIteration iteration_B;
-
-            if (index_pair < num_pairs) {
-              const int particle_index_a = pair_list->get_particle_index_i(
-                  wavex, index_cell, index_pair);
-              const int particle_index_b = pair_list->get_particle_index_j(
-                  wavex, index_cell, index_pair);
-
-              iteration.pair_index = offset_list + offset_cell;
-
-              iteration_A.local_sycl_index = idx.get_local_linear_id();
-              iteration_A.local_sycl_range =
+            cgh.parallel_for(nd_iteration_set, [=](sycl::nd_item<3> idx) {
+              const std::size_t index_cell =
+                  idx.get_global_id(0) + cell_start_actual;
+              const std::size_t index_list = idx.get_global_id(1);
+              const std::size_t local_id = idx.get_local_linear_id();
+              const std::size_t local_range =
                   idx.get_group().get_local_linear_range();
-              iteration_A.cellx = index_cell;
-              iteration_A.layerx = particle_index_a;
+              const INT offset_list = k_pair_list_counts_es[index_list];
 
-              iteration_B.local_sycl_index = idx.get_local_linear_id();
-              iteration_B.local_sycl_range =
-                  idx.get_group().get_local_linear_range();
-              iteration_B.cellx = index_cell;
-              iteration_B.layerx = particle_index_b;
+              const auto *pair_list = &k_pair_lists[index_list];
+              const int wave_count = pair_list->get_num_waves(index_cell);
 
-              kernel_parameter_type kernel_args;
-              KernelMasksType kernel_masks;
+              for (int wavex = 0; wavex < wave_count; wavex++) {
 
-              create_kernel_args(iteration, kernel_masks, iteration_A,
-                                 iteration_B, loop_args, kernel_args);
-              Tuple::apply(k_kernel, kernel_args);
-            }
+                const auto num_pairs =
+                    static_cast<std::size_t>(pair_list->get_num_pairs(
+                        wavex, static_cast<int>(index_cell)));
 
-            sycl::group_barrier(idx.get_group());
-          }
-        });
-      }));
+                for (std::size_t index_pair = local_id; index_pair < num_pairs;
+                     index_pair += local_range) {
+
+                  const INT offset_cell = pair_list->get_pair_linear_index(
+                      wavex, index_cell, index_pair);
+
+                  ParticlePairLoopImplementation::ParticlePairLoopIteration
+                      iteration;
+                  iteration.work_item = &idx;
+
+                  ParticleLoopImplementation::ParticleLoopIteration iteration_A;
+                  ParticleLoopImplementation::ParticleLoopIteration iteration_B;
+
+                  const int particle_index_a = pair_list->get_particle_index_i(
+                      wavex, index_cell, index_pair);
+                  const int particle_index_b = pair_list->get_particle_index_j(
+                      wavex, index_cell, index_pair);
+
+                  iteration.pair_index = offset_list + offset_cell;
+
+                  iteration_A.local_sycl_index = idx.get_local_linear_id();
+                  iteration_A.local_sycl_range =
+                      idx.get_group().get_local_linear_range();
+                  iteration_A.cellx = index_cell;
+                  iteration_A.layerx = particle_index_a;
+
+                  iteration_B.local_sycl_index = idx.get_local_linear_id();
+                  iteration_B.local_sycl_range =
+                      idx.get_group().get_local_linear_range();
+                  iteration_B.cellx = index_cell;
+                  iteration_B.layerx = particle_index_b;
+
+                  kernel_parameter_type kernel_args;
+                  KernelMasksType kernel_masks;
+
+                  create_kernel_args(iteration, kernel_masks, iteration_A,
+                                     iteration_B, loop_args, kernel_args);
+                  Tuple::apply(k_kernel, kernel_args);
+                }
+
+                sycl::group_barrier(idx.get_group());
+              }
+            });
+          }));
     }
   }
 };

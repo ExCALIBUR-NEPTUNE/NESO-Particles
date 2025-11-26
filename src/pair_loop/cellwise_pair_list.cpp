@@ -4,8 +4,9 @@ namespace NESO::Particles {
 
 CellwisePairList::CellwisePairList(SYCLTargetSharedPtr sycl_target,
                                    const int cell_count)
-    : h_num_waves(std::vector<int>(cell_count)),
-      d_num_waves(std::make_shared<BufferDevice<int>>(sycl_target, cell_count)),
+    : h_wave_count(std::vector<int>(cell_count)),
+      d_wave_count(
+          std::make_shared<BufferDevice<int>>(sycl_target, cell_count)),
       d_wave_offsets(
           std::make_shared<BufferDevice<int>>(sycl_target, cell_count)),
       d_pair_list(std::make_shared<CellDat<int>>(sycl_target, cell_count, 2)),
@@ -112,8 +113,8 @@ void CellwisePairList::push_back(const std::vector<int> &c,
   this->pair_count = last_es_count + this->h_pair_counts[this->cell_count - 1];
 
   auto e4 = this->sycl_target->queue.fill(
-      this->d_num_waves->ptr, static_cast<int>(1), this->cell_count);
-  std::fill(this->h_num_waves.begin(), this->h_num_waves.end(), 1);
+      this->d_wave_count->ptr, static_cast<int>(1), this->cell_count);
+  std::fill(this->h_wave_count.begin(), this->h_wave_count.end(), 1);
 
   e0.wait_and_throw();
   e4.wait_and_throw();
@@ -126,23 +127,23 @@ void CellwisePairList::set(CellwisePairListHostSharedPtr pair_list) {
   auto &m = pair_list->get();
 
   EventStack event_stack;
-  int max_num_waves = 0;
+  int max_wave_count = 0;
   {
     for (int cellx = 0; cellx < this->cell_count; cellx++) {
-      const int tmp_num_waves = static_cast<int>(m[cellx].size());
-      this->h_num_waves[cellx] = tmp_num_waves;
-      max_num_waves = std::max(max_num_waves, tmp_num_waves);
+      const int tmp_wave_count = static_cast<int>(m[cellx].size());
+      this->h_wave_count[cellx] = tmp_wave_count;
+      max_wave_count = std::max(max_wave_count, tmp_wave_count);
     }
   }
 
   {
-    event_stack.push(this->d_num_waves->set_async(this->h_num_waves));
-    this->h_wave_offsets.resize(max_num_waves * this->cell_count);
-    this->d_wave_offsets->realloc_no_copy(max_num_waves * this->cell_count);
-    this->h_pair_counts.resize(max_num_waves * this->cell_count);
-    this->d_pair_counts->realloc_no_copy(max_num_waves * this->cell_count);
-    this->h_pair_counts_es.resize(max_num_waves * this->cell_count);
-    this->d_pair_counts_es->realloc_no_copy(max_num_waves * this->cell_count);
+    event_stack.push(this->d_wave_count->set_async(this->h_wave_count));
+    this->h_wave_offsets.resize(max_wave_count * this->cell_count);
+    this->d_wave_offsets->realloc_no_copy(max_wave_count * this->cell_count);
+    this->h_pair_counts.resize(max_wave_count * this->cell_count);
+    this->d_pair_counts->realloc_no_copy(max_wave_count * this->cell_count);
+    this->h_pair_counts_es.resize(max_wave_count * this->cell_count);
+    this->d_pair_counts_es->realloc_no_copy(max_wave_count * this->cell_count);
   }
 
   auto k_wave_offsets = this->d_wave_offsets->ptr;
@@ -150,14 +151,6 @@ void CellwisePairList::set(CellwisePairListHostSharedPtr pair_list) {
   auto k_pair_counts_es = this->d_pair_counts_es->ptr;
 
   {
-    if (max_num_waves) {
-      event_stack.push(this->sycl_target->queue.parallel_for(
-          sycl::range<1>(max_num_waves * this->cell_count), [=](auto ix) {
-            k_wave_offsets[ix] = 0;
-            k_pair_counts[ix] = 0;
-            k_pair_counts_es[ix] = 0;
-          }));
-    }
     std::fill(this->h_pair_counts.begin(), this->h_pair_counts.end(), 0);
     std::fill(this->h_wave_offsets.begin(), this->h_wave_offsets.end(), 0);
   }
@@ -166,10 +159,10 @@ void CellwisePairList::set(CellwisePairListHostSharedPtr pair_list) {
 
     INT linear_offset = 0;
     for (int cellx = 0; cellx < this->cell_count; cellx++) {
-      const int num_waves = m[cellx].size();
+      const int wave_count = m[cellx].size();
 
       int num_pairs = 0;
-      for (int wavex = 0; wavex < num_waves; wavex++) {
+      for (int wavex = 0; wavex < wave_count; wavex++) {
         const int num_pairs_wave = m[cellx].at(wavex).first.size();
         this->h_pair_counts.at(wavex * cell_count + cellx) = num_pairs_wave;
         this->h_wave_offsets.at(wavex * cell_count + cellx) = num_pairs;
@@ -184,16 +177,16 @@ void CellwisePairList::set(CellwisePairListHostSharedPtr pair_list) {
       }
     }
 
-    if (max_num_waves) {
+    if (max_wave_count) {
       event_stack.push(this->sycl_target->queue.memcpy(
           k_wave_offsets, this->h_wave_offsets.data(),
-          max_num_waves * this->cell_count * sizeof(int)));
+          max_wave_count * this->cell_count * sizeof(int)));
       event_stack.push(this->sycl_target->queue.memcpy(
           k_pair_counts, this->h_pair_counts.data(),
-          max_num_waves * this->cell_count * sizeof(int)));
+          max_wave_count * this->cell_count * sizeof(int)));
       event_stack.push(this->sycl_target->queue.memcpy(
           k_pair_counts_es, this->h_pair_counts_es.data(),
-          max_num_waves * this->cell_count * sizeof(INT)));
+          max_wave_count * this->cell_count * sizeof(INT)));
     }
   }
 
@@ -203,13 +196,13 @@ void CellwisePairList::set(CellwisePairListHostSharedPtr pair_list) {
     this->max_pair_count = 0;
     this->pair_count = 0;
     for (int cellx = 0; cellx < this->cell_count; cellx++) {
-      const int num_waves = m[cellx].size();
+      const int wave_count = m[cellx].size();
 
       int *particle_i_ptr = this->d_pair_list->col_device_ptr(cellx, 0);
       int *particle_j_ptr = this->d_pair_list->col_device_ptr(cellx, 1);
 
       int num_pairs = 0;
-      for (int wavex = 0; wavex < num_waves; wavex++) {
+      for (int wavex = 0; wavex < wave_count; wavex++) {
         const int num_pairs_wave = m[cellx].at(wavex).first.size();
         if (num_pairs_wave) {
           const int *source_i_ptr = m[cellx].at(wavex).first.data();
@@ -235,18 +228,18 @@ void CellwisePairList::set(CellwisePairListHostSharedPtr pair_list) {
 
 void CellwisePairList::clear() {
   if (this->cell_count > 0) {
-    auto k_num_waves = this->d_num_waves->ptr;
+    auto k_wave_count = this->d_wave_count->ptr;
     auto k_pair_counts = this->d_pair_counts->ptr;
     auto k_wave_offsets = this->d_wave_offsets->ptr;
 
     auto e0 = this->sycl_target->queue.parallel_for(
         sycl::range<1>(this->cell_count), [=](auto ix) {
-          k_num_waves[ix] = 0;
+          k_wave_count[ix] = 0;
           k_pair_counts[ix] = 0;
           k_wave_offsets[ix] = 0;
         });
 
-    std::fill(this->h_num_waves.begin(), this->h_num_waves.end(), 0);
+    std::fill(this->h_wave_count.begin(), this->h_wave_count.end(), 0);
     std::fill(this->h_pair_counts.begin(), this->h_pair_counts.end(), 0);
     e0.wait_and_throw();
   }
@@ -256,8 +249,8 @@ void CellwisePairList::clear() {
 }
 
 CellwisePairListDevice CellwisePairList::get() {
-  CellwisePairListDevice l = {this->h_num_waves.data(),
-                              this->d_num_waves->ptr,
+  CellwisePairListDevice l = {this->h_wave_count.data(),
+                              this->d_wave_count->ptr,
                               this->cell_count,
                               this->d_wave_offsets->ptr,
                               this->d_pair_list->device_ptr(),
@@ -276,9 +269,9 @@ CellwisePairListHostMap CellwisePairList::host_get() {
   for (int cx = 0; cx < this->cell_count; cx++) {
     auto pairs = this->d_pair_list->get_cell(cx);
 
-    const int num_waves = this->h_num_waves.at(cx);
+    const int wave_count = this->h_wave_count.at(cx);
     int index = 0;
-    for (int wavex = 0; wavex < num_waves; wavex++) {
+    for (int wavex = 0; wavex < wave_count; wavex++) {
       const auto pair_count = this->h_pair_counts[wavex * cell_count + cx];
       for (int px = 0; px < pair_count; px++) {
         l[cx][wavex].first.push_back(pairs->at(index, 0));

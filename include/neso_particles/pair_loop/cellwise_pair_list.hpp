@@ -15,8 +15,8 @@ namespace NESO::Particles {
  * Device type for CellwisePairList.
  */
 struct CellwisePairListDevice {
-  int const *h_num_waves{nullptr};
-  int const *d_num_waves{nullptr};
+  int const *h_wave_count{nullptr};
+  int const *d_wave_count{nullptr};
   int cell_count{0};
 
   // These pointer types should be accessed through the methods not directly.
@@ -35,7 +35,7 @@ struct CellwisePairListDevice {
    * @returns The number of waves for the given cell.
    */
   inline int get_num_waves(const int cell) const {
-    return this->d_num_waves[cell];
+    return this->d_wave_count[cell];
   }
 
   /**
@@ -99,9 +99,9 @@ struct CellwisePairListDevice {
 class CellwisePairList {
 protected:
   // The number of waves. Pairs within a wave are independent.
-  std::vector<int> h_num_waves;
+  std::vector<int> h_wave_count;
   // The number of waves. Pairs within a wave are independent.
-  std::shared_ptr<BufferDevice<int>> d_num_waves;
+  std::shared_ptr<BufferDevice<int>> d_wave_count;
   // The offsets for each cell to the start of the wave in the pair list.
   std::shared_ptr<BufferDevice<int>> d_wave_offsets;
   std::vector<int> h_wave_offsets;

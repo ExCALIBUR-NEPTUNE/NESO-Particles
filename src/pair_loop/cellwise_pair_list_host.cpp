@@ -7,7 +7,6 @@ CellwisePairListHost::CellwisePairListHost(const int cell_count)
 
 void CellwisePairListHost::push_back(const int cell, const int i, const int j) {
   NESOASSERT((0 <= cell) && (cell < this->cell_count), "Bad cell index.");
-  NESOASSERT(i != j, "i == j is not allowed.");
   const int wave =
       std::max(this->get_next_wave(cell, i), this->get_next_wave(cell, j));
   const int oi = i < j ? i : j;

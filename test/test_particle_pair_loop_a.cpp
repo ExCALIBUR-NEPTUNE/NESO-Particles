@@ -553,19 +553,155 @@ TEST(CellwisePairListHost, device) {
     ASSERT_EQ(m.max_pair_count, 0);
     ASSERT_EQ(m.pair_count, 0);
 
-    std::vector<int> h_num_waves(cell_count);
+    std::vector<int> h_wave_count(cell_count);
     sycl_target->queue
-        .memcpy(h_num_waves.data(), m.d_num_waves, cell_count * sizeof(int))
+        .memcpy(h_wave_count.data(), m.d_wave_count, cell_count * sizeof(int))
         .wait_and_throw();
 
     for (int cellx = 0; cellx < cell_count; cellx++) {
-      ASSERT_EQ(m.h_num_waves[cellx], 0);
+      ASSERT_EQ(m.h_wave_count[cellx], 0);
       ASSERT_EQ(m.h_pair_counts[cellx], 0);
-      ASSERT_EQ(h_num_waves[cellx], 0);
+      ASSERT_EQ(h_wave_count[cellx], 0);
     }
   }
 
-  {}
+  {
+    cpl->clear();
+
+    const int num_samples = 37;
+    std::mt19937 rng(522342 + sycl_target->comm_pair.rank_parent);
+    std::uniform_int_distribution<int> dist_cell(0, cell_count - 1);
+
+    std::vector<int> h_npart_cell(cell_count);
+    std::vector<std::uniform_int_distribution<int>> dist_indices(cell_count);
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      h_npart_cell.at(cellx) = cellx + 2;
+      dist_indices.at(cellx) =
+          std::uniform_int_distribution<int>(0, h_npart_cell.at(cellx) - 1);
+    }
+
+    std::set<std::tuple<int, int, int>> pairs_correct;
+    std::map<std::tuple<int, int, int>, int> pairs_count_correct;
+
+    for (int samplex = 0; samplex < num_samples; samplex++) {
+
+      bool valid = false;
+      const int cell = dist_cell(rng);
+      const int i = dist_indices.at(cell)(rng);
+      int j = -1;
+      do {
+        j = dist_indices.at(cell)(rng);
+        valid = i != j;
+      } while (!valid);
+      cplh->push_back(cell, i, j);
+      const int oi = i < j ? i : j;
+      const int oj = i < j ? j : i;
+      pairs_correct.insert({cell, oi, oj});
+      pairs_count_correct[{cell, oi, oj}]++;
+    }
+
+    auto h = cplh->get();
+
+    std::map<std::tuple<int, int, int>, int> pairs_count_to_test;
+
+    for (auto &cell_map : h) {
+      const int cell = cell_map.first;
+      for (auto &wave_map : cell_map.second) {
+        std::set<int> seen_indices;
+        const int num_pairs = wave_map.second.first.size();
+        for (int px = 0; px < num_pairs; px++) {
+          const int i = wave_map.second.first.at(px);
+          const int j = wave_map.second.second.at(px);
+          const int oi = i < j ? i : j;
+          const int oj = i < j ? j : i;
+          ASSERT_TRUE(pairs_correct.count({cell, oi, oj}));
+          pairs_count_to_test[{cell, oi, oj}]++;
+          ASSERT_EQ(seen_indices.count(oi), 0);
+          ASSERT_EQ(seen_indices.count(oj), 0);
+          seen_indices.insert(oi);
+          seen_indices.insert(oj);
+        }
+      }
+    }
+    ASSERT_EQ(pairs_count_correct, pairs_count_to_test);
+
+    cpl->set(cplh);
+    h = cpl->host_get();
+
+    pairs_count_to_test.clear();
+    for (auto &cell_map : h) {
+      const int cell = cell_map.first;
+      for (auto &wave_map : cell_map.second) {
+        const int num_pairs = wave_map.second.first.size();
+        for (int px = 0; px < num_pairs; px++) {
+          const int i = wave_map.second.first.at(px);
+          const int j = wave_map.second.second.at(px);
+          const int oi = i < j ? i : j;
+          const int oj = i < j ? j : i;
+          ASSERT_TRUE(pairs_correct.count({cell, oi, oj}));
+          pairs_count_to_test[{cell, oi, oj}]++;
+        }
+      }
+    }
+    ASSERT_EQ(pairs_count_correct, pairs_count_to_test);
+
+    {
+      auto d = cpl->get();
+      std::vector<int> h_wave_count(cell_count);
+      sycl_target->queue
+          .memcpy(h_wave_count.data(), d.d_wave_count, cell_count * sizeof(int))
+          .wait_and_throw();
+
+      int max_wave_count = 0;
+      for (int cellx = 0; cellx < cell_count; cellx++) {
+        ASSERT_EQ(h_wave_count[cellx], d.h_wave_count[cellx]);
+        max_wave_count = std::max(max_wave_count, h_wave_count[cellx]);
+      }
+
+      const int N = max_wave_count * cell_count;
+      std::vector<int> h_wave_offsets(N);
+      std::vector<int> h_pair_counts(N);
+      std::vector<INT> h_pair_counts_es(N);
+
+      sycl_target->queue
+          .memcpy(h_wave_offsets.data(), d.d_wave_offsets, N * sizeof(int))
+          .wait_and_throw();
+      sycl_target->queue
+          .memcpy(h_pair_counts.data(), d.d_pair_counts, N * sizeof(int))
+          .wait_and_throw();
+      sycl_target->queue
+          .memcpy(h_pair_counts_es.data(), d.d_pair_counts_es, N * sizeof(INT))
+          .wait_and_throw();
+
+      int pair_count = 0;
+
+      std::set<int> linear_to_test;
+      std::set<int> linear_correct;
+      for (int ix = 0; ix < num_samples; ix++) {
+        linear_correct.insert(ix);
+      }
+
+      for (int cellx = 0; cellx < cell_count; cellx++) {
+        const int wave_count = h_wave_count[cellx];
+        int wave_offset = 0;
+        for (int wavex = 0; wavex < wave_count; wavex++) {
+          const int num_pairs = h_pair_counts[wavex * cell_count + cellx];
+          ASSERT_EQ(num_pairs, d.h_pair_counts[wavex * cell_count + cellx]);
+          pair_count += num_pairs;
+          ASSERT_EQ(h_wave_offsets[wavex * cell_count + cellx], wave_offset);
+          wave_offset += num_pairs;
+
+          for (int ix = 0; ix < num_pairs; ix++) {
+            const int linear_index =
+                h_pair_counts_es[wavex * cell_count + cellx] + ix;
+            linear_to_test.insert(linear_index);
+          }
+        }
+      }
+      ASSERT_EQ(pair_count, num_samples);
+      ASSERT_EQ(linear_to_test, linear_correct);
+    }
+  }
 
   sycl_target->free();
 }
