@@ -12,6 +12,7 @@
 
 #include "communication.hpp"
 #include "containers/resource_stack_map.hpp"
+#include "device_functions.hpp"
 #include "device_limits.hpp"
 #include "parameters.hpp"
 #include "profiling.hpp"
@@ -555,6 +556,34 @@ constexpr inline T *cast_align_pointer(void *ptr, const std::size_t alignment) {
   std::size_t ptr_int = reinterpret_cast<std::size_t>(ptr);
   ptr_int = (ptr_int + (alignment - 1)) & -alignment;
   return reinterpret_cast<T *>(ptr_int);
+}
+
+/**
+ * Compute reduce the entries of an array.
+ *
+ * @param[in] sycl_target Compute device.
+ * @param[in] n Number of items in buffer.
+ * @param[in] ptr Pointer to start of input buffer.
+ * @param[in] binary_op Binary operation to use for reduction.
+ * @param[in, out] result_ptr Output location for reduction.
+ * @returns Event to wait on for completion.
+ */
+template <typename T, typename BINARY_OP>
+[[nodiscard]] inline sycl::event
+reduce_values(SYCLTargetSharedPtr sycl_target, const std::size_t n,
+              T *RESTRICT ptr, BINARY_OP binary_op, T *RESTRICT result_ptr) {
+  std::size_t local_size =
+      sycl_target->parameters->get<SizeTParameter>("LOOP_LOCAL_SIZE")->value;
+
+  return sycl_target->queue.parallel_for(
+      sycl::nd_range<1>(sycl::range<1>(local_size), sycl::range<1>(local_size)),
+      [=](sycl::nd_item<1> idx) {
+        const T v =
+            Kernel::joint_reduce(idx.get_group(), ptr, ptr + n, binary_op);
+        if (idx.get_global_linear_id() == 0) {
+          result_ptr[0] = v;
+        }
+      });
 }
 
 } // namespace NESO::Particles

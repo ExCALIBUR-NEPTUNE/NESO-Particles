@@ -60,27 +60,28 @@ TEST(SYCLTarget, print_device_info) {
 TEST(SYCLTarget, joint_exclusive_scan_int) {
   auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
 
-  const std::size_t N = 21241;
-  const std::size_t group_size =
-      std::min(static_cast<std::size_t>(
-                   sycl_target->device
-                       .get_info<sycl::info::device::max_work_group_size>()),
-               static_cast<std::size_t>(N));
-  ASSERT_TRUE(group_size >= 1);
+  for (std::size_t N : {1, 2, 100, 21241}) {
+    const std::size_t group_size =
+        std::min(static_cast<std::size_t>(
+                     sycl_target->device
+                         .get_info<sycl::info::device::max_work_group_size>()),
+                 static_cast<std::size_t>(N));
+    ASSERT_TRUE(group_size >= 1);
 
-  std::vector<int> h_src(N);
-  std::vector<int> h_correct(N);
-  std::iota(h_src.begin(), h_src.end(), 1);
-  std::exclusive_scan(h_src.begin(), h_src.end(), h_correct.begin(), 0);
+    std::vector<int> h_src(N);
+    std::vector<int> h_correct(N);
+    std::iota(h_src.begin(), h_src.end(), 1);
+    std::exclusive_scan(h_src.begin(), h_src.end(), h_correct.begin(), 0);
 
-  BufferDevice d_src(sycl_target, h_src);
-  BufferDevice d_dst(sycl_target, h_src);
+    BufferDevice d_src(sycl_target, h_src);
+    BufferDevice d_dst(sycl_target, h_src);
 
-  joint_exclusive_scan(sycl_target, N, d_src.ptr, d_dst.ptr).wait_and_throw();
+    joint_exclusive_scan(sycl_target, N, d_src.ptr, d_dst.ptr).wait_and_throw();
 
-  auto h_to_test = d_dst.get();
+    auto h_to_test = d_dst.get();
 
-  EXPECT_EQ(h_to_test, h_correct);
+    EXPECT_EQ(h_to_test, h_correct);
+  }
 
   sycl_target->free();
 }
@@ -383,6 +384,38 @@ TEST(SYCLTarget, atomics_long) {
   sycl_target->free();
 }
 
+TEST(SYCLTarget, buffer_max_int) {
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+
+  std::random_device rng{};
+  std::uniform_int_distribution<int> dist(-50, 50);
+
+  BufferDevice<int> d_output(sycl_target, 1);
+
+  for (std::size_t N : {1, 2, 31, 123, 1037}) {
+    std::vector<int> h_input(N);
+
+    int correct = std::numeric_limits<int>::lowest();
+    for (auto &ix : h_input) {
+      const int v = dist(rng);
+      correct = std::max(correct, v);
+      ix = v;
+    }
+
+    BufferDevice<int> d_input(sycl_target, h_input);
+
+    reduce_values(sycl_target, N, d_input.ptr, sycl::maximum<int>(),
+                  d_output.ptr)
+        .wait_and_throw();
+
+    auto h_output = d_output.get();
+
+    ASSERT_EQ(h_output.at(0), correct);
+  }
+
+  sycl_target->free();
+}
+
 TEST(SYCLTarget, profile_region) {
   auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
 
@@ -412,6 +445,5 @@ TEST(SYCLTarget, profile_region) {
   sycl_target->profile_map.reset();
 
   ASSERT_EQ(sycl_target->profile_map.regions.size(), 0);
-
   sycl_target->free();
 }

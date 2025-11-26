@@ -218,8 +218,12 @@ protected:
    */
   inline T *const *const *impl_get_const() { return this->d_ptr; }
 
+public:
   /**
-   * Get the device pointer for a column in a cell.
+   * Get the device pointer for a column in a cell. Do NOT use this method to
+   * access particle data - it will break in a hard to detect manner. Instead
+   * use the methods for accessing particle data directly which are designed for
+   * accessing particle data directly.
    *
    * @param cell Cell index to get pointer for.
    * @param col Column in cell to get pointer for.
@@ -229,6 +233,7 @@ protected:
     return this->h_ptr_cols[cell * this->ncol + col];
   }
 
+protected:
   /**
    * Create new CellDat on a specified compute target.
    *

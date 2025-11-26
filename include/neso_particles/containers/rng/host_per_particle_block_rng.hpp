@@ -53,6 +53,22 @@ template <typename T> struct PerParticleBlockRNG {
     *valid_sample = true;
     return at(index, component);
   }
+
+  /**
+   * Access the RNG data for this particle pair.
+   *
+   * @param[in] pair_index Particle pair index to access.
+   * @param[in] component RNG component to access.
+   * @param[in, out] valid_sample On return this bool is set to true if the
+   * returned sample is good (i.e. RNG is in a valid state).
+   * @returns Constant reference to RNG data.
+   */
+  inline auto at(const Access::PairLoopIndex::Read &pair_index,
+                 const int component, bool *valid_sample) {
+    const auto index = pair_index.get_loop_linear_index();
+    *valid_sample = true;
+    return at(index, component);
+  }
 };
 
 /**
@@ -124,9 +140,13 @@ public:
     if (this->num_components == 0) {
       return {0, nullptr};
     } else {
-      const auto num_particles = get_loop_npart(global_info);
+      const auto num_particles = get_loop_iteration_set_size(global_info);
       auto sycl_target = global_info->particle_group->sycl_target;
-      return {num_particles, this->get_buffer_ptr(sycl_target)};
+      NESOASSERT(num_particles < std::numeric_limits<int>::max(),
+                 "More than int max RNG samples requested.");
+
+      return {static_cast<int>(num_particles),
+              this->get_buffer_ptr(sycl_target)};
     }
   }
 
@@ -144,7 +164,7 @@ public:
         "overlapping execution.");
     this->internal_state = 1;
     if (this->num_components > 0) {
-      const auto num_particles = get_loop_npart(global_info);
+      const auto num_particles = get_loop_iteration_set_size(global_info);
 
       // Allocate space
       auto sycl_target = global_info->particle_group->sycl_target;
