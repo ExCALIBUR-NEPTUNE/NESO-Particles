@@ -240,7 +240,7 @@ public:
     T null_data = 0;
     T null_data_gathered = 0;
 
-    MPICHK(MPI_Neighbor_alltoallw(
+    MPICHK(NP_MPI_Neighbor_alltoallw_wrapper(
         data != nullptr ? data : &null_data, args.sendcounts.data(),
         args.sdispls.data(), args.sendtypes.data(),
         data_gathered != nullptr ? data_gathered : &null_data_gathered,
@@ -269,11 +269,7 @@ public:
     T null_data = 0;
     T null_data_gathered = 0;
 
-#ifdef OMPI_MAJOR_VERSION
-    nprint("OPENMPI DETECTED");
-#endif
-
-    MPICHK(MPI_Neighbor_alltoallw(
+    MPICHK(NP_MPI_Neighbor_alltoallw_wrapper(
         data != nullptr ? data : &null_data, args.sendcounts.data(),
         args.sdispls.data(), args.sendtypes.data(),
         data_gathered != nullptr ? data_gathered : &null_data_gathered,

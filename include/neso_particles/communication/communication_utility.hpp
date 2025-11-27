@@ -302,7 +302,9 @@ extern template std::set<int> set_all_reduce_union(std::set<int> &set_input,
                                                    MPI_Comm comm);
 
 /**
- * TODO
+ * Reimplementation of MPI_Neighbor_alltoall for broken MPI implementations.
+ * OpenMPI seems to be broken when comm is a dist graph created from a cart
+ * comm.
  */
 int NP_MPI_Neighbor_alltoall(const void *sendbuf, int sendcount,
                              MPI_Datatype sendtype, void *recvbuf,
@@ -310,12 +312,34 @@ int NP_MPI_Neighbor_alltoall(const void *sendbuf, int sendcount,
                              MPI_Comm comm);
 
 /**
- * TODO
+ * Calls the MPI implementation of MPI_Neighbor_alltoall or
+ * NP_MPI_Neighbor_alltoall depending on if
+ * NESO_PARTICLES_MPI_NEIGHBOUR_ALL_TO_ALL_FIX is defined.
  */
 int NP_MPI_Neighbor_alltoall_wrapper(const void *sendbuf, int sendcount,
                                      MPI_Datatype sendtype, void *recvbuf,
                                      int recvcount, MPI_Datatype recvtype,
                                      MPI_Comm comm);
+
+/**
+ * Reimplementation of MPI_Neighbor_alltoall for broken MPI implementations.
+ * OpenMPI seems to be broken when comm is a dist graph created from a cart
+ * comm.
+ */
+int NP_MPI_Neighbor_alltoallw(const void *sendbuf, const int sendcounts[],
+                              const MPI_Aint sdispls[],
+                              const MPI_Datatype sendtypes[], void *recvbuf,
+                              const int recvcounts[], const MPI_Aint rdispls[],
+                              const MPI_Datatype recvtypes[], MPI_Comm comm);
+/**
+ * Calls the MPI implementation of MPI_Neighbor_alltoallw or
+ * NP_MPI_Neighbor_alltoallw depending on if
+ * NESO_PARTICLES_MPI_NEIGHBOUR_ALL_TO_ALL_FIX is defined.
+ */
+int NP_MPI_Neighbor_alltoallw_wrapper(
+    const void *sendbuf, const int sendcounts[], const MPI_Aint sdispls[],
+    const MPI_Datatype sendtypes[], void *recvbuf, const int recvcounts[],
+    const MPI_Aint rdispls[], const MPI_Datatype recvtypes[], MPI_Comm comm);
 
 } // namespace NESO::Particles
 
