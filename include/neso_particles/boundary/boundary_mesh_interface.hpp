@@ -269,6 +269,10 @@ public:
     T null_data = 0;
     T null_data_gathered = 0;
 
+#ifdef OMPI_MAJOR_VERSION
+    nprint("OPENMPI DETECTED");
+#endif
+
     MPICHK(MPI_Neighbor_alltoallw(
         data != nullptr ? data : &null_data, args.sendcounts.data(),
         args.sdispls.data(), args.sendtypes.data(),

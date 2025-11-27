@@ -301,6 +301,22 @@ std::set<T> set_all_reduce_union(std::set<T> &set_input, MPI_Comm comm) {
 extern template std::set<int> set_all_reduce_union(std::set<int> &set_input,
                                                    MPI_Comm comm);
 
+/**
+ * TODO
+ */
+int NP_MPI_Neighbor_alltoall(const void *sendbuf, int sendcount,
+                             MPI_Datatype sendtype, void *recvbuf,
+                             int recvcount, MPI_Datatype recvtype,
+                             MPI_Comm comm);
+
+/**
+ * TODO
+ */
+int NP_MPI_Neighbor_alltoall_wrapper(const void *sendbuf, int sendcount,
+                                     MPI_Datatype sendtype, void *recvbuf,
+                                     int recvcount, MPI_Datatype recvtype,
+                                     MPI_Comm comm);
+
 } // namespace NESO::Particles
 
 #endif

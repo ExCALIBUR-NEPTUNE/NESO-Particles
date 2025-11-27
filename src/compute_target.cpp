@@ -60,6 +60,9 @@ void SYCLTarget::print_info_inner() {
 #ifdef NESO_PARTICLES_CAS_MIN_REAL
   mods += "cas_min_REAL ";
 #endif
+#ifdef NESO_PARTICLES_MPI_NEIGHBOUR_ALL_TO_ALL_FIX
+  mods += "mpi_neighbour_all_to_all_fix ";
+#endif
 
   if (device_aware_mpi_enabled()) {
     mods += "device_aware_mpi ";
