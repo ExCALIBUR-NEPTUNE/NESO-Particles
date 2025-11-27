@@ -28,6 +28,7 @@ struct CellwisePairListDevice {
 
   // max pair count of any wave
   int max_pair_count{0};
+  int max_wave_count{0};
   INT pair_count{0};
 
   /**
@@ -116,6 +117,8 @@ protected:
   std::vector<int> h_pair_counts;
   // The max size of the pair lists across all cells.
   int max_pair_count{-1};
+  // The max wave count of any cell
+  int max_wave_count{-1};
   // The number of pairs.
   INT pair_count{-1};
 

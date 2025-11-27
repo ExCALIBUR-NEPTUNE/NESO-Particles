@@ -491,4 +491,10 @@ inline bool is_power_of_two(const std::size_t n) {
 constexpr inline std::size_t NESO_PARTICLES_CACHELINE_NUM_int =
     NESO_PARTICLES_CACHELINE_NUM_BYTES / sizeof(int);
 
+#ifndef NESO_PARTICLES_DISABLE_MPI_NEIGHBOUR_FIXES
+#ifdef OMPI_MAJOR_VERSION
+#define NESO_PARTICLES_MPI_NEIGHBOUR_ALL_TO_ALL_FIX
+#endif
+#endif
+
 #endif

@@ -90,10 +90,15 @@ void BoundaryMeshInterface::extend_exchange_pattern(
       owned_geom_counts.push_back(static_cast<int>(rx.second.size()));
     }
 
+    // get a legitimate pointer to avoid the mpi implementations complaining
+    // about nullptrs on arrays they don't access....
+    int dummy_destinations = 1;
+
     // Graph for the projection direction
-    MPICHK(MPI_Dist_graph_create(this->comm, 1, &rank, &degrees,
-                                 destinations.data(), MPI_UNWEIGHTED,
-                                 MPI_INFO_NULL, 0, &this->ncomm));
+    MPICHK(MPI_Dist_graph_create(
+        this->comm, 1, &rank, &degrees,
+        destinations.size() ? destinations.data() : &dummy_destinations,
+        MPI_UNWEIGHTED, MPI_INFO_NULL, 0, &this->ncomm));
     NESOASSERT(this->ncomm != MPI_COMM_NULL,
                "Failure to setup MPI graph topology.");
 
@@ -156,8 +161,8 @@ void BoundaryMeshInterface::extend_exchange_pattern(
                               ? this->incoming_geom_counts.data()
                               : &null_in;
 
-    MPICHK(MPI_Neighbor_alltoall(out_data_counts, 1, MPI_INT, in_data_counts, 1,
-                                 MPI_INT, this->ncomm));
+    MPICHK(NP_MPI_Neighbor_alltoall_wrapper(
+        out_data_counts, 1, MPI_INT, in_data_counts, 1, MPI_INT, this->ncomm));
 
     // Send the geometry id to the corresponding owning rank such that the
     // owning rank knows which geometry object incoming data corresonds to.

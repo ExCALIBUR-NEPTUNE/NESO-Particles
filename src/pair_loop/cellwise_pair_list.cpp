@@ -115,6 +115,7 @@ void CellwisePairList::push_back(const std::vector<int> &c,
   auto e4 = this->sycl_target->queue.fill(
       this->d_wave_count->ptr, static_cast<int>(1), this->cell_count);
   std::fill(this->h_wave_count.begin(), this->h_wave_count.end(), 1);
+  this->max_wave_count = 1;
 
   e0.wait_and_throw();
   e4.wait_and_throw();
@@ -127,12 +128,12 @@ void CellwisePairList::set(CellwisePairListHostSharedPtr pair_list) {
   auto &m = pair_list->get();
 
   EventStack event_stack;
-  int max_wave_count = 0;
+  this->max_wave_count = 0;
   {
     for (int cellx = 0; cellx < this->cell_count; cellx++) {
       const int tmp_wave_count = static_cast<int>(m[cellx].size());
       this->h_wave_count[cellx] = tmp_wave_count;
-      max_wave_count = std::max(max_wave_count, tmp_wave_count);
+      this->max_wave_count = std::max(this->max_wave_count, tmp_wave_count);
     }
   }
 
@@ -244,6 +245,7 @@ void CellwisePairList::clear() {
     e0.wait_and_throw();
   }
   this->max_pair_count = -1;
+  this->max_wave_count = -1;
   this->pair_count = -1;
   this->mode = 0;
 }
@@ -258,6 +260,7 @@ CellwisePairListDevice CellwisePairList::get() {
                               this->d_pair_counts_es->ptr,
                               this->h_pair_counts.data(),
                               this->max_pair_count,
+                              this->max_wave_count,
                               this->pair_count};
 
   return l;

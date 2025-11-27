@@ -457,23 +457,30 @@ TEST(ParticlePairLoop, kernel_rng_base) {
 
   ASSERT_TRUE(rng_block_kernel->valid_internal_state());
 
+  ErrorPropagate ep(sycl_target);
+  auto k_ep = ep.device_ptr();
+
   auto rng_atomic_kernel =
       host_atomic_block_kernel_rng<INT>(rng_lambda, rng_ncomp);
   auto pl1 = particle_pair_loop(
       "particle_pair_loop_test",
       {CellwisePairListAbsolute<ParticleGroup>(A, A, cellwise_pair_listA)},
-      [](auto PAIR_INDEX, auto RNG, auto NN_i, auto NN_j) {
+      [=](auto PAIR_INDEX, auto RNG, auto NN_i, auto NN_j) {
         bool valid = true;
         NN_i.at(0) = 1;
         NN_i.at(1) = RNG.at(PAIR_INDEX, 0, &valid);
+        NESO_KERNEL_ASSERT(valid, k_ep);
         NN_j.at(0) = 1;
         NN_j.at(1) = RNG.at(PAIR_INDEX, 1, &valid);
+        NESO_KERNEL_ASSERT(valid, k_ep);
       },
       Access::read(ParticlePairLoopIndex{}), Access::read(rng_atomic_kernel),
       Access::A(Access::write(Sym<INT>("NEIGHBOURS"))),
       Access::B(Access::write(Sym<INT>("NEIGHBOURS"))));
 
   pl1->execute();
+
+  ASSERT_FALSE(ep.get_flag());
 
   for (std::size_t pairx = 0; pairx < num_to_test; pairx++) {
     const int cell = c.at(pairx);
