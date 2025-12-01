@@ -1,5 +1,5 @@
-#ifndef __NESO_PARTICLES_ALGORITHMS_DSMC_PAIR_SAMPLING_NTC_HPP_
-#define __NESO_PARTICLES_ALGORITHMS_DSMC_PAIR_SAMPLING_NTC_HPP_
+#ifndef __NESO_PARTICLES_ALGORITHMS_DSMC_PAIR_SAMPLER_NTC_HPP_
+#define __NESO_PARTICLES_ALGORITHMS_DSMC_PAIR_SAMPLER_NTC_HPP_
 
 #include "../../compute_target.hpp"
 #include "../../containers/rng/host_rng_common.hpp"
@@ -13,7 +13,7 @@ namespace DSMC {
 /**
  * Interface to sample pairs of particles for NTC style DSMC.
  */
-class PairSamplingNTC : public CellwisePairListBlockInterface {
+class PairSamplerNTC : public CellwisePairListBlockInterface {
 protected:
   std::shared_ptr<BufferDevice<int>> d_wave_counts;
   int pair_count{0};
@@ -27,15 +27,17 @@ protected:
 
 public:
   /// Disable (implicit) copies.
-  PairSamplingNTC(const PairSamplingNTC &st) = delete;
+  PairSamplerNTC(const PairSamplerNTC &st) = delete;
   /// Disable (implicit) copies.
-  PairSamplingNTC &operator=(PairSamplingNTC const &a) = delete;
+  PairSamplerNTC &operator=(PairSamplerNTC const &a) = delete;
+
+  virtual ~PairSamplerNTC() = default;
 
   SYCLTargetSharedPtr sycl_target{nullptr};
   int cell_count{0};
   std::shared_ptr<RNGGenerationFunction<REAL>> rng_generation_function{nullptr};
 
-  PairSamplingNTC(
+  PairSamplerNTC(
       SYCLTargetSharedPtr sycl_target, const int cell_count,
       std::shared_ptr<RNGGenerationFunction<REAL>> rng_generation_function);
 

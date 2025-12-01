@@ -44,14 +44,14 @@ CellwisePairListBlockInterface::get_host_pair_list(
   int offset = 0;
   for (int cellx = 0; cellx < cell_count; cellx++) {
     const int cell_pair_count = h_pair_counts[cellx];
-    std::get<0>(h_pair_list[cellx]).reserve(cell_pair_count);
-    std::get<1>(h_pair_list[cellx]).reserve(cell_pair_count);
-    std::get<2>(h_pair_list[cellx]).reserve(cell_pair_count);
+    std::get<0>(h_pair_list[cellx]).resize(cell_pair_count);
+    std::get<1>(h_pair_list[cellx]).resize(cell_pair_count);
+    std::get<2>(h_pair_list[cellx]).resize(cell_pair_count);
 
     for (int ix = 0; ix < cell_pair_count; ix++) {
-      std::get<0>(h_pair_list[cellx])[ix] = pairs_i[offset + ix];
-      std::get<1>(h_pair_list[cellx])[ix] = pairs_j[offset + ix];
-      std::get<2>(h_pair_list[cellx])[ix] = waves[offset + ix];
+      std::get<0>(h_pair_list[cellx]).at(ix) = pairs_i.at(offset + ix);
+      std::get<1>(h_pair_list[cellx]).at(ix) = pairs_j.at(offset + ix);
+      std::get<2>(h_pair_list[cellx]).at(ix) = waves.at(offset + ix);
     }
 
     offset += cell_pair_count;

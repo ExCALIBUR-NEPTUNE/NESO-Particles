@@ -54,6 +54,8 @@ struct CellwisePairListBlockDevice {
 };
 
 struct CellwisePairListBlockInterface {
+  virtual ~CellwisePairListBlockInterface() = default;
+
   virtual CellwisePairListBlockDevice get_pair_list() = 0;
 
   std::map<int,

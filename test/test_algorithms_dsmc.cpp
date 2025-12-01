@@ -92,3 +92,163 @@ TEST(DSMC, all_to_all_looping_device) {
 
   sycl_target->free();
 }
+
+TEST(DSMC, ntc_pair_generation_aa) {
+
+  const int max_num_pairs_to_sample = 10000;
+  int npart_cell = 10;
+  const int ndim = 2;
+  const int nx = 4;
+  const int ny = 4;
+  const int nz = 48;
+
+  auto [A, sycl_target_t, cell_count] =
+      particle_loop_create_common(npart_cell, ndim, nx, ny, nz);
+  auto sycl_target = sycl_target_t;
+  A->clear();
+
+  ParticleSpec particle_spec{ParticleProp(Sym<INT>("CELL_ID"), 1, true)};
+
+  int N = 0;
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    N += cellx;
+  }
+
+  ParticleSet distribution(N, particle_spec);
+
+  int ix = 0;
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    for (int px = 0; px < cellx; px++) {
+      distribution[Sym<INT>("CELL_ID")][ix + px][0] = cellx;
+    }
+    ix += cellx;
+  }
+  A->add_particles_local(distribution);
+
+  auto aa = particle_sub_group(A, [=]() { return true; });
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    ASSERT_EQ(A->get_npart_cell(cellx), cellx);
+    ASSERT_EQ(aa->get_npart_cell(cellx), cellx);
+  }
+
+  const int rank = sycl_target->comm_pair.rank_parent;
+
+  std::mt19937 rng(34234 + rank);
+  std::uniform_real_distribution<REAL> dist{
+      std::uniform_real_distribution<REAL>(0.0, 1.0)};
+  auto lambda_sampler = [&]() -> REAL { return dist(rng); };
+
+  auto rng_function =
+      std::make_shared<HostRNGGenerationFunction<REAL>>(lambda_sampler);
+
+  auto pair_sampler_ntc = std::make_shared<DSMC::PairSamplerNTC>(
+      sycl_target, cell_count, rng_function);
+
+  std::vector<int> num_pairs(cell_count);
+  std::fill(num_pairs.begin(), num_pairs.end(), 0);
+
+  pair_sampler_ntc->sample(aa, aa, num_pairs);
+
+  auto d_pair_list = pair_sampler_ntc->get_pair_list();
+  auto h_pair_list = pair_sampler_ntc->get_host_pair_list(sycl_target);
+
+  const std::size_t default_local_size =
+      sycl_target->parameters->template get<SizeTParameter>("LOOP_LOCAL_SIZE")
+          ->value;
+
+  ASSERT_EQ(d_pair_list.cell_count, cell_count);
+  ASSERT_EQ(d_pair_list.pair_count, 0);
+  ASSERT_EQ(d_pair_list.block_size, default_local_size);
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    ASSERT_EQ(std::get<0>(h_pair_list[cellx]).size(), 0);
+    ASSERT_EQ(std::get<1>(h_pair_list[cellx]).size(), 0);
+    ASSERT_EQ(std::get<2>(h_pair_list[cellx]).size(), 0);
+  }
+
+  sycl_target->parameters->set("LOOP_LOCAL_SIZE",
+                               std::make_shared<SizeTParameter>(8));
+
+  pair_sampler_ntc = std::make_shared<DSMC::PairSamplerNTC>(
+      sycl_target, cell_count, rng_function);
+
+  int expected_num_pairs = 0;
+  for (int cellx = 2; cellx < cell_count; cellx++) {
+    num_pairs[cellx] = max_num_pairs_to_sample;
+    expected_num_pairs += max_num_pairs_to_sample;
+  }
+
+  pair_sampler_ntc->sample(aa, aa, num_pairs);
+
+  d_pair_list = pair_sampler_ntc->get_pair_list();
+  h_pair_list = pair_sampler_ntc->get_host_pair_list(sycl_target);
+
+  ASSERT_EQ(d_pair_list.cell_count, cell_count);
+  ASSERT_EQ(d_pair_list.pair_count, expected_num_pairs);
+  ASSERT_EQ(d_pair_list.block_size, 8);
+
+  int test_total_num_pairs = 0;
+  for (int cellx = 2; cellx < cell_count; cellx++) {
+    const int npart_cell = aa->get_npart_cell(cellx);
+    const int num_pairs_test =
+        static_cast<int>(std::get<0>(h_pair_list[cellx]).size());
+
+    ASSERT_EQ(std::get<0>(h_pair_list[cellx]).size(), num_pairs_test);
+    ASSERT_EQ(std::get<1>(h_pair_list[cellx]).size(), num_pairs_test);
+    ASSERT_EQ(std::get<2>(h_pair_list[cellx]).size(), num_pairs_test);
+
+    for (int ix = 0; ix < num_pairs_test; ix++) {
+      ASSERT_NE(std::get<0>(h_pair_list[cellx])[ix],
+                std::get<1>(h_pair_list[cellx])[ix]);
+      ASSERT_TRUE(std::get<0>(h_pair_list[cellx])[ix] >= 0);
+      ASSERT_TRUE(std::get<1>(h_pair_list[cellx])[ix] >= 0);
+      ASSERT_TRUE(std::get<0>(h_pair_list[cellx])[ix] < npart_cell);
+      ASSERT_TRUE(std::get<1>(h_pair_list[cellx])[ix] < npart_cell);
+      ASSERT_TRUE(std::get<2>(h_pair_list[cellx])[ix] >= 0);
+    }
+    test_total_num_pairs += num_pairs_test;
+  }
+  ASSERT_EQ(test_total_num_pairs, expected_num_pairs);
+
+  std::map<int, std::vector<int>> map_cell_adj_matrix;
+
+  for (int cellx = 2; cellx < cell_count; cellx++) {
+    const int npart_cell = aa->get_npart_cell(cellx);
+    map_cell_adj_matrix[cellx].resize(npart_cell * npart_cell);
+    std::fill(map_cell_adj_matrix[cellx].begin(),
+              map_cell_adj_matrix[cellx].end(), 0);
+  }
+
+  for (int sx = 0; sx < 100; sx++) {
+    pair_sampler_ntc->sample(aa, aa, num_pairs);
+    h_pair_list = pair_sampler_ntc->get_host_pair_list(sycl_target);
+    for (int cellx = 2; cellx < cell_count; cellx++) {
+
+      const int npart_cell = aa->get_npart_cell(cellx);
+      const int num_pairs_test =
+          static_cast<int>(std::get<0>(h_pair_list[cellx]).size());
+
+      for (int ix = 0; ix < num_pairs_test; ix++) {
+        const int i = std::get<0>(h_pair_list[cellx])[ix];
+        const int j = std::get<1>(h_pair_list[cellx])[ix];
+        map_cell_adj_matrix[cellx][j * npart_cell + i]++;
+      }
+    }
+  }
+
+  for (int cellx = 2; cellx < 8; cellx++) {
+
+    const int npart_cell = aa->get_npart_cell(cellx);
+    for (int jx = 0; jx < npart_cell; jx++) {
+      for (int ix = 0; ix < npart_cell; ix++) {
+        std::cout << map_cell_adj_matrix[cellx][jx * npart_cell + ix] << " ";
+      }
+      std::cout << std::endl;
+    }
+
+    std::cout << std::endl;
+  }
+
+  sycl_target->free();
+  A->domain->mesh->free();
+}
