@@ -537,3 +537,14 @@ TEST(DeviceFunctions, joint_reduce) {
 
   sycl_target->free();
 }
+
+TEST(DeviceFunctions, div_round_up) {
+  ASSERT_EQ(div_round_up(0, 1), 0);
+  ASSERT_EQ(div_round_up(-1, 1), -1);
+  ASSERT_EQ(div_round_up(-3, 1), -3);
+  ASSERT_EQ(div_round_up(-3, 2), (-3) / 2);
+
+  ASSERT_EQ(div_round_up(1, 1), 1);
+  ASSERT_EQ(div_round_up(4, 2), 2);
+  ASSERT_EQ(div_round_up(5, 2), 3);
+}
