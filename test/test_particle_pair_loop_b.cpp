@@ -37,9 +37,10 @@ TEST(ParticlePairLoopBlock, base) {
       sycl_target, cell_count, rng_function);
 
   std::vector<int> num_pairs(cell_count);
-  std::fill(num_pairs.begin(), num_pairs.end(), 511);
+  std::fill(num_pairs.begin(), num_pairs.end(), 127);
 
   pair_sampler_ntc->sample(aa, aa, num_pairs);
+  ASSERT_TRUE(pair_sampler_ntc->validate_pair_list(sycl_target));
 
   auto pl0 = particle_pair_loop(
       "particle_pair_loop_test",

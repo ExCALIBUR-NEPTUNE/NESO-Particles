@@ -226,10 +226,10 @@ public:
                                    iteration_B, loop_args, kernel_args);
                 Tuple::apply(k_kernel, kernel_args);
               }
-              pair_index += block_size;
               sycl::group_barrier(idx.get_group(),
                                   sycl::memory_scope::work_group);
             }
+            pair_index += block_size;
           }
         });
       }));
