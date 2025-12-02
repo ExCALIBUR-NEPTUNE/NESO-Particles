@@ -1,3 +1,4 @@
+#include <neso_particles/error_propagate.hpp>
 #include <neso_particles/pair_loop/cellwise_pair_list_block.hpp>
 
 namespace NESO::Particles {
@@ -58,6 +59,110 @@ CellwisePairListBlockInterface::get_host_pair_list(
   }
 
   return h_pair_list;
+}
+
+bool CellwisePairListBlockInterface::validate_pair_list(
+    SYCLTargetSharedPtr sycl_target) {
+  auto d_pair_list = this->get_pair_list();
+
+  const int pair_count = d_pair_list.pair_count;
+  const int cell_count = d_pair_list.cell_count;
+
+  ErrorPropagate ep(sycl_target);
+  auto k_ep = ep.device_ptr();
+  const auto block_size = d_pair_list.block_size;
+
+  BufferDevice<int> d_pair_count(sycl_target, 1);
+  auto h_pair_count = d_pair_count.get();
+  h_pair_count[0] = 0;
+  d_pair_count.set(h_pair_count);
+
+  int *k_pair_count = d_pair_count.ptr;
+
+  sycl_target->queue
+      .submit([&](sycl::handler &cgh) {
+        sycl::local_accessor<int, 1> la_i(sycl::range(block_size), cgh);
+        sycl::local_accessor<int, 1> la_j(sycl::range(block_size), cgh);
+
+        cgh.parallel_for(
+            sycl_target->device_limits.validate_nd_range(
+                sycl::nd_range<2>(sycl::range<2>(cell_count, block_size),
+                                  sycl::range<2>(1, block_size))),
+            [=](sycl::nd_item<2> idx) {
+              const int index_cell = idx.get_global_id(0);
+              const int index_local = idx.get_global_id(1);
+              const int num_pairs = d_pair_list.get_num_pairs(index_cell);
+
+              idx.barrier(sycl::access::fence_space::local_space);
+              la_i[index_local] = -1;
+              la_j[index_local] = -1;
+              idx.barrier(sycl::access::fence_space::local_space);
+
+              const int num_blocks = div_round_up(num_pairs, block_size);
+              int pair_index = index_local;
+              for (int block = 0; block < num_blocks; block++) {
+
+                const int num_waves =
+                    d_pair_list.get_num_waves(index_cell, block);
+
+                const bool required = pair_index < num_pairs;
+                const int i =
+                    required
+                        ? d_pair_list.get_pair_index_i(index_cell, pair_index)
+                        : -2;
+                const int j =
+                    required
+                        ? d_pair_list.get_pair_index_j(index_cell, pair_index)
+                        : -3;
+                NESO_KERNEL_ASSERT(i != j, k_ep);
+                const int wave =
+                    required ? d_pair_list.get_pair_wave(index_cell, pair_index)
+                             : -4;
+
+                for (int wavex = 0; wavex < num_waves; wavex++) {
+                  idx.barrier(sycl::access::fence_space::local_space);
+                  if (wavex == wave) {
+                    la_i[index_local] = i;
+                    la_j[index_local] = j;
+                    atomic_fetch_add(k_pair_count, 1);
+                  }
+                  idx.barrier(sycl::access::fence_space::local_space);
+                  if (wavex == wave) {
+                    for (int bx = 0; bx < block_size; bx++) {
+                      if (bx != index_local) {
+                        const int oi = la_i[bx];
+                        const int oj = la_j[bx];
+                        NESO_KERNEL_ASSERT(oi != i, k_ep);
+                        NESO_KERNEL_ASSERT(oj != j, k_ep);
+                        NESO_KERNEL_ASSERT(oi != j, k_ep);
+                        NESO_KERNEL_ASSERT(oj != i, k_ep);
+                      }
+                    }
+                  }
+                  idx.barrier(sycl::access::fence_space::local_space);
+                  la_i[index_local] = -1;
+                  la_j[index_local] = -1;
+                  idx.barrier(sycl::access::fence_space::local_space);
+                  sycl::group_barrier(idx.get_group());
+                }
+
+                pair_index += block_size;
+              }
+            });
+      })
+      .wait_and_throw();
+
+  if (d_pair_count.get().at(0) != pair_count) {
+    nprint("pair count failed", pair_count, d_pair_count.get().at(0));
+    return false;
+  }
+
+  if (ep.get_flag()) {
+    nprint("get_flag failed");
+    return false;
+  }
+
+  return true;
 }
 
 } // namespace NESO::Particles

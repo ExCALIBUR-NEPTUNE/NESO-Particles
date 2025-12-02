@@ -200,9 +200,18 @@ void PairSamplerNTC::sample(ParticleSubGroupSharedPtr sub_group_a,
 
             if (num_steps_ordering) {
 
-              if (i3 > -1) {
-                la_flags[i3] = 0;
-                la_flags[j3] = 0;
+              for (int orderx = 0; orderx < num_steps_ordering; orderx++) {
+                if ((orderx + 1) == order) {
+                  la_flags[i3] = 0;
+                  la_flags[j3] = 0;
+                }
+                idx.barrier(sycl::access::fence_space::local_space);
+              }
+              idx.barrier(sycl::access::fence_space::local_space);
+
+              if (wave > -1) {
+                la_flags[i3] = 1;
+                la_flags[j3] = 1;
               }
               idx.barrier(sycl::access::fence_space::local_space);
 
@@ -211,9 +220,9 @@ void PairSamplerNTC::sample(ParticleSubGroupSharedPtr sub_group_a,
                 // Only one of the work items holding a conflicting pair should
                 // enter this conditional per iteration.
                 if ((orderx + 1) == order) {
-                  wave = sycl::max(la_flags[i3], la_flags[j3]) + 1;
-                  la_flags[i3] = wave;
-                  la_flags[j3] = wave;
+                  wave = sycl::max(la_flags[i3], la_flags[j3]);
+                  la_flags[i3] = wave + 1;
+                  la_flags[j3] = wave + 1;
                   la_counts[0] = sycl::max(wave, la_counts[0]);
                 }
 
@@ -260,7 +269,7 @@ CellwisePairListBlockDevice PairSamplerNTC::get_pair_list() {
 
   auto lambda_check_group = [&](auto px, auto v) {
     NESOASSERT(!px.expired(), "The particle sub group this pair list was "
-                              "created from has been destructed.");
+                              "created from has been deconstructed.");
     px.lock()->create_if_required();
     NESOASSERT(px.lock()->get_version() == v,
                "The particle sub group this pair list was created from has "

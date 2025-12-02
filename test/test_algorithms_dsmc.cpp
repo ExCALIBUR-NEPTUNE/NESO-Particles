@@ -95,7 +95,7 @@ TEST(DSMC, all_to_all_looping_device) {
 
 TEST(DSMC, ntc_pair_generation_aa) {
 
-  const int max_num_pairs_to_sample = 1000;
+  const int max_num_pairs_to_sample = 1003;
   int npart_cell = 10;
   const int ndim = 2;
   const int nx = 32;
@@ -174,12 +174,13 @@ TEST(DSMC, ntc_pair_generation_aa) {
 
   int expected_num_pairs = 0;
   for (int cellx = 2; cellx < cell_count; cellx++) {
-    num_pairs[cellx] = max_num_pairs_to_sample;
-    expected_num_pairs += max_num_pairs_to_sample;
+    const int n = max_num_pairs_to_sample + cellx % 8;
+    num_pairs[cellx] = n;
+    expected_num_pairs += n;
   }
 
   pair_sampler_ntc->sample(aa, aa, num_pairs);
-
+  ASSERT_TRUE(pair_sampler_ntc->validate_pair_list(sycl_target));
   d_pair_list = pair_sampler_ntc->get_pair_list();
   h_pair_list = pair_sampler_ntc->get_host_pair_list(sycl_target);
 
@@ -189,9 +190,9 @@ TEST(DSMC, ntc_pair_generation_aa) {
 
   int test_total_num_pairs = 0;
   for (int cellx = 2; cellx < cell_count; cellx++) {
+    const int n = max_num_pairs_to_sample + cellx % 8;
     const int npart_cell = aa->get_npart_cell(cellx);
-    const int num_pairs_test =
-        static_cast<int>(std::get<0>(h_pair_list[cellx]).size());
+    const int num_pairs_test = n;
 
     ASSERT_EQ(std::get<0>(h_pair_list[cellx]).size(), num_pairs_test);
     ASSERT_EQ(std::get<1>(h_pair_list[cellx]).size(), num_pairs_test);
@@ -210,6 +211,10 @@ TEST(DSMC, ntc_pair_generation_aa) {
   }
   ASSERT_EQ(test_total_num_pairs, expected_num_pairs);
 
+  for (int cellx = 2; cellx < cell_count; cellx++) {
+    const int n = max_num_pairs_to_sample;
+    num_pairs[cellx] = n;
+  }
   const int max_cell = std::min(8, cell_count);
   for (int cellx = max_cell; cellx < cell_count; cellx++) {
     num_pairs[cellx] = 0;
@@ -227,6 +232,7 @@ TEST(DSMC, ntc_pair_generation_aa) {
   const int num_steps = 100;
   for (int sx = 0; sx < num_steps; sx++) {
     pair_sampler_ntc->sample(aa, aa, num_pairs);
+    ASSERT_TRUE(pair_sampler_ntc->validate_pair_list(sycl_target));
     h_pair_list = pair_sampler_ntc->get_host_pair_list(sycl_target);
     for (int cellx = 2; cellx < max_cell; cellx++) {
 
@@ -269,7 +275,7 @@ TEST(DSMC, ntc_pair_generation_aa) {
 
 TEST(DSMC, ntc_pair_generation_aa_bb) {
 
-  const int max_num_pairs_to_sample = 1000;
+  const int max_num_pairs_to_sample = 1001;
   int npart_cell = 10;
   const int ndim = 2;
   const int nx = 32;
@@ -422,6 +428,7 @@ TEST(DSMC, ntc_pair_generation_aa_bb) {
   const int num_steps = 100;
   for (int sx = 0; sx < num_steps; sx++) {
     pair_sampler_ntc->sample(aa, bb, num_pairs);
+    ASSERT_TRUE(pair_sampler_ntc->validate_pair_list(sycl_target));
     h_pair_list = pair_sampler_ntc->get_host_pair_list(sycl_target);
     for (int cellx = 2; cellx < max_cell; cellx++) {
 

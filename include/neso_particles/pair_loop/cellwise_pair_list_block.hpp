@@ -22,7 +22,7 @@ struct CellwisePairListBlockDevice {
   INT const *d_pair_counts_es{nullptr};
   int const *d_pair_list{nullptr};
 
-  inline int get_wave_count(const int cell, const int block) {
+  inline int get_num_waves(const int cell, const int block) const {
     return this->d_wave_counts[block * this->cell_count + cell];
   }
 
@@ -34,19 +34,19 @@ struct CellwisePairListBlockDevice {
     return this->d_pair_counts_es[cell] + pair_index;
   }
 
-  inline int get_particle_index_i(const int cell, const int pair_index) const {
+  inline int get_pair_index_i(const int cell, const int pair_index) const {
     const int offset = 0;
     const int index = this->get_pair_linear_index(cell, pair_index);
     return this->d_pair_list[offset + index];
   }
 
-  inline int get_particle_index_j(const int cell, const int pair_index) const {
+  inline int get_pair_index_j(const int cell, const int pair_index) const {
     const int offset = this->pair_count;
     const int index = this->get_pair_linear_index(cell, pair_index);
     return this->d_pair_list[offset + index];
   }
 
-  inline int get_particle_wave(const int cell, const int pair_index) const {
+  inline int get_pair_wave(const int cell, const int pair_index) const {
     const int offset = this->pair_count * 2;
     const int index = this->get_pair_linear_index(cell, pair_index);
     return this->d_pair_list[offset + index];
@@ -61,6 +61,8 @@ struct CellwisePairListBlockInterface {
   std::map<int,
            std::tuple<std::vector<int>, std::vector<int>, std::vector<int>>>
   get_host_pair_list(SYCLTargetSharedPtr sycl_target);
+
+  bool validate_pair_list(SYCLTargetSharedPtr sycl_target);
 };
 
 } // namespace NESO::Particles
