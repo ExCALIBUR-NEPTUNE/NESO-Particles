@@ -20,6 +20,9 @@ PairSamplerNTC::PairSamplerNTC(
   this->block_size = this->sycl_target->parameters
                          ->template get<SizeTParameter>("LOOP_LOCAL_SIZE")
                          ->value;
+
+  this->particle_sub_group_a.reset();
+  this->particle_sub_group_b.reset();
 }
 
 void PairSamplerNTC::sample(ParticleSubGroupSharedPtr sub_group_a,
@@ -88,7 +91,10 @@ void PairSamplerNTC::sample(ParticleSubGroupSharedPtr sub_group_a,
 
   sub_group_a->create_if_required();
   sub_group_b->create_if_required();
-
+  this->particle_sub_group_a = sub_group_a;
+  this->particle_sub_group_b = sub_group_b;
+  this->version_a = sub_group_a->get_version();
+  this->version_b = sub_group_b->get_version();
   auto selection_a = sub_group_a->get_selection();
   auto selection_b = sub_group_b->get_selection();
 
@@ -251,6 +257,19 @@ void PairSamplerNTC::sample(ParticleSubGroupSharedPtr sub_group_a,
 }
 
 CellwisePairListBlockDevice PairSamplerNTC::get_pair_list() {
+
+  auto lambda_check_group = [&](auto px, auto v) {
+    NESOASSERT(!px.expired(), "The particle sub group this pair list was "
+                              "created from has been destructed.");
+    px.lock()->create_if_required();
+    NESOASSERT(px.lock()->get_version() == v,
+               "The particle sub group this pair list was created from has "
+               "been updated.");
+  };
+
+  lambda_check_group(this->particle_sub_group_a, this->version_a);
+  lambda_check_group(this->particle_sub_group_b, this->version_b);
+
   return this->d_pair_list_block_device;
 }
 

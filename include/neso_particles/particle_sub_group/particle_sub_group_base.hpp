@@ -351,6 +351,7 @@ public:
 };
 
 typedef std::shared_ptr<ParticleSubGroup> ParticleSubGroupSharedPtr;
+typedef std::weak_ptr<ParticleSubGroup> ParticleSubGroupWeakPtr;
 
 } // namespace NESO::Particles
 

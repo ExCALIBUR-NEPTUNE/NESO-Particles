@@ -25,6 +25,11 @@ protected:
   std::shared_ptr<BufferDevice<int>> d_pair_list;
   CellwisePairListBlockDevice d_pair_list_block_device;
 
+  std::int64_t version_a{0};
+  std::int64_t version_b{0};
+  ParticleSubGroupWeakPtr particle_sub_group_a;
+  ParticleSubGroupWeakPtr particle_sub_group_b;
+
 public:
   /// Disable (implicit) copies.
   PairSamplerNTC(const PairSamplerNTC &st) = delete;
