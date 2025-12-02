@@ -53,6 +53,7 @@ bool ParticleSubGroup::create_inner() {
     this->reset_ephemeral_dats(
         this->selection.npart_local, this->selection.h_npart_cell,
         this->selection.d_npart_cell, this->selection.d_npart_cell_es);
+    this->version++;
   }
 
   return was_updated;
@@ -154,6 +155,8 @@ INT ParticleSubGroup::get_npart_cell(const int cell) {
 ParticleGroupSharedPtr ParticleSubGroup::get_particle_group() {
   return this->particle_group;
 }
+
+std::int64_t ParticleSubGroup::get_version() const { return this->version; }
 
 bool ParticleSubGroup::is_entire_particle_group() {
   return this->is_whole_particle_group;
