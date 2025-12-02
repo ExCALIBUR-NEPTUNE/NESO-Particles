@@ -45,7 +45,8 @@ protected:
   }
 
 public:
-  std::vector<CellwisePairListAbsolute<ParticleGroup>> pair_lists;
+  std::vector<CellwisePairListAbsolute<ParticleGroup, CellwisePairList>>
+      pair_lists;
   typename GetParticlePairLoopKernelType<KERNEL>::type kernel;
 
   /**
@@ -58,7 +59,8 @@ public:
    */
   ParticlePairLoopCellwisePairList(
       std::string name,
-      std::vector<CellwisePairListAbsolute<ParticleGroup>> pair_lists,
+      std::vector<CellwisePairListAbsolute<ParticleGroup, CellwisePairList>>
+          pair_lists,
       KERNEL kernel, ARGS... args)
       : ParticlePairLoopArgs<ARGS...>(nullptr, name, nullptr, nullptr, nullptr,
                                       nullptr, args...),
@@ -332,7 +334,8 @@ public:
 template <typename KERNEL, typename... ARGS>
 inline ParticlePairLoopBaseSharedPtr particle_pair_loop(
     std::string name,
-    std::vector<CellwisePairListAbsolute<ParticleGroup>> pair_lists,
+    std::vector<CellwisePairListAbsolute<ParticleGroup, CellwisePairList>>
+        pair_lists,
     KERNEL kernel, ARGS... args) {
   auto ptr =
       std::make_shared<ParticlePairLoopCellwisePairList<KERNEL, ARGS...>>(
@@ -351,7 +354,8 @@ inline ParticlePairLoopBaseSharedPtr particle_pair_loop(
  */
 template <typename KERNEL, typename... ARGS>
 inline ParticlePairLoopBaseSharedPtr particle_pair_loop(
-    std::vector<CellwisePairListAbsolute<ParticleGroup>> pair_lists,
+    std::vector<CellwisePairListAbsolute<ParticleGroup, CellwisePairList>>
+        pair_lists,
     KERNEL kernel, ARGS... args) {
 
   return particle_pair_loop("unnamed_particle_pair_loop", pair_lists, kernel,

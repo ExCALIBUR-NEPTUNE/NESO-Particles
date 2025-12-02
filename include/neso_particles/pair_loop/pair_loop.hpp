@@ -8,5 +8,6 @@
 #include "particle_pair_loop_args.hpp"
 #include "particle_pair_loop_base.hpp"
 #include "particle_pair_loop_cellwise_pair_list.hpp"
+#include "particle_pair_loop_cellwise_pair_list_block.hpp"
 
 #endif

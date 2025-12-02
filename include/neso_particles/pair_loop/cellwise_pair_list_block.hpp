@@ -65,6 +65,9 @@ struct CellwisePairListBlockInterface {
   bool validate_pair_list(SYCLTargetSharedPtr sycl_target);
 };
 
+using CellwisePairListBlockInterfaceSharedPtr =
+    std::shared_ptr<CellwisePairListBlockInterface>;
+
 } // namespace NESO::Particles
 
 #endif

@@ -185,7 +185,8 @@ TEST(ParticlePairLoop, base) {
 
   auto pl0 = particle_pair_loop(
       "particle_pair_loop_test",
-      {CellwisePairListAbsolute<ParticleGroup>(A, A, cellwise_pair_listA)},
+      {CellwisePairListAbsolute<ParticleGroup, CellwisePairList>(
+          A, A, cellwise_pair_listA)},
       [](auto ID_i, auto ID_j, auto NN_i, auto NN_j) {
         NN_i.at(0) = ID_j.at(0);
         NN_j.at(0) = ID_i.at(0);
@@ -319,7 +320,8 @@ TEST(ParticlePairLoop, particle_pair_loop_index) {
 
   auto pl0 = particle_pair_loop(
       "particle_pair_loop_test",
-      {CellwisePairListAbsolute<ParticleGroup>(A, A, cellwise_pair_listA)},
+      {CellwisePairListAbsolute<ParticleGroup, CellwisePairList>(
+          A, A, cellwise_pair_listA)},
       [](auto PAIR_INDEX, auto NN_i, auto NN_j) {
         NN_i.at(0) = PAIR_INDEX.get_loop_linear_index();
         NN_i.at(1) = 1;
@@ -418,7 +420,8 @@ TEST(ParticlePairLoop, kernel_rng_base) {
 
   auto pl0 = particle_pair_loop(
       "particle_pair_loop_test",
-      {CellwisePairListAbsolute<ParticleGroup>(A, A, cellwise_pair_listA)},
+      {CellwisePairListAbsolute<ParticleGroup, CellwisePairList>(
+          A, A, cellwise_pair_listA)},
       [](auto PAIR_INDEX, auto RNG, auto NN_i, auto NN_j) {
         bool valid = true;
         NN_i.at(0) = 1;
@@ -464,7 +467,8 @@ TEST(ParticlePairLoop, kernel_rng_base) {
       host_atomic_block_kernel_rng<INT>(rng_lambda, rng_ncomp);
   auto pl1 = particle_pair_loop(
       "particle_pair_loop_test",
-      {CellwisePairListAbsolute<ParticleGroup>(A, A, cellwise_pair_listA)},
+      {CellwisePairListAbsolute<ParticleGroup, CellwisePairList>(
+          A, A, cellwise_pair_listA)},
       [=](auto PAIR_INDEX, auto RNG, auto NN_i, auto NN_j) {
         bool valid = true;
         NN_i.at(0) = 1;
@@ -735,7 +739,8 @@ TEST(ParticlePairLoop, cell_wise_pair_list_waves) {
 
   auto pl0 = particle_pair_loop(
       "particle_pair_loop_test",
-      {CellwisePairListAbsolute<ParticleGroup>(A, A, cellwise_pair_listA)},
+      {CellwisePairListAbsolute<ParticleGroup, CellwisePairList>(
+          A, A, cellwise_pair_listA)},
       [](auto NN_i, auto NN_j) {
         NN_i.at(0)++;
         NN_j.at(0)++;
@@ -829,7 +834,8 @@ TEST(ParticlePairLoop, cell_wise_pair_list_waves) {
 
   particle_pair_loop(
       "particle_pair_loop_test",
-      {CellwisePairListAbsolute<ParticleGroup>(A, A, cellwise_pair_listA)},
+      {CellwisePairListAbsolute<ParticleGroup, CellwisePairList>(
+          A, A, cellwise_pair_listA)},
       [=](auto INDEX) { k_masks[INDEX.get_loop_linear_index()] += 1; },
       Access::read(ParticlePairLoopIndex{}))
       ->execute();
