@@ -98,8 +98,8 @@ TEST(DSMC, ntc_pair_generation_aa) {
   const int max_num_pairs_to_sample = 10000;
   int npart_cell = 10;
   const int ndim = 2;
-  const int nx = 4;
-  const int ny = 4;
+  const int nx = 32;
+  const int ny = 16;
   const int nz = 48;
 
   auto [A, sycl_target_t, cell_count] =
@@ -210,19 +210,25 @@ TEST(DSMC, ntc_pair_generation_aa) {
   }
   ASSERT_EQ(test_total_num_pairs, expected_num_pairs);
 
+  const int max_cell = std::min(8, cell_count);
+  for (int cellx = max_cell; cellx < cell_count; cellx++) {
+    num_pairs[cellx] = 0;
+  }
+
   std::map<int, std::vector<int>> map_cell_adj_matrix;
 
-  for (int cellx = 2; cellx < cell_count; cellx++) {
+  for (int cellx = 2; cellx < max_cell; cellx++) {
     const int npart_cell = aa->get_npart_cell(cellx);
     map_cell_adj_matrix[cellx].resize(npart_cell * npart_cell);
     std::fill(map_cell_adj_matrix[cellx].begin(),
               map_cell_adj_matrix[cellx].end(), 0);
   }
 
-  for (int sx = 0; sx < 100; sx++) {
+  const int num_steps = 10;
+  for (int sx = 0; sx < num_steps; sx++) {
     pair_sampler_ntc->sample(aa, aa, num_pairs);
     h_pair_list = pair_sampler_ntc->get_host_pair_list(sycl_target);
-    for (int cellx = 2; cellx < cell_count; cellx++) {
+    for (int cellx = 2; cellx < max_cell; cellx++) {
 
       const int npart_cell = aa->get_npart_cell(cellx);
       const int num_pairs_test =
@@ -236,17 +242,33 @@ TEST(DSMC, ntc_pair_generation_aa) {
     }
   }
 
-  for (int cellx = 2; cellx < 8; cellx++) {
+  for (int cellx = 2; cellx < max_cell; cellx++) {
 
     const int npart_cell = aa->get_npart_cell(cellx);
+    const int total_num_pairs = npart_cell * npart_cell - npart_cell;
+    const REAL average_pair_count =
+        static_cast<REAL>(max_num_pairs_to_sample * num_steps) /
+        static_cast<REAL>(total_num_pairs);
+
     for (int jx = 0; jx < npart_cell; jx++) {
       for (int ix = 0; ix < npart_cell; ix++) {
-        std::cout << map_cell_adj_matrix[cellx][jx * npart_cell + ix] << " ";
+        const int pair_count = map_cell_adj_matrix[cellx][jx * npart_cell + ix];
+        std::cout << pair_count << " ";
       }
       std::cout << std::endl;
     }
-
     std::cout << std::endl;
+
+    for (int jx = 0; jx < npart_cell; jx++) {
+      for (int ix = 0; ix < npart_cell; ix++) {
+        const int pair_count = map_cell_adj_matrix[cellx][jx * npart_cell + ix];
+        if (ix != jx) {
+          nprint(average_pair_count, pair_count);
+          ASSERT_TRUE(relative_error(average_pair_count,
+                                     static_cast<REAL>(pair_count)) < 0.1);
+        }
+      }
+    }
   }
 
   sycl_target->free();

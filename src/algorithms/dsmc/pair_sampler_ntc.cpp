@@ -26,6 +26,9 @@ void PairSamplerNTC::sample(ParticleSubGroupSharedPtr sub_group_a,
                             ParticleSubGroupSharedPtr sub_group_b,
                             std::vector<int> &new_sample_counts) {
 
+  auto r0 =
+      this->sycl_target->profile_map.start_region("PairSamplerNTC", "sample");
+
   NESOASSERT(static_cast<int>(new_sample_counts.size()) == this->cell_count,
              "new_sample_counts size does not match the cell count.");
 
@@ -243,6 +246,8 @@ void PairSamplerNTC::sample(ParticleSubGroupSharedPtr sub_group_a,
       this->cell_count,         this->d_wave_counts->ptr,
       this->d_pair_counts->ptr, this->d_pair_counts_es->ptr,
       this->d_pair_list->ptr};
+
+  this->sycl_target->profile_map.end_region(r0);
 }
 
 CellwisePairListBlockDevice PairSamplerNTC::get_pair_list() {
