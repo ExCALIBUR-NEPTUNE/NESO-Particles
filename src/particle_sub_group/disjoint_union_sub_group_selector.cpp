@@ -63,9 +63,7 @@ void DisjointUnionSubGroupSelector::create(Selection *created_selection) {
         for (int px = 0; px < sub_group_count; px++) {
           const int npart_cell = k_selections[px].d_npart_cell[idx];
           new_occupancy += npart_cell;
-          if (npart_cell > 0) {
-            new_es += k_selections[px].d_npart_cell_es[idx];
-          }
+          new_es += k_selections[px].d_npart_cell_es[idx];
         }
         k_npart_cell[idx] = new_occupancy;
         k_npart_cell_es[idx] = new_es;

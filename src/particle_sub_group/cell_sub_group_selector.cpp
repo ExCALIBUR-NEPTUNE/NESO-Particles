@@ -31,6 +31,10 @@ void CellSubGroupSelector::create(Selection *created_selection) {
   if (this->parent_is_whole_group) {
     auto pr0 = ProfileRegion("CellSubGroupSelector", "create_particle_group");
 
+    for (int cell = 0; cell < cell_start; cell++) {
+      h_npart_cell_ptr[cell] = 0;
+      h_npart_cell_es_ptr[cell] = 0;
+    }
     INT es_tmp = 0;
     INT max_occ = 0;
     for (int cell = cell_start; cell < cell_end; cell++) {
@@ -40,16 +44,18 @@ void CellSubGroupSelector::create(Selection *created_selection) {
       h_npart_cell_es_ptr[cell] = es_tmp;
       es_tmp += total;
     }
+    for (int cell = cell_end; cell < cell_count; cell++) {
+      h_npart_cell_ptr[cell] = 0;
+      h_npart_cell_es_ptr[cell] = es_tmp;
+    }
 
     EventStack es;
 
     if (range_cell_count > 0) {
-      es.push(sycl_target->queue.memcpy(d_npart_cell_es_ptr + cell_start,
-                                        h_npart_cell_es_ptr + cell_start,
-                                        sizeof(INT) * range_cell_count));
-      es.push(sycl_target->queue.memcpy(d_npart_cell_ptr + cell_start,
-                                        h_npart_cell_ptr + cell_start,
-                                        range_cell_count * sizeof(int)));
+      es.push(sycl_target->queue.memcpy(
+          d_npart_cell_es_ptr, h_npart_cell_es_ptr, sizeof(INT) * cell_count));
+      es.push(sycl_target->queue.memcpy(d_npart_cell_ptr, h_npart_cell_ptr,
+                                        cell_count * sizeof(int)));
     }
 
     this->sub_group_particle_map->create(cell_start, cell_end, h_npart_cell_ptr,
@@ -105,6 +111,10 @@ void CellSubGroupSelector::create(Selection *created_selection) {
     this->particle_sub_group->create_if_required();
     auto s_parent = this->particle_sub_group->get_selection();
 
+    for (int cell = 0; cell < cell_start; cell++) {
+      h_npart_cell_ptr[cell] = 0;
+      h_npart_cell_es_ptr[cell] = 0;
+    }
     INT es_tmp = 0;
     INT max_occ = 0;
     for (int cell = cell_start; cell < cell_end; cell++) {
@@ -114,15 +124,17 @@ void CellSubGroupSelector::create(Selection *created_selection) {
       h_npart_cell_es_ptr[cell] = es_tmp;
       es_tmp += total;
     }
+    for (int cell = cell_end; cell < cell_count; cell++) {
+      h_npart_cell_ptr[cell] = 0;
+      h_npart_cell_es_ptr[cell] = es_tmp;
+    }
 
     EventStack es;
     if (range_cell_count > 0) {
-      es.push(sycl_target->queue.memcpy(d_npart_cell_es_ptr + cell_start,
-                                        h_npart_cell_es_ptr + cell_start,
-                                        sizeof(INT) * range_cell_count));
-      es.push(sycl_target->queue.memcpy(d_npart_cell_ptr + cell_start,
-                                        h_npart_cell_ptr + cell_start,
-                                        range_cell_count * sizeof(int)));
+      es.push(sycl_target->queue.memcpy(
+          d_npart_cell_es_ptr, h_npart_cell_es_ptr, sizeof(INT) * cell_count));
+      es.push(sycl_target->queue.memcpy(d_npart_cell_ptr, h_npart_cell_ptr,
+                                        cell_count * sizeof(int)));
     }
 
     this->sub_group_particle_map->create(cell_start, cell_end, h_npart_cell_ptr,
