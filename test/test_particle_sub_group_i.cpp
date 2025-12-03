@@ -385,6 +385,16 @@ TEST(ParticleSubGroup, disjoint_union) {
       particle_loop_create_common(npart_cell, 2);
 
   {
+    const int npart_local_before = A->get_npart_local();
+    const int cell_to_empty = std::max(0, cell_count - 3);
+    const int npart_to_remove = A->get_npart_cell(cell_to_empty);
+    auto to_remove = particle_sub_group(A, cell_to_empty);
+    A->remove_particles(to_remove);
+    ASSERT_EQ(A->get_npart_cell(cell_to_empty), 0);
+    ASSERT_EQ(A->get_npart_local(), npart_local_before - npart_to_remove);
+  }
+
+  {
 
     std::vector<ParticleSubGroupSharedPtr> groups = {particle_sub_group(A)};
     auto aa = particle_sub_group_disjoint_union(groups);
@@ -473,9 +483,7 @@ TEST(ParticleSubGroup, disjoint_union) {
 
         for (int cellx = 0; cellx < cell_count; cellx++) {
           h_npart_cell.at(cellx) += selection.h_npart_cell[cellx];
-          if (selection.h_npart_cell[cellx] >= 0) {
-            h_npart_cell_es.at(cellx) += t_npart_cell_es[cellx];
-          }
+          h_npart_cell_es.at(cellx) += t_npart_cell_es[cellx];
         }
       }
 
