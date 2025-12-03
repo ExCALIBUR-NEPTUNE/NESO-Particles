@@ -186,13 +186,18 @@ public:
             const bool required = pair_index < num_pairs;
             const int particle_index_a =
                 required ? pair_list->get_pair_index_i(index_cell, pair_index)
-                         : -2;
+                         : -1;
             const int particle_index_b =
                 required ? pair_list->get_pair_index_j(index_cell, pair_index)
-                         : -3;
+                         : -1;
             const int wave =
                 required ? pair_list->get_pair_wave(index_cell, pair_index)
-                         : -4;
+                         : -1;
+            const int linear_index =
+                required
+                    ? pair_list->get_pair_linear_index(index_cell, pair_index) +
+                          offset_list
+                    : -1;
 
             for (int wavex = 0; wavex < num_waves; wavex++) {
               if (wavex == wave) {
@@ -203,9 +208,7 @@ public:
                 ParticleLoopImplementation::ParticleLoopIteration iteration_A;
                 ParticleLoopImplementation::ParticleLoopIteration iteration_B;
 
-                iteration.pair_index =
-                    offset_list +
-                    pair_list->get_pair_linear_index(index_cell, pair_index);
+                iteration.pair_index = linear_index;
 
                 iteration_A.local_sycl_index = idx.get_local_linear_id();
                 iteration_A.local_sycl_range =

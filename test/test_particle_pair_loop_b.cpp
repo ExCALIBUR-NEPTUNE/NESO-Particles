@@ -37,12 +37,10 @@ TEST(ParticlePairLoopBlock, base) {
       sycl_target, cell_count, rng_function);
 
   std::vector<int> num_pairs(cell_count);
-  std::fill(num_pairs.begin(), num_pairs.end(), 127);
+  std::fill(num_pairs.begin(), num_pairs.end(), 0);
 
   pair_sampler_ntc->sample(aa, aa, num_pairs);
-  ASSERT_TRUE(pair_sampler_ntc->validate_pair_list(sycl_target));
-
-  auto pl0 = particle_pair_loop(
+  particle_pair_loop(
       "particle_pair_loop_test",
       {CellwisePairListAbsolute<ParticleGroup, CellwisePairListBlockInterface>(
           A, A, pair_sampler_ntc)},
@@ -51,9 +49,33 @@ TEST(ParticlePairLoopBlock, base) {
         NN_j.at(0)++;
       },
       Access::A(Access::write(Sym<INT>("NEIGHBOURS"))),
-      Access::B(Access::write(Sym<INT>("NEIGHBOURS"))));
+      Access::B(Access::write(Sym<INT>("NEIGHBOURS"))))
+      ->execute();
 
-  pl0->execute();
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto NN = A->get_cell(Sym<INT>("NEIGHBOURS"), cellx);
+    const int nrow = NN->nrow;
+    for (int rx = 0; rx < nrow; rx++) {
+      const INT to_test = NN->at(rx, 0);
+      ASSERT_EQ(0, to_test);
+    }
+  }
+
+  std::fill(num_pairs.begin(), num_pairs.end(), 127);
+  pair_sampler_ntc->sample(aa, aa, num_pairs);
+  ASSERT_TRUE(pair_sampler_ntc->validate_pair_list(sycl_target));
+
+  particle_pair_loop(
+      "particle_pair_loop_test",
+      {CellwisePairListAbsolute<ParticleGroup, CellwisePairListBlockInterface>(
+          A, A, pair_sampler_ntc)},
+      [](auto NN_i, auto NN_j) {
+        NN_i.at(0)++;
+        NN_j.at(0)++;
+      },
+      Access::A(Access::write(Sym<INT>("NEIGHBOURS"))),
+      Access::B(Access::write(Sym<INT>("NEIGHBOURS"))))
+      ->execute();
 
   std::map<std::pair<int, int>, int> map_particles_to_nn;
 
@@ -79,6 +101,43 @@ TEST(ParticlePairLoopBlock, base) {
       const INT correct = map_particles_to_nn[{cellx, rx}];
       ASSERT_EQ(correct, to_test);
     }
+  }
+
+  int total_num_pairs = 0;
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    num_pairs[cellx] = cellx;
+    total_num_pairs += cellx;
+  }
+
+  pair_sampler_ntc->sample(aa, aa, num_pairs);
+  ASSERT_TRUE(pair_sampler_ntc->validate_pair_list(sycl_target));
+
+  std::vector<int> h_flags(total_num_pairs);
+  std::fill(h_flags.begin(), h_flags.end(), 0);
+
+  BufferDevice<int> d_flags(sycl_target, h_flags);
+  int *k_flags = d_flags.ptr;
+
+  ErrorPropagate ep(sycl_target);
+  auto k_ep = ep.device_ptr();
+
+  particle_pair_loop(
+      "particle_pair_loop_test",
+      {CellwisePairListAbsolute<ParticleGroup, CellwisePairListBlockInterface>(
+          A, A, pair_sampler_ntc)},
+      [=](auto INDEX) {
+        const int linear_index = INDEX.get_loop_linear_index();
+        NESO_KERNEL_ASSERT(k_flags[linear_index] == 0, k_ep);
+        k_flags[linear_index] = linear_index;
+      },
+      Access::read(ParticlePairLoopIndex{}))
+      ->execute();
+
+  ASSERT_FALSE(ep.get_flag());
+
+  h_flags = d_flags.get();
+  for (int ix = 0; ix < total_num_pairs; ix++) {
+    ASSERT_EQ(h_flags.at(ix), ix);
   }
 
   sycl_target->free();

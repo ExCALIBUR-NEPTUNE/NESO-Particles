@@ -98,6 +98,21 @@ bool CellwisePairListBlockInterface::validate_pair_list(
               la_j[index_local] = -1;
               idx.barrier(sycl::access::fence_space::local_space);
 
+              if (index_cell == 0) {
+                NESO_KERNEL_ASSERT(d_pair_list.get_pair_linear_index(0, 0) == 0,
+                                   k_ep);
+              }
+
+              if (index_cell < (cell_count - 1)) {
+                const INT c0 = d_pair_list.get_pair_linear_index(index_cell, 0);
+                const INT c1 =
+                    d_pair_list.get_pair_linear_index(index_cell + 1, 0);
+                const int diff = static_cast<int>(c1 - c0);
+
+                NESO_KERNEL_ASSERT(
+                    d_pair_list.d_pair_counts[index_cell] == diff, k_ep);
+              }
+
               const int num_blocks = div_round_up(num_pairs, block_size);
               int pair_index = index_local;
               for (int block = 0; block < num_blocks; block++) {
