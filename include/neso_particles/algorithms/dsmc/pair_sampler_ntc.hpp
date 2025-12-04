@@ -29,6 +29,7 @@ protected:
   std::int64_t version_b{0};
   ParticleSubGroupWeakPtr particle_sub_group_a;
   ParticleSubGroupWeakPtr particle_sub_group_b;
+  int max_wave_count{0};
 
 public:
   /// Disable (implicit) copies.

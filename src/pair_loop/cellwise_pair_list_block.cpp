@@ -67,6 +67,7 @@ bool CellwisePairListBlockInterface::validate_pair_list(
 
   const int pair_count = d_pair_list.pair_count;
   const int cell_count = d_pair_list.cell_count;
+  const int max_wave_count = d_pair_list.max_wave_count;
 
   ErrorPropagate ep(sycl_target);
   auto k_ep = ep.device_ptr();
@@ -117,9 +118,6 @@ bool CellwisePairListBlockInterface::validate_pair_list(
               int pair_index = index_local;
               for (int block = 0; block < num_blocks; block++) {
 
-                const int num_waves =
-                    d_pair_list.get_num_waves(index_cell, block);
-
                 const bool required = pair_index < num_pairs;
                 const int i =
                     required
@@ -134,7 +132,12 @@ bool CellwisePairListBlockInterface::validate_pair_list(
                     required ? d_pair_list.get_pair_wave(index_cell, pair_index)
                              : -4;
 
-                for (int wavex = 0; wavex < num_waves; wavex++) {
+                if (required) {
+                  NESO_KERNEL_ASSERT((0 <= wave) && (wave < max_wave_count),
+                                     k_ep);
+                }
+
+                for (int wavex = 0; wavex < max_wave_count; wavex++) {
                   idx.barrier(sycl::access::fence_space::local_space);
                   if (wavex == wave) {
                     la_i[index_local] = i;
@@ -143,6 +146,7 @@ bool CellwisePairListBlockInterface::validate_pair_list(
                   }
                   idx.barrier(sycl::access::fence_space::local_space);
                   if (wavex == wave) {
+
                     for (int bx = 0; bx < block_size; bx++) {
                       if (bx != index_local) {
                         const int oi = la_i[bx];

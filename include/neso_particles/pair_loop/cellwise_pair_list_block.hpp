@@ -17,6 +17,7 @@ struct CellwisePairListBlockDevice {
   INT pair_count{0};
   int block_size{0};
   int cell_count{0};
+  int max_wave_count{0};
   int *d_wave_counts{nullptr};
   int const *d_pair_counts{nullptr};
   INT const *d_pair_counts_es{nullptr};

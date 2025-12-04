@@ -101,6 +101,18 @@ void PairSamplerNTC::sample(ParticleSubGroupSharedPtr sub_group_a,
   const auto *k_npart_cell = particle_group->mpi_rank_dat->d_npart_cell;
   const auto *h_npart_cell = particle_group->mpi_rank_dat->h_npart_cell;
 
+  auto d_max_wave_count =
+      get_resource<BufferDevice<int>, ResourceStackInterfaceBufferDevice<int>>(
+          sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<int>{},
+          sycl_target);
+  d_max_wave_count->realloc_no_copy(1);
+  int *k_max_wave_count = d_max_wave_count->ptr;
+
+  this->max_wave_count = 0;
+  this->sycl_target->queue
+      .memcpy(k_max_wave_count, &this->max_wave_count, sizeof(int))
+      .wait_and_throw();
+
   int max_npart_cell = 0;
   for (int cellx = 0; cellx < this->cell_count; cellx++) {
     max_npart_cell = std::max(max_npart_cell, h_npart_cell[cellx]);
@@ -136,6 +148,7 @@ void PairSamplerNTC::sample(ParticleSubGroupSharedPtr sub_group_a,
           const REAL scale_a = static_cast<REAL>(sample_range_a);
           const REAL scale_b = static_cast<REAL>(sample_range_b);
           const int offset_cell = k_pair_counts_es[cell];
+          int max_wave_count = 0;
           int block_index = 0;
 
           if (local_id == 0) {
@@ -235,6 +248,7 @@ void PairSamplerNTC::sample(ParticleSubGroupSharedPtr sub_group_a,
               k_pair_list[ox] = i3;
               k_pair_list[k_pair_count * 1 + ox] = j3;
               k_pair_list[k_pair_count * 2 + ox] = wave;
+              max_wave_count = sycl::max(max_wave_count, wave + 1);
             }
 
             if (local_id == 0) {
@@ -249,18 +263,29 @@ void PairSamplerNTC::sample(ParticleSubGroupSharedPtr sub_group_a,
             idx.barrier(sycl::access::fence_space::local_space);
             block_index++;
           }
+
+          atomic_fetch_max(k_max_wave_count, max_wave_count);
         });
       })
       .wait_and_throw();
 
+  this->sycl_target->queue
+      .memcpy(&this->max_wave_count, k_max_wave_count, sizeof(int))
+      .wait_and_throw();
+
+  restore_resource(sycl_target->resource_stack_map,
+                   ResourceStackKeyBufferDevice<int>{}, d_max_wave_count);
   restore_resource(sycl_target->resource_stack_map,
                    ResourceStackKeyBufferDevice<REAL>{}, d_real_samples);
 
-  this->d_pair_list_block_device = {
-      this->pair_count,         this->block_size,
-      this->cell_count,         this->d_wave_counts->ptr,
-      this->d_pair_counts->ptr, this->d_pair_counts_es->ptr,
-      this->d_pair_list->ptr};
+  this->d_pair_list_block_device = {this->pair_count,
+                                    this->block_size,
+                                    this->cell_count,
+                                    this->max_wave_count,
+                                    this->d_wave_counts->ptr,
+                                    this->d_pair_counts->ptr,
+                                    this->d_pair_counts_es->ptr,
+                                    this->d_pair_list->ptr};
 
   this->sycl_target->profile_map.end_region(r0);
 }
