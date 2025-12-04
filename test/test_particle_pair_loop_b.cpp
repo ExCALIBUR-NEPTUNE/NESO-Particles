@@ -44,7 +44,7 @@ TEST(ParticlePairLoopBlock, base) {
       "particle_pair_loop_test",
       {CellwisePairListAbsolute<ParticleGroup, CellwisePairListBlockInterface>(
           A, A, pair_sampler_ntc)},
-      [](auto NN_i, auto NN_j) {
+      [=](auto NN_i, auto NN_j) {
         NN_i.at(0)++;
         NN_j.at(0)++;
       },
@@ -139,6 +139,173 @@ TEST(ParticlePairLoopBlock, base) {
   for (int ix = 0; ix < total_num_pairs; ix++) {
     ASSERT_EQ(h_flags.at(ix), ix);
   }
+
+  sycl_target->free();
+  A->domain->mesh->free();
+}
+
+TEST(ParticlePairLoopBlock, kernel_rng_base) {
+
+  int npart_cell = 10;
+  const int ndim = 2;
+  const int nx = 16;
+  const int ny = 33;
+  const int nz = 48;
+
+  auto [A, sycl_target, cell_count] =
+      particle_loop_create_common(npart_cell, ndim, nx, ny, nz);
+  A->add_particle_dat(Sym<INT>("NEIGHBOURS"), 2);
+
+  auto reset_loop = particle_loop(
+      A,
+      [=](auto NN) {
+        NN.at(0) = 0;
+        NN.at(1) = 1;
+      },
+      Access::write(Sym<INT>("NEIGHBOURS")));
+
+  reset_loop->execute();
+  auto aa = particle_sub_group(A, []() { return true; });
+
+  const int rank = sycl_target->comm_pair.rank_parent;
+
+  std::mt19937 rng(34234 + rank);
+  std::uniform_real_distribution<REAL> dist{
+      std::uniform_real_distribution<REAL>(0.0, 1.0)};
+  auto lambda_sampler = [&]() -> REAL { return dist(rng); };
+
+  auto rng_function_ntc =
+      std::make_shared<HostRNGGenerationFunction<REAL>>(lambda_sampler);
+
+  auto lambda_sampler_kernel = [&]() -> REAL { return dist(rng) + 1.0; };
+
+  auto rng_function_kernel =
+      std::make_shared<HostRNGGenerationFunction<REAL>>(lambda_sampler_kernel);
+
+  auto pair_sampler_ntc = std::make_shared<DSMC::PairSamplerNTC>(
+      sycl_target, cell_count, rng_function_ntc);
+
+  std::vector<int> num_pairs(cell_count);
+  std::fill(num_pairs.begin(), num_pairs.end(), 0);
+  pair_sampler_ntc->sample(aa, aa, num_pairs);
+
+  const int rng_ncomp = 2;
+  auto rng_block_kernel = host_per_particle_block_rng<REAL>(
+      std::dynamic_pointer_cast<RNGGenerationFunction<REAL>>(
+          rng_function_kernel),
+      rng_ncomp);
+
+  particle_pair_loop(
+      "particle_pair_loop_test",
+      {CellwisePairListAbsolute<ParticleGroup, CellwisePairListBlockInterface>(
+          A, A, pair_sampler_ntc)},
+      [=](auto INDEX, auto RNG, auto P2_i, auto P2_j) {
+        bool valid = true;
+        P2_i.at(0) = RNG.at(INDEX, 0, &valid);
+        P2_j.at(0) = RNG.at(INDEX, 1, &valid);
+      },
+      Access::read(ParticlePairLoopIndex{}),
+      Access::read(rng_block_kernel),
+      Access::A(Access::write(Sym<REAL>("P2"))),
+      Access::B(Access::write(Sym<REAL>("P2"))))
+      ->execute();
+
+  ASSERT_EQ(static_cast<std::size_t>(0),
+            rng_function_kernel->get_last_sample_size());
+
+  auto rng_atomic_kernel = host_atomic_block_kernel_rng<REAL>(
+      std::dynamic_pointer_cast<RNGGenerationFunction<REAL>>(
+          rng_function_kernel),
+      rng_ncomp);
+
+  particle_pair_loop(
+      "particle_pair_loop_test",
+      {CellwisePairListAbsolute<ParticleGroup, CellwisePairListBlockInterface>(
+          A, A, pair_sampler_ntc)},
+      [=](auto INDEX, auto RNG, auto P2_i, auto P2_j) {
+        bool valid = true;
+        P2_i.at(0) = RNG.at(INDEX, 0, &valid);
+        P2_j.at(0) = RNG.at(INDEX, 1, &valid);
+      },
+      Access::read(ParticlePairLoopIndex{}),
+      Access::read(rng_atomic_kernel),
+      Access::A(Access::write(Sym<REAL>("P2"))),
+      Access::B(Access::write(Sym<REAL>("P2"))))
+      ->execute();
+
+  ASSERT_EQ(static_cast<std::size_t>(0),
+            rng_function_kernel->get_last_sample_size());
+
+
+  int total_num_pairs = 0;
+  for(int cellx=0 ; cellx<cell_count ; cellx++){
+    num_pairs.at(cellx) = cellx % 127;
+    total_num_pairs += cellx % 127;
+  }
+
+  pair_sampler_ntc->sample(aa, aa, num_pairs);
+
+  auto reset_P2 = particle_loop(
+    A,
+    [=](auto P2){
+      P2.at(0) = -1.0;
+    },
+    Access::write(Sym<REAL>("P2"))
+  );
+
+  ErrorPropagate ep(sycl_target);
+  auto k_ep = ep.device_ptr();
+
+  particle_pair_loop(
+      "particle_pair_loop_test",
+      {CellwisePairListAbsolute<ParticleGroup, CellwisePairListBlockInterface>(
+          A, A, pair_sampler_ntc)},
+      [=](auto INDEX, auto RNG, auto P2_i, auto P2_j) {
+        bool valid = true;
+        P2_i.at(0) = RNG.at(INDEX, 0, &valid);
+        NESO_KERNEL_ASSERT(valid, k_ep);
+        P2_j.at(0) = RNG.at(INDEX, 1, &valid);
+        NESO_KERNEL_ASSERT(valid, k_ep);
+        NESO_KERNEL_ASSERT(P2_i.at(0) >= 1.0, k_ep);
+        NESO_KERNEL_ASSERT(P2_i.at(0) <= 2.0, k_ep);
+        NESO_KERNEL_ASSERT(P2_j.at(0) >= 1.0, k_ep);
+        NESO_KERNEL_ASSERT(P2_j.at(0) <= 2.0, k_ep);
+      },
+      Access::read(ParticlePairLoopIndex{}),
+      Access::read(rng_block_kernel),
+      Access::A(Access::write(Sym<REAL>("P2"))),
+      Access::B(Access::write(Sym<REAL>("P2"))))
+      ->execute();
+
+  ASSERT_EQ(static_cast<std::size_t>(total_num_pairs * rng_ncomp),
+            rng_function_kernel->get_last_sample_size());
+  ASSERT_FALSE(ep.get_flag());
+
+  particle_pair_loop(
+      "particle_pair_loop_test",
+      {CellwisePairListAbsolute<ParticleGroup, CellwisePairListBlockInterface>(
+          A, A, pair_sampler_ntc)},
+      [=](auto INDEX, auto RNG, auto P2_i, auto P2_j) {
+        bool valid = true;
+        P2_i.at(0) = RNG.at(INDEX, 0, &valid);
+        NESO_KERNEL_ASSERT(valid, k_ep);
+        P2_j.at(0) = RNG.at(INDEX, 1, &valid);
+        NESO_KERNEL_ASSERT(valid, k_ep);
+        NESO_KERNEL_ASSERT(P2_i.at(0) >= 1.0, k_ep);
+        NESO_KERNEL_ASSERT(P2_i.at(0) <= 2.0, k_ep);
+        NESO_KERNEL_ASSERT(P2_j.at(0) >= 1.0, k_ep);
+        NESO_KERNEL_ASSERT(P2_j.at(0) <= 2.0, k_ep);
+      },
+      Access::read(ParticlePairLoopIndex{}),
+      Access::read(rng_atomic_kernel),
+      Access::A(Access::write(Sym<REAL>("P2"))),
+      Access::B(Access::write(Sym<REAL>("P2"))))
+      ->execute();
+
+  ASSERT_TRUE(rng_atomic_kernel->valid_internal_state());
+  ASSERT_EQ(static_cast<std::size_t>(total_num_pairs * rng_ncomp),
+            rng_function_kernel->get_last_sample_size());
+  ASSERT_FALSE(ep.get_flag());
 
   sycl_target->free();
   A->domain->mesh->free();

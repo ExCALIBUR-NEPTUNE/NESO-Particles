@@ -35,6 +35,7 @@ protected:
       d_pair_lists_device;
   std::size_t num_pair_lists{0};
   int cell_count{0};
+  std::size_t total_num_pairs{0};
 
   std::vector<INT> h_pair_list_counts_es;
   std::shared_ptr<BufferDevice<INT>> d_pair_list_counts_es;
@@ -44,6 +45,7 @@ protected:
     for (const auto &ix : this->h_pair_lists_device) {
       num_pairs += static_cast<std::size_t>(ix.pair_count);
     }
+    total_num_pairs = num_pairs;
     return num_pairs;
   }
 
@@ -146,7 +148,7 @@ public:
 
     this->event_stack.wait();
     if ((block_size > 0) && (this->num_pair_lists > 0) &&
-        (cell_count_iteration > 0)) {
+        (cell_count_iteration > 0) && (this->total_num_pairs > 0)) {
 
       auto k_kernel = this->kernel.kernel;
       auto k_pair_lists = this->d_pair_lists_device->ptr;
@@ -207,6 +209,10 @@ public:
                            : -1;
 
               for (int wavex = 0; wavex < max_wave_count; wavex++) {
+
+                // These barriers seem to avoid a failure in acpp
+                // omp.accelerated?
+                idx.barrier(sycl::access::fence_space::local_space);
                 if (wavex == wave) {
                   ParticlePairLoopImplementation::ParticlePairLoopIteration
                       iteration;
@@ -236,9 +242,14 @@ public:
                                      iteration_B, loop_args, kernel_args);
                   Tuple::apply(k_kernel, kernel_args);
                 }
-                sycl::group_barrier(idx.get_group(),
-                                    sycl::memory_scope::work_group);
+
+                // These barriers seem to avoid a failure in acpp
+                // omp.accelerated?
+                idx.barrier(sycl::access::fence_space::local_space);
+
+                sycl::group_barrier(idx.get_group());
               }
+
               pair_index += block_size;
             }
           });
