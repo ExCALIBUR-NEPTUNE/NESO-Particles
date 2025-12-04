@@ -14,7 +14,7 @@ template <typename T, typename U> inline auto min(const T &x, const U &y) {
 }
 inline auto min(const REAL &x, const REAL &y) { return sycl::fmin(x, y); }
 template <typename T, typename U> inline auto max(const T &x, const U &y) {
-  return KERNEL_MIN(x, y);
+  return KERNEL_MAX(x, y);
 }
 inline auto max(const REAL &x, const REAL &y) { return sycl::fmax(x, y); }
 template <typename T> inline auto abs(const T &x) { return KERNEL_ABS(x); }
