@@ -84,20 +84,19 @@ bool CellwisePairListBlockInterface::validate_pair_list(
       .submit([&](sycl::handler &cgh) {
         sycl::local_accessor<int, 1> la_i(sycl::range(block_size), cgh);
         sycl::local_accessor<int, 1> la_j(sycl::range(block_size), cgh);
+        sycl::local_accessor<int, 1> la_w(sycl::range(block_size), cgh);
 
         cgh.parallel_for(
-            sycl_target->device_limits.validate_nd_range(
-                sycl::nd_range<2>(sycl::range<2>(cell_count, block_size),
-                                  sycl::range<2>(1, block_size))),
-            [=](sycl::nd_item<2> idx) {
+            sycl_target->device_limits.validate_nd_range(sycl::nd_range<1>(
+                sycl::range<1>(cell_count), sycl::range<1>(1))),
+            [=](sycl::nd_item<1> idx) {
               const int index_cell = idx.get_global_id(0);
-              const int index_local = idx.get_global_id(1);
               const int num_pairs = d_pair_list.get_num_pairs(index_cell);
 
-              idx.barrier(sycl::access::fence_space::local_space);
-              la_i[index_local] = -1;
-              la_j[index_local] = -1;
-              idx.barrier(sycl::access::fence_space::local_space);
+              for (int ix = 0; ix < block_size; ix++) {
+                la_i[ix] = -1;
+                la_j[ix] = -1;
+              }
 
               if (index_cell == 0) {
                 NESO_KERNEL_ASSERT(d_pair_list.get_pair_linear_index(0, 0) == 0,
@@ -115,57 +114,57 @@ bool CellwisePairListBlockInterface::validate_pair_list(
               }
 
               const int num_blocks = div_round_up(num_pairs, block_size);
-              int pair_index = index_local;
+              int pair_index_offset = 0;
               for (int block = 0; block < num_blocks; block++) {
 
-                const bool required = pair_index < num_pairs;
-                const int i =
-                    required
-                        ? d_pair_list.get_pair_index_i(index_cell, pair_index)
-                        : -2;
-                const int j =
-                    required
-                        ? d_pair_list.get_pair_index_j(index_cell, pair_index)
-                        : -3;
-                NESO_KERNEL_ASSERT(i != j, k_ep);
-                const int wave =
-                    required ? d_pair_list.get_pair_wave(index_cell, pair_index)
-                             : -4;
+                for (int index_local = 0; index_local < block_size;
+                     index_local++) {
+                  const int pair_index = pair_index_offset + index_local;
+                  const bool required = pair_index < num_pairs;
+                  const int i =
+                      required
+                          ? d_pair_list.get_pair_index_i(index_cell, pair_index)
+                          : -2;
+                  const int j =
+                      required
+                          ? d_pair_list.get_pair_index_j(index_cell, pair_index)
+                          : -3;
+                  NESO_KERNEL_ASSERT(i != j, k_ep);
+                  const int wave =
+                      required
+                          ? d_pair_list.get_pair_wave(index_cell, pair_index)
+                          : -4;
 
-                if (required) {
-                  NESO_KERNEL_ASSERT((0 <= wave) && (wave < max_wave_count),
-                                     k_ep);
+                  if (required) {
+                    NESO_KERNEL_ASSERT((0 <= wave) && (wave < max_wave_count),
+                                       k_ep);
+                  }
+
+                  la_i[index_local] = i;
+                  la_j[index_local] = j;
+                  la_w[index_local] = wave;
                 }
 
-                for (int wavex = 0; wavex < max_wave_count; wavex++) {
-                  idx.barrier(sycl::access::fence_space::local_space);
-                  if (wavex == wave) {
-                    la_i[index_local] = i;
-                    la_j[index_local] = j;
+                for (int ix = 0; ix < block_size; ix++) {
+                  const int i0 = la_i[ix];
+                  const int j0 = la_j[ix];
+                  const int w0 = la_w[ix];
+                  if (w0 > -1) {
                     atomic_fetch_add(k_pair_count, 1);
-                  }
-                  idx.barrier(sycl::access::fence_space::local_space);
-                  if (wavex == wave) {
-
-                    for (int bx = 0; bx < block_size; bx++) {
-                      if (bx != index_local) {
-                        const int oi = la_i[bx];
-                        const int oj = la_j[bx];
-                        NESO_KERNEL_ASSERT(oi != i, k_ep);
-                        NESO_KERNEL_ASSERT(oj != j, k_ep);
-                        NESO_KERNEL_ASSERT(oi != j, k_ep);
-                        NESO_KERNEL_ASSERT(oj != i, k_ep);
+                    for (int jx = ix + 1; jx < block_size; jx++) {
+                      const int i1 = la_i[jx];
+                      const int j1 = la_j[jx];
+                      const int w1 = la_w[jx];
+                      if (w0 == w1) {
+                        NESO_KERNEL_ASSERT(i0 != i1, k_ep);
+                        NESO_KERNEL_ASSERT(j0 != j1, k_ep);
+                        NESO_KERNEL_ASSERT(i0 != j1, k_ep);
+                        NESO_KERNEL_ASSERT(j0 != i1, k_ep);
                       }
                     }
                   }
-                  idx.barrier(sycl::access::fence_space::local_space);
-                  la_i[index_local] = -1;
-                  la_j[index_local] = -1;
-                  idx.barrier(sycl::access::fence_space::local_space);
-                  sycl::group_barrier(idx.get_group());
                 }
-
-                pair_index += block_size;
+                pair_index_offset += block_size;
               }
             });
       })
