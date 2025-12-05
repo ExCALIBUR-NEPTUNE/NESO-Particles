@@ -130,6 +130,7 @@ void PairSamplerNTC::sample(ParticleSubGroupSharedPtr sub_group_a,
       sycl::nd_range<2>(sycl::range<2>(this->cell_count, this->block_size),
                         sycl::range<2>(1, this->block_size)));
 
+  const auto k_cell_count = this->cell_count;
   this->sycl_target->queue
       .submit([&](sycl::handler &cgh) {
         sycl::local_accessor<int, 1> la_counts(sycl::range(1), cgh);
@@ -252,7 +253,8 @@ void PairSamplerNTC::sample(ParticleSubGroupSharedPtr sub_group_a,
             }
 
             if (local_id == 0) {
-              k_wave_counts[block_index * cell_count + cell] = la_counts[0] + 1;
+              k_wave_counts[block_index * k_cell_count + cell] =
+                  la_counts[0] + 1;
               la_counts[0] = 0;
             }
             if (i3 > -1) {

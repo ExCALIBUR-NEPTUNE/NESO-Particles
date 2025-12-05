@@ -204,8 +204,7 @@ TEST(ParticlePairLoopBlock, kernel_rng_base) {
         P2_i.at(0) = RNG.at(INDEX, 0, &valid);
         P2_j.at(0) = RNG.at(INDEX, 1, &valid);
       },
-      Access::read(ParticlePairLoopIndex{}),
-      Access::read(rng_block_kernel),
+      Access::read(ParticlePairLoopIndex{}), Access::read(rng_block_kernel),
       Access::A(Access::write(Sym<REAL>("P2"))),
       Access::B(Access::write(Sym<REAL>("P2"))))
       ->execute();
@@ -227,8 +226,7 @@ TEST(ParticlePairLoopBlock, kernel_rng_base) {
         P2_i.at(0) = RNG.at(INDEX, 0, &valid);
         P2_j.at(0) = RNG.at(INDEX, 1, &valid);
       },
-      Access::read(ParticlePairLoopIndex{}),
-      Access::read(rng_atomic_kernel),
+      Access::read(ParticlePairLoopIndex{}), Access::read(rng_atomic_kernel),
       Access::A(Access::write(Sym<REAL>("P2"))),
       Access::B(Access::write(Sym<REAL>("P2"))))
       ->execute();
@@ -236,9 +234,8 @@ TEST(ParticlePairLoopBlock, kernel_rng_base) {
   ASSERT_EQ(static_cast<std::size_t>(0),
             rng_function_kernel->get_last_sample_size());
 
-
   int total_num_pairs = 0;
-  for(int cellx=0 ; cellx<cell_count ; cellx++){
+  for (int cellx = 0; cellx < cell_count; cellx++) {
     num_pairs.at(cellx) = cellx % 127;
     total_num_pairs += cellx % 127;
   }
@@ -246,12 +243,7 @@ TEST(ParticlePairLoopBlock, kernel_rng_base) {
   pair_sampler_ntc->sample(aa, aa, num_pairs);
 
   auto reset_P2 = particle_loop(
-    A,
-    [=](auto P2){
-      P2.at(0) = -1.0;
-    },
-    Access::write(Sym<REAL>("P2"))
-  );
+      A, [=](auto P2) { P2.at(0) = -1.0; }, Access::write(Sym<REAL>("P2")));
 
   ErrorPropagate ep(sycl_target);
   auto k_ep = ep.device_ptr();
@@ -271,8 +263,7 @@ TEST(ParticlePairLoopBlock, kernel_rng_base) {
         NESO_KERNEL_ASSERT(P2_j.at(0) >= 1.0, k_ep);
         NESO_KERNEL_ASSERT(P2_j.at(0) <= 2.0, k_ep);
       },
-      Access::read(ParticlePairLoopIndex{}),
-      Access::read(rng_block_kernel),
+      Access::read(ParticlePairLoopIndex{}), Access::read(rng_block_kernel),
       Access::A(Access::write(Sym<REAL>("P2"))),
       Access::B(Access::write(Sym<REAL>("P2"))))
       ->execute();
@@ -296,8 +287,7 @@ TEST(ParticlePairLoopBlock, kernel_rng_base) {
         NESO_KERNEL_ASSERT(P2_j.at(0) >= 1.0, k_ep);
         NESO_KERNEL_ASSERT(P2_j.at(0) <= 2.0, k_ep);
       },
-      Access::read(ParticlePairLoopIndex{}),
-      Access::read(rng_atomic_kernel),
+      Access::read(ParticlePairLoopIndex{}), Access::read(rng_atomic_kernel),
       Access::A(Access::write(Sym<REAL>("P2"))),
       Access::B(Access::write(Sym<REAL>("P2"))))
       ->execute();
