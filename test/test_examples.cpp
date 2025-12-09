@@ -93,6 +93,7 @@ particle_loop_common(const int N = 10930, const int sx = 4, const int sy = 8) {
 #include "example_sources/example_particle_loop_rng.hpp"
 #include "example_sources/example_particle_loop_sym_vector.hpp"
 #include "example_sources/example_particle_sub_group_creation.hpp"
+#include "example_sources/example_particle_sub_group_creation_specific.hpp"
 #include "example_sources/example_particle_sub_group_loop.hpp"
 
 TEST(Examples, particle_loop_base) {
@@ -106,6 +107,7 @@ TEST(Examples, particle_loop_base) {
   global_array_example(A);
   cell_dat_const_example(A);
   particle_sub_group_creation(A);
+  particle_sub_group_creation_specific(A);
   particle_sub_group_loop(A);
   sym_vector_example(A);
   advection_example_loop_index(A);
