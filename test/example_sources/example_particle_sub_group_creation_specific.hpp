@@ -22,7 +22,7 @@ inline void particle_sub_group_creation_specific(
   auto a2 = particle_sub_group(particle_group);
 
   /**
-   * Creates a copy of a0. As a0 is a ParticleGroup this also creates a
+   * Creates a copy of a2. As a2 is a ParticleGroup this also creates a
    * lightweight reference.
    */
   auto a3 = particle_sub_group(a2);
