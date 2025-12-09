@@ -19,6 +19,7 @@ namespace NESO::Particles {
 class H5Part {
 
 private:
+  SYCLTargetSharedPtr sycl_target;
   std::string filename;
   CommPair &comm_pair;
   SymStore sym_store;
@@ -53,15 +54,14 @@ private:
                                     hid_t group_step, hid_t memspace,
                                     hid_t filespace, bool is_position) {
 
-    auto sycl_target = get_particle_group(parent)->sycl_target;
     const int ncomp = dat->ncomp;
     NESOASSERT(npart_local == parent->get_npart_local(),
                "Missmatch in npart local.");
 
     auto dh_buffer = get_resource<BufferDeviceHost<T>,
                                   ResourceStackInterfaceBufferDeviceHost<T>>(
-        sycl_target->resource_stack_map, ResourceStackKeyBufferDeviceHost<T>{},
-        sycl_target);
+        this->sycl_target->resource_stack_map,
+        ResourceStackKeyBufferDeviceHost<T>{}, this->sycl_target);
     dh_buffer->realloc_no_copy(ncomp * npart_local);
 
     auto k_ptr = dh_buffer->d_buffer.ptr;
@@ -100,7 +100,7 @@ private:
       H5CHK(H5Dclose(dset));
     }
 
-    restore_resource(sycl_target->resource_stack_map,
+    restore_resource(this->sycl_target->resource_stack_map,
                      ResourceStackKeyBufferDeviceHost<T>{}, dh_buffer);
   }
 
@@ -115,15 +115,14 @@ private:
                const std::int64_t offset, ParticleDatSharedPtr<T> dat,
                hid_t group_step, hid_t dxpl) {
 
-    auto sycl_target = get_particle_group(parent)->sycl_target;
     const int ncomp = dat->ncomp;
     NESOASSERT(npart_local == parent->get_npart_local(),
                "Missmatch in npart local.");
 
     auto dh_buffer = get_resource<BufferDeviceHost<T>,
                                   ResourceStackInterfaceBufferDeviceHost<T>>(
-        sycl_target->resource_stack_map, ResourceStackKeyBufferDeviceHost<T>{},
-        sycl_target);
+        this->sycl_target->resource_stack_map,
+        ResourceStackKeyBufferDeviceHost<T>{}, this->sycl_target);
     dh_buffer->realloc_no_copy(ncomp * npart_local);
 
     auto k_ptr = dh_buffer->d_buffer.ptr;
@@ -172,7 +171,7 @@ private:
     H5CHK(H5Sclose(filespace));
     H5CHK(H5Sclose(memspace));
 
-    restore_resource(sycl_target->resource_stack_map,
+    restore_resource(this->sycl_target->resource_stack_map,
                      ResourceStackKeyBufferDeviceHost<T>{}, dh_buffer);
   }
 
@@ -229,7 +228,6 @@ private:
   template <typename GROUP_TYPE>
   inline void write_inner(std::shared_ptr<GROUP_TYPE> group) {
     auto particle_group = get_particle_group(group);
-    auto sycl_target = particle_group->sycl_target;
 
     // check the ParticleDats actually exist
     for (auto &sym : this->sym_store.syms_real) {
@@ -336,7 +334,8 @@ public:
   template <typename... T>
   H5Part(std::string filename, ParticleGroupSharedPtr particle_group,
          T &&...args)
-      : filename(filename), comm_pair(particle_group->sycl_target->comm_pair),
+      : sycl_target(particle_group->sycl_target), filename(filename),
+        comm_pair(particle_group->sycl_target->comm_pair),
         sym_store(std::forward<T>(args)...), particle_group(particle_group),
         particle_sub_group(nullptr), multi_dim_mode(false) {
     this->plist_id = H5Pcreate(H5P_FILE_ACCESS);
@@ -373,9 +372,9 @@ public:
    *  @param sycl_target SYCLTarget to use for computation/communcation.
    */
   H5Part(std::string filename, SYCLTargetSharedPtr sycl_target)
-      : filename(filename), comm_pair(sycl_target->comm_pair),
-        particle_group(nullptr), particle_sub_group(nullptr),
-        multi_dim_mode(false) {
+      : sycl_target(sycl_target), filename(filename),
+        comm_pair(sycl_target->comm_pair), particle_group(nullptr),
+        particle_sub_group(nullptr), multi_dim_mode(false) {
     this->is_closed = true;
     this->step = 0;
   }
