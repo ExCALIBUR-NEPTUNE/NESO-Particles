@@ -54,6 +54,8 @@ public:
   virtual CellwisePairListBlockDevice get_pair_list() override;
 };
 
+using PairSamplerNTCSharedPtr = std::shared_ptr<PairSamplerNTC>;
+
 } // namespace DSMC
 } // namespace NESO::Particles
 

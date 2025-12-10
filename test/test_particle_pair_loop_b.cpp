@@ -300,3 +300,183 @@ TEST(ParticlePairLoopBlock, kernel_rng_base) {
   sycl_target->free();
   A->domain->mesh->free();
 }
+
+TEST(ParticlePairLoopBlock, multiple_lists) {
+
+  int npart_cell = 100;
+  const int ndim = 2;
+  const int nx = 16;
+  const int ny = 33;
+  const int nz = 48;
+  const int nbins = 3;
+  const int nsteps = 4;
+  const int npairs = 8;
+
+  auto [A, sycl_target, cell_count] =
+      particle_loop_create_common(npart_cell, ndim, nx, ny, nz);
+  A->add_particle_dat(Sym<INT>("NEIGHBOURS"), 2);
+  A->add_particle_dat(Sym<INT>("DSMC_CELL"), 1);
+
+  // RNG
+  const int rank = sycl_target->comm_pair.rank_parent;
+  std::mt19937 rng(34234 + rank);
+  std::uniform_real_distribution<REAL> dist{
+      std::uniform_real_distribution<REAL>(0.0, 1.0)};
+
+  // NTC Sampler
+  auto lambda_sampler = [&]() -> REAL { return dist(rng); };
+  auto rng_function_ntc =
+      std::make_shared<HostRNGGenerationFunction<REAL>>(lambda_sampler);
+
+  auto reset_loop = particle_loop(
+      A,
+      [=](auto NN) {
+        NN.at(0) = 0;
+        NN.at(1) = 1;
+      },
+      Access::write(Sym<INT>("NEIGHBOURS")));
+  reset_loop->execute();
+
+  particle_loop(
+      A, [=](auto ID, auto DSMC_CELL) { DSMC_CELL.at(0) = ID.at(0) % nbins; },
+      Access::read(Sym<INT>("ID")), Access::write(Sym<INT>("DSMC_CELL")))
+      ->execute();
+
+  std::vector<ParticleSubGroupSharedPtr> sub_groups =
+      particle_group_partition(A, Sym<INT>("DSMC_CELL"), nbins);
+
+  std::vector<DSMC::PairSamplerNTCSharedPtr> ntc_pair_lists(nbins);
+  std::vector<
+      CellwisePairListAbsolute<ParticleGroup, CellwisePairListBlockInterface>>
+      ntc_abs_pair_lists(nbins);
+
+  for (int binx = 0; binx < nbins; binx++) {
+    ntc_pair_lists.at(binx) = std::make_shared<DSMC::PairSamplerNTC>(
+        sycl_target, cell_count, rng_function_ntc);
+    ntc_abs_pair_lists.at(binx) = {A, A, ntc_pair_lists.at(binx)};
+  }
+
+  std::vector<int> num_pairs(cell_count);
+  std::fill(num_pairs.begin(), num_pairs.end(), 0);
+
+  // Kernel RNG sampler
+  auto lambda_sampler_kernel = [&]() -> REAL { return dist(rng) + 1.0; };
+  auto rng_function_kernel =
+      std::make_shared<HostRNGGenerationFunction<REAL>>(lambda_sampler_kernel);
+
+  const int rng_ncomp = 1;
+  auto rng_block_kernel = host_per_particle_block_rng<REAL>(
+      std::dynamic_pointer_cast<RNGGenerationFunction<REAL>>(
+          rng_function_kernel),
+      rng_ncomp);
+
+  auto d_test_linear_index = std::make_shared<BufferDevice<int>>(
+      sycl_target, cell_count * nbins * npairs);
+  auto k_test_linear_index = d_test_linear_index->ptr;
+  auto h_test_linear_index = d_test_linear_index->get();
+  std::fill(h_test_linear_index.begin(), h_test_linear_index.end(), 0);
+
+  ErrorPropagate ep(sycl_target);
+  auto k_ep = ep.device_ptr();
+
+  auto pl0 = particle_pair_loop(
+      ntc_abs_pair_lists,
+      [=](auto INDEX, auto DSMC_CELL_I, auto DSMC_CELL_J, auto RNG_KERNEL) {
+        NESO_KERNEL_ASSERT(DSMC_CELL_I.at(0) == DSMC_CELL_J.at(0), k_ep);
+        const auto linear_index = INDEX.get_loop_linear_index();
+        k_test_linear_index[linear_index] = linear_index;
+        bool valid = true;
+        const REAL rng_sample = RNG_KERNEL.at(INDEX, 0, &valid);
+        NESO_KERNEL_ASSERT((1.0 <= rng_sample) && (rng_sample <= 2.0), k_ep);
+        NESO_KERNEL_ASSERT(valid, k_ep);
+      },
+      Access::read(ParticlePairLoopIndex{}),
+      Access::A(Access::read(Sym<INT>("DSMC_CELL"))),
+      Access::B(Access::read(Sym<INT>("DSMC_CELL"))),
+      Access::read(rng_block_kernel));
+
+  auto pl1 = particle_pair_loop(
+      ntc_abs_pair_lists,
+      [=](auto NN_i, auto NN_j) {
+        NN_i.at(0)++;
+        NN_j.at(0)++;
+      },
+      Access::A(Access::write(Sym<INT>("NEIGHBOURS"))),
+      Access::B(Access::write(Sym<INT>("NEIGHBOURS"))));
+
+  auto permute_loop = particle_loop(
+      A,
+      [=](auto INDEX, auto DSMC_CELL, auto KERNEL_RNG) {
+        bool valid = true;
+        const int offset = (KERNEL_RNG.at(INDEX, 0, &valid) * nbins);
+        const int new_dsmc_cell = (DSMC_CELL.at(0) + offset) % nbins;
+        DSMC_CELL.at(0) = new_dsmc_cell;
+      },
+      Access::read(ParticleLoopIndex{}), Access::write(Sym<INT>("DSMC_CELL")),
+      Access::read(rng_block_kernel));
+
+  for (int stepx = 0; stepx < nsteps; stepx++) {
+    reset_loop->execute();
+
+    int total_num_pairs = 0;
+    for (int binx = 0; binx < nbins; binx++) {
+      auto groupx = sub_groups.at(binx);
+      for (int cellx = 0; cellx < cell_count; cellx++) {
+        const int npart_cell = groupx->get_npart_cell(cellx);
+        const int npairs_cell = npart_cell > 1 ? npairs : 0;
+        num_pairs.at(cellx) = npairs_cell;
+        total_num_pairs += npairs_cell;
+      }
+      ntc_pair_lists.at(binx)->sample(groupx, groupx, num_pairs);
+    }
+    for (int binx = 0; binx < nbins; binx++) {
+      ASSERT_TRUE(ntc_pair_lists.at(binx)->validate_pair_list(sycl_target));
+    }
+
+    d_test_linear_index->set(h_test_linear_index);
+    pl0->execute();
+    ASSERT_FALSE(ep.get_flag());
+
+    auto h_test_linear_index2 = d_test_linear_index->get();
+    for (int ix = 0; ix < total_num_pairs; ix++) {
+      ASSERT_EQ(h_test_linear_index2.at(ix), ix);
+    }
+
+    ASSERT_EQ(total_num_pairs, rng_function_kernel->get_last_sample_size());
+
+    pl1->execute();
+
+    std::map<std::pair<int, int>, int> h_nn;
+
+    for (int binx = 0; binx < nbins; binx++) {
+      auto h_pair_list =
+          ntc_pair_lists.at(binx)->get_host_pair_list(sycl_target);
+      for (int cellx = 0; cellx < cell_count; cellx++) {
+        auto &pair_i = std::get<0>(h_pair_list.at(cellx));
+        auto &pair_j = std::get<1>(h_pair_list.at(cellx));
+        const int tmp_num_pairs = static_cast<int>(pair_i.size());
+        for (int px = 0; px < tmp_num_pairs; px++) {
+          const int ix = pair_i.at(px);
+          const int jx = pair_j.at(px);
+          h_nn[{cellx, ix}]++;
+          h_nn[{cellx, jx}]++;
+        }
+      }
+    }
+
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      auto NN = A->get_cell(Sym<INT>("NEIGHBOURS"), cellx);
+      const int nrow = NN->nrow;
+      for (int rowx = 0; rowx < nrow; rowx++) {
+        const int nn_to_test = NN->at(rowx, 0);
+        const int nn_correct = h_nn[{cellx, rowx}];
+        ASSERT_EQ(nn_correct, nn_to_test);
+      }
+    }
+
+    permute_loop->execute();
+  }
+
+  sycl_target->free();
+  A->domain->mesh->free();
+}
