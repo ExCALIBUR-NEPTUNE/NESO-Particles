@@ -111,6 +111,9 @@ public:
          [[maybe_unused]] const std::optional<int> cell_end =
              std::nullopt) override {
 
+    this->profile_region = this->sycl_target->profile_map.start_region(
+        "ParticlePairLoopCellwisePairListBlock", this->name);
+
     INT pair_list_counts_es = 0;
     int block_size = 0;
     int max_wave_count = 0;
