@@ -480,3 +480,94 @@ TEST(ParticlePairLoopBlock, multiple_lists) {
   sycl_target->free();
   A->domain->mesh->free();
 }
+
+TEST(ParticlePairLoopBlock, wave_analysis) {
+
+  {
+    std::vector<int> test_occupancy(33);
+    std::fill(test_occupancy.begin(), test_occupancy.end(), 0);
+    ASSERT_EQ(get_mean_wave_occupancy(test_occupancy), 0.0);
+    test_occupancy.at(32) = 1;
+    ASSERT_NEAR(get_mean_wave_occupancy(test_occupancy), 1.0, 1.0e-12);
+    test_occupancy.at(32) = 2;
+    ASSERT_NEAR(get_mean_wave_occupancy(test_occupancy), 1.0, 1.0e-12);
+    test_occupancy.at(0) = 1;
+    test_occupancy.at(32) = 0;
+    ASSERT_NEAR(get_mean_wave_occupancy(test_occupancy), 0.0, 1.0e-12);
+    test_occupancy.at(0) = 1;
+    test_occupancy.at(16) = 1;
+    ASSERT_NEAR(get_mean_wave_occupancy(test_occupancy), 0.25, 1.0e-12);
+  }
+
+  const int max_num_pairs_to_sample = 1001;
+  int npart_cell = 1000;
+  const int ndim = 2;
+  const int nx = 32;
+  const int ny = 16;
+  const int nz = 48;
+
+  auto [A, sycl_target_t, cell_count] =
+      particle_loop_create_common(npart_cell, ndim, nx, ny, nz);
+  auto sycl_target = sycl_target_t;
+
+  auto aa = particle_sub_group(A, [=]() { return true; });
+  const int rank = sycl_target->comm_pair.rank_parent;
+
+  std::mt19937 rng(34234 + rank);
+  std::uniform_real_distribution<REAL> dist{
+      std::uniform_real_distribution<REAL>(0.0, 1.0)};
+  auto lambda_sampler = [&]() -> REAL { return dist(rng); };
+
+  auto rng_function =
+      std::make_shared<HostRNGGenerationFunction<REAL>>(lambda_sampler);
+
+  auto pair_sampler_ntc = std::make_shared<DSMC::PairSamplerNTC>(
+      sycl_target, cell_count, rng_function);
+
+  std::vector<int> num_pairs(cell_count);
+  std::fill(num_pairs.begin(), num_pairs.end(), max_num_pairs_to_sample);
+
+  pair_sampler_ntc->sample(aa, aa, num_pairs);
+
+  auto d_pair_list = pair_sampler_ntc->get_pair_list();
+  auto h_pair_list = pair_sampler_ntc->get_host_pair_list(sycl_target);
+
+  ASSERT_TRUE(pair_sampler_ntc->validate_pair_list(sycl_target));
+
+  std::vector<int> wave_occupancies;
+  pair_sampler_ntc->get_wave_occupancy_counts(sycl_target, wave_occupancies);
+
+  ASSERT_EQ(static_cast<std::size_t>(d_pair_list.block_size + 1),
+            wave_occupancies.size());
+
+  int num_entries = 0;
+  for (int ix = 0; ix < (d_pair_list.block_size + 1); ix++) {
+    num_entries += ix * wave_occupancies.at(ix);
+  }
+
+  ASSERT_EQ(d_pair_list.pair_count, max_num_pairs_to_sample * cell_count);
+  ASSERT_EQ(num_entries, d_pair_list.pair_count);
+
+  const REAL mean_occupancy = get_mean_wave_occupancy(wave_occupancies);
+  ASSERT_TRUE(0.0 <= mean_occupancy);
+  ASSERT_TRUE(mean_occupancy <= 1.0);
+
+  std::vector<int> global_wave_occupancies;
+  get_global_wave_occupancy_counts(sycl_target, wave_occupancies,
+                                   global_wave_occupancies);
+
+  for (int ix = 0; ix < (d_pair_list.block_size + 1); ix++) {
+    const int local_count = wave_occupancies.at(ix);
+    int global_count = 0;
+
+    MPICHK(MPI_Reduce(&local_count, &global_count, 1, MPI_INT, MPI_SUM, 0,
+                      sycl_target->comm_pair.comm_parent));
+
+    if (sycl_target->comm_pair.rank_parent == 0) {
+      ASSERT_EQ(global_count, global_wave_occupancies.at(ix));
+    }
+  }
+
+  sycl_target->free();
+  A->domain->mesh->free();
+}

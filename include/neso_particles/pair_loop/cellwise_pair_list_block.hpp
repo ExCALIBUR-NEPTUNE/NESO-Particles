@@ -54,17 +54,60 @@ struct CellwisePairListBlockDevice {
   }
 };
 
+/**
+ * Abstract interface class for classes which generate
+ * CellwisePairListBlockDevice based pair loops.
+ */
 struct CellwisePairListBlockInterface {
   virtual ~CellwisePairListBlockInterface() = default;
 
+  /**
+   * @returns The device copyable representation of the pair list.
+   */
   virtual CellwisePairListBlockDevice get_pair_list() = 0;
 
+  /**
+   *
+   * @param sycl_target Compute target for the pair list.
+   * @returns Host representation of the pair list.
+   */
   std::map<int,
            std::tuple<std::vector<int>, std::vector<int>, std::vector<int>>>
   get_host_pair_list(SYCLTargetSharedPtr sycl_target);
 
+  /**
+   * @param sycl_target Compute target for the pair list.
+   * @returns True if no conflicts were detected or the pair list was otherwise
+   * malformed.
+   */
   bool validate_pair_list(SYCLTargetSharedPtr sycl_target);
+
+  /**
+   * @param[in] sycl_target Compute target for the pair list.
+   * @param[in, out] occupancy_counts Vector of size block_size + 1. The entry
+   * at index i denotes the number of blocks that execute i pairs.
+   */
+  void get_wave_occupancy_counts(SYCLTargetSharedPtr sycl_target,
+                                 std::vector<int> &occupancy_counts);
 };
+
+/**
+ * @param occupancy_counts Vector of occupancies of size block_size + 1. See
+ * get_wave_occupancy_counts.
+ * @returns Average proportion of wave which is active.
+ */
+REAL get_mean_wave_occupancy(std::vector<int> &occupancy_counts);
+
+/**
+ * Reduce wave occupancy counts onto rank zero.
+ *
+ * @param[in] SYCLTargetSharedPtr Compute target to reduce over.
+ * @param[in] local_occupancy_counts Local contributions to occupancy counts.
+ * @param[in, out] global_occupancy_counts Global occupancy counts.
+ */
+void get_global_wave_occupancy_counts(
+    SYCLTargetSharedPtr sycl_target, std::vector<int> &local_occupancy_counts,
+    std::vector<int> &global_occupancy_counts);
 
 using CellwisePairListBlockInterfaceSharedPtr =
     std::shared_ptr<CellwisePairListBlockInterface>;

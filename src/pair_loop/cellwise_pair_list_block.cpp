@@ -80,6 +80,11 @@ bool CellwisePairListBlockInterface::validate_pair_list(
 
   int *k_pair_count = d_pair_count.ptr;
 
+  if (max_wave_count > block_size) {
+    nprint("bad max wave count:", max_wave_count, block_size);
+    return false;
+  }
+
   sycl_target->queue
       .submit([&](sycl::handler &cgh) {
         sycl::local_accessor<int, 1> la_i(sycl::range<1>(block_size), cgh);
@@ -181,6 +186,147 @@ bool CellwisePairListBlockInterface::validate_pair_list(
   }
 
   return true;
+}
+
+void CellwisePairListBlockInterface::get_wave_occupancy_counts(
+    SYCLTargetSharedPtr sycl_target, std::vector<int> &occupancy_counts) {
+
+  auto d_pair_list = this->get_pair_list();
+  const int pair_count = d_pair_list.pair_count;
+  const int cell_count = d_pair_list.cell_count;
+  const int max_wave_count = d_pair_list.max_wave_count;
+  const auto block_size = d_pair_list.block_size;
+
+  occupancy_counts.resize(block_size + 1);
+  std::fill(occupancy_counts.begin(), occupancy_counts.end(), 0);
+
+  auto d_occupancy_counts =
+      get_resource<BufferDevice<int>, ResourceStackInterfaceBufferDevice<int>>(
+          sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<int>{},
+          sycl_target);
+  d_occupancy_counts->realloc_no_copy(block_size + 1);
+  int *k_occupancy_counts = d_occupancy_counts->ptr;
+
+  sycl_target->queue
+      .memcpy(k_occupancy_counts, occupancy_counts.data(),
+              (block_size + 1) * sizeof(int))
+      .wait_and_throw();
+
+  auto e1 = sycl_target->queue.submit([&](sycl::handler &cgh) {
+    sycl::local_accessor<int, 1> la_occupancy_counts(
+        sycl::range<1>(block_size + 1), cgh);
+    sycl::local_accessor<int, 1> la_waves(sycl::range<1>(block_size), cgh);
+
+    cgh.parallel_for(
+        sycl_target->device_limits.validate_nd_range(
+            sycl::nd_range<2>(sycl::range<2>(cell_count, block_size),
+                              sycl::range<2>(1, block_size))),
+        [=](sycl::nd_item<2> idx) {
+          const int index_cell = idx.get_global_id(0);
+          const int index_local = idx.get_global_id(1);
+          la_occupancy_counts[index_local] = 0;
+          if (index_local == (block_size - 1)) {
+            la_occupancy_counts[block_size] = 0;
+          }
+          idx.barrier(sycl::access::fence_space::local_space);
+
+          const int num_pairs = d_pair_list.get_num_pairs(index_cell);
+          const int num_blocks = div_round_up(num_pairs, block_size);
+
+          int index_pair = index_local;
+          for (int index_block = 0; index_block < num_blocks; index_block++) {
+            int wave = -1;
+            if (index_pair < num_pairs) {
+              wave = d_pair_list.get_pair_wave(index_cell, index_pair);
+            }
+            la_waves[index_local] = wave;
+
+            idx.barrier(sycl::access::fence_space::local_space);
+            int wave_count = 0;
+            for (int ix = 0; ix < block_size; ix++) {
+              if (la_waves[ix] == index_local) {
+                wave_count++;
+              }
+            }
+
+            sycl::atomic_ref<int, sycl::memory_order::relaxed,
+                             sycl::memory_scope::work_group>(
+                la_occupancy_counts[wave_count])
+                .fetch_add(1);
+
+            idx.barrier(sycl::access::fence_space::local_space);
+            index_pair += block_size;
+          }
+
+          atomic_fetch_add(k_occupancy_counts + index_local,
+                           la_occupancy_counts[index_local]);
+          if (index_local == (block_size - 1)) {
+            atomic_fetch_add(k_occupancy_counts + block_size,
+                             la_occupancy_counts[block_size]);
+          }
+        });
+  });
+
+  // N.B. this call passes e1 hence we don't explicitly wait on e1 here.
+  sycl_target->queue
+      .memcpy(occupancy_counts.data(), k_occupancy_counts,
+              (block_size + 1) * sizeof(int), e1)
+      .wait_and_throw();
+
+  restore_resource(sycl_target->resource_stack_map,
+                   ResourceStackKeyBufferDevice<int>{}, d_occupancy_counts);
+}
+
+REAL get_mean_wave_occupancy(std::vector<int> &occupancy_counts) {
+
+  const int block_size = static_cast<int>(occupancy_counts.size()) - 1;
+  REAL occupancy_unscaled = 0.0;
+
+  int num_blocks = 0.0;
+  for (int wave_size = 0; wave_size < (block_size + 1); wave_size++) {
+    occupancy_unscaled += wave_size * occupancy_counts[wave_size];
+    num_blocks += occupancy_counts[wave_size];
+  }
+
+  if (num_blocks == 0) {
+    return 0.0;
+  } else {
+    const REAL occupancy =
+        occupancy_unscaled / static_cast<REAL>(block_size * num_blocks);
+    return occupancy;
+  }
+}
+
+void get_global_wave_occupancy_counts(
+    SYCLTargetSharedPtr sycl_target, std::vector<int> &local_occupancy_counts,
+    std::vector<int> &global_occupancy_counts) {
+
+  MPI_Comm comm = sycl_target->comm_pair.comm_parent;
+
+  const int num_values_in = static_cast<int>(local_occupancy_counts.size());
+  int num_values = num_values_in;
+
+  MPICHK(MPI_Bcast(&num_values, 1, MPI_INT, 0, comm));
+  NESOASSERT(num_values == num_values_in,
+             "Missmatch in input size across ranks.");
+
+  const int rank = sycl_target->comm_pair.rank_parent;
+  if (rank && (!global_occupancy_counts.size())) {
+    global_occupancy_counts.resize(1);
+  } else {
+    global_occupancy_counts.resize(num_values);
+  }
+
+  MPICHK(MPI_Reduce(local_occupancy_counts.data(),
+                    global_occupancy_counts.data(), num_values, MPI_INT,
+                    MPI_SUM, 0, comm));
+
+  // We do this resize after the MPI call as some MPI implementations
+  // complain if they are passed nullptrs (even if they have no reason to
+  // dereference them).
+  if (rank) {
+    global_occupancy_counts.resize(0);
+  }
 }
 
 } // namespace NESO::Particles
