@@ -82,9 +82,9 @@ bool CellwisePairListBlockInterface::validate_pair_list(
 
   sycl_target->queue
       .submit([&](sycl::handler &cgh) {
-        sycl::local_accessor<int, 1> la_i(sycl::range(block_size), cgh);
-        sycl::local_accessor<int, 1> la_j(sycl::range(block_size), cgh);
-        sycl::local_accessor<int, 1> la_w(sycl::range(block_size), cgh);
+        sycl::local_accessor<int, 1> la_i(sycl::range<1>(block_size), cgh);
+        sycl::local_accessor<int, 1> la_j(sycl::range<1>(block_size), cgh);
+        sycl::local_accessor<int, 1> la_w(sycl::range<1>(block_size), cgh);
 
         cgh.parallel_for(
             sycl_target->device_limits.validate_nd_range(sycl::nd_range<1>(

@@ -127,6 +127,7 @@ void PairSamplerNTC::sample(ParticleSubGroupSharedPtr sub_group_a,
              "memory. Please raise an issue if this is actually a problem.");
 
   const auto k_cell_count = this->cell_count;
+  const auto k_block_size = this->block_size;
 
   if (this->sycl_target->device.is_cpu()) {
 
@@ -135,8 +136,8 @@ void PairSamplerNTC::sample(ParticleSubGroupSharedPtr sub_group_a,
 
     this->sycl_target->queue
         .submit([&](sycl::handler &cgh) {
-          sycl::local_accessor<int, 1> la_counts(sycl::range(1), cgh);
-          sycl::local_accessor<int, 1> la_flags(sycl::range(max_npart_cell),
+          sycl::local_accessor<int, 1> la_counts(sycl::range<1>(1), cgh);
+          sycl::local_accessor<int, 1> la_flags(sycl::range<1>(max_npart_cell),
                                                 cgh);
 
           cgh.parallel_for(nd_iteration_set, [=](sycl::nd_item<1> idx) {
@@ -157,11 +158,11 @@ void PairSamplerNTC::sample(ParticleSubGroupSharedPtr sub_group_a,
               la_flags[ix] = 0;
             }
 
-            const int num_blocks = div_round_up(npairs, block_size);
+            const int num_blocks = div_round_up(npairs, k_block_size);
 
             for (int block_index = 0; block_index < num_blocks; block_index++) {
-              const int px_start = block_index * block_size;
-              const int px_end = sycl::min(px_start + block_size, npairs);
+              const int px_start = block_index * k_block_size;
+              const int px_end = sycl::min(px_start + k_block_size, npairs);
               for (int px = px_start; px < px_end; px++) {
                 const int ox = offset_cell + px;
 
@@ -212,8 +213,8 @@ void PairSamplerNTC::sample(ParticleSubGroupSharedPtr sub_group_a,
 
     this->sycl_target->queue
         .submit([&](sycl::handler &cgh) {
-          sycl::local_accessor<int, 1> la_counts(sycl::range(1), cgh);
-          sycl::local_accessor<int, 1> la_flags(sycl::range(max_npart_cell),
+          sycl::local_accessor<int, 1> la_counts(sycl::range<1>(1), cgh);
+          sycl::local_accessor<int, 1> la_flags(sycl::range<1>(max_npart_cell),
                                                 cgh);
 
           cgh.parallel_for(nd_iteration_set, [=](sycl::nd_item<2> idx) {
