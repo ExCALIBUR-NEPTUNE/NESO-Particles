@@ -67,7 +67,6 @@ struct CellwisePairListBlockInterface {
   virtual CellwisePairListBlockDevice get_pair_list() = 0;
 
   /**
-   *
    * @param sycl_target Compute target for the pair list.
    * @returns Host representation of the pair list.
    */

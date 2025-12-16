@@ -96,6 +96,7 @@ bool CellwisePairListBlockInterface::validate_pair_list(
                 sycl::range<1>(cell_count), sycl::range<1>(1))),
             [=](sycl::nd_item<1> idx) {
               const int index_cell = idx.get_global_id(0);
+
               const int num_pairs = d_pair_list.get_num_pairs(index_cell);
 
               for (int ix = 0; ix < block_size; ix++) {
@@ -121,6 +122,10 @@ bool CellwisePairListBlockInterface::validate_pair_list(
               const int num_blocks = div_round_up(num_pairs, block_size);
               int pair_index_offset = 0;
               for (int block = 0; block < num_blocks; block++) {
+                const int num_waves =
+                    d_pair_list.get_num_waves(index_cell, block);
+
+                int max_seen_wave = 0;
 
                 for (int index_local = 0; index_local < block_size;
                      index_local++) {
@@ -143,12 +148,16 @@ bool CellwisePairListBlockInterface::validate_pair_list(
                   if (required) {
                     NESO_KERNEL_ASSERT((0 <= wave) && (wave < max_wave_count),
                                        k_ep);
+                    NESO_KERNEL_ASSERT((0 <= wave) && (wave < num_waves), k_ep);
+                    max_seen_wave = sycl::max(wave, max_seen_wave);
                   }
 
                   la_i[index_local] = i;
                   la_j[index_local] = j;
                   la_w[index_local] = wave;
                 }
+
+                NESO_KERNEL_ASSERT(max_seen_wave + 1 == num_waves, k_ep);
 
                 for (int ix = 0; ix < block_size; ix++) {
                   const int i0 = la_i[ix];
@@ -241,6 +250,9 @@ void CellwisePairListBlockInterface::get_wave_occupancy_counts(
             }
             la_waves[index_local] = wave;
 
+            const int num_waves =
+                d_pair_list.get_num_waves(index_cell, index_block);
+
             idx.barrier(sycl::access::fence_space::local_space);
             int wave_count = 0;
             for (int ix = 0; ix < block_size; ix++) {
@@ -249,10 +261,15 @@ void CellwisePairListBlockInterface::get_wave_occupancy_counts(
               }
             }
 
-            sycl::atomic_ref<int, sycl::memory_order::relaxed,
-                             sycl::memory_scope::work_group>(
-                la_occupancy_counts[wave_count])
-                .fetch_add(1);
+            // If the wave index is less than the number of waves in the block
+            // then an empty wave does contribute to the dispatch count and
+            // affect the occupancy.
+            if ((index_local < num_waves)) {
+              sycl::atomic_ref<int, sycl::memory_order::relaxed,
+                               sycl::memory_scope::work_group>(
+                  la_occupancy_counts[wave_count])
+                  .fetch_add(1);
+            }
 
             idx.barrier(sycl::access::fence_space::local_space);
             index_pair += block_size;

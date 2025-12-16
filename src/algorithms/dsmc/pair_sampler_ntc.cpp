@@ -163,6 +163,7 @@ void PairSamplerNTC::sample(ParticleSubGroupSharedPtr sub_group_a,
             for (int block_index = 0; block_index < num_blocks; block_index++) {
               const int px_start = block_index * k_block_size;
               const int px_end = sycl::min(px_start + k_block_size, npairs);
+              int inner_max_wave_count = 0;
               for (int px = px_start; px < px_end; px++) {
                 const int ox = offset_cell + px;
 
@@ -188,7 +189,12 @@ void PairSamplerNTC::sample(ParticleSubGroupSharedPtr sub_group_a,
                 k_pair_list[k_pair_count * 1 + ox] = j3;
                 k_pair_list[k_pair_count * 2 + ox] = wave;
                 max_wave_count = sycl::max(wave + 1, max_wave_count);
+                inner_max_wave_count =
+                    sycl::max(wave + 1, inner_max_wave_count);
               }
+
+              k_wave_counts[block_index * k_cell_count + cell] =
+                  inner_max_wave_count;
 
               for (int px = px_start; px < px_end; px++) {
 
@@ -247,8 +253,8 @@ void PairSamplerNTC::sample(ParticleSubGroupSharedPtr sub_group_a,
 
               int i3 = -1;
               int j3 = -1;
-              int wave = -1000000000;
-              int order = 0;
+              int wave = -1;
+              int order = -1;
               const int ox = offset_cell + num_sampled_pairs + local_id;
 
               if ((num_sampled_pairs + local_id) < npairs) {
@@ -294,9 +300,14 @@ void PairSamplerNTC::sample(ParticleSubGroupSharedPtr sub_group_a,
               // resolve dependencies within the block of pairs
               idx.barrier(sycl::access::fence_space::local_space);
               const int num_steps_ordering = la_counts[0];
+              idx.barrier(sycl::access::fence_space::local_space);
+              if (local_id == 0) {
+                la_counts[0] = 0;
+              }
 
               if (num_steps_ordering) {
 
+                // Reset all of the next waves for conflicting pairs to zero.
                 for (int orderx = 0; orderx < num_steps_ordering; orderx++) {
                   if ((orderx + 1) == order) {
                     la_flags[i3] = 0;
@@ -306,6 +317,8 @@ void PairSamplerNTC::sample(ParticleSubGroupSharedPtr sub_group_a,
                 }
                 idx.barrier(sycl::access::fence_space::local_space);
 
+                // For all the particles which are involved in wave 0 set the
+                // next wave to 1.
                 if (wave > -1) {
                   la_flags[i3] = 1;
                   la_flags[j3] = 1;
@@ -318,8 +331,10 @@ void PairSamplerNTC::sample(ParticleSubGroupSharedPtr sub_group_a,
                   // should enter this conditional per iteration.
                   if ((orderx + 1) == order) {
                     wave = sycl::max(la_flags[i3], la_flags[j3]);
+                    // Set the next wave for these particles
                     la_flags[i3] = wave + 1;
                     la_flags[j3] = wave + 1;
+                    // la_counts[0] always holds the max wave exactly (not +1).
                     la_counts[0] = sycl::max(wave, la_counts[0]);
                   }
 
@@ -328,7 +343,8 @@ void PairSamplerNTC::sample(ParticleSubGroupSharedPtr sub_group_a,
 
                 idx.barrier(sycl::access::fence_space::local_space);
               }
-              if (wave >= 0) {
+
+              if (wave > -1) {
                 k_pair_list[ox] = i3;
                 k_pair_list[k_pair_count * 1 + ox] = j3;
                 k_pair_list[k_pair_count * 2 + ox] = wave;
@@ -340,7 +356,7 @@ void PairSamplerNTC::sample(ParticleSubGroupSharedPtr sub_group_a,
                     la_counts[0] + 1;
                 la_counts[0] = 0;
               }
-              if (i3 > -1) {
+              if (wave > -1) {
                 la_flags[i3] = 0;
                 la_flags[j3] = 0;
               }

@@ -2,7 +2,7 @@
 
 TEST(ParticlePairLoopBlock, base) {
 
-  int npart_cell = 10;
+  int npart_cell = 127;
   const int ndim = 2;
   const int nx = 16;
   const int ny = 33;
@@ -146,7 +146,7 @@ TEST(ParticlePairLoopBlock, base) {
 
 TEST(ParticlePairLoopBlock, kernel_rng_base) {
 
-  int npart_cell = 10;
+  int npart_cell = 255;
   const int ndim = 2;
   const int nx = 16;
   const int ny = 33;
@@ -303,7 +303,7 @@ TEST(ParticlePairLoopBlock, kernel_rng_base) {
 
 TEST(ParticlePairLoopBlock, multiple_lists) {
 
-  int npart_cell = 100;
+  int npart_cell = 129;
   const int ndim = 2;
   const int nx = 16;
   const int ny = 33;
@@ -536,6 +536,9 @@ TEST(ParticlePairLoopBlock, wave_analysis) {
 
   std::vector<int> wave_occupancies;
   pair_sampler_ntc->get_wave_occupancy_counts(sycl_target, wave_occupancies);
+
+  // The NTC samplers should never emit empty waves
+  ASSERT_EQ(wave_occupancies.at(0), 0);
 
   ASSERT_EQ(static_cast<std::size_t>(d_pair_list.block_size + 1),
             wave_occupancies.size());
