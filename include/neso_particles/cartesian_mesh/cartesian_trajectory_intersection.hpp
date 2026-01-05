@@ -125,7 +125,9 @@ public:
                               ResourceStackInterfaceBufferDevice<INT>>(
         sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<INT>{},
         sycl_target);
-    d_lut->realloc_no_copy(particle_group->get_npart_local());
+
+    const auto npart_local = particle_group->get_npart_local();
+    d_lut->realloc_no_copy(npart_local);
     auto k_lut = d_lut->ptr;
 
     const REAL k_tolerance = this->tolerance;
@@ -331,6 +333,51 @@ public:
         },
         Access::read(ParticleLoopIndex{}))
         ->execute();
+
+    if (ep.get_flag()) {
+
+      BufferDeviceHost<int> dh_cells(sycl_target, npart_leaving);
+      BufferDeviceHost<int> dh_layers(sycl_target, npart_leaving);
+
+      std::vector<int> one_zero = {0};
+      BufferDeviceHost<int> dh_index(sycl_target, one_zero);
+
+      auto *k_cells = dh_cells.d_buffer.ptr;
+      auto *k_layers = dh_layers.d_buffer.ptr;
+      auto *k_index = dh_index.d_buffer.ptr;
+
+      particle_loop(
+          departing_particles,
+          [=](auto INDEX) {
+            if (k_lut[INDEX.get_local_linear_index()] < 0) {
+              const int index = atomic_fetch_add(k_index, 1);
+              k_cells[index] = INDEX.cell;
+              k_layers[index] = INDEX.layer;
+            }
+          },
+          Access::read(ParticleLoopIndex{}))
+          ->execute();
+
+      dh_cells.device_to_host();
+      dh_layers.device_to_host();
+      dh_index.device_to_host();
+      const int npart_error = dh_index.h_buffer.get().at(0);
+
+      nprint("Start of particles for which boundary information could not be "
+             "found.");
+
+      auto particle_group = get_particle_group(departing_particles);
+      for (int px = 0; px < npart_error; px++) {
+        nprint("---------------------------------------------------");
+        const int cell = dh_cells.h_buffer.ptr[px];
+        const int layer = dh_layers.h_buffer.ptr[px];
+        particle_group->print_particle(cell, layer);
+      }
+
+      nprint("End of particles for which boundary information could not be "
+             "found.");
+    }
+
     ep.check_and_throw(
         "Failed to find boundary information for departing particle.");
 
