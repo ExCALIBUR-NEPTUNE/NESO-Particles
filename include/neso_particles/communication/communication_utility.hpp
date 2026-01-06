@@ -285,6 +285,11 @@ extern template std::set<int> set_reduce_union(std::set<int> &set_input,
                                                int root, MPI_Comm comm);
 
 /**
+ * MPI implementations complain if they are passed 
+ */
+
+
+/**
  * Reduce sets across all MPI ranks using the union operation. Must be called
  * collectively on the communicator.
  *

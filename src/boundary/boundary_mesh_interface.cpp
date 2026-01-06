@@ -41,7 +41,16 @@ INT BoundaryMeshInterface::get_total_num_exported_geoms() const {
   return static_cast<INT>(this->d_reverse_outgoing_pack_index->size);
 }
 
-void BoundaryMeshInterface::free() { MPICHK(MPI_Comm_free(&this->ncomm)); }
+void BoundaryMeshInterface::free() {
+  if (this->ncomm != MPI_COMM_NULL) {
+    MPICHK(MPI_Comm_free(&this->ncomm));
+    this->ncomm = MPI_COMM_NULL;
+  }
+  if (this->rncomm != MPI_COMM_NULL) {
+    MPICHK(MPI_Comm_free(&this->rncomm));
+    this->rncomm = MPI_COMM_NULL;
+  }
+}
 
 void BoundaryMeshInterface::extend_exchange_pattern(
     const std::vector<std::pair<int, INT>> &rank_geom_ids) {

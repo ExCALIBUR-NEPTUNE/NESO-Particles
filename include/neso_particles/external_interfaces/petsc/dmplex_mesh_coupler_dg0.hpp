@@ -46,7 +46,11 @@ struct DMPlexMeshCouplerDG0MapEntry {
 class DMPlexMeshCouplerDG0 {
 protected:
   /// Parent MPI communicator.
-  MPI_Comm comm;
+  MPI_Comm comm {MPI_COMM_NULL};
+  DM B_dmplex;
+
+  MPI_Comm comm_forward {MPI_COMM_NULL};
+  MPI_Comm comm_backward {MPI_COMM_NULL};
 
 public:
   /// Disable (implicit) copies.
