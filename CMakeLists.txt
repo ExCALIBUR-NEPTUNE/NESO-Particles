@@ -46,6 +46,7 @@ endif()
 set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set(SRC_FILES
     ${SRC_DIR}/algorithms/cellwise_methods.cpp
+    ${SRC_DIR}/algorithms/dsmc/pair_sampler_ntc.cpp
     ${SRC_DIR}/algorithms/particle_data_movement.cpp
     ${SRC_DIR}/algorithms/reduce_dat_cellwise.cpp
     ${SRC_DIR}/algorithms/unseen_value_extractor.cpp
@@ -98,6 +99,7 @@ set(SRC_FILES
     ${SRC_DIR}/packing_unpacking.cpp
     ${SRC_DIR}/pair_loop/cellwise_pair_list.cpp
     ${SRC_DIR}/pair_loop/cellwise_pair_list_host.cpp
+    ${SRC_DIR}/pair_loop/cellwise_pair_list_block.cpp
     ${SRC_DIR}/particle_dat.cpp
     ${SRC_DIR}/particle_group.cpp
     ${SRC_DIR}/particle_set.cpp
@@ -135,6 +137,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/algorithms.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/dsmc.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/cellwise_all_to_all.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/pair_sampler_ntc.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/cellwise_methods.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/particle_data_movement.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/reduce_dat_cellwise.hpp
@@ -254,12 +257,14 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/packing_unpacking.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/cellwise_pair_list.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/cellwise_pair_list_absolute.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/cellwise_pair_list_block.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/cellwise_pair_list_host.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/pair_loop.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/particle_pair_loop_args.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/particle_pair_loop_base.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/particle_pair_loop_index.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/particle_pair_loop_cellwise_pair_list.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/particle_pair_loop_cellwise_pair_list_block.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/parallel_initialisation.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/parameters.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_dat.hpp

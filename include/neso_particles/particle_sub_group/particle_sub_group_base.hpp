@@ -43,6 +43,7 @@ public:
 
   INT npart_local;
   bool is_whole_particle_group;
+  std::int64_t version{1};
 
   /**
    * Get the cells and layers of the particles in the sub group (slow)
@@ -192,6 +193,12 @@ public:
    * @returns The original ParticleGroup this ParticleSubGroup references.
    */
   ParticleGroupSharedPtr get_particle_group();
+
+  /**
+   * @returns The version of the ParticleSubGroup. The version will always be
+   * greater than or equal to one.
+   */
+  std::int64_t get_version() const;
 
   /**
    * @returns True if this ParticleSubGroup references the entirety of the
@@ -344,6 +351,7 @@ public:
 };
 
 typedef std::shared_ptr<ParticleSubGroup> ParticleSubGroupSharedPtr;
+typedef std::weak_ptr<ParticleSubGroup> ParticleSubGroupWeakPtr;
 
 } // namespace NESO::Particles
 

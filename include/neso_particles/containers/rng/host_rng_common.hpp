@@ -55,6 +55,17 @@ make_rng_generation_function(ARGS... args) {
  */
 template <typename T>
 struct HostRNGGenerationFunction : RNGGenerationFunction<T> {
+protected:
+  std::size_t last_sample_size{0};
+
+public:
+  /**
+   * @returns The number of samples in the last call to draw_random_samples.
+   */
+  inline std::size_t get_last_sample_size() const {
+    return this->last_sample_size;
+  }
+
   virtual ~HostRNGGenerationFunction() = default;
 
   /// The host callable that returns RNG samples.
@@ -80,6 +91,7 @@ struct HostRNGGenerationFunction : RNGGenerationFunction<T> {
                                           T *d_ptr,
                                           const std::size_t num_numbers,
                                           const int block_size) override {
+    this->last_sample_size = num_numbers;
     auto d_ptr_start = d_ptr;
 
     // Create the random number in blocks and copy to device blockwise.

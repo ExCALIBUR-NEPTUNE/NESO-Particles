@@ -224,6 +224,12 @@ template <typename T> inline T get_prev_power_of_two(const T N_work_items) {
   return N * M;
 }
 
+template <typename T>
+[[nodiscard]] inline T div_round_up(const T N, const T M) {
+  const T q0 = N / M;
+  return (q0 * M) < N ? q0 + 1 : q0;
+}
+
 template <typename U> inline void nprint_recurse(int flag, U next) {
   if (flag) {
     std::cout << " ";
