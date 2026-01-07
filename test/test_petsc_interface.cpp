@@ -605,4 +605,257 @@ TEST(PETSc, dmplex_volume) {
 
 INSTANTIATE_TEST_SUITE_P(init, PETSC_NDIM, testing::Values(2));
 
+TEST(PETSc, dmplex_helper) {
+
+  PETSCCHK(PetscInitializeNoArguments());
+  DM dm;
+
+  const PetscInt ndim = 2;
+  const int mesh_size = (ndim == 2) ? 31 : 17;
+  PetscInt faces[3] = {mesh_size, mesh_size, mesh_size};
+
+  PETSCCHK(NPPETScAPI::NP_DMPlexCreateBoxMesh(
+      PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces,
+      /* lower */ NULL,
+      /* upper */ NULL,
+      /* periodicity */ NULL, PETSC_TRUE, &dm));
+
+  PetscInterface::generic_distribute(&dm, MPI_COMM_WORLD, 1);
+
+  auto mesh =
+      std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
+
+  int cell_count = mesh->get_cell_count();
+  ASSERT_EQ(cell_count, mesh->dmh->get_cell_count());
+
+  int size = 0;
+  int rank = 0;
+  MPICHK(MPI_Comm_size(MPI_COMM_WORLD, &size));
+  MPICHK(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
+
+  if (size > 1) {
+
+    int tmp = -1;
+
+    MPICHK(
+        MPI_Allreduce(&cell_count, &tmp, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD));
+    ASSERT_EQ(mesh->dmh->get_global_cell_count(), tmp);
+
+    PetscInt depth = 0;
+    PETSCCHK(DMPlexGetDepth(dm, &depth));
+    ASSERT_EQ(depth, 2);
+
+    PetscInt gsize = 0;
+    PETSCCHK(DMPlexGetDepthStratumGlobalSize(dm, depth, &gsize));
+
+    ASSERT_EQ(static_cast<int>(gsize), tmp);
+  }
+  {
+    auto [offset, global_owners] =
+        PetscInterface::get_map_from_global_cell_points_to_ranks(dm);
+
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      const auto point_index = mesh->dmh->get_dmplex_cell_index(cellx);
+      const auto global_point_index =
+          mesh->dmh->get_point_global_index(point_index);
+      const int rank_test = global_owners.at(global_point_index - offset);
+      ASSERT_EQ(rank_test, rank);
+    }
+  }
+
+  mesh->free();
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
+
+TEST(PETSc, dmplex_mesh_coupler_dg0) {
+
+  PETSCCHK(PetscInitializeNoArguments());
+  DM dm;
+
+  int size = 0;
+  int rank = 0;
+  MPICHK(MPI_Comm_size(MPI_COMM_WORLD, &size));
+  MPICHK(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
+
+  const PetscInt ndim = 2;
+  const int mesh_size = (ndim == 2) ? 31 : 17;
+  PetscInt faces[3] = {mesh_size, mesh_size, mesh_size};
+
+  PETSCCHK(NPPETScAPI::NP_DMPlexCreateBoxMesh(
+      PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces,
+      /* lower */ NULL,
+      /* upper */ NULL,
+      /* periodicity */ NULL, PETSC_TRUE, &dm));
+
+  PetscInterface::generic_distribute(&dm, MPI_COMM_WORLD, 1);
+
+  PetscInterface::DMPlexHelper dmh(MPI_COMM_WORLD, dm);
+  const int cell_count_B = dmh.get_cell_count();
+  const int cell_count_A = rank + 1;
+
+  {
+
+    std::vector<std::vector<PetscInterface::DMPlexMeshCouplerDG0MapEntry>>
+        coupling_map(cell_count_A);
+
+    auto cmdg0 = std::make_shared<PetscInterface::DMPlexMeshCouplerDG0>(
+        dm, coupling_map);
+    ASSERT_EQ(cmdg0->cell_count_A, cell_count_A);
+
+    int indegree = -1;
+    int outdegree = -1;
+    int weighted = -1;
+    MPICHK(MPI_Dist_graph_neighbors_count(cmdg0->comm_forward, &indegree,
+                                          &outdegree, &weighted));
+    ASSERT_EQ(indegree, 0);
+    ASSERT_EQ(outdegree, 0);
+
+    MPICHK(MPI_Dist_graph_neighbors_count(cmdg0->comm_backward, &indegree,
+                                          &outdegree, &weighted));
+    ASSERT_EQ(indegree, 0);
+    ASSERT_EQ(outdegree, 0);
+  }
+
+  {
+    std::set<int> local_cell_indices;
+    for (PetscInt cellx = 0; cellx < cell_count_B; cellx++) {
+      const PetscInt cell_point_index = dmh.get_dmplex_cell_index(cellx);
+      const int cell_point_global_index =
+          dmh.get_point_global_index(cell_point_index);
+      local_cell_indices.insert(cell_point_global_index);
+    }
+
+    std::set<int> global_cell_indices_set =
+        set_all_reduce_union(local_cell_indices, MPI_COMM_WORLD);
+
+    ASSERT_EQ(static_cast<int>(global_cell_indices_set.size()),
+              dmh.get_global_cell_count());
+
+    std::vector<int> global_cell_indices;
+    global_cell_indices.reserve(global_cell_indices_set.size());
+    for_each(global_cell_indices_set.begin(), global_cell_indices_set.end(),
+             [&](auto ix) { global_cell_indices.push_back(ix); });
+
+    // deliberatly the same seed on all ranks
+    std::mt19937 rng(5234234);
+    std::uniform_int_distribution<int> dist_cells(
+        0, static_cast<int>(global_cell_indices.size() - 1));
+    std::uniform_int_distribution<int> dist_number(0, 4);
+    std::uniform_real_distribution<REAL> dist_weight(1.0, 2.0);
+
+    std::map<
+        int,
+        std::vector<std::vector<PetscInterface::DMPlexMeshCouplerDG0MapEntry>>>
+        map_rank_to_map;
+
+    for (int rankx = 0; rankx < size; rankx++) {
+
+      const int num_owned_cells = rankx + 1;
+      map_rank_to_map[rankx].resize(num_owned_cells);
+
+      for (int cellx = 0; cellx < num_owned_cells; cellx++) {
+        const int map_size = dist_number(rng);
+        std::set<int> tmp_cells_set;
+        for (int mx = 0; mx < map_size; mx++) {
+          int tmp_cell = 0;
+          do {
+            tmp_cell = dist_cells(rng);
+          } while (tmp_cells_set.count(tmp_cell));
+          tmp_cells_set.insert(tmp_cell);
+          map_rank_to_map.at(rankx).at(cellx).push_back(
+              {tmp_cell, dist_weight(rng), dist_weight(rng)});
+        }
+      }
+    }
+
+    // compute the outward edges and inward edges on this rank
+    std::set<int> edges_forwards;
+    std::set<int> edges_backwards;
+
+    auto [offset, global_owners] =
+        PetscInterface::get_map_from_global_cell_points_to_ranks(dm);
+
+    auto &maps = map_rank_to_map.at(rank);
+    for (int cellx = 0; cellx < cell_count_A; cellx++) {
+      for (auto &ex : maps.at(cellx)) {
+        const int cell_index = ex.cell_index;
+        const int owning_rank = global_owners.at(cell_index - offset);
+        edges_forwards.insert(owning_rank);
+      }
+    }
+
+    for (int rankx = 0; rankx < size; rankx++) {
+
+      for (auto cell_map : map_rank_to_map.at(rankx)) {
+        for (auto &ex : cell_map) {
+          const int cell_index = ex.cell_index;
+          const int owning_rank = global_owners.at(cell_index - offset);
+          if (rank == owning_rank) {
+            edges_backwards.insert(rankx);
+          }
+        }
+      }
+    }
+
+    auto cmdg0 = std::make_shared<PetscInterface::DMPlexMeshCouplerDG0>(
+        dm, map_rank_to_map.at(rank));
+
+    int indegree = -1;
+    int outdegree = -1;
+    int weighted = -1;
+    MPICHK(MPI_Dist_graph_neighbors_count(cmdg0->comm_forward, &indegree,
+                                          &outdegree, &weighted));
+    ASSERT_EQ(outdegree, static_cast<int>(edges_forwards.size()));
+    ASSERT_EQ(indegree, static_cast<int>(edges_backwards.size()));
+
+    std::vector<int> sources(indegree);
+    std::vector<int> destinations(outdegree);
+    std::vector<int> source_weights(indegree);
+    std::vector<int> destination_weights(outdegree);
+
+    SuppressMPINullPtrCheck snpc;
+    MPICHK(MPI_Dist_graph_neighbors(cmdg0->comm_forward, indegree,
+                                    snpc.get(sources), snpc.get(source_weights),
+                                    outdegree, snpc.get(destinations),
+                                    snpc.get(destination_weights)));
+
+    for (int rx = 0; rx < indegree; rx++) {
+      const int rankt = sources.at(rx);
+      ASSERT_EQ(edges_backwards.count(rankt), 1);
+    }
+    for (int rx = 0; rx < outdegree; rx++) {
+      const int rankt = destinations.at(rx);
+      ASSERT_EQ(edges_forwards.count(rankt), 1);
+    }
+
+    MPICHK(MPI_Dist_graph_neighbors_count(cmdg0->comm_backward, &indegree,
+                                          &outdegree, &weighted));
+    ASSERT_EQ(indegree, static_cast<int>(edges_forwards.size()));
+    ASSERT_EQ(outdegree, static_cast<int>(edges_backwards.size()));
+
+    sources.resize(indegree);
+    destinations.resize(outdegree);
+    source_weights.resize(indegree);
+    destination_weights.resize(outdegree);
+
+    MPICHK(MPI_Dist_graph_neighbors(cmdg0->comm_backward, indegree,
+                                    snpc.get(sources), snpc.get(source_weights),
+                                    outdegree, snpc.get(destinations),
+                                    snpc.get(destination_weights)));
+
+    for (int rx = 0; rx < indegree; rx++) {
+      const int rankt = sources.at(rx);
+      ASSERT_EQ(edges_forwards.count(rankt), 1);
+    }
+    for (int rx = 0; rx < outdegree; rx++) {
+      const int rankt = destinations.at(rx);
+      ASSERT_EQ(edges_backwards.count(rankt), 1);
+    }
+  }
+
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
+
 #endif

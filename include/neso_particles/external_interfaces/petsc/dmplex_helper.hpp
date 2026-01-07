@@ -180,6 +180,7 @@ protected:
   std::vector<PetscInt> map_np_to_petsc;
   std::map<PetscInt, PetscInt> map_petsc_to_np;
   double volume;
+  int ncells_global{-1};
 
   inline void check_valid_local_cell(const PetscInt cell) const {
     NESOASSERT((cell > -1) && (cell < this->ncells),
@@ -240,6 +241,11 @@ public:
    * @returns the number of cells.
    */
   int get_cell_count();
+
+  /**
+   * @returns the total number of cells. Collective on the communicator.
+   */
+  int get_global_cell_count();
 
   /**
    * Convert a local cell id into a DMPlex cell id.
@@ -402,6 +408,18 @@ std::tuple<std::shared_ptr<CellDatConst<int>>,
            std::shared_ptr<CellDatConst<REAL>>>
 get_cell_vertices_cdc(SYCLTargetSharedPtr sycl_target,
                       std::shared_ptr<DMPlexHelper> dmh);
+
+/**
+ * Get the map from global cell index to owning rank. Assumes that the N global
+ * cell indices live in [a, a+N) and returns a vector of MPI ranks and a. Must
+ * be called collectively on the communicator of the DMPlex.
+ *
+ * @param dm DMPlex to retrieve owning ranks for.
+ * @returns The offset a and the vector that holds the MPI rank that owns cell i
+ * + a in element i.
+ */
+std::pair<int, std::vector<int>>
+get_map_from_global_cell_points_to_ranks(DM dm);
 
 } // namespace NESO::Particles::PetscInterface
 

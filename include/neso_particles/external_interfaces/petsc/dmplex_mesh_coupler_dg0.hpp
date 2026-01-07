@@ -45,13 +45,6 @@ struct DMPlexMeshCouplerDG0MapEntry {
  */
 class DMPlexMeshCouplerDG0 {
 protected:
-  /// Parent MPI communicator.
-  MPI_Comm comm {MPI_COMM_NULL};
-  DM B_dmplex;
-
-  MPI_Comm comm_forward {MPI_COMM_NULL};
-  MPI_Comm comm_backward {MPI_COMM_NULL};
-
 public:
   /// Disable (implicit) copies.
   DMPlexMeshCouplerDG0(const DMPlexMeshCouplerDG0 &st) = delete;
@@ -60,13 +53,23 @@ public:
 
   ~DMPlexMeshCouplerDG0() = default;
 
+  // The DMPlex representing B.
+  DM dmplex_B;
+
+  // The number of local cells in A.
+  int cell_count_A{0};
+
+  // Dist graph comm for forward transfer.
+  MPI_Comm comm_forward{MPI_COMM_NULL};
+
+  // Dist graph comm for backward transfer.
+  MPI_Comm comm_backward{MPI_COMM_NULL};
+
   /**
    * Create a coupler with the provided forward and backward maps. This
    * constructor is collective on the communicator.
    *
-   * @param comm MPI communicator over which both meshes are distributed. A rank
-   * owns zero or more cells from A and B on this comm.
-   * @param B_dmplex DMPlex representation of mesh B.
+   * @param dmplex_B DMPlex representation of mesh B.
    * @param coupling_map Vector of entries which describe the non-zero adjacency
    * matrix weights for the forward and backward directions. The cell indices in
    * this map are global indices of PETSc DMPlex cells. This vector should have
@@ -74,7 +77,7 @@ public:
    * vector can be freed after construction of the instance.
    */
   DMPlexMeshCouplerDG0(
-      MPI_Comm comm, DM B_dmplex,
+      DM dmplex_B,
       std::vector<std::vector<DMPlexMeshCouplerDG0MapEntry>> &coupling_map);
 
   /**

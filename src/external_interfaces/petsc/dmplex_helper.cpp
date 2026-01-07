@@ -224,6 +224,18 @@ DMPlexHelper::DMPlexHelper(MPI_Comm comm, DM dm)
 
 int DMPlexHelper::get_cell_count() { return this->ncells; }
 
+int DMPlexHelper::get_global_cell_count() {
+
+  if (this->ncells_global < 0) {
+    int ncells_local = this->get_cell_count();
+    int tmp = -1;
+    MPICHK(MPI_Allreduce(&ncells_local, &tmp, 1, MPI_INT, MPI_SUM, this->comm));
+    this->ncells_global = tmp;
+  }
+
+  return this->ncells_global;
+}
+
 PetscInt DMPlexHelper::get_dmplex_cell_index(const PetscInt local_index) {
   this->check_valid_local_cell(local_index);
   const auto index = this->map_np_to_petsc.at(local_index);
@@ -623,6 +635,60 @@ get_cell_vertices_cdc(SYCLTargetSharedPtr sycl_target,
   }
 
   return d;
+}
+
+std::pair<int, std::vector<int>>
+get_map_from_global_cell_points_to_ranks(DM dm) {
+
+  MPI_Comm comm = MPI_COMM_NULL;
+  PETSCCHK(PetscObjectGetComm((PetscObject)dm, &comm));
+
+  DMPlexHelper dmh(comm, dm);
+  const int global_cell_count = dmh.get_global_cell_count();
+  const int cell_count = dmh.get_cell_count();
+
+  std::vector<int> cell_owners_local(global_cell_count);
+  std::fill(cell_owners_local.begin(), cell_owners_local.end(), -1);
+
+  int point_min = std::numeric_limits<int>::max();
+  int point_max = std::numeric_limits<int>::lowest();
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    // local point index of the cell
+    const PetscInt point_index = dmh.get_dmplex_cell_index(cellx);
+    const int global_point_index =
+        static_cast<int>(dmh.get_point_global_index(point_index));
+    point_min = std::min(point_min, global_point_index);
+    point_max = std::max(point_max, global_point_index);
+  }
+
+  int global_point_min = 0;
+  int global_point_max = 0;
+
+  MPICHK(
+      MPI_Allreduce(&point_min, &global_point_min, 1, MPI_INT, MPI_MIN, comm));
+  MPICHK(
+      MPI_Allreduce(&point_max, &global_point_max, 1, MPI_INT, MPI_MAX, comm));
+  NESOASSERT(global_point_max - global_point_min + 1 == global_cell_count,
+             "Error deducing petsc numbering");
+
+  int rank = 0;
+  MPICHK(MPI_Comm_rank(comm, &rank));
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    // local point index of the cell
+    const PetscInt point_index = dmh.get_dmplex_cell_index(cellx);
+    const int global_point_index =
+        static_cast<int>(dmh.get_point_global_index(point_index));
+    const int index = global_point_index - global_point_min;
+    cell_owners_local.at(index) = rank;
+  }
+
+  std::vector<int> cell_owners(global_cell_count);
+  MPICHK(MPI_Allreduce(cell_owners_local.data(), cell_owners.data(),
+                       global_cell_count, MPI_INT, MPI_MAX, comm));
+  cell_owners_local.clear();
+
+  return {global_point_min, cell_owners};
 }
 
 } // namespace NESO::Particles::PetscInterface
