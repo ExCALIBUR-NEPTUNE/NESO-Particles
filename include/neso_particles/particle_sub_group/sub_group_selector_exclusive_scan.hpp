@@ -63,7 +63,7 @@ protected:
 
   template <typename T> inline void create_loop_1(std::shared_ptr<T> parent) {
 
-    this->create_callback = [=](Selection *created_selection) {
+    this->create_callback = [parent,this](Selection *created_selection) {
       auto sycl_target = get_particle_group(parent)->sycl_target;
       // std::tuple<int *, int *, INT *, INT *>
       auto [h_npart_cell_ptr, d_npart_cell_ptr, h_npart_cell_es_ptr,
