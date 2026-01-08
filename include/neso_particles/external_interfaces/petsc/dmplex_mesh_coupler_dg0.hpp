@@ -75,6 +75,11 @@ public:
   MPI_Comm comm_backward{MPI_COMM_NULL};
   std::vector<int> sources_backward;
   std::vector<int> destinations_backward;
+  std::vector<MPI_Aint> send_disps_backward;
+  std::vector<MPI_Aint> recv_disps_backward;
+  std::vector<int> cells_backward_A;
+  std::vector<int> cells_backward_B;
+  std::vector<REAL> weights_backward_A;
 
   /**
    * Create a coupler with the provided forward and backward maps. This

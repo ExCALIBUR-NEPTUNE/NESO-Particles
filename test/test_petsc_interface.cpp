@@ -935,8 +935,6 @@ TEST(PETSc, dmplex_mesh_coupler_dg0) {
         index_A++;
       }
 
-      nprint_variable(cells_correct);
-
       const int num_cells = static_cast<int>(cells_correct.size());
       for (int ix = 0; ix < num_cells; ix++) {
         ASSERT_EQ(cells_correct.at(ix),
@@ -945,6 +943,66 @@ TEST(PETSc, dmplex_mesh_coupler_dg0) {
                   cmdg0->weights_forward_A.at(soffset + ix));
       }
       soffset += num_cells;
+    }
+
+    // backward sources are the ranks that hold B cells for our map
+    auto &m = map_rank_to_map.at(rank);
+    int rank_index = 0;
+    for (const int rankx : cmdg0->sources_backward) {
+      std::vector<int> cells_correct;
+      std::vector<REAL> weights_correct;
+
+      int index = 0;
+      for (auto &cell : m) {
+        for (auto &ex : cell) {
+          const int cell_index = ex.cell_index;
+          const int owning_rank = global_owners.at(cell_index - offset);
+          if (rankx == owning_rank) {
+            cells_correct.push_back(index);
+            weights_correct.push_back(ex.weight_backward);
+          }
+        }
+        index++;
+      }
+
+      const int num_cells = static_cast<int>(cells_correct.size());
+      const int offsets =
+          static_cast<int>(cmdg0->recv_disps_backward.at(rank_index));
+
+      for (int ix = 0; ix < num_cells; ix++) {
+        ASSERT_EQ(cmdg0->cells_backward_A.at(offsets + ix),
+                  cells_correct.at(ix));
+        ASSERT_EQ(cmdg0->weights_backward_A.at(offsets + ix),
+                  weights_correct.at(ix));
+      }
+
+      rank_index++;
+    }
+
+    rank_index = 0;
+    for (const int rankx : cmdg0->destinations_backward) {
+      auto &m = map_rank_to_map.at(rankx);
+      std::vector<int> cells_correct;
+      int index = 0;
+      for (auto &cell : m) {
+        for (auto &ex : cell) {
+          const int cell_index = ex.cell_index;
+          const int owning_rank = global_owners.at(cell_index - offset);
+          if (rank == owning_rank) {
+            cells_correct.push_back(cell_index);
+          }
+        }
+        index++;
+      }
+      const int num_cells = static_cast<int>(cells_correct.size());
+      const int offsets =
+          static_cast<int>(cmdg0->send_disps_backward.at(rank_index));
+
+      for (int ix = 0; ix < num_cells; ix++) {
+        ASSERT_EQ(cmdg0->cells_backward_B.at(offsets + ix),
+                  cells_correct.at(ix));
+      }
+      rank_index++;
     }
   }
 

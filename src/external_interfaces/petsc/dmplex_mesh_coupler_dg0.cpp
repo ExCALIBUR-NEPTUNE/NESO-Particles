@@ -30,6 +30,7 @@ DMPlexMeshCouplerDG0::DMPlexMeshCouplerDG0(
   std::map<int, std::vector<int>> map_remote_rank_to_cells_A;
   std::map<int, std::vector<int>> map_remote_rank_to_cells_B;
   std::map<int, std::vector<REAL>> map_remote_rank_to_forward_weights;
+  std::map<int, std::vector<REAL>> map_remote_rank_to_backward_weights;
   std::set<int> remote_ranks_set;
 
   int cell_index_A = 0;
@@ -44,6 +45,8 @@ DMPlexMeshCouplerDG0::DMPlexMeshCouplerDG0(
       map_remote_rank_to_cells_B[remote_rank].push_back(global_point_index);
       map_remote_rank_to_forward_weights[remote_rank].push_back(
           map_entry.weight_forward);
+      map_remote_rank_to_backward_weights[remote_rank].push_back(
+          map_entry.weight_backward);
     }
     cell_index_A++;
   }
@@ -185,6 +188,65 @@ DMPlexMeshCouplerDG0::DMPlexMeshCouplerDG0(
       snpc.get(recv_disps_forward_int), snpc.get(recv_types),
       this->comm_forward));
 
+  // Temporaries to be able to invert the maps from the forward direction to
+  // reverse direction.
+  std::map<int, int> map_rank_to_forward_index_source;
+  std::map<int, int> map_rank_to_forward_index_dest;
+  index = 0;
+  for (const int rankx : this->sources_forward) {
+    map_rank_to_forward_index_source[rankx] = index;
+    index++;
+  }
+  index = 0;
+  for (const int rankx : this->destinations_forward) {
+    map_rank_to_forward_index_dest[rankx] = index;
+    index++;
+  }
+
+  this->cells_backward_A.reserve(this->cells_forward_A.size());
+  this->weights_backward_A.reserve(this->weights_forward_A.size());
+
+  this->send_disps_backward.reserve(this->destinations_backward.size());
+  this->recv_disps_backward.reserve(this->sources_backward.size());
+
+  int offset = 0;
+  for (const int rankx : this->sources_backward) {
+    const int forward_edge_index = map_rank_to_forward_index_dest.at(rankx);
+    const int num_cells = send_counts.at(forward_edge_index);
+    const int forward_disp =
+        static_cast<int>(this->send_disps_forward.at(forward_edge_index));
+
+    this->cells_backward_A.insert(this->cells_backward_A.end(),
+                                  this->cells_forward_A.begin() + forward_disp,
+                                  this->cells_forward_A.begin() + forward_disp +
+                                      num_cells);
+
+    auto &wb = map_remote_rank_to_backward_weights.at(rankx);
+    NESOASSERT(static_cast<int>(wb.size()) == num_cells,
+               "Failure to map to correct weights.");
+    this->weights_backward_A.insert(this->weights_backward_A.end(), wb.begin(),
+                                    wb.end());
+    this->recv_disps_backward.push_back(offset);
+    offset += num_cells;
+  }
+
+  this->cells_backward_B.reserve(this->cells_forward_B.size());
+  offset = 0;
+  for (const int rankx : this->destinations_backward) {
+    const int forward_edge_index = map_rank_to_forward_index_source.at(rankx);
+    const int num_cells = recv_counts.at(forward_edge_index);
+
+    const int forward_disp =
+        static_cast<int>(this->recv_disps_forward.at(forward_edge_index));
+
+    this->cells_backward_B.insert(this->cells_backward_B.end(),
+                                  this->cells_forward_B.begin() + forward_disp,
+                                  this->cells_forward_B.begin() + forward_disp +
+                                      num_cells);
+    this->send_disps_backward.push_back(offset);
+    offset += num_cells;
+  }
+
   nprint_variable(this->sources_forward);
   nprint_variable(this->destinations_forward);
   nprint_variable(send_counts);
@@ -192,8 +254,12 @@ DMPlexMeshCouplerDG0::DMPlexMeshCouplerDG0(
   nprint_variable(this->send_disps_forward);
   nprint_variable(this->recv_disps_forward);
   nprint_variable(remote_cells);
-  nprint_variable(this->cells_forward_B);
   nprint_variable(this->cells_forward_A);
+  nprint_variable(this->cells_forward_B);
+  nprint_variable(this->cells_backward_A);
+  nprint_variable(this->cells_backward_B);
+
+  // TODO NEED TO CONVERT THE B CELL INDICES BACK TO LOCAL INDICES
 }
 
 void DMPlexMeshCouplerDG0::forward_transfer(std::vector<REAL> &dofs_A,
