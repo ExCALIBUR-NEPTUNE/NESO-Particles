@@ -230,11 +230,23 @@ template <typename T>
   return (q0 * M) < N ? q0 + 1 : q0;
 }
 
+template <typename T> inline void nprint_inner(T t) { std::cout << t; }
+
+template <typename T> inline void nprint_inner(std::vector<T> &t) {
+  std::cout << "{";
+  for (auto ix : t) {
+    nprint_inner(ix);
+    std::cout << " ";
+  }
+  std::cout << "}";
+}
+
 template <typename U> inline void nprint_recurse(int flag, U next) {
   if (flag) {
     std::cout << " ";
   }
-  std::cout << next << std::endl;
+  nprint_inner(next);
+  std::cout << std::endl;
 }
 
 template <typename U, typename... T>
@@ -242,7 +254,7 @@ inline void nprint_recurse(int flag, U next, T... args) {
   if (flag) {
     std::cout << " ";
   }
-  std::cout << next;
+  nprint_inner(next);
   nprint_recurse(++flag, args...);
 }
 

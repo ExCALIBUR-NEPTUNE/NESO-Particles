@@ -820,14 +820,21 @@ TEST(PETSc, dmplex_mesh_coupler_dg0) {
                                     outdegree, snpc.get(destinations),
                                     snpc.get(destination_weights)));
 
+    std::set<int> tmp_set;
     for (int rx = 0; rx < indegree; rx++) {
       const int rankt = sources.at(rx);
       ASSERT_EQ(edges_backwards.count(rankt), 1);
+      tmp_set.insert(rankt);
     }
+    ASSERT_EQ(tmp_set, edges_backwards);
+
+    tmp_set.clear();
     for (int rx = 0; rx < outdegree; rx++) {
       const int rankt = destinations.at(rx);
       ASSERT_EQ(edges_forwards.count(rankt), 1);
+      tmp_set.insert(rankt);
     }
+    ASSERT_EQ(tmp_set, edges_forwards);
 
     MPICHK(MPI_Dist_graph_neighbors_count(cmdg0->comm_backward, &indegree,
                                           &outdegree, &weighted));
@@ -843,14 +850,101 @@ TEST(PETSc, dmplex_mesh_coupler_dg0) {
                                     snpc.get(sources), snpc.get(source_weights),
                                     outdegree, snpc.get(destinations),
                                     snpc.get(destination_weights)));
-
+    tmp_set.clear();
     for (int rx = 0; rx < indegree; rx++) {
       const int rankt = sources.at(rx);
       ASSERT_EQ(edges_forwards.count(rankt), 1);
+      tmp_set.insert(rankt);
     }
+    ASSERT_EQ(tmp_set, edges_forwards);
+
+    tmp_set.clear();
     for (int rx = 0; rx < outdegree; rx++) {
       const int rankt = destinations.at(rx);
       ASSERT_EQ(edges_backwards.count(rankt), 1);
+      tmp_set.insert(rankt);
+    }
+    ASSERT_EQ(tmp_set, edges_backwards);
+
+    tmp_set.clear();
+    std::for_each(cmdg0->sources_forward.begin(), cmdg0->sources_forward.end(),
+                  [&](auto ix) { tmp_set.insert(ix); });
+    ASSERT_EQ(tmp_set, edges_backwards);
+    tmp_set.clear();
+    std::for_each(cmdg0->destinations_forward.begin(),
+                  cmdg0->destinations_forward.end(),
+                  [&](auto ix) { tmp_set.insert(ix); });
+    ASSERT_EQ(tmp_set, edges_forwards);
+
+    tmp_set.clear();
+    std::for_each(cmdg0->sources_backward.begin(),
+                  cmdg0->sources_backward.end(),
+                  [&](auto ix) { tmp_set.insert(ix); });
+    ASSERT_EQ(tmp_set, edges_forwards);
+    tmp_set.clear();
+    std::for_each(cmdg0->destinations_backward.begin(),
+                  cmdg0->destinations_backward.end(),
+                  [&](auto ix) { tmp_set.insert(ix); });
+    ASSERT_EQ(tmp_set, edges_backwards);
+
+    // ranks that will send to this ranka
+    int index = 0;
+    for (const int rankx : cmdg0->sources_forward) {
+      // the local copy of the map for that rank
+      auto &m = map_rank_to_map.at(rankx);
+
+      std::vector<int> cells_correct;
+
+      // loop over cells on the rank
+      for (auto &entries_outer : m) {
+        for (auto &ex : entries_outer) {
+          const int cell_index = ex.cell_index;
+          const int owning_rank = global_owners.at(cell_index - offset);
+          if (rank == owning_rank) {
+            cells_correct.push_back(cell_index);
+          }
+        }
+      }
+
+      const int soffset = static_cast<int>(cmdg0->recv_disps_forward.at(index));
+      const int num_cells = static_cast<int>(cells_correct.size());
+      for (int ix = 0; ix < num_cells; ix++) {
+        ASSERT_EQ(cells_correct.at(ix),
+                  cmdg0->cells_forward_B.at(soffset + ix));
+      }
+      index++;
+    }
+
+    int soffset = 0;
+    for (const int rankx : cmdg0->destinations_forward) {
+      auto &m = map_rank_to_map.at(rank);
+
+      std::vector<int> cells_correct;
+      std::vector<REAL> weights_correct;
+
+      int index_A = 0;
+      for (auto &entries_outer : m) {
+        for (auto &ex : entries_outer) {
+          const int cell_index = ex.cell_index;
+          const int owning_rank = global_owners.at(cell_index - offset);
+          if (rankx == owning_rank) {
+            cells_correct.push_back(index_A);
+            weights_correct.push_back(ex.weight_forward);
+          }
+        }
+        index_A++;
+      }
+
+      nprint_variable(cells_correct);
+
+      const int num_cells = static_cast<int>(cells_correct.size());
+      for (int ix = 0; ix < num_cells; ix++) {
+        ASSERT_EQ(cells_correct.at(ix),
+                  cmdg0->cells_forward_A.at(soffset + ix));
+        ASSERT_EQ(weights_correct.at(ix),
+                  cmdg0->weights_forward_A.at(soffset + ix));
+      }
+      soffset += num_cells;
     }
   }
 

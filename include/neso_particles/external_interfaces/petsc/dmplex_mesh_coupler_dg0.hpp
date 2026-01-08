@@ -61,9 +61,20 @@ public:
 
   // Dist graph comm for forward transfer.
   MPI_Comm comm_forward{MPI_COMM_NULL};
+  std::vector<int> sources_forward;
+  std::vector<int> destinations_forward;
+  std::vector<MPI_Aint> send_disps_forward;
+  std::vector<MPI_Aint> recv_disps_forward;
+  std::vector<MPI_Aint> send_disps_forward_real;
+  std::vector<MPI_Aint> recv_disps_forward_real;
+  std::vector<int> cells_forward_A;
+  std::vector<int> cells_forward_B;
+  std::vector<REAL> weights_forward_A;
 
   // Dist graph comm for backward transfer.
   MPI_Comm comm_backward{MPI_COMM_NULL};
+  std::vector<int> sources_backward;
+  std::vector<int> destinations_backward;
 
   /**
    * Create a coupler with the provided forward and backward maps. This
