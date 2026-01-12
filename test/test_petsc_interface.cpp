@@ -707,6 +707,22 @@ TEST(PETSc, dmplex_mesh_coupler_dg0) {
   const int cell_count_B = dmh.get_cell_count();
   const int cell_count_A = rank + 1;
 
+  int tmp = 0;
+  int tmp_offset = 0;
+  for (int rx = 0; rx < size; rx++) {
+    if (rank == rx) {
+      tmp_offset = tmp;
+    }
+    tmp += rx + 1;
+  }
+  const int global_cell_count_A = tmp;
+  const int dof_offset_A = tmp_offset;
+
+  const int global_cell_count_B = dmh.get_global_cell_count();
+  tmp = 0;
+  MPICHK(MPI_Exscan(&cell_count_B, &tmp, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD));
+  const int dof_offset_B = tmp;
+
   {
 
     std::vector<std::vector<PetscInterface::DMPlexMeshCouplerDG0MapEntry>>
@@ -1039,6 +1055,73 @@ TEST(PETSc, dmplex_mesh_coupler_dg0) {
       rank_index++;
     }
     ASSERT_EQ(test_total_number_cells, cmdg0->total_num_send_cells_backward);
+
+    // Can now actually test the forward/backward transport
+    std::vector<REAL> dofs_A_correct(cell_count_A);
+    std::vector<REAL> dofs_A_to_test(cell_count_A);
+    std::vector<REAL> dofs_B_correct(cell_count_B);
+    std::vector<REAL> dofs_B_to_test(cell_count_B);
+    std::vector<REAL> global_dofs_A(global_cell_count_A);
+    std::vector<REAL> global_dofs_B(global_cell_count_B);
+
+    auto lambda_reset_dofs = [&]() {
+      std::fill(dofs_A_correct.begin(), dofs_A_correct.end(), 0.0);
+      std::fill(dofs_A_to_test.begin(), dofs_A_to_test.end(), 0.0);
+      std::fill(dofs_B_correct.begin(), dofs_B_correct.end(), 0.0);
+      std::fill(dofs_B_to_test.begin(), dofs_B_to_test.end(), 0.0);
+    };
+
+    std::uniform_real_distribution<REAL> dist_dofs(1.0, 2.0);
+
+    auto lambda_generate_dofs = [&](auto &dofs) {
+      std::for_each(dofs.begin(), dofs.end(),
+                    [&](auto &dx) { dx = dist_dofs(rng); });
+    };
+
+    lambda_reset_dofs();
+    lambda_generate_dofs(global_dofs_A);
+    std::copy(global_dofs_A.begin() + dof_offset_A,
+              global_dofs_A.begin() + dof_offset_A + cell_count_A,
+              dofs_A_correct.begin());
+
+    const int point_index_offset = offset;
+    auto lambda_forward_transfer = [&](auto &dofs_A, auto &dofs_B) {
+      std::fill(dofs_B.begin(), dofs_B.end(), 0.0);
+      std::vector<REAL> tmp_dofs_B(global_cell_count_B);
+      std::fill(tmp_dofs_B.begin(), tmp_dofs_B.end(), 0.0);
+      std::vector<REAL> tmp_dofs_B2(global_cell_count_B);
+      std::fill(tmp_dofs_B2.begin(), tmp_dofs_B2.end(), 0.0);
+
+      auto &m = map_rank_to_map.at(rank);
+
+      int index = 0;
+      for (auto &cell_entries : m) {
+        const REAL contrib = dofs_A.at(index);
+        for (auto &entry : cell_entries) {
+          const int B_point_index = entry.cell_index;
+          const REAL B_weight = entry.weight_forward;
+          const int B_dof_index = B_point_index - point_index_offset;
+          tmp_dofs_B.at(B_dof_index) += B_weight * contrib;
+        }
+        index++;
+      }
+
+      ASSERT_TRUE(static_cast<int>(dofs_B.size()) >= cell_count_B);
+      MPICHK(MPI_Allreduce(tmp_dofs_B.data(), tmp_dofs_B2.data(),
+                           global_cell_count_B, map_ctype_mpi_type<REAL>(),
+                           MPI_SUM, MPI_COMM_WORLD));
+
+      std::copy(tmp_dofs_B2.begin() + dof_offset_B,
+                tmp_dofs_B2.begin() + dof_offset_B + cell_count_B,
+                dofs_B.begin());
+    };
+
+    lambda_forward_transfer(dofs_A_correct, dofs_B_correct);
+    cmdg0->forward_transfer(dofs_A_correct, dofs_B_to_test);
+
+    for (int ix = 0; ix < cell_count_B; ix++) {
+      ASSERT_NEAR(dofs_B_correct.at(ix), dofs_B_to_test.at(ix), 1.0e-12);
+    }
   }
 
   PETSCCHK(DMDestroy(&dm));
