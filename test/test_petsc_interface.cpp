@@ -1122,6 +1122,37 @@ TEST(PETSc, dmplex_mesh_coupler_dg0) {
     for (int ix = 0; ix < cell_count_B; ix++) {
       ASSERT_NEAR(dofs_B_correct.at(ix), dofs_B_to_test.at(ix), 1.0e-12);
     }
+
+    lambda_reset_dofs();
+    lambda_generate_dofs(global_dofs_B);
+
+    auto lambda_backward_transfer = [&](auto &global_dofs_B, auto &dofs_A) {
+      std::fill(dofs_A.begin(), dofs_A.end(), 0.0);
+      auto &m = map_rank_to_map.at(rank);
+
+      int index = 0;
+      for (auto &cell_entries : m) {
+        for (auto &entry : cell_entries) {
+          const int B_point_index = entry.cell_index;
+          const REAL B_weight = entry.weight_backward;
+          const int B_dof_index = B_point_index - point_index_offset;
+          const REAL contrib = global_dofs_B.at(B_dof_index);
+          dofs_A.at(index) += B_weight * contrib;
+        }
+        index++;
+      }
+    };
+
+    std::copy(global_dofs_B.begin() + dof_offset_B,
+              global_dofs_B.begin() + dof_offset_B + cell_count_B,
+              dofs_B_correct.begin());
+
+    lambda_backward_transfer(global_dofs_B, dofs_A_correct);
+    cmdg0->backward_transfer(dofs_B_correct, dofs_A_to_test);
+
+    for (int ix = 0; ix < cell_count_A; ix++) {
+      ASSERT_NEAR(dofs_A_correct.at(ix), dofs_A_to_test.at(ix), 1.0e-12);
+    }
   }
 
   PETSCCHK(DMDestroy(&dm));
