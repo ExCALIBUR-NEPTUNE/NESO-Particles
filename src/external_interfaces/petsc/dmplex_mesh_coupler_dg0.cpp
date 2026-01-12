@@ -247,19 +247,16 @@ DMPlexMeshCouplerDG0::DMPlexMeshCouplerDG0(
     offset += num_cells;
   }
 
-  nprint_variable(this->sources_forward);
-  nprint_variable(this->destinations_forward);
-  nprint_variable(send_counts);
-  nprint_variable(recv_counts);
-  nprint_variable(this->send_disps_forward);
-  nprint_variable(this->recv_disps_forward);
-  nprint_variable(remote_cells);
-  nprint_variable(this->cells_forward_A);
-  nprint_variable(this->cells_forward_B);
-  nprint_variable(this->cells_backward_A);
-  nprint_variable(this->cells_backward_B);
+  // Convert the b cell indices back to local indices.
+  DMPlexHelper dmh_B(B_comm, dmplex_B);
+  auto lambda_global_to_local = [&](std::vector<int> &cells) {
+    std::for_each(cells.begin(), cells.end(), [&](auto &cellx) {
+      cellx = dmh_B.get_local_point_from_global_point(cellx);
+    });
+  };
 
-  // TODO NEED TO CONVERT THE B CELL INDICES BACK TO LOCAL INDICES
+  lambda_global_to_local(this->cells_forward_B);
+  lambda_global_to_local(this->cells_backward_B);
 }
 
 void DMPlexMeshCouplerDG0::forward_transfer(std::vector<REAL> &dofs_A,

@@ -179,6 +179,7 @@ protected:
   PetscInt cell_end;
   std::vector<PetscInt> map_np_to_petsc;
   std::map<PetscInt, PetscInt> map_petsc_to_np;
+  std::map<PetscInt, PetscInt> map_gobal_point_to_local_point;
   double volume;
   int ncells_global{-1};
 
@@ -282,6 +283,16 @@ public:
    */
   PetscInt get_point_global_index(const PetscInt point,
                                   const bool signed_point = false);
+
+  /**
+   * Get the local point index from a global point index if the point is owned
+   * by this rank.
+   *
+   * @param global_point_index Global point index to retrieve local point index
+   * for.
+   * @returns Local point index.
+   */
+  PetscInt get_local_point_from_global_point(const PetscInt global_point_index);
 
   /**
    * Get a bounding box for the cells on this MPI rank.

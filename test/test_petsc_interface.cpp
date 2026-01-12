@@ -663,6 +663,19 @@ TEST(PETSc, dmplex_helper) {
     }
   }
 
+  {
+
+    PetscInt point_start = 0;
+    PetscInt point_end = 0;
+    PETSCCHK(DMPlexGetChart(dm, &point_start, &point_end));
+    for (PetscInt px = point_start; px < point_end; px++) {
+      const PetscInt global_point = mesh->dmh->get_point_global_index(px);
+      const PetscInt local_point =
+          mesh->dmh->get_local_point_from_global_point(global_point);
+      ASSERT_EQ(local_point, px);
+    }
+  }
+
   mesh->free();
   PETSCCHK(DMDestroy(&dm));
   PETSCCHK(PetscFinalize());
@@ -887,6 +900,13 @@ TEST(PETSc, dmplex_mesh_coupler_dg0) {
                   [&](auto ix) { tmp_set.insert(ix); });
     ASSERT_EQ(tmp_set, edges_backwards);
 
+    PetscInterface::DMPlexHelper dmh_B{MPI_COMM_WORLD, dm};
+    auto lambda_global_to_local = [&](std::vector<int> &cells) {
+      std::for_each(cells.begin(), cells.end(), [&](auto &cellx) {
+        cellx = dmh_B.get_local_point_from_global_point(cellx);
+      });
+    };
+
     // ranks that will send to this ranka
     int index = 0;
     for (const int rankx : cmdg0->sources_forward) {
@@ -908,6 +928,9 @@ TEST(PETSc, dmplex_mesh_coupler_dg0) {
 
       const int soffset = static_cast<int>(cmdg0->recv_disps_forward.at(index));
       const int num_cells = static_cast<int>(cells_correct.size());
+
+      lambda_global_to_local(cells_correct);
+
       for (int ix = 0; ix < num_cells; ix++) {
         ASSERT_EQ(cells_correct.at(ix),
                   cmdg0->cells_forward_B.at(soffset + ix));
@@ -983,7 +1006,6 @@ TEST(PETSc, dmplex_mesh_coupler_dg0) {
     for (const int rankx : cmdg0->destinations_backward) {
       auto &m = map_rank_to_map.at(rankx);
       std::vector<int> cells_correct;
-      int index = 0;
       for (auto &cell : m) {
         for (auto &ex : cell) {
           const int cell_index = ex.cell_index;
@@ -992,11 +1014,12 @@ TEST(PETSc, dmplex_mesh_coupler_dg0) {
             cells_correct.push_back(cell_index);
           }
         }
-        index++;
       }
       const int num_cells = static_cast<int>(cells_correct.size());
       const int offsets =
           static_cast<int>(cmdg0->send_disps_backward.at(rank_index));
+
+      lambda_global_to_local(cells_correct);
 
       for (int ix = 0; ix < num_cells; ix++) {
         ASSERT_EQ(cmdg0->cells_backward_B.at(offsets + ix),

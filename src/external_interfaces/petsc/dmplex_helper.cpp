@@ -220,6 +220,16 @@ DMPlexHelper::DMPlexHelper(MPI_Comm comm, DM dm)
              "Size missmatch.");
   this->ncells = this->map_np_to_petsc.size();
   NESOASSERT(this->ncells, "A rank has zero cells.");
+
+  PetscInt point_start = 0;
+  PetscInt point_end = 0;
+  PETSCCHK(DMPlexGetChart(dm, &point_start, &point_end));
+
+  for (PetscInt px = point_start; px < point_end; px++) {
+    const PetscInt global_point = signed_global_id_to_global_id(
+        this->internal_get_point_global_index(px));
+    this->map_gobal_point_to_local_point[global_point] = px;
+  }
 }
 
 int DMPlexHelper::get_cell_count() { return this->ncells; }
@@ -265,6 +275,14 @@ PetscInt DMPlexHelper::get_point_global_index(const PetscInt point,
   } else {
     return signed_global_id_to_global_id(global_point);
   }
+}
+
+PetscInt DMPlexHelper::get_local_point_from_global_point(
+    const PetscInt global_point_index) {
+  NESOASSERT(this->map_gobal_point_to_local_point.count(
+                 signed_global_id_to_global_id(global_point_index)),
+             "Global point not found.");
+  return this->map_gobal_point_to_local_point[global_point_index];
 }
 
 ExternalCommon::BoundingBoxSharedPtr DMPlexHelper::get_bounding_box() {

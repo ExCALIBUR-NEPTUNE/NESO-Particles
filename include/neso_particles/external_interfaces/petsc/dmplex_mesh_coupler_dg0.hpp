@@ -67,8 +67,12 @@ public:
   std::vector<MPI_Aint> recv_disps_forward;
   std::vector<MPI_Aint> send_disps_forward_real;
   std::vector<MPI_Aint> recv_disps_forward_real;
+  // Local cell indices of A to multiply by the weights in weights_forward_A for
+  // forward transfer.
   std::vector<int> cells_forward_A;
+  // Local cell indices of B to reduce (+) the incoming contributions into.
   std::vector<int> cells_forward_B;
+  // Weights to multiply the local DOFs by in A before forward transfer.
   std::vector<REAL> weights_forward_A;
 
   // Dist graph comm for backward transfer.
@@ -77,8 +81,13 @@ public:
   std::vector<int> destinations_backward;
   std::vector<MPI_Aint> send_disps_backward;
   std::vector<MPI_Aint> recv_disps_backward;
+
+  // Local cell indices in a to reduce incoming values into for backward
+  // direction after multiplying by the weights in weights_backward_A.
   std::vector<int> cells_backward_A;
+  // Local cell indices in B to send unmodified in the backwards transfer.
   std::vector<int> cells_backward_B;
+  // Weights for backward transfer.
   std::vector<REAL> weights_backward_A;
 
   /**
