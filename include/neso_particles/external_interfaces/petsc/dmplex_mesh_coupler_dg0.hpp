@@ -45,6 +45,9 @@ struct DMPlexMeshCouplerDG0MapEntry {
  */
 class DMPlexMeshCouplerDG0 {
 protected:
+  std::vector<REAL> h_stage_send;
+  std::vector<REAL> h_stage_recv;
+
 public:
   /// Disable (implicit) copies.
   DMPlexMeshCouplerDG0(const DMPlexMeshCouplerDG0 &st) = delete;
@@ -58,15 +61,25 @@ public:
 
   // The number of local cells in A.
   int cell_count_A{0};
+  // The number of local cells in B.
+  int cell_count_B{0};
+
+  std::vector<int> send_dtypes;
+  std::vector<int> recv_dtypes;
 
   // Dist graph comm for forward transfer.
   MPI_Comm comm_forward{MPI_COMM_NULL};
   std::vector<int> sources_forward;
   std::vector<int> destinations_forward;
+  std::vector<int> send_counts_forward;
+  std::vector<int> recv_counts_forward;
   std::vector<MPI_Aint> send_disps_forward;
   std::vector<MPI_Aint> recv_disps_forward;
   std::vector<MPI_Aint> send_disps_forward_real;
   std::vector<MPI_Aint> recv_disps_forward_real;
+  int total_num_send_cells_forward{0};
+  int total_num_recv_cells_forward{0};
+
   // Local cell indices of A to multiply by the weights in weights_forward_A for
   // forward transfer.
   std::vector<int> cells_forward_A;
@@ -79,8 +92,14 @@ public:
   MPI_Comm comm_backward{MPI_COMM_NULL};
   std::vector<int> sources_backward;
   std::vector<int> destinations_backward;
+  std::vector<int> send_counts_backward;
+  std::vector<int> recv_counts_backward;
   std::vector<MPI_Aint> send_disps_backward;
   std::vector<MPI_Aint> recv_disps_backward;
+  std::vector<MPI_Aint> send_disps_backward_real;
+  std::vector<MPI_Aint> recv_disps_backward_real;
+  int total_num_send_cells_backward{0};
+  int total_num_recv_cells_backward{0};
 
   // Local cell indices in a to reduce incoming values into for backward
   // direction after multiplying by the weights in weights_backward_A.

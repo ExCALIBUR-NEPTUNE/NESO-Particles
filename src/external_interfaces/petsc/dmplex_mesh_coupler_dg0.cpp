@@ -100,27 +100,26 @@ DMPlexMeshCouplerDG0::DMPlexMeshCouplerDG0(
       snpc.get(this->destinations_backward), snpc.get(destination_weights)));
 
   // Exchange the cell counts for each edge (can use the forward graph)
-
-  std::vector<int> send_counts(this->destinations_forward.size());
-  std::vector<int> recv_counts(this->sources_forward.size());
+  this->send_counts_forward.resize(this->destinations_forward.size());
+  this->recv_counts_forward.resize(this->sources_forward.size());
 
   int index = 0;
   for (auto rankx : this->destinations_forward) {
-    send_counts.at(index) =
+    send_counts_forward.at(index) =
         static_cast<int>(map_remote_rank_to_cells_B.at(rankx).size());
     index++;
   }
 
-  MPICHK(NP_MPI_Neighbor_alltoall_wrapper(snpc.get(send_counts), 1, MPI_INT,
-                                          snpc.get(recv_counts), 1, MPI_INT,
-                                          this->comm_forward));
+  MPICHK(NP_MPI_Neighbor_alltoall_wrapper(
+      snpc.get(send_counts_forward), 1, MPI_INT, snpc.get(recv_counts_forward),
+      1, MPI_INT, this->comm_forward));
 
   this->send_disps_forward.resize(this->destinations_forward.size());
   this->recv_disps_forward.resize(this->sources_forward.size());
 
-  std::exclusive_scan(send_counts.begin(), send_counts.end(),
+  std::exclusive_scan(send_counts_forward.begin(), send_counts_forward.end(),
                       this->send_disps_forward.begin(), 0);
-  std::exclusive_scan(recv_counts.begin(), recv_counts.end(),
+  std::exclusive_scan(recv_counts_forward.begin(), recv_counts_forward.end(),
                       this->recv_disps_forward.begin(), 0);
 
   std::vector<MPI_Aint> send_disps_forward_int(this->send_disps_forward.size());
@@ -147,10 +146,10 @@ DMPlexMeshCouplerDG0::DMPlexMeshCouplerDG0(
                  this->recv_disps_forward_real.begin(),
                  [](auto ix) { return ix * sizeof(REAL); });
 
-  const int total_num_send_cells_forward =
-      std::accumulate(send_counts.begin(), send_counts.end(), 0);
-  const int total_num_recv_cells_forward =
-      std::accumulate(recv_counts.begin(), recv_counts.end(), 0);
+  this->total_num_send_cells_forward = std::accumulate(
+      send_counts_forward.begin(), send_counts_forward.end(), 0);
+  this->total_num_recv_cells_forward = std::accumulate(
+      recv_counts_forward.begin(), recv_counts_forward.end(), 0);
 
   // These are the remote cells of B that this rank will send contributions to.
   std::vector<int> remote_cells;
@@ -182,9 +181,9 @@ DMPlexMeshCouplerDG0::DMPlexMeshCouplerDG0(
 
   // Exchange the cell indices for each edge
   MPICHK(NP_MPI_Neighbor_alltoallw_wrapper(
-      snpc.get(remote_cells), snpc.get(send_counts),
+      snpc.get(remote_cells), snpc.get(send_counts_forward),
       snpc.get(send_disps_forward_int), snpc.get(send_types),
-      snpc.get(this->cells_forward_B), snpc.get(recv_counts),
+      snpc.get(this->cells_forward_B), snpc.get(recv_counts_forward),
       snpc.get(recv_disps_forward_int), snpc.get(recv_types),
       this->comm_forward));
 
@@ -209,10 +208,24 @@ DMPlexMeshCouplerDG0::DMPlexMeshCouplerDG0(
   this->send_disps_backward.reserve(this->destinations_backward.size());
   this->recv_disps_backward.reserve(this->sources_backward.size());
 
+  this->send_dtypes.resize(std::max(this->destinations_forward.size(),
+                                    this->destinations_backward.size()));
+  this->recv_dtypes.resize(
+      std::max(this->sources_forward.size(), this->sources_backward.size()));
+
+  auto lambda_fill_dtypes_real = [](auto &vx) {
+    std::fill(vx.begin(), vx.end(), map_ctype_mpi_type<REAL>());
+  };
+  lambda_fill_dtypes_real(this->send_dtypes);
+  lambda_fill_dtypes_real(this->recv_dtypes);
+
+  this->send_counts_backward.reserve(this->destinations_backward.size());
+  this->recv_counts_forward.reserve(this->sources_backward.size());
+
   int offset = 0;
   for (const int rankx : this->sources_backward) {
     const int forward_edge_index = map_rank_to_forward_index_dest.at(rankx);
-    const int num_cells = send_counts.at(forward_edge_index);
+    const int num_cells = send_counts_forward.at(forward_edge_index);
     const int forward_disp =
         static_cast<int>(this->send_disps_forward.at(forward_edge_index));
 
@@ -227,14 +240,16 @@ DMPlexMeshCouplerDG0::DMPlexMeshCouplerDG0(
     this->weights_backward_A.insert(this->weights_backward_A.end(), wb.begin(),
                                     wb.end());
     this->recv_disps_backward.push_back(offset);
+    this->recv_counts_backward.push_back(num_cells);
     offset += num_cells;
   }
+  this->total_num_recv_cells_backward = offset;
 
   this->cells_backward_B.reserve(this->cells_forward_B.size());
   offset = 0;
   for (const int rankx : this->destinations_backward) {
     const int forward_edge_index = map_rank_to_forward_index_source.at(rankx);
-    const int num_cells = recv_counts.at(forward_edge_index);
+    const int num_cells = recv_counts_forward.at(forward_edge_index);
 
     const int forward_disp =
         static_cast<int>(this->recv_disps_forward.at(forward_edge_index));
@@ -244,11 +259,28 @@ DMPlexMeshCouplerDG0::DMPlexMeshCouplerDG0(
                                   this->cells_forward_B.begin() + forward_disp +
                                       num_cells);
     this->send_disps_backward.push_back(offset);
+    this->send_counts_backward.push_back(num_cells);
     offset += num_cells;
   }
+  this->total_num_send_cells_backward = offset;
+
+  this->send_disps_backward_real.resize(this->send_disps_backward.size());
+  this->recv_disps_backward_real.resize(this->recv_disps_backward.size());
+
+  std::transform(this->send_disps_backward.begin(),
+                 this->send_disps_backward.end(),
+                 this->send_disps_backward_real.begin(),
+                 [](auto ix) { return ix * sizeof(REAL); });
+
+  std::transform(this->recv_disps_backward.begin(),
+                 this->recv_disps_backward.end(),
+                 this->recv_disps_backward_real.begin(),
+                 [](auto ix) { return ix * sizeof(REAL); });
 
   // Convert the b cell indices back to local indices.
   DMPlexHelper dmh_B(B_comm, dmplex_B);
+
+  this->cell_count_B = dmh_B.get_cell_count();
   auto lambda_global_to_local = [&](std::vector<int> &cells) {
     std::for_each(cells.begin(), cells.end(), [&](auto &cellx) {
       cellx = dmh_B.get_local_point_from_global_point(cellx);
@@ -257,13 +289,79 @@ DMPlexMeshCouplerDG0::DMPlexMeshCouplerDG0(
 
   lambda_global_to_local(this->cells_forward_B);
   lambda_global_to_local(this->cells_backward_B);
+
+  NESOASSERT(this->cells_forward_A.size() == this->weights_forward_A.size(),
+             "Vector size missmatch forward.");
+  NESOASSERT(this->cells_backward_A.size() == this->weights_backward_A.size(),
+             "Vector size missmatch forward.");
+
+  this->h_stage_send.resize(std::max(this->total_num_send_cells_forward,
+                                     this->total_num_send_cells_backward));
+  this->h_stage_recv.resize(std::max(this->total_num_recv_cells_forward,
+                                     this->total_num_recv_cells_backward));
 }
 
 void DMPlexMeshCouplerDG0::forward_transfer(std::vector<REAL> &dofs_A,
-                                            std::vector<REAL> &dofs_B) {}
+                                            std::vector<REAL> &dofs_B) {
+
+  NESOASSERT(dofs_A.size() >= this->cell_count_A,
+             "Insufficent number of DOFs passed for A.");
+  NESOASSERT(dofs_B.size() >= this->cell_count_B,
+             "Insufficent number of DOFs passed for B.");
+
+  const std::size_t NA = this->cells_forward_A.size();
+  for (int ix = 0; ix < NA; ix++) {
+    const int index_A = this->cells_forward_A[ix];
+    const REAL weight_A = this->weights_forward_A[ix];
+    this->h_stage_send[ix] = dofs_A[index_A] * weight_A;
+  }
+
+  SuppressMPINullPtrCheck snpc;
+  MPICHK(NP_MPI_Neighbor_alltoallw_wrapper(
+      snpc.get(this->h_stage_send), snpc.get(this->send_counts_forward),
+      snpc.get(this->send_disps_forward_real), snpc.get(this->send_dtypes),
+      snpc.get(this->h_stage_recv), snpc.get(this->recv_counts_forward),
+      snpc.get(this->recv_disps_forward_real), snpc.get(this->recv_dtypes),
+      this->comm_forward));
+
+  const int NB = static_cast<int>(this->cells_forward_B.size());
+  std::fill(dofs_B.begin(), dofs_B.end(), 0.0);
+  for (int ix = 0; ix < NB; ix++) {
+    const int index_B = this->cells_forward_B[ix];
+    dofs_B[index_B] += this->h_stage_recv[ix];
+  }
+}
 
 void DMPlexMeshCouplerDG0::backward_transfer(std::vector<REAL> &dofs_B,
-                                             std::vector<REAL> &dofs_A) {}
+                                             std::vector<REAL> &dofs_A) {
+
+  NESOASSERT(dofs_A.size() >= this->cell_count_A,
+             "Insufficent number of DOFs passed for A.");
+  NESOASSERT(dofs_B.size() >= this->cell_count_B,
+             "Insufficent number of DOFs passed for B.");
+
+  const int NB = static_cast<int>(this->cells_backward_B.size());
+  for (int ix = 0; ix < NB; ix++) {
+    const int index_B = this->cells_backward_B[ix];
+    this->h_stage_send[ix] = dofs_B[index_B];
+  }
+
+  SuppressMPINullPtrCheck snpc;
+  MPICHK(NP_MPI_Neighbor_alltoallw_wrapper(
+      snpc.get(this->h_stage_send), snpc.get(this->send_counts_backward),
+      snpc.get(this->send_disps_backward_real), snpc.get(this->send_dtypes),
+      snpc.get(this->h_stage_recv), snpc.get(this->recv_counts_backward),
+      snpc.get(this->recv_disps_backward_real), snpc.get(this->recv_dtypes),
+      this->comm_backward));
+
+  const int NA = static_cast<int>(this->cells_backward_A.size());
+  std::fill(dofs_A.begin(), dofs_A.end(), 0.0);
+  for (int ix = 0; ix < NA; ix++) {
+    const int index_A = this->cells_backward_A[ix];
+    const REAL weight_A = this->weights_backward_A[ix];
+    dofs_A[index_A] += this->h_stage_recv[ix] * weight_A;
+  }
+}
 
 void DMPlexMeshCouplerDG0::free() {
   if (this->comm_forward != MPI_COMM_NULL) {

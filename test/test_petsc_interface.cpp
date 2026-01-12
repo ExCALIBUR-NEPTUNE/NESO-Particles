@@ -907,8 +907,9 @@ TEST(PETSc, dmplex_mesh_coupler_dg0) {
       });
     };
 
-    // ranks that will send to this ranka
+    // ranks that will send to this rank
     int index = 0;
+    int test_total_number_cells = 0;
     for (const int rankx : cmdg0->sources_forward) {
       // the local copy of the map for that rank
       auto &m = map_rank_to_map.at(rankx);
@@ -928,6 +929,7 @@ TEST(PETSc, dmplex_mesh_coupler_dg0) {
 
       const int soffset = static_cast<int>(cmdg0->recv_disps_forward.at(index));
       const int num_cells = static_cast<int>(cells_correct.size());
+      test_total_number_cells += num_cells;
 
       lambda_global_to_local(cells_correct);
 
@@ -937,8 +939,10 @@ TEST(PETSc, dmplex_mesh_coupler_dg0) {
       }
       index++;
     }
+    ASSERT_EQ(test_total_number_cells, cmdg0->total_num_recv_cells_forward);
 
     int soffset = 0;
+    test_total_number_cells = 0;
     for (const int rankx : cmdg0->destinations_forward) {
       auto &m = map_rank_to_map.at(rank);
 
@@ -959,6 +963,7 @@ TEST(PETSc, dmplex_mesh_coupler_dg0) {
       }
 
       const int num_cells = static_cast<int>(cells_correct.size());
+      test_total_number_cells += num_cells;
       for (int ix = 0; ix < num_cells; ix++) {
         ASSERT_EQ(cells_correct.at(ix),
                   cmdg0->cells_forward_A.at(soffset + ix));
@@ -967,10 +972,12 @@ TEST(PETSc, dmplex_mesh_coupler_dg0) {
       }
       soffset += num_cells;
     }
+    ASSERT_EQ(test_total_number_cells, cmdg0->total_num_send_cells_forward);
 
     // backward sources are the ranks that hold B cells for our map
     auto &m = map_rank_to_map.at(rank);
     int rank_index = 0;
+    test_total_number_cells = 0;
     for (const int rankx : cmdg0->sources_backward) {
       std::vector<int> cells_correct;
       std::vector<REAL> weights_correct;
@@ -989,6 +996,7 @@ TEST(PETSc, dmplex_mesh_coupler_dg0) {
       }
 
       const int num_cells = static_cast<int>(cells_correct.size());
+      test_total_number_cells += num_cells;
       const int offsets =
           static_cast<int>(cmdg0->recv_disps_backward.at(rank_index));
 
@@ -1001,8 +1009,10 @@ TEST(PETSc, dmplex_mesh_coupler_dg0) {
 
       rank_index++;
     }
+    ASSERT_EQ(test_total_number_cells, cmdg0->total_num_recv_cells_backward);
 
     rank_index = 0;
+    test_total_number_cells = 0;
     for (const int rankx : cmdg0->destinations_backward) {
       auto &m = map_rank_to_map.at(rankx);
       std::vector<int> cells_correct;
@@ -1016,6 +1026,7 @@ TEST(PETSc, dmplex_mesh_coupler_dg0) {
         }
       }
       const int num_cells = static_cast<int>(cells_correct.size());
+      test_total_number_cells += num_cells;
       const int offsets =
           static_cast<int>(cmdg0->send_disps_backward.at(rank_index));
 
@@ -1027,6 +1038,7 @@ TEST(PETSc, dmplex_mesh_coupler_dg0) {
       }
       rank_index++;
     }
+    ASSERT_EQ(test_total_number_cells, cmdg0->total_num_send_cells_backward);
   }
 
   PETSCCHK(DMDestroy(&dm));
