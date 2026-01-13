@@ -1159,4 +1159,201 @@ TEST(PETSc, dmplex_mesh_coupler_dg0) {
   PETSCCHK(PetscFinalize());
 }
 
+TEST(PETSc, dmplex_mesh_coupler_dg0_integration) {
+
+  PETSCCHK(PetscInitializeNoArguments());
+
+  DM dm_outer;
+  DM dm_inner;
+
+  int size = 0;
+  int rank = 0;
+  MPICHK(MPI_Comm_size(MPI_COMM_WORLD, &size));
+  MPICHK(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
+
+  MPI_Comm comm_outer = MPI_COMM_WORLD;
+  MPI_Comm comm_inner = MPI_COMM_WORLD;
+
+  const int inner_comm_size = 8;
+  const int colour = (rank < inner_comm_size) ? 1 : MPI_UNDEFINED;
+  const bool inner_active = colour != MPI_UNDEFINED;
+  MPICHK(MPI_Comm_split(comm_outer, colour, rank, &comm_inner));
+
+  const REAL cell_width_outer = 1.0;
+  const REAL cell_width_inner = 2.0 * cell_width_outer;
+  const PetscInt ndim = 2;
+  const PetscInt mesh_size_inner = 4;
+  const PetscInt mesh_offset = 2;
+  const PetscInt mesh_size_outer = 2 * mesh_size_inner + 4 * mesh_offset;
+
+  PetscInt faces_outer[2] = {mesh_size_outer, mesh_size_outer};
+  PetscReal upper_outer[2] = {mesh_size_outer * cell_width_outer,
+                              mesh_size_outer * cell_width_outer};
+  PetscReal lower_outer[2] = {0.0, 0.0};
+
+  PetscInt faces_inner[2] = {mesh_size_inner, mesh_size_inner};
+  PetscReal upper_inner[2] = {
+      mesh_size_inner * cell_width_inner + mesh_offset * cell_width_inner,
+      mesh_size_inner * cell_width_inner + mesh_offset * cell_width_inner};
+  PetscReal lower_inner[2] = {mesh_offset * cell_width_inner,
+                              mesh_offset * cell_width_inner};
+
+  PetscSF sf_outer;
+  PetscSF sf_inner;
+
+  PETSCCHK(NPPETScAPI::NP_DMPlexCreateBoxMesh(
+      comm_outer, ndim, PETSC_FALSE, faces_outer, lower_outer, upper_outer,
+      NULL, PETSC_TRUE, &dm_outer));
+  PetscInterface::generic_distribute(&dm_outer, comm_outer, 1, &sf_outer);
+
+  // PetscViewer viewer;
+  // PETSCCHK(PetscViewerCreate(PETSC_COMM_SELF, &viewer));
+  // PETSCCHK(PetscViewerSetType(viewer, PETSCVIEWERASCII));
+  // PETSCCHK(PetscSFView(sf_outer, viewer));
+
+  PetscInt nroots = 0;
+  PetscInt nleaves = 0;
+  PetscInt const *ilocal = nullptr;
+  PetscSFNode const *iremote = nullptr;
+  PETSCCHK(PetscSFGetGraph(sf_outer, &nroots, &nleaves, &ilocal, &iremote));
+
+  for (int ix = 0; ix < nleaves; ix++) {
+    nprint(ix, iremote[ix].rank, iremote[ix].index);
+  }
+
+  nprint_variable(nroots);
+  nprint_variable(nleaves);
+  nprint_variable(ilocal);
+  nprint_variable(iremote);
+
+  if (inner_active) {
+    PETSCCHK(NPPETScAPI::NP_DMPlexCreateBoxMesh(
+        comm_inner, ndim, PETSC_FALSE, faces_inner, lower_inner, upper_inner,
+        NULL, PETSC_TRUE, &dm_inner));
+    PetscInterface::generic_distribute(&dm_inner, comm_inner, 1, &sf_inner);
+  }
+
+  std::shared_ptr<PetscInterface::DMPlexHelper> helper_outer;
+  std::shared_ptr<PetscInterface::DMPlexHelper> helper_inner;
+
+  helper_outer =
+      std::make_shared<PetscInterface::DMPlexHelper>(comm_outer, dm_outer);
+  helper_outer->write_vtk("outer.vtu");
+
+  if (inner_active) {
+    helper_inner =
+        std::make_shared<PetscInterface::DMPlexHelper>(comm_inner, dm_inner);
+    helper_inner->write_vtk("inner.vtu");
+  }
+
+  const int cell_count_outer = helper_outer->get_cell_count();
+  const int cell_count_inner =
+      inner_active ? helper_inner->get_cell_count() : 0;
+
+  std::vector<REAL> dofs_outer_forward(cell_count_outer);
+  std::vector<REAL> dofs_inner_forward(cell_count_inner);
+  std::vector<REAL> dofs_outer_backward(cell_count_outer);
+  std::vector<REAL> dofs_inner_backward(cell_count_inner);
+
+  for (int cellx = 0; cellx < cell_count_outer; cellx++) {
+    const PetscInt petsc_cell_index =
+        helper_outer->get_dmplex_cell_index(cellx);
+    const PetscInt global_cell_index =
+        helper_outer->get_point_global_index(petsc_cell_index);
+    dofs_outer_backward.at(cellx) = global_cell_index;
+    dofs_outer_forward.at(cellx) = 0.0;
+  }
+
+  for (int cellx = 0; cellx < cell_count_inner; cellx++) {
+    const PetscInt petsc_cell_index =
+        helper_inner->get_dmplex_cell_index(cellx);
+    const PetscInt global_cell_index =
+        helper_inner->get_point_global_index(petsc_cell_index);
+    dofs_inner_backward.at(cellx) = 0.0;
+    dofs_inner_forward.at(cellx) = global_cell_index;
+  }
+
+  std::vector<std::vector<PetscInterface::DMPlexMeshCouplerDG0MapEntry>>
+      coupler_map(cell_count_inner);
+
+  for (int cellx = 0; cellx < cell_count_inner; cellx++) {
+    const PetscInt petsc_cell_index =
+        helper_inner->get_dmplex_cell_index(cellx);
+    const PetscInt global_cell_index =
+        helper_inner->get_point_global_index(petsc_cell_index);
+    nprint_variable(cellx);
+    nprint_variable(global_cell_index);
+
+    const PetscInt cell_index_x = global_cell_index % mesh_size_inner;
+    const PetscInt cell_index_y = global_cell_index / mesh_size_inner;
+
+    const PetscInt cell_index_outer_base_x = (mesh_offset + cell_index_x) * 2;
+    const PetscInt cell_index_outer_base_y = (mesh_offset + cell_index_y) * 2;
+
+    for (int dy : {0, 1}) {
+      for (int dx : {0, 1}) {
+        const PetscInt cell_index_outer_x = cell_index_outer_base_x + dx;
+        const PetscInt cell_index_outer_y = cell_index_outer_base_y + dy;
+        const PetscInt cell_index_outer =
+            cell_index_outer_y * mesh_size_outer + cell_index_outer_x;
+        coupler_map.at(cellx).push_back({cell_index_outer, 1.0, 0.25});
+      }
+    }
+  }
+
+  auto coupler = std::make_shared<PetscInterface::DMPlexMeshCouplerDG0>(
+      dm_outer, coupler_map);
+
+  coupler->forward_transfer(dofs_inner_forward, dofs_outer_forward);
+  coupler->backward_transfer(dofs_outer_backward, dofs_inner_backward);
+
+  auto vtk_outer = helper_outer->get_vtk_cell_data();
+  for (int cellx = 0; cellx < cell_count_outer; cellx++) {
+    vtk_outer.at(cellx).cell_data["forward"] = dofs_outer_forward.at(cellx);
+    vtk_outer.at(cellx).cell_data["backward"] = dofs_outer_backward.at(cellx);
+    vtk_outer.at(cellx).cell_data["rank"] = rank;
+
+    const PetscInt petsc_cell_index =
+        helper_outer->get_dmplex_cell_index(cellx);
+    const PetscInt global_cell_index =
+        helper_outer->get_point_global_index(petsc_cell_index);
+    vtk_outer.at(cellx).cell_data["cell_index"] = global_cell_index;
+  }
+  VTK::VTKHDF vtkhdf_outer("outer.vtkhdf", comm_outer);
+  vtkhdf_outer.write(vtk_outer);
+  vtkhdf_outer.close();
+
+  if (inner_active) {
+    auto vtk_inner = helper_inner->get_vtk_cell_data();
+    for (int cellx = 0; cellx < cell_count_inner; cellx++) {
+      vtk_inner.at(cellx).cell_data["forward"] = dofs_inner_forward.at(cellx);
+      vtk_inner.at(cellx).cell_data["backward"] = dofs_inner_backward.at(cellx);
+      vtk_inner.at(cellx).cell_data["rank"] = rank;
+
+      const PetscInt petsc_cell_index =
+          helper_inner->get_dmplex_cell_index(cellx);
+      const PetscInt global_cell_index =
+          helper_inner->get_point_global_index(petsc_cell_index);
+      vtk_inner.at(cellx).cell_data["cell_index"] = global_cell_index;
+    }
+    VTK::VTKHDF vtkhdf_inner("inner.vtkhdf", comm_inner);
+    vtkhdf_inner.write(vtk_inner);
+    vtkhdf_inner.close();
+  }
+
+  PETSCCHK(PetscSFDestroy(&sf_outer));
+  PETSCCHK(DMDestroy(&dm_outer));
+  if (inner_active) {
+    PETSCCHK(DMDestroy(&dm_inner));
+    PETSCCHK(PetscSFDestroy(&sf_inner));
+  }
+
+  if (comm_inner != MPI_COMM_NULL) {
+    MPICHK(MPI_Comm_free(&comm_inner));
+    comm_inner = MPI_COMM_NULL;
+  }
+
+  PETSCCHK(PetscFinalize());
+}
+
 #endif

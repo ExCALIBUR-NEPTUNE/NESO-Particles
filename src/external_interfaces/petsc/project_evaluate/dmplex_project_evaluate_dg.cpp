@@ -20,6 +20,18 @@ void DMPlexProjectEvaluateDG::check_ncomp(const int ncomp) {
   }
 }
 
+std::vector<VTK::UnstructuredCell> DMPlexProjectEvaluateDG::get_vtk_data() {
+  const int cell_count = this->mesh->get_cell_count();
+  std::vector<VTK::UnstructuredCell> data =
+      this->mesh->dmh->get_vtk_cell_data();
+  const int ndim = mesh->get_ndim();
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    const auto cell_value = this->cdc_project->get_value(cellx, 0, 0);
+    data.at(cellx).cell_data["value"] = cell_value;
+  }
+  return data;
+}
+
 DMPlexProjectEvaluateDG::DMPlexProjectEvaluateDG(
     ExternalCommon::QuadraturePointMapperSharedPtr qpm,
     std::string function_space, int polynomial_order)

@@ -3,6 +3,7 @@
 
 #include "../../containers/cell_dat_const.hpp"
 #include "../common/bounding_box.hpp"
+#include "../vtk/vtk.hpp"
 #include "dmplex_cell_serialise.hpp"
 #include "petsc_common.hpp"
 #include <limits>
@@ -22,8 +23,7 @@ constexpr static char face_sets_label[] = "Face Sets";
  * @param[in] overlap Optional overlap to pass to PETSc (default 0).
  */
 void generic_distribute(DM *dm, MPI_Comm comm = MPI_COMM_WORLD,
-                        const PetscInt overlap = 0);
-
+                        const PetscInt overlap = 0, PetscSF *sf = nullptr);
 /**
  * Setup the coordinate section for a DMPlex. See
  * DMPlexBuildCoordinatesFromCellList.
@@ -390,6 +390,15 @@ public:
    * @param filename Filename for VTK file.
    */
   void write_vtk(const std::string filename);
+
+  /**
+   * Get VTK data for all cells.
+   *
+   * @returns Vector of VTK data which can be passed to our VTKHDF
+   * implementation.
+   */
+  std::vector<VTK::UnstructuredCell> get_vtk_cell_data();
+
   /**
    * Print to stdout information about the held DMPlex.
    */

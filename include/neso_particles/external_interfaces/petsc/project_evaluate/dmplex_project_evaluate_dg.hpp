@@ -113,33 +113,7 @@ public:
    *
    * @returns Data for VTKHDF unstructured grid writer.
    */
-  virtual inline std::vector<VTK::UnstructuredCell> get_vtk_data() override {
-    const int cell_count = this->mesh->get_cell_count();
-    std::vector<VTK::UnstructuredCell> data(cell_count);
-    std::vector<std::vector<REAL>> vertices;
-    const int ndim = mesh->get_ndim();
-    for (int cellx = 0; cellx < cell_count; cellx++) {
-      vertices.clear();
-      mesh->dmh->get_cell_vertices(cellx, vertices);
-      const int num_vertices = vertices.size();
-      const auto cell_value = this->cdc_project->get_value(cellx, 0, 0);
-      data.at(cellx).num_points = num_vertices;
-      data.at(cellx).cell_type = num_vertices == 3
-                                     ? VTK::CellType::triangle
-                                     : VTK::CellType::quadrilateral;
-      data.at(cellx).points.reserve(num_vertices * 3);
-      for (int vx = 0; vx < num_vertices; vx++) {
-        for (int dx = 0; dx < ndim; dx++) {
-          data.at(cellx).points.push_back(vertices.at(vx).at(dx));
-        }
-        for (int dx = ndim; dx < 3; dx++) {
-          data.at(cellx).points.push_back(0.0);
-        }
-        data.at(cellx).cell_data["value"] = cell_value;
-      }
-    }
-    return data;
-  }
+  virtual inline std::vector<VTK::UnstructuredCell> get_vtk_data() override;
 
   /**
    * Create a DG0 project/evaluate instance from a QuadraturePointMapper.

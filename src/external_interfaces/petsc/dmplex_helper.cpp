@@ -3,12 +3,13 @@
 
 namespace NESO::Particles::PetscInterface {
 
-void generic_distribute(DM *dm, MPI_Comm comm, const PetscInt overlap) {
+void generic_distribute(DM *dm, MPI_Comm comm, const PetscInt overlap,
+                        PetscSF *sf) {
   int size;
   MPICHK(MPI_Comm_size(comm, &size));
   if (size > 1) {
     DM dm_out;
-    PETSCCHK(DMPlexDistribute(*dm, overlap, nullptr, &dm_out));
+    PETSCCHK(DMPlexDistribute(*dm, overlap, sf, &dm_out));
     NESOASSERT(dm_out, "Could not distribute mesh.");
     PETSCCHK(DMDestroy(dm));
     *dm = dm_out;
@@ -570,6 +571,31 @@ void DMPlexHelper::write_vtk(const std::string filename) {
   PETSCCHK(PetscViewerFileSetName(viewer, filename.c_str()));
   PETSCCHK(DMView(this->dm, viewer));
   PETSCCHK(PetscViewerDestroy(&viewer));
+}
+
+std::vector<VTK::UnstructuredCell> DMPlexHelper::get_vtk_cell_data() {
+  const int cell_count = this->get_cell_count();
+  std::vector<VTK::UnstructuredCell> data(cell_count);
+  std::vector<std::vector<REAL>> vertices;
+  NESOASSERT(this->ndim == 2, "Only implemented in 2D.");
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    vertices.clear();
+    this->get_cell_vertices(cellx, vertices);
+    const int num_vertices = vertices.size();
+    data.at(cellx).num_points = num_vertices;
+    data.at(cellx).cell_type = num_vertices == 3 ? VTK::CellType::triangle
+                                                 : VTK::CellType::quadrilateral;
+    data.at(cellx).points.reserve(num_vertices * 3);
+    for (int vx = 0; vx < num_vertices; vx++) {
+      for (int dx = 0; dx < this->ndim; dx++) {
+        data.at(cellx).points.push_back(vertices.at(vx).at(dx));
+      }
+      for (int dx = this->ndim; dx < 3; dx++) {
+        data.at(cellx).points.push_back(0.0);
+      }
+    }
+  }
+  return data;
 }
 
 void DMPlexHelper::print() {

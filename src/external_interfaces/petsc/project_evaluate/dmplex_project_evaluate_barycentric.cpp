@@ -7,27 +7,16 @@ namespace NESO::Particles::PetscInterface {
 std::vector<VTK::UnstructuredCell>
 DMPlexProjectEvaluateBarycentric::get_vtk_data() {
   const int cell_count = this->mesh->get_cell_count();
-  std::vector<VTK::UnstructuredCell> data(cell_count);
-  std::vector<std::vector<REAL>> vertices;
-  const int ndim = mesh->get_ndim();
+  std::vector<VTK::UnstructuredCell> data =
+      this->mesh->dmh->get_vtk_cell_data();
   for (int cellx = 0; cellx < cell_count; cellx++) {
-    vertices.clear();
-    mesh->dmh->get_cell_vertices(cellx, vertices);
     auto values = this->cdc_project->get_cell(cellx);
     auto inverse_volumes = this->cdc_volumes->get_value(cellx, 0, 0);
-    const int num_vertices = vertices.size();
-    data.at(cellx).num_points = num_vertices;
-    data.at(cellx).cell_type = num_vertices == 3 ? VTK::CellType::triangle
-                                                 : VTK::CellType::quadrilateral;
-    data.at(cellx).points.reserve(num_vertices * 3);
+    const int num_vertices = data.at(cellx).num_points;
+    NESOASSERT((3 <= num_vertices) && (num_vertices <= 4),
+               "Bad number of vertices.");
     data.at(cellx).point_data["value"].reserve(num_vertices);
     for (int vx = 0; vx < num_vertices; vx++) {
-      for (int dx = 0; dx < ndim; dx++) {
-        data.at(cellx).points.push_back(vertices.at(vx).at(dx));
-      }
-      for (int dx = ndim; dx < 3; dx++) {
-        data.at(cellx).points.push_back(0.0);
-      }
       data.at(cellx).point_data["value"].push_back(values->at(0, vx) *
                                                    inverse_volumes);
     }
