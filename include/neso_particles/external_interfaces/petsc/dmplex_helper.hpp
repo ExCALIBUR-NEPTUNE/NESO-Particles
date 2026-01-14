@@ -46,6 +46,19 @@ void setup_coordinate_section(DM &dm, const PetscInt vertex_start,
 void setup_local_coordinate_vector(DM &dm, Vec &coordinates);
 
 /**
+ * Get the global map from old point indices to new point indices after
+ * DMPlexDistribute has been called. Must be called collectively on the
+ * communicator.
+ *
+ * @param dm_distributed DMPlex output from a DMPlexDistribute call.
+ * @param sf PetscSF returned from a DMPlexDistribute call.
+ * @returns Vector where the entry at index i is the new global point index for
+ * the global point i in the DMPlex before the distribute call.
+ */
+std::vector<PetscInt> get_global_distributed_points_map(DM &dm_distributed,
+                                                        PetscSF &sf);
+
+/**
  * Class to determine new local indices from global indices when constructing
  * halos.
  */

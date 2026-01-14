@@ -614,13 +614,17 @@ TEST(PETSc, dmplex_helper) {
   const int mesh_size = (ndim == 2) ? 31 : 17;
   PetscInt faces[3] = {mesh_size, mesh_size, mesh_size};
 
+  const REAL cell_width = 1.0 / static_cast<REAL>(mesh_size);
+  const REAL inverse_cell_width = 1.0 / cell_width;
+
   PETSCCHK(NPPETScAPI::NP_DMPlexCreateBoxMesh(
       PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces,
       /* lower */ NULL,
       /* upper */ NULL,
       /* periodicity */ NULL, PETSC_TRUE, &dm));
 
-  PetscInterface::generic_distribute(&dm, MPI_COMM_WORLD, 1);
+  PetscSF sf;
+  PetscInterface::generic_distribute(&dm, MPI_COMM_WORLD, 1, &sf);
 
   auto mesh =
       std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
@@ -673,6 +677,33 @@ TEST(PETSc, dmplex_helper) {
       const PetscInt local_point =
           mesh->dmh->get_local_point_from_global_point(global_point);
       ASSERT_EQ(local_point, px);
+    }
+  }
+
+  {
+
+    auto points_map = PetscInterface::get_global_distributed_points_map(dm, sf);
+
+    std::vector<std::vector<REAL>> vertices;
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      vertices.clear();
+      const PetscInt point_index = mesh->dmh->get_dmplex_cell_index(cellx);
+      const int global_point_index_current =
+          mesh->dmh->get_point_global_index(point_index);
+      mesh->dmh->get_cell_vertices(cellx, vertices);
+
+      const REAL avg_x = 0.25 * (vertices.at(0).at(0) + vertices.at(1).at(0) +
+                                 vertices.at(2).at(0) + vertices.at(3).at(0));
+      const REAL avg_y = 0.25 * (vertices.at(0).at(1) + vertices.at(1).at(1) +
+                                 vertices.at(2).at(1) + vertices.at(3).at(1));
+
+      const int bin_x = avg_x * inverse_cell_width;
+      const int bin_y = avg_y * inverse_cell_width;
+
+      const int global_point_index_original = bin_y * mesh_size + bin_x;
+
+      const int to_test = points_map.at(global_point_index_original);
+      ASSERT_EQ(to_test, global_point_index_current);
     }
   }
 
@@ -1200,37 +1231,45 @@ TEST(PETSc, dmplex_mesh_coupler_dg0_integration) {
 
   PetscSF sf_outer;
   PetscSF sf_inner;
+  std::vector<PetscInt> outer_map;
+  std::vector<PetscInt> inner_map;
+  std::vector<PetscInt> outer_map_inverse;
+  std::vector<PetscInt> inner_map_inverse;
 
   PETSCCHK(NPPETScAPI::NP_DMPlexCreateBoxMesh(
       comm_outer, ndim, PETSC_FALSE, faces_outer, lower_outer, upper_outer,
       NULL, PETSC_TRUE, &dm_outer));
   PetscInterface::generic_distribute(&dm_outer, comm_outer, 1, &sf_outer);
 
-  // PetscViewer viewer;
-  // PETSCCHK(PetscViewerCreate(PETSC_COMM_SELF, &viewer));
-  // PETSCCHK(PetscViewerSetType(viewer, PETSCVIEWERASCII));
-  // PETSCCHK(PetscSFView(sf_outer, viewer));
+  outer_map =
+      PetscInterface::get_global_distributed_points_map(dm_outer, sf_outer);
 
-  PetscInt nroots = 0;
-  PetscInt nleaves = 0;
-  PetscInt const *ilocal = nullptr;
-  PetscSFNode const *iremote = nullptr;
-  PETSCCHK(PetscSFGetGraph(sf_outer, &nroots, &nleaves, &ilocal, &iremote));
-
-  for (int ix = 0; ix < nleaves; ix++) {
-    nprint(ix, iremote[ix].rank, iremote[ix].index);
+  outer_map_inverse.resize(outer_map.size());
+  const int outer_map_size = static_cast<int>(outer_map.size());
+  for (int ix = 0; ix < outer_map_size; ix++) {
+    const PetscInt jx = outer_map[ix];
+    if (jx > -1) {
+      outer_map_inverse.at(jx) = ix;
+    }
   }
-
-  nprint_variable(nroots);
-  nprint_variable(nleaves);
-  nprint_variable(ilocal);
-  nprint_variable(iremote);
 
   if (inner_active) {
     PETSCCHK(NPPETScAPI::NP_DMPlexCreateBoxMesh(
         comm_inner, ndim, PETSC_FALSE, faces_inner, lower_inner, upper_inner,
         NULL, PETSC_TRUE, &dm_inner));
     PetscInterface::generic_distribute(&dm_inner, comm_inner, 1, &sf_inner);
+
+    inner_map =
+        PetscInterface::get_global_distributed_points_map(dm_inner, sf_inner);
+
+    inner_map_inverse.resize(inner_map.size());
+    const int inner_map_size = static_cast<int>(inner_map.size());
+    for (int ix = 0; ix < inner_map_size; ix++) {
+      const PetscInt jx = inner_map[ix];
+      if (jx > -1) {
+        inner_map_inverse.at(jx) = ix;
+      }
+    }
   }
 
   std::shared_ptr<PetscInterface::DMPlexHelper> helper_outer;
@@ -1238,12 +1277,10 @@ TEST(PETSc, dmplex_mesh_coupler_dg0_integration) {
 
   helper_outer =
       std::make_shared<PetscInterface::DMPlexHelper>(comm_outer, dm_outer);
-  helper_outer->write_vtk("outer.vtu");
 
   if (inner_active) {
     helper_inner =
         std::make_shared<PetscInterface::DMPlexHelper>(comm_inner, dm_inner);
-    helper_inner->write_vtk("inner.vtu");
   }
 
   const int cell_count_outer = helper_outer->get_cell_count();
@@ -1255,12 +1292,18 @@ TEST(PETSc, dmplex_mesh_coupler_dg0_integration) {
   std::vector<REAL> dofs_outer_backward(cell_count_outer);
   std::vector<REAL> dofs_inner_backward(cell_count_inner);
 
+  std::vector<REAL> dofs_outer_correct(cell_count_outer);
+  std::vector<REAL> dofs_inner_correct(cell_count_inner);
+
+  std::fill(dofs_outer_correct.begin(), dofs_outer_correct.end(), 0.0);
+  std::fill(dofs_inner_correct.begin(), dofs_inner_correct.end(), 0.0);
+
   for (int cellx = 0; cellx < cell_count_outer; cellx++) {
     const PetscInt petsc_cell_index =
         helper_outer->get_dmplex_cell_index(cellx);
     const PetscInt global_cell_index =
         helper_outer->get_point_global_index(petsc_cell_index);
-    dofs_outer_backward.at(cellx) = global_cell_index;
+    dofs_outer_backward.at(cellx) = outer_map_inverse.at(global_cell_index);
     dofs_outer_forward.at(cellx) = 0.0;
   }
 
@@ -1270,7 +1313,7 @@ TEST(PETSc, dmplex_mesh_coupler_dg0_integration) {
     const PetscInt global_cell_index =
         helper_inner->get_point_global_index(petsc_cell_index);
     dofs_inner_backward.at(cellx) = 0.0;
-    dofs_inner_forward.at(cellx) = global_cell_index;
+    dofs_inner_forward.at(cellx) = inner_map_inverse.at(global_cell_index);
   }
 
   std::vector<std::vector<PetscInterface::DMPlexMeshCouplerDG0MapEntry>>
@@ -1279,10 +1322,8 @@ TEST(PETSc, dmplex_mesh_coupler_dg0_integration) {
   for (int cellx = 0; cellx < cell_count_inner; cellx++) {
     const PetscInt petsc_cell_index =
         helper_inner->get_dmplex_cell_index(cellx);
-    const PetscInt global_cell_index =
-        helper_inner->get_point_global_index(petsc_cell_index);
-    nprint_variable(cellx);
-    nprint_variable(global_cell_index);
+    const PetscInt global_cell_index = inner_map_inverse.at(
+        helper_inner->get_point_global_index(petsc_cell_index));
 
     const PetscInt cell_index_x = global_cell_index % mesh_size_inner;
     const PetscInt cell_index_y = global_cell_index / mesh_size_inner;
@@ -1290,62 +1331,122 @@ TEST(PETSc, dmplex_mesh_coupler_dg0_integration) {
     const PetscInt cell_index_outer_base_x = (mesh_offset + cell_index_x) * 2;
     const PetscInt cell_index_outer_base_y = (mesh_offset + cell_index_y) * 2;
 
+    REAL correct_backward_value = 0.0;
+
     for (int dy : {0, 1}) {
       for (int dx : {0, 1}) {
         const PetscInt cell_index_outer_x = cell_index_outer_base_x + dx;
         const PetscInt cell_index_outer_y = cell_index_outer_base_y + dy;
         const PetscInt cell_index_outer =
             cell_index_outer_y * mesh_size_outer + cell_index_outer_x;
-        coupler_map.at(cellx).push_back({cell_index_outer, 1.0, 0.25});
+
+        correct_backward_value += 0.25 * cell_index_outer;
+
+        coupler_map.at(cellx).push_back(
+            {outer_map.at(cell_index_outer), 1.0, 0.25});
       }
     }
+
+    dofs_inner_correct.at(cellx) = correct_backward_value;
+  }
+
+  for (int cellx = 0; cellx < cell_count_outer; cellx++) {
+    const PetscInt petsc_cell_index =
+        helper_outer->get_dmplex_cell_index(cellx);
+    const PetscInt global_cell_index = outer_map_inverse.at(
+        helper_outer->get_point_global_index(petsc_cell_index));
+
+    const PetscInt cell_index_x = global_cell_index % mesh_size_outer;
+    const PetscInt cell_index_y = global_cell_index / mesh_size_outer;
+
+    REAL value = 0;
+
+    const bool outside_x =
+        (cell_index_x < mesh_offset * 2) ||
+        (cell_index_x >= ((mesh_offset + mesh_size_inner) * 2));
+
+    const bool outside_y =
+        (cell_index_y < mesh_offset * 2) ||
+        (cell_index_y >= ((mesh_offset + mesh_size_inner) * 2));
+
+    if (!(outside_x || outside_y)) {
+
+      const PetscInt cell_index_inner_x = (cell_index_x / 2) - mesh_offset;
+      const PetscInt cell_index_inner_y = (cell_index_y / 2) - mesh_offset;
+      const PetscInt cell_index_inner =
+          cell_index_inner_y * mesh_size_inner + cell_index_inner_x;
+
+      value = cell_index_inner;
+    }
+
+    dofs_outer_correct.at(cellx) = value;
   }
 
   auto coupler = std::make_shared<PetscInterface::DMPlexMeshCouplerDG0>(
       dm_outer, coupler_map);
 
   coupler->forward_transfer(dofs_inner_forward, dofs_outer_forward);
+
+  for (int cellx = 0; cellx < cell_count_outer; cellx++) {
+    const REAL correct = dofs_outer_correct.at(cellx);
+    const REAL to_test = dofs_outer_forward.at(cellx);
+    ASSERT_NEAR(correct, to_test, 1.0e-14);
+  }
+
   coupler->backward_transfer(dofs_outer_backward, dofs_inner_backward);
 
-  auto vtk_outer = helper_outer->get_vtk_cell_data();
-  for (int cellx = 0; cellx < cell_count_outer; cellx++) {
-    vtk_outer.at(cellx).cell_data["forward"] = dofs_outer_forward.at(cellx);
-    vtk_outer.at(cellx).cell_data["backward"] = dofs_outer_backward.at(cellx);
-    vtk_outer.at(cellx).cell_data["rank"] = rank;
-
-    const PetscInt petsc_cell_index =
-        helper_outer->get_dmplex_cell_index(cellx);
-    const PetscInt global_cell_index =
-        helper_outer->get_point_global_index(petsc_cell_index);
-    vtk_outer.at(cellx).cell_data["cell_index"] = global_cell_index;
-  }
-  VTK::VTKHDF vtkhdf_outer("outer.vtkhdf", comm_outer);
-  vtkhdf_outer.write(vtk_outer);
-  vtkhdf_outer.close();
-
-  if (inner_active) {
-    auto vtk_inner = helper_inner->get_vtk_cell_data();
-    for (int cellx = 0; cellx < cell_count_inner; cellx++) {
-      vtk_inner.at(cellx).cell_data["forward"] = dofs_inner_forward.at(cellx);
-      vtk_inner.at(cellx).cell_data["backward"] = dofs_inner_backward.at(cellx);
-      vtk_inner.at(cellx).cell_data["rank"] = rank;
-
-      const PetscInt petsc_cell_index =
-          helper_inner->get_dmplex_cell_index(cellx);
-      const PetscInt global_cell_index =
-          helper_inner->get_point_global_index(petsc_cell_index);
-      vtk_inner.at(cellx).cell_data["cell_index"] = global_cell_index;
-    }
-    VTK::VTKHDF vtkhdf_inner("inner.vtkhdf", comm_inner);
-    vtkhdf_inner.write(vtk_inner);
-    vtkhdf_inner.close();
+  for (int cellx = 0; cellx < cell_count_inner; cellx++) {
+    const REAL correct = dofs_inner_correct.at(cellx);
+    const REAL to_test = dofs_inner_backward.at(cellx);
+    ASSERT_NEAR(correct, to_test, 1.0e-14);
   }
 
-  PETSCCHK(PetscSFDestroy(&sf_outer));
+  // auto vtk_outer = helper_outer->get_vtk_cell_data();
+  // for (int cellx = 0; cellx < cell_count_outer; cellx++) {
+  //   vtk_outer.at(cellx).cell_data["forward"] = dofs_outer_forward.at(cellx);
+  //   vtk_outer.at(cellx).cell_data["backward"] =
+  //   dofs_outer_backward.at(cellx); vtk_outer.at(cellx).cell_data["debug"] =
+  //   dofs_outer_correct.at(cellx); vtk_outer.at(cellx).cell_data["rank"] =
+  //   rank;
+  //
+  //   const PetscInt petsc_cell_index =
+  //       helper_outer->get_dmplex_cell_index(cellx);
+  //   const PetscInt global_cell_index =
+  //       helper_outer->get_point_global_index(petsc_cell_index);
+  //   vtk_outer.at(cellx).cell_data["cell_index"] = global_cell_index;
+  // }
+  // VTK::VTKHDF vtkhdf_outer("outer.vtkhdf", comm_outer);
+  // vtkhdf_outer.write(vtk_outer);
+  // vtkhdf_outer.close();
+  //
+  // if (inner_active) {
+  //   auto vtk_inner = helper_inner->get_vtk_cell_data();
+  //   for (int cellx = 0; cellx < cell_count_inner; cellx++) {
+  //     vtk_inner.at(cellx).cell_data["forward"] =
+  //     dofs_inner_forward.at(cellx); vtk_inner.at(cellx).cell_data["backward"]
+  //     = dofs_inner_backward.at(cellx); vtk_inner.at(cellx).cell_data["rank"]
+  //     = rank;
+  //
+  //     const PetscInt petsc_cell_index =
+  //         helper_inner->get_dmplex_cell_index(cellx);
+  //     const PetscInt global_cell_index =
+  //         helper_inner->get_point_global_index(petsc_cell_index);
+  //     vtk_inner.at(cellx).cell_data["cell_index"] = global_cell_index;
+  //   }
+  //   VTK::VTKHDF vtkhdf_inner("inner.vtkhdf", comm_inner);
+  //   vtkhdf_inner.write(vtk_inner);
+  //   vtkhdf_inner.close();
+  // }
+
+  if (size > 1) {
+    PETSCCHK(PetscSFDestroy(&sf_outer));
+  }
   PETSCCHK(DMDestroy(&dm_outer));
   if (inner_active) {
     PETSCCHK(DMDestroy(&dm_inner));
-    PETSCCHK(PetscSFDestroy(&sf_inner));
+    if (size > 1) {
+      PETSCCHK(PetscSFDestroy(&sf_inner));
+    }
   }
 
   if (comm_inner != MPI_COMM_NULL) {

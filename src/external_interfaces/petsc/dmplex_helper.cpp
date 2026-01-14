@@ -48,6 +48,75 @@ void setup_local_coordinate_vector(DM &dm, Vec &coordinates) {
   PETSCCHK(VecSetType(coordinates, VECSTANDARD));
 }
 
+std::vector<PetscInt> get_global_distributed_points_map(DM &dm_distributed,
+                                                        PetscSF &sf) {
+
+  MPI_Comm comm;
+  PETSCCHK(PetscObjectGetComm((PetscObject)dm_distributed, &comm));
+
+  int size;
+  MPICHK(MPI_Comm_size(comm, &size));
+
+  PetscInt point_start = 0;
+  PetscInt point_end = 0;
+  PETSCCHK(DMPlexGetChart(dm_distributed, &point_start, &point_end));
+
+  if (size == 1) {
+    const PetscInt npoints_global = point_end - point_start;
+    std::vector<PetscInt> global_points(npoints_global);
+    std::iota(global_points.begin(), global_points.end(), 0);
+    return global_points;
+  } else {
+
+    PetscInt nroots = 0;
+    PetscInt nleaves = 0;
+    PetscInt const *ilocal = nullptr;
+    PetscSFNode const *iremote = nullptr;
+    PETSCCHK(PetscSFGetGraph(sf, &nroots, &nleaves, &ilocal, &iremote));
+
+    IS global_point_numbers;
+    PETSCCHK(DMPlexCreatePointNumbering(dm_distributed, &global_point_numbers));
+    const PetscInt *ptr;
+    PETSCCHK(ISGetIndices(global_point_numbers, &ptr));
+
+    PetscInt npoints_global = 0;
+
+    MPICHK(
+        MPI_Allreduce(&nleaves, &npoints_global, 1, MPIU_INT, MPI_SUM, comm));
+
+    std::vector<PetscInt> local_points(npoints_global);
+    std::vector<PetscInt> global_points(npoints_global);
+    std::fill(local_points.begin(), local_points.end(), -1);
+    std::fill(global_points.begin(), global_points.end(), -1);
+
+    for (int ix = 0; ix < nleaves; ix++) {
+
+      const PetscInt global_point_previous = iremote[ix].index;
+      const PetscInt global_point_current = ptr[ix - point_start];
+
+      NESOASSERT((0 <= global_point_previous) &&
+                     (global_point_previous < npoints_global),
+                 "Bad global point previous.");
+
+      if (global_point_current > -1) {
+        NESOASSERT((global_point_current < npoints_global),
+                   "Bad global point current.");
+
+        local_points[global_point_previous] = global_point_current;
+      }
+    }
+
+    MPICHK(MPI_Allreduce(local_points.data(), global_points.data(),
+                         static_cast<int>(npoints_global), MPIU_INT, MPI_MAX,
+                         comm));
+
+    PETSCCHK(ISRestoreIndices(global_point_numbers, &ptr));
+    PETSCCHK(ISDestroy(&global_point_numbers));
+
+    return global_points;
+  }
+}
+
 bool dm_from_serialised_cells(
     std::list<DMPlexCellSerialise> &serialised_cells, DM &dm_prototype, DM &dm,
     std::map<PetscInt, std::tuple<int, PetscInt, PetscInt>>
