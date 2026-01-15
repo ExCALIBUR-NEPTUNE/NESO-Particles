@@ -47,6 +47,13 @@ class DMPlexMeshCouplerDG0 {
 protected:
   std::vector<REAL> h_stage_send;
   std::vector<REAL> h_stage_recv;
+  std::vector<MPI_Aint> h_send_disps;
+  std::vector<MPI_Aint> h_recv_disps;
+  std::vector<int> h_send_counts;
+  std::vector<int> h_recv_counts;
+  int stage_base_size{0};
+
+  void prepare_transfer(const int ncomp);
 
 public:
   /// Disable (implicit) copies.
@@ -129,18 +136,22 @@ public:
    * communicator.
    *
    * @param dofs_A Source DOFs to send and combine.
+   * @param ncomp Number of components per cell.
    * @param dofs_B Destination DOFS.
    */
-  void forward_transfer(std::vector<REAL> &dofs_A, std::vector<REAL> &dofs_B);
+  void forward_transfer(std::vector<REAL> &dofs_A, const int ncomp,
+                        std::vector<REAL> &dofs_B);
 
   /**
    * Perform the backward transfer. This method is collective on the
    * communicator.
    *
    * @param dofs_B Source DOFs to send and combine.
+   * @param ncomp Number of components per cell.
    * @param dofs_A Destination DOFS.
    */
-  void backward_transfer(std::vector<REAL> &dofs_B, std::vector<REAL> &dofs_A);
+  void backward_transfer(std::vector<REAL> &dofs_B, const int ncomp,
+                         std::vector<REAL> &dofs_A);
 
   /*
    * Free the coupler. This method is collective on the communicator.

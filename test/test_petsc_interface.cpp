@@ -1148,7 +1148,7 @@ TEST(PETSc, dmplex_mesh_coupler_dg0) {
     };
 
     lambda_forward_transfer(dofs_A_correct, dofs_B_correct);
-    cmdg0->forward_transfer(dofs_A_correct, dofs_B_to_test);
+    cmdg0->forward_transfer(dofs_A_correct, 1, dofs_B_to_test);
 
     for (int ix = 0; ix < cell_count_B; ix++) {
       ASSERT_NEAR(dofs_B_correct.at(ix), dofs_B_to_test.at(ix), 1.0e-12);
@@ -1179,7 +1179,7 @@ TEST(PETSc, dmplex_mesh_coupler_dg0) {
               dofs_B_correct.begin());
 
     lambda_backward_transfer(global_dofs_B, dofs_A_correct);
-    cmdg0->backward_transfer(dofs_B_correct, dofs_A_to_test);
+    cmdg0->backward_transfer(dofs_B_correct, 1, dofs_A_to_test);
 
     for (int ix = 0; ix < cell_count_A; ix++) {
       ASSERT_NEAR(dofs_A_correct.at(ix), dofs_A_to_test.at(ix), 1.0e-12);
@@ -1212,6 +1212,7 @@ TEST(PETSc, dmplex_mesh_coupler_dg0_integration) {
 
   const REAL cell_width_outer = 1.0;
   const REAL cell_width_inner = 2.0 * cell_width_outer;
+  const int ncomp = 2;
   const PetscInt ndim = 2;
   const PetscInt mesh_size_inner = 4;
   const PetscInt mesh_offset = 2;
@@ -1287,13 +1288,13 @@ TEST(PETSc, dmplex_mesh_coupler_dg0_integration) {
   const int cell_count_inner =
       inner_active ? helper_inner->get_cell_count() : 0;
 
-  std::vector<REAL> dofs_outer_forward(cell_count_outer);
-  std::vector<REAL> dofs_inner_forward(cell_count_inner);
-  std::vector<REAL> dofs_outer_backward(cell_count_outer);
-  std::vector<REAL> dofs_inner_backward(cell_count_inner);
+  std::vector<REAL> dofs_outer_forward(cell_count_outer * ncomp);
+  std::vector<REAL> dofs_inner_forward(cell_count_inner * ncomp);
+  std::vector<REAL> dofs_outer_backward(cell_count_outer * ncomp);
+  std::vector<REAL> dofs_inner_backward(cell_count_inner * ncomp);
 
-  std::vector<REAL> dofs_outer_correct(cell_count_outer);
-  std::vector<REAL> dofs_inner_correct(cell_count_inner);
+  std::vector<REAL> dofs_outer_correct(cell_count_outer * ncomp);
+  std::vector<REAL> dofs_inner_correct(cell_count_inner * ncomp);
 
   std::fill(dofs_outer_correct.begin(), dofs_outer_correct.end(), 0.0);
   std::fill(dofs_inner_correct.begin(), dofs_inner_correct.end(), 0.0);
@@ -1303,8 +1304,12 @@ TEST(PETSc, dmplex_mesh_coupler_dg0_integration) {
         helper_outer->get_dmplex_cell_index(cellx);
     const PetscInt global_cell_index =
         helper_outer->get_point_global_index(petsc_cell_index);
-    dofs_outer_backward.at(cellx) = outer_map_inverse.at(global_cell_index);
-    dofs_outer_forward.at(cellx) = 0.0;
+    dofs_outer_backward.at(cellx * ncomp) =
+        outer_map_inverse.at(global_cell_index);
+    dofs_outer_backward.at(cellx * ncomp + 1) =
+        -outer_map_inverse.at(global_cell_index);
+    dofs_outer_forward.at(cellx * ncomp) = 0.0;
+    dofs_outer_forward.at(cellx * ncomp + 1) = 0.0;
   }
 
   for (int cellx = 0; cellx < cell_count_inner; cellx++) {
@@ -1312,8 +1317,12 @@ TEST(PETSc, dmplex_mesh_coupler_dg0_integration) {
         helper_inner->get_dmplex_cell_index(cellx);
     const PetscInt global_cell_index =
         helper_inner->get_point_global_index(petsc_cell_index);
-    dofs_inner_backward.at(cellx) = 0.0;
-    dofs_inner_forward.at(cellx) = inner_map_inverse.at(global_cell_index);
+    dofs_inner_backward.at(cellx * ncomp) = 0.0;
+    dofs_inner_backward.at(cellx * ncomp + 1) = 0.0;
+    dofs_inner_forward.at(cellx * ncomp) =
+        inner_map_inverse.at(global_cell_index);
+    dofs_inner_forward.at(cellx * ncomp + 1) =
+        -inner_map_inverse.at(global_cell_index);
   }
 
   std::vector<std::vector<PetscInterface::DMPlexMeshCouplerDG0MapEntry>>
@@ -1347,7 +1356,8 @@ TEST(PETSc, dmplex_mesh_coupler_dg0_integration) {
       }
     }
 
-    dofs_inner_correct.at(cellx) = correct_backward_value;
+    dofs_inner_correct.at(cellx * ncomp) = correct_backward_value;
+    dofs_inner_correct.at(cellx * ncomp + 1) = -correct_backward_value;
   }
 
   for (int cellx = 0; cellx < cell_count_outer; cellx++) {
@@ -1379,23 +1389,24 @@ TEST(PETSc, dmplex_mesh_coupler_dg0_integration) {
       value = cell_index_inner;
     }
 
-    dofs_outer_correct.at(cellx) = value;
+    dofs_outer_correct.at(cellx * ncomp) = value;
+    dofs_outer_correct.at(cellx * ncomp + 1) = -value;
   }
 
   auto coupler = std::make_shared<PetscInterface::DMPlexMeshCouplerDG0>(
       dm_outer, coupler_map);
 
-  coupler->forward_transfer(dofs_inner_forward, dofs_outer_forward);
+  coupler->forward_transfer(dofs_inner_forward, ncomp, dofs_outer_forward);
 
-  for (int cellx = 0; cellx < cell_count_outer; cellx++) {
+  for (int cellx = 0; cellx < cell_count_outer * ncomp; cellx++) {
     const REAL correct = dofs_outer_correct.at(cellx);
     const REAL to_test = dofs_outer_forward.at(cellx);
     ASSERT_NEAR(correct, to_test, 1.0e-14);
   }
 
-  coupler->backward_transfer(dofs_outer_backward, dofs_inner_backward);
+  coupler->backward_transfer(dofs_outer_backward, ncomp, dofs_inner_backward);
 
-  for (int cellx = 0; cellx < cell_count_inner; cellx++) {
+  for (int cellx = 0; cellx < cell_count_inner * ncomp; cellx++) {
     const REAL correct = dofs_inner_correct.at(cellx);
     const REAL to_test = dofs_inner_backward.at(cellx);
     ASSERT_NEAR(correct, to_test, 1.0e-14);
@@ -1403,11 +1414,13 @@ TEST(PETSc, dmplex_mesh_coupler_dg0_integration) {
 
   // auto vtk_outer = helper_outer->get_vtk_cell_data();
   // for (int cellx = 0; cellx < cell_count_outer; cellx++) {
-  //   vtk_outer.at(cellx).cell_data["forward"] = dofs_outer_forward.at(cellx);
+  //   vtk_outer.at(cellx).cell_data["forward"] =
+  //       dofs_outer_forward.at(cellx * ncomp);
   //   vtk_outer.at(cellx).cell_data["backward"] =
-  //   dofs_outer_backward.at(cellx); vtk_outer.at(cellx).cell_data["debug"] =
-  //   dofs_outer_correct.at(cellx); vtk_outer.at(cellx).cell_data["rank"] =
-  //   rank;
+  //       dofs_outer_backward.at(cellx * ncomp);
+  //   vtk_outer.at(cellx).cell_data["debug"] =
+  //       dofs_outer_correct.at(cellx * ncomp);
+  //   vtk_outer.at(cellx).cell_data["rank"] = rank;
   //
   //   const PetscInt petsc_cell_index =
   //       helper_outer->get_dmplex_cell_index(cellx);
@@ -1423,9 +1436,10 @@ TEST(PETSc, dmplex_mesh_coupler_dg0_integration) {
   //   auto vtk_inner = helper_inner->get_vtk_cell_data();
   //   for (int cellx = 0; cellx < cell_count_inner; cellx++) {
   //     vtk_inner.at(cellx).cell_data["forward"] =
-  //     dofs_inner_forward.at(cellx); vtk_inner.at(cellx).cell_data["backward"]
-  //     = dofs_inner_backward.at(cellx); vtk_inner.at(cellx).cell_data["rank"]
-  //     = rank;
+  //         dofs_inner_forward.at(cellx * ncomp);
+  //     vtk_inner.at(cellx).cell_data["backward"] =
+  //         dofs_inner_backward.at(cellx * ncomp);
+  //     vtk_inner.at(cellx).cell_data["rank"] = rank;
   //
   //     const PetscInt petsc_cell_index =
   //         helper_inner->get_dmplex_cell_index(cellx);
