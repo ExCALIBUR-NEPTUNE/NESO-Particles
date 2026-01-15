@@ -341,6 +341,27 @@ int NP_MPI_Neighbor_alltoallw_wrapper(
     const MPI_Datatype sendtypes[], void *recvbuf, const int recvcounts[],
     const MPI_Aint rdispls[], const MPI_Datatype recvtypes[], MPI_Comm comm);
 
+/**
+ * MPI implementations check if the arguments they have been passed are nullptr.
+ * In some cases these checks happen even if the pointer is never dereferenced.
+ * This is a problem when a buffer is not needed and is backed by a std::vector
+ * of size zero. Size zero std::vectors may return a nullptr on call to data().
+ *
+ * This class returns a fictuous non-zero pointer instead of a nullptr to avoid
+ * these checks causing the program to stop for no good reason.
+ */
+struct SuppressMPINullPtrCheck {
+  std::uintptr_t source{1};
+
+  template <typename T> T *get(std::vector<T> &vec) {
+    if (vec.size()) {
+      return vec.data();
+    } else {
+      return reinterpret_cast<T *>(this->source++);
+    }
+  }
+};
+
 } // namespace NESO::Particles
 
 #endif

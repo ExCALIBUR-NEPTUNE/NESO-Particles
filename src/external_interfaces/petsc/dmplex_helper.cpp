@@ -3,12 +3,13 @@
 
 namespace NESO::Particles::PetscInterface {
 
-void generic_distribute(DM *dm, MPI_Comm comm, const PetscInt overlap) {
+void generic_distribute(DM *dm, MPI_Comm comm, const PetscInt overlap,
+                        PetscSF *sf) {
   int size;
   MPICHK(MPI_Comm_size(comm, &size));
   if (size > 1) {
     DM dm_out;
-    PETSCCHK(DMPlexDistribute(*dm, overlap, nullptr, &dm_out));
+    PETSCCHK(DMPlexDistribute(*dm, overlap, sf, &dm_out));
     NESOASSERT(dm_out, "Could not distribute mesh.");
     PETSCCHK(DMDestroy(dm));
     *dm = dm_out;
@@ -45,6 +46,75 @@ void setup_local_coordinate_vector(DM &dm, Vec &coordinates) {
   PETSCCHK(VecSetSizes(coordinates, coord_size, PETSC_DETERMINE));
   PETSCCHK(VecSetBlockSize(coordinates, ndim));
   PETSCCHK(VecSetType(coordinates, VECSTANDARD));
+}
+
+std::vector<PetscInt> get_global_distributed_points_map(DM &dm_distributed,
+                                                        PetscSF &sf) {
+
+  MPI_Comm comm;
+  PETSCCHK(PetscObjectGetComm((PetscObject)dm_distributed, &comm));
+
+  int size;
+  MPICHK(MPI_Comm_size(comm, &size));
+
+  PetscInt point_start = 0;
+  PetscInt point_end = 0;
+  PETSCCHK(DMPlexGetChart(dm_distributed, &point_start, &point_end));
+
+  if (size == 1) {
+    const PetscInt npoints_global = point_end - point_start;
+    std::vector<PetscInt> global_points(npoints_global);
+    std::iota(global_points.begin(), global_points.end(), 0);
+    return global_points;
+  } else {
+
+    PetscInt nroots = 0;
+    PetscInt nleaves = 0;
+    PetscInt const *ilocal = nullptr;
+    PetscSFNode const *iremote = nullptr;
+    PETSCCHK(PetscSFGetGraph(sf, &nroots, &nleaves, &ilocal, &iremote));
+
+    IS global_point_numbers;
+    PETSCCHK(DMPlexCreatePointNumbering(dm_distributed, &global_point_numbers));
+    const PetscInt *ptr;
+    PETSCCHK(ISGetIndices(global_point_numbers, &ptr));
+
+    PetscInt npoints_global = 0;
+
+    MPICHK(
+        MPI_Allreduce(&nleaves, &npoints_global, 1, MPIU_INT, MPI_SUM, comm));
+
+    std::vector<PetscInt> local_points(npoints_global);
+    std::vector<PetscInt> global_points(npoints_global);
+    std::fill(local_points.begin(), local_points.end(), -1);
+    std::fill(global_points.begin(), global_points.end(), -1);
+
+    for (int ix = 0; ix < nleaves; ix++) {
+
+      const PetscInt global_point_previous = iremote[ix].index;
+      const PetscInt global_point_current = ptr[ix - point_start];
+
+      NESOASSERT((0 <= global_point_previous) &&
+                     (global_point_previous < npoints_global),
+                 "Bad global point previous.");
+
+      if (global_point_current > -1) {
+        NESOASSERT((global_point_current < npoints_global),
+                   "Bad global point current.");
+
+        local_points[global_point_previous] = global_point_current;
+      }
+    }
+
+    MPICHK(MPI_Allreduce(local_points.data(), global_points.data(),
+                         static_cast<int>(npoints_global), MPIU_INT, MPI_MAX,
+                         comm));
+
+    PETSCCHK(ISRestoreIndices(global_point_numbers, &ptr));
+    PETSCCHK(ISDestroy(&global_point_numbers));
+
+    return global_points;
+  }
 }
 
 bool dm_from_serialised_cells(
@@ -220,9 +290,31 @@ DMPlexHelper::DMPlexHelper(MPI_Comm comm, DM dm)
              "Size missmatch.");
   this->ncells = this->map_np_to_petsc.size();
   NESOASSERT(this->ncells, "A rank has zero cells.");
+
+  PetscInt point_start = 0;
+  PetscInt point_end = 0;
+  PETSCCHK(DMPlexGetChart(dm, &point_start, &point_end));
+
+  for (PetscInt px = point_start; px < point_end; px++) {
+    const PetscInt global_point = signed_global_id_to_global_id(
+        this->internal_get_point_global_index(px));
+    this->map_gobal_point_to_local_point[global_point] = px;
+  }
 }
 
 int DMPlexHelper::get_cell_count() { return this->ncells; }
+
+int DMPlexHelper::get_global_cell_count() {
+
+  if (this->ncells_global < 0) {
+    int ncells_local = this->get_cell_count();
+    int tmp = -1;
+    MPICHK(MPI_Allreduce(&ncells_local, &tmp, 1, MPI_INT, MPI_SUM, this->comm));
+    this->ncells_global = tmp;
+  }
+
+  return this->ncells_global;
+}
 
 PetscInt DMPlexHelper::get_dmplex_cell_index(const PetscInt local_index) {
   this->check_valid_local_cell(local_index);
@@ -253,6 +345,14 @@ PetscInt DMPlexHelper::get_point_global_index(const PetscInt point,
   } else {
     return signed_global_id_to_global_id(global_point);
   }
+}
+
+PetscInt DMPlexHelper::get_local_point_from_global_point(
+    const PetscInt global_point_index) {
+  NESOASSERT(this->map_gobal_point_to_local_point.count(
+                 signed_global_id_to_global_id(global_point_index)),
+             "Global point not found.");
+  return this->map_gobal_point_to_local_point[global_point_index];
 }
 
 ExternalCommon::BoundingBoxSharedPtr DMPlexHelper::get_bounding_box() {
@@ -542,6 +642,31 @@ void DMPlexHelper::write_vtk(const std::string filename) {
   PETSCCHK(PetscViewerDestroy(&viewer));
 }
 
+std::vector<VTK::UnstructuredCell> DMPlexHelper::get_vtk_cell_data() {
+  const int cell_count = this->get_cell_count();
+  std::vector<VTK::UnstructuredCell> data(cell_count);
+  std::vector<std::vector<REAL>> vertices;
+  NESOASSERT(this->ndim == 2, "Only implemented in 2D.");
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    vertices.clear();
+    this->get_cell_vertices(cellx, vertices);
+    const int num_vertices = vertices.size();
+    data.at(cellx).num_points = num_vertices;
+    data.at(cellx).cell_type = num_vertices == 3 ? VTK::CellType::triangle
+                                                 : VTK::CellType::quadrilateral;
+    data.at(cellx).points.reserve(num_vertices * 3);
+    for (int vx = 0; vx < num_vertices; vx++) {
+      for (int dx = 0; dx < this->ndim; dx++) {
+        data.at(cellx).points.push_back(vertices.at(vx).at(dx));
+      }
+      for (int dx = this->ndim; dx < 3; dx++) {
+        data.at(cellx).points.push_back(0.0);
+      }
+    }
+  }
+  return data;
+}
+
 void DMPlexHelper::print() {
   for (int cx = 0; cx < this->ncells; cx++) {
     const PetscInt point_index = this->map_np_to_petsc.at(cx);
@@ -623,6 +748,60 @@ get_cell_vertices_cdc(SYCLTargetSharedPtr sycl_target,
   }
 
   return d;
+}
+
+std::pair<int, std::vector<int>>
+get_map_from_global_cell_points_to_ranks(DM dm) {
+
+  MPI_Comm comm = MPI_COMM_NULL;
+  PETSCCHK(PetscObjectGetComm((PetscObject)dm, &comm));
+
+  DMPlexHelper dmh(comm, dm);
+  const int global_cell_count = dmh.get_global_cell_count();
+  const int cell_count = dmh.get_cell_count();
+
+  std::vector<int> cell_owners_local(global_cell_count);
+  std::fill(cell_owners_local.begin(), cell_owners_local.end(), -1);
+
+  int point_min = std::numeric_limits<int>::max();
+  int point_max = std::numeric_limits<int>::lowest();
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    // local point index of the cell
+    const PetscInt point_index = dmh.get_dmplex_cell_index(cellx);
+    const int global_point_index =
+        static_cast<int>(dmh.get_point_global_index(point_index));
+    point_min = std::min(point_min, global_point_index);
+    point_max = std::max(point_max, global_point_index);
+  }
+
+  int global_point_min = 0;
+  int global_point_max = 0;
+
+  MPICHK(
+      MPI_Allreduce(&point_min, &global_point_min, 1, MPI_INT, MPI_MIN, comm));
+  MPICHK(
+      MPI_Allreduce(&point_max, &global_point_max, 1, MPI_INT, MPI_MAX, comm));
+  NESOASSERT(global_point_max - global_point_min + 1 == global_cell_count,
+             "Error deducing petsc numbering");
+
+  int rank = 0;
+  MPICHK(MPI_Comm_rank(comm, &rank));
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    // local point index of the cell
+    const PetscInt point_index = dmh.get_dmplex_cell_index(cellx);
+    const int global_point_index =
+        static_cast<int>(dmh.get_point_global_index(point_index));
+    const int index = global_point_index - global_point_min;
+    cell_owners_local.at(index) = rank;
+  }
+
+  std::vector<int> cell_owners(global_cell_count);
+  MPICHK(MPI_Allreduce(cell_owners_local.data(), cell_owners.data(),
+                       global_cell_count, MPI_INT, MPI_MAX, comm));
+  cell_owners_local.clear();
+
+  return {global_point_min, cell_owners};
 }
 
 } // namespace NESO::Particles::PetscInterface

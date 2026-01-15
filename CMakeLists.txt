@@ -55,6 +55,7 @@ set(SRC_FILES
     ${SRC_DIR}/external_interfaces/petsc/dmplex_cell_serialise.cpp
     ${SRC_DIR}/external_interfaces/petsc/dmplex_interface.cpp
     ${SRC_DIR}/external_interfaces/petsc/dmplex_helper.cpp
+    ${SRC_DIR}/external_interfaces/petsc/dmplex_mesh_coupler_dg0.cpp
     ${SRC_DIR}/external_interfaces/petsc/dmplex_utility.cpp
     ${SRC_DIR}/external_interfaces/petsc/particle_cell_mapping/dmplex_2d_mapper.cpp
     ${SRC_DIR}/external_interfaces/petsc/particle_cell_mapping/dmplex_host_mapper.cpp
@@ -216,6 +217,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/dmplex_helper.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/dmplex_interface.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/dmplex_local_mapper.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/dmplex_mesh_coupler_dg0.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/dmplex_project_evaluate.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/dmplex_utility.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/petsc_api_redirection.hpp
