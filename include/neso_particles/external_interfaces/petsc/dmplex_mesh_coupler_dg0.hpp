@@ -71,8 +71,8 @@ public:
   // The number of local cells in B.
   int cell_count_B{0};
 
-  std::vector<int> send_dtypes;
-  std::vector<int> recv_dtypes;
+  std::vector<MPI_Datatype> send_dtypes;
+  std::vector<MPI_Datatype> recv_dtypes;
 
   // Dist graph comm for forward transfer.
   MPI_Comm comm_forward{MPI_COMM_NULL};
