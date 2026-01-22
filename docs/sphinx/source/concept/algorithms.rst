@@ -15,3 +15,18 @@ The output may be one of the arguments.
    :language: cpp
    :caption: Example use of a elementwise loop and function application for ``CellDatConst`` instances.
 
+Cellwise Broadcast
+===================
+
+Set the specified component and property on all particles to the value in the passed array at the index that corresponds to the cell of the particle.
+
+.. literalinclude:: ../example_sources/example_cell_wise_broadcast.hpp
+   :language: cpp
+   :caption: Example use of a cellwise broadcast.
+
+
+
+
+
+
+
