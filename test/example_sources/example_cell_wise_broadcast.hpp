@@ -1,5 +1,5 @@
 // clang-format off
-inline void cell_wise_broadcast(
+inline void cellwise_broadcast(
     ParticleGroupSharedPtr particle_group
 ) {
   // Get the number of cells on this MPI rank.

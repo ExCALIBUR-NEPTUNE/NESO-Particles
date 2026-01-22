@@ -89,7 +89,7 @@ TEST(Examples, particle_loop_base_b) {
 
   cell_dat_const_reduction_example(A);
   cell_dat_const_loop_element_wise_example(A->sycl_target);
-  cell_wise_broadcast(A);
+  cellwise_broadcast(A);
 
   auto B = particle_loop_common(5);
 
