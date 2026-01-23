@@ -295,6 +295,38 @@ TEST(Algorithms, cell_dat_const_loop_element_wise_base_broadcast) {
   auto d =
       std::make_shared<CellDatConst<REAL>>(sycl_target, cell_count, nrow, ncol);
 
+  std::array<int, 4> correct_masks = {0, 0, 0, 0};
+  std::array<int, 4> to_test_masks = {0, 0, 0, 0};
+
+  auto lambda_reset = [&]() {
+    for (int ix = 0; ix < 4; ix++) {
+      correct_masks.at(ix) = 0;
+      to_test_masks.at(ix) = 0;
+    }
+  };
+
+  Private::CellDatConstLoop::get_broadcast_masks<0, 4>(to_test_masks, a, a, a,
+                                                       a);
+  ASSERT_EQ(correct_masks, to_test_masks);
+  lambda_reset();
+  Private::CellDatConstLoop::get_broadcast_masks<0, 4>(to_test_masks, c, c, c,
+                                                       c);
+  correct_masks.at(0) = 1;
+  correct_masks.at(1) = 1;
+  correct_masks.at(2) = 1;
+  correct_masks.at(3) = 1;
+
+  ASSERT_EQ(correct_masks, to_test_masks);
+  lambda_reset();
+
+  Private::CellDatConstLoop::get_broadcast_masks<0, 4>(to_test_masks, c, a, c,
+                                                       a);
+  correct_masks.at(0) = 1;
+  correct_masks.at(2) = 1;
+
+  ASSERT_EQ(correct_masks, to_test_masks);
+  lambda_reset();
+
   std::mt19937 rng(522342 + sycl_target->comm_pair.rank_parent);
   std::uniform_real_distribution<REAL> dist(1.0, 4.0);
   auto h_a = a->get_all_cells();
