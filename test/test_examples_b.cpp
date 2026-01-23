@@ -80,9 +80,9 @@ particle_loop_common(const int N = 10930, const int sx = 4, const int sy = 8) {
 
 } // namespace
 
-#include "example_sources/example_particle_loop_cell_dat_const_reduction.hpp"
 #include "example_sources/example_cell_dat_const_loop_element_wise.hpp"
 #include "example_sources/example_cell_wise_broadcast.hpp"
+#include "example_sources/example_particle_loop_cell_dat_const_reduction.hpp"
 
 TEST(Examples, particle_loop_base_b) {
   auto A = particle_loop_common();
