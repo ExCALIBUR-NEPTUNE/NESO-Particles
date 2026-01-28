@@ -1,9 +1,5 @@
-#include <cmath>
-#include <gtest/gtest.h>
-#include <neso_particles.hpp>
-#include <random>
 
-using namespace NESO::Particles;
+#include "include/test_neso_particles.hpp"
 
 TEST(BoundaryConditions, pbc_apply) {
 
@@ -191,5 +187,93 @@ TEST(BoundaryConditions, pbc_apply_particle_loop) {
     }
   }
 
+  sycl_target->free();
   mesh->free();
+}
+
+TEST(BoundaryConditions, pbc_apply_particle_loop_masks) {
+
+  auto lambda_do_test = [&](auto ndim, auto A) {
+    A->add_particle_dat(Sym<REAL>("P_ORIG"), ndim);
+    std::uniform_real_distribution<double> uniform_dist(-20000.0, 20000.0);
+    std::mt19937 rng(52234234);
+    auto rng_lambda = [&]() -> REAL { return uniform_dist(rng); };
+    auto rng_kernel = host_per_particle_block_rng<REAL>(rng_lambda, ndim);
+    auto mesh = std::dynamic_pointer_cast<CartesianHMesh>(A->domain->mesh);
+
+    std::vector<REAL> h_extents;
+    int max_multiple = 0;
+    for (int dx = 0; dx < ndim; dx++) {
+      const REAL ex = mesh->global_extents[dx];
+      h_extents.push_back(ex);
+      max_multiple = std::max(max_multiple, static_cast<int>(20000 / ex));
+    }
+    max_multiple += 10;
+    BufferDevice<REAL> d_extents(A->sycl_target, h_extents);
+    auto k_extents = d_extents.ptr;
+
+    for (int dx_outer = 0; dx_outer < ndim; dx_outer++) {
+
+      particle_loop(
+          A,
+          [=](auto INDEX, auto P, auto P_ORIG, auto RNG) {
+            for (int dx = 0; dx < ndim; dx++) {
+              const REAL v = RNG.at(INDEX, dx);
+              P.at(dx) = v;
+              P_ORIG.at(dx) = v;
+            }
+          },
+          Access::read(ParticleLoopIndex{}), Access::write(Sym<REAL>("P")),
+          Access::write(Sym<REAL>("P_ORIG")), Access::read(rng_kernel))
+          ->execute();
+
+      std::vector<int> masks(ndim);
+      std::fill(masks.begin(), masks.end(), 0);
+      masks.at(dx_outer) = 1;
+
+      CartesianPeriodic pbc(mesh, A, masks);
+      pbc.execute();
+
+      ErrorPropagate ep(A->sycl_target);
+      auto k_ep = ep.device_ptr();
+
+      particle_loop(
+          A,
+          [=](auto P, auto P_ORIG) {
+            for (int dx = 0; dx < ndim; dx++) {
+              if (dx == dx_outer) {
+                const REAL correct_pos =
+                    Kernel::fmod(P_ORIG.at(dx) + max_multiple * k_extents[dx],
+                                 k_extents[dx]);
+                const REAL error = Kernel::abs(correct_pos - P.at(dx));
+                NESO_KERNEL_ASSERT(error < 1.0e-8, k_ep);
+              }
+            }
+          },
+          Access::read(Sym<REAL>("P")), Access::read(Sym<REAL>("P_ORIG")))
+          ->execute();
+
+      ASSERT_FALSE(ep.get_flag());
+    }
+  };
+
+  {
+    auto [A, sycl_target, cell_count_t] = particle_loop_common_2d(27, 16, 32);
+    constexpr int ndim = 2;
+
+    lambda_do_test(ndim, A);
+
+    sycl_target->free();
+    A->domain->mesh->free();
+  }
+
+  {
+    auto [A, sycl_target, cell_count_t] = particle_loop_common_3d(27, 16, 5, 6);
+    constexpr int ndim = 3;
+
+    lambda_do_test(ndim, A);
+
+    sycl_target->free();
+    A->domain->mesh->free();
+  }
 }
