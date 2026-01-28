@@ -10,6 +10,7 @@ CellDatConst Arithmetic
 
 The ``cell_dat_const_loop_element_wise`` applies a given scalar function elementwise to the set of ``CellDatConst`` instances provided as arguments and assigns the outputs to the output ``CellDatConst``. 
 The output may be one of the arguments.
+In the case where an argument has one row and column per cell this single value per cell is broadcast to all elements of the matrix which is the size of the output matrix.
 
 .. literalinclude:: ../example_sources/example_cell_dat_const_loop_element_wise.hpp
    :language: cpp

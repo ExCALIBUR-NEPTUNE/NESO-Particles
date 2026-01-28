@@ -279,3 +279,93 @@ TEST(Algorithms, cell_dat_const_loop_element_wise_base) {
 
   sycl_target->free();
 }
+
+TEST(Algorithms, cell_dat_const_loop_element_wise_base_broadcast) {
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+
+  const int cell_count = 61;
+  int nrow = 3;
+  int ncol = 7;
+
+  auto a =
+      std::make_shared<CellDatConst<REAL>>(sycl_target, cell_count, nrow, ncol);
+  auto b =
+      std::make_shared<CellDatConst<REAL>>(sycl_target, cell_count, nrow, ncol);
+  auto c = std::make_shared<CellDatConst<REAL>>(sycl_target, cell_count, 1, 1);
+  auto d =
+      std::make_shared<CellDatConst<REAL>>(sycl_target, cell_count, nrow, ncol);
+
+  std::array<int, 4> correct_masks = {0, 0, 0, 0};
+  std::array<int, 4> to_test_masks = {0, 0, 0, 0};
+
+  auto lambda_reset = [&]() {
+    for (int ix = 0; ix < 4; ix++) {
+      correct_masks.at(ix) = 0;
+      to_test_masks.at(ix) = 0;
+    }
+  };
+
+  Private::CellDatConstLoop::get_broadcast_masks<0, 4>(to_test_masks, a, a, a,
+                                                       a);
+  ASSERT_EQ(correct_masks, to_test_masks);
+  lambda_reset();
+  Private::CellDatConstLoop::get_broadcast_masks<0, 4>(to_test_masks, c, c, c,
+                                                       c);
+  correct_masks.at(0) = 1;
+  correct_masks.at(1) = 1;
+  correct_masks.at(2) = 1;
+  correct_masks.at(3) = 1;
+
+  ASSERT_EQ(correct_masks, to_test_masks);
+  lambda_reset();
+
+  Private::CellDatConstLoop::get_broadcast_masks<0, 4>(to_test_masks, c, a, c,
+                                                       a);
+  correct_masks.at(0) = 1;
+  correct_masks.at(2) = 1;
+
+  ASSERT_EQ(correct_masks, to_test_masks);
+  lambda_reset();
+
+  std::mt19937 rng(522342 + sycl_target->comm_pair.rank_parent);
+  std::uniform_real_distribution<REAL> dist(1.0, 4.0);
+  auto h_a = a->get_all_cells();
+  auto h_b = b->get_all_cells();
+  auto h_c = c->get_all_cells();
+  auto h_d = d->get_all_cells();
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    const auto tc = dist(rng);
+    h_c.at(cellx)->at(0, 0) = tc;
+    for (int colx = 0; colx < ncol; colx++) {
+      for (int rowx = 0; rowx < nrow; rowx++) {
+        const auto ta = dist(rng);
+        const auto tb = dist(rng);
+        h_a.at(cellx)->at(rowx, colx) = ta;
+        h_b.at(cellx)->at(rowx, colx) = tb;
+        h_d.at(cellx)->at(rowx, colx) = ta * tb + tc;
+      }
+    }
+  }
+
+  a->set_all_cells(h_a);
+  b->set_all_cells(h_b);
+  c->set_all_cells(h_c);
+  d->fill(0);
+  cell_dat_const_loop_element_wise(
+      d, [=](auto a, auto b, auto c) { return a * b + c; }, a, b, c);
+
+  auto h_d_to_test = d->get_all_cells();
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    for (int colx = 0; colx < ncol; colx++) {
+      for (int rowx = 0; rowx < nrow; rowx++) {
+        const auto correct = h_d.at(cellx)->at(rowx, colx);
+        const auto to_test = h_d_to_test.at(cellx)->at(rowx, colx);
+        ASSERT_NEAR(correct, to_test, 1.0e-14);
+      }
+    }
+  }
+
+  sycl_target->free();
+}

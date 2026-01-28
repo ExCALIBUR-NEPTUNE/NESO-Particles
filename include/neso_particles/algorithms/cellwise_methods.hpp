@@ -125,6 +125,40 @@ void get_element_values(const std::size_t linear_index, LOOP_ARGS &loop_args,
   }
 }
 
+template <int INDEX, int SIZE, typename LOOP_ARGS, typename KERNEL_ARGS>
+void get_element_values_broadcast(const std::size_t linear_index,
+                                  LOOP_ARGS &loop_args,
+                                  const std::size_t index_cell,
+                                  const std::size_t index_row,
+                                  const std::size_t index_col,
+                                  const std::array<int, SIZE> &masks,
+                                  KERNEL_ARGS &kernel_args) {
+
+  const std::size_t broadcast_mask = static_cast<std::size_t>(masks[INDEX]);
+  const std::size_t index =
+      broadcast_mask * index_cell + (1 - broadcast_mask) * linear_index;
+
+  Tuple::get<INDEX>(kernel_args) = Tuple::get<INDEX>(loop_args)[index];
+
+  if constexpr ((INDEX + 1) < SIZE) {
+    get_element_values_broadcast<INDEX + 1, SIZE>(
+        linear_index, loop_args, index_cell, index_row, index_col, masks,
+        kernel_args);
+  }
+}
+
+template <int INDEX, int SIZE, typename DAT, typename... DAT_ARGS>
+void get_broadcast_masks(std::array<int, SIZE> &masks, DAT &dat,
+                         DAT_ARGS... dat_args) {
+
+  const bool broadcast = (dat->nrow == 1) && (dat->ncol == 1);
+  masks[INDEX] = broadcast ? 1 : 0;
+
+  if constexpr (INDEX + 1 < SIZE) {
+    get_broadcast_masks<INDEX + 1, SIZE>(masks, dat_args...);
+  }
+}
+
 } // namespace CellDatConstLoop
 } // namespace Private
 
@@ -141,6 +175,9 @@ void get_element_values(const std::size_t linear_index, LOOP_ARGS &loop_args,
  *     },
  *     a, b, c
  * );
+ *
+ * If the output dat, d, has shape NxM and ff any arguments have nrow==1 and
+ * ncol==1 then these single values are logically broadcast to size NxM.
  *
  * @param result_dat CellDatConst to be overwritten with the result of the
  * operation. May be equal to one of the arguments to the kernel.
@@ -161,11 +198,18 @@ cell_dat_const_loop_element_wise(CellDatConstSharedPtr<T> result_dat,
   const int nrow = result_dat->nrow;
   const int ncol = result_dat->ncol;
 
+  bool broadcasting = false;
+  const bool one_x_one = (nrow == 1) && (ncol == 1);
+
   auto lambda_check_args = [&](auto dat) {
     NESOASSERT(dat->sycl_target == sycl_target, "Missmatched SYCLTarget.");
     NESOASSERT(dat->ncells == cell_count, "Missmatched cell count.");
-    NESOASSERT(dat->nrow == nrow, "Missmatched number of rows.");
-    NESOASSERT(dat->ncol == ncol, "Missmatched number of columns.");
+    if ((!one_x_one) && ((dat->nrow == 1) && (dat->ncol == 1))) {
+      broadcasting = true;
+    } else {
+      NESOASSERT(dat->nrow == nrow, "Missmatched number of rows.");
+      NESOASSERT(dat->ncol == ncol, "Missmatched number of columns.");
+    }
   };
   (lambda_check_args(dat_args), ...);
 
@@ -174,33 +218,71 @@ cell_dat_const_loop_element_wise(CellDatConstSharedPtr<T> result_dat,
 
   auto *output_pointer = result_dat->device_ptr();
 
-  sycl_target->queue
-      .parallel_for(
-          sycl_target->device_limits.validate_range_global(
-              sycl::range<3>(cell_count, ncol, nrow)),
-          [=](sycl::item<3> idx) {
-            const std::size_t index_cell = idx.get_id(0);
-            const std::size_t index_col = idx.get_id(1);
-            const std::size_t index_row = idx.get_id(2);
+  if (broadcasting) {
 
-            const std::size_t linear_index =
-                nrow * index_col + index_row + index_cell * nrow * ncol;
+    constexpr int N = sizeof...(DAT_ARGS);
+    std::array<int, N> broadcast_masks = {0};
+    Private::CellDatConstLoop::get_broadcast_masks<0, N>(broadcast_masks,
+                                                         dat_args...);
 
-            typename Private::CellDatConstLoop::
-                cell_dat_const_loop_element_wise_kernel_type<DAT_ARGS...>::type
-                    kernel_args;
+    sycl_target->queue
+        .parallel_for(
+            sycl_target->device_limits.validate_range_global(
+                sycl::range<3>(cell_count, ncol, nrow)),
+            [=](sycl::item<3> idx) {
+              const std::size_t index_cell = idx.get_id(0);
+              const std::size_t index_col = idx.get_id(1);
+              const std::size_t index_row = idx.get_id(2);
 
-            Private::CellDatConstLoop::get_element_values<0,
-                                                          sizeof...(DAT_ARGS)>(
-                linear_index, pointers, index_cell, index_row, index_col,
-                kernel_args);
+              const std::size_t linear_index =
+                  nrow * index_col + index_row + index_cell * nrow * ncol;
 
-            output_pointer[linear_index] =
-                static_cast<T>(Tuple::apply(kernel, kernel_args));
-          }
+              typename Private::CellDatConstLoop::
+                  cell_dat_const_loop_element_wise_kernel_type<
+                      DAT_ARGS...>::type kernel_args;
 
-          )
-      .wait_and_throw();
+              Private::CellDatConstLoop::get_element_values_broadcast<
+                  0, sizeof...(DAT_ARGS)>(linear_index, pointers, index_cell,
+                                          index_row, index_col, broadcast_masks,
+                                          kernel_args);
+
+              output_pointer[linear_index] =
+                  static_cast<T>(Tuple::apply(kernel, kernel_args));
+            }
+
+            )
+        .wait_and_throw();
+
+  } else {
+
+    sycl_target->queue
+        .parallel_for(
+            sycl_target->device_limits.validate_range_global(
+                sycl::range<3>(cell_count, ncol, nrow)),
+            [=](sycl::item<3> idx) {
+              const std::size_t index_cell = idx.get_id(0);
+              const std::size_t index_col = idx.get_id(1);
+              const std::size_t index_row = idx.get_id(2);
+
+              const std::size_t linear_index =
+                  nrow * index_col + index_row + index_cell * nrow * ncol;
+
+              typename Private::CellDatConstLoop::
+                  cell_dat_const_loop_element_wise_kernel_type<
+                      DAT_ARGS...>::type kernel_args;
+
+              Private::CellDatConstLoop::get_element_values<
+                  0, sizeof...(DAT_ARGS)>(linear_index, pointers, index_cell,
+                                          index_row, index_col, kernel_args);
+
+              output_pointer[linear_index] =
+                  static_cast<T>(Tuple::apply(kernel, kernel_args));
+            }
+
+            )
+        .wait_and_throw();
+  }
+
   sycl_target->profile_map.end_region(r0);
 }
 
