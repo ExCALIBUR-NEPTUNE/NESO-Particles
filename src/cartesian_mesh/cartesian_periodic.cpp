@@ -1,5 +1,6 @@
 #include <neso_particles/cartesian_mesh/cartesian_periodic.hpp>
 #include <neso_particles/common_impl.hpp>
+#include <neso_particles/containers/local_array.hpp>
 
 namespace NESO::Particles {
 

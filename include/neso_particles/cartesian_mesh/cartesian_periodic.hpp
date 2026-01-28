@@ -4,7 +4,6 @@
 #include <cmath>
 #include <memory>
 
-#include "../containers/local_array.hpp"
 #include "../domain.hpp"
 #include "../loop/particle_loop.hpp"
 #include "../particle_dat.hpp"
