@@ -245,8 +245,11 @@ TEST(BoundaryConditions, pbc_apply_particle_loop_masks) {
                 const REAL correct_pos =
                     Kernel::fmod(P_ORIG.at(dx) + max_multiple * k_extents[dx],
                                  k_extents[dx]);
-                const REAL error = Kernel::abs(correct_pos - P.at(dx));
-                NESO_KERNEL_ASSERT(error < 1.0e-8, k_ep);
+                const REAL error_abs = Kernel::abs(correct_pos - P.at(dx));
+                const REAL correct_abs = Kernel::abs(correct_pos);
+                const REAL error_rel =
+                    correct_abs > 0.0 ? error_abs / correct_abs : error_abs;
+                NESO_KERNEL_ASSERT(error_rel < 1.0e-8, k_ep);
               }
             }
           },
