@@ -16,7 +16,7 @@ CartesianPeriodic::CartesianPeriodic(SYCLTargetSharedPtr sycl_target,
   auto la_extents = std::make_shared<LocalArray<REAL>>(sycl_target, extents);
 
   this->pbc_loop = particle_loop(
-      "CartesianPeriodicPBCMasks", position_dat,
+      "CartesianPeriodicPBC", position_dat,
       [=](auto P, auto E) {
         for (int dimx = 0; dimx < k_ndim; dimx++) {
           const REAL pos = P[dimx];
