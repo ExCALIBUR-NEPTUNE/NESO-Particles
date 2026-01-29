@@ -54,7 +54,7 @@ TEST(DSMC, all_to_all_looping_device) {
 
   for (int num_particles : {0, 1, 3, 4, 7, 8, 31, 255, 1023, 1024}) {
 
-    std::vector<int> seen_entries(num_particles * num_particles);
+    std::vector<int> seen_entries(std::max(num_particles * num_particles, 1));
     std::fill(seen_entries.begin(), seen_entries.end(), 0);
     BufferDevice<int> d_seen_entries(sycl_target, seen_entries);
     auto k_seen_entries = d_seen_entries.ptr;
