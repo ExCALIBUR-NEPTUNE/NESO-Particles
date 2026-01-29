@@ -218,7 +218,10 @@ public:
    *
    * @param data Data to write to the file.
    */
-  inline void write([[maybe_unused]] std::vector<UnstructuredCell> &data) {}
+  inline void
+  write([[maybe_unused]] std::vector<UnstructuredCell> &data,
+        [[maybe_unused]] std::set<std::string> point_data_keys = {},
+        [[maybe_unused]] std::set<std::string> cell_data_keys = {}) {}
 };
 
 #endif
