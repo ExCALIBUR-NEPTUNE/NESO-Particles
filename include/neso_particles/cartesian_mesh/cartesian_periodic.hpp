@@ -20,10 +20,6 @@ namespace NESO::Particles {
  */
 class CartesianPeriodic {
 private:
-  BufferDevice<REAL> d_extents;
-  SYCLTargetSharedPtr sycl_target;
-  std::shared_ptr<CartesianHMesh> mesh;
-  ParticleDatSharedPtr<REAL> position_dat;
   ParticleLoopSharedPtr pbc_loop;
 
 public:
@@ -50,12 +46,41 @@ public:
    * Construct instance to apply periodic boundary conditions to particles
    * within the passed ParticleDat.
    *
+   * @param sycl_target SYCLTarget to use as compute device.
+   * @param mesh CartedianHMesh instance to use a domain for the particles.
+   * @param position_dat ParticleDat containing particle positions.
+   * @param masks Vector of ints that indicate if the dimension is periodic or
+   * not.
+   */
+  CartesianPeriodic(SYCLTargetSharedPtr sycl_target,
+                    std::shared_ptr<CartesianHMesh> mesh,
+                    ParticleDatSharedPtr<REAL> position_dat,
+                    std::vector<int> masks);
+
+  /**
+   * Construct instance to apply periodic boundary conditions to particles
+   * within the passed ParticleDat.
+   *
    * @param mesh CartedianHMesh instance to use a domain for the particles.
    * @param particle_group ParticleGroup to apply periodic boundary conditions
    * to.
    */
   CartesianPeriodic(std::shared_ptr<CartesianHMesh> mesh,
                     ParticleGroupSharedPtr particle_group);
+
+  /**
+   * Construct instance to apply periodic boundary conditions to particles
+   * within the passed ParticleDat.
+   *
+   * @param mesh CartedianHMesh instance to use a domain for the particles.
+   * @param particle_group ParticleGroup to apply periodic boundary conditions
+   * to.
+   * @param masks Vector of ints that indicate if the dimension is periodic or
+   * not.
+   */
+  CartesianPeriodic(std::shared_ptr<CartesianHMesh> mesh,
+                    ParticleGroupSharedPtr particle_group,
+                    std::vector<int> masks);
 
   /**
    * Apply periodic boundary conditions to the particle positions in the
