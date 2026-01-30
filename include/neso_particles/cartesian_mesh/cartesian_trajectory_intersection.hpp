@@ -91,18 +91,28 @@ public:
     }
 
     // Collect into a sub-group the particles which are leaving the domain.
-    auto departing_particles = static_particle_sub_group(
-        particles,
-        [=](auto P) {
-          bool outside_domain = false;
-          for (int dimx = 0; dimx < k_ndim; dimx++) {
-            outside_domain =
-                outside_domain ||
-                ((P.at(dimx) <= 0.0) || (P.at(dimx) >= k_extents[dimx]));
-          }
-          return outside_domain;
-        },
-        Access::read(particle_group->position_dat->sym));
+    ParticleSubGroupSharedPtr departing_particles = nullptr;
+
+    if (k_ndim == 2) {
+      departing_particles = static_particle_sub_group(
+          particles,
+          [=](auto P) {
+            return (P.at(0) <= 0.0) || (P.at(0) >= k_extents[0]) ||
+                   (P.at(1) <= 0.0) || (P.at(1) >= k_extents[1]);
+          },
+          Access::read(particle_group->position_dat->sym));
+
+    } else {
+
+      departing_particles = static_particle_sub_group(
+          particles,
+          [=](auto P) {
+            return (P.at(0) <= 0.0) || (P.at(0) >= k_extents[0]) ||
+                   (P.at(1) <= 0.0) || (P.at(1) >= k_extents[1]) ||
+                   (P.at(2) <= 0.0) || (P.at(2) >= k_extents[2]);
+          },
+          Access::read(particle_group->position_dat->sym));
+    }
 
     // Create a buffer to store the information for the leaving particles
     const INT npart_leaving = departing_particles->get_npart_local();
