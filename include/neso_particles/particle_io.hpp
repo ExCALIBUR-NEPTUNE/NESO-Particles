@@ -483,8 +483,9 @@ public:
    *  indicating which ParticleDats are to be written.
    */
   template <typename... T>
-  H5Part(std::string filename, ParticleGroupSharedPtr particle_group,
-         T... args){};
+  H5Part([[maybe_unused]] std::string filename,
+         [[maybe_unused]] ParticleGroupSharedPtr particle_group,
+         [[maybe_unused]] T... args){};
 
   /**
    *  Construct a H5Part writer for a given set of ParticleDats described by
@@ -497,8 +498,9 @@ public:
    *  indicating which ParticleDats are to be written.
    */
   template <typename... T>
-  H5Part(std::string filename, ParticleSubGroupSharedPtr particle_sub_group,
-         T... args){};
+  H5Part([[maybe_unused]] std::string filename,
+         [[maybe_unused]] ParticleSubGroupSharedPtr particle_sub_group,
+         [[maybe_unused]] T... args){};
 
   /**
    *  Close the H5Part writer. Must be called. Must be called collectively on
@@ -510,7 +512,7 @@ public:
    * Write the current particle data to the HDF5 file as a new time step. Must
    * be called collectively on the communicator.
    */
-  inline void write(INT step_in = -1) {};
+  inline void write([[maybe_unused]] INT step_in = -1) {};
 };
 
 #endif

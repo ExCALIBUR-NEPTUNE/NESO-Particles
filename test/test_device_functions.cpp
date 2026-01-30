@@ -456,14 +456,18 @@ TEST(DeviceFunctions, joint_reduce) {
     using value_type = typename decltype(to_test)::value_type;
     const auto correct = std::accumulate(to_test.begin(), to_test.end(),
                                          static_cast<value_type>(0));
+
+    const std::size_t k_n = to_test.size();
+    if (to_test.size() == 0) {
+      to_test.resize(1);
+    }
+
     std::vector<value_type> output = {0};
     BufferDevice d_output(sycl_target, output);
     BufferDevice d_to_test(sycl_target, to_test);
 
     auto *k_output = d_output.ptr;
     auto *k_to_test = d_to_test.ptr;
-
-    const std::size_t k_n = to_test.size();
 
     for (std::size_t ls = 1; ls <= local_size; ls *= 2) {
 
