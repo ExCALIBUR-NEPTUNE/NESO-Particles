@@ -179,8 +179,7 @@ void CartesianTrajectoryIntersection::function_project_contribute(
   const INT current_stage_size = func->d_dofs_stage->size / cell_dof_count;
   if (current_stage_size < k_num_accessible_geoms) {
 
-    func->d_dofs_stage->realloc_no_copy(k_num_accessible_geoms *
-                                        cell_dof_count);
+    func->d_dofs_stage->realloc(k_num_accessible_geoms * cell_dof_count);
     const auto diff =
         (k_num_accessible_geoms - current_stage_size) * cell_dof_count;
     REAL *k_buffer =
