@@ -190,6 +190,11 @@ void CartesianTrajectoryIntersection::function_project_contribute(
         .wait_and_throw();
   }
 
+  NESOASSERT(
+      func->d_dofs_stage->size >=
+          static_cast<std::size_t>(num_accessible_geoms * cell_dof_count),
+      "Temporary staging buffer is too small. Please raise an issue.");
+
   REAL *k_buffer = func->d_dofs_stage->ptr;
 
   if (!null_sub_group) {
