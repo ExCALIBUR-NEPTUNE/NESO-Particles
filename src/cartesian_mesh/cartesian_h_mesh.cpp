@@ -31,19 +31,35 @@ CartesianHMesh::CartesianHMesh(MPI_Comm comm, const int ndim,
   int rank, size;
   MPICHK(MPI_Comm_size(comm, &size));
   MPICHK(MPI_Comm_rank(comm, &rank));
-  MPICHK(MPI_Dims_create(size, ndim, mpi_dims));
-
   for (int dimx = 0; dimx < ndim; dimx++) {
     cell_counts[dimx] = dims[dimx] * std::pow(2, subdivision_order);
     global_extents[dimx] = extent * dims[dimx];
   }
-  // direction with most cells first to match mpi_dims order
-  auto cell_count_ordering = reverse_argsort(cell_counts);
-
   // reorder the mpi_dims to match the actual domain
   std::vector<int> mpi_dims_reordered(ndim);
-  for (int dimx = 0; dimx < ndim; dimx++) {
-    mpi_dims_reordered[cell_count_ordering[dimx]] = mpi_dims[dimx];
+
+  // Is the parent comm a cart comm?
+  int topo_status = -1;
+  MPICHK(MPI_Topo_test(comm, &topo_status));
+
+  if (topo_status == MPI_CART) {
+    std::vector<int> parent_dims(ndim);
+    std::vector<int> parent_periods(ndim);
+    std::vector<int> parent_coords(ndim);
+    MPICHK(MPI_Cart_get(comm, ndim, parent_dims.data(), parent_periods.data(),
+                        parent_coords.data()));
+    for (int dimx = 0; dimx < ndim; dimx++) {
+      mpi_dims_reordered.at(dimx) = parent_dims.at(dimx);
+      periods[dimx] = parent_periods.at(dimx);
+    }
+
+  } else {
+    MPICHK(MPI_Dims_create(size, ndim, mpi_dims));
+    // direction with most cells first to match mpi_dims order
+    auto cell_count_ordering = reverse_argsort(cell_counts);
+    for (int dimx = 0; dimx < ndim; dimx++) {
+      mpi_dims_reordered[cell_count_ordering[dimx]] = mpi_dims[dimx];
+    }
   }
 
   // create MPI cart comm with a decomposition that roughly makes sense for

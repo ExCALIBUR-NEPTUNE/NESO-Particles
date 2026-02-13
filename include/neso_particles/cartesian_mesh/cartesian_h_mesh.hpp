@@ -161,7 +161,11 @@ public:
   int ncells_face_global{0};
 
   /**
-   * Construct a mesh over a given MPI communicator with a specified shape.
+   * Construct a mesh over a given MPI communicator with a specified shape. If
+   * the passed MPI communicator is a Cartesian communicator then a new
+   * Cartesian communicator will be created with the same dims and periods as
+   * this passed communicator. This allows users to bypass the decomposition
+   * processes by explicitly specifying what should happen.
    *
    * @param comm MPI Communicator to use for decomposition.
    * @param ndim Number of dimensions.
