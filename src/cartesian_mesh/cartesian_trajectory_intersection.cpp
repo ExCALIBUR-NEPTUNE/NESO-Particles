@@ -166,13 +166,32 @@ void CartesianTrajectoryIntersection::function_project_contribute(
     const int component, const bool is_ephemeral,
     CartesianHMeshFunctionSharedPtr func) {
 
-  REAL *k_buffer = func->d_dofs_stage->ptr;
   const bool null_sub_group = particle_sub_group == nullptr;
   const int group = func->boundary_group;
   auto &boundary_mesh_interface = this->map_groups_boundary_interface.at(group);
 
   auto [d_tree_root, num_accessible_geoms] =
       boundary_mesh_interface->get_device_geom_id_to_seq();
+
+  const INT k_num_accessible_geoms = num_accessible_geoms;
+
+  const auto cell_dof_count = func->cell_dof_count;
+  const INT current_stage_size = func->d_dofs_stage->size / cell_dof_count;
+  if (current_stage_size < k_num_accessible_geoms) {
+
+    func->d_dofs_stage->realloc_no_copy(k_num_accessible_geoms *
+                                        cell_dof_count);
+    const auto diff =
+        (k_num_accessible_geoms - current_stage_size) * cell_dof_count;
+    REAL *k_buffer =
+        func->d_dofs_stage->ptr + current_stage_size * cell_dof_count;
+    this->sycl_target->queue
+        .parallel_for(sycl::range<1>(diff),
+                      [=](auto idx) { k_buffer[idx] = 0.0; })
+        .wait_and_throw();
+  }
+
+  REAL *k_buffer = func->d_dofs_stage->ptr;
 
   if (!null_sub_group) {
     auto *k_tree_root = d_tree_root;
@@ -185,9 +204,10 @@ void CartesianTrajectoryIntersection::function_project_contribute(
             (particle_sub_group->contains_ephemeral_dat(sym) && is_ephemeral),
         "Source particle data not found.");
 
-    ErrorPropagate ep(this->sycl_target);
-    auto k_ep = ep.device_ptr();
-
+    ErrorPropagate ep_found(this->sycl_target);
+    ErrorPropagate ep_dof(this->sycl_target);
+    auto k_ep_found = ep_found.device_ptr();
+    auto k_ep_dof = ep_dof.device_ptr();
     const REAL k_inverse_width = func->mesh->inverse_cell_width_fine;
 
     auto lambda_dispatch = [&](auto extract_quantity) {
@@ -201,7 +221,10 @@ void CartesianTrajectoryIntersection::function_project_contribute(
               found =
                   k_tree_root->get(BOUNDARY_METADATA.at_ephemeral(1), &index);
 #ifndef NDEBUG
-              NESO_KERNEL_ASSERT(found, k_ep);
+              NESO_KERNEL_ASSERT(found, k_ep_found);
+              const bool bad_index =
+                  ((*index) < 0) || ((*index) >= k_num_accessible_geoms);
+              NESO_KERNEL_ASSERT(!bad_index, k_ep_dof);
 #endif
               if (found) {
                 const REAL value = extract_quantity(SYM, component);
@@ -222,7 +245,9 @@ void CartesianTrajectoryIntersection::function_project_contribute(
       lambda_dispatch(
           [](auto SYM, const int component) { return SYM.at(component); });
     }
-    NESOASSERT(!ep.get_flag(), "Failed to find index for hit geometry object.");
+    NESOASSERT(!ep_found.get_flag(),
+               "Failed to find index for hit geometry object.");
+    NESOASSERT(!ep_dof.get_flag(), "Bad index for hit geometry object.");
   }
 }
 
