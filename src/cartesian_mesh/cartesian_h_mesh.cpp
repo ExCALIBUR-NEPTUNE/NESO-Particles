@@ -38,6 +38,25 @@ CartesianHMesh::CartesianHMesh(MPI_Comm comm, const int ndim,
   // reorder the mpi_dims to match the actual domain
   std::vector<int> mpi_dims_reordered(ndim);
 
+  auto lambda_valid_decomp = [&]() -> bool {
+    int nranks = 1;
+    for (int dimx = 0; dimx < ndim; dimx++) {
+      nranks *= mpi_dims_reordered.at(dimx);
+    }
+
+    if (nranks != size) {
+      return false;
+    }
+
+    for (int dimx = 0; dimx < ndim; dimx++) {
+      if (mpi_dims_reordered.at(dimx) > cell_counts[dimx]) {
+        return false;
+      }
+    }
+
+    return true;
+  };
+
   // Is the parent comm a cart comm?
   int topo_status = -1;
   MPICHK(MPI_Topo_test(comm, &topo_status));
@@ -54,13 +73,21 @@ CartesianHMesh::CartesianHMesh(MPI_Comm comm, const int ndim,
     }
 
   } else {
-    MPICHK(MPI_Dims_create(size, ndim, mpi_dims));
-    // direction with most cells first to match mpi_dims order
-    auto cell_count_ordering = reverse_argsort(cell_counts);
-    for (int dimx = 0; dimx < ndim; dimx++) {
-      mpi_dims_reordered[cell_count_ordering[dimx]] = mpi_dims[dimx];
+
+    // Try a "normal" decomposition
+    auto tmp =
+        get_reordered_cart_decomp(ndim, get_cart_dims(size, ndim), cell_counts);
+    std::copy(tmp.begin(), tmp.end(), mpi_dims_reordered.begin());
+
+    // Can we find a sensible decomposition in a lower dimensional space?
+    if (!lambda_valid_decomp()) {
+      auto tmp = get_lower_dimension_cart_decomp(size, ndim, cell_counts);
+      std::copy(tmp.begin(), tmp.end(), mpi_dims_reordered.begin());
     }
   }
+
+  NESOASSERT(lambda_valid_decomp(),
+             "Failed to construct a parallel decomposition.");
 
   // create MPI cart comm with a decomposition that roughly makes sense for
   // the shape of the domain

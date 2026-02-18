@@ -329,3 +329,99 @@ TEST(communication_utility, set_reduce_union) {
   auto to_test = set_all_reduce_union(contrib, MPI_COMM_WORLD);
   ASSERT_EQ(correct, to_test);
 }
+
+TEST(communication_utility, cart_decomp) {
+  std::vector<int> mpi_dims_correct(3);
+  for (const int ndim : {1, 2, 3}) {
+    mpi_dims_correct.resize(ndim);
+    for (const int size : {1, 4, 6, 7, 8, 32, 1024}) {
+      std::fill(mpi_dims_correct.begin(), mpi_dims_correct.end(), 0);
+      MPICHK(MPI_Dims_create(size, ndim, mpi_dims_correct.data()));
+      auto mpi_dims_to_test = get_cart_dims(size, ndim);
+      for (int dx = 0; dx < ndim; dx++) {
+        ASSERT_EQ(mpi_dims_to_test.at(dx), mpi_dims_correct.at(dx));
+      }
+    }
+  }
+
+  {
+    std::vector<int> cell_counts = {100, 200, 300};
+    std::vector<int> mpi_dims = {1, 2, 3};
+    auto to_test = get_reordered_cart_decomp(3, mpi_dims, cell_counts);
+    ASSERT_EQ(to_test.at(0), 1);
+    ASSERT_EQ(to_test.at(1), 2);
+    ASSERT_EQ(to_test.at(2), 3);
+  }
+
+  {
+    std::vector<int> cell_counts = {100, 200, 300};
+    std::vector<int> mpi_dims = {2, 1, 3};
+    auto to_test = get_reordered_cart_decomp(3, mpi_dims, cell_counts);
+    ASSERT_EQ(to_test.at(0), 1);
+    ASSERT_EQ(to_test.at(1), 2);
+    ASSERT_EQ(to_test.at(2), 3);
+  }
+
+  {
+    std::vector<int> cell_counts = {300, 200, 100};
+    std::vector<int> mpi_dims = {2, 1, 3};
+    auto to_test = get_reordered_cart_decomp(3, mpi_dims, cell_counts);
+    ASSERT_EQ(to_test.at(0), 3);
+    ASSERT_EQ(to_test.at(1), 2);
+    ASSERT_EQ(to_test.at(2), 1);
+  }
+
+  {
+    std::vector<int> cell_counts = {1, 1, 32};
+    auto tmp = get_lower_dimension_cart_decomp(32, 3, cell_counts);
+    ASSERT_EQ(tmp[0], 1);
+    ASSERT_EQ(tmp[1], 1);
+    ASSERT_EQ(tmp[2], 32);
+  }
+
+  {
+    std::vector<int> cell_counts = {1, 1, 32};
+    auto tmp = get_lower_dimension_cart_decomp(8, 3, cell_counts);
+    ASSERT_EQ(tmp[0], 1);
+    ASSERT_EQ(tmp[1], 1);
+    ASSERT_EQ(tmp[2], 8);
+  }
+  {
+    std::vector<int> cell_counts = {1, 32, 1};
+    auto tmp = get_lower_dimension_cart_decomp(8, 3, cell_counts);
+    ASSERT_EQ(tmp[0], 1);
+    ASSERT_EQ(tmp[1], 8);
+    ASSERT_EQ(tmp[2], 1);
+  }
+
+  {
+    std::vector<int> cell_counts = {1, 2, 32};
+    auto tmp = get_lower_dimension_cart_decomp(64, 3, cell_counts);
+    ASSERT_EQ(tmp[0], 1);
+    ASSERT_EQ(tmp[1], 2);
+    ASSERT_EQ(tmp[2], 32);
+  }
+  {
+    std::vector<int> cell_counts = {2, 2, 32};
+    auto tmp = get_lower_dimension_cart_decomp(64, 3, cell_counts);
+    ASSERT_EQ(tmp[0], 2);
+    ASSERT_EQ(tmp[1], 2);
+    ASSERT_EQ(tmp[2], 16);
+  }
+
+  {
+    std::vector<int> cell_counts = {2, 3, 2};
+    auto tmp = get_lower_dimension_cart_decomp(12, 3, cell_counts);
+    ASSERT_EQ(tmp[0], 2);
+    ASSERT_EQ(tmp[1], 3);
+    ASSERT_EQ(tmp[2], 2);
+  }
+
+  {
+    std::vector<int> cell_counts = {1, 1, 128};
+    auto tmp = get_lower_dimension_cart_decomp(37, 3, cell_counts);
+    ASSERT_EQ(tmp[0], 1);
+    ASSERT_EQ(tmp[1], 1);
+    ASSERT_EQ(tmp[2], 37);
+  }
+}

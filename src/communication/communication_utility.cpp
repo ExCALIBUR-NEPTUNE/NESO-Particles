@@ -185,4 +185,78 @@ int NP_MPI_Neighbor_alltoallw_wrapper(
 #endif
 }
 
+std::vector<int> get_cart_dims(const int size, const int ndim) {
+  std::vector<int> mpi_dims(ndim);
+  std::fill(mpi_dims.begin(), mpi_dims.end(), 0);
+  if (ndim > 0) {
+    MPICHK(MPI_Dims_create(size, ndim, mpi_dims.data()));
+  }
+  return mpi_dims;
+}
+
+std::vector<int> get_reordered_cart_decomp(const int ndim,
+                                           std::vector<int> mpi_dims,
+                                           std::vector<int> &cell_counts) {
+
+  auto cell_count_ordering = reverse_argsort(cell_counts);
+  std::sort(mpi_dims.begin(), mpi_dims.end(), std::greater<int>());
+
+  std::vector<int> mpi_dims_reordered(ndim);
+  for (int dimx = 0; dimx < ndim; dimx++) {
+    mpi_dims_reordered.at(cell_count_ordering.at(dimx)) = mpi_dims.at(dimx);
+  }
+
+  return mpi_dims_reordered;
+}
+
+std::vector<int>
+get_lower_dimension_cart_decomp(const int size, const int ndim,
+                                std::vector<int> &cell_counts) {
+
+  int effective_ndim = ndim;
+  int effective_size = size;
+
+  std::vector<int> known_dims(ndim);
+  std::fill(known_dims.begin(), known_dims.end(), -1);
+
+  std::vector<int> reduced_space;
+  reduced_space.reserve(ndim);
+
+  for (int dimx = 0; dimx < ndim; dimx++) {
+    const int cell_count = cell_counts[dimx];
+    if (effective_size % cell_count == 0) {
+      effective_ndim--;
+      effective_size /= cell_count;
+      known_dims.at(dimx) = cell_count;
+    } else {
+      reduced_space.push_back(cell_count);
+    }
+  }
+
+  // If the decomp factors the problem in all dimensions already then we are
+  // done.
+  if (effective_ndim == 0) {
+    return known_dims;
+  }
+
+  if (effective_ndim != ndim) {
+    auto tmp = get_reordered_cart_decomp(
+        effective_ndim, get_cart_dims(effective_size, effective_ndim),
+        reduced_space);
+
+    int index = 0;
+    for (int dimx = 0; dimx < ndim; dimx++) {
+      if (known_dims.at(dimx) < 1) {
+        known_dims.at(dimx) = tmp[index];
+        index++;
+      }
+    }
+
+    return known_dims;
+  }
+
+  return get_reordered_cart_decomp(ndim, get_cart_dims(size, ndim),
+                                   cell_counts);
+}
+
 } // namespace NESO::Particles
