@@ -400,6 +400,22 @@ std::vector<int> get_reordered_cart_decomp(const int ndim,
 std::vector<int> get_lower_dimension_cart_decomp(const int size, const int ndim,
                                                  std::vector<int> &cell_counts);
 
+/**
+ * Attempt to create a Cartesian decomposition from an array of cell counts by
+ * decomposing only the largest dimension. i.e. this produces a 1D
+ * decomposition. The output should be checked to ensure the decomposition is
+ * valid.
+ *
+ * @param size Total number of MPI ranks.
+ * @param ndim Total number of dimensions.
+ * @param cell_counts Number of cells in each dimension.
+ * @returns Computed number of MPI ranks in each dimension. This vector will
+ * have an element which is greater than one in at most one entry.
+ */
+std::vector<int>
+get_single_dimension_cart_decomp(const int size, const int ndim,
+                                 std::vector<int> &cell_counts);
+
 } // namespace NESO::Particles
 
 #endif

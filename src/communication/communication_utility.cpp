@@ -259,4 +259,19 @@ get_lower_dimension_cart_decomp(const int size, const int ndim,
                                    cell_counts);
 }
 
+std::vector<int>
+get_single_dimension_cart_decomp(const int size, const int ndim,
+                                 std::vector<int> &cell_counts) {
+  std::vector<int> dims(ndim);
+  std::fill(dims.begin(), dims.end(), 1);
+
+  const int index =
+      std::distance(cell_counts.begin(),
+                    std::max_element(cell_counts.begin(), cell_counts.end()));
+
+  dims.at(index) = size;
+
+  return dims;
+}
+
 } // namespace NESO::Particles

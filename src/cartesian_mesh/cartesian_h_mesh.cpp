@@ -84,6 +84,12 @@ CartesianHMesh::CartesianHMesh(MPI_Comm comm, const int ndim,
       auto tmp = get_lower_dimension_cart_decomp(size, ndim, cell_counts);
       std::copy(tmp.begin(), tmp.end(), mpi_dims_reordered.begin());
     }
+
+    // Can we find a 1D decomposition in any direction?
+    if (!lambda_valid_decomp()) {
+      auto tmp = get_single_dimension_cart_decomp(size, ndim, cell_counts);
+      std::copy(tmp.begin(), tmp.end(), mpi_dims_reordered.begin());
+    }
   }
 
   NESOASSERT(lambda_valid_decomp(),

@@ -424,4 +424,27 @@ TEST(communication_utility, cart_decomp) {
     ASSERT_EQ(tmp[1], 1);
     ASSERT_EQ(tmp[2], 37);
   }
+
+  {
+    std::vector<int> cell_counts = {1, 1, 128};
+    auto tmp = get_single_dimension_cart_decomp(37, 3, cell_counts);
+    ASSERT_EQ(tmp[0], 1);
+    ASSERT_EQ(tmp[1], 1);
+    ASSERT_EQ(tmp[2], 37);
+  }
+
+  {
+    std::vector<int> cell_counts = {3, 7, 127};
+    auto tmp = get_single_dimension_cart_decomp(4, 3, cell_counts);
+    ASSERT_EQ(tmp[0], 1);
+    ASSERT_EQ(tmp[1], 1);
+    ASSERT_EQ(tmp[2], 4);
+  }
+
+  {
+    std::vector<int> cell_counts = {127, 2};
+    auto tmp = get_single_dimension_cart_decomp(4, 2, cell_counts);
+    ASSERT_EQ(tmp[0], 4);
+    ASSERT_EQ(tmp[1], 1);
+  }
 }
