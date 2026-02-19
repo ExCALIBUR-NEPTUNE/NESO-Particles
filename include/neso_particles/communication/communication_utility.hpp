@@ -362,6 +362,60 @@ struct SuppressMPINullPtrCheck {
   }
 };
 
+/**
+ * Thin wrapper around MPI_Dims_create.
+ *
+ * @param size Number of ranks in parent communicator.
+ * @param ndim Number of dimensions in the Cartesian grid.
+ * @returns Vector of Cartesian grid dimensions.
+ */
+std::vector<int> get_cart_dims(const int size, const int ndim);
+
+/**
+ * Reorder computed dims to match cell counts with MPI decomposition.
+ *
+ * @param ndim Number of dimensions in Cartesian grid.
+ * @param mpi_dims Number of MPI ranks in each direction.
+ * @param cell_counts Number of Cartesian cells in each direction.
+ * @returns Number of MPI ranks in each direction matching the cell counts in
+ * each direction.
+ */
+std::vector<int> get_reordered_cart_decomp(const int ndim,
+                                           std::vector<int> mpi_dims,
+                                           std::vector<int> &cell_counts);
+
+/**
+ * Attempt to create a decomposition, may fail check the output, for a Cartesian
+ * grid with cell_counts cells in each dimension. When the number of cells in a
+ * dimension is a factor of the number of cells in that dimension reduce the
+ * effective dimension of the problem by one and search for a decomposition in
+ * the remaining space.
+ *
+ * @param size Total number of MPI ranks.
+ * @param ndim Total number of dimensions.
+ * @param cell_counts Number of cells in each dimension.
+ * @returns Computed number of MPI ranks in each dimension. Users should check
+ * this output is a valid decomposition.
+ */
+std::vector<int> get_lower_dimension_cart_decomp(const int size, const int ndim,
+                                                 std::vector<int> &cell_counts);
+
+/**
+ * Attempt to create a Cartesian decomposition from an array of cell counts by
+ * decomposing only the largest dimension. i.e. this produces a 1D
+ * decomposition. The output should be checked to ensure the decomposition is
+ * valid.
+ *
+ * @param size Total number of MPI ranks.
+ * @param ndim Total number of dimensions.
+ * @param cell_counts Number of cells in each dimension.
+ * @returns Computed number of MPI ranks in each dimension. This vector will
+ * have an element which is greater than one in at most one entry.
+ */
+std::vector<int>
+get_single_dimension_cart_decomp(const int size, const int ndim,
+                                 std::vector<int> &cell_counts);
+
 } // namespace NESO::Particles
 
 #endif
