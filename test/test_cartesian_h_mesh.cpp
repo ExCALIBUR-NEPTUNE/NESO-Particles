@@ -442,6 +442,7 @@ TEST(CartesianHMesh, mpi_topology_custom) {
       ASSERT_EQ(test_periods.at(2), mpi_periods[2]);
 
       mesh->free();
+      MPICHK(MPI_Comm_free(&comm_cart));
     }
   }
 }
