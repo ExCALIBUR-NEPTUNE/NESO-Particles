@@ -1,6 +1,6 @@
 #include "include/test_neso_particles.hpp"
 
-TEST(ParticlePairLoopBlock, local_array_read_write) {
+TEST(ParticlePairLoopBlock, local_array_read_write_add) {
 
   int npart_cell = 127;
   const int ndim = 2;
@@ -95,12 +95,17 @@ TEST(ParticlePairLoopBlock, local_array_read_write) {
       Access::read(ParticleLoopIndex{}), Access::write(Sym<INT>("INDEX")))
       ->execute();
 
+  auto la_test_add_int = std::make_shared<LocalArray<INT>>(sycl_target, 2);
+  la_test_add_int->fill(0);
+  auto la_test_add_real = std::make_shared<LocalArray<REAL>>(sycl_target, 2);
+  la_test_add_real->fill(0.0);
+
   particle_pair_loop(
       "particle_pair_loop_test",
       {CellwisePairListAbsolute<ParticleGroup, CellwisePairListBlockInterface>(
           A, A, pair_sampler_ntc)},
       [=](auto INDEX, auto LA_INT, auto LA_REAL, auto P_i, auto P_j,
-          auto INDEX_i, auto INDEX_j) {
+          auto INDEX_i, auto INDEX_j, auto LA_ADD_INT, auto LA_ADD_REAL) {
         const INT index = INDEX.get_loop_linear_index();
         const INT cell = INDEX_i.at(0);
         const INT layer_i = INDEX_i.at(1);
@@ -110,15 +115,24 @@ TEST(ParticlePairLoopBlock, local_array_read_write) {
         LA_INT.at(index * 3 + 1) = layer_i;
         LA_INT.at(index * 3 + 2) = layer_j;
 
-        for (int dx = 0; dx < 2; dx++) {
-          LA_REAL.at(2 * index + dx) = P_i.at(dx) + P_j.at(dx);
-        }
+        const REAL p0 = P_i.at(0) + P_j.at(0);
+        const REAL p1 = P_i.at(1) + P_j.at(1);
+
+        LA_REAL.at(2 * index + 0) = p0;
+        LA_REAL.at(2 * index + 1) = p1;
+
+        LA_ADD_INT.fetch_add(0, 1);
+        LA_ADD_INT.fetch_add(1, -1);
+
+        LA_ADD_REAL.fetch_add(0, 0.01 * p0);
+        LA_ADD_REAL.fetch_add(1, -0.01 * p1);
       },
       Access::read(ParticlePairLoopIndex{}), Access::write(la_test_int),
       Access::write(la_test_real), Access::A(Access::read(Sym<REAL>("P"))),
       Access::B(Access::read(Sym<REAL>("P"))),
       Access::A(Access::read(Sym<INT>("INDEX"))),
-      Access::B(Access::read(Sym<INT>("INDEX"))))
+      Access::B(Access::read(Sym<INT>("INDEX"))), Access::add(la_test_add_int),
+      Access::add(la_test_add_real))
       ->execute();
 
   dh_to_test_int.device_to_host();
@@ -126,6 +140,11 @@ TEST(ParticlePairLoopBlock, local_array_read_write) {
 
   auto h_test_int = la_test_int->get();
   auto h_test_real = la_test_real->get();
+  auto h_test_add_int = la_test_add_int->get();
+  auto h_test_add_real = la_test_add_real->get();
+
+  REAL correct_add_real0 = 0.0;
+  REAL correct_add_real1 = 0.0;
 
   for (int ix = 0; ix < total_num_pairs; ix++) {
     const auto cell = static_cast<int>(h_test_int.at(3 * ix + 0));
@@ -139,7 +158,18 @@ TEST(ParticlePairLoopBlock, local_array_read_write) {
 
     ASSERT_NEAR(h_test_real.at(2 * ix + 0), P_c0, 1.0e-14);
     ASSERT_NEAR(h_test_real.at(2 * ix + 1), P_c1, 1.0e-14);
+
+    correct_add_real0 += 0.01 * P_c0;
+    correct_add_real1 -= 0.01 * P_c1;
   }
+
+  ASSERT_EQ(h_test_add_int.at(0), total_num_pairs);
+  ASSERT_EQ(h_test_add_int.at(1), -total_num_pairs);
+
+  ASSERT_NEAR(relative_error(correct_add_real0, h_test_add_real.at(0)), 0.0,
+              1.0e-8);
+  ASSERT_NEAR(relative_error(correct_add_real1, h_test_add_real.at(1)), 0.0,
+              1.0e-8);
 
   sycl_target->free();
   A->domain->mesh->free();

@@ -198,6 +198,20 @@ inline void create_kernel_arg(
   lhs.ptr = rhs;
 }
 
+/**
+ *  Function to create the kernel argument for LocalArray add
+ * access in a pair loop.
+ */
+template <typename T>
+inline void create_kernel_arg(
+    [[maybe_unused]] ParticlePairLoopIteration &iteration,
+    [[maybe_unused]] ParticleLoopImplementation::ParticleLoopIteration
+        &iteration_particle,
+    T *rhs, Access::LocalArray::Add<T> &lhs) {
+
+  lhs.ptr = rhs;
+}
+
 } // namespace ParticlePairLoopImplementation
 
 /**
