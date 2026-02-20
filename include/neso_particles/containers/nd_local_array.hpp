@@ -185,7 +185,7 @@ create_kernel_arg([[maybe_unused]] ParticleLoopIteration &iterationx,
 namespace ParticlePairLoopImplementation {
 
 /**
- *  Function to create the kernel argument for LocalArray read
+ *  Function to create the kernel argument for NDLocalArray read
  * access in a pair loop.
  */
 template <typename T, std::size_t N>
@@ -200,7 +200,7 @@ inline void create_kernel_arg(
 }
 
 /**
- *  Function to create the kernel argument for LocalArray write
+ *  Function to create the kernel argument for NDLocalArray write
  * access in a pair loop.
  */
 template <typename T, std::size_t N>
@@ -215,7 +215,7 @@ inline void create_kernel_arg(
 }
 
 /**
- *  Function to create the kernel argument for LocalArray add
+ *  Function to create the kernel argument for NDLocalArray add
  * access in a pair loop.
  */
 template <typename T, std::size_t N>
