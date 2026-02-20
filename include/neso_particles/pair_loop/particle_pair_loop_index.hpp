@@ -61,7 +61,7 @@ namespace ParticlePairLoopImplementation {
  * access.
  */
 inline void create_kernel_arg(
-    ParticlePairLoopImplementation::ParticlePairLoopIteration &iteration,
+    ParticlePairLoopIteration &iteration,
     [[maybe_unused]] ParticleLoopImplementation::ParticleLoopIteration
         &iteration_particle,
     [[maybe_unused]] ParticleLoopImplementation::ParticlePairLoopIndexKernelT

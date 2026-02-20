@@ -4,6 +4,7 @@
 #include "../compute_target.hpp"
 #include "../loop/access_descriptors.hpp"
 #include "../loop/particle_loop_base.hpp"
+#include "../pair_loop/particle_pair_loop_base.hpp"
 #include <memory>
 #include <optional>
 #include <vector>
@@ -166,6 +167,24 @@ create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
 }
 
 } // namespace ParticleLoopImplementation
+
+namespace ParticlePairLoopImplementation {
+
+/**
+ *  Function to create the kernel argument for LocalArray read
+ * access in a pair loop.
+ */
+template <typename T>
+inline void create_kernel_arg(
+    [[maybe_unused]] ParticlePairLoopIteration &iteration,
+    [[maybe_unused]] ParticleLoopImplementation::ParticleLoopIteration
+        &iteration_particle,
+    T const *rhs, Access::LocalArray::Read<T> &lhs) {
+
+  lhs.ptr = rhs;
+}
+
+} // namespace ParticlePairLoopImplementation
 
 /**
  * Container to hold an array of values on each MPI rank.
