@@ -174,3 +174,114 @@ TEST(ParticlePairLoopBlock, local_array_read_write_add) {
   sycl_target->free();
   A->domain->mesh->free();
 }
+
+TEST(ParticlePairLoopBlock, nd_local_array_read_write_add) {
+
+  int npart_cell = 127;
+  const int ndim = 2;
+  const int nx = 16;
+  const int ny = 33;
+  const int nz = 48;
+
+  auto [A, sycl_target, cell_count] =
+      particle_loop_create_common(npart_cell, ndim, nx, ny, nz);
+  A->add_particle_dat(Sym<INT>("INDEX"), 2);
+
+  particle_loop(
+      A,
+      [=](auto INDEX, auto INDEX_PARTICLE) {
+        INDEX_PARTICLE.at(0) = INDEX.cell;
+        INDEX_PARTICLE.at(1) = INDEX.layer;
+      },
+      Access::read(ParticleLoopIndex{}), Access::write(Sym<INT>("INDEX")))
+      ->execute();
+
+  auto aa = particle_sub_group(A, []() { return true; });
+
+  const int rank = sycl_target->comm_pair.rank_parent;
+
+  std::mt19937 rng(34234 + rank);
+  std::uniform_real_distribution<REAL> dist{
+      std::uniform_real_distribution<REAL>(0.0, 1.0)};
+  auto lambda_sampler = [&]() -> REAL { return dist(rng); };
+
+  auto rng_function =
+      std::make_shared<HostRNGGenerationFunction<REAL>>(lambda_sampler);
+
+  auto pair_sampler_ntc = std::make_shared<DSMC::PairSamplerNTC>(
+      sycl_target, cell_count, rng_function);
+
+  std::vector<int> num_pairs(cell_count);
+
+  const int num_pairs_per_cell = 17;
+  const int total_num_pairs = cell_count * num_pairs_per_cell;
+  std::fill(num_pairs.begin(), num_pairs.end(), num_pairs_per_cell);
+  pair_sampler_ntc->sample(aa, aa, num_pairs);
+  ASSERT_TRUE(pair_sampler_ntc->validate_pair_list(sycl_target));
+
+  auto ndla_int = std::make_shared<NDLocalArray<int, 2>>(sycl_target, 3, 5);
+  auto h_ndla_int = ndla_int->get();
+
+  auto ndla_int_npair = std::make_shared<NDLocalArray<int, 3>>(
+      sycl_target, 1, 1, total_num_pairs);
+  ndla_int_npair->fill(0);
+
+  int index = 0;
+  int correct_sum = 0;
+  for (int i0 = 0; i0 < 3; i0++) {
+    for (int i1 = 0; i1 < 5; i1++) {
+      h_ndla_int.at(index) = index;
+      correct_sum += index;
+      index++;
+    }
+  }
+  ndla_int->set(h_ndla_int);
+
+  auto ndla_real = std::make_shared<NDLocalArray<REAL, 2>>(sycl_target, 3, 5);
+  ndla_real->fill(0.0);
+
+  ErrorPropagate ep(sycl_target);
+  auto k_ep = ep.device_ptr();
+
+  particle_pair_loop(
+      "particle_pair_loop_test",
+      {CellwisePairListAbsolute<ParticleGroup, CellwisePairListBlockInterface>(
+          A, A, pair_sampler_ntc)},
+      [=](auto INDEX, auto NDLA_INT, auto NDLA_REAL, auto NDLA_NPAIR) {
+        int to_test_sum = 0;
+        for (int i0 = 0; i0 < 3; i0++) {
+          for (int i1 = 0; i1 < 5; i1++) {
+            int index = NDLA_INT.at(i0, i1);
+            to_test_sum += index;
+            NDLA_REAL.fetch_add(i0, i1, 0.01 * (i0 + i1));
+          }
+        }
+        NESO_KERNEL_ASSERT(to_test_sum == correct_sum, k_ep);
+        const int index = static_cast<int>(INDEX.get_loop_linear_index());
+        NDLA_NPAIR.at(0, 0, index) = 42 + index;
+      },
+      Access::read(ParticlePairLoopIndex{}), Access::read(ndla_int),
+      Access::add(ndla_real), Access::write(ndla_int_npair))
+      ->execute();
+
+  ASSERT_FALSE(ep.get_flag());
+
+  auto h_ndla_real = ndla_real->get();
+  index = 0;
+  for (int i0 = 0; i0 < 3; i0++) {
+    for (int i1 = 0; i1 < 5; i1++) {
+      const REAL correct = total_num_pairs * 0.01 * (i0 + i1);
+      const REAL to_test = h_ndla_real.at(index);
+      ASSERT_NEAR(relative_error(correct, to_test), 0, 1.0e-8);
+      index++;
+    }
+  }
+
+  auto h_ndla_int_npair = ndla_int_npair->get();
+  for (int ix = 0; ix < total_num_pairs; ix++) {
+    ASSERT_EQ(h_ndla_int_npair.at(ix), ix + 42);
+  }
+
+  sycl_target->free();
+  A->domain->mesh->free();
+}

@@ -4,6 +4,7 @@
 #include "../compute_target.hpp"
 #include "../loop/access_descriptors.hpp"
 #include "../loop/particle_loop_base.hpp"
+#include "../pair_loop/particle_pair_loop_base.hpp"
 #include "nd_index.hpp"
 #include "tuple.hpp"
 
@@ -180,6 +181,55 @@ create_kernel_arg([[maybe_unused]] ParticleLoopIteration &iterationx,
 }
 
 } // namespace ParticleLoopImplementation
+
+namespace ParticlePairLoopImplementation {
+
+/**
+ *  Function to create the kernel argument for LocalArray read
+ * access in a pair loop.
+ */
+template <typename T, std::size_t N>
+inline void create_kernel_arg(
+    [[maybe_unused]] ParticlePairLoopIteration &iteration,
+    [[maybe_unused]] ParticleLoopImplementation::ParticleLoopIteration
+        &iteration_particle,
+    Access::NDLocalArray::Read<T, N> &rhs,
+    Access::NDLocalArray::Read<T, N> &lhs) {
+
+  lhs = rhs;
+}
+
+/**
+ *  Function to create the kernel argument for LocalArray write
+ * access in a pair loop.
+ */
+template <typename T, std::size_t N>
+inline void create_kernel_arg(
+    [[maybe_unused]] ParticlePairLoopIteration &iteration,
+    [[maybe_unused]] ParticleLoopImplementation::ParticleLoopIteration
+        &iteration_particle,
+    Access::NDLocalArray::Write<T, N> &rhs,
+    Access::NDLocalArray::Write<T, N> &lhs) {
+
+  lhs = rhs;
+}
+
+/**
+ *  Function to create the kernel argument for LocalArray add
+ * access in a pair loop.
+ */
+template <typename T, std::size_t N>
+inline void create_kernel_arg(
+    [[maybe_unused]] ParticlePairLoopIteration &iteration,
+    [[maybe_unused]] ParticleLoopImplementation::ParticleLoopIteration
+        &iteration_particle,
+    Access::NDLocalArray::Add<T, N> &rhs,
+    Access::NDLocalArray::Add<T, N> &lhs) {
+
+  lhs = rhs;
+}
+
+} // namespace ParticlePairLoopImplementation
 
 /**
  * Generic N-Dimensional array type which is accessible on the host and in a
