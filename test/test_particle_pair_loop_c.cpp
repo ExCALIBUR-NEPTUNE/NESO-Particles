@@ -77,8 +77,8 @@ TEST(ParticlePairLoopBlock, local_array_read_write_add) {
   const REAL correct_real = 3.14 + 2.75;
 
   for (int ix = 0; ix < total_num_pairs; ix++) {
-    ASSERT_EQ(dh_to_test_int.d_buffer.ptr[ix], correct_int);
-    ASSERT_NEAR(dh_to_test_real.d_buffer.ptr[ix], correct_real, 1.0e-15);
+    ASSERT_EQ(dh_to_test_int.h_buffer.ptr[ix], correct_int);
+    ASSERT_NEAR(dh_to_test_real.h_buffer.ptr[ix], correct_real, 1.0e-15);
   }
 
   la_test_int =
