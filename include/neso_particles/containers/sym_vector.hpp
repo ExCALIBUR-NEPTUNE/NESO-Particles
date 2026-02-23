@@ -3,8 +3,8 @@
 #include "../compute_target.hpp"
 #include "../loop/access_descriptors.hpp"
 #include "../loop/particle_loop_base.hpp"
-#include "../pair_loop/particle_pair_loop_base.hpp"
 #include "../loop/particle_loop_index.hpp"
+#include "../pair_loop/particle_pair_loop_base.hpp"
 #include "../particle_group.hpp"
 #include "../particle_spec.hpp"
 #include <initializer_list>
@@ -190,13 +190,23 @@ inline void create_kernel_arg(
 template <typename T> class SymVector {
   // This allows the ParticleLoop to access the implementation methods.
   template <typename KERNEL, typename... ARGS> friend class ParticleLoop;
+
   friend SymVectorImplGetConstT<T>
   ParticleLoopImplementation::create_loop_arg<T>(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
       sycl::handler &cgh, Access::Read<SymVector<T> *> &a);
+
   friend SymVectorImplGetT<T> ParticleLoopImplementation::create_loop_arg<T>(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
       sycl::handler &cgh, Access::Write<SymVector<T> *> &a);
+
+  friend void ParticleLoopImplementation::pre_loop(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      Access::Read<SymVector<T> *> &arg);
+
+  friend void ParticleLoopImplementation::pre_loop(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      Access::Write<SymVector<T> *> &arg);
 
 protected:
   ParticleGroupSharedPtr particle_group;
