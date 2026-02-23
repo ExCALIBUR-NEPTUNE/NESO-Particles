@@ -285,3 +285,122 @@ TEST(ParticlePairLoopBlock, nd_local_array_read_write_add) {
   sycl_target->free();
   A->domain->mesh->free();
 }
+
+TEST(ParticlePairLoopBlock, sym_vector) {
+
+  int npart_cell = 127;
+  const int ndim = 2;
+  const int nx = 16;
+  const int ny = 33;
+  const int nz = 48;
+
+  auto [A, sycl_target, cell_count] =
+      particle_loop_create_common(npart_cell, ndim, nx, ny, nz);
+  A->add_particle_dat(Sym<INT>("NUM_N"), 2);
+  A->add_particle_dat(Sym<INT>("FOO"), 2);
+  A->add_particle_dat(Sym<REAL>("R0"), 1);
+  A->add_particle_dat(Sym<REAL>("R1"), 1);
+
+  particle_loop(
+      A,
+      [=](auto INDEX, auto NN, auto FOO, auto R0, auto R1, auto V) {
+        NN.at(0) = 0;
+        NN.at(1) = 0;
+        FOO.at(0) = 0;
+        FOO.at(1) = 0;
+        R0.at(0) = INDEX.get_loop_linear_index() * 0.01;
+        R1.at(0) = INDEX.get_loop_linear_index() * 0.01;
+        V.at(0) = 0.0;
+        V.at(1) = 0.0;
+      },
+      Access::read(ParticleLoopIndex{}), Access::write(Sym<INT>("NUM_N")),
+      Access::write(Sym<INT>("FOO")), Access::write(Sym<REAL>("R0")),
+      Access::write(Sym<REAL>("R1")), Access::write(Sym<REAL>("V")))
+      ->execute();
+
+  auto aa = particle_sub_group(A, []() { return true; });
+
+  const int rank = sycl_target->comm_pair.rank_parent;
+
+  std::mt19937 rng(34234 + rank);
+  std::uniform_real_distribution<REAL> dist{
+      std::uniform_real_distribution<REAL>(0.0, 1.0)};
+  auto lambda_sampler = [&]() -> REAL { return dist(rng); };
+
+  auto rng_function =
+      std::make_shared<HostRNGGenerationFunction<REAL>>(lambda_sampler);
+
+  auto pair_sampler_ntc = std::make_shared<DSMC::PairSamplerNTC>(
+      sycl_target, cell_count, rng_function);
+
+  const int num_pairs_per_cell = 221;
+  std::vector<int> num_pairs(cell_count);
+  std::fill(num_pairs.begin(), num_pairs.end(), num_pairs_per_cell);
+  pair_sampler_ntc->sample(aa, aa, num_pairs);
+
+  particle_pair_loop(
+      "particle_pair_loop_test",
+      {CellwisePairListAbsolute<ParticleGroup, CellwisePairListBlockInterface>(
+          A, A, pair_sampler_ntc)},
+      [=](auto NN_a, auto NN_b, auto SVI_a, auto SVI_b) {
+        NN_a.at(0)++;
+        NN_b.at(0)++;
+
+        SVI_a.at(1, 1)++;
+        SVI_b.at(1, 1)++;
+      },
+      Access::A(Access::write(Sym<INT>("NUM_N"))),
+      Access::B(Access::write(Sym<INT>("NUM_N"))),
+      Access::A(Access::write(
+          sym_vector<INT>(A, {Sym<INT>("NUM_N"), Sym<INT>("FOO")}))),
+      Access::B(Access::write(
+          sym_vector<INT>(A, {Sym<INT>("NUM_N"), Sym<INT>("FOO")}))))
+      ->execute();
+
+  ErrorPropagate ep(sycl_target);
+  auto k_ep = ep.device_ptr();
+
+  particle_loop(
+      A,
+      [=](auto NN, auto FOO) {
+        NESO_KERNEL_ASSERT(NN.at(0) == FOO.at(1), k_ep);
+      },
+      Access::read(Sym<INT>("NUM_N")), Access::read(Sym<INT>("FOO")))
+      ->execute();
+
+  ASSERT_FALSE(ep.get_flag());
+
+  particle_pair_loop(
+      "particle_pair_loop_test",
+      {CellwisePairListAbsolute<ParticleGroup, CellwisePairListBlockInterface>(
+          A, A, pair_sampler_ntc)},
+      [=](auto V_a, auto V_b, auto R0_a, auto R0_b, auto SR1_a, auto SR1_b) {
+        V_a.at(0) += R0_b.at(0);
+        V_a.at(1) += SR1_b.at(1, 0);
+
+        V_b.at(0) += R0_a.at(0);
+        V_b.at(1) += SR1_a.at(1, 0);
+      },
+      Access::A(Access::write(Sym<REAL>("V"))),
+      Access::B(Access::write(Sym<REAL>("V"))),
+      Access::A(Access::read(Sym<REAL>("R0"))),
+      Access::B(Access::read(Sym<REAL>("R0"))),
+      Access::A(
+          Access::read(sym_vector<REAL>(A, {Sym<REAL>("P"), Sym<REAL>("R1")}))),
+      Access::B(
+          Access::read(sym_vector<REAL>(A, {Sym<REAL>("P"), Sym<REAL>("R1")}))))
+      ->execute();
+
+  particle_loop(
+      A,
+      [=](auto V) {
+        NESO_KERNEL_ASSERT(relative_error(V.at(0), V.at(1)) < 1.0e-10, k_ep);
+      },
+      Access::read(Sym<REAL>("V")))
+      ->execute();
+
+  ASSERT_FALSE(ep.get_flag());
+
+  sycl_target->free();
+  A->domain->mesh->free();
+}

@@ -152,6 +152,36 @@ inline void create_kernel_arg(ParticleLoopIteration &iterationx, T ****rhs,
 
 } // namespace ParticleLoopImplementation
 
+namespace ParticlePairLoopImplementation {
+
+/**
+ *  Function to create the kernel argument for SymVector read
+ * access in a pair loop.
+ */
+template <typename T>
+inline void create_kernel_arg(
+    [[maybe_unused]] ParticlePairLoopIteration &iteration,
+    ParticleLoopImplementation::ParticleLoopIteration &iteration_particle,
+    T *const *const **rhs, Access::SymVector::Read<T> &lhs) {
+  lhs.iterationx = &iteration_particle;
+  lhs.ptr = rhs;
+}
+
+/**
+ *  Function to create the kernel argument for SymVector write
+ * access in a pair loop.
+ */
+template <typename T>
+inline void create_kernel_arg(
+    [[maybe_unused]] ParticlePairLoopIteration &iteration,
+    ParticleLoopImplementation::ParticleLoopIteration &iteration_particle,
+    T ****rhs, Access::SymVector::Write<T> &lhs) {
+  lhs.iterationx = &iteration_particle;
+  lhs.ptr = rhs;
+}
+
+} // namespace ParticlePairLoopImplementation
+
 /**
  * Enables ParticleDats to be accessed in ParticleLoops with a number of
  * ParticleDats determined at runtime.

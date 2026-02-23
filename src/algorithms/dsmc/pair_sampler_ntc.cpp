@@ -395,12 +395,14 @@ void PairSamplerNTC::sample(ParticleSubGroupSharedPtr sub_group_a,
 CellwisePairListBlockDevice PairSamplerNTC::get_pair_list() {
 
   auto lambda_check_group = [&](auto px, auto v) {
-    NESOASSERT(!px.expired(), "The particle sub group this pair list was "
-                              "created from has been deconstructed.");
+    NESOASSERT(
+        !px.expired(),
+        "The particle sub group this pair list was "
+        "created from has been deconstructed. Or sample was never called.");
     px.lock()->create_if_required();
     NESOASSERT(px.lock()->get_version() == v,
                "The particle sub group this pair list was created from has "
-               "been updated.");
+               "been updated. or sample was never called.");
   };
 
   lambda_check_group(this->particle_sub_group_a, this->version_a);
