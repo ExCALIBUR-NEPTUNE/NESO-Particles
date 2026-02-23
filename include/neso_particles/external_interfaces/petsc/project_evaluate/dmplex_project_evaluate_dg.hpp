@@ -113,7 +113,7 @@ public:
    *
    * @returns Data for VTKHDF unstructured grid writer.
    */
-  virtual inline std::vector<VTK::UnstructuredCell> get_vtk_data() override;
+  virtual std::vector<VTK::UnstructuredCell> get_vtk_data() override;
 
   /**
    * Create a DG0 project/evaluate instance from a QuadraturePointMapper.

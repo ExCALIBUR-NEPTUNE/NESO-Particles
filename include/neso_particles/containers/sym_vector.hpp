@@ -4,6 +4,7 @@
 #include "../loop/access_descriptors.hpp"
 #include "../loop/particle_loop_base.hpp"
 #include "../loop/particle_loop_index.hpp"
+#include "../pair_loop/particle_pair_loop_base.hpp"
 #include "../particle_group.hpp"
 #include "../particle_spec.hpp"
 #include <initializer_list>
@@ -152,6 +153,36 @@ inline void create_kernel_arg(ParticleLoopIteration &iterationx, T ****rhs,
 
 } // namespace ParticleLoopImplementation
 
+namespace ParticlePairLoopImplementation {
+
+/**
+ *  Function to create the kernel argument for SymVector read
+ * access in a pair loop.
+ */
+template <typename T>
+inline void create_kernel_arg(
+    [[maybe_unused]] ParticlePairLoopIteration &iteration,
+    ParticleLoopImplementation::ParticleLoopIteration &iteration_particle,
+    T *const *const **rhs, Access::SymVector::Read<T> &lhs) {
+  lhs.iterationx = &iteration_particle;
+  lhs.ptr = rhs;
+}
+
+/**
+ *  Function to create the kernel argument for SymVector write
+ * access in a pair loop.
+ */
+template <typename T>
+inline void create_kernel_arg(
+    [[maybe_unused]] ParticlePairLoopIteration &iteration,
+    ParticleLoopImplementation::ParticleLoopIteration &iteration_particle,
+    T ****rhs, Access::SymVector::Write<T> &lhs) {
+  lhs.iterationx = &iteration_particle;
+  lhs.ptr = rhs;
+}
+
+} // namespace ParticlePairLoopImplementation
+
 /**
  * Enables ParticleDats to be accessed in ParticleLoops with a number of
  * ParticleDats determined at runtime.
@@ -159,13 +190,23 @@ inline void create_kernel_arg(ParticleLoopIteration &iterationx, T ****rhs,
 template <typename T> class SymVector {
   // This allows the ParticleLoop to access the implementation methods.
   template <typename KERNEL, typename... ARGS> friend class ParticleLoop;
+
   friend SymVectorImplGetConstT<T>
   ParticleLoopImplementation::create_loop_arg<T>(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
       sycl::handler &cgh, Access::Read<SymVector<T> *> &a);
+
   friend SymVectorImplGetT<T> ParticleLoopImplementation::create_loop_arg<T>(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
       sycl::handler &cgh, Access::Write<SymVector<T> *> &a);
+
+  friend void ParticleLoopImplementation::pre_loop(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      Access::Read<SymVector<T> *> &arg);
+
+  friend void ParticleLoopImplementation::pre_loop(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      Access::Write<SymVector<T> *> &arg);
 
 protected:
   ParticleGroupSharedPtr particle_group;
