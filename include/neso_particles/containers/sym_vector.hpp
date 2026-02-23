@@ -3,6 +3,7 @@
 #include "../compute_target.hpp"
 #include "../loop/access_descriptors.hpp"
 #include "../loop/particle_loop_base.hpp"
+#include "../pair_loop/particle_pair_loop_base.hpp"
 #include "../loop/particle_loop_index.hpp"
 #include "../particle_group.hpp"
 #include "../particle_spec.hpp"
