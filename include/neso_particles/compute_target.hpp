@@ -396,6 +396,54 @@ joint_exclusive_scan_n(SYCLTargetSharedPtr sycl_target, std::size_t N,
                        INT *d_dst);
 
 /**
+ * Compute the inclusive scan of a n arrays using the SYCL group built-ins.
+ *
+ * @param[in] sycl_target Compute device to use.
+ * @param[in] N Number of arrays.
+ * @param[in] d_array_sizes Number of elements in each sub array.
+ * @param[in] d_array_offsets The starting index of each sub array.
+ * @param[in] d_src Device poitner to source values.
+ * @param[in, out] d_dst Device pointer to destination values  (same size as
+ * d_src).
+ * @returns Event to wait on for completion.
+ */
+template <typename U, typename T>
+[[nodiscard]] inline sycl::event
+joint_inclusive_scan_n(SYCLTargetSharedPtr sycl_target, std::size_t N,
+                       const U *RESTRICT const d_array_sizes,
+                       const U *RESTRICT const d_array_offsets, T *d_src,
+                       T *d_dst)
+
+{
+  if (N == 0) {
+    return sycl::event{};
+  }
+
+  const std::size_t local_size =
+      sycl_target->parameters->template get<SizeTParameter>("LOOP_LOCAL_SIZE")
+          ->value;
+
+  auto iteration_set =
+      sycl_target->device_limits.validate_nd_range(sycl::nd_range<2>(
+          sycl::range<2>(N, local_size), sycl::range<2>(1, local_size)));
+
+  NESOASSERT(local_size >= 1, "Bad local size for exclusive_scan.");
+  return sycl_target->queue.parallel_for(
+      iteration_set, [=](sycl::nd_item<2> it) {
+        const std::size_t array_index = it.get_global_id(0);
+        const auto num_elements = d_array_sizes[array_index];
+        if (num_elements > 0) {
+          const auto start_index = d_array_offsets[array_index];
+          T *first = d_src + start_index;
+          T *last = first + num_elements;
+          sycl::joint_inclusive_scan(it.get_group(), first, last,
+                                     d_dst + start_index, sycl::plus<T>());
+          sycl::group_barrier(it.get_group());
+        }
+      });
+}
+
+/**
  * Compute the exclusive scan of a n arrays using the SYCL group built-ins. Also
  * computes the total for each of the n arrays.
  *

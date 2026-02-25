@@ -12,6 +12,8 @@ CollisionCellPartition::CollisionCellPartition(SYCLTargetSharedPtr sycl_target,
 
   this->h_map_species_id_linear_id =
       std::make_unique<BlockedBinaryTree<INT, INT>>(this->sycl_target);
+  this->d_collision_cell_offsets =
+      std::make_unique<BufferDevice<INT>>(this->sycl_target, 32);
 
   {
     INT index = 0;
@@ -105,6 +107,64 @@ void CollisionCellPartition::construct(
   // The map reallocation can be async with the above atomics loop.
 
   // TODO get max species count in dsmc cells from above array
+
+  const INT total_num_collision_cells = max_num_collision_cells * k_cell_count;
+
+  auto d_array_sizes =
+      get_resource<BufferDevice<INT>, ResourceStackInterfaceBufferDevice<INT>>(
+          sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<INT>{},
+          sycl_target);
+  d_array_sizes->realloc_no_copy(total_num_collision_cells);
+  auto *k_array_sizes = d_array_sizes->ptr;
+  auto d_array_offsets =
+      get_resource<BufferDevice<INT>, ResourceStackInterfaceBufferDevice<INT>>(
+          sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<INT>{},
+          sycl_target);
+  d_array_offsets->realloc_no_copy(total_num_collision_cells);
+  auto *k_array_offsets = d_array_offsets->ptr;
+
+  this->sycl_target->queue
+      .parallel_for(sycl::range<1>(total_num_collision_cells),
+                    [=](auto ix) {
+                      k_array_sizes[ix] = k_num_species;
+                      k_array_offsets[ix] = ix * k_num_species;
+                    })
+      .wait_and_throw();
+
+  // After this call we have the incscan of the species counts in each collision
+  // cell.
+  joint_inclusive_scan_n(this->sycl_target, total_num_collision_cells,
+                         k_array_sizes, k_array_offsets, k_cell_counts,
+                         k_cell_counts)
+      .wait_and_throw();
+
+  this->d_collision_cell_offsets->realloc_no_copy(total_num_collision_cells);
+  INT *k_collision_cell_offsets = this->d_collision_cell_offsets->ptr;
+
+  this->sycl_target->queue
+      .parallel_for(sycl::range<1>(total_num_collision_cells),
+                    [=](auto ix) {
+                      const INT index =
+                          ix * k_num_species + (k_num_species - 1);
+                      const INT contribution = k_cell_counts[index];
+                      k_collision_cell_offsets[ix] = contribution;
+                    })
+      .wait_and_throw();
+
+  int last_collision_cell_sum = 0;
+  this->sycl_target->queue
+      .memcpy(&last_collision_cell_sum,
+              k_cell_counts + layer_matrix_total_size - 1, sizeof(int))
+      .wait_and_throw();
+
+  joint_exclusive_scan(this->sycl_target, total_num_collision_cells,
+                       k_collision_cell_offsets, k_collision_cell_offsets)
+      .wait_and_throw();
+
+  restore_resource(sycl_target->resource_stack_map,
+                   ResourceStackKeyBufferDevice<INT>{}, d_array_offsets);
+  restore_resource(sycl_target->resource_stack_map,
+                   ResourceStackKeyBufferDevice<INT>{}, d_array_sizes);
 
   restore_resource(sycl_target->resource_stack_map,
                    ResourceStackKeyBufferDevice<int>{}, d_layers);

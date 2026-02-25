@@ -168,6 +168,60 @@ TEST(SYCLTarget, joint_exclusive_scan_n_int) {
   sycl_target->free();
 }
 
+TEST(SYCLTarget, joint_inclusive_scan_n_int) {
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+
+  const std::size_t num_arrays = 7;
+  const std::size_t N = 2121;
+
+  std::vector<int> h_src;
+  std::vector<int> h_correct;
+  std::vector<int> h_array_sizes(num_arrays);
+  std::vector<int> h_array_offsets(num_arrays);
+
+  std::mt19937 rng(52234234);
+  std::uniform_int_distribution<int> dist{0, 512};
+
+  h_src.reserve(num_arrays * N);
+  h_correct.reserve(num_arrays * N);
+
+  int offset = 0;
+  for (std::size_t ax = 0; ax < num_arrays; ax++) {
+    const std::size_t num_elements = (ax == 10) ? 0 : N - ax;
+    std::vector<int> tmp_src(num_elements);
+    std::vector<int> tmp_correct(num_elements);
+
+    h_array_sizes[ax] = num_elements;
+    h_array_offsets[ax] = offset;
+    offset += num_elements;
+
+    int current = 0;
+    for (std::size_t ex = 0; ex < num_elements; ex++) {
+      const int value = dist(rng);
+      current += value;
+      tmp_src[ex] = value;
+      tmp_correct[ex] = current;
+    }
+
+    h_src.insert(h_src.end(), tmp_src.begin(), tmp_src.end());
+    h_correct.insert(h_correct.end(), tmp_correct.begin(), tmp_correct.end());
+  }
+
+  BufferDevice d_src(sycl_target, h_src);
+  BufferDevice d_dst(sycl_target, h_src);
+  BufferDevice d_array_sizes(sycl_target, h_array_sizes);
+  BufferDevice d_array_offsets(sycl_target, h_array_offsets);
+
+  joint_inclusive_scan_n(sycl_target, num_arrays, d_array_sizes.ptr,
+                         d_array_offsets.ptr, d_src.ptr, d_dst.ptr)
+      .wait_and_throw();
+
+  auto h_to_test = d_dst.get();
+  EXPECT_EQ(h_to_test, h_correct);
+
+  sycl_target->free();
+}
+
 TEST(SYCLTarget, joint_exclusive_scan_n_sum_int) {
   auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
 

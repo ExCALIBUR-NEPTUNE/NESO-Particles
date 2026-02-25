@@ -18,6 +18,7 @@ protected:
   // we use in the data structures.
   std::unique_ptr<BlockedBinaryTree<INT, INT>> h_map_species_id_linear_id;
   INT num_species{0};
+  std::unique_ptr<BufferDevice<INT>> d_collision_cell_offsets;
 
 public:
   /// Disable (implicit) copies.
