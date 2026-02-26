@@ -51,10 +51,10 @@ void CollisionCellPartition::construct(
       static_cast<INT>(this->cell_count) * this->num_species;
 
   auto d_cell_counts =
-      get_resource<BufferDevice<int>, ResourceStackInterfaceBufferDevice<int>>(
-          sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<int>{},
+      get_resource<BufferDevice<INT>, ResourceStackInterfaceBufferDevice<INT>>(
+          sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<INT>{},
           sycl_target);
-  d_cell_counts->realloc_no_copy(layer_matrix_total_size);
+  d_cell_counts->realloc_no_copy(layer_matrix_total_size + 1);
   auto *k_cell_counts = d_cell_counts->ptr;
 
   auto d_layers =
@@ -65,8 +65,8 @@ void CollisionCellPartition::construct(
   auto *k_layers = d_layers->ptr;
 
   EventStack es;
-  es.push(this->sycl_target->queue.fill<int>(k_cell_counts, 0,
-                                             layer_matrix_total_size));
+  es.push(this->sycl_target->queue.fill<INT>(k_cell_counts, 0,
+                                             layer_matrix_total_size + 1));
 
   auto k_tree_root = this->h_map_species_id_linear_id->root;
   const INT k_cell_count = this->cell_count;
@@ -95,7 +95,7 @@ void CollisionCellPartition::construct(
               k_cell_counts +
                   mesh_cell * max_num_collision_cells * k_num_species +
                   collision_cell * k_num_species + species_id_linear,
-              1);
+              static_cast<INT>(1));
 
           k_layers[linear_index] = new_layer;
         }
@@ -104,72 +104,29 @@ void CollisionCellPartition::construct(
       Access::read(collision_cell_sym))
       ->execute();
 
-  // The map reallocation can be async with the above atomics loop.
-
-  // TODO get max species count in dsmc cells from above array
-
-  const INT total_num_collision_cells = max_num_collision_cells * k_cell_count;
-
-  auto d_array_sizes =
-      get_resource<BufferDevice<INT>, ResourceStackInterfaceBufferDevice<INT>>(
-          sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<INT>{},
-          sycl_target);
-  d_array_sizes->realloc_no_copy(total_num_collision_cells);
-  auto *k_array_sizes = d_array_sizes->ptr;
-  auto d_array_offsets =
-      get_resource<BufferDevice<INT>, ResourceStackInterfaceBufferDevice<INT>>(
-          sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<INT>{},
-          sycl_target);
-  d_array_offsets->realloc_no_copy(total_num_collision_cells);
-  auto *k_array_offsets = d_array_offsets->ptr;
-
-  this->sycl_target->queue
-      .parallel_for(sycl::range<1>(total_num_collision_cells),
-                    [=](auto ix) {
-                      k_array_sizes[ix] = k_num_species;
-                      k_array_offsets[ix] = ix * k_num_species;
-                    })
-      .wait_and_throw();
-
-  // After this call we have the incscan of the species counts in each collision
-  // cell.
-  joint_inclusive_scan_n(this->sycl_target, total_num_collision_cells,
-                         k_array_sizes, k_array_offsets, k_cell_counts,
-                         k_cell_counts)
-      .wait_and_throw();
-
-  this->d_collision_cell_offsets->realloc_no_copy(total_num_collision_cells);
+  this->d_collision_cell_offsets->realloc_no_copy(layer_matrix_total_size + 1);
   INT *k_collision_cell_offsets = this->d_collision_cell_offsets->ptr;
 
-  this->sycl_target->queue
-      .parallel_for(sycl::range<1>(total_num_collision_cells),
-                    [=](auto ix) {
-                      const INT index =
-                          ix * k_num_species + (k_num_species - 1);
-                      const INT contribution = k_cell_counts[index];
-                      k_collision_cell_offsets[ix] = contribution;
-                    })
+  // TODO make joint exclusive scan more efficient for large arrays
+  joint_exclusive_scan(this->sycl_target, layer_matrix_total_size + 1,
+                       k_cell_counts, k_collision_cell_offsets)
       .wait_and_throw();
-
-  int last_collision_cell_sum = 0;
-  this->sycl_target->queue
-      .memcpy(&last_collision_cell_sum,
-              k_cell_counts + layer_matrix_total_size - 1, sizeof(int))
-      .wait_and_throw();
-
-  joint_exclusive_scan(this->sycl_target, total_num_collision_cells,
-                       k_collision_cell_offsets, k_collision_cell_offsets)
-      .wait_and_throw();
-
-  restore_resource(sycl_target->resource_stack_map,
-                   ResourceStackKeyBufferDevice<INT>{}, d_array_offsets);
-  restore_resource(sycl_target->resource_stack_map,
-                   ResourceStackKeyBufferDevice<INT>{}, d_array_sizes);
 
   restore_resource(sycl_target->resource_stack_map,
                    ResourceStackKeyBufferDevice<int>{}, d_layers);
   restore_resource(sycl_target->resource_stack_map,
-                   ResourceStackKeyBufferDevice<int>{}, d_cell_counts);
+                   ResourceStackKeyBufferDevice<INT>{}, d_cell_counts);
+
+  this->max_num_collision_cells = max_num_collision_cells;
+
   this->sycl_target->profile_map.end_region(r0);
 }
+
+CollisionCellPartitionDevice CollisionCellPartition::get_device() {
+
+  return {this->d_collision_cell_offsets->ptr,
+          this->h_map_species_id_linear_id->root, this->cell_count,
+          this->max_num_collision_cells, this->num_species};
+}
+
 } // namespace NESO::Particles::DSMC

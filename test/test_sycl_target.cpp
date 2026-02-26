@@ -108,8 +108,13 @@ TEST(SYCLTarget, joint_exclusive_scan_INT) {
   joint_exclusive_scan(sycl_target, N, d_src.ptr, d_dst.ptr).wait_and_throw();
 
   auto h_to_test = d_dst.get();
-
   EXPECT_EQ(h_to_test, h_correct);
+
+  // In place seems to be broken on some backends
+  //
+  // joint_exclusive_scan(sycl_target, N, d_src.ptr,
+  // d_src.ptr).wait_and_throw(); h_to_test = d_src.get(); EXPECT_EQ(h_to_test,
+  // h_correct);
 
   sycl_target->free();
 }

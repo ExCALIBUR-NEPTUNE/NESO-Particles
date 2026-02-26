@@ -12,6 +12,67 @@ namespace NESO::Particles::DSMC {
 /**
  * TODO
  */
+struct CollisionCellPartitionDevice {
+  INT *d_collision_cell_offsets{nullptr};
+
+  BlockedBinaryNode<INT, INT, NESO_PARTICLES_BLOCKED_BINARY_TREE_WIDTH>
+      *d_species_map_root{nullptr};
+
+  INT mesh_cell_count{0};
+  INT max_num_collision_cells{0};
+  INT max_num_species{0};
+
+  /**
+   * @param species_id Input species ID from user space.
+   * @param linear_species_id Output linearised species id.
+   * @returns True if linear species ID found otherwise false.
+   */
+  inline bool get_linear_species_index(const INT species_id,
+                                       INT *linear_species_id) const {
+    return this->d_species_map_root->get(species_id, linear_species_id);
+  }
+
+  /**
+   * @param cell_mesh Mesh cell to index collision cell.
+   * @param cell_collision Collision cell index within the mesh cell.
+   * @param linear_species_id Linear species index.
+   * @returns The number of particles in the requested collision cell with the
+   * requested linear species.
+   */
+  inline INT get_num_particles_cell_species(const int cell_mesh,
+                                            const int cell_collision,
+                                            const INT linear_species_id) const {
+    const INT offset = this->get_offset_cell_species(cell_mesh, cell_collision,
+                                                     linear_species_id);
+    const INT npart_rhs = d_collision_cell_offsets[offset + 1];
+    const INT npart_lhs = d_collision_cell_offsets[offset];
+    return npart_rhs - npart_lhs;
+  }
+
+  /**
+   * @param cell_mesh Mesh cell to index collision cell.
+   * @param cell_collision Collision cell index within the mesh cell.
+   * @param linear_species_id Linear species index.
+   * @returns The number of particles in the requested collision cell with the
+   * requested linear species.
+   */
+  inline INT get_offset_cell_species(const int cell_mesh,
+                                     const int cell_collision,
+                                     const INT linear_species_id) const {
+
+    const INT stride_mesh_cells = max_num_collision_cells * max_num_species;
+    const INT offset_cell = cell_mesh * stride_mesh_cells;
+
+    const INT offset =
+        offset_cell + cell_collision * max_num_species + linear_species_id;
+
+    return offset;
+  }
+};
+
+/**
+ * TODO
+ */
 class CollisionCellPartition {
 protected:
   // This is the map from the species IDs the user specified to the linear index
@@ -19,6 +80,8 @@ protected:
   std::unique_ptr<BlockedBinaryTree<INT, INT>> h_map_species_id_linear_id;
   INT num_species{0};
   std::unique_ptr<BufferDevice<INT>> d_collision_cell_offsets;
+
+  INT max_num_collision_cells{0};
 
 public:
   /// Disable (implicit) copies.
@@ -65,6 +128,11 @@ public:
                  Sym<INT> species_id_sym, const int species_id_component,
                  Sym<INT> collision_cell_sym,
                  const int collision_cell_component);
+
+  /**
+   * @returns The device description of the maps.
+   */
+  CollisionCellPartitionDevice get_device();
 };
 
 } // namespace NESO::Particles::DSMC
