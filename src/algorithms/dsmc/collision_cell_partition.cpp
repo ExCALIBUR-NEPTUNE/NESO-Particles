@@ -14,6 +14,8 @@ CollisionCellPartition::CollisionCellPartition(SYCLTargetSharedPtr sycl_target,
       std::make_unique<BlockedBinaryTree<INT, INT>>(this->sycl_target);
   this->d_collision_cell_offsets =
       std::make_unique<BufferDevice<INT>>(this->sycl_target, 32);
+  this->d_map_entries =
+      std::make_unique<BufferDevice<int>>(this->sycl_target, 32);
 
   {
     INT index = 0;
@@ -45,6 +47,7 @@ void CollisionCellPartition::construct(
             this->collision_cell_counts.begin());
   const int max_num_collision_cells = *std::max_element(
       this->collision_cell_counts.begin(), this->collision_cell_counts.end());
+  this->max_num_collision_cells = max_num_collision_cells;
 
   const INT layer_matrix_total_size =
       static_cast<INT>(max_num_collision_cells) *
@@ -112,12 +115,39 @@ void CollisionCellPartition::construct(
                        k_cell_counts, k_collision_cell_offsets)
       .wait_and_throw();
 
+  this->d_map_entries->realloc_no_copy(particle_sub_group->get_npart_local());
+  auto k_map_entries = this->d_map_entries->ptr;
+
+  auto k_map = this->get_device();
+
+  particle_loop(
+      "CollisionCellPartition::populate_map", particle_sub_group,
+      [=](auto INDEX, auto SPECIES_ID, auto COLLISION_CELL) {
+        const INT species_id_label = SPECIES_ID.at(species_id_component);
+        INT species_id_linear = 0;
+        const bool found = k_map.get_linear_species_index(species_id_label,
+                                                          &species_id_linear);
+
+        if (found) {
+          const INT offset_species = k_map.get_offset_cell_species(
+              INDEX.cell, COLLISION_CELL.at(collision_cell_component),
+              species_id_linear);
+
+          const INT offset_particle =
+              k_map.d_collision_cell_offsets[offset_species] +
+              k_layers[INDEX.get_loop_linear_index()];
+
+          k_map_entries[offset_particle] = INDEX.layer;
+        }
+      },
+      Access::read(ParticleLoopIndex{}), Access::read(species_id_sym),
+      Access::read(collision_cell_sym))
+      ->execute();
+
   restore_resource(sycl_target->resource_stack_map,
                    ResourceStackKeyBufferDevice<int>{}, d_layers);
   restore_resource(sycl_target->resource_stack_map,
                    ResourceStackKeyBufferDevice<INT>{}, d_cell_counts);
-
-  this->max_num_collision_cells = max_num_collision_cells;
 
   this->sycl_target->profile_map.end_region(r0);
 }
@@ -125,8 +155,11 @@ void CollisionCellPartition::construct(
 CollisionCellPartitionDevice CollisionCellPartition::get_device() {
 
   return {this->d_collision_cell_offsets->ptr,
-          this->h_map_species_id_linear_id->root, this->cell_count,
-          this->max_num_collision_cells, this->num_species};
+          this->h_map_species_id_linear_id->root,
+          this->cell_count,
+          this->max_num_collision_cells,
+          this->num_species,
+          this->d_map_entries->ptr};
 }
 
 } // namespace NESO::Particles::DSMC

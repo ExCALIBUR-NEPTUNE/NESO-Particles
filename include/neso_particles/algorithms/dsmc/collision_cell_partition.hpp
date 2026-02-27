@@ -13,7 +13,7 @@ namespace NESO::Particles::DSMC {
  * TODO
  */
 struct CollisionCellPartitionDevice {
-  INT *d_collision_cell_offsets{nullptr};
+  INT const *d_collision_cell_offsets{nullptr};
 
   BlockedBinaryNode<INT, INT, NESO_PARTICLES_BLOCKED_BINARY_TREE_WIDTH>
       *d_species_map_root{nullptr};
@@ -21,6 +21,7 @@ struct CollisionCellPartitionDevice {
   INT mesh_cell_count{0};
   INT max_num_collision_cells{0};
   INT max_num_species{0};
+  int const *d_map_entries;
 
   /**
    * @param species_id Input species ID from user space.
@@ -39,13 +40,13 @@ struct CollisionCellPartitionDevice {
    * @returns The number of particles in the requested collision cell with the
    * requested linear species.
    */
-  inline INT get_num_particles_cell_species(const int cell_mesh,
-                                            const int cell_collision,
+  inline INT get_num_particles_cell_species(const INT cell_mesh,
+                                            const INT cell_collision,
                                             const INT linear_species_id) const {
     const INT offset = this->get_offset_cell_species(cell_mesh, cell_collision,
                                                      linear_species_id);
-    const INT npart_rhs = d_collision_cell_offsets[offset + 1];
-    const INT npart_lhs = d_collision_cell_offsets[offset];
+    const INT npart_rhs = this->d_collision_cell_offsets[offset + 1];
+    const INT npart_lhs = this->d_collision_cell_offsets[offset];
     return npart_rhs - npart_lhs;
   }
 
@@ -56,8 +57,8 @@ struct CollisionCellPartitionDevice {
    * @returns The number of particles in the requested collision cell with the
    * requested linear species.
    */
-  inline INT get_offset_cell_species(const int cell_mesh,
-                                     const int cell_collision,
+  inline INT get_offset_cell_species(const INT cell_mesh,
+                                     const INT cell_collision,
                                      const INT linear_species_id) const {
 
     const INT stride_mesh_cells = max_num_collision_cells * max_num_species;
@@ -67,6 +68,23 @@ struct CollisionCellPartitionDevice {
         offset_cell + cell_collision * max_num_species + linear_species_id;
 
     return offset;
+  }
+
+  /**
+   * @param cell_mesh Mesh cell to index collision cell.
+   * @param cell_collition Collision cell index within the mesh cell.
+   * @param linear_species_id Linear species index.
+   * @param particle_index Linear index of particle within the species and
+   * collision cell.
+   * @returns Layer of particle within the mesh cell.
+   */
+  inline INT get_particle_layer(const INT cell_mesh, const INT cell_collision,
+                                const INT linear_species_id,
+                                const INT particle_index) const {
+    const INT index = this->get_offset_cell_species(cell_mesh, cell_collision,
+                                                    linear_species_id);
+    const INT offset = this->d_collision_cell_offsets[index];
+    return this->d_map_entries[offset + particle_index];
   }
 };
 
@@ -80,6 +98,7 @@ protected:
   std::unique_ptr<BlockedBinaryTree<INT, INT>> h_map_species_id_linear_id;
   INT num_species{0};
   std::unique_ptr<BufferDevice<INT>> d_collision_cell_offsets;
+  std::unique_ptr<BufferDevice<int>> d_map_entries;
 
   INT max_num_collision_cells{0};
 
