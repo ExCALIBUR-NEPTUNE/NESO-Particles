@@ -8,12 +8,6 @@
 #include <memory>
 #include <vector>
 
-namespace NESO::Particles::DSMC {
-
-
-
-
-
-}
+namespace NESO::Particles::DSMC {}
 
 #endif

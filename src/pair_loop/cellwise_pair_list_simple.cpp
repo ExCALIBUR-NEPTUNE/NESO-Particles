@@ -1,9 +1,9 @@
-#include <neso_particles/pair_loop/cellwise_pair_list.hpp>
+#include <neso_particles/pair_loop/cellwise_pair_list_simple.hpp>
 
 namespace NESO::Particles {
 
-CellwisePairList::CellwisePairList(SYCLTargetSharedPtr sycl_target,
-                                   const int cell_count)
+CellwisePairListSimple::CellwisePairListSimple(SYCLTargetSharedPtr sycl_target,
+                                               const int cell_count)
     : h_wave_count(std::vector<int>(cell_count)),
       d_wave_count(
           std::make_shared<BufferDevice<int>>(sycl_target, cell_count)),
@@ -19,9 +19,9 @@ CellwisePairList::CellwisePairList(SYCLTargetSharedPtr sycl_target,
   this->clear();
 }
 
-void CellwisePairList::push_back(const std::vector<int> &c,
-                                 const std::vector<int> &i,
-                                 const std::vector<int> &j) {
+void CellwisePairListSimple::push_back(const std::vector<int> &c,
+                                       const std::vector<int> &i,
+                                       const std::vector<int> &j) {
 
   NESOASSERT((this->mode == 0) || (this->mode == 1),
              "push_back and push_back_waves cannot be used at the same time");
@@ -121,7 +121,7 @@ void CellwisePairList::push_back(const std::vector<int> &c,
   e4.wait_and_throw();
 }
 
-void CellwisePairList::set(CellwisePairListHostSharedPtr pair_list) {
+void CellwisePairListSimple::set(CellwisePairListHostSharedPtr pair_list) {
   NESOASSERT(this->cell_count == pair_list->cell_count,
              "Cell count missmatch.");
 
@@ -227,7 +227,7 @@ void CellwisePairList::set(CellwisePairListHostSharedPtr pair_list) {
   event_stack.wait();
 }
 
-void CellwisePairList::clear() {
+void CellwisePairListSimple::clear() {
   if (this->cell_count > 0) {
     auto k_wave_count = this->d_wave_count->ptr;
     auto k_pair_counts = this->d_pair_counts->ptr;
@@ -250,7 +250,7 @@ void CellwisePairList::clear() {
   this->mode = 0;
 }
 
-CellwisePairListDevice CellwisePairList::get() {
+CellwisePairListDevice CellwisePairListSimple::get_pair_list() {
   CellwisePairListDevice l = {this->h_wave_count.data(),
                               this->d_wave_count->ptr,
                               this->cell_count,
@@ -266,7 +266,7 @@ CellwisePairListDevice CellwisePairList::get() {
   return l;
 }
 
-CellwisePairListHostMap CellwisePairList::host_get() {
+CellwisePairListHostMap CellwisePairListSimple::get_host_pair_list() {
   CellwisePairListHostMap l;
 
   for (int cx = 0; cx < this->cell_count; cx++) {
