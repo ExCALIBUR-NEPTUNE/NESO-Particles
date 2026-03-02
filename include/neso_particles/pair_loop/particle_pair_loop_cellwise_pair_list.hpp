@@ -144,7 +144,7 @@ public:
       auto k_pair_list_counts_es = this->d_pair_list_counts_es->ptr;
       std::size_t local_size = this->global_info_A.local_size;
 
-      if (this->sycl_target->device.is_cpu()) {
+      if (this->sycl_target->device.is_cpu() || (max_wave_count == 1)) {
 
         sycl::range<3> local_iteration_set(1, 1, local_size);
         sycl::range<3> global_iteration_set(

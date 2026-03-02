@@ -4,5 +4,6 @@
 #include "cellwise_all_to_all.hpp"
 #include "collision_cell_partition.hpp"
 #include "pair_sampler_ntc.hpp"
+#include "pair_sampler_no_replacement.hpp"
 
 #endif

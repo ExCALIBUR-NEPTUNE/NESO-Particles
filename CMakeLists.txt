@@ -47,6 +47,7 @@ set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set(SRC_FILES
     ${SRC_DIR}/algorithms/cellwise_methods.cpp
     ${SRC_DIR}/algorithms/dsmc/pair_sampler_ntc.cpp
+    ${SRC_DIR}/algorithms/dsmc/pair_sampler_no_replacement.cpp
     ${SRC_DIR}/algorithms/dsmc/collision_cell_partition.cpp
     ${SRC_DIR}/algorithms/particle_data_movement.cpp
     ${SRC_DIR}/algorithms/reduce_dat_cellwise.cpp
@@ -141,6 +142,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/cellwise_all_to_all.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/collision_cell_partition.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/pair_sampler_ntc.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/pair_sampler_no_replacement.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/cellwise_methods.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/particle_data_movement.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/reduce_dat_cellwise.hpp
