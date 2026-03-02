@@ -396,6 +396,51 @@ joint_exclusive_scan_n(SYCLTargetSharedPtr sycl_target, std::size_t N,
                        INT *d_dst);
 
 /**
+ * Compute the exclusive scan of a n arrays using the SYCL group built-ins.
+ *
+ * @param[in] sycl_target Compute device to use.
+ * @param[in] N Number of arrays.
+ * @param[in] M Number of elements in each sub array.
+ * @param[in] d_src Device poitner to source values.
+ * @param[in, out] d_dst Device pointer to destination values  (same size as
+ * d_src).
+ * @returns Event to wait on for completion.
+ */
+template <typename T>
+[[nodiscard]] inline sycl::event
+joint_exclusive_scan_n(SYCLTargetSharedPtr sycl_target, std::size_t N,
+                       std::size_t M, T *d_src, T *d_dst) {
+  if (N == 0) {
+    return sycl::event{};
+  }
+
+  const std::size_t local_size =
+      sycl_target->parameters->template get<SizeTParameter>("LOOP_LOCAL_SIZE")
+          ->value;
+
+  auto iteration_set =
+      sycl_target->device_limits.validate_nd_range(sycl::nd_range<2>(
+          sycl::range<2>(N, local_size), sycl::range<2>(1, local_size)));
+
+  NESOASSERT(local_size >= 1, "Bad local size for exclusive_scan.");
+  return sycl_target->queue.parallel_for(
+      iteration_set, [=](sycl::nd_item<2> it) {
+        const std::size_t array_index = it.get_global_id(0);
+        if (M > 0) {
+          const auto start_index = M * array_index;
+          T *first = d_src + start_index;
+          T *last = first + M;
+          sycl::joint_exclusive_scan(it.get_group(), first, last,
+                                     d_dst + start_index, sycl::plus<T>());
+          sycl::group_barrier(it.get_group());
+          if (it.get_local_linear_id() == 0) {
+            d_dst[start_index] = 0;
+          }
+        }
+      });
+}
+
+/**
  * Compute the inclusive scan of a n arrays using the SYCL group built-ins.
  *
  * @param[in] sycl_target Compute device to use.

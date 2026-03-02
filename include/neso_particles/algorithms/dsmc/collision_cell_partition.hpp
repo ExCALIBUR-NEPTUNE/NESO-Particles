@@ -100,7 +100,7 @@ protected:
   std::unique_ptr<BufferDevice<INT>> d_collision_cell_offsets;
   std::unique_ptr<BufferDevice<int>> d_map_entries;
 
-  INT max_num_collision_cells{0};
+  std::map<INT, INT> map_species_id_to_linear;
 
 public:
   /// Disable (implicit) copies.
@@ -115,11 +115,17 @@ public:
   // Number of mesh cells
   int cell_count{0};
 
+  // The ParticleSubGroup from the last construct.
+  ParticleSubGroupSharedPtr particle_sub_group;
+
   // Permissible species IDs.
   std::vector<INT> species_ids;
 
   // Current number of collision cells for each mesh cell.
   std::vector<int> collision_cell_counts;
+
+  // Maximum number of collision cells over all mesh cells.
+  INT max_num_collision_cells{0};
 
   /**
    * Create a container that holds a representation of particles partitioned
@@ -149,10 +155,18 @@ public:
                  const int collision_cell_component);
 
   /**
+   * @param species_id Species ID as stored on particles.
+   * @returns Linear species ID as used in the device maps.
+   */
+  INT get_linear_species_id(const INT species_id);
+
+  /**
    * @returns The device description of the maps.
    */
   CollisionCellPartitionDevice get_device();
 };
+
+using CollisionCellPartitionSharedPtr = std::shared_ptr<CollisionCellPartition>;
 
 } // namespace NESO::Particles::DSMC
 

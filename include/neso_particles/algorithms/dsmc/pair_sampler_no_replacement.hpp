@@ -8,6 +8,73 @@
 #include <memory>
 #include <vector>
 
-namespace NESO::Particles::DSMC {}
+namespace NESO::Particles::DSMC {
+
+/**
+ * TODO
+ */
+class PairSamplerNoReplacement : public CellwisePairList {
+protected:
+  std::unique_ptr<CellDat<int>> d_pair_list;
+
+  std::vector<int> h_wave_count;
+  std::unique_ptr<BufferDevice<int>> d_wave_count;
+  std::vector<int> h_pair_counts;
+  std::unique_ptr<BufferDevice<int>> d_pair_counts;
+  std::vector<INT> h_pair_counts_es;
+  std::unique_ptr<BufferDevice<INT>> d_pair_counts_es;
+
+  std::vector<int> h_num_collision_cells;
+  std::unique_ptr<BufferDevice<int>> d_num_collision_cells;
+
+public:
+  /// Disable (implicit) copies.
+  PairSamplerNoReplacement(const PairSamplerNoReplacement &st) = delete;
+  /// Disable (implicit) copies.
+  PairSamplerNoReplacement &
+  operator=(PairSamplerNoReplacement const &a) = delete;
+
+  virtual ~PairSamplerNoReplacement() = default;
+
+  // Compute device
+  SYCLTargetSharedPtr sycl_target;
+
+  // Number of mesh cells
+  int cell_count{0};
+
+  // RNG Generation function.
+  std::shared_ptr<RNGGenerationFunction<REAL>> rng_generation_function;
+
+  /**
+   * TODO
+   */
+  PairSamplerNoReplacement(
+      SYCLTargetSharedPtr sycl_target, const int cell_count,
+      std::shared_ptr<RNGGenerationFunction<REAL>> rng_generation_function);
+
+  /**
+   * TODO
+   */
+  void sample(CollisionCellPartitionSharedPtr collision_cell_partition,
+              const INT species_id_a, const INT species_id_b,
+              const std::vector<std::vector<int>> &map_cells_to_counts);
+
+  /**
+   * Get a description of the pair list accessible on the device.
+   *
+   * @returns PairListDevice describing all the particle pairs. The returned
+   * object must have a lifetime equal or shorter than this host instance.
+   */
+  virtual CellwisePairListDevice get_pair_list() override;
+
+  /**
+   * Get a description of the pair list accessible on the host.
+   *
+   * @returns Container of pairs for each cell.
+   */
+  virtual CellwisePairListHostMap get_host_pair_list() override;
+};
+
+} // namespace NESO::Particles::DSMC
 
 #endif

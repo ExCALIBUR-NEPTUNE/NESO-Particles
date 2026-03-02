@@ -5,8 +5,7 @@ namespace NESO::Particles::DSMC {
 CollisionCellPartition::CollisionCellPartition(SYCLTargetSharedPtr sycl_target,
                                                const int cell_count,
                                                std::vector<INT> species_ids)
-    : sycl_target(sycl_target), cell_count(cell_count),
-      species_ids(species_ids) {
+    : sycl_target(sycl_target), cell_count(cell_count) {
 
   NESOASSERT(cell_count > 0, "Bad cell count: " + std::to_string(cell_count));
 
@@ -17,10 +16,16 @@ CollisionCellPartition::CollisionCellPartition(SYCLTargetSharedPtr sycl_target,
   this->d_map_entries =
       std::make_unique<BufferDevice<int>>(this->sycl_target, 32);
 
+  std::set<INT> species_id_set;
+  species_id_set.insert(species_ids.begin(), species_ids.end());
+  this->species_ids.reserve(species_id_set.size());
+
   {
     INT index = 0;
-    for (auto id : this->species_ids) {
+    for (auto id : species_id_set) {
       this->h_map_species_id_linear_id->add(id, index);
+      this->map_species_id_to_linear[id] = index;
+      this->species_ids.push_back(id);
       index++;
     }
     this->num_species = index;
@@ -40,6 +45,8 @@ void CollisionCellPartition::construct(
 
   NESOASSERT(collision_cell_counts.size() >= this->cell_count,
              "collision_cell_counts vector is too small.");
+
+  this->particle_sub_group = particle_sub_group;
 
   // These two loops could be on device if needed.
   std::copy(collision_cell_counts.begin(),
@@ -150,6 +157,15 @@ void CollisionCellPartition::construct(
                    ResourceStackKeyBufferDevice<INT>{}, d_cell_counts);
 
   this->sycl_target->profile_map.end_region(r0);
+}
+
+INT CollisionCellPartition::get_linear_species_id(const INT species_id) {
+
+  NESOASSERT(this->map_species_id_to_linear.count(species_id),
+             "Could not find requested species id: " +
+                 std::to_string(species_id));
+
+  return this->map_species_id_to_linear[species_id];
 }
 
 CollisionCellPartitionDevice CollisionCellPartition::get_device() {
