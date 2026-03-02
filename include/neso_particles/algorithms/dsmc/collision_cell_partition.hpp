@@ -10,7 +10,7 @@
 namespace NESO::Particles::DSMC {
 
 /**
- * TODO
+ * Device type corresponding to CollisionCellPartition.
  */
 struct CollisionCellPartitionDevice {
   INT const *d_collision_cell_offsets{nullptr};
@@ -89,7 +89,7 @@ struct CollisionCellPartitionDevice {
 };
 
 /**
- * TODO
+ * Holds a map from (mesh cell, collision cell, species ID) to particle layers.
  */
 class CollisionCellPartition {
 protected:
@@ -135,7 +135,7 @@ public:
                          std::vector<INT> species_ids);
 
   /**
-   * TODO
+   * Construct the internal representation from a ParticleSubGroup.
    *
    * @param particle_sub_group The set of particles which are partitioned into
    * species and dsmc cells.

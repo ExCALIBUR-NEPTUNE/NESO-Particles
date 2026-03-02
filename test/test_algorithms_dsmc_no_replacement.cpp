@@ -44,17 +44,6 @@ TEST(DSMCCollisionCells, collision_cell_partition) {
   const int species_id_offset = 3;
   const int num_collision_cells = 7;
 
-  // particle_loop(
-  //     A,
-  //     [=](auto INDEX, auto SPECIES_ID, auto COLLISION_CELL) {
-  //       SPECIES_ID.at(0) = INDEX.layer % num_species + species_id_offset;
-  //       COLLISION_CELL.at(0) = INDEX.layer % num_collision_cells;
-  //     },
-  //     Access::read(ParticleLoopIndex{}),
-  //     Access::write(Sym<INT>("SPECIES_ID")),
-  //     Access::write(Sym<INT>("COLLISION_CELL")))
-  //     ->execute();
-
   particle_loop(
       A,
       [=](auto INDEX, auto SPECIES_ID, auto COLLISION_CELL, auto RNG) {
