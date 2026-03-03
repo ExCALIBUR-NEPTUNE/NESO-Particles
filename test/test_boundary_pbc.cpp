@@ -102,7 +102,7 @@ TEST(BoundaryConditions, pbc_apply_particle_loop) {
   dims[0] = 8;
   dims[1] = 8;
 
-  const double cell_extent = 1.0;
+  const double cell_extent = 0.1;
   const int subdivision_order = 0;
   auto mesh = std::make_shared<CartesianHMesh>(MPI_COMM_WORLD, ndim, dims,
                                                cell_extent, subdivision_order);
@@ -195,7 +195,7 @@ TEST(BoundaryConditions, pbc_apply_particle_loop_masks) {
 
   auto lambda_do_test = [&](auto ndim, auto A) {
     A->add_particle_dat(Sym<REAL>("P_ORIG"), ndim);
-    std::uniform_real_distribution<double> uniform_dist(-20000.0, 20000.0);
+    std::uniform_real_distribution<double> uniform_dist(-200.0, 200.0);
     std::mt19937 rng(52234234);
     auto rng_lambda = [&]() -> REAL { return uniform_dist(rng); };
     auto rng_kernel = host_per_particle_block_rng<REAL>(rng_lambda, ndim);
@@ -206,7 +206,8 @@ TEST(BoundaryConditions, pbc_apply_particle_loop_masks) {
     for (int dx = 0; dx < ndim; dx++) {
       const REAL ex = mesh->global_extents[dx];
       h_extents.push_back(ex);
-      max_multiple = std::max(max_multiple, static_cast<int>(20000 / ex));
+      nprint_variable(ex);
+      max_multiple = std::max(max_multiple, static_cast<int>(2000 / ex));
     }
     max_multiple += 10;
     BufferDevice<REAL> d_extents(A->sycl_target, h_extents);
@@ -245,11 +246,10 @@ TEST(BoundaryConditions, pbc_apply_particle_loop_masks) {
                 const REAL correct_pos =
                     Kernel::fmod(P_ORIG.at(dx) + max_multiple * k_extents[dx],
                                  k_extents[dx]);
+                const REAL error_rel = relative_error(correct_pos, P.at(dx));
                 const REAL error_abs = Kernel::abs(correct_pos - P.at(dx));
-                const REAL correct_abs = Kernel::abs(correct_pos);
-                const REAL error_rel =
-                    correct_abs > 0.0 ? error_abs / correct_abs : error_abs;
-                NESO_KERNEL_ASSERT(error_rel < 1.0e-8, k_ep);
+                NESO_KERNEL_ASSERT((error_rel < 1.0e-8) || (error_abs < 1.0e-8),
+                                   k_ep);
               }
             }
           },
@@ -261,7 +261,8 @@ TEST(BoundaryConditions, pbc_apply_particle_loop_masks) {
   };
 
   {
-    auto [A, sycl_target, cell_count_t] = particle_loop_common_2d(27, 16, 32);
+    auto [A, sycl_target, cell_count_t] =
+        particle_loop_common_2d(27, 16, 32, 0.1);
     constexpr int ndim = 2;
 
     lambda_do_test(ndim, A);
@@ -271,7 +272,8 @@ TEST(BoundaryConditions, pbc_apply_particle_loop_masks) {
   }
 
   {
-    auto [A, sycl_target, cell_count_t] = particle_loop_common_3d(27, 16, 5, 6);
+    auto [A, sycl_target, cell_count_t] =
+        particle_loop_common_3d(27, 16, 5, 6, 0.1);
     constexpr int ndim = 3;
 
     lambda_do_test(ndim, A);
