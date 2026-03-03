@@ -206,7 +206,6 @@ TEST(BoundaryConditions, pbc_apply_particle_loop_masks) {
     for (int dx = 0; dx < ndim; dx++) {
       const REAL ex = mesh->global_extents[dx];
       h_extents.push_back(ex);
-      nprint_variable(ex);
       max_multiple = std::max(max_multiple, static_cast<int>(2000 / ex));
     }
     max_multiple += 10;
