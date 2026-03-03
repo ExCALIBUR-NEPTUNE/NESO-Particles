@@ -275,6 +275,21 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement) {
   auto h_no_pairs = pair_sampler_no_replacement->get_host_pair_list();
   ASSERT_EQ(h_no_pairs.size(), 0);
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
   sycl_target->free();
   A->domain->mesh->free();
 }

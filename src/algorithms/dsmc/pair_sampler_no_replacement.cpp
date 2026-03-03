@@ -99,6 +99,9 @@ void PairSamplerNoReplacement::sample(
       sycl_target->parameters->template get<SizeTParameter>("LOOP_LOCAL_SIZE")
           ->value;
 
+  // For each mesh cell we sum over the collision cells to obtain the number of
+  // pairs in the mesh cell.
+
   this->sycl_target->queue
       .parallel_for(
           sycl::nd_range<2>(sycl::range<2>(this->cell_count, local_size),
@@ -143,6 +146,8 @@ void PairSamplerNoReplacement::sample(
                                             k_pair_counts_es,
                                             this->cell_count * sizeof(INT), e0);
 
+  // We need the exscan of the pairs in each collision cell (mesh cell wise)
+  // such that we can sample pairs with work items per collision cell.
   auto e4 = joint_exclusive_scan_n(this->sycl_target, this->cell_count,
                                    max_num_collision_cells, k_pair_counts_ccell,
                                    k_pair_counts_ccell_es);
@@ -180,6 +185,48 @@ void PairSamplerNoReplacement::sample(
 
   this->num_pairs = last_count + last_count_es;
 
+  // Now we can actually sample pairs.
+  const auto k_pair_count = this->num_pairs;
+
+  auto d_real_samples = get_resource<BufferDevice<REAL>,
+                                     ResourceStackInterfaceBufferDevice<REAL>>(
+      sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<REAL>{},
+      sycl_target);
+  d_real_samples->realloc_no_copy(2 * k_pair_count);
+  REAL *k_real_samples = d_real_samples->ptr;
+
+  this->rng_generation_function->draw_random_samples(
+      this->sycl_target, k_real_samples, 2 * k_pair_count, 1024);
+
+  auto k_pair_list = this->d_pair_list->device_ptr();
+
+
+  sycl::range<2> iteration_set(
+    this->cell_count,
+    max_num_collision_cells
+  );
+
+  this->sycl_target->queue.parallel_for(
+    iteration_set,
+    [=](auto ix){
+      const std::size_t mesh_cell = ix.get_id(0);
+      const std::size_t collision_cell = ix.get_id(1);
+      if (collision_cell < k_counts[mesh_cell]){
+        const int num_pairs_in_collision_cell =
+            k_pair_counts_ccell[mesh_cell * max_num_collision_cells +
+                                collision_cell];
+
+
+
+
+      }
+    }
+  ).wait_and_throw();
+
+
+
+  restore_resource(sycl_target->resource_stack_map,
+                   ResourceStackKeyBufferDevice<REAL>{}, d_real_samples);
   restore_resource(sycl_target->resource_stack_map,
                    ResourceStackKeyBufferDevice<INT>{}, d_counts);
   restore_resource(sycl_target->resource_stack_map,
