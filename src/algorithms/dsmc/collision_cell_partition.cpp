@@ -15,6 +15,8 @@ CollisionCellPartition::CollisionCellPartition(SYCLTargetSharedPtr sycl_target,
       std::make_unique<BufferDevice<INT>>(this->sycl_target, 32);
   this->d_map_entries =
       std::make_unique<BufferDevice<int>>(this->sycl_target, 32);
+  this->d_max_collision_cell_occupancy =
+      std::make_unique<BufferDevice<INT>>(this->sycl_target, 1);
 
   std::set<INT> species_id_set;
   species_id_set.insert(species_ids.begin(), species_ids.end());
@@ -117,9 +119,18 @@ void CollisionCellPartition::construct(
   this->d_collision_cell_offsets->realloc_no_copy(layer_matrix_total_size + 1);
   INT *k_collision_cell_offsets = this->d_collision_cell_offsets->ptr;
 
+  auto e0 = reduce_values(this->sycl_target, layer_matrix_total_size,
+                          k_cell_counts, sycl::maximum<INT>{},
+                          this->d_max_collision_cell_occupancy->ptr);
+
   // TODO make joint exclusive scan more efficient for large arrays
   joint_exclusive_scan(this->sycl_target, layer_matrix_total_size + 1,
                        k_cell_counts, k_collision_cell_offsets)
+      .wait_and_throw();
+
+  this->sycl_target->queue
+      .memcpy(&this->max_collision_cell_occupancy,
+              this->d_max_collision_cell_occupancy->ptr, sizeof(INT), e0)
       .wait_and_throw();
 
   this->d_map_entries->realloc_no_copy(particle_sub_group->get_npart_local());

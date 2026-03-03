@@ -102,6 +102,8 @@ protected:
 
   std::map<INT, INT> map_species_id_to_linear;
 
+  std::unique_ptr<BufferDevice<INT>> d_max_collision_cell_occupancy;
+
 public:
   /// Disable (implicit) copies.
   CollisionCellPartition(const CollisionCellPartition &st) = delete;
@@ -126,6 +128,9 @@ public:
 
   // Maximum number of collision cells over all mesh cells.
   INT max_num_collision_cells{0};
+
+  // Maximum occupancy of a collision cell for any species.
+  INT max_collision_cell_occupancy{0};
 
   /**
    * Create a container that holds a representation of particles partitioned

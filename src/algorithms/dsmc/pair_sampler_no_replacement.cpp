@@ -46,6 +46,11 @@ void PairSamplerNoReplacement::sample(
   auto r0 = this->sycl_target->profile_map.start_region(
       "PairSamplerNoReplacement", "sample");
 
+  const int linear_species_id_a =
+      collision_cell_partition->get_linear_species_id(species_id_a);
+  const int linear_species_id_b =
+      collision_cell_partition->get_linear_species_id(species_id_b);
+
   NESOASSERT(this->cell_count == collision_cell_partition->cell_count,
              "Cell count missmatch.");
 
@@ -104,8 +109,9 @@ void PairSamplerNoReplacement::sample(
 
   this->sycl_target->queue
       .parallel_for(
-          sycl::nd_range<2>(sycl::range<2>(this->cell_count, local_size),
-                            sycl::range<2>(1, local_size)),
+          this->sycl_target->device_limits.validate_nd_range(
+              sycl::nd_range<2>(sycl::range<2>(this->cell_count, local_size),
+                                sycl::range<2>(1, local_size))),
           [=](sycl::nd_item<2> ix) {
             const std::size_t mesh_cell = ix.get_global_id(0);
             const std::size_t local_id = ix.get_global_id(1);
@@ -200,30 +206,144 @@ void PairSamplerNoReplacement::sample(
 
   auto k_pair_list = this->d_pair_list->device_ptr();
 
+  const auto k_collision_cell_partition =
+      collision_cell_partition->get_device();
 
-  sycl::range<2> iteration_set(
-    this->cell_count,
-    max_num_collision_cells
-  );
+  const INT k_max_collision_cell_occupancy =
+      collision_cell_partition->max_collision_cell_occupancy;
 
-  this->sycl_target->queue.parallel_for(
-    iteration_set,
-    [=](auto ix){
-      const std::size_t mesh_cell = ix.get_id(0);
-      const std::size_t collision_cell = ix.get_id(1);
-      if (collision_cell < k_counts[mesh_cell]){
-        const int num_pairs_in_collision_cell =
-            k_pair_counts_ccell[mesh_cell * max_num_collision_cells +
-                                collision_cell];
+  const std::size_t local_size_sample =
+      this->sycl_target->get_num_local_work_items(
+          sizeof(int) * 2 * k_max_collision_cell_occupancy, local_size);
 
+  sycl::nd_range<2> iteration_set(
+      sycl::range<2>(
+          this->cell_count,
+          get_next_multiple(max_num_collision_cells, local_size_sample)),
+      sycl::range<2>(1, local_size_sample));
 
+  const bool k_a_is_b = linear_species_id_a == linear_species_id_b;
 
+  this->sycl_target->queue
+      .submit([&](sycl::handler &cgh) {
+        sycl::local_accessor<int, 2> la_indices_a(
+            sycl::range<2>(k_max_collision_cell_occupancy, local_size_sample
 
-      }
-    }
-  ).wait_and_throw();
+                           ),
+            cgh);
 
+        sycl::local_accessor<int, 2> la_indices_b(
+            sycl::range<2>(k_max_collision_cell_occupancy, local_size_sample
 
+                           ),
+            cgh);
+
+        cgh.parallel_for(
+            this->sycl_target->device_limits.validate_nd_range(iteration_set),
+            [=](sycl::nd_item<2> ix) {
+              const std::size_t mesh_cell = ix.get_global_id(0);
+              const std::size_t collision_cell = ix.get_global_id(1);
+              const std::size_t local_id = ix.get_local_id(1);
+              const int num_collision_cells = k_num_collision_cells[mesh_cell];
+
+              if (collision_cell < num_collision_cells) {
+
+                int num_particles_a =
+                    k_collision_cell_partition.get_num_particles_cell_species(
+                        mesh_cell, collision_cell, linear_species_id_a);
+                int num_particles_b =
+                    k_collision_cell_partition.get_num_particles_cell_species(
+                        mesh_cell, collision_cell, linear_species_id_b);
+
+                int *current_num_particles_a = &num_particles_a;
+                int *current_num_particles_b =
+                    k_a_is_b ? current_num_particles_a : &num_particles_b;
+
+                // Create the indices that we use to track available particle
+                // indices.
+                for (int ix = 0; ix < num_particles_a; ix++) {
+                  la_indices_a[ix][local_id] = ix;
+                }
+                if (!k_a_is_b) {
+                  for (int ix = 0; ix < num_particles_b; ix++) {
+                    la_indices_b[ix][local_id] = ix;
+                  }
+                }
+
+                const sycl::local_accessor<int, 2> &a_indices = la_indices_a;
+                const sycl::local_accessor<int, 2> &b_indices =
+                    k_a_is_b ? la_indices_a : la_indices_b;
+
+                const int num_pairs_in_collision_cell =
+                    k_pair_counts_ccell[mesh_cell * max_num_collision_cells +
+                                        collision_cell];
+
+                const INT offset_mesh_cell = k_pair_counts_es[mesh_cell];
+                const int offset_collision_cell =
+                    k_pair_counts_ccell_es[mesh_cell * max_num_collision_cells +
+                                           collision_cell];
+
+                auto lambda_sample_index =
+                    [](const std::size_t &local_id, const REAL uniform_sample,
+                       int *num_particles,
+                       const sycl::local_accessor<int, 2> &indices) -> int {
+                  const int start_num_particles = *num_particles;
+                  const int end_num_particles = start_num_particles - 1;
+                  *num_particles = end_num_particles;
+
+                  const REAL ratio =
+                      1.0 / static_cast<REAL>(start_num_particles);
+                  const int index0 = uniform_sample * ratio;
+                  const int index1 = Kernel::max(0, index0);
+                  const int index2 =
+                      Kernel::min(start_num_particles - 1, index1);
+
+                  const int sampled_index = indices[index2][local_id];
+                  const int to_move_index =
+                      indices[start_num_particles - 1][local_id];
+                  indices[index2][local_id] = to_move_index;
+
+                  return sampled_index;
+                };
+
+                for (int pairx = 0; pairx < num_pairs_in_collision_cell;
+                     pairx++) {
+                  // The data access here is in the wrong order....
+                  const INT rng_index =
+                      pairx + offset_collision_cell + offset_mesh_cell;
+                  const REAL rng_sample_a = k_real_samples[rng_index];
+                  const REAL rng_sample_b =
+                      k_real_samples[rng_index + k_pair_count];
+
+                  const int index_a =
+                      lambda_sample_index(local_id, rng_sample_a,
+                                          current_num_particles_a, a_indices);
+
+                  const int index_b =
+                      lambda_sample_index(local_id, rng_sample_b,
+                                          current_num_particles_b, b_indices);
+
+                  // convert the map indices into actual particle indices
+
+                  const int particle_index_a =
+                      k_collision_cell_partition.get_particle_layer(
+                          mesh_cell, collision_cell, linear_species_id_a,
+                          index_a);
+
+                  const int particle_index_b =
+                      k_collision_cell_partition.get_particle_layer(
+                          mesh_cell, collision_cell, linear_species_id_b,
+                          index_b);
+
+                  k_pair_list[mesh_cell][0][offset_collision_cell + pairx] =
+                      particle_index_a;
+                  k_pair_list[mesh_cell][1][offset_collision_cell + pairx] =
+                      particle_index_b;
+                }
+              }
+            });
+      })
+      .wait_and_throw();
 
   restore_resource(sycl_target->resource_stack_map,
                    ResourceStackKeyBufferDevice<REAL>{}, d_real_samples);

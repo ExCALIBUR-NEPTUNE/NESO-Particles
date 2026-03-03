@@ -130,6 +130,20 @@ TEST(DSMCCollisionCells, collision_cell_partition) {
 
   ASSERT_FALSE(ep.get_flag());
 
+  auto h_counts = cdc_counts->get_all_cells();
+
+  int correct_max = 0;
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    for (int rx = 0; rx < num_collision_cells; rx++) {
+      for (int cx = 0; cx < num_species; cx++) {
+        correct_max = std::max(correct_max, h_counts.at(cellx)->at(rx, cx));
+      }
+    }
+  }
+
+  ASSERT_EQ(correct_max,
+            collision_cell_partition->max_collision_cell_occupancy);
+
   sycl_target->free();
   A->domain->mesh->free();
 }
@@ -274,21 +288,6 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement) {
 
   auto h_no_pairs = pair_sampler_no_replacement->get_host_pair_list();
   ASSERT_EQ(h_no_pairs.size(), 0);
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
   sycl_target->free();
   A->domain->mesh->free();
