@@ -15,10 +15,12 @@ namespace NESO::Particles::DSMC {
  */
 class PairSamplerNoReplacement : public CellwisePairList {
 protected:
-  std::unique_ptr<CellDat<int>> d_pair_list;
-
   std::vector<int> h_wave_count;
   std::unique_ptr<BufferDevice<int>> d_wave_count;
+
+  std::unique_ptr<BufferDevice<int>> d_wave_offsets;
+  std::unique_ptr<CellDat<int>> d_pair_list;
+
   std::vector<int> h_pair_counts;
   std::unique_ptr<BufferDevice<int>> d_pair_counts;
   std::vector<INT> h_pair_counts_es;
@@ -26,6 +28,11 @@ protected:
 
   std::vector<int> h_num_collision_cells;
   std::unique_ptr<BufferDevice<int>> d_num_collision_cells;
+  INT num_pairs{0};
+
+  CellwisePairListDevice d_pair_list_device;
+
+  std::unique_ptr<BufferDevice<INT>> d_max_pair_count;
 
 public:
   /// Disable (implicit) copies.

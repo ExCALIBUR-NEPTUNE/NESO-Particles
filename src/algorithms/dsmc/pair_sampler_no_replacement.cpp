@@ -16,6 +16,12 @@ PairSamplerNoReplacement::PairSamplerNoReplacement(
   this->d_wave_count =
       std::make_unique<BufferDevice<int>>(sycl_target, this->h_wave_count);
 
+  this->d_wave_offsets =
+      std::make_unique<BufferDevice<int>>(sycl_target, this->cell_count);
+  this->sycl_target->queue
+      .fill<int>(this->d_wave_offsets->ptr, 0, this->cell_count)
+      .wait_and_throw();
+
   this->h_pair_counts.resize(this->cell_count);
   this->d_pair_counts =
       std::make_unique<BufferDevice<int>>(this->sycl_target, this->cell_count);
@@ -27,12 +33,19 @@ PairSamplerNoReplacement::PairSamplerNoReplacement(
   this->h_num_collision_cells.resize(this->cell_count);
   this->d_num_collision_cells =
       std::make_unique<BufferDevice<int>>(this->sycl_target, this->cell_count);
+
+  this->d_max_pair_count =
+      std::make_unique<BufferDevice<INT>>(this->sycl_target, 1);
 }
 
 void PairSamplerNoReplacement::sample(
     CollisionCellPartitionSharedPtr collision_cell_partition,
     const INT species_id_a, const INT species_id_b,
     const std::vector<std::vector<int>> &map_cells_to_counts) {
+
+  auto r0 = this->sycl_target->profile_map.start_region(
+      "PairSamplerNoReplacement", "sample");
+
   NESOASSERT(this->cell_count == collision_cell_partition->cell_count,
              "Cell count missmatch.");
 
@@ -134,6 +147,20 @@ void PairSamplerNoReplacement::sample(
                                    max_num_collision_cells, k_pair_counts_ccell,
                                    k_pair_counts_ccell_es);
 
+  auto e7 = reduce_values(this->sycl_target, this->cell_count, k_counts,
+                          sycl::maximum<INT>{}, this->d_max_pair_count->ptr);
+
+  INT max_pair_count = 0;
+  INT last_count = 0;
+  INT last_count_es = 0;
+
+  auto e5 = this->sycl_target->queue.memcpy(
+      &last_count, k_counts + this->cell_count - 1, sizeof(INT));
+  auto e6 = this->sycl_target->queue.memcpy(
+      &last_count_es, k_pair_counts_es + this->cell_count - 1, sizeof(INT), e0);
+  auto e8 = this->sycl_target->queue.memcpy(
+      &max_pair_count, this->d_max_pair_count->ptr, sizeof(INT), e7);
+
   for (int cx = 0; cx < this->cell_count; cx++) {
     const auto current_size = static_cast<int>(this->d_pair_list->nrow[cx]);
     const auto required_size = this->h_pair_counts[cx];
@@ -146,6 +173,12 @@ void PairSamplerNoReplacement::sample(
   e0.wait_and_throw();
   e2.wait_and_throw();
   e4.wait_and_throw();
+  e5.wait_and_throw();
+  e6.wait_and_throw();
+  e7.wait_and_throw();
+  e8.wait_and_throw();
+
+  this->num_pairs = last_count + last_count_es;
 
   restore_resource(sycl_target->resource_stack_map,
                    ResourceStackKeyBufferDevice<INT>{}, d_counts);
@@ -153,10 +186,45 @@ void PairSamplerNoReplacement::sample(
                    ResourceStackKeyBufferDevice<int>{}, d_pair_counts_ccell_es);
   restore_resource(sycl_target->resource_stack_map,
                    ResourceStackKeyBufferDevice<int>{}, d_pair_counts_ccell);
+
+  this->d_pair_list_device = {this->h_wave_count.data(),
+                              this->d_wave_count->ptr,
+                              this->cell_count,
+                              this->d_wave_offsets->ptr,
+                              this->d_pair_list->device_ptr(),
+                              this->d_pair_counts->ptr,
+                              this->d_pair_counts_es->ptr,
+                              this->h_pair_counts.data(),
+                              static_cast<int>(max_pair_count),
+                              1,
+                              this->num_pairs};
+
+  this->sycl_target->profile_map.end_region(r0);
 }
 
-CellwisePairListDevice PairSamplerNoReplacement::get_pair_list() {}
+CellwisePairListDevice PairSamplerNoReplacement::get_pair_list() {
+  return this->d_pair_list_device;
+}
 
-CellwisePairListHostMap PairSamplerNoReplacement::get_host_pair_list() {}
+CellwisePairListHostMap PairSamplerNoReplacement::get_host_pair_list() {
+  CellwisePairListHostMap l;
+
+  for (int cx = 0; cx < this->cell_count; cx++) {
+    auto pairs = this->d_pair_list->get_cell(cx);
+
+    const int wave_count = this->h_wave_count.at(cx);
+    int index = 0;
+    for (int wavex = 0; wavex < wave_count; wavex++) {
+      const auto pair_count = this->h_pair_counts[wavex * cell_count + cx];
+      for (int px = 0; px < pair_count; px++) {
+        l[cx][wavex].first.push_back(pairs->at(index, 0));
+        l[cx][wavex].second.push_back(pairs->at(index, 1));
+        index++;
+      }
+    }
+  }
+
+  return l;
+}
 
 } // namespace NESO::Particles::DSMC
