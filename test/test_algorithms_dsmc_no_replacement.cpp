@@ -17,6 +17,7 @@ TEST(DSMCCollisionCells, collision_cell_partition) {
 
   std::mt19937 rng_state(52234234 + rank);
   std::uniform_real_distribution<> rng_dist(0.0, 1.0);
+
   auto rng_lambda = [&]() -> REAL { return rng_dist(rng_state); };
 
   auto rng_kernel = host_per_particle_block_rng<REAL>(rng_lambda, 2);
@@ -230,7 +231,7 @@ TEST(DSMCCollisionCells, collision_cell_partition) {
 
 TEST(DSMCCollisionCells, pair_sampler_no_replacement) {
 
-  int npart_cell = 511;
+  int npart_cell = 257;
   const int ndim = 2;
   const int nx = 16;
   const int ny = 33;
@@ -369,16 +370,88 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement) {
   auto h_no_pairs = pair_sampler_no_replacement->get_host_pair_list();
   ASSERT_EQ(h_no_pairs.size(), 0);
 
-  for (int cx = 0; cx < cell_count; cx++) {
-    const auto collision_cell_count = collision_cell_counts.at(cx);
-    map_cells_to_counts.at(cx).resize(collision_cell_count);
-    std::fill(map_cells_to_counts.at(cx).begin(),
-              map_cells_to_counts.at(cx).end(), 0);
-  }
+  const auto cell_count_t = cell_count;
+  auto A_t = A;
+  auto lambda_check = [&](const INT species_id_a, const INT species_id_b) {
+    std::vector<std::vector<int>> max_num_pairs_per_cell;
+    collision_cell_partition->get_max_num_pairs(species_id_a, species_id_b,
+                                                false, max_num_pairs_per_cell);
 
-  pair_sampler_no_replacement->sample(collision_cell_partition,
-                                      species_id_offset, species_id_offset + 1,
-                                      map_cells_to_counts);
+    std::vector<int> num_pairs_per_mesh_cell(cell_count_t);
+    std::fill(num_pairs_per_mesh_cell.begin(), num_pairs_per_mesh_cell.end(),
+              0);
+
+    for (int cx = 0; cx < cell_count_t; cx++) {
+      const auto collision_cell_count = collision_cell_counts.at(cx);
+      map_cells_to_counts.at(cx).resize(collision_cell_count);
+      std::fill(map_cells_to_counts.at(cx).begin(),
+                map_cells_to_counts.at(cx).end(), 0);
+
+      int npair = 0;
+      for (int rx = 0; rx < collision_cell_count; rx++) {
+        const int max_num_pairs = max_num_pairs_per_cell.at(cx).at(rx);
+        if (max_num_pairs > 0) {
+          std::uniform_int_distribution<int> rng_int(0, max_num_pairs - 1);
+          const int num_pairs_to_sample = rng_int(rng_state);
+          map_cells_to_counts.at(cx).at(rx) = num_pairs_to_sample;
+          npair += num_pairs_to_sample;
+        }
+      }
+      num_pairs_per_mesh_cell.at(cx) = npair;
+    }
+
+    pair_sampler_no_replacement->sample(collision_cell_partition, species_id_a,
+                                        species_id_b, map_cells_to_counts);
+
+    auto h_pair_list = pair_sampler_no_replacement->get_host_pair_list();
+
+    std::set<int> seen_layers;
+    for (int cellx = 0; cellx < cell_count_t; cellx++) {
+      const int expected_npair = num_pairs_per_mesh_cell.at(cellx);
+      seen_layers.clear();
+      if (expected_npair) {
+        ASSERT_TRUE(h_pair_list.count(cellx));
+
+        const auto &waves = h_pair_list.at(cellx);
+        ASSERT_EQ(waves.size(), 1);
+
+        const auto &pairs_a = waves.at(0).first;
+        const auto &pairs_b = waves.at(0).second;
+
+        const auto npairs = pairs_a.size();
+
+        ASSERT_EQ(pairs_b.size(), npairs);
+        ASSERT_EQ(pairs_b.size(), expected_npair);
+
+        auto SPECIES_ID = A_t->get_cell(Sym<INT>("SPECIES_ID"), cellx);
+        auto COLLISION_CELL = A_t->get_cell(Sym<INT>("COLLISION_CELL"), cellx);
+
+        for (std::size_t pairx = 0; pairx < npairs; pairx++) {
+          const int layer_a = pairs_a.at(pairx);
+          const int layer_b = pairs_b.at(pairx);
+
+          ASSERT_NE(layer_a, layer_b);
+          ASSERT_EQ(seen_layers.count(layer_a), 0);
+          seen_layers.insert(layer_a);
+          ASSERT_EQ(seen_layers.count(layer_b), 0);
+          seen_layers.insert(layer_b);
+
+          auto SA = SPECIES_ID->at(layer_a, 0);
+          auto SB = SPECIES_ID->at(layer_b, 0);
+          ASSERT_EQ(SA, species_id_a);
+          ASSERT_EQ(SB, species_id_b);
+
+          auto CA = COLLISION_CELL->at(layer_a, 0);
+          auto CB = COLLISION_CELL->at(layer_b, 0);
+          ASSERT_EQ(CA, CB);
+        }
+      }
+    }
+  };
+
+  lambda_check(species_id_offset + 0, species_id_offset + 1);
+  lambda_check(species_id_offset + 0, species_id_offset + 0);
+  lambda_check(species_id_offset + 1, species_id_offset + 1);
 
   sycl_target->free();
   A->domain->mesh->free();
