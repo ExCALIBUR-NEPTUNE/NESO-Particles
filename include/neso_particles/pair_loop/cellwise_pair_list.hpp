@@ -117,6 +117,13 @@ public:
    * @returns Container of pairs for each cell.
    */
   virtual CellwisePairListHostMap get_host_pair_list() = 0;
+
+  /**
+   * @param sycl_target Compute target for the pair list.
+   * @returns True if no conflicts were detected or the pair list was otherwise
+   * malformed.
+   */
+  virtual bool validate_pair_list(SYCLTargetSharedPtr sycl_target);
 };
 
 using CellwisePairListSharedPtr = std::shared_ptr<CellwisePairList>;

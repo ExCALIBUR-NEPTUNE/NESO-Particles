@@ -100,6 +100,7 @@ set(SRC_FILES
     ${SRC_DIR}/global_mapping.cpp
     ${SRC_DIR}/parallel_initialisation.cpp
     ${SRC_DIR}/packing_unpacking.cpp
+    ${SRC_DIR}/pair_loop/cellwise_pair_list.cpp
     ${SRC_DIR}/pair_loop/cellwise_pair_list_simple.cpp
     ${SRC_DIR}/pair_loop/cellwise_pair_list_host.cpp
     ${SRC_DIR}/pair_loop/cellwise_pair_list_block.cpp

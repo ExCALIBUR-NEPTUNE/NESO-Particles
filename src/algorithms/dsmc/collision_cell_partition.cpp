@@ -1,3 +1,4 @@
+#include <limits>
 #include <neso_particles/algorithms/dsmc/collision_cell_partition.hpp>
 
 namespace NESO::Particles::DSMC {
@@ -166,6 +167,129 @@ void CollisionCellPartition::construct(
                    ResourceStackKeyBufferDevice<int>{}, d_layers);
   restore_resource(sycl_target->resource_stack_map,
                    ResourceStackKeyBufferDevice<INT>{}, d_cell_counts);
+
+  this->sycl_target->profile_map.end_region(r0);
+}
+
+void CollisionCellPartition::get_max_num_pairs(
+    const INT species_id_a, const INT species_id_b, const bool replacement,
+    std::vector<std::vector<int>> &map_cells_to_counts) {
+
+  auto r0 = this->sycl_target->profile_map.start_region(
+      "CollisionCellPartition", "get_max_num_pairs");
+
+  const INT linear_species_id_a = this->get_linear_species_id(species_id_a);
+  const INT linear_species_id_b = this->get_linear_species_id(species_id_b);
+
+  const auto k_max_num_collision_cells = this->max_num_collision_cells;
+  const auto k_cell_count = this->cell_count;
+
+  auto d_counts =
+      get_resource<BufferDevice<int>, ResourceStackInterfaceBufferDevice<int>>(
+          sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<int>{},
+          sycl_target);
+  d_counts->realloc_no_copy(k_max_num_collision_cells * k_cell_count);
+  auto *k_counts = d_counts->ptr;
+
+  sycl::event e0;
+
+  sycl::range<2> iteration_set =
+      this->sycl_target->device_limits.validate_range_global(
+          sycl::range<2>(k_cell_count, k_max_num_collision_cells));
+
+  const bool k_a_is_b = species_id_a == species_id_b;
+  const auto k_map = this->get_device();
+
+  if (replacement) {
+    if (k_a_is_b) {
+      e0 = this->sycl_target->queue.parallel_for(
+          iteration_set, [=](sycl::item<2> ix) {
+            const std::size_t cell_mesh = ix.get_id(0);
+            const std::size_t cell_collision = ix.get_id(1);
+            constexpr int max_int = std::numeric_limits<int>::max();
+            const INT num_particles_a = k_map.get_num_particles_cell_species(
+                cell_mesh, cell_collision, linear_species_id_a);
+
+            // If A == B then we need at least two particles in the collision
+            // cell. Otherwise we need at least one of each type.
+            const int num_pairs = num_particles_a >= 2 ? max_int : 0;
+
+            k_counts[cell_mesh * k_max_num_collision_cells + cell_collision] =
+                num_pairs;
+          });
+    } else {
+      e0 = this->sycl_target->queue.parallel_for(
+          iteration_set, [=](sycl::item<2> ix) {
+            const std::size_t cell_mesh = ix.get_id(0);
+            const std::size_t cell_collision = ix.get_id(1);
+            constexpr int max_int = std::numeric_limits<int>::max();
+
+            const INT num_particles_a = k_map.get_num_particles_cell_species(
+                cell_mesh, cell_collision, linear_species_id_a);
+            const INT num_particles_b = k_map.get_num_particles_cell_species(
+                cell_mesh, cell_collision, linear_species_id_b);
+
+            // If A == B then we need at least two particles in the collision
+            // cell. Otherwise we need at least one of each type.
+            const int num_pairs =
+                (num_particles_a >= 1) && (num_particles_b >= 1) ? max_int : 0;
+            k_counts[cell_mesh * k_max_num_collision_cells + cell_collision] =
+                num_pairs;
+          });
+    }
+  } else {
+    if (k_a_is_b) {
+      e0 = this->sycl_target->queue.parallel_for(
+          iteration_set, [=](sycl::item<2> ix) {
+            const std::size_t cell_mesh = ix.get_id(0);
+            const std::size_t cell_collision = ix.get_id(1);
+            const INT num_particles_a = k_map.get_num_particles_cell_species(
+                cell_mesh, cell_collision, linear_species_id_a);
+            const int num_pairs = num_particles_a / 2;
+            k_counts[cell_mesh * k_max_num_collision_cells + cell_collision] =
+                num_pairs;
+          });
+    } else {
+      e0 = this->sycl_target->queue.parallel_for(
+          iteration_set, [=](sycl::item<2> ix) {
+            const std::size_t cell_mesh = ix.get_id(0);
+            const std::size_t cell_collision = ix.get_id(1);
+            constexpr int max_int = std::numeric_limits<int>::max();
+
+            const INT num_particles_a = k_map.get_num_particles_cell_species(
+                cell_mesh, cell_collision, linear_species_id_a);
+            const INT num_particles_b = k_map.get_num_particles_cell_species(
+                cell_mesh, cell_collision, linear_species_id_b);
+
+            const int num_pairs = sycl::min(num_particles_a, num_particles_b);
+
+            k_counts[cell_mesh * k_max_num_collision_cells + cell_collision] =
+                num_pairs;
+          });
+    }
+  }
+
+  map_cells_to_counts.resize(k_cell_count);
+  for (int cellx = 0; cellx < k_cell_count; cellx++) {
+    const auto num_collision_cells = this->collision_cell_counts.at(cellx);
+    map_cells_to_counts.at(cellx).resize(num_collision_cells);
+  }
+
+  e0.wait_and_throw();
+
+  EventStack es;
+  for (int cellx = 0; cellx < k_cell_count; cellx++) {
+    const auto num_collision_cells = this->collision_cell_counts.at(cellx);
+    es.push(this->sycl_target->queue.memcpy(
+        map_cells_to_counts.at(cellx).data(),
+        k_counts + cellx * k_max_num_collision_cells,
+        num_collision_cells * sizeof(int)));
+  }
+
+  es.wait();
+
+  restore_resource(sycl_target->resource_stack_map,
+                   ResourceStackKeyBufferDevice<int>{}, d_counts);
 
   this->sycl_target->profile_map.end_region(r0);
 }

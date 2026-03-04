@@ -160,6 +160,24 @@ public:
                  const int collision_cell_component);
 
   /**
+   * Determine the maximum number of pairs that can be formed between species A
+   * and B for each collision cell. Note that in the case of replacement these
+   * values are identical to determining if there are two or more particles in
+   * the collision cell. In this scenario the return values are 0 or INT_MAX.
+   *
+   * @param[in] species_id_a Species ID of A.
+   * @param[in] species_id_b Species ID of B.
+   * @param[in] replacement Indicate if pairs are chosen with (true) or without
+   * replacement (false).
+   * @param[in, out] map_cells_to_counts Output map from [mesh cell][collision
+   * cell] to maximum number of pairs that can be formed. The passed argument
+   * will be resized as needed.
+   */
+  void get_max_num_pairs(const INT species_id_a, const INT species_id_b,
+                         const bool replacement,
+                         std::vector<std::vector<int>> &map_cells_to_counts);
+
+  /**
    * @param species_id Species ID as stored on particles.
    * @returns Linear species ID as used in the device maps.
    */
