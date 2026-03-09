@@ -438,7 +438,7 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement_bias) {
   auto cell_count = cell_count_t;
   A->add_particle_dat(Sym<INT>("SPECIES_ID"), 1);
   A->add_particle_dat(Sym<INT>("COLLISION_CELL"), 1);
-  A->add_particle_dat(Sym<INT>("LAYER"), 2);
+  A->add_particle_dat(Sym<INT>("LAYER"), 3);
 
   const int rank = sycl_target->comm_pair.rank_parent;
 
@@ -455,6 +455,9 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement_bias) {
   const int num_species = 2;
   const int species_id_offset = 3;
   const int num_collision_cells = 2;
+
+  A->add_particle_dat(Sym<INT>("NEIGBOURS"), 2);
+  A->add_particle_dat(Sym<INT>("SEEN_COUNT"), 1);
 
   particle_loop(
       A,
@@ -495,7 +498,6 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement_bias) {
               map_cells_to_counts.at(cx).end(), 0);
   }
 
-
   // Get a linear index for each particle for species/collision cell.
   auto cdc_counts = std::make_shared<CellDatConst<int>>(
       sycl_target, cell_count, num_collision_cells, num_species);
@@ -503,38 +505,29 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement_bias) {
 
   particle_loop(
       aa,
-      [=](auto INDEX, auto SPECIES_ID, auto COLLISION_CELL, auto CDC_COUNTS, auto LAYER) {
-        const int layer = CDC_COUNTS.fetch_add(COLLISION_CELL.at(0),
-                           SPECIES_ID.at(0) - species_id_offset, 1);
+      [=](auto INDEX, auto SPECIES_ID, auto COLLISION_CELL, auto CDC_COUNTS,
+          auto LAYER) {
+        const int layer = CDC_COUNTS.fetch_add(
+            COLLISION_CELL.at(0), SPECIES_ID.at(0) - species_id_offset, 1);
         LAYER.at(0) = INDEX.cell;
         LAYER.at(1) = layer;
+        LAYER.at(2) = INDEX.layer;
       },
-      Access::read(ParticleLoopIndex{}),
-      Access::read(Sym<INT>("SPECIES_ID")),
+      Access::read(ParticleLoopIndex{}), Access::read(Sym<INT>("SPECIES_ID")),
       Access::read(Sym<INT>("COLLISION_CELL")), Access::add(cdc_counts),
       Access::write(Sym<INT>("LAYER")))
       ->execute();
 
-  const auto k_max_collision_cell_occupancy =
-    collision_cell_partition->max_collision_cell_occupancy;
-
   int max_species_layer = 0;
   auto h_cdc_counts = cdc_counts->get_all_cells();
-  for(int cellx=0 ; cellx<cell_count ; cellx++){
-    for(int rowx=0 ; rowx<num_collision_cells ; rowx++){
-      for(int colx=0 ; colx<num_species ; colx++){
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    for (int rowx = 0; rowx < num_collision_cells; rowx++) {
+      for (int colx = 0; colx < num_species; colx++) {
         max_species_layer =
             std::max(max_species_layer, h_cdc_counts.at(cellx)->at(rowx, colx));
       }
     }
   }
-
-  // [mesh_cell][collision_cell][species_id][layer_in_species]
-  const std::size_t incidence_matrix_size =
-      cell_count * k_max_collision_cell_occupancy * num_species * max_species_layer;
-
-  BufferDevice<int> d_incidence_counts(sycl_target, incidence_matrix_size);
-  int * k_incidence_counts = d_incidence_counts.ptr;
 
   auto lambda_check = [&](const INT species_id_a, const INT species_id_b) {
     std::vector<std::vector<int>> max_num_pairs_per_cell;
@@ -557,64 +550,138 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement_bias) {
       }
     }
 
-    sycl_target->queue.fill<int>(k_incidence_counts, 0, incidence_matrix_size)
-        .wait_and_throw();
+    particle_loop(
+        A, [=](auto SEEN_COUNT) { SEEN_COUNT.at(0) = 0; },
+        Access::write(Sym<INT>("SEEN_COUNT")))
+        ->execute();
 
-    const int Nsample = 1;
-
-    pair_sampler_no_replacement->sample(collision_cell_partition, species_id_a,
-                                        species_id_b, map_cells_to_counts);
+    const int Nsample = 2;
+    std::set<std::tuple<int, int, int>> correct_neigbours;
 
     for (int stepx = 0; stepx < Nsample; stepx++) {
+
+      particle_loop(
+          A,
+          [=](auto NEIGBOURS) {
+            NEIGBOURS.at(0) = -1;
+            NEIGBOURS.at(1) = -1;
+          },
+          Access::write(Sym<INT>("NEIGBOURS")))
+          ->execute();
+
+      pair_sampler_no_replacement->sample(collision_cell_partition,
+                                          species_id_a, species_id_b,
+                                          map_cells_to_counts);
+
+      auto h_pair_list = pair_sampler_no_replacement->get_host_pair_list();
+      correct_neigbours.clear();
+
+      for (auto &ix : h_pair_list) {
+        for (auto &wx : ix.second) {
+          const int n = wx.second.first.size();
+          for (int px = 0; px < n; px++) {
+            const int i = wx.second.first.at(px);
+            const int j = wx.second.second.at(px);
+            ASSERT_EQ(correct_neigbours.count({ix.first, i, j}), 0);
+            correct_neigbours.insert({ix.first, i, j});
+            ASSERT_EQ(correct_neigbours.count({ix.first, j, i}), 0);
+            correct_neigbours.insert({ix.first, j, i});
+          }
+        }
+      }
+
+      for (auto &ix : h_pair_list) {
+        if (ix.first == 0) {
+          nprint("mesh_cell:", ix.first);
+          for (auto &wx : ix.second) {
+            const int n = wx.second.first.size();
+            for (int px = 0; px < n; px++) {
+              const int i = wx.second.first.at(px);
+              const int j = wx.second.second.at(px);
+              nprint(px, "->", i, j);
+            }
+          }
+        }
+      }
 
       auto pl0 = particle_pair_loop(
           "particle_pair_loop_test",
           {CellwisePairListAbsolute<ParticleGroup, CellwisePairList>(
               A, A, pair_sampler_no_replacement)},
-          [=](auto LAYER_a, auto LAYER_b, auto SPECIES_a, auto SPECIES_b,
-             auto COLLISION_CELL) {
-              
-            const INT mesh_cell = LAYER_a.at(0);
-            const INT collision_cell = COLLISION_CELL.at(0);
-            const INT layer_a = LAYER_a.at(1);
-            const INT layer_b = LAYER_b.at(1);
-            
-            const INT species_a = SPECIES_a.at(0) - species_id_offset;
-            const INT species_b = SPECIES_b.at(0) - species_id_offset;
-
-            // [mesh_cell][collision_cell][species_id][layer_in_species]
-            
-            const INT offset_a = 
-              ((mesh_cell * k_max_collision_cell_occupancy + collision_cell) *
-              num_species + species_a) * max_species_layer + layer_a;
-
-            atomic_fetch_add(k_incidence_counts + offset_a, 1);
-
-            const INT offset_b = 
-              ((mesh_cell * k_max_collision_cell_occupancy + collision_cell) *
-              num_species + species_b) * max_species_layer + layer_b;
-
-            atomic_fetch_add(k_incidence_counts + offset_b, 1);
-
+          [=](auto LAYER_a, auto LAYER_b, auto SEEN_COUNT_a, auto SEEN_COUNT_b,
+              auto NEIGBOURS_a, auto NEIGBOURS_b) {
+            NEIGBOURS_a.at(0) = LAYER_b.at(2);
+            NEIGBOURS_b.at(0) = LAYER_a.at(2);
+            NEIGBOURS_a.at(1) = 42;
+            NEIGBOURS_b.at(1) = 42;
+            SEEN_COUNT_a.at(0) += 1;
+            SEEN_COUNT_b.at(0) += 1;
           },
           Access::A(Access::read(Sym<INT>("LAYER"))),
           Access::B(Access::read(Sym<INT>("LAYER"))),
-          Access::A(Access::read(Sym<INT>("COLLISION_CELL"))),
-          Access::A(Access::read(Sym<INT>("SPECIES_ID"))),
-          Access::B(Access::read(Sym<INT>("SPECIES_ID"))));
+          Access::A(Access::write(Sym<INT>("SEEN_COUNT"))),
+          Access::B(Access::write(Sym<INT>("SEEN_COUNT"))),
+          Access::A(Access::write(Sym<INT>("NEIGBOURS"))),
+          Access::B(Access::write(Sym<INT>("NEIGBOURS"))));
 
       pl0->execute();
+
+      for (int mesh_cellx = 0; mesh_cellx < cell_count; mesh_cellx++) {
+        auto NEIGBOURS = A->get_cell(Sym<INT>("NEIGBOURS"), mesh_cellx);
+        const int nrow = NEIGBOURS->nrow;
+        for (int rx = 0; rx < nrow; rx++) {
+          if (NEIGBOURS->at(rx, 1) == 42) {
+            const int j = NEIGBOURS->at(rx, 0);
+            ASSERT_EQ(correct_neigbours.count({mesh_cellx, rx, j}), 1);
+            correct_neigbours.erase({mesh_cellx, rx, j});
+          }
+        }
+      }
+
+      ASSERT_EQ(correct_neigbours.size(), 0);
     }
 
+    std::map<int, std::map<int, std::vector<int>>> map_cell_species_to_layers;
+    nprint("TODO FIX BELOW");
+    // for(int mesh_cellx=0 ; mesh_cellx<cell_count ; mesh_cellx++){
+    for (int mesh_cellx = 0; mesh_cellx < 1; mesh_cellx++) {
+      map_cell_species_to_layers.clear();
 
+      nprint("mesh_cell:", mesh_cellx);
+      auto COLLISION_CELL = A->get_cell(Sym<INT>("COLLISION_CELL"), mesh_cellx);
+      auto SPECIES_ID = A->get_cell(Sym<INT>("SPECIES_ID"), mesh_cellx);
+      auto SEEN_COUNT = A->get_cell(Sym<INT>("SEEN_COUNT"), mesh_cellx);
+      const int nrow = COLLISION_CELL->nrow;
 
+      for (int rx = 0; rx < nrow; rx++) {
+        map_cell_species_to_layers[COLLISION_CELL->at(rx, 0)]
+                                  [SPECIES_ID->at(rx, 0) - species_id_offset]
+                                      .push_back(rx);
+      }
 
+      for (int collision_cellx = 0; collision_cellx < num_collision_cells;
+           collision_cellx++) {
+        nprint("\tcollision_cell:", collision_cellx);
 
+        for (int speciesx = 0; speciesx < num_species; speciesx++) {
 
+          nprint("\t\tspecies:", speciesx);
+          std::cout << "\t\t\t";
 
+          const int num_particles =
+              h_cdc_counts.at(mesh_cellx)->at(collision_cellx, speciesx);
 
+          for (int px = 0; px < num_particles; px++) {
+            const int layer = map_cell_species_to_layers.at(collision_cellx)
+                                  .at(speciesx)
+                                  .at(px);
+            std::cout << SEEN_COUNT->at(layer, 0) << " ";
+          }
 
-
+          std::cout << "\n";
+        }
+      }
+    }
   };
 
   lambda_check(species_id_offset + 0, species_id_offset + 1);
