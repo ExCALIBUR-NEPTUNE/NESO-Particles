@@ -438,7 +438,7 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement_bias) {
   auto cell_count = cell_count_t;
   A->add_particle_dat(Sym<INT>("SPECIES_ID"), 1);
   A->add_particle_dat(Sym<INT>("COLLISION_CELL"), 1);
-  A->add_particle_dat(Sym<INT>("LAYER"), 1);
+  A->add_particle_dat(Sym<INT>("LAYER"), 2);
 
   const int rank = sycl_target->comm_pair.rank_parent;
 
@@ -503,11 +503,13 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement_bias) {
 
   particle_loop(
       aa,
-      [=](auto SPECIES_ID, auto COLLISION_CELL, auto CDC_COUNTS, auto LAYER) {
+      [=](auto INDEX, auto SPECIES_ID, auto COLLISION_CELL, auto CDC_COUNTS, auto LAYER) {
         const int layer = CDC_COUNTS.fetch_add(COLLISION_CELL.at(0),
                            SPECIES_ID.at(0) - species_id_offset, 1);
-        LAYER.at(0) = layer;
+        LAYER.at(0) = INDEX.cell;
+        LAYER.at(1) = layer;
       },
+      Access::read(ParticleLoopIndex{}),
       Access::read(Sym<INT>("SPECIES_ID")),
       Access::read(Sym<INT>("COLLISION_CELL")), Access::add(cdc_counts),
       Access::write(Sym<INT>("LAYER")))
@@ -516,9 +518,22 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement_bias) {
   const auto k_max_collision_cell_occupancy =
     collision_cell_partition->max_collision_cell_occupancy;
 
-  BufferDevice<int> d_incidence_counts(
-      sycl_target, k_max_collision_cell_occupancy * cell_count * num_species);
+  int max_species_layer = 0;
+  auto h_cdc_counts = cdc_counts->get_all_cells();
+  for(int cellx=0 ; cellx<cell_count ; cellx++){
+    for(int rowx=0 ; rowx<num_collision_cells ; rowx++){
+      for(int colx=0 ; colx<num_species ; colx++){
+        max_species_layer =
+            std::max(max_species_layer, h_cdc_counts.at(cellx)->at(rowx, colx));
+      }
+    }
+  }
 
+  // [mesh_cell][collision_cell][species_id][layer_in_species]
+  const std::size_t incidence_matrix_size =
+      cell_count * k_max_collision_cell_occupancy * num_species * max_species_layer;
+
+  BufferDevice<int> d_incidence_counts(sycl_target, incidence_matrix_size);
   int * k_incidence_counts = d_incidence_counts.ptr;
 
   auto lambda_check = [&](const INT species_id_a, const INT species_id_b) {
@@ -542,16 +557,10 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement_bias) {
       }
     }
 
-    sycl_target->queue.fill<int>(
-      k_incidence_counts,
-      0,
-      k_max_collision_cell_occupancy * cell_count * num_species
-    ).wait_and_throw();
-
+    sycl_target->queue.fill<int>(k_incidence_counts, 0, incidence_matrix_size)
+        .wait_and_throw();
 
     const int Nsample = 1;
-
-
 
     pair_sampler_no_replacement->sample(collision_cell_partition, species_id_a,
                                         species_id_b, map_cells_to_counts);
@@ -564,18 +573,41 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement_bias) {
               A, A, pair_sampler_no_replacement)},
           [=](auto LAYER_a, auto LAYER_b, auto SPECIES_a, auto SPECIES_b,
              auto COLLISION_CELL) {
+              
+            const INT mesh_cell = LAYER_a.at(0);
+            const INT collision_cell = COLLISION_CELL.at(0);
+            const INT layer_a = LAYER_a.at(1);
+            const INT layer_b = LAYER_b.at(1);
+            
+            const INT species_a = SPECIES_a.at(0) - species_id_offset;
+            const INT species_b = SPECIES_b.at(0) - species_id_offset;
 
+            // [mesh_cell][collision_cell][species_id][layer_in_species]
+            
+            const INT offset_a = 
+              ((mesh_cell * k_max_collision_cell_occupancy + collision_cell) *
+              num_species + species_a) * max_species_layer + layer_a;
 
+            atomic_fetch_add(k_incidence_counts + offset_a, 1);
+
+            const INT offset_b = 
+              ((mesh_cell * k_max_collision_cell_occupancy + collision_cell) *
+              num_species + species_b) * max_species_layer + layer_b;
+
+            atomic_fetch_add(k_incidence_counts + offset_b, 1);
 
           },
           Access::A(Access::read(Sym<INT>("LAYER"))),
           Access::B(Access::read(Sym<INT>("LAYER"))),
           Access::A(Access::read(Sym<INT>("COLLISION_CELL"))),
-          Access::A(Access::read(Sym<INT>("SPECIES"))),
-          Access::B(Access::read(Sym<INT>("SPECIES"))));
+          Access::A(Access::read(Sym<INT>("SPECIES_ID"))),
+          Access::B(Access::read(Sym<INT>("SPECIES_ID"))));
 
       pl0->execute();
     }
+
+
+
 
 
 
