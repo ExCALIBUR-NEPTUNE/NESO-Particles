@@ -284,15 +284,14 @@ void PairSamplerNoReplacement::sample(
                                            collision_cell];
 
                 auto lambda_sample_index =
-                    [](const std::size_t &local_id, const REAL uniform_sample,
-                       int *num_particles,
-                       const sycl::local_accessor<int, 2> &indices) -> int {
+                    [&](const std::size_t &local_id, const REAL uniform_sample,
+                        int *num_particles,
+                        const sycl::local_accessor<int, 2> &indices) -> int {
                   const int start_num_particles = *num_particles;
                   const int end_num_particles = start_num_particles - 1;
                   *num_particles = end_num_particles;
 
-                  const REAL ratio =
-                      1.0 / static_cast<REAL>(start_num_particles);
+                  const REAL ratio = static_cast<REAL>(start_num_particles);
                   const int index0 = uniform_sample * ratio;
                   const int index1 = Kernel::max(0, index0);
                   const int index2 =
