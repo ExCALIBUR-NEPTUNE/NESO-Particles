@@ -625,10 +625,10 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement_correctness) {
 
 TEST(DSMCCollisionCells, pair_sampler_no_replacement_bias) {
 
-  int npart_cell = 257;
+  int npart_cell = 129;
   const int ndim = 2;
   const int nx = 16;
-  const int ny = 33;
+  const int ny = 16;
   const int nz = 48;
 
   auto [A_t, sycl_target_t, cell_count_t] =
@@ -654,7 +654,7 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement_bias) {
 
   const int num_species = 2;
   const int species_id_offset = 3;
-  const int num_collision_cells = 2;
+  const int num_collision_cells = 8;
 
   A->add_particle_dat(Sym<INT>("SEEN_COUNT"), 1);
 
@@ -741,11 +741,7 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement_bias) {
 
       for (int rx = 0; rx < collision_cell_count; rx++) {
         const int max_num_pairs = max_num_pairs_per_cell.at(cx).at(rx);
-        if (max_num_pairs > 0) {
-          std::uniform_int_distribution<int> rng_int(0, max_num_pairs - 1);
-          const int num_pairs_to_sample = rng_int(rng_state);
-          map_cells_to_counts.at(cx).at(rx) = num_pairs_to_sample;
-        }
+        map_cells_to_counts.at(cx).at(rx) = max_num_pairs;
       }
     }
 
@@ -754,28 +750,13 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement_bias) {
         Access::write(Sym<INT>("SEEN_COUNT")))
         ->execute();
 
-    const int Nsample = 2;
+    const int Nsample = 1000;
 
     for (int stepx = 0; stepx < Nsample; stepx++) {
 
       pair_sampler_no_replacement->sample(collision_cell_partition,
                                           species_id_a, species_id_b,
                                           map_cells_to_counts);
-
-      // auto h_pair_list = pair_sampler_no_replacement->get_host_pair_list();
-      // for (auto &ix : h_pair_list) {
-      //   if (ix.first == 0) {
-      //     nprint("mesh_cell:", ix.first);
-      //     for (auto &wx : ix.second) {
-      //       const int n = wx.second.first.size();
-      //       for (int px = 0; px < n; px++) {
-      //         const int i = wx.second.first.at(px);
-      //         const int j = wx.second.second.at(px);
-      //         nprint(px, "->", i, j);
-      //       }
-      //     }
-      //   }
-      // }
 
       auto pl0 = particle_pair_loop(
           "particle_pair_loop_test",
@@ -813,6 +794,9 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement_bias) {
            collision_cellx++) {
         nprint("\tcollision_cell:", collision_cellx);
 
+        const int max_num_pairs =
+            max_num_pairs_per_cell.at(mesh_cellx).at(collision_cellx);
+
         for (int speciesx = 0; speciesx < num_species; speciesx++) {
 
           nprint("\t\tspecies:", speciesx);
@@ -821,14 +805,53 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement_bias) {
           const int num_particles =
               h_cdc_counts.at(mesh_cellx)->at(collision_cellx, speciesx);
 
+          const bool species_count_is_max_pair_count =
+              num_particles == max_num_pairs;
+
+          // TODO remove this loop
           for (int px = 0; px < num_particles; px++) {
             const int layer = map_cell_species_to_layers.at(collision_cellx)
                                   .at(speciesx)
                                   .at(px);
             std::cout << SEEN_COUNT->at(layer, 0) << " ";
           }
-
           std::cout << "\n";
+
+          if (species_count_is_max_pair_count) {
+            for (int px = 0; px < num_particles; px++) {
+              const int layer = map_cell_species_to_layers.at(collision_cellx)
+                                    .at(speciesx)
+                                    .at(px);
+              const int seen_count = SEEN_COUNT->at(layer, 0);
+              ASSERT_EQ(seen_count, Nsample);
+            }
+          } else {
+
+            std::vector<int> seen_counts;
+            seen_counts.reserve(num_particles);
+
+            int total_seen_counts = 0;
+            for (int px = 0; px < num_particles; px++) {
+              const int layer = map_cell_species_to_layers.at(collision_cellx)
+                                    .at(speciesx)
+                                    .at(px);
+              const int seen_count = SEEN_COUNT->at(layer, 0);
+              seen_counts.push_back(seen_count);
+              total_seen_counts += seen_count;
+            }
+
+            const REAL mean_seen_count = static_cast<REAL>(total_seen_counts) /
+                                         static_cast<REAL>(num_particles);
+
+            const REAL ratio = 0.5;
+            const int seen_count_min = (1.0 - ratio) * mean_seen_count;
+            const int seen_count_max = (1.0 + ratio) * mean_seen_count;
+
+            for (int px = 0; px < num_particles; px++) {
+              ASSERT_TRUE(seen_counts.at(px) <= seen_count_max);
+              ASSERT_TRUE(seen_counts.at(px) >= seen_count_min);
+            }
+          }
         }
       }
     }
