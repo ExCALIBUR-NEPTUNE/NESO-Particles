@@ -625,10 +625,13 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement_correctness) {
 
 TEST(DSMCCollisionCells, pair_sampler_no_replacement_bias) {
 
+  int size = 0;
+  MPICHK(MPI_Comm_size(MPI_COMM_WORLD, &size));
+
   int npart_cell = 129;
   const int ndim = 2;
   const int nx = 16;
-  const int ny = 16;
+  const int ny = std::min(size * 4, 32);
   const int nz = 48;
 
   auto [A_t, sycl_target_t, cell_count_t] =
@@ -750,7 +753,7 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement_bias) {
         Access::write(Sym<INT>("SEEN_COUNT")))
         ->execute();
 
-    const int Nsample = 1000;
+    const int Nsample = 4000;
 
     for (int stepx = 0; stepx < Nsample; stepx++) {
 
@@ -773,12 +776,10 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement_bias) {
     }
 
     std::map<int, std::map<int, std::vector<int>>> map_cell_species_to_layers;
-    nprint("TODO FIX BELOW");
-    // for(int mesh_cellx=0 ; mesh_cellx<cell_count ; mesh_cellx++){
-    for (int mesh_cellx = 0; mesh_cellx < 1; mesh_cellx++) {
+    std::vector<int> seen_counts;
+    for (int mesh_cellx = 0; mesh_cellx < cell_count; mesh_cellx++) {
       map_cell_species_to_layers.clear();
 
-      nprint("mesh_cell:", mesh_cellx);
       auto COLLISION_CELL = A->get_cell(Sym<INT>("COLLISION_CELL"), mesh_cellx);
       auto SPECIES_ID = A->get_cell(Sym<INT>("SPECIES_ID"), mesh_cellx);
       auto SEEN_COUNT = A->get_cell(Sym<INT>("SEEN_COUNT"), mesh_cellx);
@@ -786,36 +787,23 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement_bias) {
 
       for (int rx = 0; rx < nrow; rx++) {
         map_cell_species_to_layers[COLLISION_CELL->at(rx, 0)]
-                                  [SPECIES_ID->at(rx, 0) - species_id_offset]
+                                  [SPECIES_ID->at(rx, 0)]
                                       .push_back(rx);
       }
 
       for (int collision_cellx = 0; collision_cellx < num_collision_cells;
            collision_cellx++) {
-        nprint("\tcollision_cell:", collision_cellx);
 
         const int max_num_pairs =
             max_num_pairs_per_cell.at(mesh_cellx).at(collision_cellx);
 
-        for (int speciesx = 0; speciesx < num_species; speciesx++) {
-
-          nprint("\t\tspecies:", speciesx);
-          std::cout << "\t\t\t";
-
+        for (int speciesx : {species_id_a, species_id_b}) {
           const int num_particles =
-              h_cdc_counts.at(mesh_cellx)->at(collision_cellx, speciesx);
+              h_cdc_counts.at(mesh_cellx)
+                  ->at(collision_cellx, speciesx - species_id_offset);
 
           const bool species_count_is_max_pair_count =
               num_particles == max_num_pairs;
-
-          // TODO remove this loop
-          for (int px = 0; px < num_particles; px++) {
-            const int layer = map_cell_species_to_layers.at(collision_cellx)
-                                  .at(speciesx)
-                                  .at(px);
-            std::cout << SEEN_COUNT->at(layer, 0) << " ";
-          }
-          std::cout << "\n";
 
           if (species_count_is_max_pair_count) {
             for (int px = 0; px < num_particles; px++) {
@@ -825,9 +813,21 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement_bias) {
               const int seen_count = SEEN_COUNT->at(layer, 0);
               ASSERT_EQ(seen_count, Nsample);
             }
-          } else {
 
-            std::vector<int> seen_counts;
+          } else if (species_id_a == species_id_b) {
+
+            if (num_particles % 2 == 0) {
+              for (int px = 0; px < num_particles; px++) {
+                const int layer = map_cell_species_to_layers.at(collision_cellx)
+                                      .at(speciesx)
+                                      .at(px);
+                const int seen_count = SEEN_COUNT->at(layer, 0);
+                ASSERT_EQ(seen_count, Nsample);
+              }
+            }
+
+          } else {
+            seen_counts.clear();
             seen_counts.reserve(num_particles);
 
             int total_seen_counts = 0;
@@ -858,6 +858,7 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement_bias) {
   };
 
   lambda_check(species_id_offset + 0, species_id_offset + 1);
+  lambda_check(species_id_offset + 0, species_id_offset + 0);
 
   sycl_target->free();
   A->domain->mesh->free();
