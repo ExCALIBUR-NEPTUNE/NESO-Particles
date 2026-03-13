@@ -33,3 +33,5 @@ The behaviour of NESO-Particles can be configured at runtime by various environm
      - Default 1. When set to a non-zero value enables self checking of the vertex ordering in DMPlex meshes passed to the DMPlexInterface and the generated halo DMPlex.
    * - ``NESO_PARTICLES_AUTO_PROFILE``
      - Default empty string. When set to a file name prefix, e.g, foo, profiling will be enabled and events written to foo.<rank>json on call to free of the SYCLTarget.
+   * - ``NESO_PARTICLES_MAX_COMPUTE_UNITS``
+     - Default empty string. When set to a positive integer this will override how many compute units NESO-Particles considers each rank to have.

@@ -73,6 +73,8 @@ void SYCLTarget::print_info_inner() {
 
   std::cout << "Using " << this->device.get_info<sycl::info::device::name>()
             << std::endl;
+  std::cout << "Max compute units: "
+            << this->device_limits.get_max_compute_units() << std::endl;
   std::cout << "Version: " << NESO_PARTICLES_VERSION_MAJOR << "."
             << NESO_PARTICLES_VERSION_MINOR << "."
             << NESO_PARTICLES_VERSION_PATCH << std::endl;
@@ -163,6 +165,9 @@ SYCLTarget::SYCLTarget(const int gpu_device, MPI_Comm comm, int local_rank)
     this->parameters->set("LOOP_NBIN",
                           std::make_shared<SizeTParameter>(
                               get_env_size_t("NESO_PARTICLES_LOOP_NBIN", 4)));
+    this->parameters->set("MAX_COMPUTE_UNITS",
+                          std::make_shared<SizeTParameter>(
+                              this->device_limits.get_max_compute_units()));
   }
 
   if (get_env_size_t("NESO_PARTICLES_IN_ORDER_QUEUE", 0)) {
@@ -433,6 +438,27 @@ template sycl::event joint_exclusive_scan(SYCLTargetSharedPtr sycl_target,
 template sycl::event joint_exclusive_scan(SYCLTargetSharedPtr sycl_target,
                                           std::size_t N, INT *d_src,
                                           INT *d_dst);
+
+std::size_t
+get_joint_exclusive_scan_aux_num_blocks(SYCLTargetSharedPtr sycl_target,
+                                        const std::size_t N) {
+
+  const std::size_t local_size =
+      sycl_target->parameters->template get<SizeTParameter>("LOOP_LOCAL_SIZE")
+          ->value;
+
+  const std::size_t max_compute_units =
+      sycl_target->parameters->template get<SizeTParameter>("MAX_COMPUTE_UNITS")
+          ->value;
+
+  return std::min(div_round_up(N, local_size), max_compute_units);
+}
+
+std::size_t
+get_joint_exclusive_scan_aux_array_size(SYCLTargetSharedPtr sycl_target,
+                                        const std::size_t N) {
+  return 2 * get_joint_exclusive_scan_aux_num_blocks(sycl_target, N);
+}
 
 template sycl::event
 joint_exclusive_scan_n_sum(SYCLTargetSharedPtr sycl_target, std::size_t N,

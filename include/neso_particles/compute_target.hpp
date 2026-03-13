@@ -333,13 +333,142 @@ joint_exclusive_scan(SYCLTargetSharedPtr sycl_target, std::size_t N, INT *d_src,
                      INT *d_dst);
 
 /**
+ * Compute the number of blocks required for a larger exclusive scan.
+ *
+ * @param sycl_target SYCLTarget to use for exclusive scan.
+ * @param N Number of elements.
+ * @returns Required number of blocks.
+ */
+std::size_t
+get_joint_exclusive_scan_aux_num_blocks(SYCLTargetSharedPtr sycl_target,
+                                        const std::size_t N);
+
+/**
+ * Compute the size of the auxillary buffer required for a larger exclusive
+ * scan.
+ *
+ * @param sycl_target SYCLTarget to use for exclusive scan.
+ * @param N Number of elements.
+ * @returns Required size of auxillary array.
+ */
+std::size_t
+get_joint_exclusive_scan_aux_array_size(SYCLTargetSharedPtr sycl_target,
+                                        const std::size_t N);
+
+/**
+ * Compute the exclusive scan of an array using the SYCL group built-ins and an
+ * auxillary array.
+ *
+ * @param[in] sycl_target Compute device to use.
+ * @param[in] N Number of elements.
+ * @param[in, out] d_aux Device pointer to auxillary buffer. Will be modified.
+ * Must not be freed until the returned event is complete.
+ * @param[in] d_src Device pointer to source values.
+ * @param[in, out] d_dst Device pointer to destination values.
+ * @returns Event to wait on for completion.
+ */
+template <typename T>
+[[nodiscard]] inline sycl::event
+joint_exclusive_scan(SYCLTargetSharedPtr sycl_target, std::size_t N,
+                     T *RESTRICT d_aux, T *RESTRICT d_src, T *RESTRICT d_dst) {
+  if (N == 0) {
+    return sycl::event{};
+  }
+
+  const std::size_t num_blocks =
+      get_joint_exclusive_scan_aux_num_blocks(sycl_target, N);
+
+  if (num_blocks < 2) {
+    return joint_exclusive_scan(sycl_target, N, d_src, d_dst);
+  }
+
+  const std::size_t local_size =
+      sycl_target->parameters->template get<SizeTParameter>("LOOP_LOCAL_SIZE")
+          ->value;
+
+  auto iteration_set0 = sycl_target->device_limits.validate_nd_range(
+      sycl::nd_range<2>(sycl::range<2>(num_blocks, local_size),
+                        sycl::range<2>(1, local_size)));
+
+  auto e0 =
+      sycl_target->queue.parallel_for(iteration_set0, [=](sycl::nd_item<2> it) {
+        const std::size_t block_index = it.get_global_id(0);
+
+        std::size_t start_index = 0;
+        std::size_t end_index = 0;
+        get_decomp_1d(num_blocks, N, block_index, &start_index, &end_index);
+
+        T *first = d_src + start_index;
+        T *last = d_src + end_index;
+        sycl::joint_exclusive_scan(it.get_group(), first, last,
+                                   d_dst + start_index, sycl::plus<T>());
+        sycl::group_barrier(it.get_group());
+        if (it.get_local_linear_id() == 0) {
+          d_dst[start_index] = 0;
+        }
+      });
+
+  auto e1 = sycl_target->queue.parallel_for(
+      sycl::nd_range<1>(sycl::range<1>(local_size), sycl::range<1>(local_size)),
+      e0, [=](sycl::nd_item<1> it) {
+        {
+          const std::size_t local_index = it.get_local_id(0);
+          for (std::size_t ix = local_index; ix < num_blocks;
+               ix += local_size) {
+
+            std::size_t start_index = 0;
+            std::size_t end_index = 0;
+            get_decomp_1d(num_blocks, N, ix, &start_index, &end_index);
+
+            std::size_t last_index = end_index - 1;
+            const T value = d_dst[last_index] + d_src[last_index];
+            d_aux[ix] = value;
+          }
+        }
+        sycl::group_barrier(it.get_group());
+        {
+          T *first = d_aux;
+          T *last = first + num_blocks;
+          sycl::joint_exclusive_scan(it.get_group(), first, last, last,
+                                     sycl::plus<T>());
+          sycl::group_barrier(it.get_group());
+          if (it.get_global_linear_id() == 0) {
+            d_aux[num_blocks] = 0;
+          }
+        }
+      });
+
+  auto iteration_set1 = sycl_target->device_limits.validate_nd_range(
+      sycl::nd_range<2>(sycl::range<2>(num_blocks - 1, local_size),
+                        sycl::range<2>(1, local_size)));
+  auto e2 = sycl_target->queue.parallel_for(
+      iteration_set1, e1, [=](sycl::nd_item<2> it) {
+        const std::size_t block_index = it.get_global_id(0) + 1;
+        const std::size_t local_index = it.get_local_id(1);
+
+        std::size_t start_index = 0;
+        std::size_t end_index = 0;
+        get_decomp_1d(num_blocks, N, block_index, &start_index, &end_index);
+
+        const T shift = d_aux[num_blocks + block_index];
+
+        for (std::size_t ix = (local_index + start_index); ix < end_index;
+             ix += local_size) {
+          d_dst[ix] += shift;
+        }
+      });
+
+  return e2;
+}
+
+/**
  * Compute the exclusive scan of a n arrays using the SYCL group built-ins.
  *
  * @param[in] sycl_target Compute device to use.
  * @param[in] N Number of arrays.
  * @param[in] d_array_sizes Number of elements in each sub array.
  * @param[in] d_array_offsets The starting index of each sub array.
- * @param[in] d_src Device poitner to source values.
+ * @param[in] d_src Device pointer to source values.
  * @param[in, out] d_dst Device pointer to destination values  (same size as
  * d_src).
  * @returns Event to wait on for completion.

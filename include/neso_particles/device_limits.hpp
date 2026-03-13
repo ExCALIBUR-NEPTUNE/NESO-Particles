@@ -168,6 +168,13 @@ public:
    * @returns Cacheline size in bytes or multiple of provided factor.
    */
   std::size_t get_cacheline_size(const std::size_t num_bytes = 1);
+
+  /**
+   * @returns Number of compute units as determined by
+   * info::device::max_compute_units or if the device is CPU OMP_NUM_THREADS.
+   * Can be overridden by setting NESO_PARTICLES_MAX_COMPUTE_UNITS.
+   */
+  std::size_t get_max_compute_units();
 };
 
 } // namespace NESO::Particles
