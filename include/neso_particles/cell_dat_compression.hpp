@@ -154,10 +154,9 @@ protected:
     // Compute the exclusive scan of the occupancies which we need to call
     // joint_exclusive_scan_n
     e4.wait_and_throw();
-    joint_exclusive_scan(this->sycl_target,
-                         static_cast<std::size_t>(this->ncell + 1),
-                         k_npart_cell_p1_old, k_npart_cell_p1_old_es)
-        .wait_and_throw();
+    joint_exclusive_scan_blocking(this->sycl_target,
+                                  static_cast<std::size_t>(this->ncell + 1),
+                                  k_npart_cell_p1_old, k_npart_cell_p1_old_es);
 
     int total_num_particles_p1 = -1;
     this->sycl_target->queue
@@ -282,10 +281,9 @@ protected:
         .wait_and_throw();
 
     e5.wait_and_throw();
-    joint_exclusive_scan(this->sycl_target,
-                         static_cast<std::size_t>(this->ncell + 1),
-                         k_npart_to_fill, k_npart_to_fill_es)
-        .wait_and_throw();
+    joint_exclusive_scan_blocking(this->sycl_target,
+                                  static_cast<std::size_t>(this->ncell + 1),
+                                  k_npart_to_fill, k_npart_to_fill_es);
 
     auto e3 = this->sycl_target->queue.memcpy(
         compress_npart, k_npart_to_fill_es + this->ncell, sizeof(int));
@@ -477,9 +475,8 @@ protected:
     // space sensibly in the case where the particle distribution is
     // non-uniform.
     e4.wait_and_throw();
-    joint_exclusive_scan(this->sycl_target, this->ncell + 1, k_move_counters,
-                         k_move_counters_es)
-        .wait_and_throw();
+    joint_exclusive_scan_blocking(this->sycl_target, this->ncell + 1,
+                                  k_move_counters, k_move_counters_es);
     // We made to_find_scan have ncell+1 elements such that the final entry is
     // the number of particles we need to find across all cells.
     this->sycl_target->queue

@@ -144,9 +144,9 @@ void CellMove::move() {
   auto event_h_npart_cell = this->sycl_target->queue.memcpy(
       h_npart_cell->ptr, k_npart_cell_seq, sizeof(int) * k_ncell);
 
-  joint_exclusive_scan(this->sycl_target, static_cast<std::size_t>(k_ncell + 1),
-                       k_tmp_cell_new_npart, k_npart_cell_exscan)
-      .wait_and_throw();
+  joint_exclusive_scan_blocking(this->sycl_target,
+                                static_cast<std::size_t>(k_ncell + 1),
+                                k_tmp_cell_new_npart, k_npart_cell_exscan);
 
   // get the npart to move on the host
   int move_count;

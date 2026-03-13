@@ -146,11 +146,11 @@ void PairSamplerNoReplacement::sample(
   e1.wait_and_throw();
   e3.wait_and_throw();
 
-  auto e0 = joint_exclusive_scan(this->sycl_target, this->cell_count, k_counts,
-                                 k_pair_counts_es);
+  joint_exclusive_scan_blocking(this->sycl_target, this->cell_count, k_counts,
+                                k_pair_counts_es);
   auto e2 = this->sycl_target->queue.memcpy(this->h_pair_counts_es.data(),
                                             k_pair_counts_es,
-                                            this->cell_count * sizeof(INT), e0);
+                                            this->cell_count * sizeof(INT));
 
   // We need the exscan of the pairs in each collision cell (mesh cell wise)
   // such that we can sample pairs with work items per collision cell.
@@ -168,7 +168,7 @@ void PairSamplerNoReplacement::sample(
   auto e5 = this->sycl_target->queue.memcpy(
       &last_count, k_counts + this->cell_count - 1, sizeof(INT));
   auto e6 = this->sycl_target->queue.memcpy(
-      &last_count_es, k_pair_counts_es + this->cell_count - 1, sizeof(INT), e0);
+      &last_count_es, k_pair_counts_es + this->cell_count - 1, sizeof(INT));
   auto e8 = this->sycl_target->queue.memcpy(
       &max_pair_count, this->d_max_pair_count->ptr, sizeof(INT), e7);
 
@@ -181,7 +181,6 @@ void PairSamplerNoReplacement::sample(
   }
   this->d_pair_list->wait_set_nrow();
 
-  e0.wait_and_throw();
   e2.wait_and_throw();
   e4.wait_and_throw();
   e5.wait_and_throw();

@@ -2,6 +2,7 @@
 #define _NESO_PARTICLES_ALGORITHMS_COMMON_HPP_
 
 #include "../compute_target.hpp"
+#include "../device_buffers.hpp"
 
 namespace NESO::Particles {
 
@@ -177,6 +178,49 @@ joint_exclusive_scan(SYCLTargetSharedPtr sycl_target, std::size_t N,
       });
 
   return e2;
+}
+
+/**
+ * Compute the exclusive scan of an array using the SYCL group built-ins and an
+ * auxillary array. Blocks until completion. Uses multiple steps and auxillary
+ * arrays automatically.
+ *
+ * @param[in] sycl_target Compute device to use.
+ * @param[in] N Number of elements.
+ * @param[in] d_src Device pointer to source values.
+ * @param[in, out] d_dst Device pointer to destination values.
+ */
+template <typename T>
+void joint_exclusive_scan_blocking(SYCLTargetSharedPtr sycl_target,
+                                   std::size_t N, T *RESTRICT d_src,
+                                   T *RESTRICT d_dst) {
+  ProfileRegion pr("joint_exclusive_scan_blocking", "null");
+
+  const std::size_t num_blocks =
+      get_joint_exclusive_scan_aux_num_blocks(sycl_target, N);
+
+  if (num_blocks < 2) {
+    joint_exclusive_scan(sycl_target, N, d_src, d_dst).wait_and_throw();
+  } else {
+
+    const std::size_t aux_array_size =
+        get_joint_exclusive_scan_aux_array_size(sycl_target, N);
+
+    auto d_aux =
+        get_resource<BufferDevice<T>, ResourceStackInterfaceBufferDevice<T>>(
+            sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<T>{},
+            sycl_target);
+    d_aux->realloc_no_copy(aux_array_size);
+
+    joint_exclusive_scan(sycl_target, N, d_aux->ptr, d_src, d_dst)
+        .wait_and_throw();
+
+    restore_resource(sycl_target->resource_stack_map,
+                     ResourceStackKeyBufferDevice<T>{}, d_aux);
+  }
+
+  pr.end();
+  sycl_target->profile_map.add_region(pr);
 }
 
 /**

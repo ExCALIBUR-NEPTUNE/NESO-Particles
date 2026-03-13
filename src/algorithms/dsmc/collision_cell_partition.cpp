@@ -124,10 +124,8 @@ void CollisionCellPartition::construct(
                           k_cell_counts, sycl::maximum<INT>{},
                           this->d_max_collision_cell_occupancy->ptr);
 
-  // TODO make joint exclusive scan more efficient for large arrays
-  joint_exclusive_scan(this->sycl_target, layer_matrix_total_size + 1,
-                       k_cell_counts, k_collision_cell_offsets)
-      .wait_and_throw();
+  joint_exclusive_scan_blocking(this->sycl_target, layer_matrix_total_size + 1,
+                                k_cell_counts, k_collision_cell_offsets);
 
   this->sycl_target->queue
       .memcpy(&this->max_collision_cell_occupancy,

@@ -79,7 +79,6 @@ TEST(SYCLTarget, joint_exclusive_scan_int) {
     joint_exclusive_scan(sycl_target, N, d_src.ptr, d_dst.ptr).wait_and_throw();
 
     auto h_to_test = d_dst.get();
-
     EXPECT_EQ(h_to_test, h_correct);
   }
 
@@ -115,6 +114,11 @@ TEST(SYCLTarget, joint_exclusive_scan_large_int) {
 
     auto h_to_test = d_dst.get();
     EXPECT_EQ(h_to_test, h_correct);
+
+    joint_exclusive_scan_blocking(sycl_target, N, d_src.ptr, d_dst.ptr);
+
+    h_to_test = d_dst.get();
+    EXPECT_EQ(h_to_test, h_correct);
   }
 
   sycl_target->free();
@@ -148,6 +152,11 @@ TEST(SYCLTarget, joint_exclusive_scan_large_INT) {
         .wait_and_throw();
 
     auto h_to_test = d_dst.get();
+    EXPECT_EQ(h_to_test, h_correct);
+
+    joint_exclusive_scan_blocking(sycl_target, N, d_src.ptr, d_dst.ptr);
+
+    h_to_test = d_dst.get();
     EXPECT_EQ(h_to_test, h_correct);
   }
 
