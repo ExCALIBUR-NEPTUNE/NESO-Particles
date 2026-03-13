@@ -1,3 +1,4 @@
+#include <neso_particles/algorithms/common.hpp>
 #include <neso_particles/pair_loop/cellwise_pair_list_simple.hpp>
 
 namespace NESO::Particles {

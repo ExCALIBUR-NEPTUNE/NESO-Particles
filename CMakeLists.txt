@@ -46,6 +46,7 @@ endif()
 set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set(SRC_FILES
     ${SRC_DIR}/algorithms/cellwise_methods.cpp
+    ${SRC_DIR}/algorithms/common.cpp
     ${SRC_DIR}/algorithms/dsmc/pair_sampler_ntc.cpp
     ${SRC_DIR}/algorithms/dsmc/pair_sampler_no_replacement.cpp
     ${SRC_DIR}/algorithms/dsmc/collision_cell_partition.cpp
@@ -139,6 +140,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR}/neso_particles.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/access.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/algorithms.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/common.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/dsmc.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/cellwise_all_to_all.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/collision_cell_partition.hpp

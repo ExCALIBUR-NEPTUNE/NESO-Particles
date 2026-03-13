@@ -7,6 +7,7 @@
 #include <mpi.h>
 #include <string>
 
+#include "algorithms/common.hpp"
 #include "cell_dat.hpp"
 #include "compute_target.hpp"
 #include "loop/particle_loop_iteration_set.hpp"
