@@ -5,10 +5,10 @@ TEST(ParticlePairLoop, cellwise_pair_list) {
 
   const int cell_count = 19;
   auto cellwise_pair_list =
-      std::make_shared<CellwisePairList>(sycl_target, cell_count);
+      std::make_shared<CellwisePairListSimple>(sycl_target, cell_count);
 
   {
-    auto h_list = cellwise_pair_list->host_get();
+    auto h_list = cellwise_pair_list->get_host_pair_list();
     for (int cx = 0; cx < cell_count; cx++) {
       ASSERT_EQ(h_list[cx][0].first.size(), 0);
       ASSERT_EQ(h_list[cx][0].second.size(), 0);
@@ -36,8 +36,8 @@ TEST(ParticlePairLoop, cellwise_pair_list) {
   cellwise_pair_list->push_back(h_c, h_i, h_j);
 
   {
-    auto h_to_test = cellwise_pair_list->host_get();
-    auto d_to_test = cellwise_pair_list->get();
+    auto h_to_test = cellwise_pair_list->get_host_pair_list();
+    auto d_to_test = cellwise_pair_list->get_pair_list();
 
     int max_pair_count = 0;
 
@@ -72,7 +72,7 @@ TEST(ParticlePairLoop, cellwise_pair_list) {
   cellwise_pair_list->push_back(h_c, h_i, h_j);
 
   {
-    auto h_to_test = cellwise_pair_list->host_get();
+    auto h_to_test = cellwise_pair_list->get_host_pair_list();
 
     for (int cx = 0; cx < cell_count; cx++) {
       ASSERT_EQ(h_correct[cx], h_to_test[cx][0]);
@@ -81,7 +81,7 @@ TEST(ParticlePairLoop, cellwise_pair_list) {
 
   cellwise_pair_list->clear();
   {
-    auto h_list = cellwise_pair_list->host_get();
+    auto h_list = cellwise_pair_list->get_host_pair_list();
     for (int cx = 0; cx < cell_count; cx++) {
       ASSERT_EQ(h_list[cx][0].first.size(), 0);
       ASSERT_EQ(h_list[cx][0].second.size(), 0);
@@ -96,7 +96,7 @@ TEST(ParticlePairLoop, cellwise_pair_list) {
   }
 
   {
-    auto h_list = cellwise_pair_list->host_get();
+    auto h_list = cellwise_pair_list->get_host_pair_list();
     for (int cx = 0; cx < cell_count; cx++) {
       ASSERT_EQ(h_list[cx][0].first.size(), 0);
       ASSERT_EQ(h_list[cx][0].second.size(), 0);
@@ -157,7 +157,7 @@ TEST(ParticlePairLoop, base) {
   reset_loop->execute();
 
   auto cellwise_pair_listA =
-      std::make_shared<CellwisePairList>(sycl_target, cell_count);
+      std::make_shared<CellwisePairListSimple>(sycl_target, cell_count);
 
   std::vector<int> c;
   std::vector<int> i;
@@ -292,7 +292,7 @@ TEST(ParticlePairLoop, particle_pair_loop_index) {
   reset_loop->execute();
 
   auto cellwise_pair_listA =
-      std::make_shared<CellwisePairList>(sycl_target, cell_count);
+      std::make_shared<CellwisePairListSimple>(sycl_target, cell_count);
 
   std::vector<int> c;
   std::vector<int> i;
@@ -380,7 +380,7 @@ TEST(ParticlePairLoop, kernel_rng_base) {
   reset_loop->execute();
 
   auto cellwise_pair_listA =
-      std::make_shared<CellwisePairList>(sycl_target, cell_count);
+      std::make_shared<CellwisePairListSimple>(sycl_target, cell_count);
 
   std::vector<int> c;
   std::vector<int> i;
@@ -554,12 +554,12 @@ TEST(CellwisePairListHost, device) {
   auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
   const int cell_count = 7;
   auto cplh = std::make_shared<CellwisePairListHost>(cell_count);
-  auto cpl = std::make_shared<CellwisePairList>(sycl_target, cell_count);
+  auto cpl = std::make_shared<CellwisePairListSimple>(sycl_target, cell_count);
 
   {
     cpl->clear();
     cpl->set(cplh);
-    auto m = cpl->get();
+    auto m = cpl->get_pair_list();
     ASSERT_EQ(m.cell_count, cell_count);
     ASSERT_EQ(m.max_pair_count, 0);
     ASSERT_EQ(m.pair_count, 0);
@@ -637,7 +637,7 @@ TEST(CellwisePairListHost, device) {
     ASSERT_EQ(pairs_count_correct, pairs_count_to_test);
 
     cpl->set(cplh);
-    h = cpl->host_get();
+    h = cpl->get_host_pair_list();
 
     pairs_count_to_test.clear();
     for (auto &cell_map : h) {
@@ -657,7 +657,7 @@ TEST(CellwisePairListHost, device) {
     ASSERT_EQ(pairs_count_correct, pairs_count_to_test);
 
     {
-      auto d = cpl->get();
+      auto d = cpl->get_pair_list();
       std::vector<int> h_wave_count(cell_count);
       sycl_target->queue
           .memcpy(h_wave_count.data(), d.d_wave_count, cell_count * sizeof(int))
@@ -735,7 +735,7 @@ TEST(ParticlePairLoop, cell_wise_pair_list_waves) {
   reset_loop->execute();
 
   auto cellwise_pair_listA =
-      std::make_shared<CellwisePairList>(sycl_target, cell_count);
+      std::make_shared<CellwisePairListSimple>(sycl_target, cell_count);
 
   auto pl0 = particle_pair_loop(
       "particle_pair_loop_test",

@@ -109,7 +109,7 @@ public:
     int max_wave_count = 0;
     for (std::size_t listx = 0; listx < this->num_pair_lists; listx++) {
       this->h_pair_lists_device[listx] =
-          this->pair_lists[listx].pair_list->get();
+          this->pair_lists[listx].pair_list->get_pair_list();
       max_pair_count = std::max(
           max_pair_count, this->h_pair_lists_device[listx].max_pair_count);
       // Assemble the exclusive counts across the lists.
@@ -144,7 +144,7 @@ public:
       auto k_pair_list_counts_es = this->d_pair_list_counts_es->ptr;
       std::size_t local_size = this->global_info_A.local_size;
 
-      if (this->sycl_target->device.is_cpu()) {
+      if (this->sycl_target->device.is_cpu() || (max_wave_count == 1)) {
 
         sycl::range<3> local_iteration_set(1, 1, local_size);
         sycl::range<3> global_iteration_set(

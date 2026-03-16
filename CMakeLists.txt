@@ -46,7 +46,10 @@ endif()
 set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set(SRC_FILES
     ${SRC_DIR}/algorithms/cellwise_methods.cpp
+    ${SRC_DIR}/algorithms/common.cpp
     ${SRC_DIR}/algorithms/dsmc/pair_sampler_ntc.cpp
+    ${SRC_DIR}/algorithms/dsmc/pair_sampler_no_replacement.cpp
+    ${SRC_DIR}/algorithms/dsmc/collision_cell_partition.cpp
     ${SRC_DIR}/algorithms/particle_data_movement.cpp
     ${SRC_DIR}/algorithms/reduce_dat_cellwise.cpp
     ${SRC_DIR}/algorithms/unseen_value_extractor.cpp
@@ -99,6 +102,7 @@ set(SRC_FILES
     ${SRC_DIR}/parallel_initialisation.cpp
     ${SRC_DIR}/packing_unpacking.cpp
     ${SRC_DIR}/pair_loop/cellwise_pair_list.cpp
+    ${SRC_DIR}/pair_loop/cellwise_pair_list_simple.cpp
     ${SRC_DIR}/pair_loop/cellwise_pair_list_host.cpp
     ${SRC_DIR}/pair_loop/cellwise_pair_list_block.cpp
     ${SRC_DIR}/particle_dat.cpp
@@ -136,9 +140,12 @@ set(HEADER_FILES
     ${INCLUDE_DIR}/neso_particles.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/access.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/algorithms.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/common.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/dsmc.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/cellwise_all_to_all.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/collision_cell_partition.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/pair_sampler_ntc.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/pair_sampler_no_replacement.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/cellwise_methods.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/particle_data_movement.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/reduce_dat_cellwise.hpp
@@ -258,6 +265,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_interface_local_decomp.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/packing_unpacking.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/cellwise_pair_list.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/cellwise_pair_list_simple.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/cellwise_pair_list_absolute.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/cellwise_pair_list_block.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/cellwise_pair_list_host.hpp

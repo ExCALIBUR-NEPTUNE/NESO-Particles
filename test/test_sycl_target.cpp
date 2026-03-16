@@ -79,7 +79,84 @@ TEST(SYCLTarget, joint_exclusive_scan_int) {
     joint_exclusive_scan(sycl_target, N, d_src.ptr, d_dst.ptr).wait_and_throw();
 
     auto h_to_test = d_dst.get();
+    EXPECT_EQ(h_to_test, h_correct);
+  }
 
+  sycl_target->free();
+}
+
+TEST(SYCLTarget, joint_exclusive_scan_large_int) {
+
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+
+  for (std::size_t N : {1, 2, 4, 5, 100, 21241}) {
+    const std::size_t group_size =
+        std::min(static_cast<std::size_t>(
+                     sycl_target->device
+                         .get_info<sycl::info::device::max_work_group_size>()),
+                 static_cast<std::size_t>(N));
+    ASSERT_TRUE(group_size >= 1);
+
+    std::vector<int> h_src(N);
+    std::vector<int> h_correct(N);
+    std::iota(h_src.begin(), h_src.end(), 1);
+    std::exclusive_scan(h_src.begin(), h_src.end(), h_correct.begin(), 0);
+
+    BufferDevice d_src(sycl_target, h_src);
+    BufferDevice d_dst(sycl_target, h_src);
+
+    const std::size_t aux_array_size =
+        get_joint_exclusive_scan_aux_array_size(sycl_target, N);
+
+    BufferDevice<int> d_aux(sycl_target, aux_array_size);
+    joint_exclusive_scan(sycl_target, N, d_aux.ptr, d_src.ptr, d_dst.ptr)
+        .wait_and_throw();
+
+    auto h_to_test = d_dst.get();
+    EXPECT_EQ(h_to_test, h_correct);
+
+    joint_exclusive_scan_blocking(sycl_target, N, d_src.ptr, d_dst.ptr);
+
+    h_to_test = d_dst.get();
+    EXPECT_EQ(h_to_test, h_correct);
+  }
+
+  sycl_target->free();
+}
+
+TEST(SYCLTarget, joint_exclusive_scan_large_INT) {
+
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+
+  for (std::size_t N : {1, 2, 4, 5, 100, 21241}) {
+    const std::size_t group_size =
+        std::min(static_cast<std::size_t>(
+                     sycl_target->device
+                         .get_info<sycl::info::device::max_work_group_size>()),
+                 static_cast<std::size_t>(N));
+    ASSERT_TRUE(group_size >= 1);
+
+    std::vector<INT> h_src(N);
+    std::vector<INT> h_correct(N);
+    std::iota(h_src.begin(), h_src.end(), 1);
+    std::exclusive_scan(h_src.begin(), h_src.end(), h_correct.begin(), 0);
+
+    BufferDevice d_src(sycl_target, h_src);
+    BufferDevice d_dst(sycl_target, h_src);
+
+    const std::size_t aux_array_size =
+        get_joint_exclusive_scan_aux_array_size(sycl_target, N);
+
+    BufferDevice<INT> d_aux(sycl_target, aux_array_size);
+    joint_exclusive_scan(sycl_target, N, d_aux.ptr, d_src.ptr, d_dst.ptr)
+        .wait_and_throw();
+
+    auto h_to_test = d_dst.get();
+    EXPECT_EQ(h_to_test, h_correct);
+
+    joint_exclusive_scan_blocking(sycl_target, N, d_src.ptr, d_dst.ptr);
+
+    h_to_test = d_dst.get();
     EXPECT_EQ(h_to_test, h_correct);
   }
 
@@ -108,8 +185,13 @@ TEST(SYCLTarget, joint_exclusive_scan_INT) {
   joint_exclusive_scan(sycl_target, N, d_src.ptr, d_dst.ptr).wait_and_throw();
 
   auto h_to_test = d_dst.get();
-
   EXPECT_EQ(h_to_test, h_correct);
+
+  // In place seems to be broken on some backends
+  //
+  // joint_exclusive_scan(sycl_target, N, d_src.ptr,
+  // d_src.ptr).wait_and_throw(); h_to_test = d_src.get(); EXPECT_EQ(h_to_test,
+  // h_correct);
 
   sycl_target->free();
 }
@@ -159,6 +241,106 @@ TEST(SYCLTarget, joint_exclusive_scan_n_int) {
   BufferDevice d_array_offsets(sycl_target, h_array_offsets);
 
   joint_exclusive_scan_n(sycl_target, num_arrays, d_array_sizes.ptr,
+                         d_array_offsets.ptr, d_src.ptr, d_dst.ptr)
+      .wait_and_throw();
+
+  auto h_to_test = d_dst.get();
+  EXPECT_EQ(h_to_test, h_correct);
+
+  sycl_target->free();
+}
+
+TEST(SYCLTarget, joint_exclusive_scan_n_int_uniform_size) {
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+
+  const std::size_t num_arrays = 7;
+  const std::size_t N = 2121;
+
+  std::vector<int> h_src;
+  std::vector<int> h_correct;
+  std::vector<int> h_array_sizes(num_arrays);
+  std::vector<int> h_array_offsets(num_arrays);
+
+  std::mt19937 rng(52234234);
+  std::uniform_int_distribution<int> dist{0, 512};
+
+  h_src.reserve(num_arrays * N);
+  h_correct.reserve(num_arrays * N);
+
+  for (std::size_t ax = 0; ax < num_arrays; ax++) {
+    const std::size_t num_elements = 2043;
+    std::vector<int> tmp_src(num_elements);
+    std::vector<int> tmp_correct(num_elements);
+
+    int current = 0;
+    for (std::size_t ex = 0; ex < num_elements; ex++) {
+      const int value = dist(rng);
+      tmp_src[ex] = value;
+      tmp_correct[ex] = current;
+      current += value;
+    }
+
+    h_src.insert(h_src.end(), tmp_src.begin(), tmp_src.end());
+    h_correct.insert(h_correct.end(), tmp_correct.begin(), tmp_correct.end());
+  }
+
+  BufferDevice d_src(sycl_target, h_src);
+  BufferDevice d_dst(sycl_target, h_src);
+
+  joint_exclusive_scan_n(sycl_target, num_arrays, 2043, d_src.ptr, d_dst.ptr)
+      .wait_and_throw();
+
+  auto h_to_test = d_dst.get();
+  EXPECT_EQ(h_to_test, h_correct);
+
+  sycl_target->free();
+}
+
+TEST(SYCLTarget, joint_inclusive_scan_n_int) {
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+
+  const std::size_t num_arrays = 7;
+  const std::size_t N = 2121;
+
+  std::vector<int> h_src;
+  std::vector<int> h_correct;
+  std::vector<int> h_array_sizes(num_arrays);
+  std::vector<int> h_array_offsets(num_arrays);
+
+  std::mt19937 rng(52234234);
+  std::uniform_int_distribution<int> dist{0, 512};
+
+  h_src.reserve(num_arrays * N);
+  h_correct.reserve(num_arrays * N);
+
+  int offset = 0;
+  for (std::size_t ax = 0; ax < num_arrays; ax++) {
+    const std::size_t num_elements = (ax == 10) ? 0 : N - ax;
+    std::vector<int> tmp_src(num_elements);
+    std::vector<int> tmp_correct(num_elements);
+
+    h_array_sizes[ax] = num_elements;
+    h_array_offsets[ax] = offset;
+    offset += num_elements;
+
+    int current = 0;
+    for (std::size_t ex = 0; ex < num_elements; ex++) {
+      const int value = dist(rng);
+      current += value;
+      tmp_src[ex] = value;
+      tmp_correct[ex] = current;
+    }
+
+    h_src.insert(h_src.end(), tmp_src.begin(), tmp_src.end());
+    h_correct.insert(h_correct.end(), tmp_correct.begin(), tmp_correct.end());
+  }
+
+  BufferDevice d_src(sycl_target, h_src);
+  BufferDevice d_dst(sycl_target, h_src);
+  BufferDevice d_array_sizes(sycl_target, h_array_sizes);
+  BufferDevice d_array_offsets(sycl_target, h_array_offsets);
+
+  joint_inclusive_scan_n(sycl_target, num_arrays, d_array_sizes.ptr,
                          d_array_offsets.ptr, d_src.ptr, d_dst.ptr)
       .wait_and_throw();
 

@@ -73,6 +73,8 @@ void SYCLTarget::print_info_inner() {
 
   std::cout << "Using " << this->device.get_info<sycl::info::device::name>()
             << std::endl;
+  std::cout << "Max compute units: "
+            << this->device_limits.get_max_compute_units() << std::endl;
   std::cout << "Version: " << NESO_PARTICLES_VERSION_MAJOR << "."
             << NESO_PARTICLES_VERSION_MINOR << "."
             << NESO_PARTICLES_VERSION_PATCH << std::endl;
@@ -163,6 +165,9 @@ SYCLTarget::SYCLTarget(const int gpu_device, MPI_Comm comm, int local_rank)
     this->parameters->set("LOOP_NBIN",
                           std::make_shared<SizeTParameter>(
                               get_env_size_t("NESO_PARTICLES_LOOP_NBIN", 4)));
+    this->parameters->set("MAX_COMPUTE_UNITS",
+                          std::make_shared<SizeTParameter>(
+                              this->device_limits.get_max_compute_units()));
   }
 
   if (get_env_size_t("NESO_PARTICLES_IN_ORDER_QUEUE", 0)) {
@@ -427,40 +432,4 @@ NDRangePeel1D get_nd_range_peel_1d(const std::size_t size,
                         sycl::range<1>(local_size))};
 }
 
-template sycl::event joint_exclusive_scan(SYCLTargetSharedPtr sycl_target,
-                                          std::size_t N, int *d_src,
-                                          int *d_dst);
-template sycl::event joint_exclusive_scan(SYCLTargetSharedPtr sycl_target,
-                                          std::size_t N, INT *d_src,
-                                          INT *d_dst);
-
-template sycl::event
-joint_exclusive_scan_n_sum(SYCLTargetSharedPtr sycl_target, std::size_t N,
-                           const int *RESTRICT const d_array_sizes,
-                           const int *RESTRICT const d_array_offsets,
-                           int *d_src, int *d_dst, int *d_dst_sum);
-
-template sycl::event
-joint_exclusive_scan_n_sum(SYCLTargetSharedPtr sycl_target, std::size_t N,
-                           const INT *RESTRICT const d_array_sizes,
-                           const INT *RESTRICT const d_array_offsets,
-                           INT *d_src, INT *d_dst, INT *d_dst_sum);
-
-template sycl::event
-joint_exclusive_scan_n(SYCLTargetSharedPtr sycl_target, std::size_t N,
-                       const int *RESTRICT const d_array_sizes,
-                       const int *RESTRICT const d_array_offsets, int *d_src,
-                       int *d_dst);
-
-template sycl::event
-joint_exclusive_scan_n(SYCLTargetSharedPtr sycl_target, std::size_t N,
-                       const INT *RESTRICT const d_array_sizes,
-                       const INT *RESTRICT const d_array_offsets, INT *d_src,
-                       INT *d_dst);
-
-template sycl::event matrix_transpose(SYCLTargetSharedPtr sycl_target,
-                                      const std::size_t num_rows,
-                                      const std::size_t num_cols,
-                                      const REAL *RESTRICT const d_src,
-                                      REAL *RESTRICT d_dst);
 } // namespace NESO::Particles

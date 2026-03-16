@@ -112,4 +112,18 @@ std::size_t DeviceLimits::get_cacheline_size(const std::size_t num_bytes) {
   return get_next_multiple(hardware_cacheline_size, num_bytes);
 }
 
+std::size_t DeviceLimits::get_max_compute_units() {
+  std::size_t max_compute_units =
+      this->device.get_info<sycl::info::device::max_compute_units>();
+
+  if (this->device.is_cpu()) {
+    max_compute_units = get_env_size_t("OMP_NUM_THREADS", max_compute_units);
+  }
+
+  max_compute_units =
+      get_env_size_t("NESO_PARTICLES_MAX_COMPUTE_UNITS", max_compute_units);
+
+  return max_compute_units;
+}
+
 } // namespace NESO::Particles
