@@ -56,4 +56,69 @@ TEST(PETSc, matrix_invert_4) {
   PETSCCHK(PetscFinalize());
 }
 
+TEST(PETSc, weighted_distribute) {
+  PETSCCHK(PetscInitializeNoArguments());
+
+  int size = 0;
+  int rank = 0;
+  MPICHK(MPI_Comm_size(MPI_COMM_WORLD, &size));
+  MPICHK(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
+
+  const int ndim = 2;
+  const int mesh_size = 128;
+  PetscInt faces[3] = {mesh_size, 1};
+
+  DM dm;
+  PETSCCHK(NPPETScAPI::NP_DMPlexCreateBoxMesh(
+      PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces,
+      /* lower */ NULL,
+      /* upper */ NULL,
+      /* periodicity */ NULL, PETSC_TRUE, &dm));
+
+  PetscSection weights_section;
+  PETSCCHK(PetscSectionCreate(MPI_COMM_WORLD, &weights_section));
+
+  PetscInt point_start = 0;
+  PetscInt point_end = 0;
+  PETSCCHK(DMPlexGetChart(dm, &point_start, &point_end));
+  PETSCCHK(PetscSectionSetChart(weights_section, point_start, point_end));
+
+  if (!rank) {
+
+    for (PetscInt px = point_start; px < point_end; px++) {
+      PETSCCHK(PetscSectionSetDof(weights_section, px, 0));
+    }
+
+    PETSCCHK(DMPlexGetHeightStratum(dm, 0, &point_start, &point_end));
+
+    for (PetscInt px = point_start; px < point_end; px++) {
+      PETSCCHK(PetscSectionSetDof(weights_section, px, 1));
+    }
+    PETSCCHK(PetscSectionSetDof(weights_section, point_start, 10));
+  }
+  PETSCCHK(PetscSectionSetUp(weights_section));
+  PETSCCHK(DMSetLocalSection(dm, weights_section));
+
+  PetscInterface::generic_distribute(&dm);
+
+  PETSCCHK(DMPlexGetHeightStratum(dm, 0, &point_start, &point_end));
+  const PetscInt cell_count = point_end - point_start;
+
+  PETSCCHK(DMPlexGetChart(dm, &point_start, &point_end));
+  const PetscInt point_count = point_end - point_start;
+
+  for (int rx = 0; rx < size; rx++) {
+
+    if (rx == rank) {
+      nprint(rank, cell_count, point_count);
+      std::cout << std::flush;
+    }
+    MPICHK(MPI_Barrier(MPI_COMM_WORLD));
+  }
+
+  PETSCCHK(PetscSectionDestroy(&weights_section));
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
+
 #endif
