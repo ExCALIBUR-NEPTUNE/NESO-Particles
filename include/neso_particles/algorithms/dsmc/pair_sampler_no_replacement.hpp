@@ -11,7 +11,8 @@
 namespace NESO::Particles::DSMC {
 
 /**
- * TODO
+ * Class for sampling pairs of particles without replacement within a collision
+ * cell.
  */
 class PairSamplerNoReplacement : public CellwisePairList {
 protected:
@@ -53,14 +54,25 @@ public:
   std::shared_ptr<RNGGenerationFunction<REAL>> rng_generation_function;
 
   /**
-   * TODO
+   * Create a sampler for a given compute target and mesh cell count.
+   *
+   * @param sycl_target Compute device to use.
+   * @param cell_count Mesh cell count.
+   * @param rng_generation_function Source of random samples.
    */
   PairSamplerNoReplacement(
       SYCLTargetSharedPtr sycl_target, const int cell_count,
       std::shared_ptr<RNGGenerationFunction<REAL>> rng_generation_function);
 
   /**
-   * TODO
+   * Sample pairs in each collision cell between species A and B.
+   *
+   * @param collision_cell_partition Map from collision cells to particles
+   * within those collision cells.
+   * @param species_id_a First species ID.
+   * @param species_id_b Second species ID.
+   * @param map_cells_to_counts Map from mesh cell to counts for each collision
+   * cell.
    */
   void sample(CollisionCellPartitionSharedPtr collision_cell_partition,
               const INT species_id_a, const INT species_id_b,
