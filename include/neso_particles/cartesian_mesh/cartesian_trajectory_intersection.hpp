@@ -506,6 +506,7 @@ public:
                      ResourceStackKeyBufferDevice<REAL>{}, d_buffer);
     restore_resource(sycl_target->resource_stack_map,
                      ResourceStackKeyBufferDevice<INT>{}, d_buffer_int);
+
     return return_map;
   }
 

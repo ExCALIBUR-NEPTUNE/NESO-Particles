@@ -55,6 +55,9 @@ void BoundaryMeshInterface::free() {
 void BoundaryMeshInterface::extend_exchange_pattern(
     const std::vector<std::pair<int, INT>> &rank_geom_ids) {
 
+  auto r0 = this->sycl_target->profile_map.start_region(
+      "BoundaryMeshInterface", "extend_exchange_pattern");
+
   NESOASSERT(this->comm != MPI_COMM_NULL,
              "BoundaryMeshInterface::boundary_init has not been called.");
 
@@ -301,6 +304,8 @@ void BoundaryMeshInterface::extend_exchange_pattern(
     // As the exchange maps have been updated then update the version.
     this->version++;
   }
+
+  this->sycl_target->profile_map.end_region(r0);
 }
 
 INT BoundaryMeshInterface::get_geom_id_from_seq_index(

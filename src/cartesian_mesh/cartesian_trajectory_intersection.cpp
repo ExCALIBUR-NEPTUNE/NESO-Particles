@@ -125,6 +125,9 @@ CartesianTrajectoryIntersection::create_function(
     const int group, const std::string function_space,
     const int polynomial_order) {
 
+  auto r0 = this->sycl_target->profile_map.start_region(
+      "CartesianTrajectoryIntersection", "create_function");
+
   NESOASSERT(this->boundary_groups.count(group),
              "Passed group does not exist in boundary groups.");
 
@@ -134,13 +137,19 @@ CartesianTrajectoryIntersection::create_function(
     cells.insert(cells.end(), tmp.begin(), tmp.end());
   }
 
-  return std::make_shared<CartesianHMeshFunction>(
+  auto func = std::make_shared<CartesianHMeshFunction>(
       this->mesh, this->sycl_target, this->mesh->get_ndim() - 1, cells,
       function_space, polynomial_order, group);
+
+  this->sycl_target->profile_map.end_region(r0);
+  return func;
 }
 
 void CartesianTrajectoryIntersection::function_project_initialise(
     CartesianHMeshFunctionSharedPtr func) {
+
+  auto r0 = this->sycl_target->profile_map.start_region(
+      "CartesianTrajectoryIntersection", "function_project_initialise");
 
   const int group = func->boundary_group;
   auto &boundary_mesh_interface = this->map_groups_boundary_interface.at(group);
@@ -159,12 +168,17 @@ void CartesianTrajectoryIntersection::function_project_initialise(
         .wait_and_throw();
   }
   func->fill(0.0);
+
+  this->sycl_target->profile_map.end_region(r0);
 }
 
 void CartesianTrajectoryIntersection::function_project_contribute(
     ParticleSubGroupSharedPtr particle_sub_group, Sym<REAL> sym,
     const int component, const bool is_ephemeral,
     CartesianHMeshFunctionSharedPtr func) {
+
+  auto r0 = this->sycl_target->profile_map.start_region(
+      "CartesianTrajectoryIntersection", "function_project_contribute");
 
   const bool null_sub_group = particle_sub_group == nullptr;
   const int group = func->boundary_group;
@@ -253,10 +267,15 @@ void CartesianTrajectoryIntersection::function_project_contribute(
                "Failed to find index for hit geometry object.");
     NESOASSERT(!ep_dof.get_flag(), "Bad index for hit geometry object.");
   }
+
+  this->sycl_target->profile_map.end_region(r0);
 }
 
 void CartesianTrajectoryIntersection::function_project_finalise(
     CartesianHMeshFunctionSharedPtr func) {
+
+  auto r0 = this->sycl_target->profile_map.start_region(
+      "CartesianTrajectoryIntersection", "function_project_finalise");
 
   const int group = func->boundary_group;
   auto &boundary_mesh_interface = this->map_groups_boundary_interface.at(group);
@@ -264,6 +283,8 @@ void CartesianTrajectoryIntersection::function_project_finalise(
       func->d_dofs_stage->ptr, func->cell_dof_count, func->d_dofs->ptr);
   func->reset_version();
   NESOASSERT(func->version == 0, "Expected a version reset.");
+
+  this->sycl_target->profile_map.end_region(r0);
 }
 
 void CartesianTrajectoryIntersection::function_project(
@@ -271,16 +292,24 @@ void CartesianTrajectoryIntersection::function_project(
     const int component, const bool is_ephemeral,
     CartesianHMeshFunctionSharedPtr func) {
 
+  auto r0 = this->sycl_target->profile_map.start_region(
+      "CartesianTrajectoryIntersection", "function_project");
+
   this->function_project_initialise(func);
   this->function_project_contribute(particle_sub_group, sym, component,
                                     is_ephemeral, func);
   this->function_project_finalise(func);
+
+  this->sycl_target->profile_map.end_region(r0);
 }
 
 void CartesianTrajectoryIntersection::function_evaluate(
     ParticleSubGroupSharedPtr particle_sub_group, Sym<REAL> sym,
     const int component, const bool is_ephemeral,
     CartesianHMeshFunctionSharedPtr func) {
+
+  auto r0 = this->sycl_target->profile_map.start_region(
+      "CartesianTrajectoryIntersection", "function_evaluate");
 
   const bool null_sub_group = particle_sub_group == nullptr;
   const int group = func->boundary_group;
@@ -350,6 +379,8 @@ void CartesianTrajectoryIntersection::function_evaluate(
 
     NESOASSERT(!ep.get_flag(), "Failed to find index for hit geometry object.");
   }
+
+  this->sycl_target->profile_map.end_region(r0);
 }
 
 template void CartesianTrajectoryIntersection::pre_integration_inner(
@@ -366,24 +397,44 @@ CartesianTrajectoryIntersection::post_integration_inner(
 
 void CartesianTrajectoryIntersection::pre_integration(
     std::shared_ptr<ParticleGroup> particles) {
-  return this->pre_integration_inner(particles);
+  auto r0 = this->sycl_target->profile_map.start_region(
+      "CartesianTrajectoryIntersection",
+      "pre_integration_inner_particle_group");
+  this->pre_integration_inner(particles);
+  this->sycl_target->profile_map.end_region(r0);
+  return;
 }
 
 void CartesianTrajectoryIntersection::pre_integration(
     std::shared_ptr<ParticleSubGroup> particles) {
-  return this->pre_integration_inner(particles);
+  auto r0 = this->sycl_target->profile_map.start_region(
+      "CartesianTrajectoryIntersection",
+      "pre_integration_inner_particle_sub_group");
+  this->pre_integration_inner(particles);
+  this->sycl_target->profile_map.end_region(r0);
+  return;
 }
 
 std::map<int, ParticleSubGroupSharedPtr>
 CartesianTrajectoryIntersection::post_integration(
     std::shared_ptr<ParticleGroup> particles) {
-  return this->post_integration_inner(particles);
+  auto r0 = this->sycl_target->profile_map.start_region(
+      "CartesianTrajectoryIntersection",
+      "post_integration_inner_particle_group");
+  auto r = this->post_integration_inner(particles);
+  this->sycl_target->profile_map.end_region(r0);
+  return r;
 }
 
 std::map<int, ParticleSubGroupSharedPtr>
 CartesianTrajectoryIntersection::post_integration(
     std::shared_ptr<ParticleSubGroup> particles) {
-  return this->post_integration_inner(particles);
+  auto r0 = this->sycl_target->profile_map.start_region(
+      "CartesianTrajectoryIntersection",
+      "post_integration_inner_particle_sub_group");
+  auto r = this->post_integration_inner(particles);
+  this->sycl_target->profile_map.end_region(r0);
+  return r;
 }
 
 } // namespace NESO::Particles
