@@ -11,6 +11,8 @@
 
 #include <set>
 
+#define NESO_PARTICLES_UNSEEN_VALUE_EXTRACTOR_NODE_WIDTH 128
+
 namespace NESO::Particles {
 
 /**
@@ -25,7 +27,9 @@ protected:
     INT a;
   };
 
-  std::shared_ptr<BlockedBinaryTree<INT, NodeType>> d_tree;
+  std::shared_ptr<BlockedBinaryTree<
+      INT, NodeType, NESO_PARTICLES_UNSEEN_VALUE_EXTRACTOR_NODE_WIDTH>>
+      d_tree;
 
 public:
   /**

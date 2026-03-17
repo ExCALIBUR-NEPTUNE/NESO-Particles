@@ -5,8 +5,9 @@ namespace NESO::Particles {
 UnseenValueExtractor::UnseenValueExtractor(SYCLTargetSharedPtr sycl_target)
     : sycl_target(sycl_target) {
 
-  this->d_tree =
-      std::make_shared<BlockedBinaryTree<INT, NodeType>>(this->sycl_target);
+  this->d_tree = std::make_shared<BlockedBinaryTree<
+      INT, NodeType, NESO_PARTICLES_UNSEEN_VALUE_EXTRACTOR_NODE_WIDTH>>(
+      this->sycl_target);
 }
 
 template std::set<INT>
