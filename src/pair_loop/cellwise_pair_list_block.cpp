@@ -201,9 +201,7 @@ void CellwisePairListBlockInterface::get_wave_occupancy_counts(
     SYCLTargetSharedPtr sycl_target, std::vector<int> &occupancy_counts) {
 
   auto d_pair_list = this->get_pair_list();
-  const int pair_count = d_pair_list.pair_count;
   const int cell_count = d_pair_list.cell_count;
-  const int max_wave_count = d_pair_list.max_wave_count;
   const auto block_size = d_pair_list.block_size;
 
   occupancy_counts.resize(block_size + 1);
