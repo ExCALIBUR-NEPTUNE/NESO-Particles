@@ -11,13 +11,6 @@ namespace ParticleLoopImplementation {
 template <typename T>
 inline void pre_loop(ParticleLoopGlobalInfo *global_info,
                      Access::Read<SymVector<T> *> &arg) {
-
-#ifndef NDEBUG
-  NESOASSERT(global_info->particle_group == arg.obj->particle_group.get(),
-             "The loop ParticleGroup does not match the ParticleGroup the "
-             "SymVector was created with.");
-#endif
-
   get_sym_vector_cache_dispatch(global_info->particle_group,
                                 global_info->particle_sub_group)
       ->create_const(arg.obj->syms);
@@ -25,13 +18,6 @@ inline void pre_loop(ParticleLoopGlobalInfo *global_info,
 template <typename T>
 inline void pre_loop(ParticleLoopGlobalInfo *global_info,
                      Access::Write<SymVector<T> *> &arg) {
-
-#ifndef NDEBUG
-  NESOASSERT(global_info->particle_group == arg.obj->particle_group.get(),
-             "The loop ParticleGroup does not match the ParticleGroup the "
-             "SymVector was created with.");
-#endif
-
   get_sym_vector_cache_dispatch(global_info->particle_group,
                                 global_info->particle_sub_group)
       ->create(arg.obj->syms);

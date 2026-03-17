@@ -200,11 +200,11 @@ template <typename T> class SymVector {
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
       sycl::handler &cgh, Access::Write<SymVector<T> *> &a);
 
-  friend void ParticleLoopImplementation::pre_loop(
+  friend void ParticleLoopImplementation::pre_loop<T>(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
       Access::Read<SymVector<T> *> &arg);
 
-  friend void ParticleLoopImplementation::pre_loop(
+  friend void ParticleLoopImplementation::pre_loop<T>(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
       Access::Write<SymVector<T> *> &arg);
 
