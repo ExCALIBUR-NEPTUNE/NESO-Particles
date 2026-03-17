@@ -82,7 +82,6 @@ void CollisionCellPartition::construct(
                                              layer_matrix_total_size + 1));
 
   auto k_tree_root = this->h_map_species_id_linear_id->root;
-  const INT k_cell_count = this->cell_count;
   const INT k_num_species = this->num_species;
   es.wait();
 
@@ -252,7 +251,6 @@ void CollisionCellPartition::get_max_num_pairs(
           iteration_set, [=](sycl::item<2> ix) {
             const std::size_t cell_mesh = ix.get_id(0);
             const std::size_t cell_collision = ix.get_id(1);
-            constexpr int max_int = std::numeric_limits<int>::max();
 
             const INT num_particles_a = k_map.get_num_particles_cell_species(
                 cell_mesh, cell_collision, linear_species_id_a);
