@@ -8,7 +8,7 @@
 #include <type_traits>
 
 #ifndef NESO_PARTICLES_BLOCKED_BINARY_TREE_WIDTH
-#define NESO_PARTICLES_BLOCKED_BINARY_TREE_WIDTH 8
+#define NESO_PARTICLES_BLOCKED_BINARY_TREE_WIDTH 64
 #endif
 
 namespace NESO::Particles {
@@ -256,6 +256,25 @@ public:
   ~BlockedBinaryTree() {
     for (auto &nx : this->nodes) {
       this->sycl_target->free(nx.second);
+    }
+  }
+
+  /**
+   * Print to stdout container information.
+   */
+  inline void print() {
+    BlockedBinaryNode<KEY_TYPE, VALUE_TYPE, WIDTH> node;
+
+    for (auto &nodex : this->nodes) {
+      this->sycl_target->queue
+          .memcpy(&node, nodex.second,
+                  sizeof(BlockedBinaryNode<KEY_TYPE, VALUE_TYPE, WIDTH>))
+          .wait_and_throw();
+
+      nprint("node key:", nodex.first, "LHS:", node.lhs, "RHS:", node.rhs);
+      for (int ix = 0; ix < WIDTH; ix++) {
+        nprint("\texists:", node.exists[ix]);
+      }
     }
   }
 

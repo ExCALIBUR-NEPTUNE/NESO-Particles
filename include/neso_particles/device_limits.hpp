@@ -87,9 +87,10 @@ public:
         Private::get_max_global_workgroup<N>(this->wgl);
     for (int dx = 0; dx < N; dx++) {
       if (max_global_workgroup.get(dx)) {
-        NESOASSERT(
-            range_global.get(dx) <= max_global_workgroup.get(dx),
-            "Workgroup size exceeds device maximum global workgroup size.");
+        NESOASSERT(range_global.get(dx) <= max_global_workgroup.get(dx),
+                   "Workgroup size (" + std::to_string(range_global.get(dx)) +
+                       ") exceeds device maximum global workgroup size (" +
+                       std::to_string(max_global_workgroup.get(dx)) + ").");
       }
     }
     return range_global;

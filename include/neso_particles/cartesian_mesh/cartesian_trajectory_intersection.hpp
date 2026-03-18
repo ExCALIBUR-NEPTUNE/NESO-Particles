@@ -477,6 +477,8 @@ public:
           ->execute();
     }
 
+    std::map<INT, std::vector<std::pair<int, INT>>> new_potentialy_hit_geoms;
+    int new_geoms_exist = 0;
     for (const auto &boundary_group : this->boundary_groups) {
       const auto group_id = boundary_group.first;
 
@@ -490,14 +492,24 @@ public:
                 true);
       }
 
-      std::vector<std::pair<int, INT>> new_potentialy_hit_geoms;
-      new_potentialy_hit_geoms.reserve(new_geoms.size());
+      new_potentialy_hit_geoms[group_id].reserve(new_geoms.size());
       for (auto &geomx : new_geoms) {
         const int owning_rank = this->mesh->get_face_id_owning_rank(geomx);
-        new_potentialy_hit_geoms.push_back({owning_rank, geomx});
+        new_potentialy_hit_geoms.at(group_id).push_back({owning_rank, geomx});
+        new_geoms_exist = 1;
       }
-      this->map_groups_boundary_interface.at(group_id)->extend_exchange_pattern(
-          new_potentialy_hit_geoms);
+    }
+
+    int global_new_geoms_exist = 0;
+    MPICHK(MPI_Allreduce(&new_geoms_exist, &global_new_geoms_exist, 1, MPI_INT,
+                         MPI_MAX, this->mesh->get_comm()));
+
+    if (global_new_geoms_exist) {
+      for (const auto &boundary_group : this->boundary_groups) {
+        const auto group_id = boundary_group.first;
+        this->map_groups_boundary_interface.at(group_id)
+            ->extend_exchange_pattern(new_potentialy_hit_geoms.at(group_id));
+      }
     }
 
     restore_resource(sycl_target->resource_stack_map,
@@ -506,6 +518,7 @@ public:
                      ResourceStackKeyBufferDevice<REAL>{}, d_buffer);
     restore_resource(sycl_target->resource_stack_map,
                      ResourceStackKeyBufferDevice<INT>{}, d_buffer_int);
+
     return return_map;
   }
 
