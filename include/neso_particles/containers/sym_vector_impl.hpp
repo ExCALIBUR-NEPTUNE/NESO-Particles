@@ -1,6 +1,7 @@
 #ifndef _NESO_PARTICLES_SYM_VECTOR_IMPL_H_
 #define _NESO_PARTICLES_SYM_VECTOR_IMPL_H_
 
+#include "../typedefs.hpp"
 #include "sym_vector.hpp"
 #include "sym_vector_pointer_cache_dispatch.hpp"
 

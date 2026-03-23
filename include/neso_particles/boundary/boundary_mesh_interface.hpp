@@ -4,6 +4,8 @@
 #include "../communication.hpp"
 #include "../compute_target.hpp"
 #include "../containers/blocked_binary_tree.hpp"
+#include <cstdint>
+#include <functional>
 #include <map>
 #include <set>
 #include <typeindex>
@@ -17,6 +19,12 @@ protected:
 #ifdef NESO_PARTICLES_TEST_COMPILATION
 public:
 #endif
+  // The version of the interface. Will be incremented when
+  // extend_exchange_pattern is called with new geometry objects on any rank.
+  // Will be initialised to 1 such that downstream objects, which update when
+  // behind this version, can initialise their versions to 0 and guarantee an
+  // update will happen.
+  std::int64_t version{1};
 
   struct AllToAllWArgs {
     std::vector<int> sendcounts;
@@ -59,6 +67,8 @@ public:
   std::vector<int> outgoing_geom_ids;
   // Counter to place an ordering on face geom ids (outgoing)
   INT geom_counter{0};
+  // Set of geometry IDs which have been passed to extend_exchange_pattern.
+  std::set<INT> extended_pattern_geom_ids;
   // Map from linear sequential index to geom id (outgoing).
   std::map<INT, INT> map_linear_index_to_geom_id;
   // Map from geom id to linear sequential index (outgoing).
@@ -230,7 +240,7 @@ public:
     T null_data = 0;
     T null_data_gathered = 0;
 
-    MPICHK(MPI_Neighbor_alltoallw(
+    MPICHK(NP_MPI_Neighbor_alltoallw_wrapper(
         data != nullptr ? data : &null_data, args.sendcounts.data(),
         args.sdispls.data(), args.sendtypes.data(),
         data_gathered != nullptr ? data_gathered : &null_data_gathered,
@@ -259,7 +269,7 @@ public:
     T null_data = 0;
     T null_data_gathered = 0;
 
-    MPICHK(MPI_Neighbor_alltoallw(
+    MPICHK(NP_MPI_Neighbor_alltoallw_wrapper(
         data != nullptr ? data : &null_data, args.sendcounts.data(),
         args.sdispls.data(), args.sendtypes.data(),
         data_gathered != nullptr ? data_gathered : &null_data_gathered,
@@ -305,6 +315,33 @@ public:
    * communicator.
    */
   void free();
+
+  /**
+   * @returns The geometry IDs that have been passed to extend_exchange_pattern
+   * on this MPI rank.
+   */
+  std::set<INT> get_extended_pattern_geom_ids();
+
+  /**
+   * @details Downstream objects that use this class may want to implement
+   * caching schemes which invalidate when new geometry objects (faces, edges)
+   * are passed to extend_exchange_pattern. This BoundaryMeshInterface holds a
+   * version counter which starts at 1 and is incremented when new geometry
+   * objects are passed to extend_exchange_pattern on any rank.
+   *
+   * Downstream objects can initialise their version counter at 0 and use the
+   * function handle, returned by this method, to retrive the current version of
+   * this interface class.
+   *
+   * @returns Function object which takes no arguments and returns the current
+   * version.
+   */
+  std::function<std::int64_t()> get_version_function_handle();
+
+  /**
+   * Print topology information for debugging evaluation direction.
+   */
+  void print_reverse_info();
 
 protected:
 #ifdef NESO_PARTICLES_TEST_COMPILATION

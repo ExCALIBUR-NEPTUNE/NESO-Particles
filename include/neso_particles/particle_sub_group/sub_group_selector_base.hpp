@@ -91,7 +91,9 @@ protected:
 
 public:
   // The ParticleGroup this selector operates on.
-  ParticleGroupSharedPtr particle_group;
+  ParticleGroupSharedPtr particle_group{nullptr};
+  // The ParticleSubGroup this selector operates on.
+  std::shared_ptr<ParticleSubGroup> particle_sub_group{nullptr};
   // ParticleDat version tracking.
   ParticleGroup::ParticleDatVersionTracker particle_dat_versions;
   // ParticleGroup version tracking.
@@ -170,6 +172,17 @@ public:
 
 typedef std::shared_ptr<SubGroupSelectorBase> SubGroupSelectorBaseSharedPtr;
 } // namespace ParticleSubGroupImplementation
+
+/**
+ * @returns True.
+ */
+bool is_whole_group(ParticleGroupSharedPtr);
+
+/**
+ * @param parent ParticleSubGroup instance.
+ * @returns True if the parent of the sub group is an entire particle group.
+ */
+bool is_whole_group(std::shared_ptr<ParticleSubGroup> parent);
 
 } // namespace NESO::Particles
 

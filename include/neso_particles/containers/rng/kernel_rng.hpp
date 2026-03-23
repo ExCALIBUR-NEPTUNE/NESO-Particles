@@ -3,6 +3,8 @@
 
 #include "../../loop/particle_loop_base.hpp"
 #include "../../loop/particle_loop_index.hpp"
+#include "../../pair_loop/particle_pair_loop_base.hpp"
+#include "../../pair_loop/particle_pair_loop_index.hpp"
 #include "../../particle_group.hpp"
 
 #include <functional>
@@ -51,6 +53,20 @@ template <typename T> struct Read {
                  const int component) {
     bool valid_sample = false;
     return this->at(particle_index, component, &valid_sample);
+  }
+
+  /**
+   * Access the RNG data for this particle pair.
+   *
+   * @param[in] pair_index Particle pair index to access.
+   * @param[in] component RNG component to access.
+   * @param[in, out] valid_sample On return this bool is set to true if the
+   * returned sample is good (i.e. RNG is in a valid state).
+   * @returns Constant reference to RNG data.
+   */
+  inline auto at(const Access::PairLoopIndex::Read &pair_index,
+                 const int component, bool *valid_sample) {
+    return this->data.at(pair_index, component, valid_sample);
   }
 };
 
@@ -138,6 +154,20 @@ inline void post_loop(ParticleLoopGlobalInfo *global_info,
 }
 
 } // namespace ParticleLoopImplementation
+
+namespace ParticlePairLoopImplementation {
+/**
+ * Create the kernel argument for a KernelRNG.
+ */
+template <typename T>
+inline void create_kernel_arg(
+    [[maybe_unused]] ParticlePairLoopIteration &iteration,
+    [[maybe_unused]] ParticleLoopImplementation::ParticleLoopIteration
+        &iteration_particle,
+    Access::KernelRNG::Read<T> &rhs, Access::KernelRNG::Read<T> &lhs) {
+  lhs = rhs;
+}
+} // namespace ParticlePairLoopImplementation
 
 namespace {
 

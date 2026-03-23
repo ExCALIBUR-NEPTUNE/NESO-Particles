@@ -1,0 +1,232 @@
+#include <gtest/gtest.h>
+#include <neso_particles.hpp>
+#include <random>
+#include <type_traits>
+
+using namespace NESO::Particles;
+
+namespace {
+
+const int ndim = 2;
+
+ParticleGroupSharedPtr particle_loop_common(const int N = 10093) {
+  std::vector<int> dims(ndim);
+  dims[0] = 4;
+  dims[1] = 8;
+
+  const double cell_extent = 1.0;
+  const int subdivision_order = 2;
+
+  auto mesh = std::make_shared<CartesianHMesh>(MPI_COMM_WORLD, ndim, dims,
+                                               cell_extent, subdivision_order);
+
+  auto sycl_target =
+      std::make_shared<SYCLTarget>(GPU_SELECTOR, mesh->get_comm());
+
+  auto cart_local_mapper = CartesianHMeshLocalMapper(sycl_target, mesh);
+  auto domain = std::make_shared<Domain>(mesh, cart_local_mapper);
+
+  ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
+                             ParticleProp(Sym<REAL>("V"), 3),
+                             ParticleProp(Sym<REAL>("P2"), ndim),
+                             ParticleProp(Sym<INT>("CELL_ID"), 1, true),
+                             ParticleProp(Sym<INT>("LOOP_INDEX"), 4),
+                             ParticleProp(Sym<INT>("ID"), 1)};
+
+  auto A = std::make_shared<ParticleGroup>(domain, particle_spec, sycl_target);
+  A->add_particle_dat(ParticleDat(sycl_target,
+                                  ParticleProp(Sym<REAL>("FOO"), 3),
+                                  domain->mesh->get_cell_count()));
+
+  const int rank = sycl_target->comm_pair.rank_parent;
+  const INT id_offset = rank * N;
+
+  std::mt19937 rng_pos(52234234 + rank);
+  std::mt19937 rng_vel(52234231 + rank);
+
+  auto positions =
+      uniform_within_extents(N, ndim, mesh->global_extents, rng_pos);
+  auto velocities =
+      NESO::Particles::normal_distribution(N, 3, 0.0, 1.0, rng_vel);
+
+  ParticleSet initial_distribution(N, particle_spec);
+
+  for (int px = 0; px < N; px++) {
+    for (int dimx = 0; dimx < ndim; dimx++) {
+      initial_distribution[Sym<REAL>("P")][px][dimx] = positions[dimx][px];
+    }
+    for (int dimx = 0; dimx < 3; dimx++) {
+      initial_distribution[Sym<REAL>("V")][px][dimx] = velocities[dimx][px];
+    }
+    initial_distribution[Sym<INT>("CELL_ID")][px][0] = 0;
+    initial_distribution[Sym<INT>("ID")][px][0] = px + id_offset;
+  }
+
+  A->add_particles_local(initial_distribution);
+  parallel_advection_initialisation(A, 16);
+
+  auto ccb = std::make_shared<CartesianCellBin>(
+      sycl_target, mesh, A->position_dat, A->cell_id_dat);
+
+  ccb->execute();
+  A->cell_move();
+
+  return A;
+}
+
+} // namespace
+
+TEST(ParticleLoopRNG, tuple_rng_a) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  auto sycl_target = A->sycl_target;
+
+  INT count_a = 1;
+  INT count_b = 2;
+  INT count_c = 3;
+  INT count_d = 4;
+  auto seq_lambda_a = [&]() -> INT { return count_a; };
+  auto seq_lambda_b = [&]() -> INT { return count_b; };
+  auto seq_lambda_c = [&]() -> INT { return count_c; };
+  auto seq_lambda_d = [&]() -> INT { return count_d; };
+
+  auto seq_kernel_a = host_per_particle_block_rng<INT>(seq_lambda_a, 1);
+  auto seq_kernel_b = host_atomic_block_kernel_rng<INT>(seq_lambda_b, 1);
+  auto seq_kernel_c = host_per_particle_block_rng<INT>(seq_lambda_c, 1);
+  auto seq_kernel_d = host_atomic_block_kernel_rng<INT>(seq_lambda_d, 1);
+
+  auto trng0 = tuple_rng(seq_kernel_a, seq_kernel_b);
+
+  auto trng1 = tuple_rng(seq_kernel_c, seq_kernel_d, trng0);
+
+  ErrorPropagate ep(sycl_target);
+  auto k_ep = ep.device_ptr();
+
+  auto l0 = particle_loop(
+      A,
+      [=](auto INDEX, auto TRNG) {
+        bool valid = false;
+        NESO_KERNEL_ASSERT(
+            Access::TupleRNG::get<0>(TRNG).at(INDEX, 0, &valid) == 1, k_ep);
+        NESO_KERNEL_ASSERT(valid, k_ep);
+        NESO_KERNEL_ASSERT(
+            Access::TupleRNG::get<1>(TRNG).at(INDEX, 0, &valid) == 2, k_ep);
+        NESO_KERNEL_ASSERT(valid, k_ep);
+      },
+      Access::read(ParticleLoopIndex{}), Access::read(trng0));
+
+  auto l1 = particle_loop(
+      A,
+      [=](auto INDEX, auto TRNG) {
+        bool valid = false;
+        NESO_KERNEL_ASSERT(TRNG.template get<0>().at(INDEX, 0, &valid) == 3,
+                           k_ep);
+        NESO_KERNEL_ASSERT(valid, k_ep);
+        NESO_KERNEL_ASSERT(TRNG.template get<1>().at(INDEX, 0, &valid) == 4,
+                           k_ep);
+        NESO_KERNEL_ASSERT(valid, k_ep);
+        NESO_KERNEL_ASSERT(
+            TRNG.template get<2>().template get<0>().at(INDEX, 0, &valid) == 1,
+            k_ep);
+        NESO_KERNEL_ASSERT(valid, k_ep);
+        NESO_KERNEL_ASSERT(
+            TRNG.template get<2>().template get<1>().at(INDEX, 0, &valid) == 2,
+            k_ep);
+        NESO_KERNEL_ASSERT(valid, k_ep);
+      },
+      Access::read(ParticleLoopIndex{}), Access::read(trng1));
+
+  l0->execute();
+  ASSERT_FALSE(ep.get_flag());
+  l1->execute();
+  ASSERT_FALSE(ep.get_flag());
+
+  particle_loop(
+      A,
+      [=](auto INDEX, auto TRNG) {
+        bool valid = false;
+        // Trying to test valid here would be a race condition.
+        Access::TupleRNG::get<0>(TRNG).at(INDEX, 0, &valid);
+        Access::TupleRNG::get<1>(TRNG).at(INDEX, 0, &valid);
+        Access::TupleRNG::get<0>(Access::TupleRNG::get<2>(TRNG))
+            .at(INDEX, 0, &valid);
+        Access::TupleRNG::get<1>(Access::TupleRNG::get<2>(TRNG))
+            .at(INDEX, 0, &valid);
+        Access::TupleRNG::get<0>(TRNG).at(INDEX, 0, &valid);
+        Access::TupleRNG::get<1>(TRNG).at(INDEX, 0, &valid);
+        Access::TupleRNG::get<0>(Access::TupleRNG::get<2>(TRNG))
+            .at(INDEX, 0, &valid);
+        Access::TupleRNG::get<1>(Access::TupleRNG::get<2>(TRNG))
+            .at(INDEX, 0, &valid);
+      },
+      Access::read(ParticleLoopIndex{}), Access::read(trng1))
+      ->execute();
+
+  // Tests that post loop is getting called
+  ASSERT_FALSE(seq_kernel_b->valid_internal_state());
+  ASSERT_FALSE(seq_kernel_d->valid_internal_state());
+
+  // test chaining
+  {
+    auto trng3 = tuple_rng(seq_kernel_d);
+    auto trng2 = tuple_rng(seq_kernel_c, trng3);
+    auto trng1 = tuple_rng(seq_kernel_b, trng2);
+    auto trng0 = tuple_rng(seq_kernel_a, trng1);
+
+    particle_loop(
+        A,
+        [=](auto INDEX, auto TRNG) {
+          bool valid = false;
+          NESO_KERNEL_ASSERT(
+              Access::TupleRNG::get<0>(TRNG).at(INDEX, 0, &valid) == 1, k_ep);
+          auto &TRNG1 = Access::TupleRNG::get<1>(TRNG);
+          NESO_KERNEL_ASSERT(
+              Access::TupleRNG::get<0>(TRNG1).at(INDEX, 0, &valid) == 2, k_ep);
+          NESO_KERNEL_ASSERT(valid, k_ep);
+          auto &TRNG2 = Access::TupleRNG::get<1>(TRNG1);
+          NESO_KERNEL_ASSERT(
+              Access::TupleRNG::get<0>(TRNG2).at(INDEX, 0, &valid) == 3, k_ep);
+          auto &TRNG3 = Access::TupleRNG::get<1>(TRNG2);
+          NESO_KERNEL_ASSERT(
+              Access::TupleRNG::get<0>(TRNG3).at(INDEX, 0, &valid) == 4, k_ep);
+          NESO_KERNEL_ASSERT(valid, k_ep);
+        },
+        Access::read(ParticleLoopIndex{}), Access::read(trng0))
+        ->execute();
+
+    ASSERT_FALSE(ep.get_flag());
+  }
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}
+
+TEST(ParticleLoopRNG, null_kernel_rng) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  auto sycl_target = A->sycl_target;
+
+  ErrorPropagate ep(sycl_target);
+  auto k_ep = ep.device_ptr();
+
+  auto nrng = null_kernel_rng<REAL>();
+
+  auto l0 = particle_loop(
+      A,
+      [=](auto INDEX, auto NRNG) {
+        bool valid = true;
+        NESO_KERNEL_ASSERT(NRNG.at(INDEX, 0, &valid) == 0, k_ep);
+        NESO_KERNEL_ASSERT(!valid, k_ep);
+      },
+      Access::read(ParticleLoopIndex{}), Access::read(nrng));
+
+  l0->execute();
+  ASSERT_FALSE(ep.get_flag());
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}

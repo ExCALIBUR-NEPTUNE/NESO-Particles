@@ -132,8 +132,8 @@ protected:
   // This type should be replaceable with typedef std::variant<Sym<INT>,
   // Sym<REAL>> ParticleDatVersion; But we see issues with nvc++.
   typedef ParticleDatVersionT ParticleDatVersion;
-  typedef int64_t ParticleGroupVersion;
-  typedef std::map<ParticleDatVersion, int64_t> ParticleDatVersionTracker;
+  typedef std::int64_t ParticleGroupVersion;
+  typedef std::map<ParticleDatVersion, std::int64_t> ParticleDatVersionTracker;
 
   REAL zero_value_real{0.0};
   INT zero_value_int{0};
@@ -236,21 +236,15 @@ protected:
 
   // members for mpi communication
   // global communication context
-  GlobalMove global_move_ctx;
+  std::shared_ptr<GlobalMove> global_move_ctx;
   // method to map particle positions to global cells
   std::shared_ptr<MeshHierarchyGlobalMap> mesh_hierarchy_global_map;
   // neighbour communication context
   std::unique_ptr<LocalMove> local_move_ctx;
 
-#ifdef NESO_PARTICLES_TEST_COMPILATION
-public:
-#endif
-  // members for moving particles between local cells
-  CellMove cell_move_ctx;
-
-protected:
   // This member tracks the versions of the particle dat data
-  std::map<ParticleDatVersion, std::tuple<int64_t, bool>> particle_dat_versions;
+  std::map<ParticleDatVersion, std::tuple<std::int64_t, bool>>
+      particle_dat_versions;
   // This member tracks the versions of the particle dat structure, which is
   // also the version of the particle group itself. Calls to methods which
   // modify the number of cells or layers will increment this value.
@@ -338,7 +332,7 @@ protected:
   std::size_t debug_sub_group_indent{0};
 
   // Helper type to hold pointers to the dats
-  std::shared_ptr<ParticleGroupPointerMap> particle_group_pointer_map;
+  ParticleGroupPointerMapSharedPtr particle_group_pointer_map;
 
   /**
    * Returns true if the passed version is behind and can be updated. By
@@ -413,6 +407,14 @@ public:
   /// Layer compression instance for dats when particles are removed from cells.
   LayerCompressor layer_compressor;
 
+protected:
+#ifdef NESO_PARTICLES_TEST_COMPILATION
+public:
+#endif
+  // members for moving particles between local cells
+  CellMove cell_move_ctx;
+
+public:
   /// Used to be required to be called. Kept to not break API.
   inline void free() {}
 
@@ -430,16 +432,14 @@ public:
                 SYCLTargetSharedPtr sycl_target, const bool is_temporary)
       : is_temporary(is_temporary), ncell(domain->mesh->get_cell_count()),
         npart_local(0), h_npart_cell(sycl_target, 1),
-        d_npart_cell(sycl_target, 1),
-        global_move_ctx(
-            sycl_target,
-            domain->mesh->get_mesh_hierarchy()->global_move_communication,
-            layer_compressor, particle_dats_real, particle_dats_int),
-        cell_move_ctx(sycl_target, this->ncell, layer_compressor,
-                      particle_dats_real, particle_dats_int),
-        particle_group_version(1), domain(domain), sycl_target(sycl_target),
+        d_npart_cell(sycl_target, 1), particle_group_version(1),
+        particle_group_pointer_map(std::make_shared<ParticleGroupPointerMap>(
+            sycl_target, &this->particle_dats_real, &this->particle_dats_int)),
+        domain(domain), sycl_target(sycl_target),
         layer_compressor(sycl_target, ncell, particle_dats_real,
-                         particle_dats_int) {
+                         particle_dats_int, particle_group_pointer_map),
+        cell_move_ctx(sycl_target, layer_compressor,
+                      particle_group_pointer_map) {
     if (!this->is_temporary) {
       const std::string name = "NESO_PARTICLES_NPART_CELL_HINT";
       if (!this->sycl_target->parameters->contains(name)) {
@@ -450,6 +450,10 @@ public:
       auto v = this->sycl_target->parameters->get<SizeTParameter>(name);
       this->npart_cell_hint = v->value;
     }
+    this->global_move_ctx = std::make_shared<GlobalMove>(
+        sycl_target,
+        domain->mesh->get_mesh_hierarchy()->global_move_communication,
+        layer_compressor, this->particle_group_pointer_map);
     this->setup_internal(domain, particle_spec, sycl_target);
   }
 

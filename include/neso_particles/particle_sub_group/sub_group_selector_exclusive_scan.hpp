@@ -7,9 +7,11 @@
 #include "../loop/particle_loop_functions.hpp"
 #include "../loop/particle_loop_impl.hpp"
 #include "../loop/particle_loop_index.hpp"
+#include "particle_loop_sub_group_functions.hpp"
 #include "particle_sub_group_utility.hpp"
 #include "sub_group_selector_base.hpp"
 #include "sub_group_selector_utility.hpp"
+
 #include <functional>
 
 namespace NESO::Particles {
@@ -61,7 +63,7 @@ protected:
 
   template <typename T> inline void create_loop_1(std::shared_ptr<T> parent) {
 
-    this->create_callback = [=](Selection *created_selection) {
+    this->create_callback = [parent, this](Selection *created_selection) {
       auto sycl_target = get_particle_group(parent)->sycl_target;
       // std::tuple<int *, int *, INT *, INT *>
       auto [h_npart_cell_ptr, d_npart_cell_ptr, h_npart_cell_es_ptr,
@@ -134,9 +136,8 @@ protected:
           .fill(static_cast<int *>(k_npart_cell_es_parent), static_cast<int>(0),
                 cell_count)
           .wait_and_throw();
-      joint_exclusive_scan(sycl_target, cell_count, d_npart_cell_ptr,
-                           k_npart_cell_es_parent)
-          .wait_and_throw();
+      joint_exclusive_scan_blocking(sycl_target, cell_count, d_npart_cell_ptr,
+                                    k_npart_cell_es_parent);
       // copy the exclusive scan for the selection into the correct place int ->
       // INT
 

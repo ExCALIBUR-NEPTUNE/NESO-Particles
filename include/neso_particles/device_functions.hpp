@@ -14,7 +14,7 @@ template <typename T, typename U> inline auto min(const T &x, const U &y) {
 }
 inline auto min(const REAL &x, const REAL &y) { return sycl::fmin(x, y); }
 template <typename T, typename U> inline auto max(const T &x, const U &y) {
-  return KERNEL_MIN(x, y);
+  return KERNEL_MAX(x, y);
 }
 inline auto max(const REAL &x, const REAL &y) { return sycl::fmax(x, y); }
 template <typename T> inline auto abs(const T &x) { return KERNEL_ABS(x); }
@@ -82,6 +82,14 @@ template <int N, typename T> inline T dot_product(const T *a, const T *b) {
     value += a[ix] * b[ix];
   }
   return value;
+}
+template <typename T>
+inline void cross_product(const T &a1, const T &a2, const T &a3, const T &b1,
+                          const T &b2, const T &b3, T *RESTRICT c1,
+                          T *RESTRICT c2, T *RESTRICT c3) {
+  *c1 = ((a2) * (b3)) - ((a3) * (b2));
+  *c2 = ((a3) * (b1)) - ((a1) * (b3));
+  *c3 = ((a1) * (b2)) - ((a2) * (b1));
 }
 
 } // namespace Kernel
@@ -625,10 +633,10 @@ VALUE_TYPE joint_reduce(GROUP_TYPE group, VALUE_TYPE *d_first,
   return sycl::joint_reduce(group, d_first, d_last, binary_op);
 #else
   VALUE_TYPE value = get_identity(binary_op);
-  d_first += group.get_local_id(1);
+  d_first += group.get_local_linear_id();
   while (d_first < d_last) {
     value = binary_op(value, *d_first);
-    d_first += group.get_local_range(1);
+    d_first += group.get_local_linear_range();
   }
   value = sycl::reduce_over_group(group, value, binary_op);
   return value;

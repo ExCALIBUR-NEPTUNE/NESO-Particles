@@ -398,3 +398,51 @@ TEST(CartesianHMesh, mpi_topology_3d) {
 
   mesh->free();
 }
+
+TEST(CartesianHMesh, mpi_topology_custom) {
+
+  {
+    const int ndim = 3;
+    std::vector<int> dims(ndim);
+    dims[0] = 8;
+    dims[1] = 8;
+    dims[2] = 256;
+    const double cell_extent = 1.0;
+    const int subdivision_order = 0;
+
+    int size = 0;
+    MPICHK(MPI_Comm_size(MPI_COMM_WORLD, &size));
+
+    if (size <= 256) {
+
+      int mpi_dims[3] = {1, 1, size};
+      int mpi_periods[3] = {0, 1, 0};
+
+      MPI_Comm comm_cart = MPI_COMM_NULL;
+      MPICHK(MPI_Cart_create(MPI_COMM_WORLD, ndim, mpi_dims, mpi_periods, 1,
+                             &comm_cart));
+
+      auto mesh = std::make_shared<CartesianHMesh>(
+          comm_cart, ndim, dims, cell_extent, subdivision_order);
+
+      auto test_comm = mesh->get_comm();
+
+      std::vector<int> test_dims(ndim);
+      std::vector<int> test_periods(ndim);
+      std::vector<int> test_coords(ndim);
+      MPICHK(MPI_Cart_get(test_comm, ndim, test_dims.data(),
+                          test_periods.data(), test_coords.data()));
+
+      ASSERT_EQ(test_dims.at(0), 1);
+      ASSERT_EQ(test_dims.at(1), 1);
+      ASSERT_EQ(test_dims.at(2), size);
+
+      ASSERT_EQ(test_periods.at(0), mpi_periods[0]);
+      ASSERT_EQ(test_periods.at(1), mpi_periods[1]);
+      ASSERT_EQ(test_periods.at(2), mpi_periods[2]);
+
+      mesh->free();
+      MPICHK(MPI_Comm_free(&comm_cart));
+    }
+  }
+}

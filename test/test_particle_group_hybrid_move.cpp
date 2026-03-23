@@ -177,6 +177,7 @@ TEST_P(ParticleGroupHybridMove, multiple) {
 
     T += dt;
   }
+  sycl_target->free();
   mesh->free();
 }
 

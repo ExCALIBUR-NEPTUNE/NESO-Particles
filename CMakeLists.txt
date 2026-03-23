@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.24)
 
 project(
   NESO-Particles
-  VERSION 0.9.0
+  VERSION 0.10.0
   LANGUAGES CXX C)
 
 include(GNUInstallDirs)
@@ -45,6 +45,11 @@ endif()
 
 set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set(SRC_FILES
+    ${SRC_DIR}/algorithms/cellwise_methods.cpp
+    ${SRC_DIR}/algorithms/common.cpp
+    ${SRC_DIR}/algorithms/dsmc/pair_sampler_ntc.cpp
+    ${SRC_DIR}/algorithms/dsmc/pair_sampler_no_replacement.cpp
+    ${SRC_DIR}/algorithms/dsmc/collision_cell_partition.cpp
     ${SRC_DIR}/algorithms/particle_data_movement.cpp
     ${SRC_DIR}/algorithms/reduce_dat_cellwise.cpp
     ${SRC_DIR}/algorithms/unseen_value_extractor.cpp
@@ -53,6 +58,7 @@ set(SRC_FILES
     ${SRC_DIR}/external_interfaces/petsc/dmplex_cell_serialise.cpp
     ${SRC_DIR}/external_interfaces/petsc/dmplex_interface.cpp
     ${SRC_DIR}/external_interfaces/petsc/dmplex_helper.cpp
+    ${SRC_DIR}/external_interfaces/petsc/dmplex_mesh_coupler_dg0.cpp
     ${SRC_DIR}/external_interfaces/petsc/dmplex_utility.cpp
     ${SRC_DIR}/external_interfaces/petsc/particle_cell_mapping/dmplex_2d_mapper.cpp
     ${SRC_DIR}/external_interfaces/petsc/particle_cell_mapping/dmplex_host_mapper.cpp
@@ -95,6 +101,10 @@ set(SRC_FILES
     ${SRC_DIR}/global_mapping.cpp
     ${SRC_DIR}/parallel_initialisation.cpp
     ${SRC_DIR}/packing_unpacking.cpp
+    ${SRC_DIR}/pair_loop/cellwise_pair_list.cpp
+    ${SRC_DIR}/pair_loop/cellwise_pair_list_simple.cpp
+    ${SRC_DIR}/pair_loop/cellwise_pair_list_host.cpp
+    ${SRC_DIR}/pair_loop/cellwise_pair_list_block.cpp
     ${SRC_DIR}/particle_dat.cpp
     ${SRC_DIR}/particle_group.cpp
     ${SRC_DIR}/particle_set.cpp
@@ -105,6 +115,9 @@ set(SRC_FILES
     ${SRC_DIR}/loop/particle_loop_utility.cpp
     ${SRC_DIR}/loop/pli_particle_dat.cpp
     ${SRC_DIR}/particle_sub_group/cell_sub_group_selector.cpp
+    ${SRC_DIR}/particle_sub_group/truncate_sub_group_selector.cpp
+    ${SRC_DIR}/particle_sub_group/disjoint_union_sub_group_selector.cpp
+    ${SRC_DIR}/particle_sub_group/discard_sub_group_selector.cpp
     ${SRC_DIR}/particle_sub_group/copy_selector.cpp
     ${SRC_DIR}/particle_sub_group/particle_group_partition.cpp
     ${SRC_DIR}/particle_sub_group/particle_sub_group_base.cpp
@@ -127,6 +140,13 @@ set(HEADER_FILES
     ${INCLUDE_DIR}/neso_particles.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/access.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/algorithms.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/common.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/dsmc.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/cellwise_all_to_all.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/collision_cell_partition.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/pair_sampler_ntc.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/pair_sampler_no_replacement.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/cellwise_methods.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/particle_data_movement.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/reduce_dat_cellwise.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/unseen_value_extractor.hpp
@@ -162,6 +182,8 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/rng/host_rng_common.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/rng/host_per_particle_block_rng.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/rng/host_atomic_block_kernel_rng.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/containers/rng/null_kernel_rng.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/containers/rng/tuple_rng.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/descendant_products.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/global_array.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/local_array.hpp
@@ -202,6 +224,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/dmplex_helper.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/dmplex_interface.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/dmplex_local_mapper.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/dmplex_mesh_coupler_dg0.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/dmplex_project_evaluate.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/dmplex_utility.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/petsc_api_redirection.hpp
@@ -241,6 +264,17 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_interface.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_interface_local_decomp.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/packing_unpacking.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/cellwise_pair_list.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/cellwise_pair_list_simple.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/cellwise_pair_list_absolute.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/cellwise_pair_list_block.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/cellwise_pair_list_host.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/pair_loop.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/particle_pair_loop_args.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/particle_pair_loop_base.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/particle_pair_loop_index.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/particle_pair_loop_cellwise_pair_list.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/particle_pair_loop_cellwise_pair_list_block.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/parallel_initialisation.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/parameters.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_dat.hpp
@@ -269,6 +303,9 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/particle_loop_sub_group_functions.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/particle_loop_sub_group_reduction.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/cell_sub_group_selector.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/discard_sub_group_selector.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/truncate_sub_group_selector.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/disjoint_union_sub_group_selector.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/profiling.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/sycl_typedefs.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/typedefs.hpp

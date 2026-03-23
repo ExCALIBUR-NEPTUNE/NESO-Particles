@@ -6,7 +6,12 @@
 #include "../loop/particle_loop.hpp"
 #include "../loop/particle_loop_impl.hpp"
 #include "../particle_group.hpp"
+#include "../particle_sub_group/particle_loop_sub_group_functions.hpp"
+#include "../particle_sub_group/particle_sub_group.hpp"
+
 #include <set>
+
+#define NESO_PARTICLES_UNSEEN_VALUE_EXTRACTOR_NODE_WIDTH 128
 
 namespace NESO::Particles {
 
@@ -22,7 +27,9 @@ protected:
     INT a;
   };
 
-  std::shared_ptr<BlockedBinaryTree<INT, NodeType>> d_tree;
+  std::shared_ptr<BlockedBinaryTree<
+      INT, NodeType, NESO_PARTICLES_UNSEEN_VALUE_EXTRACTOR_NODE_WIDTH>>
+      d_tree;
 
 public:
   /**

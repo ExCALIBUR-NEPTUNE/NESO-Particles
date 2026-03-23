@@ -1,6 +1,7 @@
 #ifndef _NESO_PARTICLES_PLI_PARTICLE_DAT_H_
 #define _NESO_PARTICLES_PLI_PARTICLE_DAT_H_
 #include "../loop/particle_loop_base.hpp"
+#include "../pair_loop/particle_pair_loop_base.hpp"
 #include "../particle_group.hpp"
 
 /**
@@ -165,5 +166,36 @@ inline void create_kernel_arg(ParticleLoopIteration &iterationx, T ***rhs,
 }
 
 } // namespace NESO::Particles::ParticleLoopImplementation
+
+namespace NESO::Particles {
+namespace ParticlePairLoopImplementation {
+
+/**
+ *  Function to create the kernel argument for ParticleDat read access.
+ */
+template <typename T>
+inline void create_kernel_arg(
+    [[maybe_unused]] ParticlePairLoopImplementation::ParticlePairLoopIteration
+        &iteration_pair,
+    ParticleLoopImplementation::ParticleLoopIteration &iteration_particle,
+    T *const *const *rhs, Access::ParticleDat::Read<T> &lhs) {
+  lhs.iterationx = &iteration_particle;
+  lhs.ptr = rhs[iteration_particle.cellx];
+}
+/**
+ *  Function to create the kernel argument for ParticleDat write access.
+ */
+template <typename T>
+inline void create_kernel_arg(
+    [[maybe_unused]] ParticlePairLoopImplementation::ParticlePairLoopIteration
+        &iteration_pair,
+    ParticleLoopImplementation::ParticleLoopIteration &iteration_particle,
+    T ***rhs, Access::ParticleDat::Write<T> &lhs) {
+  lhs.iterationx = &iteration_particle;
+  lhs.ptr = rhs[iteration_particle.cellx];
+}
+
+} // namespace ParticlePairLoopImplementation
+} // namespace NESO::Particles
 
 #endif

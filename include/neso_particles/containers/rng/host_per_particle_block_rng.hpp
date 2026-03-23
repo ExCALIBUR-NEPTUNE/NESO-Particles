@@ -53,6 +53,22 @@ template <typename T> struct PerParticleBlockRNG {
     *valid_sample = true;
     return at(index, component);
   }
+
+  /**
+   * Access the RNG data for this particle pair.
+   *
+   * @param[in] pair_index Particle pair index to access.
+   * @param[in] component RNG component to access.
+   * @param[in, out] valid_sample On return this bool is set to true if the
+   * returned sample is good (i.e. RNG is in a valid state).
+   * @returns Constant reference to RNG data.
+   */
+  inline auto at(const Access::PairLoopIndex::Read &pair_index,
+                 const int component, bool *valid_sample) {
+    const auto index = pair_index.get_loop_linear_index();
+    *valid_sample = true;
+    return at(index, component);
+  }
 };
 
 /**
@@ -63,7 +79,7 @@ template <typename T>
 class HostPerParticleBlockRNG : public KernelRNG<PerParticleBlockRNG<T>>,
                                 public BlockKernelRNGBase<T> {
 protected:
-  int internal_state;
+  int internal_state{0};
 
 public:
   HostPerParticleBlockRNG() : BlockKernelRNGBase<T>() {}
@@ -124,9 +140,13 @@ public:
     if (this->num_components == 0) {
       return {0, nullptr};
     } else {
-      const auto num_particles = get_loop_npart(global_info);
+      const auto num_particles = get_loop_iteration_set_size(global_info);
       auto sycl_target = global_info->particle_group->sycl_target;
-      return {num_particles, this->get_buffer_ptr(sycl_target)};
+      NESOASSERT(num_particles < std::numeric_limits<int>::max(),
+                 "More than int max RNG samples requested.");
+
+      return {static_cast<int>(num_particles),
+              this->get_buffer_ptr(sycl_target)};
     }
   }
 
@@ -134,7 +154,6 @@ public:
    * Create the loop arguments for the RNG implementation.
    *
    * @param global_info Global information for the loop about to be executed.
-   * @returns Pointer to the device data that contains the RNG data.
    */
   virtual inline void impl_pre_loop_read(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info)
@@ -145,7 +164,7 @@ public:
         "overlapping execution.");
     this->internal_state = 1;
     if (this->num_components > 0) {
-      const auto num_particles = get_loop_npart(global_info);
+      const auto num_particles = get_loop_iteration_set_size(global_info);
 
       // Allocate space
       auto sycl_target = global_info->particle_group->sycl_target;
@@ -187,6 +206,7 @@ public:
  * @param num_components Number of samples required per particle in the kernel.
  * @param block_size Optional block size to sample RNG values and copy to the
  * device in.
+ * @returns New per particle RNG instance that can be passed as a ParticleLoop
  */
 template <typename T, typename FUNC_TYPE>
 inline std::shared_ptr<HostPerParticleBlockRNG<T>>

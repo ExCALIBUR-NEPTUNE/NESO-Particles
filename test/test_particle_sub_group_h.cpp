@@ -26,7 +26,15 @@ TEST(ParticleSubGroup, range_cell_base) {
 
   auto lambda_test_range = [&](auto parent, const int cell_start,
                                const int cell_end) {
-    auto aa = particle_sub_group(parent, cell_start, cell_end);
+    auto selector =
+        std::make_shared<ParticleSubGroupImplementation::CellSubGroupSelector>(
+            parent, cell_start, cell_end);
+    auto aa = std::make_shared<ParticleSubGroup>(
+        std::dynamic_pointer_cast<
+            ParticleSubGroupImplementation::SubGroupSelectorBase>(selector));
+
+    // This is what the user will write
+    // auto aa = particle_sub_group(parent, cell_start, cell_end);
 
     particle_loop(
         parent,
@@ -166,6 +174,46 @@ TEST(ParticleSubGroup, range_cell_base) {
   lambda_run();
   A->clear();
   lambda_run();
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}
+
+TEST(ParticleSubGroup, range_cell_helper) {
+  auto A = subgroup_test_common(4001);
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  auto sycl_target = A->sycl_target;
+  const int cell_count = mesh->get_cell_count();
+
+  for (auto s : {true, false}) {
+    {
+      auto aa = particle_sub_group(A, 0, cell_count, s);
+      auto selector = aa->selector;
+      ASSERT_NE(nullptr,
+                std::dynamic_pointer_cast<
+                    ParticleSubGroupImplementation::SubGroupSelectorWholeGroup>(
+                    selector));
+
+      auto bb = particle_sub_group(aa, 0, cell_count, s);
+      auto selectorbb = bb->selector;
+      ASSERT_NE(nullptr,
+                std::dynamic_pointer_cast<
+                    ParticleSubGroupImplementation::CopySelector>(selectorbb));
+    }
+
+    {
+      auto aa = particle_sub_group(A, 0, cell_count - 1, s);
+      auto selector = aa->selector;
+      if (cell_count > 1) {
+        ASSERT_NE(nullptr,
+                  std::dynamic_pointer_cast<
+                      ParticleSubGroupImplementation::CellSubGroupSelector>(
+                      selector));
+      }
+    }
+  }
 
   A->free();
   sycl_target->free();

@@ -91,18 +91,28 @@ public:
     }
 
     // Collect into a sub-group the particles which are leaving the domain.
-    auto departing_particles = static_particle_sub_group(
-        particles,
-        [=](auto P) {
-          bool outside_domain = false;
-          for (int dimx = 0; dimx < k_ndim; dimx++) {
-            outside_domain =
-                outside_domain ||
-                ((P.at(dimx) <= 0.0) || (P.at(dimx) >= k_extents[dimx]));
-          }
-          return outside_domain;
-        },
-        Access::read(particle_group->position_dat->sym));
+    ParticleSubGroupSharedPtr departing_particles = nullptr;
+
+    if (k_ndim == 2) {
+      departing_particles = static_particle_sub_group(
+          particles,
+          [=](auto P) {
+            return (P.at(0) <= 0.0) || (P.at(0) >= k_extents[0]) ||
+                   (P.at(1) <= 0.0) || (P.at(1) >= k_extents[1]);
+          },
+          Access::read(particle_group->position_dat->sym));
+
+    } else {
+
+      departing_particles = static_particle_sub_group(
+          particles,
+          [=](auto P) {
+            return (P.at(0) <= 0.0) || (P.at(0) >= k_extents[0]) ||
+                   (P.at(1) <= 0.0) || (P.at(1) >= k_extents[1]) ||
+                   (P.at(2) <= 0.0) || (P.at(2) >= k_extents[2]);
+          },
+          Access::read(particle_group->position_dat->sym));
+    }
 
     // Create a buffer to store the information for the leaving particles
     const INT npart_leaving = departing_particles->get_npart_local();
@@ -125,7 +135,9 @@ public:
                               ResourceStackInterfaceBufferDevice<INT>>(
         sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<INT>{},
         sycl_target);
-    d_lut->realloc_no_copy(particle_group->get_npart_local());
+
+    const auto npart_local = particle_group->get_npart_local();
+    d_lut->realloc_no_copy(npart_local);
     auto k_lut = d_lut->ptr;
 
     const REAL k_tolerance = this->tolerance;
@@ -331,6 +343,51 @@ public:
         },
         Access::read(ParticleLoopIndex{}))
         ->execute();
+
+    if (ep.get_flag()) {
+
+      BufferDeviceHost<int> dh_cells(sycl_target, npart_leaving);
+      BufferDeviceHost<int> dh_layers(sycl_target, npart_leaving);
+
+      std::vector<int> one_zero = {0};
+      BufferDeviceHost<int> dh_index(sycl_target, one_zero);
+
+      auto *k_cells = dh_cells.d_buffer.ptr;
+      auto *k_layers = dh_layers.d_buffer.ptr;
+      auto *k_index = dh_index.d_buffer.ptr;
+
+      particle_loop(
+          departing_particles,
+          [=](auto INDEX) {
+            if (k_lut[INDEX.get_local_linear_index()] < 0) {
+              const int index = atomic_fetch_add(k_index, 1);
+              k_cells[index] = INDEX.cell;
+              k_layers[index] = INDEX.layer;
+            }
+          },
+          Access::read(ParticleLoopIndex{}))
+          ->execute();
+
+      dh_cells.device_to_host();
+      dh_layers.device_to_host();
+      dh_index.device_to_host();
+      const int npart_error = dh_index.h_buffer.get().at(0);
+
+      nprint("Start of particles for which boundary information could not be "
+             "found.");
+
+      auto particle_group = get_particle_group(departing_particles);
+      for (int px = 0; px < npart_error; px++) {
+        nprint("---------------------------------------------------");
+        const int cell = dh_cells.h_buffer.ptr[px];
+        const int layer = dh_layers.h_buffer.ptr[px];
+        particle_group->print_particle(cell, layer);
+      }
+
+      nprint("End of particles for which boundary information could not be "
+             "found.");
+    }
+
     ep.check_and_throw(
         "Failed to find boundary information for departing particle.");
 
@@ -420,6 +477,8 @@ public:
           ->execute();
     }
 
+    std::map<INT, std::vector<std::pair<int, INT>>> new_potentialy_hit_geoms;
+    int new_geoms_exist = 0;
     for (const auto &boundary_group : this->boundary_groups) {
       const auto group_id = boundary_group.first;
 
@@ -433,14 +492,24 @@ public:
                 true);
       }
 
-      std::vector<std::pair<int, INT>> new_potentialy_hit_geoms;
-      new_potentialy_hit_geoms.reserve(new_geoms.size());
+      new_potentialy_hit_geoms[group_id].reserve(new_geoms.size());
       for (auto &geomx : new_geoms) {
         const int owning_rank = this->mesh->get_face_id_owning_rank(geomx);
-        new_potentialy_hit_geoms.push_back({owning_rank, geomx});
+        new_potentialy_hit_geoms.at(group_id).push_back({owning_rank, geomx});
+        new_geoms_exist = 1;
       }
-      this->map_groups_boundary_interface.at(group_id)->extend_exchange_pattern(
-          new_potentialy_hit_geoms);
+    }
+
+    int global_new_geoms_exist = 0;
+    MPICHK(MPI_Allreduce(&new_geoms_exist, &global_new_geoms_exist, 1, MPI_INT,
+                         MPI_MAX, this->mesh->get_comm()));
+
+    if (global_new_geoms_exist) {
+      for (const auto &boundary_group : this->boundary_groups) {
+        const auto group_id = boundary_group.first;
+        this->map_groups_boundary_interface.at(group_id)
+            ->extend_exchange_pattern(new_potentialy_hit_geoms.at(group_id));
+      }
     }
 
     restore_resource(sycl_target->resource_stack_map,
@@ -449,6 +518,7 @@ public:
                      ResourceStackKeyBufferDevice<REAL>{}, d_buffer);
     restore_resource(sycl_target->resource_stack_map,
                      ResourceStackKeyBufferDevice<INT>{}, d_buffer_int);
+
     return return_map;
   }
 
@@ -490,7 +560,8 @@ public:
 
   /**
    * Prepare a ParticleGroup such that it, or sub groups based on it, can be
-   * passed to pre_integration and post_integration.
+   * passed to pre_integration and post_integration. Must be called collectively
+   * on the communicator.
    *
    * @param particle_group ParticleGroup to prepare.
    */
@@ -498,7 +569,8 @@ public:
 
   /**
    * This method should be called with a collection of particles prior to
-   * updating the positions of these particles.
+   * updating the positions of these particles. Must be called collectively on
+   * the communicator.
    *
    * @param particles ParticleGroup or ParticleSubGroup of particles whose
    * positions are about to be updated, e.g. in a time stepping operation.
@@ -507,7 +579,8 @@ public:
 
   /**
    * This method should be called with a collection of particles prior to
-   * updating the positions of these particles.
+   * updating the positions of these particles. Must be called collectively on
+   * the communicator.
    *
    * @param particles ParticleGroup or ParticleSubGroup of particles whose
    * positions are about to be updated, e.g. in a time stepping operation.
@@ -516,7 +589,7 @@ public:
 
   /**
    * Call after updating to find particles whose trajectories intersect the
-   * CartesianHMesh boundary.
+   * CartesianHMesh boundary. Must be called collectively on the communicator.
    *
    * @param particles Collection of particles, either a ParticleGroup or
    * ParticleSubGroup, to identify trajectory-boundary intersections of.
@@ -529,7 +602,7 @@ public:
 
   /**
    * Call after updating to find particles whose trajectories intersect the
-   * CartesianHMesh boundary.
+   * CartesianHMesh boundary. Must be called collectively on the communicator.
    *
    * @param particles Collection of particles, either a ParticleGroup or
    * ParticleSubGroup, to identify trajectory-boundary intersections of.
@@ -548,7 +621,8 @@ public:
   void free();
 
   /**
-   * Create a function on a boundary group.
+   * Create a function on a boundary group. Must be called collectively on the
+   * communicator.
    *
    * @param group ID of boundary group to create function on.
    * @param function_space Family of function to create, e.g. "DG".
@@ -561,7 +635,15 @@ public:
 
   /**
    * Project particle data onto a function defined on the surface. Uses the
-   * standardarised boundary interface on the sub group.
+   * standardarised boundary interface on the sub group. This function call is
+   * equivalent to calling:
+   *
+   * function_project_initialise(func);
+   * function_project_contribute(particle_sub_group, sym, component,
+   *                             is_ephemeral, func);
+   * function_project_finalise(func);
+   *
+   * Must be called collectively on the communicator.
    *
    * @param particle_sub_group ParticleSubGroup to project onto function.
    * @param sym Sym<REAL> Particle property to use as source weights.
@@ -576,8 +658,64 @@ public:
                         CartesianHMeshFunctionSharedPtr func);
 
   /**
+   * A function_project call is equivalent to calling:
+   *
+   * function_project_initialise(func);
+   * function_project_contribute(particle_sub_group, sym, component,
+   *                             is_ephemeral, func);
+   * function_project_finalise(func);
+   *
+   * This method initialises the destination function for projection. Must be
+   * called collectively on the communicator.
+   *
+   * @param func Function to project onto.
+   */
+  void function_project_initialise(CartesianHMeshFunctionSharedPtr func);
+
+  /**
+   * A function_project call is equivalent to calling:
+   *
+   * function_project_initialise(func);
+   * function_project_contribute(particle_sub_group, sym, component,
+   *                             is_ephemeral, func);
+   * function_project_finalise(func);
+   *
+   * This method adds the contributions from the particles in the
+   * particle_sub_group to the projection. Must be called collectively on the
+   * communicator.
+   *
+   * @param particle_sub_group ParticleSubGroup to project onto function.
+   * @param sym Sym<REAL> Particle property to use as source weights.
+   * @param component Component of particle property to use as source weights.
+   * @param is_ephemeral Indicate if the particle weights are in an EphemeralDat
+   * or ParticleDat.
+   * @param func Function to project onto.
+   */
+  void function_project_contribute(ParticleSubGroupSharedPtr particle_sub_group,
+                                   Sym<REAL> sym, const int component,
+                                   const bool is_ephemeral,
+                                   CartesianHMeshFunctionSharedPtr func);
+
+  /**
+   * A function_project call is equivalent to calling:
+   *
+   * function_project_initialise(func);
+   * function_project_contribute(particle_sub_group, sym, component,
+   *                             is_ephemeral, func);
+   * function_project_finalise(func);
+   *
+   * This method must be called after all contributions to the projection have
+   * been made with function_project_contribute. Must be called collectively on
+   * the communicator.
+   *
+   * @param func Function to project onto.
+   */
+  void function_project_finalise(CartesianHMeshFunctionSharedPtr func);
+
+  /**
    * Evaluate particle data from a function defined on the surface. Uses the
-   * standardarised boundary interface on the sub group.
+   * standardarised boundary interface on the sub group. Must be called
+   * collectively on the communicator.
    *
    * @param particle_sub_group ParticleSubGroup to containing destination
    * particles for evaluation.

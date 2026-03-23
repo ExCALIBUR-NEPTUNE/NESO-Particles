@@ -19,10 +19,12 @@ bool determine_iteration_set(const int ncell,
     *cell_end_v = *cell_start_v + 1;
     return false;
   } else if ((cell_start != std::nullopt) && (cell_end != std::nullopt)) {
-    // Is single cell
+    // Is provided cell range.
     *cell_start_v = cell_start.value();
     *cell_end_v = cell_end.value();
-    return false;
+    const bool default_start = cell_start.value() == 0;
+    const bool default_end = cell_end.value() == ncell;
+    return default_start && default_end;
   } else {
     NESOASSERT(false, "Bad cell_start, cell_end found.");
     return false;

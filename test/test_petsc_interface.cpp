@@ -605,4 +605,870 @@ TEST(PETSc, dmplex_volume) {
 
 INSTANTIATE_TEST_SUITE_P(init, PETSC_NDIM, testing::Values(2));
 
+TEST(PETSc, dmplex_helper) {
+
+  PETSCCHK(PetscInitializeNoArguments());
+  DM dm;
+
+  const PetscInt ndim = 2;
+  const int mesh_size = (ndim == 2) ? 31 : 17;
+  PetscInt faces[3] = {mesh_size, mesh_size, mesh_size};
+
+  const REAL cell_width = 1.0 / static_cast<REAL>(mesh_size);
+  const REAL inverse_cell_width = 1.0 / cell_width;
+
+  PETSCCHK(NPPETScAPI::NP_DMPlexCreateBoxMesh(
+      PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces,
+      /* lower */ NULL,
+      /* upper */ NULL,
+      /* periodicity */ NULL, PETSC_TRUE, &dm));
+
+  PetscSF sf;
+  PetscInterface::generic_distribute(&dm, MPI_COMM_WORLD, 1, &sf);
+
+  auto mesh =
+      std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
+
+  int cell_count = mesh->get_cell_count();
+  ASSERT_EQ(cell_count, mesh->dmh->get_cell_count());
+
+  int size = 0;
+  int rank = 0;
+  MPICHK(MPI_Comm_size(MPI_COMM_WORLD, &size));
+  MPICHK(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
+
+  if (size > 1) {
+
+    int tmp = -1;
+
+    MPICHK(
+        MPI_Allreduce(&cell_count, &tmp, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD));
+    ASSERT_EQ(mesh->dmh->get_global_cell_count(), tmp);
+
+    PetscInt depth = 0;
+    PETSCCHK(DMPlexGetDepth(dm, &depth));
+    ASSERT_EQ(depth, 2);
+
+    PetscInt gsize = 0;
+    PETSCCHK(DMPlexGetDepthStratumGlobalSize(dm, depth, &gsize));
+
+    ASSERT_EQ(static_cast<int>(gsize), tmp);
+  }
+  {
+    auto [offset, global_owners] =
+        PetscInterface::get_map_from_global_cell_points_to_ranks(dm);
+
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      const auto point_index = mesh->dmh->get_dmplex_cell_index(cellx);
+      const auto global_point_index =
+          mesh->dmh->get_point_global_index(point_index);
+      const int rank_test = global_owners.at(global_point_index - offset);
+      ASSERT_EQ(rank_test, rank);
+    }
+  }
+
+  {
+
+    PetscInt point_start = 0;
+    PetscInt point_end = 0;
+    PETSCCHK(DMPlexGetChart(dm, &point_start, &point_end));
+    for (PetscInt px = point_start; px < point_end; px++) {
+      const PetscInt global_point = mesh->dmh->get_point_global_index(px);
+      const PetscInt local_point =
+          mesh->dmh->get_local_point_from_global_point(global_point);
+      ASSERT_EQ(local_point, px);
+    }
+  }
+
+  {
+
+    auto points_map = PetscInterface::get_global_distributed_points_map(dm, sf);
+
+    std::vector<std::vector<REAL>> vertices;
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      vertices.clear();
+      const PetscInt point_index = mesh->dmh->get_dmplex_cell_index(cellx);
+      const int global_point_index_current =
+          mesh->dmh->get_point_global_index(point_index);
+      mesh->dmh->get_cell_vertices(cellx, vertices);
+
+      const REAL avg_x = 0.25 * (vertices.at(0).at(0) + vertices.at(1).at(0) +
+                                 vertices.at(2).at(0) + vertices.at(3).at(0));
+      const REAL avg_y = 0.25 * (vertices.at(0).at(1) + vertices.at(1).at(1) +
+                                 vertices.at(2).at(1) + vertices.at(3).at(1));
+
+      const int bin_x = avg_x * inverse_cell_width;
+      const int bin_y = avg_y * inverse_cell_width;
+
+      const int global_point_index_original = bin_y * mesh_size + bin_x;
+
+      const int to_test = points_map.at(global_point_index_original);
+      ASSERT_EQ(to_test, global_point_index_current);
+    }
+  }
+
+  mesh->free();
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
+
+TEST(PETSc, dmplex_mesh_coupler_dg0) {
+
+  PETSCCHK(PetscInitializeNoArguments());
+  DM dm;
+
+  int size = 0;
+  int rank = 0;
+  MPICHK(MPI_Comm_size(MPI_COMM_WORLD, &size));
+  MPICHK(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
+
+  const PetscInt ndim = 2;
+  const int mesh_size = (ndim == 2) ? 31 : 17;
+  PetscInt faces[3] = {mesh_size, mesh_size, mesh_size};
+
+  PETSCCHK(NPPETScAPI::NP_DMPlexCreateBoxMesh(
+      PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces,
+      /* lower */ NULL,
+      /* upper */ NULL,
+      /* periodicity */ NULL, PETSC_TRUE, &dm));
+
+  PetscInterface::generic_distribute(&dm, MPI_COMM_WORLD, 1);
+
+  PetscInterface::DMPlexHelper dmh(MPI_COMM_WORLD, dm);
+  const int cell_count_B = dmh.get_cell_count();
+  const int cell_count_A = rank + 1;
+
+  int tmp = 0;
+  int tmp_offset = 0;
+  for (int rx = 0; rx < size; rx++) {
+    if (rank == rx) {
+      tmp_offset = tmp;
+    }
+    tmp += rx + 1;
+  }
+  const int global_cell_count_A = tmp;
+  const int dof_offset_A = tmp_offset;
+
+  const int global_cell_count_B = dmh.get_global_cell_count();
+  tmp = 0;
+  MPICHK(MPI_Exscan(&cell_count_B, &tmp, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD));
+  const int dof_offset_B = tmp;
+
+  {
+
+    std::vector<std::vector<PetscInterface::DMPlexMeshCouplerDG0MapEntry>>
+        coupling_map(cell_count_A);
+
+    auto cmdg0 = std::make_shared<PetscInterface::DMPlexMeshCouplerDG0>(
+        dm, coupling_map);
+    ASSERT_EQ(cmdg0->cell_count_A, cell_count_A);
+
+    int indegree = -1;
+    int outdegree = -1;
+    int weighted = -1;
+    MPICHK(MPI_Dist_graph_neighbors_count(cmdg0->comm_forward, &indegree,
+                                          &outdegree, &weighted));
+    ASSERT_EQ(indegree, 0);
+    ASSERT_EQ(outdegree, 0);
+
+    MPICHK(MPI_Dist_graph_neighbors_count(cmdg0->comm_backward, &indegree,
+                                          &outdegree, &weighted));
+    ASSERT_EQ(indegree, 0);
+    ASSERT_EQ(outdegree, 0);
+  }
+
+  {
+    std::set<int> local_cell_indices;
+    for (PetscInt cellx = 0; cellx < cell_count_B; cellx++) {
+      const PetscInt cell_point_index = dmh.get_dmplex_cell_index(cellx);
+      const int cell_point_global_index =
+          dmh.get_point_global_index(cell_point_index);
+      local_cell_indices.insert(cell_point_global_index);
+    }
+
+    std::set<int> global_cell_indices_set =
+        set_all_reduce_union(local_cell_indices, MPI_COMM_WORLD);
+
+    ASSERT_EQ(static_cast<int>(global_cell_indices_set.size()),
+              dmh.get_global_cell_count());
+
+    std::vector<int> global_cell_indices;
+    global_cell_indices.reserve(global_cell_indices_set.size());
+    for_each(global_cell_indices_set.begin(), global_cell_indices_set.end(),
+             [&](auto ix) { global_cell_indices.push_back(ix); });
+
+    // deliberatly the same seed on all ranks
+    std::mt19937 rng(5234234);
+    std::uniform_int_distribution<int> dist_cells(
+        0, static_cast<int>(global_cell_indices.size() - 1));
+    std::uniform_int_distribution<int> dist_number(0, 4);
+    std::uniform_real_distribution<REAL> dist_weight(1.0, 2.0);
+
+    std::map<
+        int,
+        std::vector<std::vector<PetscInterface::DMPlexMeshCouplerDG0MapEntry>>>
+        map_rank_to_map;
+
+    for (int rankx = 0; rankx < size; rankx++) {
+
+      const int num_owned_cells = rankx + 1;
+      map_rank_to_map[rankx].resize(num_owned_cells);
+
+      for (int cellx = 0; cellx < num_owned_cells; cellx++) {
+        const int map_size = dist_number(rng);
+        std::set<int> tmp_cells_set;
+        for (int mx = 0; mx < map_size; mx++) {
+          int tmp_cell = 0;
+          do {
+            tmp_cell = dist_cells(rng);
+          } while (tmp_cells_set.count(tmp_cell));
+          tmp_cells_set.insert(tmp_cell);
+          map_rank_to_map.at(rankx).at(cellx).push_back(
+              {tmp_cell, dist_weight(rng), dist_weight(rng)});
+        }
+      }
+    }
+
+    // compute the outward edges and inward edges on this rank
+    std::set<int> edges_forwards;
+    std::set<int> edges_backwards;
+
+    auto [offset, global_owners] =
+        PetscInterface::get_map_from_global_cell_points_to_ranks(dm);
+
+    auto &maps = map_rank_to_map.at(rank);
+    for (int cellx = 0; cellx < cell_count_A; cellx++) {
+      for (auto &ex : maps.at(cellx)) {
+        const int cell_index = ex.cell_index;
+        const int owning_rank = global_owners.at(cell_index - offset);
+        edges_forwards.insert(owning_rank);
+      }
+    }
+
+    for (int rankx = 0; rankx < size; rankx++) {
+
+      for (auto cell_map : map_rank_to_map.at(rankx)) {
+        for (auto &ex : cell_map) {
+          const int cell_index = ex.cell_index;
+          const int owning_rank = global_owners.at(cell_index - offset);
+          if (rank == owning_rank) {
+            edges_backwards.insert(rankx);
+          }
+        }
+      }
+    }
+
+    auto cmdg0 = std::make_shared<PetscInterface::DMPlexMeshCouplerDG0>(
+        dm, map_rank_to_map.at(rank));
+
+    int indegree = -1;
+    int outdegree = -1;
+    int weighted = -1;
+    MPICHK(MPI_Dist_graph_neighbors_count(cmdg0->comm_forward, &indegree,
+                                          &outdegree, &weighted));
+    ASSERT_EQ(outdegree, static_cast<int>(edges_forwards.size()));
+    ASSERT_EQ(indegree, static_cast<int>(edges_backwards.size()));
+
+    std::vector<int> sources(indegree);
+    std::vector<int> destinations(outdegree);
+    std::vector<int> source_weights(indegree);
+    std::vector<int> destination_weights(outdegree);
+
+    SuppressMPINullPtrCheck snpc;
+    MPICHK(MPI_Dist_graph_neighbors(cmdg0->comm_forward, indegree,
+                                    snpc.get(sources), snpc.get(source_weights),
+                                    outdegree, snpc.get(destinations),
+                                    snpc.get(destination_weights)));
+
+    std::set<int> tmp_set;
+    for (int rx = 0; rx < indegree; rx++) {
+      const int rankt = sources.at(rx);
+      ASSERT_EQ(edges_backwards.count(rankt), 1);
+      tmp_set.insert(rankt);
+    }
+    ASSERT_EQ(tmp_set, edges_backwards);
+
+    tmp_set.clear();
+    for (int rx = 0; rx < outdegree; rx++) {
+      const int rankt = destinations.at(rx);
+      ASSERT_EQ(edges_forwards.count(rankt), 1);
+      tmp_set.insert(rankt);
+    }
+    ASSERT_EQ(tmp_set, edges_forwards);
+
+    MPICHK(MPI_Dist_graph_neighbors_count(cmdg0->comm_backward, &indegree,
+                                          &outdegree, &weighted));
+    ASSERT_EQ(indegree, static_cast<int>(edges_forwards.size()));
+    ASSERT_EQ(outdegree, static_cast<int>(edges_backwards.size()));
+
+    sources.resize(indegree);
+    destinations.resize(outdegree);
+    source_weights.resize(indegree);
+    destination_weights.resize(outdegree);
+
+    MPICHK(MPI_Dist_graph_neighbors(cmdg0->comm_backward, indegree,
+                                    snpc.get(sources), snpc.get(source_weights),
+                                    outdegree, snpc.get(destinations),
+                                    snpc.get(destination_weights)));
+    tmp_set.clear();
+    for (int rx = 0; rx < indegree; rx++) {
+      const int rankt = sources.at(rx);
+      ASSERT_EQ(edges_forwards.count(rankt), 1);
+      tmp_set.insert(rankt);
+    }
+    ASSERT_EQ(tmp_set, edges_forwards);
+
+    tmp_set.clear();
+    for (int rx = 0; rx < outdegree; rx++) {
+      const int rankt = destinations.at(rx);
+      ASSERT_EQ(edges_backwards.count(rankt), 1);
+      tmp_set.insert(rankt);
+    }
+    ASSERT_EQ(tmp_set, edges_backwards);
+
+    tmp_set.clear();
+    std::for_each(cmdg0->sources_forward.begin(), cmdg0->sources_forward.end(),
+                  [&](auto ix) { tmp_set.insert(ix); });
+    ASSERT_EQ(tmp_set, edges_backwards);
+    tmp_set.clear();
+    std::for_each(cmdg0->destinations_forward.begin(),
+                  cmdg0->destinations_forward.end(),
+                  [&](auto ix) { tmp_set.insert(ix); });
+    ASSERT_EQ(tmp_set, edges_forwards);
+
+    tmp_set.clear();
+    std::for_each(cmdg0->sources_backward.begin(),
+                  cmdg0->sources_backward.end(),
+                  [&](auto ix) { tmp_set.insert(ix); });
+    ASSERT_EQ(tmp_set, edges_forwards);
+    tmp_set.clear();
+    std::for_each(cmdg0->destinations_backward.begin(),
+                  cmdg0->destinations_backward.end(),
+                  [&](auto ix) { tmp_set.insert(ix); });
+    ASSERT_EQ(tmp_set, edges_backwards);
+
+    PetscInterface::DMPlexHelper dmh_B{MPI_COMM_WORLD, dm};
+    auto lambda_global_to_local = [&](std::vector<int> &cells) {
+      std::for_each(cells.begin(), cells.end(), [&](auto &cellx) {
+        cellx = dmh_B.get_local_point_from_global_point(cellx);
+      });
+    };
+
+    // ranks that will send to this rank
+    int index = 0;
+    int test_total_number_cells = 0;
+    for (const int rankx : cmdg0->sources_forward) {
+      // the local copy of the map for that rank
+      auto &m = map_rank_to_map.at(rankx);
+
+      std::vector<int> cells_correct;
+
+      // loop over cells on the rank
+      for (auto &entries_outer : m) {
+        for (auto &ex : entries_outer) {
+          const int cell_index = ex.cell_index;
+          const int owning_rank = global_owners.at(cell_index - offset);
+          if (rank == owning_rank) {
+            cells_correct.push_back(cell_index);
+          }
+        }
+      }
+
+      const int soffset = static_cast<int>(cmdg0->recv_disps_forward.at(index));
+      const int num_cells = static_cast<int>(cells_correct.size());
+      test_total_number_cells += num_cells;
+
+      lambda_global_to_local(cells_correct);
+
+      for (int ix = 0; ix < num_cells; ix++) {
+        ASSERT_EQ(cells_correct.at(ix),
+                  cmdg0->cells_forward_B.at(soffset + ix));
+      }
+      index++;
+    }
+    ASSERT_EQ(test_total_number_cells, cmdg0->total_num_recv_cells_forward);
+
+    int soffset = 0;
+    test_total_number_cells = 0;
+    for (const int rankx : cmdg0->destinations_forward) {
+      auto &m = map_rank_to_map.at(rank);
+
+      std::vector<int> cells_correct;
+      std::vector<REAL> weights_correct;
+
+      int index_A = 0;
+      for (auto &entries_outer : m) {
+        for (auto &ex : entries_outer) {
+          const int cell_index = ex.cell_index;
+          const int owning_rank = global_owners.at(cell_index - offset);
+          if (rankx == owning_rank) {
+            cells_correct.push_back(index_A);
+            weights_correct.push_back(ex.weight_forward);
+          }
+        }
+        index_A++;
+      }
+
+      const int num_cells = static_cast<int>(cells_correct.size());
+      test_total_number_cells += num_cells;
+      for (int ix = 0; ix < num_cells; ix++) {
+        ASSERT_EQ(cells_correct.at(ix),
+                  cmdg0->cells_forward_A.at(soffset + ix));
+        ASSERT_EQ(weights_correct.at(ix),
+                  cmdg0->weights_forward_A.at(soffset + ix));
+      }
+      soffset += num_cells;
+    }
+    ASSERT_EQ(test_total_number_cells, cmdg0->total_num_send_cells_forward);
+
+    // backward sources are the ranks that hold B cells for our map
+    auto &m = map_rank_to_map.at(rank);
+    int rank_index = 0;
+    test_total_number_cells = 0;
+    for (const int rankx : cmdg0->sources_backward) {
+      std::vector<int> cells_correct;
+      std::vector<REAL> weights_correct;
+
+      int index = 0;
+      for (auto &cell : m) {
+        for (auto &ex : cell) {
+          const int cell_index = ex.cell_index;
+          const int owning_rank = global_owners.at(cell_index - offset);
+          if (rankx == owning_rank) {
+            cells_correct.push_back(index);
+            weights_correct.push_back(ex.weight_backward);
+          }
+        }
+        index++;
+      }
+
+      const int num_cells = static_cast<int>(cells_correct.size());
+      test_total_number_cells += num_cells;
+      const int offsets =
+          static_cast<int>(cmdg0->recv_disps_backward.at(rank_index));
+
+      for (int ix = 0; ix < num_cells; ix++) {
+        ASSERT_EQ(cmdg0->cells_backward_A.at(offsets + ix),
+                  cells_correct.at(ix));
+        ASSERT_EQ(cmdg0->weights_backward_A.at(offsets + ix),
+                  weights_correct.at(ix));
+      }
+
+      rank_index++;
+    }
+    ASSERT_EQ(test_total_number_cells, cmdg0->total_num_recv_cells_backward);
+
+    rank_index = 0;
+    test_total_number_cells = 0;
+    for (const int rankx : cmdg0->destinations_backward) {
+      auto &m = map_rank_to_map.at(rankx);
+      std::vector<int> cells_correct;
+      for (auto &cell : m) {
+        for (auto &ex : cell) {
+          const int cell_index = ex.cell_index;
+          const int owning_rank = global_owners.at(cell_index - offset);
+          if (rank == owning_rank) {
+            cells_correct.push_back(cell_index);
+          }
+        }
+      }
+      const int num_cells = static_cast<int>(cells_correct.size());
+      test_total_number_cells += num_cells;
+      const int offsets =
+          static_cast<int>(cmdg0->send_disps_backward.at(rank_index));
+
+      lambda_global_to_local(cells_correct);
+
+      for (int ix = 0; ix < num_cells; ix++) {
+        ASSERT_EQ(cmdg0->cells_backward_B.at(offsets + ix),
+                  cells_correct.at(ix));
+      }
+      rank_index++;
+    }
+    ASSERT_EQ(test_total_number_cells, cmdg0->total_num_send_cells_backward);
+
+    // Can now actually test the forward/backward transport
+    std::vector<REAL> dofs_A_correct(cell_count_A);
+    std::vector<REAL> dofs_A_to_test(cell_count_A);
+    std::vector<REAL> dofs_B_correct(cell_count_B);
+    std::vector<REAL> dofs_B_to_test(cell_count_B);
+    std::vector<REAL> global_dofs_A(global_cell_count_A);
+    std::vector<REAL> global_dofs_B(global_cell_count_B);
+
+    auto lambda_reset_dofs = [&]() {
+      std::fill(dofs_A_correct.begin(), dofs_A_correct.end(), 0.0);
+      std::fill(dofs_A_to_test.begin(), dofs_A_to_test.end(), 0.0);
+      std::fill(dofs_B_correct.begin(), dofs_B_correct.end(), 0.0);
+      std::fill(dofs_B_to_test.begin(), dofs_B_to_test.end(), 0.0);
+    };
+
+    std::uniform_real_distribution<REAL> dist_dofs(1.0, 2.0);
+
+    auto lambda_generate_dofs = [&](auto &dofs) {
+      std::for_each(dofs.begin(), dofs.end(),
+                    [&](auto &dx) { dx = dist_dofs(rng); });
+    };
+
+    lambda_reset_dofs();
+    lambda_generate_dofs(global_dofs_A);
+    std::copy(global_dofs_A.begin() + dof_offset_A,
+              global_dofs_A.begin() + dof_offset_A + cell_count_A,
+              dofs_A_correct.begin());
+
+    const int point_index_offset = offset;
+    auto lambda_forward_transfer = [&](auto &dofs_A, auto &dofs_B) {
+      std::fill(dofs_B.begin(), dofs_B.end(), 0.0);
+      std::vector<REAL> tmp_dofs_B(global_cell_count_B);
+      std::fill(tmp_dofs_B.begin(), tmp_dofs_B.end(), 0.0);
+      std::vector<REAL> tmp_dofs_B2(global_cell_count_B);
+      std::fill(tmp_dofs_B2.begin(), tmp_dofs_B2.end(), 0.0);
+
+      auto &m = map_rank_to_map.at(rank);
+
+      int index = 0;
+      for (auto &cell_entries : m) {
+        const REAL contrib = dofs_A.at(index);
+        for (auto &entry : cell_entries) {
+          const int B_point_index = entry.cell_index;
+          const REAL B_weight = entry.weight_forward;
+          const int B_dof_index = B_point_index - point_index_offset;
+          tmp_dofs_B.at(B_dof_index) += B_weight * contrib;
+        }
+        index++;
+      }
+
+      ASSERT_TRUE(static_cast<int>(dofs_B.size()) >= cell_count_B);
+      MPICHK(MPI_Allreduce(tmp_dofs_B.data(), tmp_dofs_B2.data(),
+                           global_cell_count_B, map_ctype_mpi_type<REAL>(),
+                           MPI_SUM, MPI_COMM_WORLD));
+
+      std::copy(tmp_dofs_B2.begin() + dof_offset_B,
+                tmp_dofs_B2.begin() + dof_offset_B + cell_count_B,
+                dofs_B.begin());
+    };
+
+    lambda_forward_transfer(dofs_A_correct, dofs_B_correct);
+    cmdg0->forward_transfer(dofs_A_correct, 1, dofs_B_to_test);
+
+    for (int ix = 0; ix < cell_count_B; ix++) {
+      ASSERT_NEAR(dofs_B_correct.at(ix), dofs_B_to_test.at(ix), 1.0e-12);
+    }
+
+    lambda_reset_dofs();
+    lambda_generate_dofs(global_dofs_B);
+
+    auto lambda_backward_transfer = [&](auto &global_dofs_B, auto &dofs_A) {
+      std::fill(dofs_A.begin(), dofs_A.end(), 0.0);
+      auto &m = map_rank_to_map.at(rank);
+
+      int index = 0;
+      for (auto &cell_entries : m) {
+        for (auto &entry : cell_entries) {
+          const int B_point_index = entry.cell_index;
+          const REAL B_weight = entry.weight_backward;
+          const int B_dof_index = B_point_index - point_index_offset;
+          const REAL contrib = global_dofs_B.at(B_dof_index);
+          dofs_A.at(index) += B_weight * contrib;
+        }
+        index++;
+      }
+    };
+
+    std::copy(global_dofs_B.begin() + dof_offset_B,
+              global_dofs_B.begin() + dof_offset_B + cell_count_B,
+              dofs_B_correct.begin());
+
+    lambda_backward_transfer(global_dofs_B, dofs_A_correct);
+    cmdg0->backward_transfer(dofs_B_correct, 1, dofs_A_to_test);
+
+    for (int ix = 0; ix < cell_count_A; ix++) {
+      ASSERT_NEAR(dofs_A_correct.at(ix), dofs_A_to_test.at(ix), 1.0e-12);
+    }
+  }
+
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
+
+TEST(PETSc, dmplex_mesh_coupler_dg0_integration) {
+
+  PETSCCHK(PetscInitializeNoArguments());
+
+  DM dm_outer;
+  DM dm_inner;
+
+  int size = 0;
+  int rank = 0;
+  MPICHK(MPI_Comm_size(MPI_COMM_WORLD, &size));
+  MPICHK(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
+
+  MPI_Comm comm_outer = MPI_COMM_WORLD;
+  MPI_Comm comm_inner = MPI_COMM_WORLD;
+
+  const int inner_comm_size = 8;
+  const int colour = (rank < inner_comm_size) ? 1 : MPI_UNDEFINED;
+  const bool inner_active = colour != MPI_UNDEFINED;
+  MPICHK(MPI_Comm_split(comm_outer, colour, rank, &comm_inner));
+
+  const REAL cell_width_outer = 1.0;
+  const REAL cell_width_inner = 2.0 * cell_width_outer;
+  const int ncomp = 2;
+  const PetscInt ndim = 2;
+  const PetscInt mesh_size_inner = 4;
+  const PetscInt mesh_offset = 2;
+  const PetscInt mesh_size_outer = 2 * mesh_size_inner + 4 * mesh_offset;
+
+  PetscInt faces_outer[2] = {mesh_size_outer, mesh_size_outer};
+  PetscReal upper_outer[2] = {mesh_size_outer * cell_width_outer,
+                              mesh_size_outer * cell_width_outer};
+  PetscReal lower_outer[2] = {0.0, 0.0};
+
+  PetscInt faces_inner[2] = {mesh_size_inner, mesh_size_inner};
+  PetscReal upper_inner[2] = {
+      mesh_size_inner * cell_width_inner + mesh_offset * cell_width_inner,
+      mesh_size_inner * cell_width_inner + mesh_offset * cell_width_inner};
+  PetscReal lower_inner[2] = {mesh_offset * cell_width_inner,
+                              mesh_offset * cell_width_inner};
+
+  PetscSF sf_outer;
+  PetscSF sf_inner;
+  std::vector<PetscInt> outer_map;
+  std::vector<PetscInt> inner_map;
+  std::vector<PetscInt> outer_map_inverse;
+  std::vector<PetscInt> inner_map_inverse;
+
+  PETSCCHK(NPPETScAPI::NP_DMPlexCreateBoxMesh(
+      comm_outer, ndim, PETSC_FALSE, faces_outer, lower_outer, upper_outer,
+      NULL, PETSC_TRUE, &dm_outer));
+  PetscInterface::generic_distribute(&dm_outer, comm_outer, 1, &sf_outer);
+
+  outer_map =
+      PetscInterface::get_global_distributed_points_map(dm_outer, sf_outer);
+
+  outer_map_inverse.resize(outer_map.size());
+  const int outer_map_size = static_cast<int>(outer_map.size());
+  for (int ix = 0; ix < outer_map_size; ix++) {
+    const PetscInt jx = outer_map[ix];
+    if (jx > -1) {
+      outer_map_inverse.at(jx) = ix;
+    }
+  }
+
+  if (inner_active) {
+    PETSCCHK(NPPETScAPI::NP_DMPlexCreateBoxMesh(
+        comm_inner, ndim, PETSC_FALSE, faces_inner, lower_inner, upper_inner,
+        NULL, PETSC_TRUE, &dm_inner));
+    PetscInterface::generic_distribute(&dm_inner, comm_inner, 1, &sf_inner);
+
+    inner_map =
+        PetscInterface::get_global_distributed_points_map(dm_inner, sf_inner);
+
+    inner_map_inverse.resize(inner_map.size());
+    const int inner_map_size = static_cast<int>(inner_map.size());
+    for (int ix = 0; ix < inner_map_size; ix++) {
+      const PetscInt jx = inner_map[ix];
+      if (jx > -1) {
+        inner_map_inverse.at(jx) = ix;
+      }
+    }
+  }
+
+  std::shared_ptr<PetscInterface::DMPlexHelper> helper_outer;
+  std::shared_ptr<PetscInterface::DMPlexHelper> helper_inner;
+
+  helper_outer =
+      std::make_shared<PetscInterface::DMPlexHelper>(comm_outer, dm_outer);
+
+  if (inner_active) {
+    helper_inner =
+        std::make_shared<PetscInterface::DMPlexHelper>(comm_inner, dm_inner);
+  }
+
+  const int cell_count_outer = helper_outer->get_cell_count();
+  const int cell_count_inner =
+      inner_active ? helper_inner->get_cell_count() : 0;
+
+  std::vector<REAL> dofs_outer_forward(cell_count_outer * ncomp);
+  std::vector<REAL> dofs_inner_forward(cell_count_inner * ncomp);
+  std::vector<REAL> dofs_outer_backward(cell_count_outer * ncomp);
+  std::vector<REAL> dofs_inner_backward(cell_count_inner * ncomp);
+
+  std::vector<REAL> dofs_outer_correct(cell_count_outer * ncomp);
+  std::vector<REAL> dofs_inner_correct(cell_count_inner * ncomp);
+
+  std::fill(dofs_outer_correct.begin(), dofs_outer_correct.end(), 0.0);
+  std::fill(dofs_inner_correct.begin(), dofs_inner_correct.end(), 0.0);
+
+  for (int cellx = 0; cellx < cell_count_outer; cellx++) {
+    const PetscInt petsc_cell_index =
+        helper_outer->get_dmplex_cell_index(cellx);
+    const PetscInt global_cell_index =
+        helper_outer->get_point_global_index(petsc_cell_index);
+    dofs_outer_backward.at(cellx * ncomp) =
+        outer_map_inverse.at(global_cell_index);
+    dofs_outer_backward.at(cellx * ncomp + 1) =
+        -outer_map_inverse.at(global_cell_index);
+    dofs_outer_forward.at(cellx * ncomp) = 0.0;
+    dofs_outer_forward.at(cellx * ncomp + 1) = 0.0;
+  }
+
+  for (int cellx = 0; cellx < cell_count_inner; cellx++) {
+    const PetscInt petsc_cell_index =
+        helper_inner->get_dmplex_cell_index(cellx);
+    const PetscInt global_cell_index =
+        helper_inner->get_point_global_index(petsc_cell_index);
+    dofs_inner_backward.at(cellx * ncomp) = 0.0;
+    dofs_inner_backward.at(cellx * ncomp + 1) = 0.0;
+    dofs_inner_forward.at(cellx * ncomp) =
+        inner_map_inverse.at(global_cell_index);
+    dofs_inner_forward.at(cellx * ncomp + 1) =
+        -inner_map_inverse.at(global_cell_index);
+  }
+
+  std::vector<std::vector<PetscInterface::DMPlexMeshCouplerDG0MapEntry>>
+      coupler_map(cell_count_inner);
+
+  for (int cellx = 0; cellx < cell_count_inner; cellx++) {
+    const PetscInt petsc_cell_index =
+        helper_inner->get_dmplex_cell_index(cellx);
+    const PetscInt global_cell_index = inner_map_inverse.at(
+        helper_inner->get_point_global_index(petsc_cell_index));
+
+    const PetscInt cell_index_x = global_cell_index % mesh_size_inner;
+    const PetscInt cell_index_y = global_cell_index / mesh_size_inner;
+
+    const PetscInt cell_index_outer_base_x = (mesh_offset + cell_index_x) * 2;
+    const PetscInt cell_index_outer_base_y = (mesh_offset + cell_index_y) * 2;
+
+    REAL correct_backward_value = 0.0;
+
+    for (int dy : {0, 1}) {
+      for (int dx : {0, 1}) {
+        const PetscInt cell_index_outer_x = cell_index_outer_base_x + dx;
+        const PetscInt cell_index_outer_y = cell_index_outer_base_y + dy;
+        const PetscInt cell_index_outer =
+            cell_index_outer_y * mesh_size_outer + cell_index_outer_x;
+
+        correct_backward_value += 0.25 * cell_index_outer;
+
+        coupler_map.at(cellx).push_back(
+            {outer_map.at(cell_index_outer), 1.0, 0.25});
+      }
+    }
+
+    dofs_inner_correct.at(cellx * ncomp) = correct_backward_value;
+    dofs_inner_correct.at(cellx * ncomp + 1) = -correct_backward_value;
+  }
+
+  for (int cellx = 0; cellx < cell_count_outer; cellx++) {
+    const PetscInt petsc_cell_index =
+        helper_outer->get_dmplex_cell_index(cellx);
+    const PetscInt global_cell_index = outer_map_inverse.at(
+        helper_outer->get_point_global_index(petsc_cell_index));
+
+    const PetscInt cell_index_x = global_cell_index % mesh_size_outer;
+    const PetscInt cell_index_y = global_cell_index / mesh_size_outer;
+
+    REAL value = 0;
+
+    const bool outside_x =
+        (cell_index_x < mesh_offset * 2) ||
+        (cell_index_x >= ((mesh_offset + mesh_size_inner) * 2));
+
+    const bool outside_y =
+        (cell_index_y < mesh_offset * 2) ||
+        (cell_index_y >= ((mesh_offset + mesh_size_inner) * 2));
+
+    if (!(outside_x || outside_y)) {
+
+      const PetscInt cell_index_inner_x = (cell_index_x / 2) - mesh_offset;
+      const PetscInt cell_index_inner_y = (cell_index_y / 2) - mesh_offset;
+      const PetscInt cell_index_inner =
+          cell_index_inner_y * mesh_size_inner + cell_index_inner_x;
+
+      value = cell_index_inner;
+    }
+
+    dofs_outer_correct.at(cellx * ncomp) = value;
+    dofs_outer_correct.at(cellx * ncomp + 1) = -value;
+  }
+
+  auto coupler = std::make_shared<PetscInterface::DMPlexMeshCouplerDG0>(
+      dm_outer, coupler_map);
+
+  coupler->forward_transfer(dofs_inner_forward, ncomp, dofs_outer_forward);
+
+  for (int cellx = 0; cellx < cell_count_outer * ncomp; cellx++) {
+    const REAL correct = dofs_outer_correct.at(cellx);
+    const REAL to_test = dofs_outer_forward.at(cellx);
+    ASSERT_NEAR(correct, to_test, 1.0e-14);
+  }
+
+  coupler->backward_transfer(dofs_outer_backward, ncomp, dofs_inner_backward);
+
+  for (int cellx = 0; cellx < cell_count_inner * ncomp; cellx++) {
+    const REAL correct = dofs_inner_correct.at(cellx);
+    const REAL to_test = dofs_inner_backward.at(cellx);
+    ASSERT_NEAR(correct, to_test, 1.0e-14);
+  }
+
+  // auto vtk_outer = helper_outer->get_vtk_cell_data();
+  // for (int cellx = 0; cellx < cell_count_outer; cellx++) {
+  //   vtk_outer.at(cellx).cell_data["forward"] =
+  //       dofs_outer_forward.at(cellx * ncomp);
+  //   vtk_outer.at(cellx).cell_data["backward"] =
+  //       dofs_outer_backward.at(cellx * ncomp);
+  //   vtk_outer.at(cellx).cell_data["debug"] =
+  //       dofs_outer_correct.at(cellx * ncomp);
+  //   vtk_outer.at(cellx).cell_data["rank"] = rank;
+  //
+  //   const PetscInt petsc_cell_index =
+  //       helper_outer->get_dmplex_cell_index(cellx);
+  //   const PetscInt global_cell_index =
+  //       helper_outer->get_point_global_index(petsc_cell_index);
+  //   vtk_outer.at(cellx).cell_data["cell_index"] = global_cell_index;
+  // }
+  // VTK::VTKHDF vtkhdf_outer("outer.vtkhdf", comm_outer);
+  // vtkhdf_outer.write(vtk_outer);
+  // vtkhdf_outer.close();
+  //
+  // if (inner_active) {
+  //   auto vtk_inner = helper_inner->get_vtk_cell_data();
+  //   for (int cellx = 0; cellx < cell_count_inner; cellx++) {
+  //     vtk_inner.at(cellx).cell_data["forward"] =
+  //         dofs_inner_forward.at(cellx * ncomp);
+  //     vtk_inner.at(cellx).cell_data["backward"] =
+  //         dofs_inner_backward.at(cellx * ncomp);
+  //     vtk_inner.at(cellx).cell_data["rank"] = rank;
+  //
+  //     const PetscInt petsc_cell_index =
+  //         helper_inner->get_dmplex_cell_index(cellx);
+  //     const PetscInt global_cell_index =
+  //         helper_inner->get_point_global_index(petsc_cell_index);
+  //     vtk_inner.at(cellx).cell_data["cell_index"] = global_cell_index;
+  //   }
+  //   VTK::VTKHDF vtkhdf_inner("inner.vtkhdf", comm_inner);
+  //   vtkhdf_inner.write(vtk_inner);
+  //   vtkhdf_inner.close();
+  // }
+
+  if (size > 1) {
+    PETSCCHK(PetscSFDestroy(&sf_outer));
+  }
+  PETSCCHK(DMDestroy(&dm_outer));
+  if (inner_active) {
+    PETSCCHK(DMDestroy(&dm_inner));
+    if (size > 1) {
+      PETSCCHK(PetscSFDestroy(&sf_inner));
+    }
+  }
+
+  if (comm_inner != MPI_COMM_NULL) {
+    MPICHK(MPI_Comm_free(&comm_inner));
+    comm_inner = MPI_COMM_NULL;
+  }
+
+  PETSCCHK(PetscFinalize());
+}
+
 #endif

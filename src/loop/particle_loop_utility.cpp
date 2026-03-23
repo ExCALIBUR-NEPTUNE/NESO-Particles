@@ -2,7 +2,7 @@
 #include <neso_particles/particle_sub_group/particle_sub_group_base.hpp>
 
 namespace NESO::Particles {
-int get_loop_npart(
+std::size_t get_loop_npart(
     ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info) {
   const int cell_start = global_info->starting_cell;
   const int cell_end = global_info->bounding_cell;
@@ -29,4 +29,17 @@ int get_loop_npart(
     return num_particles;
   }
 }
+
+std::size_t get_loop_iteration_set_size(
+    ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info) {
+  if (global_info->provided_iteration_set_size) {
+    return global_info->iteration_set_size;
+  } else {
+    const auto iteration_set_size = get_loop_npart(global_info);
+    global_info->provided_iteration_set_size = true;
+    global_info->iteration_set_size = iteration_set_size;
+    return iteration_set_size;
+  }
+}
+
 } // namespace NESO::Particles

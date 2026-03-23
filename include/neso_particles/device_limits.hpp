@@ -87,9 +87,10 @@ public:
         Private::get_max_global_workgroup<N>(this->wgl);
     for (int dx = 0; dx < N; dx++) {
       if (max_global_workgroup.get(dx)) {
-        NESOASSERT(
-            range_global.get(dx) <= max_global_workgroup.get(dx),
-            "Workgroup size exceeds device maximum global workgroup size.");
+        NESOASSERT(range_global.get(dx) <= max_global_workgroup.get(dx),
+                   "Workgroup size (" + std::to_string(range_global.get(dx)) +
+                       ") exceeds device maximum global workgroup size (" +
+                       std::to_string(max_global_workgroup.get(dx)) + ").");
       }
     }
     return range_global;
@@ -168,6 +169,13 @@ public:
    * @returns Cacheline size in bytes or multiple of provided factor.
    */
   std::size_t get_cacheline_size(const std::size_t num_bytes = 1);
+
+  /**
+   * @returns Number of compute units as determined by
+   * info::device::max_compute_units or if the device is CPU OMP_NUM_THREADS.
+   * Can be overridden by setting NESO_PARTICLES_MAX_COMPUTE_UNITS.
+   */
+  std::size_t get_max_compute_units();
 };
 
 } // namespace NESO::Particles

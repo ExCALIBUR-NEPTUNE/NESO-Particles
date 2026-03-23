@@ -9,6 +9,8 @@ TEST(ParticleSubGroup, creating) {
   auto aa = std::make_shared<ParticleSubGroup>(
       A, [=](auto ID) { return (ID[0] % 2) == 0; },
       Access::read(Sym<INT>("ID")));
+  auto v0 = aa->get_version();
+  ASSERT_TRUE(v0 >= 1);
 
   EXPECT_TRUE(aa->create_if_required());
   EXPECT_FALSE(aa->create_if_required());
@@ -25,9 +27,14 @@ TEST(ParticleSubGroup, creating) {
   EXPECT_TRUE(aa->create_if_required());
   EXPECT_FALSE(aa->create_if_required());
 
+  auto v1 = aa->get_version();
   A->hybrid_move();
   EXPECT_TRUE(aa->create_if_required());
+  auto v2 = aa->get_version();
   EXPECT_FALSE(aa->create_if_required());
+  auto v3 = aa->get_version();
+  ASSERT_TRUE(v2 > v1);
+  ASSERT_EQ(v2, v3);
 
   auto remover = std::make_shared<ParticleRemover>(A->sycl_target);
   const int npart0 = A->get_npart_local();

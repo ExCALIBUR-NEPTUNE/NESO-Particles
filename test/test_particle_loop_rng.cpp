@@ -589,3 +589,37 @@ TEST(ParticleLoopRNG, type_casting) {
   sycl_target->free();
   mesh->free();
 }
+
+TEST(ParticleLoopRNG, null_rng_instances) {
+  auto A = particle_loop_common();
+  auto domain = A->domain;
+  auto mesh = domain->mesh;
+  auto sycl_target = A->sycl_target;
+
+  ErrorPropagate ep(sycl_target);
+  auto k_ep = ep.device_ptr();
+
+  auto rng_block = std::make_shared<HostPerParticleBlockRNG<REAL>>();
+  particle_loop(
+      A, [=]([[maybe_unused]] auto RNG) {}, Access::read(rng_block))
+      ->execute();
+
+  auto rng_atomic = std::make_shared<HostAtomicBlockKernelRNG<REAL>>();
+
+  particle_loop(
+      A,
+      [=](auto INDEX, auto RNG) {
+        bool valid = true;
+        RNG.at(INDEX, 0, &valid);
+        NESO_KERNEL_ASSERT(!valid, k_ep);
+      },
+      Access::read(ParticleLoopIndex{}), Access::read(rng_atomic)
+
+          )
+      ->execute();
+  ASSERT_FALSE(ep.get_flag());
+
+  A->free();
+  sycl_target->free();
+  mesh->free();
+}

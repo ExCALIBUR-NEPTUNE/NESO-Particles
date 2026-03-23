@@ -7,9 +7,11 @@
 #include <mpi.h>
 #include <stack>
 #include <string>
+#include <type_traits>
 
 #include "compute_target.hpp"
 #include "particle_dat.hpp"
+#include "particle_group_pointer_map.hpp"
 #include "profiling.hpp"
 #include "sycl_typedefs.hpp"
 #include "typedefs.hpp"
@@ -21,21 +23,7 @@ namespace NESO::Particles {
  */
 class ParticlePacker {
 private:
-  int num_dats_real = 0;
-  int num_dats_int = 0;
-  BufferDeviceHost<REAL *const *const *> dh_particle_dat_ptr_real;
-  BufferDeviceHost<INT *const *const *> dh_particle_dat_ptr_int;
-  BufferDeviceHost<int> dh_particle_dat_ncomp_real;
-  BufferDeviceHost<int> dh_particle_dat_ncomp_int;
   bool device_aware_mpi_enabled;
-
-  size_t particle_size(
-      std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
-      std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int);
-
-  void get_particle_dat_info(
-      std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
-      std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int);
 
   /// Required length of the send buffer.
   INT required_send_buffer_length;
@@ -66,15 +54,16 @@ public:
    * @param sycl_target SYCLTargetSharedPtr to use as compute device.
    */
   ParticlePacker(SYCLTargetSharedPtr sycl_target)
-      : dh_particle_dat_ptr_real(sycl_target, 1),
-        dh_particle_dat_ptr_int(sycl_target, 1),
-        dh_particle_dat_ncomp_real(sycl_target, 1),
-        dh_particle_dat_ncomp_int(sycl_target, 1),
-        device_aware_mpi_enabled(NESO::Particles::device_aware_mpi_enabled()),
+      : device_aware_mpi_enabled(NESO::Particles::device_aware_mpi_enabled()),
         h_send_pointers(sycl_target, 1),
         cell_dat(sycl_target, sycl_target->comm_pair.size_parent, 1),
         h_send_buffer(sycl_target, 1), h_send_offsets(sycl_target, 1),
-        sycl_target(sycl_target) {}
+        sycl_target(sycl_target) {
+    static_assert(std::alignment_of<REAL>::value >=
+                  std::alignment_of<INT>::value);
+    static_assert(
+        (std::alignment_of<REAL>::value % std::alignment_of<INT>::value) == 0);
+  }
   /**
    *  Reset the instance before packing particle data.
    */
@@ -100,20 +89,19 @@ public:
    * to pack.
    * @param d_pack_layers_dst BufferDevice holding the destination layers in
    * the packing CellDat.
-   * @param particle_dats_real Container of REAL ParticleDat instances to pack.
-   * @param particle_dats_int Container of INT ParticleDat instances to pack.
+   * @param particle_group_pointer_map ParticleGroupPointerMap describing
+   * ParticleDat information.
+   * @param event_stack EventStack to push events onto to wait on.
    * @param rank_component Component of MPI rank ParticleDat to inspect for
    * destination MPI rank.
-   * @returns sycl::event to wait on for packing completion.
    */
-  sycl::event
-  pack(const int num_remote_send_ranks, BufferHost<int> &h_send_rank_npart,
-       BufferDeviceHost<int> &dh_send_rank_map, const int num_particles_leaving,
-       BufferDevice<int> &d_pack_cells, BufferDevice<int> &d_pack_layers_src,
-       BufferDevice<int> &d_pack_layers_dst,
-       std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
-       std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int,
-       const int rank_component = 0);
+  void pack(const int num_remote_send_ranks, BufferHost<int> &h_send_rank_npart,
+            BufferDeviceHost<int> &dh_send_rank_map,
+            const int num_particles_leaving, BufferDevice<int> &d_pack_cells,
+            BufferDevice<int> &d_pack_layers_src,
+            BufferDevice<int> &d_pack_layers_dst,
+            ParticleGroupPointerMapSharedPtr particle_group_pointer_map,
+            EventStack &event_stack, const int rank_component = 0);
 };
 
 /**
@@ -121,24 +109,8 @@ public:
  */
 class ParticleUnpacker {
 private:
-  int num_dats_real = 0;
-  int num_dats_int = 0;
-
-  BufferDeviceHost<REAL ***> dh_particle_dat_ptr_real;
-  BufferDeviceHost<INT ***> dh_particle_dat_ptr_int;
-  BufferDeviceHost<int> dh_particle_dat_ncomp_real;
-  BufferDeviceHost<int> dh_particle_dat_ncomp_int;
   BufferDevice<char> d_recv_buffer;
-
   bool device_aware_mpi_enabled;
-
-  size_t particle_size(
-      std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
-      std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int);
-
-  void get_particle_dat_info(
-      std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
-      std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int);
 
   /// Pointers in which to recv data
   BufferHost<char *> h_recv_pointers;
@@ -147,6 +119,7 @@ private:
   /// Offsets into the recv buffer for each remote rank that will send to this
   // rank.
   BufferHost<INT> h_recv_offsets;
+  int num_ranks_reset{-1};
 
 public:
   /// Disable (implicit) copies.
@@ -169,14 +142,15 @@ public:
    * @param sycl_target SYCLTargetSharedPtr to use as compute device.
    */
   ParticleUnpacker(SYCLTargetSharedPtr sycl_target)
-      : dh_particle_dat_ptr_real(sycl_target, 1),
-        dh_particle_dat_ptr_int(sycl_target, 1),
-        dh_particle_dat_ncomp_real(sycl_target, 1),
-        dh_particle_dat_ncomp_int(sycl_target, 1),
-        d_recv_buffer(sycl_target, 1),
+      : d_recv_buffer(sycl_target, 1),
         device_aware_mpi_enabled(NESO::Particles::device_aware_mpi_enabled()),
         h_recv_pointers(sycl_target, 1), h_recv_buffer(sycl_target, 1),
-        h_recv_offsets(sycl_target, 1), sycl_target(sycl_target){};
+        h_recv_offsets(sycl_target, 1), sycl_target(sycl_target) {
+    static_assert(std::alignment_of<REAL>::value >=
+                  std::alignment_of<INT>::value);
+    static_assert(
+        (std::alignment_of<REAL>::value % std::alignment_of<INT>::value) == 0);
+  };
 
   /**
    * @returns Host or device pointers for locations in which to recv packed
@@ -191,26 +165,21 @@ public:
    * rank.
    *  @param h_recv_rank_npart Number of particles each rank will send to this
    * rank.
-   *  @param particle_dats_real Container of REAL ParticleDat instances to
-   * unpack.
-   *  @param particle_dats_int Container of INT ParticleDat instances to unpack.
+   * @param particle_group_pointer_map ParticleGroupPointer map to unpack data
+   * into.
    */
-  void
-  reset(const int num_remote_recv_ranks, BufferHost<int> &h_recv_rank_npart,
-        std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
-        std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int);
+  void reset(const int num_remote_recv_ranks,
+             BufferHost<int> &h_recv_rank_npart,
+             ParticleGroupPointerMapSharedPtr particle_group_pointer_map);
 
   /**
-   * Unpack the recv buffer into the particle group. Particles unpack into cell
-   * 0.
+   * Unpack particles into the ParticleDats specified by the
+   * ParticleGroupPointerMap.
    *
-   * @param particle_dats_real Container of REAL ParticleDat instances to
-   * unpack.
-   * @param particle_dats_int Container of INT ParticleDat instances to unpack.
+   * @param particle_group_pointer_map ParticleGroupPointer map to unpack data
+   * into.
    */
-  void
-  unpack(std::map<Sym<REAL>, ParticleDatSharedPtr<REAL>> &particle_dats_real,
-         std::map<Sym<INT>, ParticleDatSharedPtr<INT>> &particle_dats_int);
+  void unpack(ParticleGroupPointerMapSharedPtr particle_group_pointer_map);
 };
 
 } // namespace NESO::Particles

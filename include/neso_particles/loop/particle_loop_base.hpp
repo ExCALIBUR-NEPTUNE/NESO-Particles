@@ -21,21 +21,28 @@ namespace ParticleLoopImplementation {
  */
 struct ParticleLoopGlobalInfo {
   // Underlying @ref ParticleGroup that created the iteration set.
-  ParticleGroup *particle_group;
+  ParticleGroup *particle_group{nullptr};
   // If the iteration set is actually a @ref ParticleSubGroup then this is a
   // pointer to the sub group. Otherwise this member is a nullptr.
-  ParticleSubGroup *particle_sub_group;
+  ParticleSubGroup *particle_sub_group{nullptr};
   // Is the loop over all cells
-  bool all_cells;
-  int const *d_npart_cell_lb;
-  INT const *d_npart_cell_es;
-  INT const *d_npart_cell_es_lb;
+  bool all_cells{true};
+  int const *d_npart_cell_lb{nullptr};
+  INT const *d_npart_cell_es{nullptr};
+  INT const *d_npart_cell_es_lb{nullptr};
   // The starting cell is only set for calls to create_loop_args.
-  int starting_cell;
+  int starting_cell{0};
   // Last cell plus one. Only set for calls to create_loop_args.
-  int bounding_cell;
-  int loop_type_int;
-  std::size_t local_size;
+  int bounding_cell{0};
+  // The loop type. e.g. ParticleGroup or ParticleSubGroup
+  int loop_type_int{0};
+  // Loop local size
+  std::size_t local_size{0};
+  // Is the size of the iteration set specifically provided by
+  // iteration_set_size.
+  bool provided_iteration_set_size{false};
+  // Provided iteration set size.
+  std::size_t iteration_set_size{0};
 };
 
 /**
@@ -84,13 +91,17 @@ struct ParticleLoopIteration {
  */
 template <typename T>
 inline void pre_loop([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
-                     [[maybe_unused]] T &arg) {}
+                     [[maybe_unused]] T &arg) {
+  // nprint("Default pre_loop called on type:", typeid(T).name());
+}
 /**
  * Default post loop execution function.
  */
 template <typename T>
 inline void post_loop([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
-                      [[maybe_unused]] T &arg) {}
+                      [[maybe_unused]] T &arg) {
+  // nprint("Default post_loop called on type:", typeid(T).name());
+}
 /**
  * Default function to determine how much local space a type needs per particle.
  */

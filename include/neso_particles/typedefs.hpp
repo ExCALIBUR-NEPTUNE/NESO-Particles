@@ -224,11 +224,29 @@ template <typename T> inline T get_prev_power_of_two(const T N_work_items) {
   return N * M;
 }
 
+template <typename T>
+[[nodiscard]] inline T div_round_up(const T N, const T M) {
+  const T q0 = N / M;
+  return (q0 * M) < N ? q0 + 1 : q0;
+}
+
+template <typename T> inline void nprint_inner(T t) { std::cout << t; }
+
+template <typename T> inline void nprint_inner(std::vector<T> &t) {
+  std::cout << "{";
+  for (auto ix : t) {
+    nprint_inner(ix);
+    std::cout << " ";
+  }
+  std::cout << "}";
+}
+
 template <typename U> inline void nprint_recurse(int flag, U next) {
   if (flag) {
     std::cout << " ";
   }
-  std::cout << next << std::endl;
+  nprint_inner(next);
+  std::cout << std::endl;
 }
 
 template <typename U, typename... T>
@@ -236,7 +254,7 @@ inline void nprint_recurse(int flag, U next, T... args) {
   if (flag) {
     std::cout << " ";
   }
-  std::cout << next;
+  nprint_inner(next);
   nprint_recurse(++flag, args...);
 }
 
@@ -490,5 +508,11 @@ inline bool is_power_of_two(const std::size_t n) {
 
 constexpr inline std::size_t NESO_PARTICLES_CACHELINE_NUM_int =
     NESO_PARTICLES_CACHELINE_NUM_BYTES / sizeof(int);
+
+#ifndef NESO_PARTICLES_DISABLE_MPI_NEIGHBOUR_FIXES
+#ifdef OMPI_MAJOR_VERSION
+#define NESO_PARTICLES_MPI_NEIGHBOUR_ALL_TO_ALL_FIX
+#endif
+#endif
 
 #endif

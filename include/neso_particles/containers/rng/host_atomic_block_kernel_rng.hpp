@@ -29,6 +29,20 @@ template <typename T> struct AtomicBlockRNG {
     *valid_sample = valid_tmp;
     return valid_tmp ? this->d_ptr[index] : static_cast<T>(0);
   }
+
+  inline auto at(const Access::PairLoopIndex::Read &, const int,
+                 bool *valid_sample) {
+    const int index = atomic_fetch_add(&this->counter[0], 1);
+    bool valid_tmp = (index < buffer_size) && (0 <= index);
+
+    const int to_poison_int = static_cast<int>(!valid_tmp);
+    const int already_poisoned_int =
+        atomic_fetch_max(&this->counter[1], to_poison_int);
+
+    valid_tmp = valid_tmp && (!already_poisoned_int);
+    *valid_sample = valid_tmp;
+    return valid_tmp ? this->d_ptr[index] : static_cast<T>(0);
+  }
 };
 
 /**
@@ -41,7 +55,7 @@ template <typename T>
 class HostAtomicBlockKernelRNG : public KernelRNG<AtomicBlockRNG<T>>,
                                  public BlockKernelRNGBase<T> {
 protected:
-  int internal_state;
+  int internal_state{0};
   std::map<SYCLTargetSharedPtr, std::shared_ptr<BufferDevice<int>>> d_counters;
   std::map<SYCLTargetSharedPtr, int> num_values;
 
@@ -100,10 +114,10 @@ public:
     NESOASSERT((this->internal_state == 1) || (this->internal_state == 2),
                "Unexpected internal state.");
     this->internal_state = 2;
+    auto sycl_target = global_info->particle_group->sycl_target;
     if (this->num_components == 0) {
-      return {0, nullptr, nullptr};
+      return {0, this->get_counter_ptr(sycl_target), nullptr};
     } else {
-      auto sycl_target = global_info->particle_group->sycl_target;
       const int buffer_size = this->get_num_values(sycl_target);
       return {buffer_size, this->get_counter_ptr(sycl_target),
               this->get_buffer_ptr(sycl_target)};
@@ -123,7 +137,7 @@ public:
     this->internal_state = 1;
 
     if (this->num_components > 0) {
-      const auto num_particles = get_loop_npart(global_info);
+      const auto num_particles = get_loop_iteration_set_size(global_info);
       auto sycl_target = global_info->particle_group->sycl_target;
       auto t0 = profile_timestamp();
 
@@ -285,6 +299,8 @@ public:
  * @param num_components Number of samples required per particle in the kernel.
  * @param block_size Optional block size to sample RNG values and copy to the
  * device in.
+ * @returns New atomic block RNG instance that can be passed as a ParticleLoop
+ * argument.
  */
 template <typename T, typename FUNC_TYPE>
 inline std::shared_ptr<HostAtomicBlockKernelRNG<T>>

@@ -25,6 +25,22 @@ int get_local_mpi_rank(MPI_Comm comm, int default_rank) {
   return default_rank;
 }
 
+std::size_t SYCLTarget::get_local_size() {
+  const bool is_cpu = this->device.is_cpu();
+
+  if (!is_cpu) {
+    // If the device is a GPU then return 256 or the env size.
+    const std::size_t env_local_size =
+        get_env_size_t("NESO_PARTICLES_LOOP_LOCAL_SIZE", 256);
+    return env_local_size;
+  } else {
+    // If the device is a CPU then return 32 or the env size.
+    const std::size_t env_local_size =
+        get_env_size_t("NESO_PARTICLES_LOOP_LOCAL_SIZE", 32);
+    return env_local_size;
+  }
+}
+
 void SYCLTarget::print_info_inner() {
   std::string mods = "";
 
@@ -44,20 +60,30 @@ void SYCLTarget::print_info_inner() {
 #ifdef NESO_PARTICLES_CAS_MIN_REAL
   mods += "cas_min_REAL ";
 #endif
+#ifdef NESO_PARTICLES_MPI_NEIGHBOUR_ALL_TO_ALL_FIX
+  mods += "mpi_neighbour_all_to_all_fix ";
+#endif
 
   if (device_aware_mpi_enabled()) {
     mods += "device_aware_mpi ";
   }
 
+  std::size_t local_size =
+      this->parameters->get<SizeTParameter>("LOOP_LOCAL_SIZE")->value;
+
   std::cout << "Using " << this->device.get_info<sycl::info::device::name>()
             << std::endl;
+  std::cout << "Max compute units: "
+            << this->device_limits.get_max_compute_units() << std::endl;
   std::cout << "Version: " << NESO_PARTICLES_VERSION_MAJOR << "."
             << NESO_PARTICLES_VERSION_MINOR << "."
             << NESO_PARTICLES_VERSION_PATCH << std::endl;
   std::cout << "In order queue: " << this->queue.is_in_order() << std::endl;
   std::cout << "Mods: " << mods << std::endl;
-  std::cout << "MPI comm size: " << this->comm_pair.size_parent << std::endl;
-  std::cout << "MPI comm rank: " << this->comm_pair.rank_parent << std::endl;
+  std::cout << "MPI comm size      : " << this->comm_pair.size_parent
+            << std::endl;
+  std::cout << "MPI comm rank      : " << this->comm_pair.rank_parent
+            << std::endl;
   std::cout << "MPI inter-comm size: " << this->comm_pair.size_inter
             << std::endl;
   std::cout << "MPI inter-comm rank: " << this->comm_pair.rank_inter
@@ -66,9 +92,10 @@ void SYCLTarget::print_info_inner() {
             << std::endl;
   std::cout << "MPI intra-comm rank: " << this->comm_pair.rank_intra
             << std::endl;
-  std::cout << "MPI local rank: " << this->local_rank << std::endl;
+  std::cout << "MPI local rank     : " << this->local_rank << std::endl;
   std::cout << "SYCL device count: " << this->num_devices << std::endl;
   std::cout << "SYCL device index: " << this->device_index << std::endl;
+  std::cout << "SYCL nd_range local_size  : " << local_size << std::endl;
   std::cout << "SYCL device cacheline size: "
             << this->device_limits.get_cacheline_size() << std::endl;
   this->device_limits.print();
@@ -133,12 +160,14 @@ SYCLTarget::SYCLTarget(const int gpu_device, MPI_Comm comm, int local_rank)
 
     // Setup the parameter store
     this->parameters = std::make_shared<Parameters>();
-    this->parameters->set("LOOP_LOCAL_SIZE",
-                          std::make_shared<SizeTParameter>(get_env_size_t(
-                              "NESO_PARTICLES_LOOP_LOCAL_SIZE", 256)));
+    this->parameters->set("LOOP_LOCAL_SIZE", std::make_shared<SizeTParameter>(
+                                                 this->get_local_size()));
     this->parameters->set("LOOP_NBIN",
                           std::make_shared<SizeTParameter>(
                               get_env_size_t("NESO_PARTICLES_LOOP_NBIN", 4)));
+    this->parameters->set("MAX_COMPUTE_UNITS",
+                          std::make_shared<SizeTParameter>(
+                              this->device_limits.get_max_compute_units()));
   }
 
   if (get_env_size_t("NESO_PARTICLES_IN_ORDER_QUEUE", 0)) {
@@ -156,6 +185,13 @@ SYCLTarget::SYCLTarget(const int gpu_device, MPI_Comm comm, int local_rank)
 
   if (get_env_size_t("NESO_PARTICLES_VERBOSE_DEVICE", 0)) {
     this->print_world_device_info();
+  }
+
+  this->auto_profiling_prefix =
+      get_env_string("NESO_PARTICLES_AUTO_PROFILE", "");
+
+  if (this->auto_profiling_prefix.size()) {
+    this->profile_map.enable();
   }
 
 #ifdef DEBUG_OOB_CHECK
@@ -204,6 +240,11 @@ void SYCLTarget::print_world_device_info() {
 }
 
 void SYCLTarget::free() {
+  if (this->auto_profiling_prefix.size()) {
+    this->profile_map.write_events_json(this->auto_profiling_prefix,
+                                        this->comm_pair.rank_parent);
+  }
+
   this->resource_stack_map->free();
   this->comm_pair.free();
 }
@@ -391,40 +432,4 @@ NDRangePeel1D get_nd_range_peel_1d(const std::size_t size,
                         sycl::range<1>(local_size))};
 }
 
-template sycl::event joint_exclusive_scan(SYCLTargetSharedPtr sycl_target,
-                                          std::size_t N, int *d_src,
-                                          int *d_dst);
-template sycl::event joint_exclusive_scan(SYCLTargetSharedPtr sycl_target,
-                                          std::size_t N, INT *d_src,
-                                          INT *d_dst);
-
-template sycl::event
-joint_exclusive_scan_n_sum(SYCLTargetSharedPtr sycl_target, std::size_t N,
-                           const int *RESTRICT const d_array_sizes,
-                           const int *RESTRICT const d_array_offsets,
-                           int *d_src, int *d_dst, int *d_dst_sum);
-
-template sycl::event
-joint_exclusive_scan_n_sum(SYCLTargetSharedPtr sycl_target, std::size_t N,
-                           const INT *RESTRICT const d_array_sizes,
-                           const INT *RESTRICT const d_array_offsets,
-                           INT *d_src, INT *d_dst, INT *d_dst_sum);
-
-template sycl::event
-joint_exclusive_scan_n(SYCLTargetSharedPtr sycl_target, std::size_t N,
-                       const int *RESTRICT const d_array_sizes,
-                       const int *RESTRICT const d_array_offsets, int *d_src,
-                       int *d_dst);
-
-template sycl::event
-joint_exclusive_scan_n(SYCLTargetSharedPtr sycl_target, std::size_t N,
-                       const INT *RESTRICT const d_array_sizes,
-                       const INT *RESTRICT const d_array_offsets, INT *d_src,
-                       INT *d_dst);
-
-template sycl::event matrix_transpose(SYCLTargetSharedPtr sycl_target,
-                                      const std::size_t num_rows,
-                                      const std::size_t num_cols,
-                                      const REAL *RESTRICT const d_src,
-                                      REAL *RESTRICT d_dst);
 } // namespace NESO::Particles

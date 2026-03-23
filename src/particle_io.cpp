@@ -11,36 +11,36 @@ template void
 H5Part::write_inner<ParticleSubGroup>(std::shared_ptr<ParticleSubGroup> group);
 
 template void H5Part::write_dat_2d<ParticleGroup, REAL>(
-    std::shared_ptr<ParticleGroup> parent, const int64_t npart_total,
-    const int64_t npart_local, const int64_t offset,
+    std::shared_ptr<ParticleGroup> parent, const std::int64_t npart_total,
+    const std::int64_t npart_local, const std::int64_t offset,
     ParticleDatSharedPtr<REAL> dat, hid_t group_step, hid_t dxpl);
 template void H5Part::write_dat_2d<ParticleGroup, INT>(
-    std::shared_ptr<ParticleGroup> parent, const int64_t npart_total,
-    const int64_t npart_local, const int64_t offset,
+    std::shared_ptr<ParticleGroup> parent, const std::int64_t npart_total,
+    const std::int64_t npart_local, const std::int64_t offset,
     ParticleDatSharedPtr<INT> dat, hid_t group_step, hid_t dxpl);
 template void H5Part::write_dat_2d<ParticleSubGroup, REAL>(
-    std::shared_ptr<ParticleSubGroup> parent, const int64_t npart_total,
-    const int64_t npart_local, const int64_t offset,
+    std::shared_ptr<ParticleSubGroup> parent, const std::int64_t npart_total,
+    const std::int64_t npart_local, const std::int64_t offset,
     ParticleDatSharedPtr<REAL> dat, hid_t group_step, hid_t dxpl);
 template void H5Part::write_dat_2d<ParticleSubGroup, INT>(
-    std::shared_ptr<ParticleSubGroup> parent, const int64_t npart_total,
-    const int64_t npart_local, const int64_t offset,
+    std::shared_ptr<ParticleSubGroup> parent, const std::int64_t npart_total,
+    const std::int64_t npart_local, const std::int64_t offset,
     ParticleDatSharedPtr<INT> dat, hid_t group_step, hid_t dxpl);
 template void H5Part::write_dat_column_wise<ParticleGroup, REAL>(
-    std::shared_ptr<ParticleGroup> parent, const int64_t npart_local,
+    std::shared_ptr<ParticleGroup> parent, const std::int64_t npart_local,
     ParticleDatSharedPtr<REAL> dat, hid_t dxpl, hid_t group_step,
     hid_t memspace, hid_t filespace, bool is_position);
 template void H5Part::write_dat_column_wise<ParticleGroup, INT>(
-    std::shared_ptr<ParticleGroup> parent, const int64_t npart_local,
+    std::shared_ptr<ParticleGroup> parent, const std::int64_t npart_local,
     ParticleDatSharedPtr<INT> dat, hid_t dxpl, hid_t group_step, hid_t memspace,
     hid_t filespace, bool is_position);
 
 template void H5Part::write_dat_column_wise<ParticleSubGroup, REAL>(
-    std::shared_ptr<ParticleSubGroup> parent, const int64_t npart_local,
+    std::shared_ptr<ParticleSubGroup> parent, const std::int64_t npart_local,
     ParticleDatSharedPtr<REAL> dat, hid_t dxpl, hid_t group_step,
     hid_t memspace, hid_t filespace, bool is_position);
 template void H5Part::write_dat_column_wise<ParticleSubGroup, INT>(
-    std::shared_ptr<ParticleSubGroup> parent, const int64_t npart_local,
+    std::shared_ptr<ParticleSubGroup> parent, const std::int64_t npart_local,
     ParticleDatSharedPtr<INT> dat, hid_t dxpl, hid_t group_step, hid_t memspace,
     hid_t filespace, bool is_position);
 
@@ -57,9 +57,15 @@ void H5Part::write(INT step_in) {
   }
 
   if (this->particle_sub_group != nullptr) {
+    auto r0 = this->sycl_target->profile_map.start_region(
+        "H5Part", "write_particle_sub_group");
     this->write_inner(this->particle_sub_group);
+    this->sycl_target->profile_map.end_region(r0);
   } else {
+    auto r0 = this->sycl_target->profile_map.start_region(
+        "H5Part", "write_particle_group");
     this->write_inner(this->particle_group);
+    this->sycl_target->profile_map.end_region(r0);
   }
 
   this->step++;
@@ -67,6 +73,7 @@ void H5Part::write(INT step_in) {
 
 ParticleSetSharedPtr H5Part::read(ParticleSpec &particle_spec, INT step,
                                   const bool use_xyz_positions) {
+  auto r0 = this->sycl_target->profile_map.start_region("H5Part", "read");
   this->open_read();
 
   std::string step_name = "Step#";
@@ -150,6 +157,8 @@ ParticleSetSharedPtr H5Part::read(ParticleSpec &particle_spec, INT step,
     H5CHK(H5Sclose(memspace));
   }
   H5CHK(H5Gclose(group_step));
+
+  this->sycl_target->profile_map.end_region(r0);
   return particle_set;
 }
 

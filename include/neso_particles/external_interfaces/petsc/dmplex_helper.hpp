@@ -3,6 +3,7 @@
 
 #include "../../containers/cell_dat_const.hpp"
 #include "../common/bounding_box.hpp"
+#include "../vtk/vtk.hpp"
 #include "dmplex_cell_serialise.hpp"
 #include "petsc_common.hpp"
 #include <limits>
@@ -22,8 +23,7 @@ constexpr static char face_sets_label[] = "Face Sets";
  * @param[in] overlap Optional overlap to pass to PETSc (default 0).
  */
 void generic_distribute(DM *dm, MPI_Comm comm = MPI_COMM_WORLD,
-                        const PetscInt overlap = 0);
-
+                        const PetscInt overlap = 0, PetscSF *sf = nullptr);
 /**
  * Setup the coordinate section for a DMPlex. See
  * DMPlexBuildCoordinatesFromCellList.
@@ -44,6 +44,19 @@ void setup_coordinate_section(DM &dm, const PetscInt vertex_start,
  * VecDestroy should be called on this vector.
  */
 void setup_local_coordinate_vector(DM &dm, Vec &coordinates);
+
+/**
+ * Get the global map from old point indices to new point indices after
+ * DMPlexDistribute has been called. Must be called collectively on the
+ * communicator.
+ *
+ * @param dm_distributed DMPlex output from a DMPlexDistribute call.
+ * @param sf PetscSF returned from a DMPlexDistribute call.
+ * @returns Vector where the entry at index i is the new global point index for
+ * the global point i in the DMPlex before the distribute call.
+ */
+std::vector<PetscInt> get_global_distributed_points_map(DM &dm_distributed,
+                                                        PetscSF &sf);
 
 /**
  * Class to determine new local indices from global indices when constructing
@@ -179,7 +192,9 @@ protected:
   PetscInt cell_end;
   std::vector<PetscInt> map_np_to_petsc;
   std::map<PetscInt, PetscInt> map_petsc_to_np;
+  std::map<PetscInt, PetscInt> map_gobal_point_to_local_point;
   double volume;
+  int ncells_global{-1};
 
   inline void check_valid_local_cell(const PetscInt cell) const {
     NESOASSERT((cell > -1) && (cell < this->ncells),
@@ -242,6 +257,11 @@ public:
   int get_cell_count();
 
   /**
+   * @returns the total number of cells. Collective on the communicator.
+   */
+  int get_global_cell_count();
+
+  /**
    * Convert a local cell id into a DMPlex cell id.
    *
    * @param local_index Local index in [0, num_cells).
@@ -276,6 +296,16 @@ public:
    */
   PetscInt get_point_global_index(const PetscInt point,
                                   const bool signed_point = false);
+
+  /**
+   * Get the local point index from a global point index if the point is owned
+   * by this rank.
+   *
+   * @param global_point_index Global point index to retrieve local point index
+   * for.
+   * @returns Local point index.
+   */
+  PetscInt get_local_point_from_global_point(const PetscInt global_point_index);
 
   /**
    * Get a bounding box for the cells on this MPI rank.
@@ -373,6 +403,15 @@ public:
    * @param filename Filename for VTK file.
    */
   void write_vtk(const std::string filename);
+
+  /**
+   * Get VTK data for all cells.
+   *
+   * @returns Vector of VTK data which can be passed to our VTKHDF
+   * implementation.
+   */
+  std::vector<VTK::UnstructuredCell> get_vtk_cell_data();
+
   /**
    * Print to stdout information about the held DMPlex.
    */
@@ -402,6 +441,18 @@ std::tuple<std::shared_ptr<CellDatConst<int>>,
            std::shared_ptr<CellDatConst<REAL>>>
 get_cell_vertices_cdc(SYCLTargetSharedPtr sycl_target,
                       std::shared_ptr<DMPlexHelper> dmh);
+
+/**
+ * Get the map from global cell index to owning rank. Assumes that the N global
+ * cell indices live in [a, a+N) and returns a vector of MPI ranks and a. Must
+ * be called collectively on the communicator of the DMPlex.
+ *
+ * @param dm DMPlex to retrieve owning ranks for.
+ * @returns The offset a and the vector that holds the MPI rank that owns cell i
+ * + a in element i.
+ */
+std::pair<int, std::vector<int>>
+get_map_from_global_cell_points_to_ranks(DM dm);
 
 } // namespace NESO::Particles::PetscInterface
 

@@ -34,12 +34,14 @@ template <typename T, typename... U> struct GetIndexType<0, T, U...> {
 };
 
 template <size_t INDEX, typename... U> auto &get(Tuple<U...> &u) {
+  static_assert(INDEX < sizeof...(U), "Bad index for Tuple::get");
   return static_cast<
              TupleImpl<INDEX, typename GetIndexType<INDEX, U...>::type> &>(u)
       .get();
 }
 
 template <size_t INDEX, typename... U> const auto &get(const Tuple<U...> &u) {
+  static_assert(INDEX < sizeof...(U), "Bad index for Tuple::get");
   return static_cast<const TupleImpl<
       INDEX, typename GetIndexType<INDEX, U...>::type> &>(u)
       .get_const();

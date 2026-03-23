@@ -55,6 +55,17 @@ make_rng_generation_function(ARGS... args) {
  */
 template <typename T>
 struct HostRNGGenerationFunction : RNGGenerationFunction<T> {
+protected:
+  std::size_t last_sample_size{0};
+
+public:
+  /**
+   * @returns The number of samples in the last call to draw_random_samples.
+   */
+  inline std::size_t get_last_sample_size() const {
+    return this->last_sample_size;
+  }
+
   virtual ~HostRNGGenerationFunction() = default;
 
   /// The host callable that returns RNG samples.
@@ -80,6 +91,7 @@ struct HostRNGGenerationFunction : RNGGenerationFunction<T> {
                                           T *d_ptr,
                                           const std::size_t num_numbers,
                                           const int block_size) override {
+    this->last_sample_size = num_numbers;
     auto d_ptr_start = d_ptr;
 
     // Create the random number in blocks and copy to device blockwise.
@@ -159,8 +171,11 @@ struct GenericDeviceRNGGenerationFunction : RNGGenerationFunction<T> {
   draw_random_samples([[maybe_unused]] SYCLTargetSharedPtr sycl_target,
                       T *d_ptr, const std::size_t num_numbers,
                       [[maybe_unused]] const int block_size) override {
+    auto r0 = sycl_target->profile_map.start_region(
+        "GenericDeviceRNGGenerationFunction", "draw_random_samples");
     NESOASSERT(this->generation_function(d_ptr, num_numbers) == 0,
                "Failed to draw random samples.");
+    sycl_target->profile_map.end_region(r0);
   }
 };
 
@@ -210,9 +225,9 @@ public:
   /// Implementation to generate samples.
   std::shared_ptr<RNGGenerationFunction<T>> generation_function;
   /// The number of RNG values required per particle.
-  int num_components;
+  int num_components{0};
   /// RNG values are sampled and copied to the device in this block size.
-  int block_size;
+  int block_size{0};
   /// Factor for allocation
   std::optional<REAL> max_factor;
 

@@ -41,10 +41,22 @@ INT BoundaryMeshInterface::get_total_num_exported_geoms() const {
   return static_cast<INT>(this->d_reverse_outgoing_pack_index->size);
 }
 
-void BoundaryMeshInterface::free() { MPICHK(MPI_Comm_free(&this->ncomm)); }
+void BoundaryMeshInterface::free() {
+  if (this->ncomm != MPI_COMM_NULL) {
+    MPICHK(MPI_Comm_free(&this->ncomm));
+    this->ncomm = MPI_COMM_NULL;
+  }
+  if (this->rncomm != MPI_COMM_NULL) {
+    MPICHK(MPI_Comm_free(&this->rncomm));
+    this->rncomm = MPI_COMM_NULL;
+  }
+}
 
 void BoundaryMeshInterface::extend_exchange_pattern(
     const std::vector<std::pair<int, INT>> &rank_geom_ids) {
+
+  auto r0 = this->sycl_target->profile_map.start_region(
+      "BoundaryMeshInterface", "extend_exchange_pattern");
 
   NESOASSERT(this->comm != MPI_COMM_NULL,
              "BoundaryMeshInterface::boundary_init has not been called.");
@@ -59,6 +71,7 @@ void BoundaryMeshInterface::extend_exchange_pattern(
       this->map_linear_index_to_geom_id[linear_seqential_index] = geom_id;
       this->map_geom_id_to_linear_index[geom_id] = linear_seqential_index;
       this->d_map_geom_id_to_linear_index->add(geom_id, linear_seqential_index);
+      this->extended_pattern_geom_ids.insert(geom_id);
     }
   }
 
@@ -89,10 +102,15 @@ void BoundaryMeshInterface::extend_exchange_pattern(
       owned_geom_counts.push_back(static_cast<int>(rx.second.size()));
     }
 
+    // get a legitimate pointer to avoid the mpi implementations complaining
+    // about nullptrs on arrays they don't access....
+    int dummy_destinations = 1;
+
     // Graph for the projection direction
-    MPICHK(MPI_Dist_graph_create(this->comm, 1, &rank, &degrees,
-                                 destinations.data(), MPI_UNWEIGHTED,
-                                 MPI_INFO_NULL, 0, &this->ncomm));
+    MPICHK(MPI_Dist_graph_create(
+        this->comm, 1, &rank, &degrees,
+        destinations.size() ? destinations.data() : &dummy_destinations,
+        MPI_UNWEIGHTED, MPI_INFO_NULL, 0, &this->ncomm));
     NESOASSERT(this->ncomm != MPI_COMM_NULL,
                "Failure to setup MPI graph topology.");
 
@@ -155,8 +173,8 @@ void BoundaryMeshInterface::extend_exchange_pattern(
                               ? this->incoming_geom_counts.data()
                               : &null_in;
 
-    MPICHK(MPI_Neighbor_alltoall(out_data_counts, 1, MPI_INT, in_data_counts, 1,
-                                 MPI_INT, this->ncomm));
+    MPICHK(NP_MPI_Neighbor_alltoall_wrapper(
+        out_data_counts, 1, MPI_INT, in_data_counts, 1, MPI_INT, this->ncomm));
 
     // Send the geometry id to the corresponding owning rank such that the
     // owning rank knows which geometry object incoming data corresonds to.
@@ -282,7 +300,12 @@ void BoundaryMeshInterface::extend_exchange_pattern(
                "Missmatch in bookkeeping array sizes.");
 
     e0.wait_and_throw();
+
+    // As the exchange maps have been updated then update the version.
+    this->version++;
   }
+
+  this->sycl_target->profile_map.end_region(r0);
 }
 
 INT BoundaryMeshInterface::get_geom_id_from_seq_index(
@@ -300,6 +323,82 @@ std::tuple<
 BoundaryMeshInterface::get_device_geom_id_to_seq() {
 
   return {this->d_map_geom_id_to_linear_index->root, this->geom_counter};
+}
+
+std::function<std::int64_t()>
+BoundaryMeshInterface::get_version_function_handle() {
+
+  return [&]() -> std::int64_t { return this->version; };
+}
+
+std::set<INT> BoundaryMeshInterface::get_extended_pattern_geom_ids() {
+  return this->extended_pattern_geom_ids;
+}
+
+void BoundaryMeshInterface::print_reverse_info() {
+
+  const int rank = this->sycl_target->comm_pair.rank_parent;
+  const int size = this->sycl_target->comm_pair.size_parent;
+
+  for (int rankx = 0; rankx < size; rankx++) {
+    if (rankx == rank) {
+      nprint("rank:", rank);
+      nprint("\tSENDING:");
+      const int num_destinations =
+          static_cast<int>(this->graph.reverse_destinations.size());
+
+      if (num_destinations) {
+        auto h_reverse_outgoing_pack_index =
+            this->d_reverse_outgoing_pack_index->get();
+
+        int pack_index_dst = 0;
+        for (int dx = 0; dx < num_destinations; dx++) {
+          const int dest_rank = this->graph.reverse_destinations.at(dx);
+          const int geom_count = this->reverse_outgoing_geom_counts[dx];
+          nprint("\t\t", "destination rank:", dest_rank,
+                 "num geoms:", geom_count);
+          for (int gx = 0; gx < geom_count; gx++) {
+            const auto source_index =
+                h_reverse_outgoing_pack_index.at(pack_index_dst);
+            const INT geom_id = this->owned_geom_ids.at(source_index);
+            nprint("\t\t\t", "pack index:", pack_index_dst,
+                   "source index:", source_index, "geom id:", geom_id);
+            pack_index_dst++;
+          }
+        }
+      }
+
+      nprint("\tRECVING:");
+      const int num_sources =
+          static_cast<int>(this->graph.reverse_sources.size());
+      if (num_sources) {
+
+        auto h_reverse_incoming_unpack_index =
+            d_reverse_incoming_unpack_index->get();
+
+        int pack_index_src = 0;
+        for (int sx = 0; sx < num_sources; sx++) {
+          const int src_rank = this->graph.reverse_sources.at(sx);
+          const int geom_count = reverse_incoming_geom_counts.at(sx);
+          nprint("\t\t", "source rank:", src_rank, "num geoms:", geom_count);
+          for (int gx = 0; gx < geom_count; gx++) {
+            const auto dst_index =
+                h_reverse_incoming_unpack_index[pack_index_src];
+            const INT geom_id = map_linear_index_to_geom_id.at(dst_index);
+
+            nprint("\t\t\t", "src index:", pack_index_src,
+                   "linear_stage_index:", dst_index, "geom id:", geom_id);
+            pack_index_src++;
+          }
+        }
+      }
+
+      std::cout << std::flush;
+    }
+    MPICHK(MPI_Barrier(this->sycl_target->comm_pair.comm_parent));
+    std::cout << std::flush;
+    MPICHK(MPI_Barrier(this->sycl_target->comm_pair.comm_parent));
+  }
 }
 
 template void BoundaryMeshInterface::exchange_surface(REAL *data,

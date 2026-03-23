@@ -135,6 +135,9 @@ TEST(ParticleLoop, range_execute_loop_index) {
       std::set<INT> loop_linear_index_correct;
       std::set<INT> loop_linear_index_to_test;
 
+      std::set<INT> loop_layer_correct;
+      std::set<INT> loop_layer_to_test;
+
       for (int cellx = 0; cellx < cell_count; cellx++) {
         if (cellx % range_size == 0) {
           loop_linear_index = 0;
@@ -153,19 +156,31 @@ TEST(ParticleLoop, range_execute_loop_index) {
         loop_linear_index_to_test.clear();
         sub_linear_index_correct.clear();
         sub_linear_index_to_test.clear();
+        loop_layer_correct.clear();
+        loop_layer_to_test.clear();
+
+        bool particles_exist = false;
+        int cell_loop_linear_index_offset = -1;
 
         // for each particle in the cell
         for (int rowx = 0; rowx < nrow; rowx++) {
           if (mask_func(id->at(rowx, 0))) {
+            particles_exist = true;
 
             // for each dimension
             ASSERT_EQ(loop_index->at(rowx, 0), cellx);
             ASSERT_EQ(loop_index->at(rowx, 1), rowx);
-            ASSERT_EQ(loop_index->at(rowx, 2),
-                      row_index); // fails randomly (cuda generic acpp?) TODO?
+
+            loop_layer_correct.insert(row_index);
+            loop_layer_to_test.insert(loop_index->at(rowx, 2));
+
             ASSERT_EQ(loop_index->at(rowx, 3),
                       (cellx / range_size) * range_size);
             ASSERT_EQ(loop_index->at(rowx, 4), local_linear_index);
+
+            if (loop_index->at(rowx, 2) == 0) {
+              cell_loop_linear_index_offset = loop_index->at(rowx, 5);
+            }
 
             // This test only works if the iteration set is a particle group.
             if (static_cast<void *>(iteration_set.get()) ==
@@ -188,6 +203,18 @@ TEST(ParticleLoop, range_execute_loop_index) {
         }
         ASSERT_EQ(loop_linear_index_to_test, loop_linear_index_correct);
         ASSERT_EQ(sub_linear_index_to_test, sub_linear_index_correct);
+        ASSERT_EQ(loop_layer_correct, loop_layer_to_test);
+
+        if (particles_exist) {
+          ASSERT_NE(cell_loop_linear_index_offset, -1);
+        }
+
+        for (int rowx = 0; rowx < nrow; rowx++) {
+          if (mask_func(id->at(rowx, 0))) {
+            ASSERT_EQ(loop_index->at(rowx, 5),
+                      cell_loop_linear_index_offset + loop_index->at(rowx, 2));
+          }
+        }
       }
     }
   };

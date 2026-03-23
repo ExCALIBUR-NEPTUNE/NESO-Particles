@@ -7,6 +7,7 @@
 #include <list>
 #include <map>
 #include <mpi.h>
+#include <optional>
 #include <string>
 
 #include "typedefs.hpp"
@@ -43,7 +44,7 @@ profile_elapsed(std::chrono::high_resolution_clock::time_point time_start,
  */
 struct ProfileEntry {
   /// Integral value stored on the entry.
-  int64_t value_integral = 0;
+  std::int64_t value_integral = 0;
   /// Floating point value stored on the entry.
   double value_real = 0.0;
 };
@@ -67,6 +68,7 @@ struct ProfileRegion {
    *
    * @param key1 First key for ProfileRegion.
    * @param key2 Second key for ProfileRegion.
+   * @param level Optional level for region, default 0.
    */
   ProfileRegion(const std::string key1, const std::string key2,
                 const int level = 0)
@@ -129,7 +131,8 @@ public:
    * @param value_real Floating point value for the entry.
    */
   inline void set(const std::string key1, const std::string key2,
-                  const int64_t value_integral, const double value_real = 0.0) {
+                  const std::int64_t value_integral,
+                  const double value_real = 0.0) {
     if (this->enabled) {
       this->profile[key1][key2].value_integral = value_integral;
       this->profile[key1][key2].value_real = value_real;
@@ -146,7 +149,8 @@ public:
    * value.
    */
   inline void inc(const std::string key1, const std::string key2,
-                  const int64_t value_integral, const double value_real = 0.0) {
+                  const std::int64_t value_integral,
+                  const double value_real = 0.0) {
     if (this->enabled) {
       this->profile[key1][key2].value_integral += value_integral;
       this->profile[key1][key2].value_real += value_real;
@@ -196,6 +200,37 @@ public:
   inline void add_region([[maybe_unused]] ProfileRegion &profile_region) {
     if (this->enabled) {
       this->regions.push_back(profile_region);
+    }
+  }
+
+  /**
+   * Start a region if profiling is enabled.
+   *
+   * @param key1 First key for ProfileRegion.
+   * @param key2 Second key for ProfileRegion.
+   * @param level Optional level for region, default 0.
+   */
+  [[nodiscard]] inline std::optional<ProfileRegion>
+  start_region(const std::string key1, const std::string key2,
+               const int level = 0) {
+    if (this->enabled) {
+      return ProfileRegion(key1, key2, level);
+    } else {
+      return {};
+    }
+  }
+
+  /**
+   * End a region and add it to the profiling if profiling is enabled.
+   *
+   * @param key1 First key for ProfileRegion.
+   * @param key2 Second key for ProfileRegion.
+   * @param level Optional level for region, default 0.
+   */
+  inline void end_region(std::optional<ProfileRegion> &profile_region) {
+    if (this->enabled) {
+      profile_region.value().end();
+      this->regions.push_back(profile_region.value());
     }
   }
 

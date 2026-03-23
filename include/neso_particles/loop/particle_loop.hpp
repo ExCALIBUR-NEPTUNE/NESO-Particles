@@ -174,8 +174,11 @@ protected:
       return false;
     }
 
-    auto &is = this->iteration_set->iteration_set;
+    // auto region_iteration_set = this->sycl_target->profile_map.start_region(
+    //     this->loop_type, this->name + "iteration_set_determination"
+    //);
 
+    auto &is = this->iteration_set->iteration_set;
     if (all_cells) {
       const std::size_t nbin = this->sycl_target->parameters
                                    ->template get<SizeTParameter>("LOOP_NBIN")
@@ -189,6 +192,7 @@ protected:
                                                global_info.local_size, 0,
                                                this->iteration_set_stride);
     }
+    // this->sycl_target->profile_map.end_region(region_iteration_set);
 
     this->profiling_region_metrics(this->iteration_set->iteration_set_size);
     return true;
@@ -295,8 +299,10 @@ public:
     auto cast_wrapper = [&](auto t) {
       ParticleLoopArgs<ARGS...>::post_loop_cast(&global_info, t);
     };
+
     auto post_loop_caller = [&](auto... as) { (cast_wrapper(as), ...); };
     std::apply(post_loop_caller, this->args);
+
     this->loop_running = false;
     this->profile_region_finalise();
   }

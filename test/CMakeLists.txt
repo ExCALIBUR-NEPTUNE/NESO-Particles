@@ -24,6 +24,8 @@ set(TEST_SRCS
     ${TEST_DIR}/test_algorithms_a.cpp
     ${TEST_DIR}/test_algorithms_b.cpp
     ${TEST_DIR}/test_algorithms_c.cpp
+    ${TEST_DIR}/test_algorithms_dsmc.cpp
+    ${TEST_DIR}/test_algorithms_dsmc_no_replacement.cpp
     ${TEST_DIR}/test_algorithms_unseen_value_extractor.cpp
     ${TEST_DIR}/test_boundary_mesh_interface_a.cpp
     ${TEST_DIR}/test_boundary_pbc.cpp
@@ -57,6 +59,7 @@ set(TEST_SRCS
     ${TEST_DIR}/test_petsc_project_evaluate.cpp
     ${TEST_DIR}/test_petsc_utility.cpp
     ${TEST_DIR}/test_particle_dat.cpp
+    ${TEST_DIR}/test_packing_unpacking.cpp
     ${TEST_DIR}/test_particle_group_cell_move.cpp
     ${TEST_DIR}/test_particle_group.cpp
     ${TEST_DIR}/test_particle_group_b.cpp
@@ -74,8 +77,12 @@ set(TEST_SRCS
     ${TEST_DIR}/test_particle_loop_range_execute.cpp
     ${TEST_DIR}/test_particle_loop_reduction_a.cpp
     ${TEST_DIR}/test_particle_loop_rng.cpp
+    ${TEST_DIR}/test_particle_loop_tuple_rng.cpp
     ${TEST_DIR}/test_particle_loop_rng_device_block.cpp
     ${TEST_DIR}/test_particle_loop_sym_vector.cpp
+    ${TEST_DIR}/test_particle_pair_loop_a.cpp
+    ${TEST_DIR}/test_particle_pair_loop_b.cpp
+    ${TEST_DIR}/test_particle_pair_loop_c.cpp
     ${TEST_DIR}/test_particle_remover.cpp
     ${TEST_DIR}/test_particle_set.cpp
     ${TEST_DIR}/test_particle_set_device.cpp
@@ -87,6 +94,7 @@ set(TEST_SRCS
     ${TEST_DIR}/test_particle_sub_group_f.cpp
     ${TEST_DIR}/test_particle_sub_group_g.cpp
     ${TEST_DIR}/test_particle_sub_group_h.cpp
+    ${TEST_DIR}/test_particle_sub_group_i.cpp
     ${TEST_DIR}/test_particle_sub_group_partition_a.cpp
     ${TEST_DIR}/test_particle_sub_group_partition_b.cpp
     ${TEST_DIR}/test_particle_sub_group_partition_c.cpp

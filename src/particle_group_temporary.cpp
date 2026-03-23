@@ -5,6 +5,9 @@ namespace NESO::Particles {
 
 ParticleGroupSharedPtr
 ParticleGroupTemporary::get(const ParticleGroupSharedPtr &particle_group) {
+
+  auto r0 = particle_group->sycl_target->profile_map.start_region(
+      "ParticleGroupTemporary", "get");
   if (particle_group->resource_stack_particle_group_temporary == nullptr) {
 
     auto tmp = std::make_shared<Private::ParticleGroupTemporaryRSI>();
@@ -55,16 +58,20 @@ ParticleGroupTemporary::get(const ParticleGroupSharedPtr &particle_group) {
   lambda_check_container_old(tmp_particle_group->particle_dats_real);
   lambda_check_container_old(tmp_particle_group->particle_dats_int);
 
+  particle_group->sycl_target->profile_map.end_region(r0);
   return tmp_particle_group;
 }
 
 void ParticleGroupTemporary::restore(
     const ParticleGroupSharedPtr &particle_group,
     ParticleGroupSharedPtr &temporary_particle_group) {
+  auto r0 = particle_group->sycl_target->profile_map.start_region(
+      "ParticleGroupTemporary", "restore");
   auto ptr = std::dynamic_pointer_cast<ResourceStack<ParticleGroup>>(
       particle_group->resource_stack_particle_group_temporary);
   NESOASSERT(ptr != nullptr, "Could not cast ptr.");
   ptr->restore(temporary_particle_group);
+  particle_group->sycl_target->profile_map.end_region(r0);
 }
 
 } // namespace NESO::Particles

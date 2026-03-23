@@ -689,4 +689,136 @@ TEST(PETSc, dmplex_project_barycentric_coeffs) {
   PETSCCHK(PetscFinalize());
 }
 
+TEST(PETSc, dmplex_project_simple_dg0) {
+  std::filesystem::path gmsh_filepath;
+  GET_TEST_RESOURCE(gmsh_filepath, "gmsh/reference_all_types_square_0.2.msh");
+
+  PETSCCHK(PetscInitializeNoArguments());
+  DM dm;
+  PETSCCHK(DMPlexCreateGmshFromFile(MPI_COMM_WORLD,
+                                    gmsh_filepath.generic_string().c_str(),
+                                    (PetscBool)1, &dm));
+  PetscInterface::generic_distribute(&dm);
+
+  auto mesh =
+      std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
+  const int ndim = mesh->get_ndim();
+  const int cell_count = mesh->get_cell_count();
+  auto sycl_target =
+      std::make_shared<SYCLTarget>(GPU_SELECTOR, mesh->get_comm());
+  auto mapper =
+      std::make_shared<PetscInterface::DMPlexLocalMapper>(sycl_target, mesh);
+  auto domain = std::make_shared<Domain>(mesh, mapper);
+
+  ParticleSpec particle_spec{
+      ParticleProp(Sym<REAL>("P"), ndim, true), ParticleProp(Sym<REAL>("Q"), 1),
+      ParticleProp(Sym<REAL>("Q2"), 2), ParticleProp(Sym<REAL>("R"), 1),
+      ParticleProp(Sym<INT>("CELL_ID"), 1, true)};
+  auto A = std::make_shared<ParticleGroup>(domain, particle_spec, sycl_target);
+
+  std::vector<std::vector<double>> positions;
+  std::vector<int> cells;
+  const int npart_per_cell = 17;
+  PetscInterface::uniform_within_dmplex_cells(mesh, npart_per_cell, positions,
+                                              cells);
+  const int N = cells.size();
+  ParticleSet initial_distribution(N, particle_spec);
+
+  std::mt19937 rng_state(52234234 + sycl_target->comm_pair.rank_parent);
+  std::normal_distribution<REAL> rng_dist(0, 1.0);
+  for (int px = 0; px < N; px++) {
+    for (int dimx = 0; dimx < ndim; dimx++) {
+      initial_distribution[Sym<REAL>("P")][px][dimx] =
+          positions.at(dimx).at(px);
+    }
+    initial_distribution[Sym<INT>("CELL_ID")][px][0] = cells.at(px);
+    initial_distribution[Sym<REAL>("Q")][px][0] = rng_dist(rng_state);
+    initial_distribution[Sym<REAL>("Q2")][px][0] = rng_dist(rng_state);
+    initial_distribution[Sym<REAL>("Q2")][px][1] = 20.0 + rng_dist(rng_state);
+  }
+  A->add_particles_local(initial_distribution);
+
+  auto dg0 = std::make_shared<PetscInterface::DMPlexProjectEvaluateDG>(
+      mesh, sycl_target, "DG", 0);
+
+  dg0->project(A, Sym<REAL>("Q"));
+  std::vector<REAL> h_project1;
+  dg0->get_dofs(1, h_project1);
+
+  ASSERT_EQ(h_project1.size(), cell_count);
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+
+    REAL correct = 0.0;
+    auto Q = A->get_cell(Sym<REAL>("Q"), cellx);
+    const int nrow = Q->nrow;
+    for (int rx = 0; rx < nrow; rx++) {
+      correct += Q->at(rx, 0);
+    }
+
+    correct = correct / mesh->dmh->get_cell_volume(cellx);
+    ASSERT_NEAR(correct, h_project1.at(cellx), 1.0e-8);
+  }
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    h_project1.at(cellx) *= 2.0;
+  }
+
+  dg0->set_dofs(1, h_project1);
+  dg0->evaluate(A, Sym<REAL>("Q"));
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto Q = A->get_cell(Sym<REAL>("Q"), cellx);
+    const int nrow = Q->nrow;
+    for (int rx = 0; rx < nrow; rx++) {
+      ASSERT_NEAR(h_project1.at(cellx), Q->at(rx, 0), 1.0e-15);
+    }
+  }
+
+  // check for 2 components
+  dg0->project(A, Sym<REAL>("Q2"));
+  std::vector<REAL> h_project2;
+  dg0->get_dofs(2, h_project2);
+  ASSERT_EQ(h_project2.size(), cell_count * 2);
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+
+    for (int compx = 0; compx < 2; compx++) {
+
+      REAL correct = 0.0;
+      auto Q2 = A->get_cell(Sym<REAL>("Q2"), cellx);
+      const int nrow = Q2->nrow;
+      for (int rx = 0; rx < nrow; rx++) {
+        correct += Q2->at(rx, compx);
+      }
+
+      correct = correct / mesh->dmh->get_cell_volume(cellx);
+      ASSERT_NEAR(correct, h_project2.at(cellx * 2 + compx), 1.0e-8);
+    }
+  }
+
+  for (int cellx = 0; cellx < cell_count * 2; cellx++) {
+    h_project2.at(cellx) *= 2.0;
+  }
+
+  dg0->set_dofs(2, h_project2);
+  dg0->evaluate(A, Sym<REAL>("Q2"));
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto Q2 = A->get_cell(Sym<REAL>("Q2"), cellx);
+    const int nrow = Q2->nrow;
+    for (int compx = 0; compx < 2; compx++) {
+      for (int rx = 0; rx < nrow; rx++) {
+        ASSERT_NEAR(h_project2.at(cellx * 2 + compx), Q2->at(rx, compx),
+                    1.0e-15);
+      }
+    }
+  }
+
+  sycl_target->free();
+  mesh->free();
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
+
 #endif

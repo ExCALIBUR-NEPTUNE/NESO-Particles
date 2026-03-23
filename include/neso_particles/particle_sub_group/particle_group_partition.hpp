@@ -146,11 +146,11 @@ public:
       this->partition_selectors.push_back(ptr_weak);
 
       std::function<void(Selection * created_selection)> create_handle =
-          [=](Selection *created_selection) -> void {
+          [px, this](Selection *created_selection) -> void {
         return this->create_indexed(px, created_selection);
       };
       ptr_shared->set_create_handle(create_handle);
-      std::function<void()> destroy_handle = [=]() -> void {
+      std::function<void()> destroy_handle = [px, this]() -> void {
         this->partition_selectors.at(px).reset();
         this->sub_group_particle_maps.at(px).reset();
       };

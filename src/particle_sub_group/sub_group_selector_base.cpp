@@ -104,7 +104,8 @@ bool SubGroupSelectorBase::update_required(bool *bool_dats, bool *bool_group) {
 }
 SubGroupSelectorBase::SubGroupSelectorBase(
     std::shared_ptr<ParticleGroup> parent)
-    : particle_group(get_particle_group(parent)), particle_group_version(0) {
+    : particle_group(get_particle_group(parent)), particle_sub_group(nullptr),
+      particle_group_version(0) {
   this->add_parent_dependencies(parent);
 
   NESOASSERT(this->sub_group_selector_resource == nullptr,
@@ -120,7 +121,8 @@ SubGroupSelectorBase::SubGroupSelectorBase(
 
 SubGroupSelectorBase::SubGroupSelectorBase(
     std::shared_ptr<ParticleSubGroup> parent)
-    : particle_group(get_particle_group(parent)), particle_group_version(0) {
+    : particle_group(get_particle_group(parent)), particle_sub_group(parent),
+      particle_group_version(0) {
   this->add_parent_dependencies(parent);
 
   NESOASSERT(this->sub_group_selector_resource == nullptr,
@@ -150,4 +152,10 @@ void SubGroupSelectorBase::add_parent_dependencies(
 }
 
 } // namespace ParticleSubGroupImplementation
+
+bool is_whole_group(ParticleGroupSharedPtr) { return true; }
+bool is_whole_group(std::shared_ptr<ParticleSubGroup> parent) {
+  return parent->is_entire_particle_group();
+}
+
 } // namespace NESO::Particles

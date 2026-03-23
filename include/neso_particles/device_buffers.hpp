@@ -115,8 +115,9 @@ public:
       this->assert_allocated();
       auto ptr_old = this->ptr;
       this->ptr = this->malloc_wrapper(size * sizeof(T));
+      const auto old_size = this->size;
       this->size = size;
-      this->memcpy_wrapper(this->ptr, ptr_old, size);
+      this->memcpy_wrapper(this->ptr, ptr_old, old_size);
       this->free_wrapper(ptr_old);
     }
     return this->size;
@@ -129,8 +130,8 @@ public:
    * @returns Event to wait on before using new values in the buffer.
    */
   inline sycl::event set_async(const std::vector<T> &data) {
-    NESOASSERT(data.size() == this->size, "Input data is incorrectly sized.");
-    const std::size_t size_bytes = sizeof(T) * this->size;
+    NESOASSERT(data.size() <= this->size, "Input data is incorrectly sized.");
+    const std::size_t size_bytes = sizeof(T) * data.size();
     if (size_bytes) {
       NESOASSERT(this->ptr != nullptr, "Internal pointer is not allocated.");
       this->assert_allocated();
@@ -639,6 +640,31 @@ struct ResourceStackInterfaceBufferDevice
 };
 
 /**
+ * ResourceStackInterface for BufferDevice.
+ */
+template <typename T>
+struct ResourceStackInterfaceBufferHost
+    : ResourceStackInterface<BufferHost<T>> {
+
+  SYCLTargetSharedPtr sycl_target;
+  ResourceStackInterfaceBufferHost(SYCLTargetSharedPtr sycl_target)
+      : sycl_target(sycl_target) {}
+
+  virtual inline std::shared_ptr<BufferHost<T>> construct() override {
+    return std::make_shared<BufferHost<T>>(this->sycl_target, 64);
+  }
+
+  virtual inline void
+  free([[maybe_unused]] std::shared_ptr<BufferHost<T>> &resource) override {
+    // These buffers are freed by their destructors hence we don't need to do
+    // anything here.
+  }
+
+  virtual inline void
+  clean([[maybe_unused]] std::shared_ptr<BufferHost<T>> &resource) override {}
+};
+
+/**
  * ResourceStackMap key for ResourceStackInterfaceBufferDeviceHost.
  */
 template <typename T> struct ResourceStackKeyBufferDeviceHost {};
@@ -647,6 +673,11 @@ template <typename T> struct ResourceStackKeyBufferDeviceHost {};
  * ResourceStackMap key for ResourceStackInterfaceBufferDevice.
  */
 template <typename T> struct ResourceStackKeyBufferDevice {};
+
+/**
+ * ResourceStackMap key for ResourceStackInterfaceBufferHost.
+ */
+template <typename T> struct ResourceStackKeyBufferHost {};
 
 } // namespace NESO::Particles
 #endif

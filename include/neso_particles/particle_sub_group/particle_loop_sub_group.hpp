@@ -90,6 +90,7 @@ protected:
 
     // If the loop is called cell wise asynchronously then the call over cell i
     // could trigger a rebuild on cell i+1
+
     if (!this->loop_running) {
       this->particle_sub_group->create_if_required();
     }
@@ -105,6 +106,7 @@ protected:
 
     global_info = this->create_global_info(cell_start, cell_end);
     global_info.particle_sub_group = this->particle_sub_group.get();
+
     this->apply_pre_loop(global_info);
 
     // This early exit is after the pre loop calls as other ranks may have a
@@ -115,6 +117,9 @@ protected:
 
     this->profiling_region_metrics(this->iteration_set->iteration_set_size);
 
+    // auto region_iteration_set = this->sycl_target->profile_map.start_region(
+    //     this->loop_type, this->name + "iteration_set_determination"
+    //);
     auto &is = this->iteration_set->iteration_set;
     if (all_cells) {
       const std::size_t nbin = this->sycl_target->parameters
@@ -129,6 +134,7 @@ protected:
                                                global_info.local_size, 0,
                                                this->iteration_set_stride);
     }
+    // this->sycl_target->profile_map.end_region(region_iteration_set);
 
     return true;
   }

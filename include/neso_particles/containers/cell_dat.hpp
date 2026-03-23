@@ -218,8 +218,12 @@ protected:
    */
   inline T *const *const *impl_get_const() { return this->d_ptr; }
 
+public:
   /**
-   * Get the device pointer for a column in a cell.
+   * Get the device pointer for a column in a cell. Do NOT use this method to
+   * access particle data - it will break in a hard to detect manner. Instead
+   * use the methods for accessing particle data directly which are designed for
+   * accessing particle data directly.
    *
    * @param cell Cell index to get pointer for.
    * @param col Column in cell to get pointer for.
@@ -229,6 +233,7 @@ protected:
     return this->h_ptr_cols[cell * this->ncol + col];
   }
 
+protected:
   /**
    * Create new CellDat on a specified compute target.
    *
@@ -245,11 +250,12 @@ protected:
     this->create(ncells, ncol);
     this->fixed_size = true;
 
-    T *k_data = static_cast<T *>(
-        this->sycl_target->malloc_device(npart_local * this->ncol * sizeof(T)));
-
+    T *k_data = nullptr;
     sycl::event e1;
+
     if (npart_local > 0) {
+      k_data = static_cast<T *>(this->sycl_target->malloc_device(
+          npart_local * this->ncol * sizeof(T)));
       e1 = this->sycl_target->queue.fill((T *)k_data, (T)0,
                                          npart_local * this->ncol);
     }
@@ -260,16 +266,19 @@ protected:
     auto k_ptr = this->d_ptr;
     auto k_ncell = ncells;
 
-    auto e0 = this->sycl_target->queue.parallel_for(
-        sycl::range<1>(k_ncell), [=](auto cellx) {
-          const INT npart_cell = d_npart_cell[cellx];
-          const INT npart_cell_es = d_npart_cell_es[cellx];
-          T *base_ptr = k_data + npart_cell_es * ncol;
-          for (int cx = 0; cx < ncol; cx++) {
-            auto col_ptr = base_ptr + cx * npart_cell;
-            k_ptr[cellx][cx] = col_ptr;
-          }
-        });
+    sycl::event e0;
+    if (npart_local > 0) {
+      e0 = this->sycl_target->queue.parallel_for(
+          sycl::range<1>(k_ncell), [=](auto cellx) {
+            const INT npart_cell = d_npart_cell[cellx];
+            const INT npart_cell_es = d_npart_cell_es[cellx];
+            T *base_ptr = k_data + npart_cell_es * ncol;
+            for (int cx = 0; cx < ncol; cx++) {
+              auto col_ptr = base_ptr + cx * npart_cell;
+              k_ptr[cellx][cx] = col_ptr;
+            }
+          });
+    }
 
     auto d_tmp = k_data;
     for (int cellx = 0; cellx < ncells; cellx++) {
@@ -277,8 +286,12 @@ protected:
       this->nrow_alloc[cellx] = npart_cell;
       this->nrow[cellx] = npart_cell;
       for (int cx = 0; cx < ncol; cx++) {
-        this->h_ptr_cols[cellx * this->ncol + cx] = d_tmp;
-        d_tmp += npart_cell;
+        if (npart_local > 0) {
+          this->h_ptr_cols[cellx * this->ncol + cx] = d_tmp;
+          d_tmp += npart_cell;
+        } else {
+          this->h_ptr_cols[cellx * this->ncol + cx] = nullptr;
+        }
       }
     }
 

@@ -125,6 +125,9 @@ CartesianTrajectoryIntersection::create_function(
     const int group, const std::string function_space,
     const int polynomial_order) {
 
+  auto r0 = this->sycl_target->profile_map.start_region(
+      "CartesianTrajectoryIntersection", "create_function");
+
   NESOASSERT(this->boundary_groups.count(group),
              "Passed group does not exist in boundary groups.");
 
@@ -134,19 +137,21 @@ CartesianTrajectoryIntersection::create_function(
     cells.insert(cells.end(), tmp.begin(), tmp.end());
   }
 
-  return std::make_shared<CartesianHMeshFunction>(
+  auto func = std::make_shared<CartesianHMeshFunction>(
       this->mesh, this->sycl_target, this->mesh->get_ndim() - 1, cells,
       function_space, polynomial_order, group);
+
+  this->sycl_target->profile_map.end_region(r0);
+  return func;
 }
 
-void CartesianTrajectoryIntersection::function_project(
-    ParticleSubGroupSharedPtr particle_sub_group, Sym<REAL> sym,
-    const int component, const bool is_ephemeral,
+void CartesianTrajectoryIntersection::function_project_initialise(
     CartesianHMeshFunctionSharedPtr func) {
 
-  const bool null_sub_group = particle_sub_group == nullptr;
+  auto r0 = this->sycl_target->profile_map.start_region(
+      "CartesianTrajectoryIntersection", "function_project_initialise");
 
-  const int group = func->element_group;
+  const int group = func->boundary_group;
   auto &boundary_mesh_interface = this->map_groups_boundary_interface.at(group);
 
   auto [d_tree_root, num_accessible_geoms] =
@@ -154,17 +159,57 @@ void CartesianTrajectoryIntersection::function_project(
 
   const std::size_t tmp_buffer_size =
       num_accessible_geoms * func->cell_dof_count;
-  auto d_buffer = get_resource<BufferDevice<REAL>,
-                               ResourceStackInterfaceBufferDevice<REAL>>(
-      sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<REAL>{},
-      sycl_target);
-  d_buffer->realloc_no_copy(tmp_buffer_size);
-  REAL *k_buffer = d_buffer->ptr;
+
+  func->d_dofs_stage->realloc_no_copy(tmp_buffer_size);
+  REAL *k_buffer = func->d_dofs_stage->ptr;
 
   if (tmp_buffer_size > 0) {
     this->sycl_target->queue.fill(k_buffer, (REAL)0.0, tmp_buffer_size)
         .wait_and_throw();
   }
+  func->fill(0.0);
+
+  this->sycl_target->profile_map.end_region(r0);
+}
+
+void CartesianTrajectoryIntersection::function_project_contribute(
+    ParticleSubGroupSharedPtr particle_sub_group, Sym<REAL> sym,
+    const int component, const bool is_ephemeral,
+    CartesianHMeshFunctionSharedPtr func) {
+
+  auto r0 = this->sycl_target->profile_map.start_region(
+      "CartesianTrajectoryIntersection", "function_project_contribute");
+
+  const bool null_sub_group = particle_sub_group == nullptr;
+  const int group = func->boundary_group;
+  auto &boundary_mesh_interface = this->map_groups_boundary_interface.at(group);
+
+  auto [d_tree_root, num_accessible_geoms] =
+      boundary_mesh_interface->get_device_geom_id_to_seq();
+
+  const INT k_num_accessible_geoms = num_accessible_geoms;
+
+  const auto cell_dof_count = func->cell_dof_count;
+  const INT current_stage_size = func->d_dofs_stage->size / cell_dof_count;
+  if (current_stage_size < k_num_accessible_geoms) {
+
+    func->d_dofs_stage->realloc(k_num_accessible_geoms * cell_dof_count);
+    const auto diff =
+        (k_num_accessible_geoms - current_stage_size) * cell_dof_count;
+    REAL *k_buffer =
+        func->d_dofs_stage->ptr + current_stage_size * cell_dof_count;
+    this->sycl_target->queue
+        .parallel_for(sycl::range<1>(diff),
+                      [=](auto idx) { k_buffer[idx] = 0.0; })
+        .wait_and_throw();
+  }
+
+  NESOASSERT(
+      func->d_dofs_stage->size >=
+          static_cast<std::size_t>(num_accessible_geoms * cell_dof_count),
+      "Temporary staging buffer is too small. Please raise an issue.");
+
+  REAL *k_buffer = func->d_dofs_stage->ptr;
 
   if (!null_sub_group) {
     auto *k_tree_root = d_tree_root;
@@ -177,62 +222,85 @@ void CartesianTrajectoryIntersection::function_project(
             (particle_sub_group->contains_ephemeral_dat(sym) && is_ephemeral),
         "Source particle data not found.");
 
-    ErrorPropagate ep(this->sycl_target);
-    auto k_ep = ep.device_ptr();
-
+    ErrorPropagate ep_found(this->sycl_target);
+    ErrorPropagate ep_dof(this->sycl_target);
+    auto k_ep_found = ep_found.device_ptr();
+    auto k_ep_dof = ep_dof.device_ptr();
     const REAL k_inverse_width = func->mesh->inverse_cell_width_fine;
 
+    auto lambda_dispatch = [&](auto extract_quantity) {
+      particle_loop(
+          "CartesianHMeshFunction::function_project_contribute",
+          particle_sub_group,
+          [=](auto BOUNDARY_METADATA, auto SYM) {
+            if (k_tree_root != nullptr) {
+              const INT *index;
+              bool found = false;
+              found =
+                  k_tree_root->get(BOUNDARY_METADATA.at_ephemeral(1), &index);
+#ifndef NDEBUG
+              NESO_KERNEL_ASSERT(found, k_ep_found);
+              const bool bad_index =
+                  ((*index) < 0) || ((*index) >= k_num_accessible_geoms);
+              NESO_KERNEL_ASSERT(!bad_index, k_ep_dof);
+#endif
+              if (found) {
+                const REAL value = extract_quantity(SYM, component);
+                atomic_fetch_add(&k_buffer[*index], k_inverse_width * value);
+              }
+            }
+          },
+          Access::read(Sym<INT>("NESO_PARTICLES_BOUNDARY_METADATA")),
+          Access::read(sym))
+          ->execute();
+    };
+
     if (is_ephemeral) {
-      particle_loop(
-          "CartesianHMeshFunction::function_project", particle_sub_group,
-          [=](auto BOUNDARY_METADATA, auto SYM) {
-            if (k_tree_root != nullptr) {
-              const INT *index;
-              bool found = false;
-              found =
-                  k_tree_root->get(BOUNDARY_METADATA.at_ephemeral(1), &index);
-#ifndef NDEBUG
-              NESO_KERNEL_ASSERT(found, k_ep);
-#endif
-              if (found) {
-                atomic_fetch_add(&k_buffer[*index],
-                                 k_inverse_width * SYM.at_ephemeral(component));
-              }
-            }
-          },
-          Access::read(Sym<INT>("NESO_PARTICLES_BOUNDARY_METADATA")),
-          Access::read(sym))
-          ->execute();
+      lambda_dispatch([](auto SYM, const int component) {
+        return SYM.at_ephemeral(component);
+      });
     } else {
-      particle_loop(
-          "CartesianHMeshFunction::function_project", particle_sub_group,
-          [=](auto BOUNDARY_METADATA, auto SYM) {
-            if (k_tree_root != nullptr) {
-              const INT *index;
-              bool found = false;
-              found =
-                  k_tree_root->get(BOUNDARY_METADATA.at_ephemeral(1), &index);
-#ifndef NDEBUG
-              NESO_KERNEL_ASSERT(found, k_ep);
-#endif
-
-              if (found) {
-                atomic_fetch_add(&k_buffer[*index],
-                                 k_inverse_width * SYM.at(component));
-              }
-            }
-          },
-          Access::read(Sym<INT>("NESO_PARTICLES_BOUNDARY_METADATA")),
-          Access::read(sym))
-          ->execute();
+      lambda_dispatch(
+          [](auto SYM, const int component) { return SYM.at(component); });
     }
-    NESOASSERT(!ep.get_flag(), "Failed to find index for hit geometry object.");
+    NESOASSERT(!ep_found.get_flag(),
+               "Failed to find index for hit geometry object.");
+    NESOASSERT(!ep_dof.get_flag(), "Bad index for hit geometry object.");
   }
-  boundary_mesh_interface->exchange_from_device(k_buffer, func->cell_dof_count,
-                                                func->d_dofs->ptr);
 
-  restore_resource(sycl_target->resource_stack_map,
-                   ResourceStackKeyBufferDevice<REAL>{}, d_buffer);
+  this->sycl_target->profile_map.end_region(r0);
+}
+
+void CartesianTrajectoryIntersection::function_project_finalise(
+    CartesianHMeshFunctionSharedPtr func) {
+
+  auto r0 = this->sycl_target->profile_map.start_region(
+      "CartesianTrajectoryIntersection", "function_project_finalise");
+
+  const int group = func->boundary_group;
+  auto &boundary_mesh_interface = this->map_groups_boundary_interface.at(group);
+  boundary_mesh_interface->exchange_from_device(
+      func->d_dofs_stage->ptr, func->cell_dof_count, func->d_dofs->ptr);
+  func->reset_version();
+  NESOASSERT(func->version == 0, "Expected a version reset.");
+
+  this->sycl_target->profile_map.end_region(r0);
+}
+
+void CartesianTrajectoryIntersection::function_project(
+    ParticleSubGroupSharedPtr particle_sub_group, Sym<REAL> sym,
+    const int component, const bool is_ephemeral,
+    CartesianHMeshFunctionSharedPtr func) {
+
+  auto r0 = this->sycl_target->profile_map.start_region(
+      "CartesianTrajectoryIntersection", "function_project");
+
+  this->function_project_initialise(func);
+  this->function_project_contribute(particle_sub_group, sym, component,
+                                    is_ephemeral, func);
+  this->function_project_finalise(func);
+
+  this->sycl_target->profile_map.end_region(r0);
 }
 
 void CartesianTrajectoryIntersection::function_evaluate(
@@ -240,25 +308,29 @@ void CartesianTrajectoryIntersection::function_evaluate(
     const int component, const bool is_ephemeral,
     CartesianHMeshFunctionSharedPtr func) {
 
+  auto r0 = this->sycl_target->profile_map.start_region(
+      "CartesianTrajectoryIntersection", "function_evaluate");
+
   const bool null_sub_group = particle_sub_group == nullptr;
-  const int group = func->element_group;
+  const int group = func->boundary_group;
   auto &boundary_mesh_interface = this->map_groups_boundary_interface.at(group);
 
   auto [d_tree_root, num_accessible_geoms] =
       boundary_mesh_interface->get_device_geom_id_to_seq();
 
-  const std::size_t tmp_buffer_size =
-      num_accessible_geoms * func->cell_dof_count;
-  auto d_buffer = get_resource<BufferDevice<REAL>,
-                               ResourceStackInterfaceBufferDevice<REAL>>(
-      sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<REAL>{},
-      sycl_target);
-  d_buffer->realloc_no_copy(tmp_buffer_size);
-  REAL *k_buffer = d_buffer->ptr;
+  const auto boundary_mesh_interface_version =
+      boundary_mesh_interface->get_version_function_handle()();
 
-  boundary_mesh_interface->reverse_exchange_from_device(
-      func->d_dofs->ptr, func->cell_dof_count, k_buffer);
+  if (func->version < boundary_mesh_interface_version) {
+    const std::size_t tmp_buffer_size =
+        num_accessible_geoms * func->cell_dof_count;
+    func->d_dofs_stage->realloc_no_copy(tmp_buffer_size);
+    boundary_mesh_interface->reverse_exchange_from_device(
+        func->d_dofs->ptr, func->cell_dof_count, func->d_dofs_stage->ptr);
+    func->version = boundary_mesh_interface_version;
+  }
 
+  REAL *k_buffer = func->d_dofs_stage->ptr;
   if (!null_sub_group) {
     auto *k_tree_root = d_tree_root;
     NESOASSERT(particle_sub_group->contains_ephemeral_dat(
@@ -273,52 +345,42 @@ void CartesianTrajectoryIntersection::function_evaluate(
     ErrorPropagate ep(this->sycl_target);
     auto k_ep = ep.device_ptr();
 
+    auto lambda_dispatch = [&](auto set_quantity) {
+      particle_loop(
+          "CartesianHMeshFunction::function_evaluate", particle_sub_group,
+          [=](auto BOUNDARY_METADATA, auto SYM) {
+            if (k_tree_root != nullptr) {
+              const INT *index;
+              bool found = false;
+              found =
+                  k_tree_root->get(BOUNDARY_METADATA.at_ephemeral(1), &index);
+#ifndef NDEBUG
+              NESO_KERNEL_ASSERT(found, k_ep);
+#endif
+              if (found) {
+                set_quantity(SYM, component, k_buffer[*index]);
+              }
+            }
+          },
+          Access::read(Sym<INT>("NESO_PARTICLES_BOUNDARY_METADATA")),
+          Access::write(sym))
+          ->execute();
+    };
+
     if (is_ephemeral) {
-      particle_loop(
-          "CartesianHMeshFunction::function_evaluate", particle_sub_group,
-          [=](auto BOUNDARY_METADATA, auto SYM) {
-            if (k_tree_root != nullptr) {
-              const INT *index;
-              bool found = false;
-              found =
-                  k_tree_root->get(BOUNDARY_METADATA.at_ephemeral(1), &index);
-#ifndef NDEBUG
-              NESO_KERNEL_ASSERT(found, k_ep);
-#endif
-              if (found) {
-                SYM.at_ephemeral(component) = k_buffer[*index];
-              }
-            }
-          },
-          Access::read(Sym<INT>("NESO_PARTICLES_BOUNDARY_METADATA")),
-          Access::write(sym))
-          ->execute();
+      lambda_dispatch([](auto &SYM, const int component, const REAL value) {
+        SYM.at_ephemeral(component) = value;
+      });
     } else {
-      particle_loop(
-          "CartesianHMeshFunction::function_evaluate", particle_sub_group,
-          [=](auto BOUNDARY_METADATA, auto SYM) {
-            if (k_tree_root != nullptr) {
-              const INT *index;
-              bool found = false;
-              found =
-                  k_tree_root->get(BOUNDARY_METADATA.at_ephemeral(1), &index);
-#ifndef NDEBUG
-              NESO_KERNEL_ASSERT(found, k_ep);
-#endif
-              if (found) {
-                SYM.at(component) = k_buffer[*index];
-              }
-            }
-          },
-          Access::read(Sym<INT>("NESO_PARTICLES_BOUNDARY_METADATA")),
-          Access::write(sym))
-          ->execute();
+      lambda_dispatch([](auto &SYM, const int component, const REAL value) {
+        SYM.at(component) = value;
+      });
     }
+
     NESOASSERT(!ep.get_flag(), "Failed to find index for hit geometry object.");
   }
 
-  restore_resource(sycl_target->resource_stack_map,
-                   ResourceStackKeyBufferDevice<REAL>{}, d_buffer);
+  this->sycl_target->profile_map.end_region(r0);
 }
 
 template void CartesianTrajectoryIntersection::pre_integration_inner(
@@ -335,24 +397,44 @@ CartesianTrajectoryIntersection::post_integration_inner(
 
 void CartesianTrajectoryIntersection::pre_integration(
     std::shared_ptr<ParticleGroup> particles) {
-  return this->pre_integration_inner(particles);
+  auto r0 = this->sycl_target->profile_map.start_region(
+      "CartesianTrajectoryIntersection",
+      "pre_integration_inner_particle_group");
+  this->pre_integration_inner(particles);
+  this->sycl_target->profile_map.end_region(r0);
+  return;
 }
 
 void CartesianTrajectoryIntersection::pre_integration(
     std::shared_ptr<ParticleSubGroup> particles) {
-  return this->pre_integration_inner(particles);
+  auto r0 = this->sycl_target->profile_map.start_region(
+      "CartesianTrajectoryIntersection",
+      "pre_integration_inner_particle_sub_group");
+  this->pre_integration_inner(particles);
+  this->sycl_target->profile_map.end_region(r0);
+  return;
 }
 
 std::map<int, ParticleSubGroupSharedPtr>
 CartesianTrajectoryIntersection::post_integration(
     std::shared_ptr<ParticleGroup> particles) {
-  return this->post_integration_inner(particles);
+  auto r0 = this->sycl_target->profile_map.start_region(
+      "CartesianTrajectoryIntersection",
+      "post_integration_inner_particle_group");
+  auto r = this->post_integration_inner(particles);
+  this->sycl_target->profile_map.end_region(r0);
+  return r;
 }
 
 std::map<int, ParticleSubGroupSharedPtr>
 CartesianTrajectoryIntersection::post_integration(
     std::shared_ptr<ParticleSubGroup> particles) {
-  return this->post_integration_inner(particles);
+  auto r0 = this->sycl_target->profile_map.start_region(
+      "CartesianTrajectoryIntersection",
+      "post_integration_inner_particle_sub_group");
+  auto r = this->post_integration_inner(particles);
+  this->sycl_target->profile_map.end_region(r0);
+  return r;
 }
 
 } // namespace NESO::Particles

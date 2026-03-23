@@ -3,6 +3,7 @@
 
 #include "particle_loop_sub_group_functions.hpp"
 #include "particle_sub_group_base.hpp"
+#include "particle_sub_group_utility.hpp"
 #include "sub_group_selector.hpp"
 #include "sub_group_selector_base.hpp"
 
@@ -17,10 +18,6 @@ protected:
   bool parent_is_whole_group;
   int cell_start;
   int cell_end;
-  inline bool get_parent_is_whole_group(ParticleGroupSharedPtr) { return true; }
-  inline bool get_parent_is_whole_group(ParticleSubGroupSharedPtr parent) {
-    return parent->is_entire_particle_group();
-  }
 
 public:
   /**
@@ -46,22 +43,7 @@ public:
     NESOASSERT(cell_start <= cell_end, "cell_start > cell_end is invalid");
 
     this->check_sym_type(this->particle_group->cell_id_dat->sym);
-    this->parent_is_whole_group = this->get_parent_is_whole_group(parent);
-    if (!this->parent_is_whole_group) {
-      this->loop_0 = particle_loop(
-          "sub_group_selector_0", parent,
-          [=](auto loop_index, auto k_map_ptrs) {
-            const INT particle_linear_index =
-                loop_index.get_local_linear_index();
-            const int layer = atomic_fetch_add(
-                &(k_map_ptrs.at(
-                    1)[cell_count +
-                       loop_index.cell * NESO_PARTICLES_CACHELINE_NUM_int]),
-                1);
-            k_map_ptrs.at(0)[particle_linear_index] = layer;
-          },
-          Access::read(ParticleLoopIndex{}), Access::read(this->map_ptrs));
-    }
+    this->parent_is_whole_group = is_whole_group(parent);
 
     auto [h_npart_cell_ptr, d_npart_cell_ptr, h_npart_cell_es_ptr,
           d_npart_cell_es_ptr] =
