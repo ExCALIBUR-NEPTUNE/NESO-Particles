@@ -72,11 +72,15 @@ TEST(ParticlePairLoopBlock, descendant_products) {
           DP_a.set_parent(INDEX_a, child);
           DP_b.set_parent(INDEX_b, child);
 
-          DP_a.at_real(INDEX_a, child, 0, 0) = INDEX_a.get_loop_linear_index();
-          DP_b.at_real(INDEX_b, child, 0, 0) = INDEX_b.get_loop_linear_index();
+          DP_a.at_real(INDEX_a, child, 0, 0) =
+              INDEX_a.get_loop_linear_index() + child;
+          DP_b.at_real(INDEX_b, child, 0, 0) =
+              INDEX_b.get_loop_linear_index() + child;
 
-          DP_a.at_int(INDEX_a, child, 0, 0) = INDEX_a.get_loop_linear_index();
-          DP_b.at_int(INDEX_b, child, 0, 0) = INDEX_b.get_loop_linear_index();
+          DP_a.at_int(INDEX_a, child, 0, 0) =
+              INDEX_a.get_loop_linear_index() + child;
+          DP_b.at_int(INDEX_b, child, 0, 0) =
+              INDEX_b.get_loop_linear_index() + child;
         }
       },
       Access::A(Access::read(ParticlePairLoopIndex{})),
@@ -137,10 +141,14 @@ TEST(ParticlePairLoopBlock, descendant_products) {
           ASSERT_EQ(h_parent_layers_a.at(child_linear_index), a);
           ASSERT_EQ(h_parent_layers_b.at(child_linear_index), b);
 
-          ASSERT_EQ(h_dp_a->at(sym_real, child_linear_index, 0), pair_index);
-          ASSERT_EQ(h_dp_b->at(sym_real, child_linear_index, 0), pair_index);
-          ASSERT_EQ(h_dp_a->at(sym_int, child_linear_index, 0), pair_index);
-          ASSERT_EQ(h_dp_b->at(sym_int, child_linear_index, 0), pair_index);
+          ASSERT_EQ(h_dp_a->at(sym_real, child_linear_index, 0),
+                    pair_index + child);
+          ASSERT_EQ(h_dp_b->at(sym_real, child_linear_index, 0),
+                    pair_index + child);
+          ASSERT_EQ(h_dp_a->at(sym_int, child_linear_index, 0),
+                    pair_index + child);
+          ASSERT_EQ(h_dp_b->at(sym_int, child_linear_index, 0),
+                    pair_index + child);
         }
 
         pair_index++;
