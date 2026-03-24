@@ -392,4 +392,6 @@ CellwisePairListHostMap PairSamplerNoReplacement::get_host_pair_list() {
   return l;
 }
 
+INT PairSamplerNoReplacement::get_num_pairs() { return this->num_pairs; }
+
 } // namespace NESO::Particles::DSMC

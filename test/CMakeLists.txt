@@ -83,6 +83,7 @@ set(TEST_SRCS
     ${TEST_DIR}/test_particle_pair_loop_a.cpp
     ${TEST_DIR}/test_particle_pair_loop_b.cpp
     ${TEST_DIR}/test_particle_pair_loop_c.cpp
+    ${TEST_DIR}/test_particle_pair_loop_products.cpp
     ${TEST_DIR}/test_particle_remover.cpp
     ${TEST_DIR}/test_particle_set.cpp
     ${TEST_DIR}/test_particle_set_device.cpp

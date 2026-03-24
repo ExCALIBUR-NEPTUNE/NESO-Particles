@@ -31,7 +31,7 @@ protected:
   // The max wave count of any cell
   int max_wave_count{-1};
   // The number of pairs.
-  INT pair_count{-1};
+  INT pair_count{0};
 
   int mode{0};
 
@@ -90,6 +90,11 @@ public:
    * @returns Container of pairs for each cell.
    */
   virtual CellwisePairListHostMap get_host_pair_list() override;
+
+  /**
+   * @returns The number of pairs in the pair list.
+   */
+  virtual INT get_num_pairs() override;
 };
 
 using CellwisePairListSimpleSharedPtr = std::shared_ptr<CellwisePairListSimple>;

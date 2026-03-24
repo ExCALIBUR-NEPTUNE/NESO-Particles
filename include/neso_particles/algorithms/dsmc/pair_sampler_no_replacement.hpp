@@ -92,6 +92,11 @@ public:
    * @returns Container of pairs for each cell.
    */
   virtual CellwisePairListHostMap get_host_pair_list() override;
+
+  /**
+   * @returns The number of pairs in the pair list.
+   */
+  virtual INT get_num_pairs() override;
 };
 
 } // namespace NESO::Particles::DSMC

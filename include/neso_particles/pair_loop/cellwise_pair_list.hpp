@@ -119,6 +119,11 @@ public:
   virtual CellwisePairListHostMap get_host_pair_list() = 0;
 
   /**
+   * @returns The number of pairs in the pair list.
+   */
+  virtual INT get_num_pairs() = 0;
+
+  /**
    * @param sycl_target Compute target for the pair list.
    * @returns True if no conflicts were detected or the pair list was otherwise
    * malformed.

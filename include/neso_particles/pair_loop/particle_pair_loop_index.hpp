@@ -17,11 +17,11 @@ struct Read {
 
   /// The cell containing the particle. Use Access::A and Access::B to
   /// distinguish between a and b.
-  INT cell;
+  INT cell{-1};
 
   /// The layer of the particle. Use Access::A and Access::B to distinguish
   /// between a and b.
-  INT layer;
+  INT layer{-1};
 
   /**
    * @returns The linear index of the pair in the loop.
@@ -65,7 +65,7 @@ inline ParticlePairLoopIndexKernelT create_loop_arg(
 namespace ParticlePairLoopImplementation {
 
 /**
- *  Function to create the kernel argument for ParticlePairLoopIndex read
+ * Function to create the kernel argument for ParticlePairLoopIndex read
  * access.
  */
 inline void create_kernel_arg(
