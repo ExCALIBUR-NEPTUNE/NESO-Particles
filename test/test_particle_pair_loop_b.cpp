@@ -11,14 +11,18 @@ TEST(ParticlePairLoopBlock, base) {
   auto [A, sycl_target, cell_count] =
       particle_loop_create_common(npart_cell, ndim, nx, ny, nz);
   A->add_particle_dat(Sym<INT>("NEIGHBOURS"), 2);
+  A->add_particle_dat(Sym<INT>("CELL_LAYER"), 2);
 
   auto reset_loop = particle_loop(
       A,
-      [=](auto NN) {
+      [=](auto NN, auto INDEX, auto CELL_LAYER) {
         NN.at(0) = 0;
         NN.at(1) = 1;
+        CELL_LAYER.at(0) = INDEX.cell;
+        CELL_LAYER.at(1) = INDEX.layer;
       },
-      Access::write(Sym<INT>("NEIGHBOURS")));
+      Access::write(Sym<INT>("NEIGHBOURS")), Access::read(ParticleLoopIndex{}),
+      Access::write(Sym<INT>("CELL_LAYER")));
 
   reset_loop->execute();
   auto aa = particle_sub_group(A, []() { return true; });
@@ -64,6 +68,27 @@ TEST(ParticlePairLoopBlock, base) {
   std::fill(num_pairs.begin(), num_pairs.end(), 127);
   pair_sampler_ntc->sample(aa, aa, num_pairs);
   ASSERT_TRUE(pair_sampler_ntc->validate_pair_list(sycl_target));
+
+  ErrorPropagate ep(sycl_target);
+  auto k_ep = ep.device_ptr();
+
+  particle_pair_loop(
+      "particle_pair_loop_test",
+      {CellwisePairListAbsolute<ParticleGroup, CellwisePairListBlockInterface>(
+          A, A, pair_sampler_ntc)},
+      [=](auto CELL_LAYER_a, auto CELL_LAYER_b, auto INDEX_a, auto INDEX_b) {
+        NESO_KERNEL_ASSERT(CELL_LAYER_a.at(0) == INDEX_a.cell, k_ep);
+        NESO_KERNEL_ASSERT(CELL_LAYER_a.at(1) == INDEX_a.layer, k_ep);
+        NESO_KERNEL_ASSERT(CELL_LAYER_b.at(0) == INDEX_b.cell, k_ep);
+        NESO_KERNEL_ASSERT(CELL_LAYER_b.at(1) == INDEX_b.layer, k_ep);
+      },
+      Access::A(Access::read(Sym<INT>("CELL_LAYER"))),
+      Access::B(Access::read(Sym<INT>("CELL_LAYER"))),
+      Access::A(Access::read(ParticlePairLoopIndex{})),
+      Access::B(Access::read(ParticlePairLoopIndex{})))
+      ->execute();
+
+  ASSERT_FALSE(ep.get_flag());
 
   particle_pair_loop(
       "particle_pair_loop_test",
@@ -117,9 +142,6 @@ TEST(ParticlePairLoopBlock, base) {
 
   BufferDevice<int> d_flags(sycl_target, h_flags);
   int *k_flags = d_flags.ptr;
-
-  ErrorPropagate ep(sycl_target);
-  auto k_ep = ep.device_ptr();
 
   particle_pair_loop(
       "particle_pair_loop_test",

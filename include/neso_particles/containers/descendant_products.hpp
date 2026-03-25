@@ -5,6 +5,7 @@
 #include "../loop/access_descriptors.hpp"
 #include "../loop/particle_loop_base.hpp"
 #include "../loop/particle_loop_index.hpp"
+#include "../pair_loop/particle_pair_loop_base.hpp"
 #include "../particle_spec.hpp"
 #include "product_matrix.hpp"
 
@@ -49,7 +50,8 @@ struct Write {
    * @param component The component of the property to access.
    * @returns Modifiable reference to property value.
    */
-  REAL &at_real(const LoopIndex::Read &particle_index, const int product,
+  template <typename INDEX_TYPE>
+  REAL &at_real(const INDEX_TYPE &particle_index, const int product,
                 const int property, const int component) {
     const int sub_index = particle_index.get_loop_linear_index();
     const int matrix_row = sub_index + product * num_parent_particles;
@@ -68,7 +70,9 @@ struct Write {
    * @param component The component of the property to access.
    * @returns Modifiable reference to property value.
    */
-  INT &at_int(const LoopIndex::Read &particle_index, const int product,
+
+  template <typename INDEX_TYPE>
+  INT &at_int(const INDEX_TYPE &particle_index, const int product,
               const int property, const int component) {
     const int sub_index = particle_index.get_loop_linear_index();
     const int matrix_row = sub_index + product * num_parent_particles;
@@ -82,8 +86,9 @@ struct Write {
    * @param particle_index Index of parent particle.
    * @param product Index of child property to set as descendant of parent.
    */
-  inline void set_parent(const LoopIndex::Read &particle_index,
-                         const int product) {
+
+  template <typename INDEX_TYPE>
+  inline void set_parent(const INDEX_TYPE &particle_index, const int product) {
     const int sub_index = particle_index.get_loop_linear_index();
     const int matrix_row = sub_index + product * num_parent_particles;
     this->d_parent_cells[matrix_row] = particle_index.cell;
@@ -196,6 +201,28 @@ create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
 }
 
 } // namespace ParticleLoopImplementation
+
+namespace ParticlePairLoopImplementation {
+
+/**
+ * Function to create the kernel argument for DescendantProducts write
+ * access.
+ */
+inline void create_kernel_arg(
+    [[maybe_unused]] ParticlePairLoopIteration &iteration,
+    [[maybe_unused]] ParticleLoopImplementation::ParticleLoopIteration
+        &iteration_particle,
+    DescendantProductsGet &rhs, Access::DescendantProducts::Write &lhs) {
+  lhs.ptr_real = rhs.product_matrix_get.ptr_real;
+  lhs.ptr_int = rhs.product_matrix_get.ptr_int;
+  lhs.offsets_real = rhs.product_matrix_get.offsets_real;
+  lhs.offsets_int = rhs.product_matrix_get.offsets_int;
+  lhs.num_products = rhs.product_matrix_get.num_products;
+  lhs.num_parent_particles = rhs.num_parent_particles;
+  lhs.d_parent_cells = rhs.d_parent_cells;
+  lhs.d_parent_layers = rhs.d_parent_layers;
+}
+} // namespace ParticlePairLoopImplementation
 
 } // namespace NESO::Particles
 

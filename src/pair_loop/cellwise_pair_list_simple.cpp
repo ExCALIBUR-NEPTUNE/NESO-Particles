@@ -247,7 +247,7 @@ void CellwisePairListSimple::clear() {
   }
   this->max_pair_count = -1;
   this->max_wave_count = -1;
-  this->pair_count = -1;
+  this->pair_count = 0;
   this->mode = 0;
 }
 
@@ -287,4 +287,7 @@ CellwisePairListHostMap CellwisePairListSimple::get_host_pair_list() {
 
   return l;
 }
+
+INT CellwisePairListSimple::get_num_pairs() { return this->pair_count; }
+
 } // namespace NESO::Particles

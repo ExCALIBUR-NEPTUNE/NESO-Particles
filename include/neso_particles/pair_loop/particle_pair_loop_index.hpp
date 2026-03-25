@@ -15,6 +15,14 @@ namespace Access::PairLoopIndex {
 struct Read {
   INT linear_index{-1};
 
+  /// The cell containing the particle. Use Access::A and Access::B to
+  /// distinguish between a and b.
+  INT cell{-1};
+
+  /// The layer of the particle. Use Access::A and Access::B to distinguish
+  /// between a and b.
+  INT layer{-1};
+
   /**
    * @returns The linear index of the pair in the loop.
    */
@@ -57,7 +65,7 @@ inline ParticlePairLoopIndexKernelT create_loop_arg(
 namespace ParticlePairLoopImplementation {
 
 /**
- *  Function to create the kernel argument for ParticlePairLoopIndex read
+ * Function to create the kernel argument for ParticlePairLoopIndex read
  * access.
  */
 inline void create_kernel_arg(
@@ -69,6 +77,8 @@ inline void create_kernel_arg(
     Access::PairLoopIndex::Read &lhs) {
 
   lhs.linear_index = iteration.pair_index;
+  lhs.cell = iteration_particle.cellx;
+  lhs.layer = iteration_particle.layerx;
 }
 } // namespace ParticlePairLoopImplementation
 } // namespace NESO::Particles
