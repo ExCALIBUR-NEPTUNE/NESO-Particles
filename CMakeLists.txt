@@ -383,7 +383,8 @@ if(NESO_PARTICLES_ENABLE_HDF5)
   # arises for certain versions of HDF5.
   enable_language(C)
   find_package(HDF5 REQUIRED)
-  if(HDF5_FOUND AND HDF5_IS_PARALLEL)
+  # HDF5 2.0 now sets HDF5_PROVIDES_PARALLEL instead of HDF5_IS_PARALLEL
+  if(HDF5_FOUND AND (HDF5_IS_PARALLEL OR HDF5_PROVIDES_PARALLEL))
     message(STATUS "Parallel HDF5 found")
     target_link_libraries(NESO-Particles PUBLIC HDF5::HDF5)
     target_compile_definitions(NESO-Particles PUBLIC NESO_PARTICLES_HDF5)
