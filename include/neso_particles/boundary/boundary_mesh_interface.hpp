@@ -589,7 +589,7 @@ public:
       }
     }
 
-    this->reverse_exchange_from_device_unpack(m_recvd_packed, ncomp, d_dst)
+    this->reverse_exchange_from_device_unpack(d_recv_packed->ptr, ncomp, d_dst)
         .wait_and_throw();
 
     restore_resource(sycl_target->resource_stack_map,
