@@ -8,7 +8,18 @@ void CartesianTrajectoryIntersection::setup() {
   auto ndim = this->mesh->get_ndim();
   auto mh = this->mesh->get_mesh_hierarchy();
 
+  std::vector<REAL> h_extents = {0.0, 0.0, 0.0};
+  for (int dimx = 0; dimx < ndim; dimx++) {
+    h_extents[dimx] = this->mesh->global_extents[dimx];
+  }
+
+  this->d_extents =
+      std::make_shared<BufferDevice<REAL>>(this->sycl_target, h_extents);
+
   std::array<INT, 6> element_offsets_tmp = {0, 0, 0, 0, 0, 0};
+  std::array<INT, 6> element_strides0 = {0, 0, 0, 0, 0, 0};
+  std::array<INT, 6> element_strides1 = {0, 0, 0, 0, 0, 0};
+  std::array<INT, 6> element_offsets = {0, 0, 0, 0, 0, 0};
 
   if (ndim == 2) {
     element_offsets_tmp[0] = mh->dims[0] * mh->ncells_dim_fine;
@@ -23,14 +34,14 @@ void CartesianTrajectoryIntersection::setup() {
                        (mh->dims[0] + mh->dims[1] + mh->dims[0] + mh->dims[1]),
                "Incorrect number of boundary cells.");
 
-    this->element_strides0[0] = mh->dims[0] * mh->ncells_dim_fine;
-    this->element_strides0[1] = mh->dims[1] * mh->ncells_dim_fine;
-    this->element_strides0[2] = mh->dims[0] * mh->ncells_dim_fine;
-    this->element_strides0[3] = mh->dims[1] * mh->ncells_dim_fine;
-    this->element_strides1[0] = 1;
-    this->element_strides1[1] = 1;
-    this->element_strides1[2] = 1;
-    this->element_strides1[3] = 1;
+    element_strides0[0] = mh->dims[0] * mh->ncells_dim_fine;
+    element_strides0[1] = mh->dims[1] * mh->ncells_dim_fine;
+    element_strides0[2] = mh->dims[0] * mh->ncells_dim_fine;
+    element_strides0[3] = mh->dims[1] * mh->ncells_dim_fine;
+    element_strides1[0] = 1;
+    element_strides1[1] = 1;
+    element_strides1[2] = 1;
+    element_strides1[3] = 1;
 
   } else {
     element_offsets_tmp[0] =
@@ -46,19 +57,19 @@ void CartesianTrajectoryIntersection::setup() {
     element_offsets_tmp[5] =
         mh->dims[0] * mh->dims[1] * std::pow(mh->ncells_dim_fine, 2);
 
-    this->element_strides0[0] = mh->dims[0] * mh->ncells_dim_fine;
-    this->element_strides0[1] = mh->dims[1] * mh->ncells_dim_fine;
-    this->element_strides0[2] = mh->dims[0] * mh->ncells_dim_fine;
-    this->element_strides0[3] = mh->dims[1] * mh->ncells_dim_fine;
-    this->element_strides0[4] = mh->dims[0] * mh->ncells_dim_fine;
-    this->element_strides0[5] = mh->dims[0] * mh->ncells_dim_fine;
+    element_strides0[0] = mh->dims[0] * mh->ncells_dim_fine;
+    element_strides0[1] = mh->dims[1] * mh->ncells_dim_fine;
+    element_strides0[2] = mh->dims[0] * mh->ncells_dim_fine;
+    element_strides0[3] = mh->dims[1] * mh->ncells_dim_fine;
+    element_strides0[4] = mh->dims[0] * mh->ncells_dim_fine;
+    element_strides0[5] = mh->dims[0] * mh->ncells_dim_fine;
 
-    this->element_strides1[0] = mh->dims[2] * mh->ncells_dim_fine;
-    this->element_strides1[1] = mh->dims[2] * mh->ncells_dim_fine;
-    this->element_strides1[2] = mh->dims[2] * mh->ncells_dim_fine;
-    this->element_strides1[3] = mh->dims[2] * mh->ncells_dim_fine;
-    this->element_strides1[4] = mh->dims[1] * mh->ncells_dim_fine;
-    this->element_strides1[5] = mh->dims[1] * mh->ncells_dim_fine;
+    element_strides1[0] = mh->dims[2] * mh->ncells_dim_fine;
+    element_strides1[1] = mh->dims[2] * mh->ncells_dim_fine;
+    element_strides1[2] = mh->dims[2] * mh->ncells_dim_fine;
+    element_strides1[3] = mh->dims[2] * mh->ncells_dim_fine;
+    element_strides1[4] = mh->dims[1] * mh->ncells_dim_fine;
+    element_strides1[5] = mh->dims[1] * mh->ncells_dim_fine;
 
     const INT total_boundary_cells = std::accumulate(
         element_offsets_tmp.begin(), element_offsets_tmp.end(), 0);
@@ -70,7 +81,39 @@ void CartesianTrajectoryIntersection::setup() {
                "Incorrect number of boundary cells.");
   }
   std::exclusive_scan(element_offsets_tmp.begin(), element_offsets_tmp.end(),
-                      this->element_offsets.begin(), 0);
+                      element_offsets.begin(), 0);
+
+  std::vector<INT> h_element_strides_offset;
+  h_element_strides_offset.reserve(18);
+  h_element_strides_offset.insert(h_element_strides_offset.end(),
+                                  element_strides0.begin(),
+                                  element_strides0.end());
+  h_element_strides_offset.insert(h_element_strides_offset.end(),
+                                  element_strides1.begin(),
+                                  element_strides1.end());
+  h_element_strides_offset.insert(h_element_strides_offset.end(),
+                                  element_offsets.begin(),
+                                  element_offsets.end());
+
+  this->d_element_strides_offsets = std::make_shared<BufferDevice<INT>>(
+      this->sycl_target, h_element_strides_offset);
+
+  std::vector<INT> h_boundary_group_map = {
+      Private::CART_TRAJ_INT_MASK_VALUE, Private::CART_TRAJ_INT_MASK_VALUE,
+      Private::CART_TRAJ_INT_MASK_VALUE, Private::CART_TRAJ_INT_MASK_VALUE,
+      Private::CART_TRAJ_INT_MASK_VALUE, Private::CART_TRAJ_INT_MASK_VALUE};
+  const INT max_edge = (ndim == 2) ? 4 : 6;
+  for (const auto &bx : this->boundary_groups) {
+    const int group = bx.first;
+    for (const int ex : bx.second) {
+      NESOASSERT((-1 < ex) && (ex < max_edge),
+                 "Bad entry in boundary group map.");
+      h_boundary_group_map[ex] = group;
+    }
+  }
+  this->d_boundary_group_map = std::make_shared<BufferDevice<INT>>(
+      this->sycl_target, h_boundary_group_map);
+
   this->inverse_cell_width_fine = mh->inverse_cell_width_fine;
 }
 

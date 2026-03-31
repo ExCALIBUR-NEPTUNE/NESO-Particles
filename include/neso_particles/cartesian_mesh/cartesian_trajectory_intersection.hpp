@@ -30,10 +30,11 @@ protected:
 public:
 #endif
 
-  std::array<INT, 6> element_offsets;
-  std::array<INT, 6> element_strides0;
-  std::array<INT, 6> element_strides1;
+  std::shared_ptr<BufferDevice<INT>> d_boundary_group_map;
+  std::shared_ptr<BufferDevice<INT>> d_element_strides_offsets;
   REAL inverse_cell_width_fine;
+
+  std::shared_ptr<BufferDevice<REAL>> d_extents;
 
   std::map<int, std::shared_ptr<BoundaryMeshInterface>>
       map_groups_boundary_interface;
@@ -79,16 +80,12 @@ public:
   [[nodiscard]] inline std::map<int, ParticleSubGroupSharedPtr>
   post_integration_inner(std::shared_ptr<T> particles) {
 
+    const int k_ndim = this->mesh->get_ndim();
     auto particle_group = get_particle_group(particles);
 
-    const int k_ndim = this->mesh->get_ndim();
     NESOASSERT(k_ndim == 2 || k_ndim == 3,
                "This method is only implemented in 2D and 3D.");
-
-    std::array<REAL, 3> k_extents = {0.0, 0.0, 0.0};
-    for (int dimx = 0; dimx < k_ndim; dimx++) {
-      k_extents[dimx] = this->mesh->global_extents[dimx];
-    }
+    REAL const *const k_extents = this->d_extents->ptr;
 
     // Collect into a sub-group the particles which are leaving the domain.
     ParticleSubGroupSharedPtr departing_particles = nullptr;
@@ -391,19 +388,7 @@ public:
     ep.check_and_throw(
         "Failed to find boundary information for departing particle.");
 
-    std::array<INT, 6> k_boundary_group_map = {
-        Private::CART_TRAJ_INT_MASK_VALUE, Private::CART_TRAJ_INT_MASK_VALUE,
-        Private::CART_TRAJ_INT_MASK_VALUE, Private::CART_TRAJ_INT_MASK_VALUE,
-        Private::CART_TRAJ_INT_MASK_VALUE, Private::CART_TRAJ_INT_MASK_VALUE};
-    const INT max_edge = (k_ndim == 2) ? 4 : 6;
-    for (const auto &bx : this->boundary_groups) {
-      const int group = bx.first;
-      for (const int ex : bx.second) {
-        NESOASSERT((-1 < ex) && (ex < max_edge),
-                   "Bad entry in boundary group map.");
-        k_boundary_group_map[ex] = group;
-      }
-    }
+    INT const *const k_boundary_group_map = this->d_boundary_group_map->ptr;
 
     // Can be described in terms of EphemeralDats if EphemeralDats can be used
     // to make ParticleSubGroups or a Partition?
@@ -421,10 +406,10 @@ public:
       add_boundary_interaction_ephemeral_dats(return_map[k_group], k_ndim);
     }
 
-    auto k_element_strides0 = this->element_strides0;
-    auto k_element_strides1 = this->element_strides1;
-    auto k_element_offsets = this->element_offsets;
-    auto k_inverse_cell_width_fine = this->inverse_cell_width_fine;
+    INT const *const k_element_strides0 = this->d_element_strides_offsets->ptr;
+    INT const *const k_element_strides1 = k_element_strides0 + 6;
+    INT const *const k_element_offsets = k_element_strides1 + 6;
+    const REAL k_inverse_cell_width_fine = this->inverse_cell_width_fine;
 
     for (const auto &group : return_map) {
       particle_loop(
