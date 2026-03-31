@@ -3,6 +3,56 @@
 TEST(MaskArray, base) {
   auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
 
+  MaskArrayDevice h_mad = {nullptr, 2, 14};
+
+  for (MaskArrayBaseType ix = 0; ix < h_mad.num_bits_per_base; ix++) {
+    ASSERT_EQ(h_mad.get_inner_index(7 + ix, 0),
+              (7 + ix) % h_mad.num_bits_per_base);
+    ASSERT_EQ(h_mad.get_outer_index(7 + ix, 0),
+              (7 + ix) / h_mad.num_bits_per_base);
+  }
+
+  MaskArrayBaseType b = 0;
+  for (MaskArrayBaseType ix = 0; ix < h_mad.num_bits_per_base; ix++) {
+    h_mad.set_inner(&b, ix, true);
+    ASSERT_EQ(sycl::popcount(b), ix + 1);
+    ASSERT_EQ(h_mad.get_inner(&b, ix), true);
+    for (MaskArrayBaseType jx = 0; jx < ix; jx++) {
+      ASSERT_EQ(h_mad.get_inner(&b, jx), true);
+    }
+    for (MaskArrayBaseType jx = ix + 1; jx < h_mad.num_bits_per_base; jx++) {
+      ASSERT_EQ(h_mad.get_inner(&b, jx), false);
+    }
+  }
+  for (MaskArrayBaseType ix = 0; ix < h_mad.num_bits_per_base; ix++) {
+    h_mad.set_inner(&b, ix, false);
+    ASSERT_EQ(h_mad.get_inner(&b, ix), false);
+    ASSERT_EQ(sycl::popcount(b), h_mad.num_bits_per_base - ix - 1);
+    for (MaskArrayBaseType jx = 0; jx < ix; jx++) {
+      ASSERT_EQ(h_mad.get_inner(&b, jx), false);
+    }
+    for (MaskArrayBaseType jx = ix + 1; jx < h_mad.num_bits_per_base; jx++) {
+      ASSERT_EQ(h_mad.get_inner(&b, jx), true);
+    }
+  }
+
+  ErrorPropagate ep(sycl_target);
+  auto k_ep = ep.device_ptr();
+  sycl_target->queue.single_task([=]() {
+    MaskArrayBaseType b = 0;
+    for (MaskArrayBaseType ix = 0; ix < h_mad.num_bits_per_base; ix++) {
+      h_mad.set_inner(&b, ix, true);
+      NESO_KERNEL_ASSERT(sycl::popcount(b) == ix + 1, k_ep);
+    }
+    for (MaskArrayBaseType ix = 0; ix < h_mad.num_bits_per_base; ix++) {
+      h_mad.set_inner(&b, ix, false);
+      NESO_KERNEL_ASSERT(sycl::popcount(b) == h_mad.num_bits_per_base - ix - 1,
+                         k_ep);
+    }
+  });
+
+  ASSERT_FALSE(ep.get_flag());
+
   std::vector<MaskArrayDevice> h_ma;
 
   for (std::size_t B : {0, 1, 2}) {
