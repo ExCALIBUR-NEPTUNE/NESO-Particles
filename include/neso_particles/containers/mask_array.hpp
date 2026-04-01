@@ -18,12 +18,12 @@ using MaskArrayBaseType = std::uint32_t;
 /**
  * Device type for MaskArray.
  */
-struct MaskArrayDevice {
+template <typename T> struct MaskArrayDeviceBase {
   // Number of bits per base element on the device.
   static constexpr MaskArrayBaseType num_bits_per_base =
       sizeof(MaskArrayBaseType) * CHAR_BIT;
 
-  MaskArrayBaseType *RESTRICT d_masks{nullptr};
+  T d_masks{nullptr};
   std::size_t num_masks_per_entry{0};
   std::size_t stride{0};
 
@@ -53,6 +53,23 @@ struct MaskArrayDevice {
   }
 
   /**
+   * Get mask at location in base type.
+   *
+   * @param base Pointer to a base type instance·
+   * @param index_bit Index of the mask (bit) in the entry in [0,
+   * num_masks_per_entry).
+   * @returns Value of mask (bit) at location.
+   */
+  static inline bool get_inner(MaskArrayBaseType const *const base,
+                               const std::size_t index_bit) {
+    const MaskArrayBaseType one_at_index = static_cast<MaskArrayBaseType>(1)
+                                           << index_bit;
+    const MaskArrayBaseType initial_base = *base;
+    const MaskArrayBaseType masked_entry = initial_base & one_at_index;
+    return masked_entry != 0;
+  }
+
+  /**
    * @param index_entry Index of the entry in [0, size)·
    * @param index_bit Index of the mask (bit) in the entry in [0,
    * num_masks_per_entry).
@@ -65,6 +82,27 @@ struct MaskArrayDevice {
     const std::size_t offset_entry = get_outer_index(index_entry, index_bit);
     return offset_bit + offset_entry;
   }
+
+  /**
+   * Get mask at location.
+   *
+   * @param index_entry Index of the entry in [0, size)·
+   * @param index_bit Index of the mask (bit) in the entry in [0,
+   * num_masks_per_entry).
+   * @returns Value of mask (bit) at location.
+   */
+  inline bool get(const std::size_t index_entry,
+                  const std::size_t index_bit) const {
+    MaskArrayBaseType *d_base =
+        this->d_masks + this->get_base_index(index_entry, index_bit);
+    return get_inner(d_base, get_inner_index(index_entry, index_bit));
+  }
+};
+
+namespace Access::MaskArray {
+using Read = MaskArrayDeviceBase<MaskArrayBaseType const * RESTRICT>;
+
+struct Write : public MaskArrayDeviceBase<MaskArrayBaseType * RESTRICT> {
 
   /**
    * Set mask at location in base type.
@@ -87,23 +125,6 @@ struct MaskArrayDevice {
   }
 
   /**
-   * Get mask at location in base type.
-   *
-   * @param base Pointer to a base type instance·
-   * @param index_bit Index of the mask (bit) in the entry in [0,
-   * num_masks_per_entry).
-   * @returns Value of mask (bit) at location.
-   */
-  static inline bool get_inner(MaskArrayBaseType const *const base,
-                               const std::size_t index_bit) {
-    const MaskArrayBaseType one_at_index = static_cast<MaskArrayBaseType>(1)
-                                           << index_bit;
-    const MaskArrayBaseType initial_base = *base;
-    const MaskArrayBaseType masked_entry = initial_base & one_at_index;
-    return masked_entry != 0;
-  }
-
-  /**
    * Set mask at location.
    *
    * @param index_entry Index of the entry in [0, size)·
@@ -117,22 +138,11 @@ struct MaskArrayDevice {
         this->d_masks + this->get_base_index(index_entry, index_bit);
     set_inner(d_base, get_inner_index(index_entry, index_bit), value);
   }
-
-  /**
-   * Get mask at location.
-   *
-   * @param index_entry Index of the entry in [0, size)·
-   * @param index_bit Index of the mask (bit) in the entry in [0,
-   * num_masks_per_entry).
-   * @returns Value of mask (bit) at location.
-   */
-  inline bool get(const std::size_t index_entry,
-                  const std::size_t index_bit) const {
-    MaskArrayBaseType *d_base =
-        this->d_masks + this->get_base_index(index_entry, index_bit);
-    return get_inner(d_base, get_inner_index(index_entry, index_bit));
-  }
 };
+
+} // namespace Access::MaskArray
+
+using MaskArrayDevice = Access::MaskArray::Write;
 
 /**
  * Type that stores N bits per entry (particle).
