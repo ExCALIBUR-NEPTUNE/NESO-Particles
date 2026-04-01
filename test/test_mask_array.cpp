@@ -54,7 +54,6 @@ TEST(MaskArray, base) {
   ASSERT_FALSE(ep.get_flag());
 
   std::vector<MaskArrayBaseType> h_ma;
-
   for (std::size_t B : {0, 1, 2}) {
     for (std::size_t N : {0, 1, 4, 31, 61, 32}) {
       auto ma = std::make_shared<MaskArray>(sycl_target, B);
@@ -76,13 +75,13 @@ TEST(MaskArray, base) {
       ma->reset(true, N);
       ASSERT_EQ(ma->size, N);
 
-      const MaskArrayDevice d_ma = ma->get_device();
+      MaskArrayDevice d_ma = ma->get_device();
 
       ASSERT_EQ(d_ma.num_masks_per_entry, B);
       ASSERT_EQ(d_ma.stride, ma->stride);
       ASSERT_EQ(stride, ma->stride);
 
-      const std::size_t M = stride * B;
+      const std::size_t M = stride * ma->num_masks_per_entry;
 
       ASSERT_TRUE(M * ma->num_bits_per_base >= N * B);
 
@@ -121,13 +120,50 @@ TEST(MaskArray, base) {
       }
       ASSERT_EQ(count, static_cast<int>(N * B));
 
+      ma->reset(false, N);
+      d_ma = ma->get_device();
+      sycl_target->queue
+          .memcpy(h_ma.data(), d_ma.d_masks, M * sizeof(MaskArrayBaseType))
+          .wait_and_throw();
+      for (std::size_t ix = 0; ix < M; ix++) {
+        ASSERT_EQ(h_ma.at(ix), static_cast<MaskArrayBaseType>(0));
+      }
+
+      sycl_target->queue
+          .single_task([=]() {
+            for (std::size_t ix = 0; ix < (N * B); ix++) {
+
+              const std::size_t ex = ix / B;
+              const std::size_t bx = ix % B;
+              d_ma.set(ex, bx, true);
+
+              for (std::size_t jx = 0; jx <= ix; jx++) {
+                const std::size_t ex = jx / B;
+                const std::size_t bx = jx % B;
+                NESO_KERNEL_ASSERT(d_ma.get(ex, bx), k_ep);
+              }
+
+              for (std::size_t jx = ix + 1; jx < (N * B); jx++) {
+                const std::size_t ex = jx / B;
+                const std::size_t bx = jx % B;
+                NESO_KERNEL_ASSERT(!d_ma.get(ex, bx), k_ep);
+              }
+            }
+          })
+          .wait_and_throw();
+
+      ASSERT_FALSE(ep.get_flag());
+
+      std::fill(h_ma.begin(), h_ma.end(), 0);
       sycl_target->queue
           .memcpy(h_ma.data(), d_ma.d_masks, M * sizeof(MaskArrayBaseType))
           .wait_and_throw();
 
-      for (std::size_t ix = 0; ix < M; ix++) {
-        ASSERT_EQ(h_ma.at(ix), ~static_cast<MaskArrayBaseType>(0));
+      count = 0;
+      for (auto ix : h_ma) {
+        count += sycl::popcount(ix);
       }
+      ASSERT_EQ(count, static_cast<int>(N * B));
     }
   }
   sycl_target->free();
