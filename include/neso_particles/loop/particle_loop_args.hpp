@@ -15,6 +15,7 @@
 #include "../containers/local_array.hpp"
 #include "../containers/local_memory_block.hpp"
 #include "../containers/local_memory_interlaced.hpp"
+#include "../containers/mask_array.hpp"
 #include "../containers/nd_local_array.hpp"
 #include "../containers/particle_set_device.hpp"
 #include "../containers/product_matrix.hpp"

@@ -168,3 +168,66 @@ TEST(MaskArray, base) {
   }
   sycl_target->free();
 }
+
+TEST(MaskArray, particle_loop) {
+  int npart_cell = 51;
+  const int ndim = 2;
+  const int nx = 1;
+  const int ny = 1;
+  const int nz = 48;
+
+  nprint("fix cell count");
+
+  auto [A_t, sycl_target_t, cell_count_t] =
+      particle_loop_create_common(npart_cell, ndim, nx, ny, nz);
+
+  auto A = A_t;
+  auto sycl_target = sycl_target_t;
+
+  for (std::size_t B : {1, 2, 3, 7}) {
+
+    auto ma = std::make_shared<MaskArray>(sycl_target, B);
+
+    ma->reset(false, A->get_npart_local());
+
+    particle_loop(
+        A,
+        [=](auto INDEX, auto MA) {
+          for (std::size_t bx = 0; bx < B; bx++) {
+            const bool value = ((INDEX.cell + INDEX.layer) % (bx + 1)) == 0;
+            MA.set(INDEX.get_loop_linear_index(), bx, value);
+          }
+        },
+        Access::read(ParticleLoopIndex{}), Access::write(ma))
+        ->execute();
+
+    ErrorPropagate ep(sycl_target);
+    auto k_ep = ep.device_ptr();
+
+    particle_loop(
+        A,
+        [=](auto INDEX, auto MA, auto R) {
+          for (std::size_t bx = 0; bx < B; bx++) {
+            const bool correct = ((INDEX.cell + INDEX.layer) % (bx + 1)) == 0;
+            const bool to_test = MA.get(INDEX.get_loop_linear_index(), bx);
+            NESO_KERNEL_ASSERT(correct == to_test, k_ep);
+            R.at(0) = correct;
+            R.at(1) = to_test;
+          }
+        },
+        Access::read(ParticleLoopIndex{}), Access::write(ma),
+        Access::write(Sym<INT>("LOOP_INDEX")))
+        ->execute();
+
+    nprint("TODO MAKE READ ACCCESS DESCIPRITOR");
+
+    WHILST THIS BIT BASHINGS IS SPACE EFFICIENT IT IS NOT THREAD SAFE!
+
+    A->print(Sym<INT>("LOOP_INDEX"));
+
+    ASSERT_FALSE(ep.get_flag());
+  }
+
+  sycl_target->free();
+  A->domain->mesh->free();
+}

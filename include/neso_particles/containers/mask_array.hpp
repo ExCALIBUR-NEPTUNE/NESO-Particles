@@ -12,6 +12,8 @@
 
 namespace NESO::Particles {
 
+class MaskArray;
+
 // The base integer type in which the masks are stored.
 using MaskArrayBaseType = std::uint32_t;
 
@@ -93,7 +95,7 @@ template <typename T> struct MaskArrayDeviceBase {
    */
   inline bool get(const std::size_t index_entry,
                   const std::size_t index_bit) const {
-    MaskArrayBaseType *d_base =
+    auto d_base =
         this->d_masks + this->get_base_index(index_entry, index_bit);
     return get_inner(d_base, get_inner_index(index_entry, index_bit));
   }
@@ -134,7 +136,7 @@ struct Write : public MaskArrayDeviceBase<MaskArrayBaseType * RESTRICT> {
    */
   inline void set(const std::size_t index_entry, const std::size_t index_bit,
                   const bool value) const {
-    MaskArrayBaseType *d_base =
+    auto d_base =
         this->d_masks + this->get_base_index(index_entry, index_bit);
     set_inner(d_base, get_inner_index(index_entry, index_bit), value);
   }
@@ -143,6 +145,57 @@ struct Write : public MaskArrayDeviceBase<MaskArrayBaseType * RESTRICT> {
 } // namespace Access::MaskArray
 
 using MaskArrayDevice = Access::MaskArray::Write;
+
+namespace ParticleLoopImplementation {
+
+/**
+ *  Loop parameter for read access of a MaskArray.
+ */
+template <> struct LoopParameter<Access::Read<MaskArray>> {
+  using type = Access::MaskArray::Read;
+};
+
+/**
+ *  Loop parameter for write access of a MaskArray.
+ */
+template <> struct LoopParameter<Access::Write<MaskArray>> {
+  using type = Access::MaskArray::Write;
+};
+
+/**
+ *  KernelParameter type for read access to a MaskArray.
+ */
+template <> struct KernelParameter<Access::Read<MaskArray>> {
+  using type = Access::MaskArray::Read;
+};
+
+/**
+ *  KernelParameter type for write access to a MaskArray.
+ */
+template <> struct KernelParameter<Access::Write<MaskArray>> {
+  using type = Access::MaskArray::Write;
+};
+
+/**
+ *  Function to create the kernel argument for MaskArray read access.
+ */
+inline void
+create_kernel_arg([[maybe_unused]] ParticleLoopIteration &iterationx,
+                  Access::MaskArray::Read &rhs, Access::MaskArray::Read &lhs) {
+  lhs = rhs;
+}
+
+/**
+ *  Function to create the kernel argument for MaskArray write access.
+ */
+inline void
+create_kernel_arg([[maybe_unused]] ParticleLoopIteration &iterationx,
+                  Access::MaskArray::Write &rhs,
+                  Access::MaskArray::Write &lhs) {
+  lhs = rhs;
+}
+
+} // namespace ParticleLoopImplementation
 
 /**
  * Type that stores N bits per entry (particle).
@@ -209,6 +262,32 @@ public:
    */
   MaskArrayDevice get_device();
 };
+
+namespace ParticleLoopImplementation {
+
+/**
+ * Method to compute access to a MaskArray (read)
+ */
+inline Access::MaskArray::Read
+create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
+                [[maybe_unused]] sycl::handler &cgh,
+                Access::Read<MaskArray *> &a) {
+  auto tmp = a.obj->get_device();
+  return {tmp.d_masks, tmp.num_masks_per_entry, tmp.stride};
+}
+
+/**
+ * Method to compute access to a MaskArray (read)
+ */
+inline Access::MaskArray::Write
+create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
+                [[maybe_unused]] sycl::handler &cgh,
+                Access::Write<MaskArray *> &a) {
+  auto tmp = a.obj->get_device();
+  return {tmp.d_masks, tmp.num_masks_per_entry, tmp.stride};
+}
+
+} // namespace ParticleLoopImplementation
 
 } // namespace NESO::Particles
 
