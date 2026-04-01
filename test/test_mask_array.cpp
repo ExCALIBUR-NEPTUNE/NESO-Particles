@@ -53,10 +53,10 @@ TEST(MaskArray, base) {
 
   ASSERT_FALSE(ep.get_flag());
 
-  std::vector<MaskArrayDevice> h_ma;
+  std::vector<MaskArrayBaseType> h_ma;
 
   for (std::size_t B : {0, 1, 2}) {
-    for (std::size_t N : {0, 1, 31, 61, 32}) {
+    for (std::size_t N : {0, 1, 4, 31, 61, 32}) {
       auto ma = std::make_shared<MaskArray>(sycl_target, B);
 
       auto lambda_test = [&](const bool value) {
@@ -70,6 +70,8 @@ TEST(MaskArray, base) {
       lambda_test(true);
       lambda_test(false);
 
+      const std::size_t stride = ma->get_stride(N);
+
       ASSERT_EQ(ma->size, 0);
       ma->reset(true, N);
       ASSERT_EQ(ma->size, N);
@@ -77,17 +79,55 @@ TEST(MaskArray, base) {
       const MaskArrayDevice d_ma = ma->get_device();
 
       ASSERT_EQ(d_ma.num_masks_per_entry, B);
-      ASSERT_EQ(d_ma.size, ma->size);
+      ASSERT_EQ(d_ma.stride, ma->stride);
+      ASSERT_EQ(stride, ma->stride);
 
-      const std::size_t M = ma->get_num_base_elements(N, B);
+      const std::size_t M = stride * B;
+
       ASSERT_TRUE(M * ma->num_bits_per_base >= N * B);
 
       h_ma.clear();
       h_ma.resize(M);
+      std::fill(h_ma.begin(), h_ma.end(), 0);
+      MaskArrayDevice h_mad = {h_ma.data(), d_ma.num_masks_per_entry, stride};
+
+      std::deque<std::pair<std::size_t, std::size_t>> a;
+      std::deque<std::pair<std::size_t, std::size_t>> b;
+
+      for (std::size_t ix = 0; ix < N; ix++) {
+        for (std::size_t jx = 0; jx < B; jx++) {
+          a.push_back({ix, jx});
+        }
+      }
+
+      while (!a.empty()) {
+        auto [ix, bx] = a.back();
+        h_mad.set(ix, bx, true);
+        b.push_back({ix, bx});
+        a.pop_back();
+
+        for (auto &jx : b) {
+          ASSERT_TRUE(h_mad.get(jx.first, jx.second));
+        }
+
+        for (auto &jx : a) {
+          ASSERT_FALSE(h_mad.get(jx.first, jx.second));
+        }
+      }
+
+      int count = 0;
+      for (auto ix : h_ma) {
+        count += sycl::popcount(ix);
+      }
+      ASSERT_EQ(count, static_cast<int>(N * B));
 
       sycl_target->queue
           .memcpy(h_ma.data(), d_ma.d_masks, M * sizeof(MaskArrayBaseType))
           .wait_and_throw();
+
+      for (std::size_t ix = 0; ix < M; ix++) {
+        ASSERT_EQ(h_ma.at(ix), ~static_cast<MaskArrayBaseType>(0));
+      }
     }
   }
   sycl_target->free();

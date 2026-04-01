@@ -25,7 +25,7 @@ struct MaskArrayDevice {
 
   MaskArrayBaseType *RESTRICT d_masks{nullptr};
   std::size_t num_masks_per_entry{0};
-  std::size_t size{0};
+  std::size_t stride{0};
 
   /**
    * @param index_entry Index of the entry in [0, size)·
@@ -61,7 +61,7 @@ struct MaskArrayDevice {
   inline MaskArrayBaseType
   get_base_index(const std::size_t index_entry,
                  [[maybe_unused]] const std::size_t index_bit) const {
-    const std::size_t offset_bit = index_bit * this->size;
+    const std::size_t offset_bit = index_bit * this->stride;
     const std::size_t offset_entry = get_outer_index(index_entry, index_bit);
     return offset_bit + offset_entry;
   }
@@ -115,7 +115,7 @@ struct MaskArrayDevice {
                   const bool value) const {
     MaskArrayBaseType *d_base =
         this->d_masks + this->get_base_index(index_entry, index_bit);
-    set_inner(d_base, index_bit, value);
+    set_inner(d_base, get_inner_index(index_entry, index_bit), value);
   }
 
   /**
@@ -130,7 +130,7 @@ struct MaskArrayDevice {
                   const std::size_t index_bit) const {
     MaskArrayBaseType *d_base =
         this->d_masks + this->get_base_index(index_entry, index_bit);
-    return get_inner(d_base, index_bit);
+    return get_inner(d_base, get_inner_index(index_entry, index_bit));
   }
 };
 
@@ -155,13 +155,10 @@ public:
 
   /**
    * @param N Number of elements.
-   * @param num_masks_per_entry Number of bits per element.
    * @returns The number of MaskArrayBaseTypes required for a given number of
-   * elements and bits (masks) per element.
+   * elements for one bit (mask) per element.
    */
-  static std::size_t
-  get_num_base_elements(const std::size_t N,
-                        const std::size_t num_masks_per_entry);
+  static std::size_t get_stride(const std::size_t N);
 
   MaskArray() = default;
   ~MaskArray();
@@ -174,6 +171,9 @@ public:
 
   // Number of entries.
   std::size_t size{0};
+
+  // Number of base elements required per bit stored per entry.
+  std::size_t stride{0};
 
   /**
    * Create a mask array on a given compute device with a set number of bits per

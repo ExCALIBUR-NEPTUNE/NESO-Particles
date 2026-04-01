@@ -16,11 +16,8 @@ MaskArrayBaseType MaskArray::get_reset_mask(const bool value) {
   return reset_value;
 }
 
-std::size_t
-MaskArray::get_num_base_elements(const std::size_t N,
-                                 const std::size_t num_masks_per_entry) {
-  return div_round_up(N * num_masks_per_entry,
-                      static_cast<std::size_t>(num_bits_per_base));
+std::size_t MaskArray::get_stride(const std::size_t N) {
+  return div_round_up(N, static_cast<std::size_t>(num_bits_per_base));
 }
 
 void MaskArray::reset(const bool value, std::optional<std::size_t> new_size) {
@@ -28,9 +25,9 @@ void MaskArray::reset(const bool value, std::optional<std::size_t> new_size) {
 
   if (new_size != std::nullopt) {
     this->size = new_size.value();
-    const std::size_t total_length =
-        div_round_up(this->size * this->num_masks_per_entry,
-                     static_cast<std::size_t>(this->num_bits_per_base));
+    this->stride = get_stride(this->size);
+    const std::size_t total_length = this->stride * this->num_masks_per_entry;
+
     if (total_length) {
       if (this->d_masks == nullptr) {
         this->d_masks = std::make_shared<BufferDevice<MaskArrayBaseType>>(
@@ -42,20 +39,19 @@ void MaskArray::reset(const bool value, std::optional<std::size_t> new_size) {
   }
 
   if (this->d_masks != nullptr) {
-    const std::size_t total_length =
-        div_round_up(this->size * this->num_masks_per_entry,
-                     static_cast<std::size_t>(this->num_bits_per_base));
+    const std::size_t total_length = this->stride * this->num_masks_per_entry;
     const MaskArrayBaseType reset_value = this->get_reset_mask(value);
-
-    this->event = this->sycl_target->queue.fill<MaskArrayBaseType>(
-        this->d_masks->ptr, reset_value, total_length);
+    if (total_length) {
+      this->event = this->sycl_target->queue.fill<MaskArrayBaseType>(
+          this->d_masks->ptr, reset_value, total_length);
+    }
   }
 }
 
 MaskArrayDevice MaskArray::get_device() {
   this->event.wait_and_throw();
   return {this->d_masks != nullptr ? this->d_masks->ptr : nullptr,
-          this->num_masks_per_entry, this->size};
+          this->num_masks_per_entry, this->stride};
 }
 
 } // namespace NESO::Particles
