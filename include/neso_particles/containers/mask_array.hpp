@@ -15,7 +15,7 @@ namespace NESO::Particles {
 class MaskArray;
 
 // The base integer type in which the masks are stored.
-using MaskArrayBaseType = std::uint32_t;
+using MaskArrayBaseType = std::uint8_t;
 
 /**
  * Device type for MaskArray.
@@ -48,7 +48,7 @@ template <typename T> struct MaskArrayDeviceBase {
    * num_masks_per_entry).
    * @returns The index to a MaskArrayBaseType.
    */
-  static inline MaskArrayBaseType
+  static inline std::size_t
   get_outer_index([[maybe_unused]] const std::size_t index_entry,
                   const std::size_t index_bit) {
     return index_bit / num_bits_per_base;
@@ -64,6 +64,7 @@ template <typename T> struct MaskArrayDeviceBase {
    */
   static inline bool get_inner(MaskArrayBaseType const *const base,
                                const std::size_t index_bit) {
+
     const MaskArrayBaseType one_at_index = static_cast<MaskArrayBaseType>(1)
                                            << index_bit;
     const MaskArrayBaseType initial_base = *base;
@@ -77,8 +78,8 @@ template <typename T> struct MaskArrayDeviceBase {
    * num_masks_per_entry).
    * @returns Offset to the MaskArrayBaseType containing the mask.
    */
-  inline MaskArrayBaseType get_base_index(const std::size_t index_entry,
-                                          const std::size_t index_bit) const {
+  inline std::size_t get_base_index(const std::size_t index_entry,
+                                    const std::size_t index_bit) const {
 
     const std::size_t offset_bit =
         get_outer_index(index_entry, index_bit) * this->size;
