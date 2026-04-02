@@ -27,7 +27,7 @@ template <typename T> struct MaskArrayDeviceBase {
 
   T d_masks{nullptr};
   std::size_t num_masks_per_entry{0};
-  std::size_t stride{0};
+  std::size_t size{0};
 
   /**
    * @param index_entry Index of the entry in [0, size)·
@@ -37,9 +37,9 @@ template <typename T> struct MaskArrayDeviceBase {
    * the provided entry and bit.
    */
   static inline MaskArrayBaseType
-  get_inner_index(const std::size_t index_entry,
-                  [[maybe_unused]] const std::size_t index_bit) {
-    return index_entry % num_bits_per_base;
+  get_inner_index([[maybe_unused]] const std::size_t index_entry,
+                  const std::size_t index_bit) {
+    return index_bit % num_bits_per_base;
   }
 
   /**
@@ -49,9 +49,9 @@ template <typename T> struct MaskArrayDeviceBase {
    * @returns The index to a MaskArrayBaseType.
    */
   static inline MaskArrayBaseType
-  get_outer_index(const std::size_t index_entry,
-                  [[maybe_unused]] const std::size_t index_bit) {
-    return index_entry / num_bits_per_base;
+  get_outer_index([[maybe_unused]] const std::size_t index_entry,
+                  const std::size_t index_bit) {
+    return index_bit / num_bits_per_base;
   }
 
   /**
@@ -77,12 +77,12 @@ template <typename T> struct MaskArrayDeviceBase {
    * num_masks_per_entry).
    * @returns Offset to the MaskArrayBaseType containing the mask.
    */
-  inline MaskArrayBaseType
-  get_base_index(const std::size_t index_entry,
-                 [[maybe_unused]] const std::size_t index_bit) const {
-    const std::size_t offset_bit = index_bit * this->stride;
-    const std::size_t offset_entry = get_outer_index(index_entry, index_bit);
-    return offset_bit + offset_entry;
+  inline MaskArrayBaseType get_base_index(const std::size_t index_entry,
+                                          const std::size_t index_bit) const {
+
+    const std::size_t offset_bit =
+        get_outer_index(index_entry, index_bit) * this->size;
+    return offset_bit + index_entry;
   }
 
   /**
@@ -95,8 +95,7 @@ template <typename T> struct MaskArrayDeviceBase {
    */
   inline bool get(const std::size_t index_entry,
                   const std::size_t index_bit) const {
-    auto d_base =
-        this->d_masks + this->get_base_index(index_entry, index_bit);
+    auto d_base = this->d_masks + this->get_base_index(index_entry, index_bit);
     return get_inner(d_base, get_inner_index(index_entry, index_bit));
   }
 };
@@ -136,8 +135,7 @@ struct Write : public MaskArrayDeviceBase<MaskArrayBaseType * RESTRICT> {
    */
   inline void set(const std::size_t index_entry, const std::size_t index_bit,
                   const bool value) const {
-    auto d_base =
-        this->d_masks + this->get_base_index(index_entry, index_bit);
+    auto d_base = this->d_masks + this->get_base_index(index_entry, index_bit);
     set_inner(d_base, get_inner_index(index_entry, index_bit), value);
   }
 };
@@ -216,13 +214,6 @@ public:
   static constexpr MaskArrayBaseType num_bits_per_base =
       sizeof(MaskArrayBaseType) * CHAR_BIT;
 
-  /**
-   * @param N Number of elements.
-   * @returns The number of MaskArrayBaseTypes required for a given number of
-   * elements for one bit (mask) per element.
-   */
-  static std::size_t get_stride(const std::size_t N);
-
   MaskArray() = default;
   ~MaskArray();
 
@@ -232,11 +223,11 @@ public:
   // Number of masks per entry.
   std::size_t num_masks_per_entry{0};
 
+  // Number of base elements per entry.
+  std::size_t num_base_elements_per_entry{0};
+
   // Number of entries.
   std::size_t size{0};
-
-  // Number of base elements required per bit stored per entry.
-  std::size_t stride{0};
 
   /**
    * Create a mask array on a given compute device with a set number of bits per
@@ -273,7 +264,7 @@ create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
                 [[maybe_unused]] sycl::handler &cgh,
                 Access::Read<MaskArray *> &a) {
   auto tmp = a.obj->get_device();
-  return {tmp.d_masks, tmp.num_masks_per_entry, tmp.stride};
+  return {tmp.d_masks, tmp.num_masks_per_entry, tmp.size};
 }
 
 /**
@@ -284,7 +275,7 @@ create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
                 [[maybe_unused]] sycl::handler &cgh,
                 Access::Write<MaskArray *> &a) {
   auto tmp = a.obj->get_device();
-  return {tmp.d_masks, tmp.num_masks_per_entry, tmp.stride};
+  return {tmp.d_masks, tmp.num_masks_per_entry, tmp.size};
 }
 
 } // namespace ParticleLoopImplementation

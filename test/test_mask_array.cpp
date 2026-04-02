@@ -6,9 +6,9 @@ TEST(MaskArray, base) {
   MaskArrayDevice h_mad = {nullptr, 2, 14};
 
   for (MaskArrayBaseType ix = 0; ix < h_mad.num_bits_per_base; ix++) {
-    ASSERT_EQ(h_mad.get_inner_index(7 + ix, 0),
+    ASSERT_EQ(h_mad.get_inner_index(0, 7 + ix),
               (7 + ix) % h_mad.num_bits_per_base);
-    ASSERT_EQ(h_mad.get_outer_index(7 + ix, 0),
+    ASSERT_EQ(h_mad.get_outer_index(0, 7 + ix),
               (7 + ix) / h_mad.num_bits_per_base);
   }
 
@@ -69,26 +69,25 @@ TEST(MaskArray, base) {
       lambda_test(true);
       lambda_test(false);
 
-      const std::size_t stride = ma->get_stride(N);
-
       ASSERT_EQ(ma->size, 0);
       ma->reset(true, N);
       ASSERT_EQ(ma->size, N);
 
+      const std::size_t size = ma->size;
       MaskArrayDevice d_ma = ma->get_device();
 
       ASSERT_EQ(d_ma.num_masks_per_entry, B);
-      ASSERT_EQ(d_ma.stride, ma->stride);
-      ASSERT_EQ(stride, ma->stride);
+      ASSERT_EQ(d_ma.size, ma->size);
+      ASSERT_EQ(size, ma->size);
 
-      const std::size_t M = stride * ma->num_masks_per_entry;
+      const std::size_t M = size * ma->num_base_elements_per_entry;
 
       ASSERT_TRUE(M * ma->num_bits_per_base >= N * B);
 
       h_ma.clear();
       h_ma.resize(M);
       std::fill(h_ma.begin(), h_ma.end(), 0);
-      MaskArrayDevice h_mad = {h_ma.data(), d_ma.num_masks_per_entry, stride};
+      MaskArrayDevice h_mad = {h_ma.data(), d_ma.num_masks_per_entry, size};
 
       std::deque<std::pair<std::size_t, std::size_t>> a;
       std::deque<std::pair<std::size_t, std::size_t>> b;
@@ -172,11 +171,9 @@ TEST(MaskArray, base) {
 TEST(MaskArray, particle_loop) {
   int npart_cell = 51;
   const int ndim = 2;
-  const int nx = 1;
-  const int ny = 1;
+  const int nx = 16;
+  const int ny = 20;
   const int nz = 48;
-
-  nprint("fix cell count");
 
   auto [A_t, sycl_target_t, cell_count_t] =
       particle_loop_create_common(npart_cell, ndim, nx, ny, nz);
@@ -184,7 +181,7 @@ TEST(MaskArray, particle_loop) {
   auto A = A_t;
   auto sycl_target = sycl_target_t;
 
-  for (std::size_t B : {1, 2, 3, 7}) {
+  for (std::size_t B : {1, 2, 3, 7, 33, 65}) {
 
     auto ma = std::make_shared<MaskArray>(sycl_target, B);
 
@@ -206,24 +203,15 @@ TEST(MaskArray, particle_loop) {
 
     particle_loop(
         A,
-        [=](auto INDEX, auto MA, auto R) {
+        [=](auto INDEX, auto MA) {
           for (std::size_t bx = 0; bx < B; bx++) {
             const bool correct = ((INDEX.cell + INDEX.layer) % (bx + 1)) == 0;
             const bool to_test = MA.get(INDEX.get_loop_linear_index(), bx);
             NESO_KERNEL_ASSERT(correct == to_test, k_ep);
-            R.at(0) = correct;
-            R.at(1) = to_test;
           }
         },
-        Access::read(ParticleLoopIndex{}), Access::write(ma),
-        Access::write(Sym<INT>("LOOP_INDEX")))
+        Access::read(ParticleLoopIndex{}), Access::read(ma))
         ->execute();
-
-    nprint("TODO MAKE READ ACCCESS DESCIPRITOR");
-
-    WHILST THIS BIT BASHINGS IS SPACE EFFICIENT IT IS NOT THREAD SAFE!
-
-    A->print(Sym<INT>("LOOP_INDEX"));
 
     ASSERT_FALSE(ep.get_flag());
   }
