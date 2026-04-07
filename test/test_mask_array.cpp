@@ -285,6 +285,9 @@ TEST(MaskArray, particle_pair_loop) {
       ->execute();
   ASSERT_FALSE(ep.get_flag());
 
+  const INT num_set = ma->get_num_masks_true(0);
+  ASSERT_EQ(num_set, cellwise_pair_list->get_num_pairs());
+
   sycl_target->free();
   A->domain->mesh->free();
 }

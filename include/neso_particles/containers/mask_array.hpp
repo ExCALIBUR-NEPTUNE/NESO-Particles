@@ -281,6 +281,12 @@ public:
    * @returns Access to the masks via the device type.
    */
   MaskArrayDevice get_device();
+
+  /**
+   * @param mask_index Index of mask in entry to count, default 0.
+   * @returns Number of masks set to true.
+   */
+  std::size_t get_num_masks_true(const std::size_t mask_index = 0);
 };
 
 namespace ParticleLoopImplementation {
