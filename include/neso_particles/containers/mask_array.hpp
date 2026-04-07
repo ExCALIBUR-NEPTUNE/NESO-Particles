@@ -196,6 +196,34 @@ create_kernel_arg([[maybe_unused]] ParticleLoopIteration &iterationx,
 
 } // namespace ParticleLoopImplementation
 
+namespace ParticlePairLoopImplementation {
+
+/**
+ *  Function to create the kernel argument for MaskArray read
+ * access in a pair loop.
+ */
+inline void create_kernel_arg(
+    [[maybe_unused]] ParticlePairLoopIteration &iteration,
+    [[maybe_unused]] ParticleLoopImplementation::ParticleLoopIteration
+        &iteration_particle,
+    Access::MaskArray::Read &rhs, Access::MaskArray::Read &lhs) {
+  lhs = rhs;
+}
+
+/**
+ * Function to create the kernel argument for MaskArray write
+ * access in a pair loop.
+ */
+inline void create_kernel_arg(
+    [[maybe_unused]] ParticlePairLoopIteration &iteration,
+    [[maybe_unused]] ParticleLoopImplementation::ParticleLoopIteration
+        &iteration_particle,
+    Access::MaskArray::Write &rhs, Access::MaskArray::Write &lhs) {
+  lhs = rhs;
+}
+
+} // namespace ParticlePairLoopImplementation
+
 /**
  * Type that stores N bits per entry (particle).
  */
