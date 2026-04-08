@@ -16,7 +16,8 @@ CellwisePairListSimple::CellwisePairListSimple(SYCLTargetSharedPtr sycl_target,
       d_pair_counts_es(
           std::make_shared<BufferDevice<INT>>(sycl_target, cell_count)),
       h_pair_counts(std::vector<int>(cell_count)), sycl_target(sycl_target),
-      cell_count(cell_count) {
+      cell_count(cell_count),
+      mask_array(std::make_shared<MaskArray>(sycl_target, 1)) {
   this->clear();
 }
 
@@ -34,6 +35,8 @@ void CellwisePairListSimple::push_back(const std::vector<int> &c,
   if (n == 0) {
     return;
   }
+
+  this->mask_array->reset(true, n);
 
   std::vector<int> layers(n);
   this->d_pair_counts->get(this->h_pair_counts);
@@ -262,7 +265,8 @@ CellwisePairListDevice CellwisePairListSimple::get_pair_list() {
                               this->h_pair_counts.data(),
                               this->max_pair_count,
                               this->max_wave_count,
-                              this->pair_count};
+                              this->pair_count,
+                              this->mask_array->get_device()};
 
   return l;
 }
@@ -289,5 +293,9 @@ CellwisePairListHostMap CellwisePairListSimple::get_host_pair_list() {
 }
 
 INT CellwisePairListSimple::get_num_pairs() { return this->pair_count; }
+
+MaskArraySharedPtr CellwisePairListSimple::get_mask_array() {
+  return this->mask_array;
+}
 
 } // namespace NESO::Particles

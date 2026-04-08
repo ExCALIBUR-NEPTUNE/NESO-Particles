@@ -35,6 +35,8 @@ protected:
 
   int mode{0};
 
+  MaskArraySharedPtr mask_array;
+
 public:
   /// Compute device holding pairs.
   SYCLTargetSharedPtr sycl_target;
@@ -95,6 +97,12 @@ public:
    * @returns The number of pairs in the pair list.
    */
   virtual INT get_num_pairs() override;
+
+  /**
+   * @returns The MaskArray which can be used to mask off pairs. By default all
+   * pairs will be enabled.
+   */
+  virtual MaskArraySharedPtr get_mask_array() override;
 };
 
 using CellwisePairListSimpleSharedPtr = std::shared_ptr<CellwisePairListSimple>;

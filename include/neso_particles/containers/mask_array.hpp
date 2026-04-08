@@ -102,9 +102,9 @@ template <typename T> struct MaskArrayDeviceBase {
 };
 
 namespace Access::MaskArray {
-using Read = MaskArrayDeviceBase<MaskArrayBaseType const * RESTRICT>;
+using Read = MaskArrayDeviceBase<MaskArrayBaseType const *>;
 
-struct Write : public MaskArrayDeviceBase<MaskArrayBaseType * RESTRICT> {
+struct Write : public MaskArrayDeviceBase<MaskArrayBaseType *> {
 
   /**
    * Set mask at location in base type.
@@ -288,6 +288,8 @@ public:
    */
   std::size_t get_num_masks_true(const std::size_t mask_index = 0);
 };
+
+using MaskArraySharedPtr = std::shared_ptr<MaskArray>;
 
 namespace ParticleLoopImplementation {
 
