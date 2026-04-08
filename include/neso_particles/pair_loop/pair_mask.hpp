@@ -87,13 +87,10 @@ namespace ParticleLoopImplementation {
 /**
  * Method to compute access to a PairMask (write)
  */
-inline MaskArrayDevice
+MaskArrayDevice
 create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
                 [[maybe_unused]] sycl::handler &cgh,
-                Access::Write<PairMask *> &a) {
-  auto tmp = a.obj->get_device();
-  return tmp;
-}
+                Access::Write<PairMask *> &a);
 
 } // namespace ParticleLoopImplementation
 

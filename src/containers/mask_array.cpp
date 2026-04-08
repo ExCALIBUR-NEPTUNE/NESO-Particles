@@ -109,4 +109,22 @@ std::size_t MaskArray::get_num_masks_true(const std::size_t mask_index) {
   return static_cast<std::size_t>(result);
 }
 
+namespace ParticleLoopImplementation {
+Access::MaskArray::Read
+create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
+                [[maybe_unused]] sycl::handler &cgh,
+                Access::Read<MaskArray *> &a) {
+  auto tmp = a.obj->get_device();
+  return {tmp.d_masks, tmp.num_masks_per_entry, tmp.size};
+}
+
+Access::MaskArray::Write
+create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
+                [[maybe_unused]] sycl::handler &cgh,
+                Access::Write<MaskArray *> &a) {
+  auto tmp = a.obj->get_device();
+  return {tmp.d_masks, tmp.num_masks_per_entry, tmp.size};
+}
+} // namespace ParticleLoopImplementation
+
 } // namespace NESO::Particles

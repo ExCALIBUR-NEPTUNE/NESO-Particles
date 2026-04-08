@@ -296,24 +296,18 @@ namespace ParticleLoopImplementation {
 /**
  * Method to compute access to a MaskArray (read)
  */
-inline Access::MaskArray::Read
+Access::MaskArray::Read
 create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
                 [[maybe_unused]] sycl::handler &cgh,
-                Access::Read<MaskArray *> &a) {
-  auto tmp = a.obj->get_device();
-  return {tmp.d_masks, tmp.num_masks_per_entry, tmp.size};
-}
+                Access::Read<MaskArray *> &a);
 
 /**
  * Method to compute access to a MaskArray (write)
  */
-inline Access::MaskArray::Write
+Access::MaskArray::Write
 create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
                 [[maybe_unused]] sycl::handler &cgh,
-                Access::Write<MaskArray *> &a) {
-  auto tmp = a.obj->get_device();
-  return {tmp.d_masks, tmp.num_masks_per_entry, tmp.size};
-}
+                Access::Write<MaskArray *> &a);
 
 } // namespace ParticleLoopImplementation
 

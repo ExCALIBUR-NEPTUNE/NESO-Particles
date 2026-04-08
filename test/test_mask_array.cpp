@@ -341,6 +341,10 @@ TEST(PairMask, particle_pair_loop) {
         NESO_KERNEL_ASSERT(MASK_ARRAY.get() == false, k_ep);
         MASK_ARRAY.set_on();
         NESO_KERNEL_ASSERT(MASK_ARRAY.get() == true, k_ep);
+        MASK_ARRAY.set_off();
+        NESO_KERNEL_ASSERT(MASK_ARRAY.get() == false, k_ep);
+        MASK_ARRAY.set_on();
+        NESO_KERNEL_ASSERT(MASK_ARRAY.get() == true, k_ep);
       },
       Access::write(ma))
       ->execute();
