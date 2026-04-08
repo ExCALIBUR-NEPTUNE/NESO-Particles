@@ -35,7 +35,7 @@ protected:
 
   int mode{0};
 
-  MaskArraySharedPtr mask_array;
+  PairMaskSharedPtr pair_mask;
 
 public:
   /// Compute device holding pairs.
@@ -102,7 +102,7 @@ public:
    * @returns The MaskArray which can be used to mask off pairs. By default all
    * pairs will be enabled.
    */
-  virtual MaskArraySharedPtr get_mask_array() override;
+  virtual PairMaskSharedPtr get_pair_mask() override;
 };
 
 using CellwisePairListSimpleSharedPtr = std::shared_ptr<CellwisePairListSimple>;

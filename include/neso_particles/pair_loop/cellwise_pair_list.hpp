@@ -3,9 +3,9 @@
 
 #include "../compute_target.hpp"
 #include "../containers/cell_dat.hpp"
-#include "../containers/mask_array.hpp"
 #include "../device_buffers.hpp"
 #include "cellwise_pair_list_host.hpp"
+#include "pair_mask.hpp"
 
 #include <map>
 #include <vector>
@@ -135,10 +135,10 @@ public:
   virtual bool validate_pair_list(SYCLTargetSharedPtr sycl_target);
 
   /**
-   * @returns The MaskArray which can be used to mask off pairs. By default all
+   * @returns The PairMask which can be used to mask off pairs. By default all
    * pairs will be enabled.
    */
-  virtual MaskArraySharedPtr get_mask_array() = 0;
+  virtual PairMaskSharedPtr get_pair_mask() = 0;
 };
 
 using CellwisePairListSharedPtr = std::shared_ptr<CellwisePairList>;
