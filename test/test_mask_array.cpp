@@ -364,6 +364,32 @@ TEST(PairMask, particle_pair_loop) {
   const INT num_set = ma->get_num_masks_true(0);
   ASSERT_EQ(num_set, cellwise_pair_list->get_num_pairs());
 
+  auto la_count = std::make_shared<LocalArray<int>>(sycl_target, 1);
+  la_count->fill(0);
+
+  particle_pair_loop(
+      "particle_pair_loop_test",
+      CellwisePairListAbsolute<ParticleGroup, CellwisePairList>(
+          A, A, cellwise_pair_list),
+      [=](auto PAIR_MASK, auto LA_COUNT) {
+        PAIR_MASK.set_off();
+        LA_COUNT.fetch_add(0, 1);
+      },
+      Access::write(cellwise_pair_list->get_pair_mask()), Access::add(la_count))
+      ->execute();
+
+  ASSERT_EQ(la_count->get().at(0), cellwise_pair_list->get_num_pairs());
+
+  la_count->fill(0);
+  particle_pair_loop(
+      "particle_pair_loop_test",
+      CellwisePairListAbsolute<ParticleGroup, CellwisePairList>(
+          A, A, cellwise_pair_list),
+      [=](auto LA_COUNT) { LA_COUNT.fetch_add(0, 1); }, Access::add(la_count))
+      ->execute();
+
+  ASSERT_EQ(la_count->get().at(0), 0);
+
   sycl_target->free();
   A->domain->mesh->free();
 }

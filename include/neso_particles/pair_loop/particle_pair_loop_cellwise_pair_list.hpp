@@ -147,42 +147,50 @@ public:
                       const INT pair_index = k_pair_list.get_pair_linear_index(
                           wavex, index_cell, index_pair);
 
-                      ParticlePairLoopImplementation::ParticlePairLoopIteration
-                          iteration;
-                      iteration.work_item = &idx;
+                      const bool mask =
+                          k_pair_list.mask_array.get(pair_index, 0);
 
-                      ParticleLoopImplementation::ParticleLoopIteration
-                          iteration_A;
-                      ParticleLoopImplementation::ParticleLoopIteration
-                          iteration_B;
+                      if (mask) {
 
-                      const int particle_index_a =
-                          k_pair_list.get_particle_index_i(wavex, index_cell,
-                                                           index_pair);
-                      const int particle_index_b =
-                          k_pair_list.get_particle_index_j(wavex, index_cell,
-                                                           index_pair);
+                        ParticlePairLoopImplementation::
+                            ParticlePairLoopIteration iteration;
+                        iteration.work_item = &idx;
 
-                      iteration.pair_index = pair_index;
+                        ParticleLoopImplementation::ParticleLoopIteration
+                            iteration_A;
+                        ParticleLoopImplementation::ParticleLoopIteration
+                            iteration_B;
 
-                      iteration_A.local_sycl_index = idx.get_local_linear_id();
-                      iteration_A.local_sycl_range =
-                          idx.get_group().get_local_linear_range();
-                      iteration_A.cellx = index_cell;
-                      iteration_A.layerx = particle_index_a;
+                        const int particle_index_a =
+                            k_pair_list.get_particle_index_i(wavex, index_cell,
+                                                             index_pair);
+                        const int particle_index_b =
+                            k_pair_list.get_particle_index_j(wavex, index_cell,
+                                                             index_pair);
 
-                      iteration_B.local_sycl_index = idx.get_local_linear_id();
-                      iteration_B.local_sycl_range =
-                          idx.get_group().get_local_linear_range();
-                      iteration_B.cellx = index_cell;
-                      iteration_B.layerx = particle_index_b;
+                        iteration.pair_index = pair_index;
 
-                      kernel_parameter_type kernel_args;
-                      KernelMasksType kernel_masks;
+                        iteration_A.local_sycl_index =
+                            idx.get_local_linear_id();
+                        iteration_A.local_sycl_range =
+                            idx.get_group().get_local_linear_range();
+                        iteration_A.cellx = index_cell;
+                        iteration_A.layerx = particle_index_a;
 
-                      create_kernel_args(iteration, kernel_masks, iteration_A,
-                                         iteration_B, loop_args, kernel_args);
-                      Tuple::apply(k_kernel, kernel_args);
+                        iteration_B.local_sycl_index =
+                            idx.get_local_linear_id();
+                        iteration_B.local_sycl_range =
+                            idx.get_group().get_local_linear_range();
+                        iteration_B.cellx = index_cell;
+                        iteration_B.layerx = particle_index_b;
+
+                        kernel_parameter_type kernel_args;
+                        KernelMasksType kernel_masks;
+
+                        create_kernel_args(iteration, kernel_masks, iteration_A,
+                                           iteration_B, loop_args, kernel_args);
+                        Tuple::apply(k_kernel, kernel_args);
+                      }
                     }
                   }
                 });
@@ -228,39 +236,42 @@ public:
 
                 const INT pair_index = k_pair_list.get_pair_linear_index(
                     wavex, index_cell, index_pair);
+                const bool mask = k_pair_list.mask_array.get(pair_index, 0);
 
-                ParticlePairLoopImplementation::ParticlePairLoopIteration
-                    iteration;
-                iteration.work_item = &idx;
+                if (mask) {
+                  ParticlePairLoopImplementation::ParticlePairLoopIteration
+                      iteration;
+                  iteration.work_item = &idx;
 
-                ParticleLoopImplementation::ParticleLoopIteration iteration_A;
-                ParticleLoopImplementation::ParticleLoopIteration iteration_B;
+                  ParticleLoopImplementation::ParticleLoopIteration iteration_A;
+                  ParticleLoopImplementation::ParticleLoopIteration iteration_B;
 
-                const int particle_index_a = k_pair_list.get_particle_index_i(
-                    wavex, index_cell, index_pair);
-                const int particle_index_b = k_pair_list.get_particle_index_j(
-                    wavex, index_cell, index_pair);
+                  const int particle_index_a = k_pair_list.get_particle_index_i(
+                      wavex, index_cell, index_pair);
+                  const int particle_index_b = k_pair_list.get_particle_index_j(
+                      wavex, index_cell, index_pair);
 
-                iteration.pair_index = pair_index;
+                  iteration.pair_index = pair_index;
 
-                iteration_A.local_sycl_index = idx.get_local_linear_id();
-                iteration_A.local_sycl_range =
-                    idx.get_group().get_local_linear_range();
-                iteration_A.cellx = index_cell;
-                iteration_A.layerx = particle_index_a;
+                  iteration_A.local_sycl_index = idx.get_local_linear_id();
+                  iteration_A.local_sycl_range =
+                      idx.get_group().get_local_linear_range();
+                  iteration_A.cellx = index_cell;
+                  iteration_A.layerx = particle_index_a;
 
-                iteration_B.local_sycl_index = idx.get_local_linear_id();
-                iteration_B.local_sycl_range =
-                    idx.get_group().get_local_linear_range();
-                iteration_B.cellx = index_cell;
-                iteration_B.layerx = particle_index_b;
+                  iteration_B.local_sycl_index = idx.get_local_linear_id();
+                  iteration_B.local_sycl_range =
+                      idx.get_group().get_local_linear_range();
+                  iteration_B.cellx = index_cell;
+                  iteration_B.layerx = particle_index_b;
 
-                kernel_parameter_type kernel_args;
-                KernelMasksType kernel_masks;
+                  kernel_parameter_type kernel_args;
+                  KernelMasksType kernel_masks;
 
-                create_kernel_args(iteration, kernel_masks, iteration_A,
-                                   iteration_B, loop_args, kernel_args);
-                Tuple::apply(k_kernel, kernel_args);
+                  create_kernel_args(iteration, kernel_masks, iteration_A,
+                                     iteration_B, loop_args, kernel_args);
+                  Tuple::apply(k_kernel, kernel_args);
+                }
               }
 
               // This barrier seems to cause the atomics in the kernel rng
