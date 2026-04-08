@@ -4,6 +4,7 @@
 #include "../containers/rng/kernel_rng.hpp"
 #include "../loop/particle_loop_args.hpp"
 #include "../particle_sub_group/particle_sub_group_base.hpp"
+#include "pair_mask.hpp"
 #include "particle_pair_loop_base.hpp"
 #include "particle_pair_loop_index.hpp"
 

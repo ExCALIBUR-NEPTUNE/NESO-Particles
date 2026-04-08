@@ -291,3 +291,75 @@ TEST(MaskArray, particle_pair_loop) {
   sycl_target->free();
   A->domain->mesh->free();
 }
+
+TEST(PairMask, particle_pair_loop) {
+
+  const int npart_cell = 257;
+  const int ndim = 2;
+  const int nx = 16;
+  const int ny = 33;
+  const int nz = 48;
+
+  auto [A_t, sycl_target_t, cell_count_t] =
+      particle_loop_create_common(npart_cell, ndim, nx, ny, nz);
+  auto A = A_t;
+  auto sycl_target = sycl_target_t;
+  auto cell_count = cell_count_t;
+
+  const int num_samples = cell_count * npart_cell * 0.2;
+  std::vector<int> h_c(num_samples);
+  std::vector<int> h_i(num_samples);
+  std::vector<int> h_j(num_samples);
+
+  std::mt19937 rng(522342 + sycl_target->comm_pair.rank_parent);
+  std::uniform_int_distribution<int> dist_cell(0, cell_count - 1);
+
+  for (int ix = 0; ix < num_samples; ix++) {
+    const int cell = dist_cell(rng);
+    h_c[ix] = cell;
+    const int npart_cell = A->get_npart_cell(cell);
+    std::uniform_int_distribution<int> dist_layer(0, npart_cell - 1);
+    h_i[ix] = dist_layer(rng);
+    h_j[ix] = dist_layer(rng);
+  }
+
+  auto cellwise_pair_list =
+      std::make_shared<CellwisePairListSimple>(sycl_target, cell_count);
+  cellwise_pair_list->push_back(h_c, h_i, h_j);
+
+  auto ma = std::make_shared<PairMask>(sycl_target);
+  ma->reset(false, cellwise_pair_list->get_num_pairs());
+
+  ErrorPropagate ep(sycl_target);
+  auto k_ep = ep.device_ptr();
+
+  particle_pair_loop(
+      "particle_pair_loop_test",
+      {CellwisePairListAbsolute<ParticleGroup, CellwisePairList>(
+          A, A, cellwise_pair_list)},
+      [=](auto MASK_ARRAY) {
+        NESO_KERNEL_ASSERT(MASK_ARRAY.get() == false, k_ep);
+        MASK_ARRAY.set_on();
+        NESO_KERNEL_ASSERT(MASK_ARRAY.get() == true, k_ep);
+      },
+      Access::write(ma))
+      ->execute();
+  ASSERT_FALSE(ep.get_flag());
+
+  particle_pair_loop(
+      "particle_pair_loop_test",
+      {CellwisePairListAbsolute<ParticleGroup, CellwisePairList>(
+          A, A, cellwise_pair_list)},
+      [=](auto MASK_ARRAY) {
+        NESO_KERNEL_ASSERT(MASK_ARRAY.get() == true, k_ep);
+      },
+      Access::write(ma))
+      ->execute();
+  ASSERT_FALSE(ep.get_flag());
+
+  const INT num_set = ma->get_num_masks_true(0);
+  ASSERT_EQ(num_set, cellwise_pair_list->get_num_pairs());
+
+  sycl_target->free();
+  A->domain->mesh->free();
+}

@@ -244,7 +244,7 @@ public:
       sizeof(MaskArrayBaseType) * CHAR_BIT;
 
   MaskArray() = default;
-  ~MaskArray();
+  virtual ~MaskArray();
 
   // Compute device.
   SYCLTargetSharedPtr sycl_target;
@@ -305,7 +305,7 @@ create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
 }
 
 /**
- * Method to compute access to a MaskArray (read)
+ * Method to compute access to a MaskArray (write)
  */
 inline Access::MaskArray::Write
 create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,

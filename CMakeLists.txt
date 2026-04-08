@@ -106,6 +106,7 @@ set(SRC_FILES
     ${SRC_DIR}/pair_loop/cellwise_pair_list_simple.cpp
     ${SRC_DIR}/pair_loop/cellwise_pair_list_host.cpp
     ${SRC_DIR}/pair_loop/cellwise_pair_list_block.cpp
+    ${SRC_DIR}/pair_loop/pair_mask.cpp
     ${SRC_DIR}/particle_dat.cpp
     ${SRC_DIR}/particle_group.cpp
     ${SRC_DIR}/particle_set.cpp
@@ -272,6 +273,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/cellwise_pair_list_block.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/cellwise_pair_list_host.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/pair_loop.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/pair_mask.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/particle_pair_loop_args.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/particle_pair_loop_base.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/particle_pair_loop_index.hpp
