@@ -352,8 +352,8 @@ TEST(PairMask, particle_pair_loop) {
 
   particle_pair_loop(
       "particle_pair_loop_test",
-      {CellwisePairListAbsolute<ParticleGroup, CellwisePairList>(
-          A, A, cellwise_pair_list)},
+      CellwisePairListAbsolute<ParticleGroup, CellwisePairList>(
+          A, A, cellwise_pair_list),
       [=](auto MASK_ARRAY) {
         NESO_KERNEL_ASSERT(MASK_ARRAY.get() == true, k_ep);
       },
