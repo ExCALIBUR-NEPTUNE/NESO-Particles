@@ -37,7 +37,7 @@ void subdivide_cells_voronoi_map(std::shared_ptr<GROUP_TYPE> particle_sub_group,
           REAL distance_squared = 0.0;
           for (int dx = 0; dx < ndim; dx++) {
             const REAL r = p[dx] - POINTS.at(pointx, dx);
-            Kernel::fma(r, r, distance_squared);
+            distance_squared = Kernel::fma(r, r, distance_squared);
           }
 
           if (distance_squared < min_distance) {
@@ -117,6 +117,8 @@ public:
 
     auto particle_group = get_particle_group(particle_sub_group);
 
+    NESOASSERT(particle_group->sycl_target.get() == this->sycl_target.get(),
+               "SYCLTarget missmatch,");
     NESOASSERT(particle_group->domain->mesh->get_cell_count() ==
                    this->points->ncells,
                "Miss-match of cell count in points and cell count of particle "
