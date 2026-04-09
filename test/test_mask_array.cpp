@@ -337,16 +337,21 @@ TEST(PairMask, particle_pair_loop) {
       "particle_pair_loop_test",
       {CellwisePairListAbsolute<ParticleGroup, CellwisePairList>(
           A, A, cellwise_pair_list)},
-      [=](auto MASK_ARRAY) {
+      [=](auto INDEX, auto MASK_ARRAY) {
+        const std::size_t i = INDEX.get_loop_linear_index();
         NESO_KERNEL_ASSERT(MASK_ARRAY.get() == false, k_ep);
+        NESO_KERNEL_ASSERT(MASK_ARRAY.mask_array.get(i, 0) == false, k_ep);
         MASK_ARRAY.set_on();
         NESO_KERNEL_ASSERT(MASK_ARRAY.get() == true, k_ep);
+        NESO_KERNEL_ASSERT(MASK_ARRAY.mask_array.get(i, 0) == true, k_ep);
         MASK_ARRAY.set_off();
         NESO_KERNEL_ASSERT(MASK_ARRAY.get() == false, k_ep);
+        NESO_KERNEL_ASSERT(MASK_ARRAY.mask_array.get(i, 0) == false, k_ep);
         MASK_ARRAY.set_on();
         NESO_KERNEL_ASSERT(MASK_ARRAY.get() == true, k_ep);
+        NESO_KERNEL_ASSERT(MASK_ARRAY.mask_array.get(i, 0) == true, k_ep);
       },
-      Access::write(ma))
+      Access::read(ParticlePairLoopIndex{}), Access::write(ma))
       ->execute();
   ASSERT_FALSE(ep.get_flag());
 
