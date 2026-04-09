@@ -163,6 +163,7 @@ void CellwisePairListSimple::set(CellwisePairListHostSharedPtr pair_list) {
   {
 
     INT linear_offset = 0;
+    std::size_t total_num_pairs = 0;
     for (int cellx = 0; cellx < this->cell_count; cellx++) {
       const int wave_count = m[cellx].size();
 
@@ -177,10 +178,13 @@ void CellwisePairListSimple::set(CellwisePairListHostSharedPtr pair_list) {
         num_pairs += num_pairs_wave;
         linear_offset += num_pairs_wave;
       }
+      total_num_pairs += static_cast<std::size_t>(num_pairs);
       if (num_pairs) {
         this->d_pair_list->set_nrow(cellx, num_pairs);
       }
     }
+
+    this->pair_mask->reset(true, total_num_pairs);
 
     if (max_wave_count) {
       event_stack.push(this->sycl_target->queue.memcpy(
