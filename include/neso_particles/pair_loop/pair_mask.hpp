@@ -65,6 +65,10 @@ inline void create_kernel_arg(
 
 } // namespace ParticlePairLoopImplementation
 
+/**
+ * Specialised MaskArray for enabling/disabling pairs of particles in pair
+ * lists.
+ */
 class PairMask : public MaskArray {
 protected:
 public:
