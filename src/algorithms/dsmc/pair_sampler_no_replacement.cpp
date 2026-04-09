@@ -36,6 +36,8 @@ PairSamplerNoReplacement::PairSamplerNoReplacement(
 
   this->d_max_pair_count =
       std::make_unique<BufferDevice<INT>>(this->sycl_target, 1);
+
+  this->pair_mask = std::make_shared<PairMask>(this->sycl_target);
 }
 
 void PairSamplerNoReplacement::sample(
@@ -189,6 +191,7 @@ void PairSamplerNoReplacement::sample(
   e8.wait_and_throw();
 
   this->num_pairs = last_count + last_count_es;
+  this->pair_mask->reset(true, this->num_pairs);
 
   // Now we can actually sample pairs.
   const auto k_pair_count = this->num_pairs;
@@ -362,7 +365,8 @@ void PairSamplerNoReplacement::sample(
                               this->h_pair_counts.data(),
                               static_cast<int>(max_pair_count),
                               1,
-                              this->num_pairs};
+                              this->num_pairs,
+                              this->pair_mask->get_device()};
 
   this->sycl_target->profile_map.end_region(r0);
 }
@@ -393,5 +397,9 @@ CellwisePairListHostMap PairSamplerNoReplacement::get_host_pair_list() {
 }
 
 INT PairSamplerNoReplacement::get_num_pairs() { return this->num_pairs; }
+
+PairMaskSharedPtr PairSamplerNoReplacement::get_pair_mask() {
+  return this->pair_mask;
+}
 
 } // namespace NESO::Particles::DSMC

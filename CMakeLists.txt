@@ -89,6 +89,7 @@ set(SRC_FILES
     ${SRC_DIR}/containers/ephemeral_dats.cpp
     ${SRC_DIR}/containers/global_array.cpp
     ${SRC_DIR}/containers/local_array.cpp
+    ${SRC_DIR}/containers/mask_array.cpp
     ${SRC_DIR}/containers/particle_set_device.cpp
     ${SRC_DIR}/containers/sym_vector.cpp
     ${SRC_DIR}/containers/sym_vector_pointer_cache.cpp
@@ -105,6 +106,7 @@ set(SRC_FILES
     ${SRC_DIR}/pair_loop/cellwise_pair_list_simple.cpp
     ${SRC_DIR}/pair_loop/cellwise_pair_list_host.cpp
     ${SRC_DIR}/pair_loop/cellwise_pair_list_block.cpp
+    ${SRC_DIR}/pair_loop/pair_mask.cpp
     ${SRC_DIR}/particle_dat.cpp
     ${SRC_DIR}/particle_group.cpp
     ${SRC_DIR}/particle_set.cpp
@@ -191,6 +193,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/local_memory_interlaced.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/lookup_table.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/nd_local_array.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/containers/mask_array.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/particle_set_device.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/product_matrix.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/resource_stack.hpp
@@ -270,6 +273,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/cellwise_pair_list_block.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/cellwise_pair_list_host.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/pair_loop.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/pair_mask.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/particle_pair_loop_args.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/particle_pair_loop_base.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/particle_pair_loop_index.hpp

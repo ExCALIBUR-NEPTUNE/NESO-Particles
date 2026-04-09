@@ -35,6 +35,8 @@ protected:
 
   std::unique_ptr<BufferDevice<INT>> d_max_pair_count;
 
+  PairMaskSharedPtr pair_mask;
+
 public:
   /// Disable (implicit) copies.
   PairSamplerNoReplacement(const PairSamplerNoReplacement &st) = delete;
@@ -97,6 +99,12 @@ public:
    * @returns The number of pairs in the pair list.
    */
   virtual INT get_num_pairs() override;
+
+  /**
+   * @returns The PairMask which can be used to mask off pairs. By default all
+   * pairs will be enabled.
+   */
+  virtual PairMaskSharedPtr get_pair_mask() override;
 };
 
 } // namespace NESO::Particles::DSMC

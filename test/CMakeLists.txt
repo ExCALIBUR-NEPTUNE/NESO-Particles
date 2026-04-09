@@ -100,6 +100,7 @@ set(TEST_SRCS
     ${TEST_DIR}/test_particle_sub_group_partition_b.cpp
     ${TEST_DIR}/test_particle_sub_group_partition_c.cpp
     ${TEST_DIR}/test_product_matrix.cpp
+    ${TEST_DIR}/test_mask_array.cpp
     ${TEST_DIR}/test_resource_stack.cpp
     ${TEST_DIR}/test_serial_container.cpp
     ${TEST_DIR}/test_selector_exclusive_scan.cpp

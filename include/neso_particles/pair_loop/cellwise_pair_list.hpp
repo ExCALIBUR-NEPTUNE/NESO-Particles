@@ -5,6 +5,7 @@
 #include "../containers/cell_dat.hpp"
 #include "../device_buffers.hpp"
 #include "cellwise_pair_list_host.hpp"
+#include "pair_mask.hpp"
 
 #include <map>
 #include <vector>
@@ -30,6 +31,9 @@ struct CellwisePairListDevice {
   int max_pair_count{0};
   int max_wave_count{0};
   INT pair_count{0};
+
+  // The masks for the pairs.
+  MaskArrayDevice mask_array;
 
   /**
    * @param cell Cell to retrieve number of waves for.
@@ -129,6 +133,12 @@ public:
    * malformed.
    */
   virtual bool validate_pair_list(SYCLTargetSharedPtr sycl_target);
+
+  /**
+   * @returns The PairMask which can be used to mask off pairs. By default all
+   * pairs will be enabled.
+   */
+  virtual PairMaskSharedPtr get_pair_mask() = 0;
 };
 
 using CellwisePairListSharedPtr = std::shared_ptr<CellwisePairList>;
