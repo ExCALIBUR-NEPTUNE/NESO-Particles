@@ -665,6 +665,8 @@ public:
 extern template class CellDat<REAL>;
 extern template class CellDat<INT>;
 
+template <typename T> using CellDatSharedPtr = std::shared_ptr<CellDat<T>>;
+
 } // namespace NESO::Particles
 
 #endif
