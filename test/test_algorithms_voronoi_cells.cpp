@@ -159,6 +159,17 @@ void voronoi_cell_test_wrapper(ParticleGroupSharedPtr A,
         A, [=](auto ID) { return ID.at(0) % 2 == 1; },
         Access::read(Sym<INT>("ID")));
 
+    lambda_reset();
+    particle_loop(
+        A,
+        [=](auto FOO) {
+          NESO_KERNEL_ASSERT(FOO.at(0) == -1, k_ep);
+          NESO_KERNEL_ASSERT(FOO.at(1) == -1, k_ep);
+        },
+        Access::read(Sym<INT>("FOO")))
+        ->execute();
+    ASSERT_FALSE(ep.get_flag());
+
     mapper.map(aa, Sym<INT>("FOO"), 1);
 
     particle_loop(
