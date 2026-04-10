@@ -16,6 +16,7 @@ class SubdivideCellsVoronoi {
 protected:
   // Number of points in each cell.
   std::shared_ptr<BufferDevice<int>> d_num_points;
+  std::vector<int> h_num_points;
 
   template <int ndim, typename GROUP_TYPE>
   static inline void
@@ -123,6 +124,11 @@ public:
                                      sym_component, k_num_points, this->points);
     }
   }
+
+  /**
+   * @returns The number of Voronoi cells in each mesh cell.
+   */
+  const std::vector<int> &get_num_subdivision_cells();
 };
 
 extern template void

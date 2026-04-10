@@ -111,11 +111,15 @@ void voronoi_cell_test_wrapper(ParticleGroupSharedPtr A,
     lambda_reset();
     mapper.map(A, Sym<INT>("FOO"), 1);
 
+    auto num_subdivision_cells = mapper.get_num_subdivision_cells();
+
     for (int cellx = 0; cellx < cell_count; cellx++) {
       auto P = A->get_cell(Sym<REAL>("P"), cellx);
       auto FOO = A->get_cell(Sym<INT>("FOO"), cellx);
       const int nrow = P->nrow;
       const int npoints = cellx % max_num_vcells;
+      ASSERT_EQ(npoints, num_subdivision_cells.at(cellx));
+
       for (int rowx = 0; rowx < nrow; rowx++) {
 
         int vcell = 0;
@@ -304,12 +308,15 @@ void cartesian_cell_test_wrapper(ParticleGroupSharedPtr A,
     mapper.map(A, Sym<INT>("FOO"), 1);
 
     const auto all_cell_indices = cartesian_mesh->get_owned_cells();
+    auto num_subdivision_cells = mapper.get_num_subdivision_cells();
 
     for (int cellx = 0; cellx < cell_count; cellx++) {
       const int num_sub_cells = cellx % max_num_subdivisions + 1;
 
       auto FOO = A->get_cell(Sym<INT>("FOO"), cellx);
       auto P = A->get_cell(Sym<REAL>("P"), cellx);
+
+      ASSERT_EQ(num_subdivision_cells.at(cellx), std::pow(num_sub_cells, ndim));
 
       const int nrow = FOO->nrow;
       auto indices = all_cell_indices.at(cellx);

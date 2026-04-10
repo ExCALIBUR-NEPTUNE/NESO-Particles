@@ -35,9 +35,12 @@ SubdivideCartesianCells::SubdivideCartesianCells(
 
   auto h_owned_cells = this->mesh->get_owned_cells();
   std::vector<REAL> h_origins(cell_count * ndim);
+  this->h_num_subdivision_cells.resize(cell_count);
   for (int cellx = 0; cellx < cell_count; cellx++) {
     NESOASSERT(this->sub_cell_count.at(cellx) > 0,
-               "A sub cell count of 0 does not make sense.");
+               "A non-positive sub cell count does not make sense.");
+    this->h_num_subdivision_cells.at(cellx) =
+        std::pow(this->sub_cell_count.at(cellx), ndim);
     for (int dx = 0; dx < ndim; dx++) {
       const auto index = h_owned_cells.at(cellx).at(dx);
       h_origins.at(cellx * ndim + dx) = cell_width * index;
@@ -47,6 +50,10 @@ SubdivideCartesianCells::SubdivideCartesianCells(
   this->d_origins =
       std::make_shared<BufferDevice<REAL>>(this->sycl_target, h_origins);
   e0.wait_and_throw();
+}
+
+const std::vector<int> &SubdivideCartesianCells::get_num_subdivision_cells() {
+  return this->h_num_subdivision_cells;
 }
 
 template void

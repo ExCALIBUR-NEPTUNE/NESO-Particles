@@ -21,6 +21,7 @@ protected:
   std::shared_ptr<BufferDevice<int>> d_sub_cell_count;
   std::shared_ptr<BufferDevice<REAL>> d_sub_cell_inverse_widths;
   std::shared_ptr<BufferDevice<REAL>> d_origins;
+  std::vector<int> h_num_subdivision_cells;
 
   template <int ndim, typename GROUP_TYPE>
   static inline void subdivide_cartesian_cells_map(
@@ -131,6 +132,11 @@ public:
                                        k_sub_cell_inverse_widths, k_origins);
     }
   }
+
+  /**
+   * @returns The total number of subdivision cells in each mesh cell.
+   */
+  const std::vector<int> &get_num_subdivision_cells();
 };
 
 extern template void

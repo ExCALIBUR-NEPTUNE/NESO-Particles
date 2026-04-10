@@ -7,12 +7,16 @@ SubdivideCellsVoronoi::SubdivideCellsVoronoi(SYCLTargetSharedPtr sycl_target,
     : sycl_target(sycl_target), points(points) {
 
   const int num_cells = points->ncells;
-  std::vector<int> h_num_points(num_cells);
+  this->h_num_points.resize(num_cells);
   for (int ix = 0; ix < num_cells; ix++) {
-    h_num_points.at(ix) = static_cast<int>(points->nrow[ix]);
+    this->h_num_points.at(ix) = static_cast<int>(points->nrow[ix]);
   }
-  this->d_num_points =
-      std::make_shared<BufferDevice<int>>(this->sycl_target, h_num_points);
+  this->d_num_points = std::make_shared<BufferDevice<int>>(this->sycl_target,
+                                                           this->h_num_points);
+}
+
+const std::vector<int> &SubdivideCellsVoronoi::get_num_subdivision_cells() {
+  return this->h_num_points;
 }
 
 template void
