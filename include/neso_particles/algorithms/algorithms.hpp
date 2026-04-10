@@ -6,6 +6,7 @@
 #include "dsmc/dsmc.hpp"
 #include "particle_data_movement.hpp"
 #include "reduce_dat_cellwise.hpp"
+#include "subdivide_cartesian_cells.hpp"
 #include "subdivide_cells_voronoi.hpp"
 #include "unseen_value_extractor.hpp"
 

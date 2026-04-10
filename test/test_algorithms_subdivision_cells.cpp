@@ -208,3 +208,100 @@ TEST(Algorithms, subdivide_cells_voronoi_3d) {
   sycl_target->free();
   A->domain->mesh->free();
 }
+
+namespace {
+
+void cartesian_cell_test_wrapper(ParticleGroupSharedPtr A,
+                                 SYCLTargetSharedPtr sycl_target,
+                                 const int cell_count) {
+
+  const int ndim = A->domain->mesh->get_ndim();
+  A->add_particle_dat(Sym<INT>("FOO"), 3);
+
+  auto lambda_reset = [&]() {
+    particle_loop(
+        A,
+        [=](auto FOO) {
+          FOO.at(0) = -1;
+          FOO.at(1) = -1;
+        },
+        Access::write(Sym<INT>("FOO")))
+        ->execute();
+  };
+
+  ErrorPropagate ep(sycl_target);
+  auto k_ep = ep.device_ptr();
+
+  const int max_num_subdivisions = 7;
+  std::vector<int> h_num_subdivions(cell_count);
+  std::fill(h_num_subdivions.begin(), h_num_subdivions.end(), 0);
+
+  // Test when no subdivisions are specified that the result is the 0-th cell.
+  {
+    SubdivideCartesianCells mapper(
+        sycl_target, std::dynamic_pointer_cast<CartesianHMesh>(A->domain->mesh),
+        h_num_subdivions);
+
+    lambda_reset();
+    mapper.map(A, Sym<INT>("FOO"), 1);
+
+    particle_loop(
+        A,
+        [=](auto FOO) {
+          NESO_KERNEL_ASSERT(FOO.at(0) == -1, k_ep);
+          NESO_KERNEL_ASSERT(FOO.at(1) == 0, k_ep);
+        },
+        Access::read(Sym<INT>("FOO")))
+        ->execute();
+    ASSERT_FALSE(ep.get_flag());
+
+    lambda_reset();
+
+    auto aa = particle_sub_group(
+        A, [=](auto ID) { return ID.at(0) % 2 == 0; },
+        Access::read(Sym<INT>("ID")));
+
+    auto bb = particle_sub_group(
+        A, [=](auto ID) { return ID.at(0) % 2 == 1; },
+        Access::read(Sym<INT>("ID")));
+
+    mapper.map(aa, Sym<INT>("FOO"), 1);
+    particle_loop(
+        aa,
+        [=](auto FOO) {
+          NESO_KERNEL_ASSERT(FOO.at(0) == -1, k_ep);
+          NESO_KERNEL_ASSERT(FOO.at(1) == 0, k_ep);
+        },
+        Access::read(Sym<INT>("FOO")))
+        ->execute();
+    ASSERT_FALSE(ep.get_flag());
+    particle_loop(
+        bb,
+        [=](auto FOO) {
+          NESO_KERNEL_ASSERT(FOO.at(0) == -1, k_ep);
+          NESO_KERNEL_ASSERT(FOO.at(1) == -1, k_ep);
+        },
+        Access::read(Sym<INT>("FOO")))
+        ->execute();
+    ASSERT_FALSE(ep.get_flag());
+  }
+
+  // Set some points for each mesh cell.
+  {}
+}
+
+} // namespace
+
+TEST(Algorithms, subdivide_cells_cartesian_2d) {
+  auto [A, sycl_target, cell_count_t] = particle_loop_common_2d(27, 16, 32);
+  cartesian_cell_test_wrapper(A, sycl_target, cell_count_t);
+  sycl_target->free();
+  A->domain->mesh->free();
+}
+
+TEST(Algorithms, subdivide_cells_cartesian_3d) {
+  auto [A, sycl_target, cell_count_t] = particle_loop_common_3d(15, 16, 3, 32);
+  cartesian_cell_test_wrapper(A, sycl_target, cell_count_t);
+  sycl_target->free();
+  A->domain->mesh->free();
+}
