@@ -8,74 +8,6 @@
 
 namespace NESO::Particles {
 
-namespace Private {
-
-template <int ndim, typename GROUP_TYPE>
-void subdivide_cells_voronoi_map(std::shared_ptr<GROUP_TYPE> particle_sub_group,
-                                 Sym<INT> sym_name, const int sym_component,
-                                 int const *const RESTRICT k_num_points,
-                                 CellDatSharedPtr<REAL> points) {
-
-  auto particle_group = get_particle_group(particle_sub_group);
-
-  particle_loop(
-      "SubdivideCellsVoronoi::map", particle_sub_group,
-      [=](auto INDEX, auto POS, auto VCELL, auto POINTS) {
-        REAL p[ndim];
-        for (int dx = 0; dx < ndim; dx++) {
-          p[dx] = POS.at(dx);
-        }
-
-        const int cell = static_cast<int>(INDEX.cell);
-        const int num_points_in_cell = k_num_points[cell];
-
-        int vcell = 0;
-        constexpr REAL default_min_distance = std::numeric_limits<REAL>::max();
-        REAL min_distance = default_min_distance;
-
-        for (int pointx = 0; pointx < num_points_in_cell; pointx++) {
-          REAL distance_squared = 0.0;
-          for (int dx = 0; dx < ndim; dx++) {
-            const REAL r = p[dx] - POINTS.at(pointx, dx);
-            distance_squared = Kernel::fma(r, r, distance_squared);
-          }
-
-          if (distance_squared < min_distance) {
-            min_distance = distance_squared;
-            vcell = pointx;
-          }
-        }
-
-        VCELL.at(sym_component) = vcell;
-      },
-      Access::read(ParticleLoopIndex{}),
-      Access::read(particle_group->position_dat), Access::write(sym_name),
-      Access::read(points))
-      ->execute();
-}
-
-extern template void subdivide_cells_voronoi_map<2>(
-    std::shared_ptr<ParticleGroup> particle_sub_group, Sym<INT> sym_name,
-    const int sym_component, int const *const RESTRICT k_num_points,
-    CellDatSharedPtr<REAL> points);
-
-extern template void subdivide_cells_voronoi_map<3>(
-    std::shared_ptr<ParticleGroup> particle_sub_group, Sym<INT> sym_name,
-    const int sym_component, int const *const RESTRICT k_num_points,
-    CellDatSharedPtr<REAL> points);
-
-extern template void subdivide_cells_voronoi_map<2>(
-    std::shared_ptr<ParticleSubGroup> particle_sub_group, Sym<INT> sym_name,
-    const int sym_component, int const *const RESTRICT k_num_points,
-    CellDatSharedPtr<REAL> points);
-
-extern template void subdivide_cells_voronoi_map<3>(
-    std::shared_ptr<ParticleSubGroup> particle_sub_group, Sym<INT> sym_name,
-    const int sym_component, int const *const RESTRICT k_num_points,
-    CellDatSharedPtr<REAL> points);
-
-} // namespace Private
-
 /**
  * Implementation for subdividing mesh cells into voronoi cells defined by
  * points.
@@ -84,6 +16,52 @@ class SubdivideCellsVoronoi {
 protected:
   // Number of points in each cell.
   std::shared_ptr<BufferDevice<int>> d_num_points;
+
+  template <int ndim, typename GROUP_TYPE>
+  static inline void
+  subdivide_cells_voronoi_map(std::shared_ptr<GROUP_TYPE> particle_sub_group,
+                              Sym<INT> sym_name, const int sym_component,
+                              int const *const RESTRICT k_num_points,
+                              CellDatSharedPtr<REAL> points) {
+
+    auto particle_group = get_particle_group(particle_sub_group);
+
+    particle_loop(
+        "SubdivideCellsVoronoi::map", particle_sub_group,
+        [=](auto INDEX, auto POS, auto VCELL, auto POINTS) {
+          REAL p[ndim];
+          for (int dx = 0; dx < ndim; dx++) {
+            p[dx] = POS.at(dx);
+          }
+
+          const auto cell = INDEX.cell;
+          const int num_points_in_cell = k_num_points[cell];
+
+          int vcell = 0;
+          constexpr REAL default_min_distance =
+              std::numeric_limits<REAL>::max();
+          REAL min_distance = default_min_distance;
+
+          for (int pointx = 0; pointx < num_points_in_cell; pointx++) {
+            REAL distance_squared = 0.0;
+            for (int dx = 0; dx < ndim; dx++) {
+              const REAL r = p[dx] - POINTS.at(pointx, dx);
+              distance_squared = Kernel::fma(r, r, distance_squared);
+            }
+
+            if (distance_squared < min_distance) {
+              min_distance = distance_squared;
+              vcell = pointx;
+            }
+          }
+
+          VCELL.at(sym_component) = vcell;
+        },
+        Access::read(ParticleLoopIndex{}),
+        Access::read(particle_group->position_dat), Access::write(sym_name),
+        Access::read(points))
+        ->execute();
+  }
 
 public:
   /// Compute device.
@@ -132,21 +110,17 @@ public:
     int const *const RESTRICT k_num_points = this->d_num_points->ptr;
 
     const int ndim = particle_group->domain->mesh->get_ndim();
-
     NESOASSERT((0 < ndim) && (ndim < 4), "Unknown number of dimensions.");
 
     if (ndim == 1) {
-      Private::subdivide_cells_voronoi_map<1>(particle_sub_group, sym_name,
-                                              sym_component, k_num_points,
-                                              this->points);
+      subdivide_cells_voronoi_map<1>(particle_sub_group, sym_name,
+                                     sym_component, k_num_points, this->points);
     } else if (ndim == 2) {
-      Private::subdivide_cells_voronoi_map<2>(particle_sub_group, sym_name,
-                                              sym_component, k_num_points,
-                                              this->points);
+      subdivide_cells_voronoi_map<2>(particle_sub_group, sym_name,
+                                     sym_component, k_num_points, this->points);
     } else {
-      Private::subdivide_cells_voronoi_map<3>(particle_sub_group, sym_name,
-                                              sym_component, k_num_points,
-                                              this->points);
+      subdivide_cells_voronoi_map<3>(particle_sub_group, sym_name,
+                                     sym_component, k_num_points, this->points);
     }
   }
 };

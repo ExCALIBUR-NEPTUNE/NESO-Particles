@@ -42,6 +42,10 @@ template <typename T> inline auto log10(const T x) { return sycl::log10(x); }
 template <typename T> inline auto round(const T x) { return sycl::round(x); }
 template <typename T> inline auto tgamma(const T x) { return sycl::tgamma(x); }
 template <typename T> inline auto trunc(const T x) { return sycl::trunc(x); }
+template <typename T>
+inline auto clamp(const T x, const T minval, const T maxval) {
+  return sycl::clamp(x, minval, maxval);
+}
 
 namespace Private {
 // ACPP does not seem to define a sycl::sincos(REAL, REAL*)

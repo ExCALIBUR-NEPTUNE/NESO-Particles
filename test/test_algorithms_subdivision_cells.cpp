@@ -234,7 +234,7 @@ void cartesian_cell_test_wrapper(ParticleGroupSharedPtr A,
 
   const int max_num_subdivisions = 7;
   std::vector<int> h_num_subdivions(cell_count);
-  std::fill(h_num_subdivions.begin(), h_num_subdivions.end(), 0);
+  std::fill(h_num_subdivions.begin(), h_num_subdivions.end(), 1);
 
   // Test when no subdivisions are specified that the result is the 0-th cell.
   {
@@ -253,6 +253,7 @@ void cartesian_cell_test_wrapper(ParticleGroupSharedPtr A,
         },
         Access::read(Sym<INT>("FOO")))
         ->execute();
+
     ASSERT_FALSE(ep.get_flag());
 
     lambda_reset();

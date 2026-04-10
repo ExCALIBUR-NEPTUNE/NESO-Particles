@@ -4,25 +4,25 @@ namespace NESO::Particles {
 
 SubdivideCartesianCells::SubdivideCartesianCells(
     SYCLTargetSharedPtr sycl_target, CartesianHMeshSharedPtr mesh,
-    std::vector<int> &num_subdivisions)
-    : sycl_target(sycl_target), mesh(mesh), num_subdivisions(num_subdivisions) {
+    std::vector<int> &sub_cell_count)
+    : sycl_target(sycl_target), mesh(mesh), sub_cell_count(sub_cell_count) {
 
   NESOASSERT(mesh != nullptr, "Bad mesh pointer passed.");
 
   const int cell_count = mesh->get_cell_count();
   const int ndim = mesh->get_ndim();
 
-  NESOASSERT(cell_count == num_subdivisions.size(),
+  NESOASSERT(cell_count == sub_cell_count.size(),
              "Miss-match in cell count between mesh and vector providing "
              "number of subdivisions.");
 
-  this->d_num_subdivisions = std::make_shared<BufferDevice<int>>(
-      this->sycl_target, this->num_subdivisions);
-  const int *k_num_subdivisions = d_num_subdivisions->ptr;
+  this->d_sub_cell_count = std::make_shared<BufferDevice<int>>(
+      this->sycl_target, this->sub_cell_count);
+  const int *k_sub_cell_count = d_sub_cell_count->ptr;
 
-  this->d_subdvision_inverse_widths =
+  this->d_sub_cell_inverse_widths =
       std::make_shared<BufferDevice<REAL>>(this->sycl_target, cell_count);
-  REAL *k_subdvision_inverse_widths = d_subdvision_inverse_widths->ptr;
+  REAL *k_subdvision_inverse_widths = d_sub_cell_inverse_widths->ptr;
 
   const REAL cell_width = this->mesh->cell_width_fine;
 
@@ -30,15 +30,17 @@ SubdivideCartesianCells::SubdivideCartesianCells(
       this->sycl_target->device_limits.validate_range_global(
           sycl::range<1>(cell_count)),
       [=](auto ix) {
-        k_subdvision_inverse_widths[ix] = k_num_subdivisions[ix] / cell_width;
+        k_subdvision_inverse_widths[ix] = k_sub_cell_count[ix] / cell_width;
       });
 
   auto h_owned_cells = this->mesh->get_owned_cells();
   std::vector<REAL> h_origins(cell_count * ndim);
-  for (int dx = 0; dx < ndim; dx++) {
-    for (int cellx = 0; cellx < cell_count; cellx++) {
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    NESOASSERT(this->sub_cell_count.at(cellx) > 0,
+               "A sub cell count of 0 does not make sense.");
+    for (int dx = 0; dx < ndim; dx++) {
       const auto index = h_owned_cells.at(cellx).at(dx);
-      h_origins.at(dx * cell_count + cellx) = cell_width * index;
+      h_origins.at(cellx * ndim + dx) = cell_width * index;
     }
   }
 

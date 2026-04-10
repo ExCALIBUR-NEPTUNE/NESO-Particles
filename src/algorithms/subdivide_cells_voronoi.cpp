@@ -2,30 +2,6 @@
 
 namespace NESO::Particles {
 
-namespace Private {
-
-template void subdivide_cells_voronoi_map<2>(
-    std::shared_ptr<ParticleGroup> particle_sub_group, Sym<INT> sym_name,
-    const int sym_component, int const *const RESTRICT k_num_points,
-    CellDatSharedPtr<REAL> points);
-
-template void subdivide_cells_voronoi_map<3>(
-    std::shared_ptr<ParticleGroup> particle_sub_group, Sym<INT> sym_name,
-    const int sym_component, int const *const RESTRICT k_num_points,
-    CellDatSharedPtr<REAL> points);
-
-template void subdivide_cells_voronoi_map<2>(
-    std::shared_ptr<ParticleSubGroup> particle_sub_group, Sym<INT> sym_name,
-    const int sym_component, int const *const RESTRICT k_num_points,
-    CellDatSharedPtr<REAL> points);
-
-template void subdivide_cells_voronoi_map<3>(
-    std::shared_ptr<ParticleSubGroup> particle_sub_group, Sym<INT> sym_name,
-    const int sym_component, int const *const RESTRICT k_num_points,
-    CellDatSharedPtr<REAL> points);
-
-} // namespace Private
-
 SubdivideCellsVoronoi::SubdivideCellsVoronoi(SYCLTargetSharedPtr sycl_target,
                                              CellDatSharedPtr<REAL> points)
     : sycl_target(sycl_target), points(points) {
