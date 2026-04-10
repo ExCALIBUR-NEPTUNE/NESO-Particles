@@ -233,14 +233,14 @@ void cartesian_cell_test_wrapper(ParticleGroupSharedPtr A,
   auto k_ep = ep.device_ptr();
 
   const int max_num_subdivisions = 7;
-  std::vector<int> h_num_subdivions(cell_count);
-  std::fill(h_num_subdivions.begin(), h_num_subdivions.end(), 1);
+  std::vector<int> h_num_sub_cells(cell_count);
+  std::fill(h_num_sub_cells.begin(), h_num_sub_cells.end(), 1);
 
   // Test when no subdivisions are specified that the result is the 0-th cell.
   {
     SubdivideCartesianCells mapper(
         sycl_target, std::dynamic_pointer_cast<CartesianHMesh>(A->domain->mesh),
-        h_num_subdivions);
+        h_num_sub_cells);
 
     lambda_reset();
     mapper.map(A, Sym<INT>("FOO"), 1);
@@ -288,7 +288,115 @@ void cartesian_cell_test_wrapper(ParticleGroupSharedPtr A,
   }
 
   // Set some points for each mesh cell.
-  {}
+  {
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      const int num_sub_cells = cellx % max_num_subdivisions + 1;
+      h_num_sub_cells.at(cellx) = num_sub_cells;
+    }
+
+    auto cartesian_mesh =
+        std::dynamic_pointer_cast<CartesianHMesh>(A->domain->mesh);
+
+    SubdivideCartesianCells mapper(sycl_target, cartesian_mesh,
+                                   h_num_sub_cells);
+
+    lambda_reset();
+    mapper.map(A, Sym<INT>("FOO"), 1);
+
+    const auto all_cell_indices = cartesian_mesh->get_owned_cells();
+
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      const int num_sub_cells = cellx % max_num_subdivisions + 1;
+
+      auto FOO = A->get_cell(Sym<INT>("FOO"), cellx);
+      auto P = A->get_cell(Sym<REAL>("P"), cellx);
+
+      const int nrow = FOO->nrow;
+      auto indices = all_cell_indices.at(cellx);
+      std::vector<REAL> origin(ndim);
+      for (int dx = 0; dx < ndim; dx++) {
+        origin.at(dx) = indices.at(dx) * cartesian_mesh->cell_width_fine;
+      }
+
+      const REAL sub_cell_width =
+          cartesian_mesh->cell_width_fine / num_sub_cells;
+
+      for (int rx = 0; rx < nrow; rx++) {
+
+        std::array<int, 3> c = {0, 0, 0};
+        for (int dx = 0; dx < ndim; dx++) {
+          const REAL p = P->at(rx, dx);
+          const REAL sp = p - origin.at(dx);
+          const int c0 = sp / sub_cell_width;
+          const int c1 = std::max(c0, 0);
+          const int c2 = std::min(c1, num_sub_cells - 1);
+          c[dx] = c2;
+        }
+
+        INT index = c.at(ndim - 1);
+        for (int dx = (ndim - 2); dx >= 0; dx--) {
+          index *= num_sub_cells;
+          index += c.at(dx);
+        }
+
+        ASSERT_TRUE(index > -1);
+        ASSERT_TRUE(index < std::pow(num_sub_cells, ndim));
+
+        const INT to_test = FOO->at(rx, 1);
+        ASSERT_EQ(to_test, index);
+      }
+    }
+
+    particle_loop(
+        A,
+        [=](auto FOO) {
+          FOO.at(2) = FOO.at(1);
+          FOO.at(0) = -1;
+          FOO.at(1) = -1;
+        },
+        Access::write(Sym<INT>("FOO")))
+        ->execute();
+
+    auto aa = particle_sub_group(
+        A, [=](auto ID) { return ID.at(0) % 2 == 0; },
+        Access::read(Sym<INT>("ID")));
+
+    auto bb = particle_sub_group(
+        A, [=](auto ID) { return ID.at(0) % 2 == 1; },
+        Access::read(Sym<INT>("ID")));
+
+    lambda_reset();
+    particle_loop(
+        A,
+        [=](auto FOO) {
+          NESO_KERNEL_ASSERT(FOO.at(0) == -1, k_ep);
+          NESO_KERNEL_ASSERT(FOO.at(1) == -1, k_ep);
+        },
+        Access::read(Sym<INT>("FOO")))
+        ->execute();
+    ASSERT_FALSE(ep.get_flag());
+
+    mapper.map(aa, Sym<INT>("FOO"), 1);
+
+    particle_loop(
+        aa,
+        [=](auto FOO) {
+          NESO_KERNEL_ASSERT(FOO.at(0) == -1, k_ep);
+          NESO_KERNEL_ASSERT(FOO.at(1) == FOO.at(2), k_ep);
+        },
+        Access::read(Sym<INT>("FOO")))
+        ->execute();
+    ASSERT_FALSE(ep.get_flag());
+    particle_loop(
+        bb,
+        [=](auto FOO) {
+          NESO_KERNEL_ASSERT(FOO.at(0) == -1, k_ep);
+          NESO_KERNEL_ASSERT(FOO.at(1) == -1, k_ep);
+        },
+        Access::read(Sym<INT>("FOO")))
+        ->execute();
+    ASSERT_FALSE(ep.get_flag());
+  }
 }
 
 } // namespace
