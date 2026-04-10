@@ -111,7 +111,7 @@ void voronoi_cell_test_wrapper(ParticleGroupSharedPtr A,
     lambda_reset();
     mapper.map(A, Sym<INT>("FOO"), 1);
 
-    auto num_subdivision_cells = mapper.get_num_subdivision_cells();
+    auto &num_subdivision_cells = mapper.get_num_subdivision_cells();
 
     for (int cellx = 0; cellx < cell_count; cellx++) {
       auto P = A->get_cell(Sym<REAL>("P"), cellx);
@@ -308,7 +308,7 @@ void cartesian_cell_test_wrapper(ParticleGroupSharedPtr A,
     mapper.map(A, Sym<INT>("FOO"), 1);
 
     const auto all_cell_indices = cartesian_mesh->get_owned_cells();
-    auto num_subdivision_cells = mapper.get_num_subdivision_cells();
+    auto &num_subdivision_cells = mapper.get_num_subdivision_cells();
 
     for (int cellx = 0; cellx < cell_count; cellx++) {
       const int num_sub_cells = cellx % max_num_subdivisions + 1;
