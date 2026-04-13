@@ -58,7 +58,7 @@ struct OverlayCartesianMeshMapper {
   /**
    * Validate a tuple cell index.
    *
-   * @param index Cell tuple index to validate.
+   * @param cell_tuple Cell tuple index to validate.
    * @returns True if cells is valid.
    */
   template <typename T>
@@ -168,7 +168,7 @@ public:
    * Get a bounding box for a cell.
    *
    * @param[in] cell_tuple Subscriptable cell index tuple.
-   * @param[out] bounding_box Bounding box.
+   * @returns Bounding box.
    */
   template <typename T>
   inline BoundingBoxSharedPtr get_bounding_box(const T &cell_tuple) {

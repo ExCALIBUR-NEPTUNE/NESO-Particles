@@ -35,7 +35,7 @@ template <typename T> struct RNGGenerationFunction {
  *
  *  make_rng_generation_function<RNG_TYPE, VALUE_TYPE>(ARGS...);
  *
- * @param args... Args to pass to downstream constructor.
+ * @param args Args to pass to downstream constructor.
  */
 template <template <typename> typename RNG_TYPE, typename VALUE_TYPE,
           typename... ARGS>

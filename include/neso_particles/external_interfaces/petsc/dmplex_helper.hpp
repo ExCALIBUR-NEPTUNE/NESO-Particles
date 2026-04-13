@@ -21,6 +21,8 @@ constexpr static char face_sets_label[] = "Face Sets";
  * @param[in, out] dm DMPlex to distribute, original DMPlex is destroyed.
  * @param[in] comm MPI communicator, default MPI_COMM_WORLD.
  * @param[in] overlap Optional overlap to pass to PETSc (default 0).
+ * @param[in, out] sf Star forest that PETSc returns describing the new parallel
+ * decomposition.
  */
 void generic_distribute(DM *dm, MPI_Comm comm = MPI_COMM_WORLD,
                         const PetscInt overlap = 0, PetscSF *sf = nullptr);
@@ -420,7 +422,7 @@ public:
   /**
    * Get the volume of a cell in the local mesh.
    *
-   * @param cell Local index of cell.
+   * @param index Local index of cell.
    * @returns Volume of cell.
    */
   REAL get_cell_volume(const int index);

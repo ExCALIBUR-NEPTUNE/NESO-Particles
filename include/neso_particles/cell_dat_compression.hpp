@@ -63,6 +63,8 @@ public:
    *  @param ncell Number of cells within each ParticleDat.
    *  @param particle_dats_real Container of ParticleDat instances of REAL type.
    *  @param particle_dats_int Container of ParticleDat instances of INT type.
+   *  @param particle_group_pointer_map Pointers to ParticleDat instances of
+   * REAL and INT type.
    */
   LayerCompressor(
       SYCLTargetSharedPtr sycl_target, const int ncell,
@@ -94,6 +96,23 @@ public:
 protected:
 #endif
 
+  /**
+   *  For the specified N particles to remove at the given cells and rows
+   *  (layers) compute the data migration required to keep the particle data
+   *  contiguous.
+   *
+   *  @param[in] npart Number of particles, N, which are to be removed.
+   *  @param[in] usm_cells Device accessible pointers to an array of length N
+   * that holds the cells of the particles that are to be removed.
+   *  @param[in] usm_layers Device accessible pointers to an array of length N
+   * that holds the layers of the particles that are to be removed.
+   * @param[in, out] compress_npart Number of particles involved in compression.
+   * @param[in, out] k_compress_cells_old Source cells of particles to move.
+   * @param[in, out] k_compress_layers_old Source layers of particles to move.
+   * @param[in, out] k_compress_layers_new Destintation layers of particles to
+   * move.
+   * @param[in, out] k_npart_cell_new New particle counts for cells.
+   */
   template <typename T>
   inline void compute_remove_compress_indicies_dense(
       const int npart, T *usm_cells, T *usm_layers, int *compress_npart,
@@ -344,11 +363,17 @@ protected:
    *  (layers) compute the data migration required to keep the particle data
    *  contiguous.
    *
-   *  @param npart Number of particles, N, which are to be removed.
-   *  @param usm_cells Device accessible pointers to an array of length N that
-   * holds the cells of the particles that are to be removed.
-   *  @param usm_layers Device accessible pointers to an array of length N that
-   * holds the layers of the particles that are to be removed.
+   *  @param[in] npart Number of particles, N, which are to be removed.
+   *  @param[in] usm_cells Device accessible pointers to an array of length N
+   * that holds the cells of the particles that are to be removed.
+   *  @param[in] usm_layers Device accessible pointers to an array of length N
+   * that holds the layers of the particles that are to be removed.
+   * @param[in, out] compress_npart Number of particles involved in compression.
+   * @param[in, out] k_compress_cells_old Source cells of particles to move.
+   * @param[in, out] k_compress_layers_old Source layers of particles to move.
+   * @param[in, out] k_compress_layers_new Destintation layers of particles to
+   * move.
+   * @param[in, out] k_npart_cell_new New particle counts for cells.
    */
   template <typename T>
   inline void compute_remove_compress_indicies_sparse(

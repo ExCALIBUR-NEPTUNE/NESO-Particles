@@ -81,7 +81,7 @@ void mesh_tuple_to_mh_tuple(const int ndim, const std::int64_t *index_mesh,
  * Compute all claims to cells, and associated weights, for the passed element
  * using the element bounding box.
  *
- * @param[in] bounding_box Bounding box to use for intersection.
+ * @param[in] element_bounding_box Bounding box to use for intersection.
  * @param[in] mesh_hierarchy MeshHierarchy instance which cell claims will be
  * made into.
  * @param[in,out] cells Mesh heirarchy cells covered by bounding box.

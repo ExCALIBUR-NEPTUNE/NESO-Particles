@@ -50,6 +50,7 @@ public:
    * This function maps particle positions to cells on the underlying mesh.
    *
    * @param particle_group ParticleGroup containing particle positions.
+   * @param map_cell Cell to map particles in.
    */
   virtual inline void map(ParticleGroup &particle_group,
                           const int map_cell = -1) override {

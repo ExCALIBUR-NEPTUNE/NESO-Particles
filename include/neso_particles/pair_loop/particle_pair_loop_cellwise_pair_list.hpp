@@ -45,7 +45,7 @@ public:
    * @param name Name for ParticlePairLoop.
    * @param pair_list CellwisePairListAbsolute pair list.
    * @param kernel Kernel for pair loop.
-   * @param args... Arguments for pair loop.
+   * @param args Arguments for pair loop.
    */
   ParticlePairLoopCellwisePairList(
       std::string name,
@@ -293,7 +293,7 @@ public:
  * @param name Name for ParticlePairLoop.
  * @param pair_lists Vector of CellwisePairListAbsolute pair lists.
  * @param kernel Kernel for pair loop.
- * @param args... Arguments for pair loop.
+ * @param args Arguments for pair loop.
  * @returns ParticlePairLoop for iteration set and arguments.
  */
 template <typename KERNEL, typename... ARGS>
@@ -318,7 +318,7 @@ inline ParticlePairLoopBaseSharedPtr particle_pair_loop(
  *
  * @param pair_lists Vector of CellwisePairListAbsolute pair lists.
  * @param kernel Kernel for pair loop.
- * @param args... Arguments for pair loop.
+ * @param args Arguments for pair loop.
  * @returns ParticlePairLoop for iteration set and arguments.
  */
 template <typename KERNEL, typename... ARGS>
@@ -337,7 +337,7 @@ inline ParticlePairLoopBaseSharedPtr particle_pair_loop(
  * @param name Name for ParticlePairLoop.
  * @param pair_list CellwisePairListAbsolute based pair list.
  * @param kernel Kernel for pair loop.
- * @param args... Arguments for pair loop.
+ * @param args Arguments for pair loop.
  * @returns ParticlePairLoop for iteration set and arguments.
  */
 template <typename KERNEL, typename... ARGS>
@@ -357,7 +357,7 @@ inline ParticlePairLoopBaseSharedPtr particle_pair_loop(
  *
  * @param pair_list CellwisePairListAbsolute based pair list.
  * @param kernel Kernel for pair loop.
- * @param args... Arguments for pair loop.
+ * @param args Arguments for pair loop.
  * @returns ParticlePairLoop for iteration set and arguments.
  */
 template <typename KERNEL, typename... ARGS>

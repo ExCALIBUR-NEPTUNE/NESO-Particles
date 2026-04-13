@@ -29,7 +29,9 @@ public:
   }
 
   /**
-   * @returns Selector for whole ParticleGroup.
+   * Creates the selection for the sub group.
+   *
+   * @param[in, out] created_selection Selection to create.
    */
   virtual inline void create(Selection *created_selection) override {
     auto &cell_id_dat = this->particle_group->cell_id_dat;

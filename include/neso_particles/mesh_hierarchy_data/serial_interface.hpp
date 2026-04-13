@@ -19,9 +19,9 @@ public:
   /**
    * Serialise this instance into the provided space.
    *
-   * @param buffer[in, out] Pointer to space that the calling function
+   * @param[in, out] buffer Pointer to space that the calling function
    * guarantees to be at least get_num_bytes in size.
-   * @param num_bytes Size of allocated buffer passed (get_num_bytes).
+   * @param[in] num_bytes Size of allocated buffer passed (get_num_bytes).
    */
   virtual inline void serialise(std::byte *buffer,
                                 const std::size_t num_bytes) const = 0;

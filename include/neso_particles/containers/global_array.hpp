@@ -283,7 +283,7 @@ public:
    *
    *  @param sycl_target Device to create GlobalArray on.
    *  @param size Number of elements in array.
-   *  @param Default value to initialise values to.
+   *  @param init_value Default value to initialise values to.
    */
   GlobalArray(SYCLTargetSharedPtr sycl_target, const std::size_t size,
               const std::optional<T> init_value = std::nullopt)

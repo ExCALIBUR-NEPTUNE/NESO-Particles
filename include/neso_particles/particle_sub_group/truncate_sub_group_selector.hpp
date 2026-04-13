@@ -34,6 +34,11 @@ public:
     NESOASSERT(num_particles >= 0, "Truncation to below zero unsupported.");
   }
 
+  /**
+   * Creates the selection for the sub group.
+   *
+   * @param[in, out] created_selection Selection to create.
+   */
   virtual void create(Selection *created_selection) override;
 };
 
@@ -53,7 +58,7 @@ class ParticleGroup;
  * Create a ParticleSubGroup from a parent by selecting only the first n
  * particles in each cell.
  *
- * @param parent Particle(Sub)Group which is the parent.
+ * @param particle_group Particle(Sub)Group which is the parent.
  * @param num_particles Number of particles to keep from each cell.
  * @param make_static Make the ParticleSubGroup static (default false).
  */
@@ -66,7 +71,7 @@ particle_sub_group_truncate(std::shared_ptr<ParticleGroup> particle_group,
  * Create a ParticleSubGroup from a parent by selecting only the first n
  * particles in each cell.
  *
- * @param parent Particle(Sub)Group which is the parent.
+ * @param particle_sub_group Particle(Sub)Group which is the parent.
  * @param num_particles Number of particles to keep from each cell.
  * @param make_static Make the ParticleSubGroup static (default false).
  */

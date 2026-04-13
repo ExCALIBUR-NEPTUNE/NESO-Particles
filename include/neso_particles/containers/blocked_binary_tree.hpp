@@ -192,7 +192,7 @@ struct BlockedBinaryNode {
    *
    *  @param key Global key to store value against.
    *  @param value Input value to store pointed to by key.
-   *  @param Returns true if the value was successfully stored. A return value
+   *  @returns True if the value was successfully stored. A return value
    *  of false indicates the node which should store the value is not present
    *  in the tree.
    */

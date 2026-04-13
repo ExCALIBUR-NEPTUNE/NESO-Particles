@@ -271,7 +271,7 @@ public:
   /**
    * Zero the masks optionally provide a new array size.
    *
-   * @param reset_value Provide the mask value to reset all entries to.
+   * @param value Provide the mask value to reset all entries to.
    * @param new_size Optional new array size.
    */
   void reset(const bool value,

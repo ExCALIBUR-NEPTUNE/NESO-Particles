@@ -13,6 +13,8 @@ namespace Private {
 /**
  * Kernel that applies trunctation to the particle trajectory.
  *
+ * @param k_reset_distance Distance to move particle back along the input
+ * trajectory away from the boundary.
  * @param P Current particle position.
  * @param TSP Time step proportion.
  * @param PP Previous particle position.
@@ -143,7 +145,7 @@ public:
 
   /**
    * Perform a truncation operation for all particles passed. This method should
-   * be called after the user has called @ref post_integration on the boundary
+   * be called after the user has called post_integration on the boundary
    * interaction class.
    *
    * @param particle_sub_group ParticleSubGroup of particles to

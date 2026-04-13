@@ -35,7 +35,6 @@ template <> inline MPI_Datatype map_ctype_mpi_type_inner<float>() {
 /**
  *  For an input data type T get the matching MPI Datatype.
  *
- *  @param i Input argument of type T.
  *  @returns MPI_Datatype that matches the input type T.
  */
 template <typename T> inline MPI_Datatype map_ctype_mpi_type() {

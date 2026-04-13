@@ -223,9 +223,7 @@ public:
   /**
    * End a region and add it to the profiling if profiling is enabled.
    *
-   * @param key1 First key for ProfileRegion.
-   * @param key2 Second key for ProfileRegion.
-   * @param level Optional level for region, default 0.
+   * @param profile_region ProfileRegion to end and add to internal container.
    */
   inline void end_region(std::optional<ProfileRegion> &profile_region) {
     if (this->enabled) {

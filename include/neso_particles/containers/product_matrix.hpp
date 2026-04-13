@@ -340,7 +340,7 @@ public:
    * Allocate space for a number of particle properties and fill the matrix
    * with the default values.
    *
-   * @param reset Number of output particles to set in matrix.
+   * @param num_products Number of output particles to set in matrix.
    */
   virtual inline void reset(const int num_products) override {
     this->num_products = num_products;

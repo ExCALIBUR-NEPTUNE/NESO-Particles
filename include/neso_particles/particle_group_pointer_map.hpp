@@ -169,9 +169,9 @@ public:
    * Call to set h_npart_cells and d_npart_cells from a host and device buffer
    * for all particle dats.
    *
-   * @param h_npart_cell_in Host accessible pointer to an array containing new
+   * @param h_npart_cell Host accessible pointer to an array containing new
    * cell counts.
-   * @param d_npart_cell_in Device accessible pointer to an array containing new
+   * @param d_npart_cell Device accessible pointer to an array containing new
    * cell_counts.
    */
   template <typename U>
@@ -214,7 +214,7 @@ public:
    * Call to set h_npart_cells and d_npart_cells from a host buffer for all
    * particle dats.
    *
-   * @param h_npart_cell_in Host accessible pointer to an array containing new
+   * @param h_npart_cell Host accessible pointer to an array containing new
    * cell counts.
    */
   template <typename U>

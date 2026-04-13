@@ -76,6 +76,11 @@ public:
     NESOASSERT((cell > -1) && (cell < cell_count), "Bad cell passed.");
   }
 
+  /**
+   * Creates the selection for the sub group.
+   *
+   * @param[in, out] created_selection Selection to create.
+   */
   virtual void create(Selection *created_selection) override;
 };
 

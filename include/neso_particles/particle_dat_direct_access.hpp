@@ -47,8 +47,8 @@ direct_get(Write<ParticleDatSharedPtr<T>> dat_access) {
  *
  * @param[in] dat_access ParticleDat which was accessed wrapped in a
  * Access::read call.
- * @param[in, out] Device pointer which was returned from call to direct_get.
- * This pointer will be set to nullptr on return.
+ * @param[in, out] data Device pointer which was returned from call to
+ * direct_get. This pointer will be set to nullptr on return.
  */
 template <typename T>
 inline void direct_restore(Read<ParticleDatSharedPtr<T>> dat_access,
@@ -64,8 +64,8 @@ inline void direct_restore(Read<ParticleDatSharedPtr<T>> dat_access,
  *
  * @param[in] dat_access ParticleDat which was accessed wrapped in a
  * Access::write call.
- * @param[in, out] Device pointer which was returned from call to direct_get.
- * This pointer will be set to nullptr on return.
+ * @param[in, out] data Device pointer which was returned from call to
+ * direct_get. This pointer will be set to nullptr on return.
  */
 template <typename T>
 inline void direct_restore(Write<ParticleDatSharedPtr<T>> dat_access,

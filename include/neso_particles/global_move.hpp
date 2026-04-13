@@ -56,8 +56,8 @@ public:
    * @param sycl_target SYCLTargetSharedPtr to use as compute device.
    * @param global_move_communication GlobalMoveCommunication.
    * @param layer_compressor LayerCompressor to use to compress ParticleDat rows
-   * @param particle_dats_real Container of the REAL valued ParticleDats.
-   * @param particle_dats_int Container of the INT valued ParticleDats.
+   * @param particle_group_pointer_map Container of the REAL and INT valued
+   * ParticleDats.
    */
   GlobalMove(SYCLTargetSharedPtr sycl_target,
              GlobalMoveCommunicationSharedPtr global_move_communication,

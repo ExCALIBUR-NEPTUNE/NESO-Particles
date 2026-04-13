@@ -266,8 +266,9 @@ public:
    * Get the mesh cell as a mesh tuple which has the passed face geometry index
    * as a face.
    *
-   * @param[in] face_tuple Tuple which desribes the cell on the face.
-   * @param[in, out] Mesh tuple that describes the cell which owns the face.
+   * @param[in] face_index_tuple Tuple which desribes the cell on the face.
+   * @param[in, out] mesh_tuple Mesh tuple that describes the cell which owns
+   * the face.
    */
   void get_mesh_tuple_owning_face_tuple(const INT *face_index_tuple,
                                         INT *mesh_tuple);

@@ -488,7 +488,7 @@ public:
    * Add a new ParticleDat by specifying the Sym and number of components.
    *
    * @param sym Sym<INT> or Sym<REAL> for new ParticleDat.
-   * @param int ncomp Number of components for the new ParticleDat.
+   * @param ncomp Number of components for the new ParticleDat.
    */
   template <typename T>
   inline void add_particle_dat(const Sym<T> sym, const int ncomp);
@@ -566,7 +566,7 @@ public:
    *  always refer to particles in the parent ParticleGroup.
    *
    *  @param descendant_products New particles to add.
-   *  @param source_particleGroup Alternative ParticleGroup to use as the set
+   *  @param source_particle_group Alternative ParticleGroup to use as the set
    *  of parent particles. The descendant_products parent indices must have
    *  been created with this ParticleGroup. By default no alternative
    *  ParticleGroup is specified and the parents are assumed to be in the
@@ -654,7 +654,7 @@ public:
    * Template for get_dat method called like:
    * ParticleGroup::get_dat(Sym<REAL>("POS")) for a real valued ParticleDat.
    *
-   * @param name Name of ParticleDat.
+   * @param sym Sym of ParticleDat to retrieve.
    * @param check_exists Check if the dat exists, default true.
    * @returns ParticleDatSharedPtr<T> particle dat.
    */
@@ -742,7 +742,7 @@ public:
    *  Remove all the particles particles from the ParticleGroup which are
    *  members of a ParticleSubGroup.
    *
-   *  @param particle_sub_group.
+   *  @param particle_sub_group Description of particles to remove.
    */
   void remove_particles(std::shared_ptr<ParticleSubGroup> particle_sub_group);
 
@@ -905,7 +905,7 @@ public:
    * layers = [0, 1]
    *
    * @param cells Vector of cell indices of particles to extract.
-   * @param cells Vector of layer indices of particles to extract.
+   * @param layers Vector of layer indices of particles to extract.
    * @returns ParticleSet of particle data.
    */
   ParticleSetSharedPtr get_particles(std::vector<INT> &cells,

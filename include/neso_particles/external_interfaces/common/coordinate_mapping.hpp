@@ -266,8 +266,8 @@ inline void quad_collapsed_to_cartesian(const REAL x0, const REAL y0,
  * @param[in] y2 Third vertex y component.
  * @param[in] x3 Fourth vertex x component.
  * @param[in] y3 Fourth vertex y component.
- * @param[in] xx Point to map into reference space, x component.
- * @param[in] yy Point to map into reference space, y component.
+ * @param[in] x Point to map into reference space, x component.
+ * @param[in] y Point to map into reference space, y component.
  * @param[in, out] l0 Barycentric coordinate 0.
  * @param[in, out] l1 Barycentric coordinate 1.
  * @param[in, out] l2 Barycentric coordinate 2.
