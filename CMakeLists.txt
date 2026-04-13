@@ -51,6 +51,8 @@ set(SRC_FILES
     ${SRC_DIR}/algorithms/dsmc/pair_sampler_no_replacement.cpp
     ${SRC_DIR}/algorithms/dsmc/collision_cell_partition.cpp
     ${SRC_DIR}/algorithms/particle_data_movement.cpp
+    ${SRC_DIR}/algorithms/subdivide_cells_voronoi.cpp
+    ${SRC_DIR}/algorithms/subdivide_cartesian_cells.cpp
     ${SRC_DIR}/algorithms/reduce_dat_cellwise.cpp
     ${SRC_DIR}/algorithms/unseen_value_extractor.cpp
     ${SRC_DIR}/external_interfaces/petsc/boundary_interaction/boundary_interaction_2d.cpp
@@ -150,6 +152,8 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/pair_sampler_no_replacement.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/cellwise_methods.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/particle_data_movement.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/subdivide_cells_voronoi.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/subdivide_cartesian_cells.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/reduce_dat_cellwise.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/unseen_value_extractor.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cartesian_mesh/cartesian_h_mesh.hpp

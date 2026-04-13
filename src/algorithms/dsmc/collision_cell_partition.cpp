@@ -39,7 +39,7 @@ CollisionCellPartition::CollisionCellPartition(SYCLTargetSharedPtr sycl_target,
 
 void CollisionCellPartition::construct(
     ParticleSubGroupSharedPtr particle_sub_group,
-    std::vector<int> &collision_cell_counts, Sym<INT> species_id_sym,
+    const std::vector<int> &collision_cell_counts, Sym<INT> species_id_sym,
     const int species_id_component, Sym<INT> collision_cell_sym,
     const int collision_cell_component) {
 

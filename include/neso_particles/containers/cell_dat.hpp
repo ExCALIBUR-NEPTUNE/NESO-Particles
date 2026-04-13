@@ -532,23 +532,23 @@ public:
    * Get the contents of a provided cell on the host as a CellData instance.
    *
    * @param cell Cell to get data from.
-   * @param cell_data CellDataT instance to populate, must be sufficiently
+   * @param cell_data CellData instance to populate, must be sufficiently
    * sized.
    * @param event_stack EventStack instance to call wait on for copy.
    */
-  inline void get_cell_async(const int cell, CellDataT<T> &cell_data,
+  inline void get_cell_async(const int cell, CellData<T> cell_data,
                              EventStack &event_stack) {
     auto t0 = profile_timestamp();
 
-    NESOASSERT(cell_data.nrow >= this->nrow[cell],
+    NESOASSERT(cell_data->nrow >= this->nrow[cell],
                "CellDataT has insufficent number of rows");
-    NESOASSERT(cell_data.ncol >= this->ncol,
+    NESOASSERT(cell_data->ncol >= this->ncol,
                "CellDataT has insufficent number of columns");
 
     if (this->nrow[cell] > 0) {
       for (int colx = 0; colx < this->ncol; colx++) {
         event_stack.push(this->sycl_target->queue.memcpy(
-            cell_data.get_column_ptr(colx),
+            cell_data->get_column_ptr(colx),
             this->h_ptr_cols[cell * this->ncol + colx],
             this->nrow[cell] * sizeof(T)));
       }
@@ -596,15 +596,15 @@ public:
    * @param cell_data New cell data to set.
    * @param event_stack EventStack instance to wait on.
    */
-  inline void set_cell_async(const int cell, CellDataT<T> &cell_data,
+  inline void set_cell_async(const int cell, CellData<T> cell_data,
                              EventStack &event_stack) {
     auto t0 = profile_timestamp();
     if (this->write_callback) {
       this->write_callback(0);
     }
-    NESOASSERT(cell_data.nrow >= this->nrow[cell],
+    NESOASSERT(cell_data->nrow >= this->nrow[cell],
                "CellData as insuffient row count.");
-    NESOASSERT(cell_data.ncol >= this->ncol,
+    NESOASSERT(cell_data->ncol >= this->ncol,
                "CellData as insuffient column count.");
 
     if (this->nrow[cell] > 0) {
@@ -612,7 +612,7 @@ public:
 
         event_stack.push(this->sycl_target->queue.memcpy(
             this->h_ptr_cols[cell * this->ncol + colx],
-            cell_data.get_column_ptr(colx), this->nrow[cell] * sizeof(T)));
+            cell_data->get_column_ptr(colx), this->nrow[cell] * sizeof(T)));
       }
     }
 
@@ -664,6 +664,8 @@ public:
 
 extern template class CellDat<REAL>;
 extern template class CellDat<INT>;
+
+template <typename T> using CellDatSharedPtr = std::shared_ptr<CellDat<T>>;
 
 } // namespace NESO::Particles
 
