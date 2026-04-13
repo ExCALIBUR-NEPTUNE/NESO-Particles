@@ -212,7 +212,7 @@ public:
    * with the owning ranks of geometry objects. This function must be called
    * collectively on the mesh communicator.
    *
-   * @param rank_geom_ids Vector of {<rank>, <geometry id>} pairs which this
+   * @param rank_geom_ids Vector of (rank, geometry id) pairs which this
    * rank has collected and may push data back to the original rank.
    */
   void extend_exchange_pattern(

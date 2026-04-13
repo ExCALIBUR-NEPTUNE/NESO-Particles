@@ -430,7 +430,7 @@ public:
    * Allocate space for a number of particle properties and fill the matrix
    * with the default values.
    *
-   * @param reset Number of output particles to set in matrix.
+   * @param num_particles Number of output particles to set in matrix.
    */
   virtual void reset(const int num_particles);
 

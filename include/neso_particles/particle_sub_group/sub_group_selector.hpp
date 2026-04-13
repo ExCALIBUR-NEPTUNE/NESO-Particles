@@ -109,11 +109,11 @@ public:
   }
 
   virtual ~SubGroupSelector() = default;
+
   /**
-   * Get two BufferDeviceHost objects that hold the cells and layers of the
-   * particles which currently are selected by the selector kernel.
+   * Creates the selection for the sub group.
    *
-   * @returns List of cells and layers of particles in the sub group.
+   * @param[in, out] created_selection Selection to create.
    */
   virtual void create(Selection *created_selection) override;
 };

@@ -276,7 +276,7 @@ inline sycl::event reduce_dat_components_cellwise_async(
  * reduced values from the particles will be combined with the value already in
  * the CellDatConst.
  * @param[in] cell_dat_const_row The row to reduce into of the CellDatConst.
- * @param[in] cell_dat_const_cel The column to reduce into of the CellDatConst.
+ * @param[in] cell_dat_const_col The column to reduce into of the CellDatConst.
  * @param[in] op Binary operation to apply.
  */
 template <typename GROUP_TYPE, typename T, typename OP>

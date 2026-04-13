@@ -332,6 +332,7 @@ public:
    * @param qpm QuadraturePointMapper with a single point per cell.
    * @param function_space Should be "Barycentric".
    * @param polynomial_order Should be 1.
+   * @param testing Enable testing mode.
    */
   DMPlexProjectEvaluateBarycentric(
       ExternalCommon::QuadraturePointMapperSharedPtr qpm,

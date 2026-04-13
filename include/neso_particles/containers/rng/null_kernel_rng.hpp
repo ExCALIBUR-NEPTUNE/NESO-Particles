@@ -22,7 +22,7 @@ template <typename T> struct NullKernelRNGDevice {
 
   /**
    * @param[in] particle_index Unused, exists to match API.
-   * @param[out] Unused, exists to match API.
+   * @param[out] component Unused, exists to match API.
    * @param[in, out] valid_sample Will be set to false.
    * @returns 0.
    */

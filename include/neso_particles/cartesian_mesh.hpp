@@ -66,6 +66,7 @@ public:
    *  prior to calling map, i.e. particles should be within the domain extents.
    *
    *  @param particle_group ParticleGroup to use.
+   *  @param map_cell Cell to map.
    */
   void map(ParticleGroup &particle_group, const int map_cell = -1) override;
 

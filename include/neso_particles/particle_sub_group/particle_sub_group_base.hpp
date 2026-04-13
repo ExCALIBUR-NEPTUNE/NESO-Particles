@@ -101,7 +101,8 @@ public:
    *
    * but can make additional optimisations.
    *
-   * @param parent Parent ParticleGroup from which to form ParticleSubGroup.
+   * @param particle_group Parent ParticleGroup from which to form
+   * ParticleSubGroup.
    */
   ParticleSubGroup(ParticleGroupSharedPtr particle_group);
 
@@ -118,7 +119,8 @@ public:
    *
    * but can make additional optimisations.
    *
-   * @param parent Parent ParticleSubGroup from which to form ParticleSubGroup.
+   * @param particle_sub_group Parent ParticleSubGroup from which to form
+   * ParticleSubGroup.
    */
   ParticleSubGroup(std::shared_ptr<ParticleSubGroup> particle_sub_group);
 
@@ -215,7 +217,7 @@ public:
    * layers = [0, 1]
    *
    * @param cells Vector of cell indices of particles to extract.
-   * @param cells Vector of layer indices of particles to extract.
+   * @param layers Vector of layer indices of particles to extract.
    * @returns ParticleSet of particle data.
    */
   ParticleSetSharedPtr get_particles(std::vector<INT> &cells,

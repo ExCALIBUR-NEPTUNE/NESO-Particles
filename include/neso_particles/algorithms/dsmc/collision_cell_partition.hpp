@@ -72,7 +72,7 @@ struct CollisionCellPartitionDevice {
 
   /**
    * @param cell_mesh Mesh cell to index collision cell.
-   * @param cell_collition Collision cell index within the mesh cell.
+   * @param cell_collision Collision cell index within the mesh cell.
    * @param linear_species_id Linear species index.
    * @param particle_index Linear index of particle within the species and
    * collision cell.
@@ -152,6 +152,14 @@ public:
    * species and dsmc cells.
    * @param collision_cell_counts Vector of length cell_count containing the
    * number of collision cells in each mesh cell.
+   * @param species_id_sym Sym describing which ParticleDat contains the species
+   * ID.
+   * @param species_id_component Describe which ParticleDat component describes
+   * the species.
+   * @param collision_cell_sym Sym describing which ParticleDat contains the
+   * collision cell ID.
+   * @param collision_cell_component Describe which ParticleDat component
+   * contains the collision cell ID.
    */
   void construct(ParticleSubGroupSharedPtr particle_sub_group,
                  const std::vector<int> &collision_cell_counts,

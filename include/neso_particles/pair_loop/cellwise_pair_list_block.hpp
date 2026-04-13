@@ -100,7 +100,7 @@ REAL get_mean_wave_occupancy(std::vector<int> &occupancy_counts);
 /**
  * Reduce wave occupancy counts onto rank zero.
  *
- * @param[in] SYCLTargetSharedPtr Compute target to reduce over.
+ * @param[in] sycl_target Compute target to reduce over.
  * @param[in] local_occupancy_counts Local contributions to occupancy counts.
  * @param[in, out] global_occupancy_counts Global occupancy counts.
  */

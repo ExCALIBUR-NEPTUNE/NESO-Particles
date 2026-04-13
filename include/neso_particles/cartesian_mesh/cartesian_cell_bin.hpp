@@ -42,9 +42,6 @@ public:
    *
    * @param sycl_target SYCLTargetSharedPtr to use as compute device.
    * @param mesh CartesianHMeshSharedPtr to containing the particles.
-   * @param position_dat ParticleDat with components equal to the mesh dimension
-   * containing particle positions.
-   * @param cell_id_dat ParticleDat to write particle cell ids to.
    */
   CartesianCellBin(SYCLTargetSharedPtr sycl_target,
                    CartesianHMeshSharedPtr mesh);

@@ -198,8 +198,8 @@ inline void post_loop(ParticleLoopGlobalInfo *global_info,
 /**
  * Helper function to create a tuple of KernelRNG/TupleRNG instances.
  *
- * @param args Shared pointers to instances of KernelRNG descendent types and
- * TupleRNG instances.
+ * @param rng_ptrs Shared pointers to instances of KernelRNG descendent types
+ * and TupleRNG instances.
  * @returns New TupleRNG instance which can be passed to a particle loop with
  * read access.
  */

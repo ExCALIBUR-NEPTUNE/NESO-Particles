@@ -53,6 +53,7 @@ struct Selection {
 /**
  * Helper function to get the selection map on the host (for testing only).
  *
+ * @param sycl_target Compute device.
  * @param selection Selection to get a host representaton of.
  * @returns Indexable [cell][layer] map.
  */

@@ -37,12 +37,18 @@ struct SubGroupParticleMap {
   std::tuple<int *, int *, INT *, INT *> get_helper_ptrs();
 
   /**
+   * @param sycl_target Compute device..
    * @param cell_count The number of cells to create a map for.
    */
   SubGroupParticleMap(SYCLTargetSharedPtr sycl_target, const int cell_count);
 
   /**
-   * Create a map for a range of cells.
+   * Create a map for a range of cells [cell_start, cell_end).
+   *
+   * @param cell_start First cell to consider.
+   * @param cell_end Final cell plus one to consider.
+   * @param h_cell_counts Number of particles in each cell.
+   * @param h_cell_counts_es Exclusive scan on number of particles in each cell.
    */
   void create(const int cell_start, const int cell_end,
               const int *RESTRICT const h_cell_counts,

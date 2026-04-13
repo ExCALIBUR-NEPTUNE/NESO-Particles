@@ -34,6 +34,7 @@ struct BoundaryInteractionSpecification {
  * @param particle_sub_group ParticleSubGroup to test for boundary intersection
  * data.
  * @param ndim Optionally specify the expected number of spatial dimensions.
+ * @param verbose Optionally print to stdout if the dat does not exist.
  * @returns True if the particle sub group contains all of the required
  * EphemeralDats to describe intersections between particle trajectories and the
  * mesh boundary.

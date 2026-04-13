@@ -53,7 +53,7 @@ class ParticleGroup;
  * Create a ParticleSubGroup from a parent by discarding the first n
  * particles in each cell.
  *
- * @param parent Particle(Sub)Group which is the parent.
+ * @param particle_group Particle(Sub)Group which is the parent.
  * @param num_particles Number of particles to discard from each cell.
  * @param make_static Make the ParticleSubGroup static (default false).
  */
@@ -66,7 +66,7 @@ particle_sub_group_discard(std::shared_ptr<ParticleGroup> particle_group,
  * Create a ParticleSubGroup from a parent by discarding the first n
  * particles in each cell.
  *
- * @param parent Particle(Sub)Group which is the parent.
+ * @param particle_sub_group Particle(Sub)Group which is the parent.
  * @param num_particles Number of particles to discard from each cell.
  * @param make_static Make the ParticleSubGroup static (default false).
  */

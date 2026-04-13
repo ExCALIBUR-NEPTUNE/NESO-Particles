@@ -77,14 +77,14 @@ public:
    * @param key Key to test if a resource stack exists for.
    * @returns True if the resource stack exists in the map.
    */
-  template <typename U> inline bool exists(U) {
+  template <typename U> inline bool exists([[maybe_unused]] U key) {
     return this->map_to_resources.count(typeid(U));
   }
 
   /**
    * Set a ResourceStack for a key.
    *
-   * @param key Key to set the resource stack for.
+   * @param u Key to set the resource stack for.
    * @param resource_stack New resource stack to set for the key.
    */
   template <typename T, typename U>
@@ -100,7 +100,7 @@ public:
   /**
    * Get the resource stack object for a key and a type.
    *
-   * @param key Type index key to retrieve object for.
+   * @param u Type index key to retrieve object for.
    * @returns ResourceStack for the key cast to type std::shared_ptr<T>.
    */
   template <typename T, typename U> inline std::shared_ptr<T> get(const U u) {

@@ -195,11 +195,11 @@ public:
    * set_dofs call. DOF ordering is the per cell components running fastest then
    * cells.
    *
-   * @param ncomp[in] Number of components/functions to retrieve DOFs for. e.g.
+   * @param[in] ncomp Number of components/functions to retrieve DOFs for. e.g.
    * if project has been called for a particle property with two components then
    * there are two DOFs per cell in the internal representation.
-   * @param[in, out] DOFs in std::vector<REAL> form. This array may be resized
-   * and zeroed by the implementation.
+   * @param[in, out] dofs DOFs in std::vector<REAL> form. This array may be
+   * resized and zeroed by the implementation.
    */
   void get_dofs(const int ncomp, std::vector<REAL> &dofs);
 
@@ -208,10 +208,10 @@ public:
    * call. DOF ordering is the per cell components running fastest then
    * cells.
    *
-   * @param ncomp[in] Number of components/functions to retrieve DOFs for. e.g.
+   * @param[in] ncomp Number of components/functions to retrieve DOFs for. e.g.
    * if project has been called for a particle property with two components then
    * there are two DOFs per cell in the internal representation.
-   * @param[in] DOFs in std::vector<REAL> form.
+   * @param[in] dofs DOFs in std::vector<REAL> form.
    */
   void set_dofs(const int ncomp, const std::vector<REAL> &dofs);
 };

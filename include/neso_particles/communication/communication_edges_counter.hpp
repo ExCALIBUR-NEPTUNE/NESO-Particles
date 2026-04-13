@@ -66,12 +66,15 @@ public:
    * will be sent in a call to @ref exchange_send_recv_data. Collective on the
    * communicator.
    *
-   * @param recv_ranks[in] Remote MPI ranks which this rank will send data.
-   * @param recv_data[in] An integer to send to each remote rank.
-   * @param send_ranks[in, out] On return contains remote MPI ranks which will
+   * @param[in] recv_ranks Remote MPI ranks which this rank will send data.
+   * @param[in] recv_data An integer to send to each remote rank.
+   * @param[in, out] send_ranks On return contains remote MPI ranks which will
    * send this rank data.
-   * @param send_data[in, out] On return contains the integers that the remote
+   * @param[in, out] send_data On return contains the integers that the remote
    * ranks sent to this rank.
+   * @param[in] ordered When true assume that the send_ranks array is already
+   * populated and should be used. Otherwise populate this array with the
+   * receive ordering.
    */
   void exchange_send_recv_counts(std::vector<int> &recv_ranks,
                                  std::vector<std::int64_t> &recv_data,

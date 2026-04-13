@@ -72,7 +72,7 @@ public:
   /**
    * Serialise the stored representation into the provided buffer.
    *
-   * @param[in, out] Buffer to serialise the stored representation into.
+   * @param[in, out] buffer Buffer to serialise the stored representation into.
    */
   void serialise(std::vector<std::byte> &buffer);
 
@@ -87,7 +87,7 @@ public:
 
 /**
  * Class to hold a serialised DMPlex cell along with metadata such as the
- * owning rank and local id on the owning rank. This class inherits the @ref
+ * owning rank and local id on the owning rank. This class inherits the
  * SerialInterface class such that the instances can be communicated and
  * combined.
  */

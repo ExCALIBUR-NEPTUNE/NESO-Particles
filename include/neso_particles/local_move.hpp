@@ -72,8 +72,8 @@ public:
    *  @param sycl_target SYCLTargetSharedPtr to use as compute device.
    *  @param layer_compressor LayerCompressor instance used to compress
    * ParticleDat instances.
-   *  @param particle_dats_real Container of REAL valued ParticleDat instances.
-   *  @param particle_dats_int Container of INT valued ParticleDat instances.
+   *  @param particle_group_pointer_map Container of REAL and INT valued
+   * ParticleDat instances.
    *  @param nranks Number of remote ranks to consider as neighbours that this
    * rank could send to.
    *  @param ranks Remote ranks to consider as neighbours that this rank could

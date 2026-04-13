@@ -31,7 +31,8 @@ public:
   /**
    * Create the selection.
    *
-   * @param[in, out] Selection that describes the ParticleSubGroup.
+   * @param[in, out] created_selection Selection that describes the
+   * ParticleSubGroup.
    */
   virtual void create(Selection *created_selection) override;
 };

@@ -211,6 +211,16 @@ protected:
   inline void set_d_npart_cell_es(INT *ptr) { this->d_npart_cell_es = ptr; }
   inline INT *get_d_npart_cell_es() { return this->d_npart_cell_es; }
 
+  /**
+   *  Append particle data to the ParticleDat. wait() must be called on the
+   *  event_stack before use of the data. Assumes the dat has already been
+   *  reallocated.
+   *
+   *  @param[in] particle_dat Source ParticleDat.
+   *  @param[in] h_npart_cell_existing Current particle count of each cell.
+   *  @param[in] h_npart_cell_to_add Particle count to add to each cell.
+   *  @param[in, out] es EventStack for events to wait on for copy to complete.
+   */
   inline void
   append_particle_data(std::shared_ptr<ParticleDatT<T>> particle_dat,
                        const std::vector<INT> &h_npart_cell_existing,
@@ -718,11 +728,6 @@ template <typename T> inline void ParticleDatT<T>::trim_cell_dat_rows() {
   this->write_callback_wrapper(0);
 }
 
-/*
- *  Append particle data to the ParticleDat. wait() must be called on the
- * event_stack before use of the data. Assumes the dat has already been
- * reallocated.
- */
 template <typename T>
 inline void ParticleDatT<T>::append_particle_data(
     const int npart_new, const bool new_data_exists, std::vector<INT> &h_cells,
@@ -781,11 +786,7 @@ inline void ParticleDatT<T>::append_particle_data(
   }
   es.push(this->async_npart_host_to_device());
 }
-/*
- *  Append particle data to the ParticleDat. wait() must be called on the
- * event_stack before use of the data. Assumes the dat has already been
- * reallocated.
- */
+
 template <typename T>
 inline void ParticleDatT<T>::append_particle_data(
     ParticleDatSharedPtr<T> particle_dat,

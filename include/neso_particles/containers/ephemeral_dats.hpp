@@ -65,7 +65,7 @@ public:
    * Add a new EphemeralDat by specifying the Sym and number of components.
    *
    * @param sym Sym<INT> or Sym<REAL> for new EphemeralDat.
-   * @param int ncomp Number of components for the new EphemeralDat.
+   * @param ncomp Number of components for the new EphemeralDat.
    */
   template <typename T>
   inline void add_ephemeral_dat(const Sym<T> sym, const int ncomp) {

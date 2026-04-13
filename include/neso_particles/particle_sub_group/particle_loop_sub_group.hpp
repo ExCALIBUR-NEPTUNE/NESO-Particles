@@ -41,7 +41,7 @@ public:
    * ParticleSubGroup.
    *
    *  @param name Identifier for particle loop.
-   *  @param particle_group ParticleSubGroup to execute kernel for all
+   *  @param particle_sub_group ParticleSubGroup to execute kernel for all
    * particles.
    *  @param kernel Kernel to execute for all particles in the ParticleGroup.
    *  @param args The remaining arguments are arguments to be passed to the
@@ -61,7 +61,7 @@ public:
    *  Create a ParticleLoop that executes a kernel for all particles in the
    * ParticleSubGroup.
    *
-   *  @param particle_group ParticleSubGroup to execute kernel for all
+   *  @param particle_sub_group ParticleSubGroup to execute kernel for all
    * particles.
    *  @param kernel Kernel to execute for all particles in the ParticleGroup.
    *  @param args The remaining arguments are arguments to be passed to the
