@@ -18,9 +18,15 @@ TEST(Benchmark, bandwidth_device_copy) {
     const bool root = sycl_target->comm_pair.rank_parent == 0;
     const int Ntest = 20;
 
+    std::ofstream out_stream("benchmark_bandwidth_device_copy.csv");
+
     if (root) {
-      std::cout << "Size (Bytes), Host To Device (GB/s), Device To Host (GB/s)"
-                << std::endl;
+      auto lambda_print = [&](auto &os) {
+        os << "Size (Bytes), Host To Device (GB/s), Device To Host (GB/s)"
+           << std::endl;
+      };
+      lambda_print(std::cout);
+      lambda_print(out_stream);
     }
     for (int px = 0; px < 31; px++) {
       const std::size_t N =
@@ -58,15 +64,20 @@ TEST(Benchmark, bandwidth_device_copy) {
       const REAL device_to_host = lambda_do_run(false);
 
       if (root) {
-        std::cout << std::setfill(' ') << std::setw(12) << N << ","
-                  << std::setw(16) << std::scientific << host_to_device << ","
-                  << std::setw(16) << std::scientific << device_to_host << ""
-                  << std::endl;
+        auto lambda_print = [&](auto &os) {
+          os << std::setfill(' ') << std::setw(12) << N << "," << std::setw(16)
+             << std::scientific << host_to_device << "," << std::setw(16)
+             << std::scientific << device_to_host << "" << std::endl;
+        };
+        lambda_print(std::cout);
+        lambda_print(out_stream);
       }
     }
 
     std::cout << std::flush;
+    out_stream << std::flush;
     MPICHK(MPI_Barrier(MPI_COMM_WORLD));
     sycl_target->free();
+    out_stream.close();
   }
 }
