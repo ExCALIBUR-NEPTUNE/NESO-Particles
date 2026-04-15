@@ -18,7 +18,10 @@ TEST(Benchmark, bandwidth_device_copy) {
     const bool root = sycl_target->comm_pair.rank_parent == 0;
     const int Ntest = 20;
 
-    std::ofstream out_stream("benchmark_bandwidth_device_copy.csv");
+    std::ofstream out_stream;
+    if (root) {
+      out_stream = std::ofstream("benchmark_bandwidth_device_copy.csv");
+    }
 
     if (root) {
       auto lambda_print = [&](auto &os) {
@@ -75,9 +78,11 @@ TEST(Benchmark, bandwidth_device_copy) {
     }
 
     std::cout << std::flush;
-    out_stream << std::flush;
+    if (root) {
+      out_stream << std::flush;
+      out_stream.close();
+    }
     MPICHK(MPI_Barrier(MPI_COMM_WORLD));
     sycl_target->free();
-    out_stream.close();
   }
 }
