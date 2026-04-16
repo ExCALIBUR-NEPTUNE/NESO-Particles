@@ -22,6 +22,16 @@
 namespace NESO::Particles {
 
 /**
+ * Wrapper for SYCL STD library allocator for host allocations.
+ *
+ * Usage like:
+ *
+ *  std::vector<int, HostAllocator<T>> h_foo(N, HostAllocator<T>(queue));
+ */
+template <typename T>
+using HostAllocator = sycl::usm_allocator<T, sycl::usm::alloc::host>;
+
+/**
  *  Determine a local MPI rank based on environment variables and shared memory
  *  splitting.
  *

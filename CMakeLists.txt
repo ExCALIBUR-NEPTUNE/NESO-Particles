@@ -87,6 +87,7 @@ set(SRC_FILES
     ${SRC_DIR}/compute_target.cpp
     ${SRC_DIR}/containers/cell_dat.cpp
     ${SRC_DIR}/containers/cell_dat_const.cpp
+    ${SRC_DIR}/containers/cell_data.cpp
     ${SRC_DIR}/containers/descendant_products.cpp
     ${SRC_DIR}/containers/ephemeral_dats.cpp
     ${SRC_DIR}/containers/global_array.cpp
