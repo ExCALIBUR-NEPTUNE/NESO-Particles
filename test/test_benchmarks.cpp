@@ -25,7 +25,8 @@ TEST(Benchmark, bandwidth_device_copy) {
 
     if (root) {
       auto lambda_print = [&](auto &os) {
-        os << "Size (Bytes), Host To Device (GB/s), Device To Host (GB/s)"
+        os << "Size (Bytes), STD Host To Device (GB/s), STD Device To Host "
+              "(GB/s), SYCL Host To Device (GB/s), SYCL Device To Host (GB/s)"
            << std::endl;
       };
       lambda_print(std::cout);
@@ -35,18 +36,15 @@ TEST(Benchmark, bandwidth_device_copy) {
       const std::size_t N =
           std::pow(static_cast<std::size_t>(2), static_cast<std::size_t>(px));
 
-      std::vector<unsigned char> h_buffer(N);
-      std::fill(h_buffer.begin(), h_buffer.end(), 1);
-      BufferDevice<unsigned char> d_buffer(sycl_target, h_buffer);
-
-      auto lambda_do_run = [&](const bool to_device) -> REAL {
+      auto lambda_do_run = [&](const bool to_device, unsigned char *h_ptr,
+                               unsigned char *d_ptr) -> REAL {
         MPICHK(MPI_Barrier(MPI_COMM_WORLD));
         auto t0 = profile_timestamp();
         for (int testx = 0; testx < Ntest; testx++) {
           if (to_device) {
-            sycl_target->queue.memcpy(d_buffer.ptr, h_buffer.data(), N).wait();
+            sycl_target->queue.memcpy(d_ptr, h_ptr, N).wait();
           } else {
-            sycl_target->queue.memcpy(h_buffer.data(), d_buffer.ptr, N).wait();
+            sycl_target->queue.memcpy(h_ptr, d_ptr, N).wait();
           }
         }
         MPICHK(MPI_Barrier(MPI_COMM_WORLD));
@@ -63,14 +61,38 @@ TEST(Benchmark, bandwidth_device_copy) {
         return total_bandwidth;
       };
 
-      const REAL host_to_device = lambda_do_run(true);
-      const REAL device_to_host = lambda_do_run(false);
+      BufferDevice<unsigned char> d_buffer(sycl_target, N);
+
+      REAL std_host_to_device = 0.0;
+      REAL std_device_to_host = 0.0;
+
+      {
+        std::vector<unsigned char> h_buffer(N);
+        std::fill(h_buffer.begin(), h_buffer.end(), 1);
+        std_host_to_device = lambda_do_run(true, h_buffer.data(), d_buffer.ptr);
+        std_device_to_host =
+            lambda_do_run(false, h_buffer.data(), d_buffer.ptr);
+      }
+
+      REAL sycl_host_to_device = 0.0;
+      REAL sycl_device_to_host = 0.0;
+
+      {
+        BufferHost<unsigned char> h_buffer(sycl_target, N);
+        std::fill(h_buffer.ptr, h_buffer.ptr + N, 1);
+        sycl_target->queue.memcpy(h_buffer.ptr, d_buffer.ptr, N)
+            .wait_and_throw();
+        sycl_host_to_device = lambda_do_run(true, h_buffer.ptr, d_buffer.ptr);
+        sycl_device_to_host = lambda_do_run(false, h_buffer.ptr, d_buffer.ptr);
+      }
 
       if (root) {
         auto lambda_print = [&](auto &os) {
           os << std::setfill(' ') << std::setw(12) << N << "," << std::setw(16)
-             << std::scientific << host_to_device << "," << std::setw(16)
-             << std::scientific << device_to_host << "" << std::endl;
+             << std::scientific << std_host_to_device << "," << std::setw(16)
+             << std::scientific << std_device_to_host << "," << std::setw(16)
+             << std::scientific << sycl_host_to_device << "," << std::setw(16)
+             << std::scientific << sycl_device_to_host << std::endl;
         };
         lambda_print(std::cout);
         lambda_print(out_stream);
