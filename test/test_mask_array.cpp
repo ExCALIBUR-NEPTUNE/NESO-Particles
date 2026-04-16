@@ -15,7 +15,7 @@ TEST(MaskArray, base) {
   MaskArrayBaseType b = 0;
   for (MaskArrayBaseType ix = 0; ix < h_mad.num_bits_per_base; ix++) {
     h_mad.set_inner(&b, ix, true);
-    ASSERT_EQ(sycl::popcount(b), ix + 1);
+    ASSERT_EQ(Kernel::popcount(b), ix + 1);
     ASSERT_EQ(h_mad.get_inner(&b, ix), true);
     for (MaskArrayBaseType jx = 0; jx < ix; jx++) {
       ASSERT_EQ(h_mad.get_inner(&b, jx), true);
@@ -27,7 +27,7 @@ TEST(MaskArray, base) {
   for (MaskArrayBaseType ix = 0; ix < h_mad.num_bits_per_base; ix++) {
     h_mad.set_inner(&b, ix, false);
     ASSERT_EQ(h_mad.get_inner(&b, ix), false);
-    ASSERT_EQ(sycl::popcount(b), h_mad.num_bits_per_base - ix - 1);
+    ASSERT_EQ(Kernel::popcount(b), h_mad.num_bits_per_base - ix - 1);
     for (MaskArrayBaseType jx = 0; jx < ix; jx++) {
       ASSERT_EQ(h_mad.get_inner(&b, jx), false);
     }
@@ -42,12 +42,14 @@ TEST(MaskArray, base) {
     MaskArrayBaseType b = 0;
     for (MaskArrayBaseType ix = 0; ix < h_mad.num_bits_per_base; ix++) {
       h_mad.set_inner(&b, ix, true);
-      NESO_KERNEL_ASSERT(sycl::popcount(b) == ix + 1, k_ep);
+      NESO_KERNEL_ASSERT(static_cast<int>(Kernel::popcount(b)) ==
+                             static_cast<int>(ix) + 1,
+                         k_ep);
     }
     for (MaskArrayBaseType ix = 0; ix < h_mad.num_bits_per_base; ix++) {
       h_mad.set_inner(&b, ix, false);
-      NESO_KERNEL_ASSERT(sycl::popcount(b) == h_mad.num_bits_per_base - ix - 1,
-                         k_ep);
+      NESO_KERNEL_ASSERT(
+          Kernel::popcount(b) == h_mad.num_bits_per_base - ix - 1, k_ep);
     }
   });
 
@@ -62,7 +64,7 @@ TEST(MaskArray, base) {
         const std::uint32_t correct_popcount =
             value ? sizeof(MaskArrayBaseType) * CHAR_BIT : 0;
         const MaskArrayBaseType reset_value = ma->get_reset_mask(value);
-        NESOASSERT(sycl::popcount(reset_value) == correct_popcount,
+        NESOASSERT(Kernel::popcount(reset_value) == correct_popcount,
                    "Failed to compute correct reset value.");
       };
 
@@ -115,7 +117,7 @@ TEST(MaskArray, base) {
 
       int count = 0;
       for (auto ix : h_ma) {
-        count += sycl::popcount(ix);
+        count += Kernel::popcount(ix);
       }
       ASSERT_EQ(count, static_cast<int>(N * B));
 
@@ -160,7 +162,7 @@ TEST(MaskArray, base) {
 
       count = 0;
       for (auto ix : h_ma) {
-        count += sycl::popcount(ix);
+        count += Kernel::popcount(ix);
       }
       ASSERT_EQ(count, static_cast<int>(N * B));
     }
