@@ -47,6 +47,23 @@ inline auto clamp(const T x, const T minval, const T maxval) {
   return sycl::clamp(x, minval, maxval);
 }
 
+template <typename T> inline auto popcount(const T x) {
+  return static_cast<T>(sycl::popcount(x));
+}
+// Are we using an AdaptiveCpp CUDA pass?
+#ifdef __ACPP_ENABLE_CUDA_TARGET__
+// Is this the nvcxx backend?
+#ifdef __NVCOMPILER
+
+// Patch sycl::popcount(std::uint8_t) on this backend.
+inline std::uint32_t popcount(const std::uint8_t x) {
+  std::uint32_t y = x;
+  return sycl::popcount(y);
+}
+
+#endif
+#endif
+
 namespace Private {
 // ACPP does not seem to define a sycl::sincos(REAL, REAL*)
 template <class, class = void> struct sincos_exists_for_t : std::false_type {};
