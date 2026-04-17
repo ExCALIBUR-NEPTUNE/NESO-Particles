@@ -21,6 +21,7 @@ endif()
 
 set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(TEST_SRCS
+    ${TEST_DIR}/test_benchmarks.cpp
     ${TEST_DIR}/test_algorithms_a.cpp
     ${TEST_DIR}/test_algorithms_b.cpp
     ${TEST_DIR}/test_algorithms_c.cpp

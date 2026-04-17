@@ -36,13 +36,16 @@ private:
   SYCLTargetSharedPtr sycl_target;
 
   /// 2D data column major.
-  std::vector<T> data;
+  std::vector<T, HostAllocator<T>> data;
 
 public:
   /// Disable (implicit) copies.
   CellDataT(const CellDataT &st) = delete;
   /// Disable (implicit) copies.
   CellDataT &operator=(CellDataT const &a) = delete;
+
+  /// Disable default constructor.
+  CellDataT() = delete;
 
   /// Number of rows in the 2D data structure.
   const int nrow;
@@ -68,9 +71,10 @@ public:
    */
   inline CellDataT(SYCLTargetSharedPtr sycl_target, const int nrow,
                    const int ncol)
-      : sycl_target(sycl_target), nrow(nrow), ncol(ncol) {
-    this->data.resize(nrow * ncol);
-  }
+      : sycl_target(sycl_target),
+        data(std::vector<T, HostAllocator<T>>(
+            nrow * ncol, HostAllocator<T>(sycl_target->queue))),
+        nrow(nrow), ncol(ncol) {}
 
   /**
    *  Subscript operator for cell data. Data should be indexed by column then
@@ -102,6 +106,9 @@ public:
     }
   }
 };
+
+extern template class CellDataT<REAL>;
+extern template class CellDataT<INT>;
 
 template <typename T> using CellData = std::shared_ptr<CellDataT<T>>;
 

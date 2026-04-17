@@ -95,8 +95,10 @@ public:
     auto d_ptr_start = d_ptr;
 
     // Create the random number in blocks and copy to device blockwise.
-    std::vector<T> block0(block_size);
-    std::vector<T> block1(block_size);
+    std::vector<T, HostAllocator<T>> block0(
+        block_size, HostAllocator<T>(sycl_target->queue));
+    std::vector<T, HostAllocator<T>> block1(
+        block_size, HostAllocator<T>(sycl_target->queue));
 
     T *ptr_tmp;
     T *ptr_current = block0.data();
