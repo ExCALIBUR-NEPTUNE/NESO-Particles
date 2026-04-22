@@ -48,6 +48,7 @@ set(TEST_SRCS
     ${TEST_DIR}/test_external_common.cpp
     ${TEST_DIR}/test_global_array.cpp
     ${TEST_DIR}/test_int_key_value_map.cpp
+    ${TEST_DIR}/test_index_map.cpp
     ${TEST_DIR}/test_local_array.cpp
     ${TEST_DIR}/test_local_decomp_mesh.cpp
     ${TEST_DIR}/test_mesh_hierarchy.cpp

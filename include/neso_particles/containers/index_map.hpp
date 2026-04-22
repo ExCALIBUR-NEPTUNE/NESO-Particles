@@ -30,9 +30,9 @@ template <int KEY_DIM, int VALUE_DIM> struct IndexMapDevice {
    * @param key Key to linearise from slowes to fastest.
    * @returns Linearised key.
    */
-  inline int get_linear_index(const int key[KEY_DIM]) const {
-    int index = key[KEY_DIM - 1];
-    for (int dim = KEY_DIM - 2; dim >= 0; dim--) {
+  inline INT get_linear_index(const int key[KEY_DIM]) const {
+    int index = key[0];
+    for (int dim = 1; dim < KEY_DIM; dim++) {
       index *= this->key_strides[dim];
       index += key[dim];
     }
