@@ -91,6 +91,7 @@ set(SRC_FILES
     ${SRC_DIR}/containers/descendant_products.cpp
     ${SRC_DIR}/containers/ephemeral_dats.cpp
     ${SRC_DIR}/containers/global_array.cpp
+    ${SRC_DIR}/containers/index_map.cpp
     ${SRC_DIR}/containers/local_array.cpp
     ${SRC_DIR}/containers/mask_array.cpp
     ${SRC_DIR}/containers/particle_set_device.cpp

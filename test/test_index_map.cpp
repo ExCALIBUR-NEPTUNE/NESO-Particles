@@ -84,3 +84,16 @@ TEST(IndexMap, device) {
     }
   }
 }
+
+TEST(IndexMap, host) {
+
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+
+  {
+    auto im = get_index_map<1, 1>(sycl_target);
+
+    restore_index_map(sycl_target, im);
+  }
+
+  sycl_target->free();
+}
