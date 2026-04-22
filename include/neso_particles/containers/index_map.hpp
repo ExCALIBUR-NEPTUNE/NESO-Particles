@@ -1,5 +1,5 @@
-#ifndef _NESO_PARTICLES_CONTAINERS_PARTITION_CONTEXT_HPP_
-#define _NESO_PARTICLES_CONTAINERS_PARTITION_CONTEXT_HPP_
+#ifndef _NESO_PARTICLES_CONTAINERS_INDEX_MAP_HPP_
+#define _NESO_PARTICLES_CONTAINERS_INDEX_MAP_HPP_
 
 #include "../compute_target.hpp"
 
@@ -9,7 +9,7 @@ namespace NESO::Particles {
  * Device type for generic maps from keys to int indices. Intended use is
  * partitions such as maps from cells to particles.
  */
-template <int KEY_DIM, int VALUE_DIM> struct PartitionContextDevice {
+template <int KEY_DIM, int VALUE_DIM> struct IndexMapDevice {
 
   static constexpr int key_dim = KEY_DIM;
   static constexpr int value_dim = VALUE_DIM;
@@ -81,26 +81,24 @@ template <int KEY_DIM, int VALUE_DIM> struct PartitionContextDevice {
  * Type for generic maps from keys to int indices. Intended use is
  * partitions such as maps from cells to particles.
  */
-template <int KEY_DIM, int VALUE_DIM> struct PartitionContext {};
+template <int KEY_DIM, int VALUE_DIM> struct IndexMap {};
 
 template <int KEY_DIM, int VALUE_DIM>
-using PartitionContextSharedPtr =
-    std::shared_ptr<PartitionContext<KEY_DIM, VALUE_DIM>>;
-
-/**
- * TODO
- */
-template <int KEY_DIM, int VALUE_DIM>
-PartitionContextSharedPtr<KEY_DIM, VALUE_DIM>
-create_partition_context(SYCLTargetSharedPtr sycl_target);
+using IndexMapSharedPtr = std::shared_ptr<IndexMap<KEY_DIM, VALUE_DIM>>;
 
 /**
  * TODO
  */
 template <int KEY_DIM, int VALUE_DIM>
-void restore_partition_context(
-    SYCLTargetSharedPtr sycl_target,
-    PartitionContextSharedPtr<KEY_DIM, VALUE_DIM> partition_context);
+IndexMapSharedPtr<KEY_DIM, VALUE_DIM>
+create_index_map(SYCLTargetSharedPtr sycl_target);
+
+/**
+ * TODO
+ */
+template <int KEY_DIM, int VALUE_DIM>
+void restore_index_map(SYCLTargetSharedPtr sycl_target,
+                       IndexMapSharedPtr<KEY_DIM, VALUE_DIM> partition_context);
 } // namespace NESO::Particles
 
 #endif

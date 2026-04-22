@@ -23,7 +23,7 @@
 #include "neso_particles/containers/mask_array.hpp"
 #include "neso_particles/containers/nd_index.hpp"
 #include "neso_particles/containers/nd_local_array.hpp"
-#include "neso_particles/containers/partition_context.hpp"
+#include "neso_particles/containers/index_map.hpp"
 #include "neso_particles/containers/product_matrix.hpp"
 #include "neso_particles/containers/resource_stack.hpp"
 #include "neso_particles/containers/rng/rng.hpp"
