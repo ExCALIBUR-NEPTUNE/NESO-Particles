@@ -1,6 +1,7 @@
 #ifndef _NESO_PARTICLES_CONTAINERS_INDEX_MAP_HPP_
 #define _NESO_PARTICLES_CONTAINERS_INDEX_MAP_HPP_
 
+#include "../algorithms/common.hpp"
 #include "../compute_target.hpp"
 #include "../device_buffers.hpp"
 
@@ -125,8 +126,8 @@ public:
       n *= this->index_map_device.key_strides[dx];
     }
     this->total_num_keys = n;
-
-    NESOASSERT(false, "REALLOCATE");
+    this->d_offsets->realloc_no_copy(n + 1);
+    this->index_map_device.d_offsets = this->d_offsets->ptr;
   }
 
   /**
@@ -143,7 +144,7 @@ public:
                                  ResourceStackInterfaceBufferDevice<INT>>(
         sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<INT>{},
         sycl_target);
-    d_buffer->realloc_no_copy(this->get_num_keys());
+    d_buffer->realloc_no_copy(this->get_num_keys() + 1);
     return d_buffer;
   }
 
@@ -152,9 +153,35 @@ public:
    * entry.
    */
   inline void
-  restore_tmp_buffer_num_values(std::shared_ptr<BufferDevice<INT>> buffer) {
+  restore_tmp_buffer_num_values(std::shared_ptr<BufferDevice<INT>> &buffer) {
     restore_resource(sycl_target->resource_stack_map,
                      ResourceStackKeyBufferDevice<INT>{}, buffer);
+  }
+
+  /**
+   * Populuate the offsets buffer using the provided number of values counts.
+   * Reallocates the values buffer.
+   *
+   * @param d_num_values Device buffer, of size number of keys plus one, holding
+   * the number of values for each key.
+   */
+  inline void populate_offsets_buffer(INT *d_num_values) {
+
+    joint_exclusive_scan_blocking(
+        this->sycl_target, static_cast<std::size_t>(this->get_num_keys() + 1),
+        d_num_values, this->d_offsets->ptr);
+
+    INT total_num_values = 0;
+    sycl_target->queue
+        .memcpy(&total_num_values, this->d_offsets->ptr + this->get_num_keys(),
+                sizeof(INT))
+        .wait_and_throw();
+
+    this->d_values->realloc_no_copy(total_num_values * VALUE_DIM);
+    for (int dx = 0; dx < VALUE_DIM; dx++) {
+      this->index_map_device.d_values[dx] =
+          this->d_values->ptr + dx * total_num_values;
+    }
   }
 
   /**

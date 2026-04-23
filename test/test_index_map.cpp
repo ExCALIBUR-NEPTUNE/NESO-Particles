@@ -90,7 +90,55 @@ TEST(IndexMap, host) {
   auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
 
   {
-    auto im = get_index_map<1, 1>(sycl_target);
+    auto im = get_index_map<3, 1>(sycl_target);
+
+    const int N0 = 7;
+    const int N1 = 5;
+    const int N2 = 3;
+    const int max_num_values = 13;
+
+    const int N = N0 * N1 * N2;
+
+    int key_strides[3] = {N0, N1, N2};
+    im->set_key_strides(key_strides);
+
+    auto d_tmp_num_values = im->get_tmp_buffer_num_values();
+    std::vector<INT> h_tmp_num_values(d_tmp_num_values->size);
+    std::vector<INT> h_correct_offsets(d_tmp_num_values->size);
+    std::vector<INT> h_to_test_offsets(d_tmp_num_values->size);
+
+    INT offset = 0;
+    INT linear_index = 0;
+    for (int i0 = 0; i0 < N0; i0++) {
+      for (int i1 = 0; i1 < N1; i1++) {
+        for (int i2 = 0; i2 < N2; i2++) {
+          const INT Nvalues = linear_index % max_num_values;
+          h_tmp_num_values.at(linear_index) = Nvalues;
+          h_correct_offsets.at(linear_index) = offset;
+          offset += Nvalues;
+          linear_index++;
+        }
+      }
+    }
+    h_correct_offsets.at(linear_index) = offset;
+    const INT total_num_values = offset;
+
+    sycl_target->queue
+        .memcpy(d_tmp_num_values->ptr, h_tmp_num_values.data(),
+                d_tmp_num_values->size_bytes())
+        .wait_and_throw();
+
+    im->populate_offsets_buffer(d_tmp_num_values->ptr);
+    im->restore_tmp_buffer_num_values(d_tmp_num_values);
+
+    auto d_im = im->get_device();
+
+    sycl_target->queue
+        .memcpy(h_to_test_offsets.data(), d_im.d_offsets,
+                h_to_test_offsets.size() * sizeof(INT))
+        .wait_and_throw();
+
+    ASSERT_EQ(h_correct_offsets, h_to_test_offsets);
 
     restore_index_map(sycl_target, im);
   }
