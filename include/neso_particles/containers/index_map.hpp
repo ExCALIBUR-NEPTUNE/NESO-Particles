@@ -72,8 +72,8 @@ template <int KEY_DIM, int VALUE_DIM> struct IndexMapDevice {
    * @param dimension Dimension of value to retrieve.
    * @returns Value specified by index.
    */
-  inline int get_value(const int key[KEY_DIM], const int value_index,
-                       const int dimension) const {
+  inline int &at(const int key[KEY_DIM], const int value_index,
+                 const int dimension) const {
     const INT offset = this->get_offset(key) + static_cast<INT>(value_index);
     return this->d_values[dimension][offset];
   }
