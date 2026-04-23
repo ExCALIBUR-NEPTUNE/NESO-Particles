@@ -120,6 +120,7 @@ set(SRC_FILES
     ${SRC_DIR}/loop/particle_loop_index.cpp
     ${SRC_DIR}/loop/particle_loop_utility.cpp
     ${SRC_DIR}/loop/pli_particle_dat.cpp
+    ${SRC_DIR}/loop/reductions/partition_mesh_cells_bins.cpp
     ${SRC_DIR}/particle_sub_group/cell_sub_group_selector.cpp
     ${SRC_DIR}/particle_sub_group/truncate_sub_group_selector.cpp
     ${SRC_DIR}/particle_sub_group/disjoint_union_sub_group_selector.cpp
@@ -266,6 +267,8 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_impl.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_reduction.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/pli_particle_dat.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/loop/reductions/reductions.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/loop/reductions/partition_mesh_cells_bins.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_hierarchy.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_hierarchy_data/mesh_hierarchy_container.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_hierarchy_data/mesh_hierarchy_data.hpp

@@ -38,6 +38,7 @@
 #include "neso_particles/local_move.hpp"
 #include "neso_particles/loop/particle_loop.hpp"
 #include "neso_particles/loop/particle_loop_functions.hpp"
+#include "neso_particles/loop/reductions/reductions.hpp"
 #include "neso_particles/mesh_hierarchy.hpp"
 #include "neso_particles/mesh_hierarchy_data/mesh_hierarchy_data.hpp"
 #include "neso_particles/mesh_interface.hpp"

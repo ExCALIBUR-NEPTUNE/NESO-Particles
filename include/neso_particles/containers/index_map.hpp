@@ -145,6 +145,10 @@ public:
         sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<INT>{},
         sycl_target);
     d_buffer->realloc_no_copy(this->get_num_keys() + 1);
+    this->sycl_target->queue
+        .template fill<INT>(d_buffer->ptr, static_cast<INT>(0),
+                            static_cast<std::size_t>(this->get_num_keys() + 1))
+        .wait_and_throw();
     return d_buffer;
   }
 
