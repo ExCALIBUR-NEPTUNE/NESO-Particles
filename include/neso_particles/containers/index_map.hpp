@@ -26,6 +26,9 @@ template <int KEY_DIM, int VALUE_DIM> struct IndexMapDevice {
   // Key strides
   int key_strides[KEY_DIM]{};
 
+  // Total number of entries.
+  INT total_num_values{0};
+
   /**
    * Compute linear index from key. Key indices are ordered from slow to fast.
    *
@@ -39,6 +42,24 @@ template <int KEY_DIM, int VALUE_DIM> struct IndexMapDevice {
       index += key[dim];
     }
     return index;
+  }
+
+  /**
+   * Convert linear index an array index. Note this implementation is not a
+   * particullary efficient (integer division) piece of code. Avoid calling
+   * anywhere performance critical.
+   *
+   * @param[in] key_linear Linear key to convert.
+   * @param[in, out] key_array Output array key.
+   */
+  inline void get_array_index(const INT key_linear, int *key_array) {
+    INT l = key_linear;
+    for (int dim = KEY_DIM - 1; dim >= 0; dim--) {
+      const INT dk = l % this->key_strides[dim];
+      key_array[dim] = static_cast<int>(dk);
+      l -= dk;
+      l /= this->key_strides[dim];
+    }
   }
 
   /**
@@ -89,8 +110,7 @@ protected:
   INT total_num_values_per_dim = 0;
   std::unique_ptr<BufferDevice<int>> d_values;
   IndexMapDevice<KEY_DIM, VALUE_DIM> index_map_device;
-  EventStack event_stack;
-  int total_num_keys{0};
+  INT total_num_keys{0};
 
 public:
   /// Disable (implicit) copies.
@@ -121,7 +141,7 @@ public:
     for (int dx = 0; dx < KEY_DIM; dx++) {
       this->index_map_device.key_strides[dx] = key_strides[dx];
     }
-    int n = 1;
+    INT n = 1;
     for (int dx = 0; dx < KEY_DIM; dx++) {
       n *= this->index_map_device.key_strides[dx];
     }
@@ -133,7 +153,7 @@ public:
   /**
    * @returns Total number of keys across all dimensions.
    */
-  inline int get_num_keys() const { return total_num_keys; }
+  inline INT get_num_keys() const { return total_num_keys; }
 
   /**
    * @returns DeviceBuffer that can be used to accumulate counts per key entry.
@@ -186,14 +206,72 @@ public:
       this->index_map_device.d_values[dx] =
           this->d_values->ptr + dx * total_num_values;
     }
+    this->index_map_device.total_num_values = total_num_values;
   }
 
   /**
    * @returns Device type for map.
    */
   inline IndexMapDevice<KEY_DIM, VALUE_DIM> get_device() {
-    this->event_stack.wait();
     return this->index_map_device;
+  }
+
+  /**
+   * @returns Host copy of stored map.
+   */
+  inline std::map<std::array<int, KEY_DIM>,
+                  std::array<std::vector<int>, VALUE_DIM>>
+  get_values() {
+
+    std::map<std::array<int, KEY_DIM>, std::array<std::vector<int>, VALUE_DIM>>
+        return_values;
+
+    IndexMapDevice index_map_device = this->index_map_device;
+
+    const INT total_num_values = index_map_device.total_num_values;
+
+    std::vector<int, HostAllocator<int>> h_values(
+        total_num_values * VALUE_DIM,
+        HostAllocator<int>{this->sycl_target->queue});
+
+    std::vector<INT, HostAllocator<INT>> h_offsets(
+        this->get_num_keys() + 1, HostAllocator<INT>{this->sycl_target->queue});
+
+    EventStack es;
+
+    for (int dx = 0; dx < VALUE_DIM; dx++) {
+      es.push(this->sycl_target->queue.memcpy(
+          h_values.data() + total_num_values * dx,
+          this->index_map_device.d_values[dx], total_num_values * sizeof(int)));
+    }
+
+    es.push(this->sycl_target->queue.memcpy(
+        h_offsets.data(), this->index_map_device.d_offsets,
+        (this->get_num_keys() + 1) * sizeof(INT)));
+
+    es.wait();
+
+    index_map_device.d_offsets = h_offsets.data();
+    for (int dx = 0; dx < VALUE_DIM; dx++) {
+      index_map_device.d_values[dx] = h_values.data() + total_num_values * dx;
+    }
+
+    const INT total_num_keys = this->get_num_keys();
+    for (INT ex = 0; ex < total_num_keys; ex++) {
+      std::array<int, KEY_DIM> key;
+      index_map_device.get_array_index(ex, key.data());
+      const int num_values = index_map_device.get_num_values(key.data());
+      const INT offset = index_map_device.get_offset(key.data());
+
+      for (int dx = 0; dx < VALUE_DIM; dx++) {
+        return_values[key][dx].resize(num_values);
+        std::memcpy(return_values.at(key).at(dx).data(),
+                    index_map_device.d_values[dx] + offset,
+                    num_values * sizeof(int));
+      }
+    }
+
+    return return_values;
   }
 };
 

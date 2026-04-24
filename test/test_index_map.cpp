@@ -37,6 +37,13 @@ TEST(IndexMap, device) {
             const int key[3] = {i0, i1, i2};
             const INT to_test = d0.get_linear_index(key);
             ASSERT_EQ(to_test, linear_index);
+
+            int key_to_test[3] = {-1, -1, -1};
+            d0.get_array_index(to_test, key_to_test);
+            for (int dx = 0; dx < 3; dx++) {
+              ASSERT_EQ(key_to_test[dx], key[dx]);
+            }
+
             const INT Nvalues = linear_index % max_num_values;
             h_offsets.at(linear_index) = offset;
 
@@ -181,8 +188,87 @@ TEST(IndexMap, host) {
 
     ASSERT_FALSE(ep.get_flag());
 
+    auto h_map = im->get_values();
+
+    linear_index = 0;
+    for (int i0 = 0; i0 < N0; i0++) {
+      for (int i1 = 0; i1 < N1; i1++) {
+        for (int i2 = 0; i2 < N2; i2++) {
+
+          std::array<int, 3> key = {i0, i1, i2};
+          const INT Nvalues = linear_index % max_num_values;
+          ASSERT_EQ(Nvalues, h_map[key][0].size());
+          ASSERT_EQ(Nvalues, h_map[key][1].size());
+
+          for (INT ix = 0; ix < Nvalues; ix++) {
+            ASSERT_EQ(h_map[key][0].at(ix), 12391 + linear_index + ix);
+            ASSERT_EQ(h_map[key][1].at(ix), 107 + linear_index + 2 * ix);
+          }
+
+          linear_index++;
+        }
+      }
+    }
+
     restore_index_map(sycl_target, im);
   }
 
   sycl_target->free();
+}
+
+TEST(IndexMap, partition_mesh_cells_bins) {
+  auto [A, sycl_target_t, cell_count_t] = particle_loop_common_2d(511, 16, 32);
+
+  A->add_particle_dat(Sym<INT>("BIN"), 2);
+  const int max_num_bins = 100;
+  auto sycl_target = sycl_target_t;
+
+  auto lambda_test = [&](auto g) {
+    particle_loop(
+        g,
+        [=](auto INDEX, auto BIN) { BIN.at(1) = INDEX.layer % max_num_bins; },
+        Access::read(ParticleLoopIndex{}), Access::write(Sym<INT>("BIN")))
+        ->execute();
+
+    auto partition = get_index_map<2, 1>(sycl_target);
+
+    partition_mesh_cells_bins(g, max_num_bins, Sym<INT>("BIN"), 1, partition);
+
+    auto d_partition = partition->get_device();
+
+    ErrorPropagate ep(sycl_target);
+    auto k_ep = ep.device_ptr();
+
+    particle_loop(
+        g,
+        [=](auto INDEX, auto BIN) {
+          const int bin = BIN.at(1);
+          const int layer = INDEX.layer;
+
+          const int key[2] = {static_cast<int>(INDEX.cell), bin};
+
+          const int num_values = d_partition.get_num_values(key);
+
+          int found_count = 0;
+          for (int vx = 0; vx < num_values; vx++) {
+            const int candididate = d_partition.at(key, vx, 0);
+            found_count += static_cast<int>(candididate == layer);
+          }
+          NESO_KERNEL_ASSERT(found_count == 1, k_ep);
+        },
+        Access::read(ParticleLoopIndex{}), Access::read(Sym<INT>("BIN")))
+        ->execute();
+
+    ASSERT_FALSE(ep.get_flag());
+
+    restore_index_map(sycl_target, partition);
+  };
+
+  lambda_test(A);
+  lambda_test(particle_sub_group(
+      A, [=](auto ID) { return ID.at(0) % 2 == 0; },
+      Access::read(Sym<INT>("ID"))));
+
+  sycl_target_t->free();
+  A->domain->mesh->free();
 }

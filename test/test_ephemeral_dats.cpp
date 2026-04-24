@@ -148,6 +148,7 @@ TEST(EphemeralDats, base) {
   aa_empty->add_ephemeral_dat(Sym<REAL>("FOO"), 2);
 
   sycl_target->free();
+  A->domain->mesh->free();
 }
 
 TEST(EphemeralDats, whole_group) {
