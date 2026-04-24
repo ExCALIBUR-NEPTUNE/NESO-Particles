@@ -223,7 +223,7 @@ TEST(IndexMap, partition_mesh_cells_bins) {
   const int max_num_bins = 100;
   auto sycl_target = sycl_target_t;
 
-  auto lambda_test = [&](auto g) {
+  auto lambda_test = [&](auto g, auto correct_version) {
     particle_loop(
         g,
         [=](auto INDEX, auto BIN) { BIN.at(1) = INDEX.layer % max_num_bins; },
@@ -233,6 +233,7 @@ TEST(IndexMap, partition_mesh_cells_bins) {
     auto partition = get_index_map<2, 1>(sycl_target);
 
     partition_mesh_cells_bins(g, max_num_bins, Sym<INT>("BIN"), 1, partition);
+    ASSERT_EQ(partition->version, correct_version);
 
     auto d_partition = partition->get_device();
 
@@ -264,10 +265,13 @@ TEST(IndexMap, partition_mesh_cells_bins) {
     restore_index_map(sycl_target, partition);
   };
 
-  lambda_test(A);
-  lambda_test(particle_sub_group(
+  lambda_test(A, 0);
+
+  auto aa = particle_sub_group(
       A, [=](auto ID) { return ID.at(0) % 2 == 0; },
-      Access::read(Sym<INT>("ID"))));
+      Access::read(Sym<INT>("ID")));
+  aa->create_if_required();
+  lambda_test(aa, aa->get_version());
 
   sycl_target_t->free();
   A->domain->mesh->free();

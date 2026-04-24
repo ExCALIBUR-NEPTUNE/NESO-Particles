@@ -105,6 +105,7 @@ set(TEST_SRCS
     ${TEST_DIR}/test_product_matrix.cpp
     ${TEST_DIR}/test_mask_array.cpp
     ${TEST_DIR}/test_resource_stack.cpp
+    ${TEST_DIR}/test_reduction_cellwise_bins.cpp
     ${TEST_DIR}/test_serial_container.cpp
     ${TEST_DIR}/test_selector_exclusive_scan.cpp
     ${TEST_DIR}/test_selector_a.cpp

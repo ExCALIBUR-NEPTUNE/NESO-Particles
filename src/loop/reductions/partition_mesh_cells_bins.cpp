@@ -90,6 +90,7 @@ void partition_mesh_cells_bins(ParticleSubGroupSharedPtr particle_sub_group,
                                IndexMapSharedPtr<2, 1> index_map) {
   partition_mesh_cells_bins_inner(particle_sub_group, num_bins, bin_sym,
                                   bin_component, index_map);
+  index_map->version = particle_sub_group->get_version();
 }
 
 } // namespace NESO::Particles

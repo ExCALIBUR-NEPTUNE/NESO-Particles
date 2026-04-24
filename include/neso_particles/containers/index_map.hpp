@@ -121,6 +121,9 @@ public:
   // Compute device.
   SYCLTargetSharedPtr sycl_target;
 
+  // Version ID for map. This member is for downstream use.
+  std::int64_t version{0};
+
   /**
    * Create an IndexMap on a device.
    *
