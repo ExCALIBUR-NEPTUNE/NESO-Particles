@@ -28,9 +28,73 @@ protected:
   using ParticleLoopArgs<ARGS...>::create_loop_args;
   using ParticleLoopArgs<ARGS...>::create_kernel_args;
 
+
+
+  
+  template<typename T>
+  static constexpr inline bool is_valid_reduction_arg(T &){
+    return false;
+  }
+
+  template <typename T>
+  static constexpr inline bool
+  is_valid_reduction_arg(std::shared_ptr<CellDatConst<T>> &) {
+    return true;
+  }
+
+  /**
+   * Method to compute access to a Reduction type wrapped in a shared_ptr.
+   */
+  template <template <typename> typename T, typename U, typename OP>
+  static inline std::size_t
+  local_mem_loop_cast(Access::Reduction<std::shared_ptr<T<U>>, OP> a) {
+    static_assert(
+        is_valid_reduction_arg(a.obj),
+        "ReductionLoopCellwiseBins only accepts reduction access "
+                  "descriptors for CellDatConst.");
+
+
+
+
+
+    return ParticleLoopImplementation::get_required_local_num_bytes(a);
+  }
+  /**
+   * Method to compute access to a type not wrapper in a shared_ptr
+   */
+  template <template <typename> typename T, typename U>
+  static inline std::size_t local_mem_loop_cast(T<U> a) {
+    T<U *> c = {&a.obj};
+    return ParticleLoopImplementation::get_required_local_num_bytes(c);
+  }
+
+
+  inline std::size_t get_local_size_args(SYCLTargetSharedPtr sycl_target,
+                                         std::string name) {
+
+    // Loop over the args and add how many local bytes they each require.
+    std::size_t num_bytes = this->local_nbytes_item;
+    auto lambda_size_add = [&](auto argx) {
+      num_bytes += this->local_mem_loop_cast(argx);
+    };
+    auto lambda_size = [&](auto... as) { (lambda_size_add(as), ...); };
+    std::apply(lambda_size, this->args);
+
+    // The amount of local space on the device and required number of local
+    // bytes gives an upper bound on local size.
+    std::size_t local_size =
+        sycl_target->parameters->template get<SizeTParameter>("LOOP_LOCAL_SIZE")
+            ->value;
+    local_size = sycl_target->get_num_local_work_items(this->local_nbytes_group,
+                                                       num_bytes, local_size);
+
+    sycl_target->profile_map.set("ParticleLoop::" + name, "local_size",
+                                 local_size, 0.0);
+    return local_size;
+  }
+
   virtual inline std::size_t get_local_size() override {
-    return ParticleLoopArgs<ARGS...>::get_local_size_args(this->sycl_target,
-                                                          this->name);
+    return this->get_local_size_args(this->sycl_target, this->name);
   }
 
   virtual inline void
