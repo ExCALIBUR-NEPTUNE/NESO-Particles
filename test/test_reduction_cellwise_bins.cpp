@@ -6,26 +6,61 @@ TEST(ReductionContextCellwiseBins, base) {
   auto A = A_t;
   const int cell_count = A->domain->mesh->get_cell_count();
 
-  A->add_particle_dat(Sym<INT>("BIN"), 2);
+  A->add_particle_dat(Sym<INT>("BIN"), 1);
+  A->add_particle_dat(Sym<INT>("FOO"), 2);
+
   const int max_num_bins = 100;
   auto sycl_target = sycl_target_t;
 
   auto lambda_test = [&](auto g) {
     particle_loop(
+        A,
+        [=](auto FOO) {
+          FOO.at(0) = -1;
+          FOO.at(1) = -1;
+        },
+        Access::write(Sym<INT>("FOO")))
+        ->execute();
+
+    particle_loop(
         g,
-        [=](auto INDEX, auto BIN) { BIN.at(1) = INDEX.layer % max_num_bins; },
+        [=](auto INDEX, auto BIN) { BIN.at(0) = INDEX.layer % max_num_bins; },
         Access::read(ParticleLoopIndex{}), Access::write(Sym<INT>("BIN")))
         ->execute();
 
     auto partition = get_index_map<2, 1>(sycl_target);
-    partition_mesh_cells_bins(g, max_num_bins, Sym<INT>("BIN"), 1, partition);
+    partition_mesh_cells_bins(g, max_num_bins, Sym<INT>("BIN"), 0, partition);
     auto reduction_context =
         std::make_shared<ReductionContextCellwiseBins>(g, partition);
 
     auto cdc = std::make_shared<CellDatConst<int>>(sycl_target, cell_count,
                                                    max_num_bins, 1);
 
-    // particle loop here
+    ErrorPropagate ep(sycl_target);
+    auto k_ep = ep.device_ptr();
+
+    particle_loop(
+        g, [=](auto INDEX, auto FOO) { FOO.at(0) = INDEX.layer; },
+        Access::read(ParticleLoopIndex{}), Access::write(Sym<INT>("FOO")))
+        ->execute();
+
+    particle_loop(
+        reduction_context,
+        [=](auto INDEX, auto FOO) {
+          NESO_KERNEL_ASSERT(INDEX.layer == FOO.at(0), k_ep);
+          FOO.at(1) = FOO.at(0);
+        },
+        Access::read(ParticleLoopIndex{}), Access::write(Sym<INT>("FOO")))
+        ->execute();
+
+    ASSERT_FALSE(ep.get_flag());
+
+    particle_loop(
+        g, [=](auto FOO) { NESO_KERNEL_ASSERT(FOO.at(0) == FOO.at(1), k_ep); },
+        Access::read(Sym<INT>("FOO")))
+        ->execute();
+
+    ASSERT_FALSE(ep.get_flag());
 
     reduction_context->free();
     restore_index_map(sycl_target, partition);

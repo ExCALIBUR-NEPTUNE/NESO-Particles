@@ -269,6 +269,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/pli_particle_dat.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/reductions/reductions.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/reductions/reduction_context_cellwise_bins.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/loop/reductions/reduction_loop_cellwise_bins.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/reductions/partition_mesh_cells_bins.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_hierarchy.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_hierarchy_data/mesh_hierarchy_container.hpp

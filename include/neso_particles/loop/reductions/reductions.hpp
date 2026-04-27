@@ -3,5 +3,6 @@
 
 #include "partition_mesh_cells_bins.hpp"
 #include "reduction_context_cellwise_bins.hpp"
+#include "reduction_loop_cellwise_bins.hpp"
 
 #endif

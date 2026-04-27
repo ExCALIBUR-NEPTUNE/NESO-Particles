@@ -58,6 +58,9 @@ struct ReductionContextCellwiseBins {
   }
 };
 
+using ReductionContextCellwiseBinsSharedPtr =
+    std::shared_ptr<ReductionContextCellwiseBins>;
+
 } // namespace NESO::Particles
 
 #endif
