@@ -245,13 +245,10 @@ protected:
 
         // By construction only one work item is accessing the element and hence
         // no atomic is required.
+
         const T current = d_ptr[0];
         d_ptr[0] = binop(current, ptr[offset]);
       }
-
-      // ACPP omp.accelerated seems to not generate the correct loops if this
-      // barrier is missing.
-      idx.barrier(sycl::access::fence_space::local_space);
     }
   }
 
@@ -392,6 +389,12 @@ public:
 
     if (this->particle_sub_group_shrptr) {
       this->particle_sub_group_shrptr->create_if_required();
+      NESOASSERT(
+          this->particle_sub_group_shrptr->version ==
+              this->reduction_context->partition->version,
+          "Miss-match between reduction context and particle sub group. "
+          "Typically this indicates that the sub group has been invalidated "
+          "between reduction context creation and execution of the loop.");
       auto selection = this->particle_sub_group_shrptr->get_selection();
       this->h_npart_cell_lb = selection.h_npart_cell;
       this->d_npart_cell_lb = selection.d_npart_cell;
@@ -503,6 +506,7 @@ public:
             const std::size_t local_sycl_range = idx.get_local_range(2);
             iterationx.local_sycl_index = local_sycl_index;
             iterationx.local_sycl_range = local_sycl_range;
+            iterationx.cellx = cellx;
 
             // initalise
             reduction_initialise_dispatch(idx, iterationx, loop_args);
@@ -512,9 +516,8 @@ public:
                  loop_layerx += local_sycl_range) {
               const int layerx = k_index_map.at(key, loop_layerx, 0);
 
-              iterationx.cellx = cellx;
               iterationx.layerx = layerx;
-              iterationx.loop_layerx = layerx;
+              iterationx.loop_layerx = loop_layerx;
 
               kernel_parameter_type kernel_args;
               create_kernel_args_reduction(iterationx, loop_args, kernel_args);
