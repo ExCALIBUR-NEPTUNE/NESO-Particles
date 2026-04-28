@@ -121,7 +121,8 @@ TEST(ReductionContextCellwiseBins, base) {
 
 namespace {
 
-template <typename T> void reduction_wrapper(const int num_components) {
+template <typename T, typename OP>
+void reduction_wrapper(const int num_components, OP op) {
   auto [A_t, sycl_target_t, cell_count_t] =
       particle_loop_common_2d(511, 16, 32);
   auto A = A_t;
@@ -130,7 +131,7 @@ template <typename T> void reduction_wrapper(const int num_components) {
   A->add_particle_dat(Sym<INT>("BIN"), 1);
   A->add_particle_dat(Sym<INT>("FOO"), 3);
 
-  const int max_num_bins = 100;
+  const int max_num_bins = 36;
   auto sycl_target = sycl_target_t;
 
   auto lambda_test = [&](auto g) {
@@ -160,7 +161,7 @@ template <typename T> void reduction_wrapper(const int num_components) {
               CDC.combine(0, dx, (T)dx + 1);
             }
           },
-          Access::reduce(cdc_to_test, Kernel::plus<T>()))
+          Access::reduce(cdc_to_test, op))
           ->execute();
 
       cdc_correct->fill(0);
@@ -168,10 +169,10 @@ template <typename T> void reduction_wrapper(const int num_components) {
           g,
           [=](auto BIN, auto CDC) {
             for (int dx = 0; dx < cx; dx++) {
-              CDC.fetch_add(BIN.at(0), dx, (T)dx + 1);
+              CDC.combine(BIN.at(0), dx, (T)dx + 1);
             }
           },
-          Access::read(Sym<INT>("BIN")), Access::add(cdc_correct))
+          Access::read(Sym<INT>("BIN")), Access::reduce(cdc_correct, op))
           ->execute();
 
       auto h_to_test = cdc_to_test->get_all_cells();
@@ -212,7 +213,15 @@ template <typename T> void reduction_wrapper(const int num_components) {
 } // namespace
 
 TEST(ReductionContextCellwiseBins, dims_types) {
-  reduction_wrapper<int>(7);
-  reduction_wrapper<REAL>(7);
-  reduction_wrapper<INT>(7);
+  reduction_wrapper<int>(5, Kernel::plus<int>());
+  reduction_wrapper<REAL>(5, Kernel::plus<REAL>());
+  reduction_wrapper<INT>(5, Kernel::plus<INT>());
+
+  reduction_wrapper<int>(3, Kernel::minimum<int>());
+  reduction_wrapper<REAL>(3, Kernel::minimum<REAL>());
+  reduction_wrapper<INT>(3, Kernel::minimum<INT>());
+
+  reduction_wrapper<int>(1, Kernel::maximum<int>());
+  reduction_wrapper<REAL>(1, Kernel::maximum<REAL>());
+  reduction_wrapper<INT>(1, Kernel::maximum<INT>());
 }

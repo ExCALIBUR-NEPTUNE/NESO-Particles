@@ -508,7 +508,6 @@ public:
             iterationx.local_sycl_range = local_sycl_range;
             iterationx.cellx = cellx;
 
-            // initalise
             reduction_initialise_dispatch(idx, iterationx, loop_args);
             idx.barrier(sycl::access::fence_space::local_space);
 
