@@ -78,16 +78,10 @@ TEST(ReductionContextCellwiseBins, base) {
     {
       particle_loop(
           reduction_context,
-          [=](auto INDEX, auto FOO, auto CDC) {
-            FOO.at(0) = INDEX.layer;
-            FOO.at(2) = 1;
-          },
-          Access::read(ParticleLoopIndex{}), Access::write(Sym<INT>("FOO")),
-          Access::reduce(cdc, Kernel::plus<int>())
-          )
+          [=](auto INDEX, auto CDC) { CDC.combine(0, 0, 1); },
+          Access::read(ParticleLoopIndex{}),
+          Access::reduce(cdc, Kernel::plus<int>()))
           ->execute();
-
-
     }
 
     reduction_context->free();

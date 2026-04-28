@@ -25,14 +25,13 @@ protected:
   /// The types of the arguments passed to the kernel.
   using kernel_parameter_type =
       typename ParticleLoopArgs<ARGS...>::kernel_parameter_type;
-  using ParticleLoopArgs<ARGS...>::create_loop_args;
-  using ParticleLoopArgs<ARGS...>::create_kernel_args;
 
+  using ParticleLoopArgs<ARGS...>::create_loop_arg_cast;
+  using ParticleLoopArgs<ARGS...>::local_mem_loop_cast;
+  using ParticleLoopArgs<ARGS...>::pre_loop_cast;
 
-
-  
-  template<typename T>
-  static constexpr inline bool is_valid_reduction_arg(T &){
+  template <typename T>
+  static constexpr inline bool is_valid_reduction_arg(T &) {
     return false;
   }
 
@@ -43,31 +42,253 @@ protected:
   }
 
   /**
-   * Method to compute access to a Reduction type wrapped in a shared_ptr.
+   * Pre loop cast for reduction access. This bypasses the standard CellDatConst
+   * reduction pre loop (which simply does correctness checks).
+   */
+  template <template <typename> typename T, typename U, typename OP>
+  inline void pre_loop_cast(
+      [[maybe_unused]] ParticleLoopImplementation::ParticleLoopGlobalInfo
+          *global_info,
+      Access::Reduction<std::shared_ptr<T<U>>, OP> a) {
+    static_assert(is_valid_reduction_arg(a.obj),
+                  "ReductionLoopCellwiseBins only accepts reduction access "
+                  "descriptors for CellDatConst.");
+  }
+
+  /**
+   * bypass the pre loop for cdc with reduction args.
+   */
+  inline void apply_pre_loop(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo &global_info) {
+    auto cast_wrapper = [&](auto t) { pre_loop_cast(&global_info, t); };
+    auto pre_loop_caller = [&](auto... as) { (cast_wrapper(as), ...); };
+    std::apply(pre_loop_caller, this->args);
+  }
+
+  /**
+   * Method to compute access to a Reduction type. The only permissible
+   * reduction type is the CellDatConst that this loop is intended for.
+   */
+  template <template <typename> typename T, typename U, typename OP>
+  inline CellDatConstDeviceTypeReduction<U, OP> create_loop_arg_cast(
+      [[maybe_unused]] ParticleLoopImplementation::ParticleLoopGlobalInfo
+          *global_info,
+      [[maybe_unused]] sycl::handler &cgh,
+      Access::Reduction<std::shared_ptr<T<U>>, OP> a) {
+
+    static_assert(is_valid_reduction_arg(a.obj),
+                  "ReductionLoopCellwiseBins only accepts reduction access "
+                  "descriptors for CellDatConst.");
+
+    auto rhs = a.obj->impl_get();
+    CellDatConstDeviceTypeReduction<U, OP> lhs;
+    lhs.ptr = rhs.ptr;
+    lhs.ncol = a.obj->ncol;
+    lhs.nrow = a.obj->nrow;
+    lhs.binop = a.binop;
+
+    // The local memory is typed, hence this size does not have sizeof(T).
+    const std::size_t size = a.obj->ncol * global_info->local_size;
+    lhs.la = sycl::local_accessor<U, 1>(sycl::range<1>(size), cgh);
+
+    return lhs;
+  }
+
+  /// Recursively assemble the outer loop arguments.
+  template <size_t INDEX, size_t SIZE, typename PARAM>
+  inline void create_loop_args_inner(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      sycl::handler &cgh, PARAM &loop_args) {
+    if constexpr (INDEX < SIZE) {
+      Tuple::get<INDEX>(loop_args) =
+          create_loop_arg_cast(global_info, cgh, std::get<INDEX>(this->args));
+      create_loop_args_inner<INDEX + 1, SIZE>(global_info, cgh, loop_args);
+    }
+  }
+
+  inline void create_loop_args(
+      sycl::handler &cgh, loop_parameter_type &loop_args,
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info) {
+    create_loop_args_inner<0, sizeof...(ARGS)>(global_info, cgh, loop_args);
+  }
+
+  template <typename T>
+  static inline void reduction_initialise_cdc_reduce(
+      [[maybe_unused]] ParticleLoopImplementation::ParticleLoopIteration &,
+      T &) {}
+
+  template <typename T, typename OP>
+  static inline void reduction_initialise_cdc_reduce(
+      ParticleLoopImplementation::ParticleLoopIteration &iterationx,
+      CellDatConstDeviceTypeReduction<T, OP> &a) {
+
+    const T initial_value = Kernel::get_identity(a.binop);
+    const int stride = static_cast<int>(a.ncol);
+    T *ptr = &a.la[0];
+    const auto local_sycl_range = iterationx.local_sycl_range;
+    const auto local_sycl_index = iterationx.local_sycl_index;
+    for (int ix = 0; ix < stride; ix++) {
+      ptr[ix * local_sycl_range + local_sycl_index] = initial_value;
+    }
+  }
+
+  /// recusively assemble the kernel arguments from the loop arguments. Differs
+  /// from the main particle loop reduction by having dimension 3 not 2.
+  template <size_t INDEX, size_t SIZE>
+  static inline void reduction_initialise_inner(
+      sycl::nd_item<3> &idx,
+      ParticleLoopImplementation::ParticleLoopIteration &iterationx,
+      const loop_parameter_type &loop_args) {
+
+    if constexpr (INDEX < SIZE) {
+      auto arg = Tuple::get<INDEX>(loop_args);
+      reduction_initialise_cdc_reduce(iterationx, arg);
+      reduction_initialise_inner<INDEX + 1, SIZE>(idx, iterationx, loop_args);
+    }
+  }
+
+  /// called before kernel execution to assemble the kernel arguments. Differs
+  /// from the main particle loop reduction by having dimension 3 not 2.
+  static inline void reduction_initialise_dispatch(
+      sycl::nd_item<3> &idx,
+      ParticleLoopImplementation::ParticleLoopIteration &iterationx,
+      const loop_parameter_type &loop_args) {
+    reduction_initialise_inner<0, sizeof...(ARGS)>(idx, iterationx, loop_args);
+  }
+
+  // If the type is not a CelDatConst reduction then dispatch to the existing
+  // particle loop implementation.
+  template <typename T, typename U>
+  static inline void create_kernel_arg_reduction(
+      ParticleLoopImplementation::ParticleLoopIteration &iterationx, T &rhs,
+      U &lhs) {
+    ParticleLoopImplementation::create_kernel_arg(iterationx, rhs, lhs);
+  }
+
+  template <typename T, typename OP>
+  static inline void create_kernel_arg_reduction(
+      ParticleLoopImplementation::ParticleLoopIteration &iterationx,
+      CellDatConstDeviceTypeReduction<T, OP> &rhs,
+      Access::CellDatConst::Reduction<T, OP> &lhs) {
+    lhs.local_sycl_index = static_cast<int>(iterationx.local_sycl_index);
+    lhs.local_sycl_range = static_cast<int>(iterationx.local_sycl_range);
+
+    // The RHS has nrow and ncol specified where nrow is the number of bins.
+    // By setting nrow = 1 in the kernel type we place the column entries next
+    // to each other.
+    lhs.ptr = &rhs.la[0];
+    lhs.nrow = 1;
+    lhs.binop = rhs.binop;
+  }
+
+  /// recusively assemble the kernel arguments from the loop arguments
+  template <size_t INDEX, size_t SIZE>
+  static inline void create_kernel_args_reduction_inner(
+      ParticleLoopImplementation::ParticleLoopIteration &iterationx,
+      const loop_parameter_type &loop_args,
+      kernel_parameter_type &kernel_args) {
+
+    if constexpr (INDEX < SIZE) {
+      auto arg = Tuple::get<INDEX>(loop_args);
+      create_kernel_arg_reduction(iterationx, arg,
+                                  Tuple::get<INDEX>(kernel_args));
+      create_kernel_args_reduction_inner<INDEX + 1, SIZE>(iterationx, loop_args,
+                                                          kernel_args);
+    }
+  }
+
+  /// called before kernel execution to assemble the kernel arguments.
+  static inline void create_kernel_args_reduction(
+      ParticleLoopImplementation::ParticleLoopIteration &iterationx,
+      const loop_parameter_type &loop_args,
+      kernel_parameter_type &kernel_args) {
+
+    create_kernel_args_reduction_inner<0, sizeof...(ARGS)>(
+        iterationx, loop_args, kernel_args);
+  }
+
+  template <typename T>
+  static inline void reduction_finalise_cdc_reduce(
+      [[maybe_unused]] sycl::nd_item<3> &,
+      [[maybe_unused]] ParticleLoopImplementation::ParticleLoopIteration &,
+      T &) {}
+
+  template <typename T, typename OP>
+  static inline void reduction_finalise_cdc_reduce(
+      sycl::nd_item<3> &idx,
+      ParticleLoopImplementation::ParticleLoopIteration &iterationx,
+      CellDatConstDeviceTypeReduction<T, OP> &a) {
+
+    const int nrow = a.nrow;
+    const int ncol = a.ncol;
+    T *ptr = &a.la[0];
+    const auto local_sycl_range = iterationx.local_sycl_range;
+    const auto local_sycl_index = iterationx.local_sycl_index;
+    const auto &binop = a.binop;
+    const int half_sycl_range = local_sycl_range / 2;
+    const int num_elements = nrow * ncol;
+    const int bin = static_cast<int>(idx.get_global_id(1));
+
+    for (int colx = 0; colx < ncol; colx++) {
+      const int offset = colx * local_sycl_range;
+      for (unsigned int s = half_sycl_range; s > 0; s >>= 1) {
+        if (local_sycl_index < s) {
+          const T current = ptr[local_sycl_index + offset];
+          ptr[local_sycl_index + offset] =
+              binop(current, ptr[local_sycl_index + offset + s]);
+        }
+        idx.barrier(sycl::access::fence_space::local_space);
+      }
+      if (local_sycl_index == 0) {
+        const int ex = colx * nrow + bin;
+        T *d_ptr = a.ptr + iterationx.cellx * num_elements + ex;
+
+        // By construction only one work item is accessing the element and hence
+        // no atomic is required.
+        const T current = d_ptr[0];
+        d_ptr[0] = binop(current, ptr[offset]);
+      }
+
+      // ACPP omp.accelerated seems to not generate the correct loops if this
+      // barrier is missing.
+      idx.barrier(sycl::access::fence_space::local_space);
+    }
+  }
+
+  template <size_t INDEX, size_t SIZE>
+  static inline void reduction_finalise_inner(
+      sycl::nd_item<3> &idx,
+      ParticleLoopImplementation::ParticleLoopIteration &iterationx,
+      const loop_parameter_type &loop_args) {
+
+    if constexpr (INDEX < SIZE) {
+      auto arg = Tuple::get<INDEX>(loop_args);
+      reduction_finalise_cdc_reduce(idx, iterationx, arg);
+      reduction_finalise_inner<INDEX + 1, SIZE>(idx, iterationx, loop_args);
+    }
+  }
+
+  /// called after kernel execution to reduce values from local memory into cell
+  /// dats.
+  static inline void reduction_finalise_dispatch(
+      sycl::nd_item<3> &idx,
+      ParticleLoopImplementation::ParticleLoopIteration &iterationx,
+      const loop_parameter_type &loop_args) {
+    reduction_finalise_inner<0, sizeof...(ARGS)>(idx, iterationx, loop_args);
+  }
+
+  /**
+   * Method to compute local memory size for a Reduction type wrapped in a
+   * shared_ptr.
    */
   template <template <typename> typename T, typename U, typename OP>
   static inline std::size_t
   local_mem_loop_cast(Access::Reduction<std::shared_ptr<T<U>>, OP> a) {
-    static_assert(
-        is_valid_reduction_arg(a.obj),
-        "ReductionLoopCellwiseBins only accepts reduction access "
+    static_assert(is_valid_reduction_arg(a.obj),
+                  "ReductionLoopCellwiseBins only accepts reduction access "
                   "descriptors for CellDatConst.");
-
-
-
-
-
-    return ParticleLoopImplementation::get_required_local_num_bytes(a);
+    return sizeof(U) * a.obj->ncol;
   }
-  /**
-   * Method to compute access to a type not wrapper in a shared_ptr
-   */
-  template <template <typename> typename T, typename U>
-  static inline std::size_t local_mem_loop_cast(T<U> a) {
-    T<U *> c = {&a.obj};
-    return ParticleLoopImplementation::get_required_local_num_bytes(c);
-  }
-
 
   inline std::size_t get_local_size_args(SYCLTargetSharedPtr sycl_target,
                                          std::string name) {
@@ -87,6 +308,9 @@ protected:
             ->value;
     local_size = sycl_target->get_num_local_work_items(this->local_nbytes_group,
                                                        num_bytes, local_size);
+
+    NESOASSERT((local_size & (local_size - 1)) == 0,
+               "Local size is not a power of two.");
 
     sycl_target->profile_map.set("ParticleLoop::" + name, "local_size",
                                  local_size, 0.0);
@@ -280,6 +504,10 @@ public:
             iterationx.local_sycl_index = local_sycl_index;
             iterationx.local_sycl_range = local_sycl_range;
 
+            // initalise
+            reduction_initialise_dispatch(idx, iterationx, loop_args);
+            idx.barrier(sycl::access::fence_space::local_space);
+
             for (int loop_layerx = local_sycl_index; loop_layerx < num_layers;
                  loop_layerx += local_sycl_range) {
               const int layerx = k_index_map.at(key, loop_layerx, 0);
@@ -289,9 +517,12 @@ public:
               iterationx.loop_layerx = layerx;
 
               kernel_parameter_type kernel_args;
-              create_kernel_args(iterationx, loop_args, kernel_args);
+              create_kernel_args_reduction(iterationx, loop_args, kernel_args);
               Tuple::apply(k_kernel, kernel_args);
             }
+
+            idx.barrier(sycl::access::fence_space::local_space);
+            reduction_finalise_dispatch(idx, iterationx, loop_args);
           });
         }));
   }
