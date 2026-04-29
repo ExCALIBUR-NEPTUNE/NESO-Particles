@@ -212,7 +212,7 @@ public:
 
   virtual inline int get_loop_type_int() { return 0; }
 
-  inline ParticleLoopImplementation::ParticleLoopGlobalInfo
+  virtual inline ParticleLoopImplementation::ParticleLoopGlobalInfo
   create_global_info(const std::optional<int> cell_start = std::nullopt,
                      const std::optional<int> cell_end = std::nullopt) {
 
