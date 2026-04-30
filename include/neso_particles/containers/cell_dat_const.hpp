@@ -550,6 +550,9 @@ cell_dat_const_impl_get(CellDatConstSharedPtr<T> cell_dat_const);
  */
 template <typename T> class CellDatConst {
   template <typename KERNEL, typename... ARGS> friend class ParticleLoop;
+  template <typename KERNEL, typename... ARGS>
+  friend class ReductionLoopCellwiseBins;
+
   friend CellDatConstDeviceTypeConst<T>
   ParticleLoopImplementation::create_loop_arg<T>(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,

@@ -91,6 +91,7 @@ set(SRC_FILES
     ${SRC_DIR}/containers/descendant_products.cpp
     ${SRC_DIR}/containers/ephemeral_dats.cpp
     ${SRC_DIR}/containers/global_array.cpp
+    ${SRC_DIR}/containers/index_map.cpp
     ${SRC_DIR}/containers/local_array.cpp
     ${SRC_DIR}/containers/mask_array.cpp
     ${SRC_DIR}/containers/particle_set_device.cpp
@@ -120,6 +121,7 @@ set(SRC_FILES
     ${SRC_DIR}/loop/particle_loop_index.cpp
     ${SRC_DIR}/loop/particle_loop_utility.cpp
     ${SRC_DIR}/loop/pli_particle_dat.cpp
+    ${SRC_DIR}/loop/reductions/partition_mesh_cells_bins.cpp
     ${SRC_DIR}/particle_sub_group/cell_sub_group_selector.cpp
     ${SRC_DIR}/particle_sub_group/truncate_sub_group_selector.cpp
     ${SRC_DIR}/particle_sub_group/disjoint_union_sub_group_selector.cpp
@@ -200,6 +202,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/lookup_table.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/nd_local_array.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/mask_array.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/containers/index_map.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/particle_set_device.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/product_matrix.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/resource_stack.hpp
@@ -266,6 +269,10 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_impl.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_reduction.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/pli_particle_dat.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/loop/reductions/reductions.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/loop/reductions/reduction_context_cellwise_bins.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/loop/reductions/reduction_loop_cellwise_bins.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/loop/reductions/partition_mesh_cells_bins.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_hierarchy.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_hierarchy_data/mesh_hierarchy_container.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_hierarchy_data/mesh_hierarchy_data.hpp
