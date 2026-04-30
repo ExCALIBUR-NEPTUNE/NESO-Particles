@@ -156,9 +156,6 @@ private:
       const std::optional<int> cell_end = std::nullopt,
       bool *is_empty = nullptr) {
 
-    // We do not use for this specialisation
-    this->iteration_set = nullptr;
-
     this->profiling_region_init();
 
     NESOASSERT(
@@ -181,20 +178,35 @@ private:
       return nullptr;
     }
 
-    // auto region_iteration_set = this->sycl_target->profile_map.start_region(
-    //     this->loop_type, this->name + "iteration_set_determination"
-    //);
-
+    std::size_t iteration_set_size = 0;
+    const std::vector<ParticleLoopImplementation::ParticleLoopBlockHost>
+        *iteration_set_host = nullptr;
     const std::size_t nbin =
         this->sycl_target->parameters->template get<SizeTParameter>("LOOP_NBIN")
             ->value;
 
-    std::size_t iteration_set_size = 0;
-    const auto &iteration_set_host =
-        this->particle_group_shrptr->particle_loop_iteration_set_cache->get(
-            cell_start_v, cell_end_v, nbin, global_info.local_size,
-            0, // Assume we have already computed a valid local size.
-            this->iteration_set_stride, &iteration_set_size);
+    // auto region_iteration_set = this->sycl_target->profile_map.start_region(
+    //     this->loop_type, this->name + "iteration_set_determination"
+    //);
+
+    // Are we in the sitation where the iteration set is a ParticleDat and hence
+    // there is no ParticleGroup with cached iteration sets?
+    if (this->particle_group_ptr == nullptr) {
+      this->iteration_set->get_generic(
+          cell_start_v, cell_end_v, nbin, global_info.local_size,
+          0, // Assume we have already computed a valid local size.
+          this->iteration_set_stride);
+      iteration_set_size = this->iteration_set->iteration_set_size;
+      iteration_set_host = &(this->iteration_set->iteration_set);
+
+    } else {
+
+      iteration_set_host =
+          this->particle_group_ptr->particle_loop_iteration_set_cache->get(
+              cell_start_v, cell_end_v, nbin, global_info.local_size,
+              0, // Assume we have already computed a valid local size.
+              this->iteration_set_stride, &iteration_set_size);
+    }
 
     // this->sycl_target->profile_map.end_region(region_iteration_set);
     this->profiling_region_metrics(iteration_set_size);
