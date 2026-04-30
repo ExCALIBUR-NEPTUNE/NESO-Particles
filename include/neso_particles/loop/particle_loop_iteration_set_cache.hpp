@@ -67,7 +67,7 @@ public:
    * @param[in, out] iteration_set_size Optionally return the size of the
    * iteration set.
    */
-  const std::vector<ParticleLoopBlockHost> &
+  const std::vector<ParticleLoopBlockHost> *
   get(const std::size_t cell_start, const std::size_t cell_end,
       std::size_t nbin, std::size_t local_size,
       const std::size_t num_bytes_local, const std::size_t stride,

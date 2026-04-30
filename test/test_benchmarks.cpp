@@ -12,6 +12,9 @@ using namespace NESO::Particles;
 static const bool benchmark_enabled =
     get_env_string("NESO_PARTICLES_ENABLE_BENCHMARK", "").size() > 0;
 
+static const std::size_t benchmark_size =
+    get_env_size_t("NESO_PARTICLES_BENCHMARK_SIZE", 0);
+
 TEST(Benchmark, bandwidth_device_copy) {
   if (benchmark_enabled) {
     auto sycl_target =
@@ -33,7 +36,9 @@ TEST(Benchmark, bandwidth_device_copy) {
       lambda_print(std::cout);
       lambda_print(out_stream);
     }
-    for (int px = 0; px < 31; px++) {
+
+    const int s = benchmark_size ? static_cast<int>(benchmark_size) : 31;
+    for (int px = 0; px < s; px++) {
       const std::size_t N =
           std::pow(static_cast<std::size_t>(2), static_cast<std::size_t>(px));
 
@@ -136,7 +141,7 @@ TEST(Benchmark, bandwidth_triad_REAL) {
     const int comm_size = sycl_target->comm_pair.size_parent;
     const int comm_rank = sycl_target->comm_pair.rank_parent;
     const bool root = sycl_target->comm_pair.rank_parent == 0;
-    const int Ntest = 400;
+    const int Ntest = 800;
 
     std::ofstream out_stream;
     if (root) {
@@ -150,7 +155,8 @@ TEST(Benchmark, bandwidth_triad_REAL) {
       lambda_print(std::cout);
       lambda_print(out_stream);
     }
-    for (int px = 0; px < 16; px++) {
+    const int s = benchmark_size ? static_cast<int>(benchmark_size) : 16;
+    for (int px = 0; px < s; px++) {
       const std::size_t N =
           std::pow(static_cast<std::size_t>(2), static_cast<std::size_t>(px)) *
           dims[0] * dims[1];
@@ -171,6 +177,10 @@ TEST(Benchmark, bandwidth_triad_REAL) {
       auto loop = particle_loop(
           A, [=](auto A, auto B) { A.at(0) = B.at(0) + B.at(1) * B.at(2); },
           Access::write(Sym<REAL>("A")), Access::read(Sym<REAL>("B")));
+
+      for (int testx = 0; testx < 10; testx++) {
+        loop->execute();
+      }
 
       MPICHK(MPI_Barrier(MPI_COMM_WORLD));
       auto t0 = profile_timestamp();
@@ -235,7 +245,7 @@ TEST(Benchmark, bandwidth_copy_REAL) {
     const int comm_size = sycl_target->comm_pair.size_parent;
     const int comm_rank = sycl_target->comm_pair.rank_parent;
     const bool root = sycl_target->comm_pair.rank_parent == 0;
-    const int Ntest = 400;
+    const int Ntest = 800;
 
     std::ofstream out_stream;
     if (root) {
@@ -249,7 +259,9 @@ TEST(Benchmark, bandwidth_copy_REAL) {
       lambda_print(std::cout);
       lambda_print(out_stream);
     }
-    for (int px = 0; px < 16; px++) {
+
+    const int s = benchmark_size ? static_cast<int>(benchmark_size) : 16;
+    for (int px = 0; px < s; px++) {
       const std::size_t N =
           std::pow(static_cast<std::size_t>(2), static_cast<std::size_t>(px)) *
           dims[0] * dims[1];
@@ -270,6 +282,10 @@ TEST(Benchmark, bandwidth_copy_REAL) {
       auto loop = particle_loop(
           A, [=](auto A, auto B) { A.at(0) = B.at(0); },
           Access::write(Sym<REAL>("A")), Access::read(Sym<REAL>("B")));
+
+      for (int testx = 0; testx < 10; testx++) {
+        loop->execute();
+      }
 
       MPICHK(MPI_Barrier(MPI_COMM_WORLD));
       auto t0 = profile_timestamp();

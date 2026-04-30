@@ -10,7 +10,7 @@ ParticleLoopIterationSetCache::ParticleLoopIterationSetCache(
 
 void ParticleLoopIterationSetCache::clear() { this->cache.clear(); }
 
-const std::vector<ParticleLoopBlockHost> &ParticleLoopIterationSetCache::get(
+const std::vector<ParticleLoopBlockHost> *ParticleLoopIterationSetCache::get(
     const std::size_t cell_start, const std::size_t cell_end, std::size_t nbin,
     std::size_t local_size, const std::size_t num_bytes_local,
     const std::size_t stride, std::size_t *iteration_set_size) {
@@ -31,6 +31,6 @@ const std::vector<ParticleLoopBlockHost> &ParticleLoopIterationSetCache::get(
   if (iteration_set_size != nullptr) {
     *iteration_set_size = this->cache[key]->iteration_set_size;
   }
-  return this->cache[key]->iteration_set;
+  return &(this->cache[key]->iteration_set);
 }
 } // namespace NESO::Particles::ParticleLoopImplementation

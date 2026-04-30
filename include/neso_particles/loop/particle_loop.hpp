@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "particle_loop_args.hpp"
+#include "particle_loop_iteration_set_cache.hpp"
 
 namespace NESO::Particles {
 
@@ -147,6 +148,59 @@ public:
                ARGS... args)
       : ParticleLoop("unnamed_kernel", particle_dat, kernel, args...) {}
 
+private:
+  inline const std::vector<ParticleLoopImplementation::ParticleLoopBlockHost> *
+  prepare_submit_cached(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo &global_info,
+      const std::optional<int> cell_start = std::nullopt,
+      const std::optional<int> cell_end = std::nullopt,
+      bool *is_empty = nullptr) {
+
+    // We do not use for this specialisation
+    this->iteration_set = nullptr;
+
+    this->profiling_region_init();
+
+    NESOASSERT(
+        (!this->loop_running) || (cell_start != std::nullopt),
+        "ParticleLoop::submit called - but the loop is already submitted.");
+    this->loop_running = true;
+
+    int cell_start_v = -1;
+    int cell_end_v = -1;
+    determine_iteration_set(this->ncell, cell_start, cell_end, &cell_start_v,
+                            &cell_end_v);
+
+    global_info = this->create_global_info(cell_start, cell_end);
+    this->apply_pre_loop(global_info);
+
+    // This early exit is after the pre loop calls as other ranks may have a
+    // non-empty iteration set and collective setup operations in the pre loop.
+    if (this->iteration_set_is_empty(cell_start, cell_end)) {
+      *is_empty = true;
+      return nullptr;
+    }
+
+    // auto region_iteration_set = this->sycl_target->profile_map.start_region(
+    //     this->loop_type, this->name + "iteration_set_determination"
+    //);
+
+    const std::size_t nbin =
+        this->sycl_target->parameters->template get<SizeTParameter>("LOOP_NBIN")
+            ->value;
+
+    std::size_t iteration_set_size = 0;
+    const auto &iteration_set_host =
+        this->particle_group_shrptr->particle_loop_iteration_set_cache->get(
+            cell_start_v, cell_end_v, nbin, global_info.local_size,
+            0, // Assume we have already computed a valid local size.
+            this->iteration_set_stride, &iteration_set_size);
+
+    // this->sycl_target->profile_map.end_region(region_iteration_set);
+    this->profiling_region_metrics(iteration_set_size);
+    return iteration_set_host;
+  }
+
 protected:
   inline bool prepare_submit(
       ParticleLoopImplementation::ParticleLoopGlobalInfo &global_info,
@@ -218,13 +272,16 @@ public:
 
     ParticleLoopImplementation::ParticleLoopGlobalInfo global_info;
 
-    if (!this->prepare_submit(global_info, cell_start, cell_end)) {
+    bool is_empty = false;
+    const auto iteration_set_host = this->prepare_submit_cached(
+        global_info, cell_start, cell_end, &is_empty);
+    if (is_empty) {
       return;
     }
 
     auto k_kernel = ParticleLoopImplementation::get_kernel(this->kernel);
 
-    for (auto &blockx : this->iteration_set->iteration_set) {
+    for (auto &blockx : *iteration_set_host) {
       const auto block_device = blockx.block_device;
       auto lambda_dispatch = [&]() {
         this->event_stack.push(
