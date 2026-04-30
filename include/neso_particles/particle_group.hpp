@@ -46,6 +46,7 @@ inline void pre_loop(ParticleLoopGlobalInfo *global_info,
 template <typename T>
 inline void pre_loop(ParticleLoopGlobalInfo *global_info,
                      Access::Write<SymVector<T> *> &arg);
+class ParticleLoopIterationSetCache;
 } // namespace ParticleLoopImplementation
 
 namespace Private {
@@ -114,6 +115,7 @@ class ParticleGroup {
   friend class SymVector<INT>;
   friend class ParticleGroupTemporary;
   friend struct TestParticleGroup;
+  template <typename KERNEL, typename... ARGS> friend class ParticleLoop;
   template <typename T>
   friend inline void ParticleLoopImplementation::pre_loop(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
@@ -326,6 +328,9 @@ protected:
   /// Cached pointers for SymVector to use.
   std::shared_ptr<SymVectorPointerCacheDispatch>
       sym_vector_pointer_cache_dispatch;
+  // Cached iteration sets for ParticleLoop to use.
+  std::shared_ptr<ParticleLoopImplementation::ParticleLoopIterationSetCache>
+      particle_loop_iteration_set_cache;
 
   // Are we printing debug information about when sub groups are recreated.
   std::size_t debug_sub_group_create{0};
@@ -346,13 +351,7 @@ protected:
 #ifdef NESO_PARTICLES_TEST_COMPILATION
 public:
 #endif
-  inline void invalidate_group_version() {
-    this->particle_group_version++;
-    // Ensure this value is never 0.
-    if (this->particle_group_version == 0) {
-      this->particle_group_version++;
-    }
-  }
+  void invalidate_group_version();
 #ifdef NESO_PARTICLES_TEST_COMPILATION
 protected:
 #endif
@@ -429,33 +428,7 @@ public:
    * temporary.
    */
   ParticleGroup(DomainSharedPtr domain, ParticleSpec &particle_spec,
-                SYCLTargetSharedPtr sycl_target, const bool is_temporary)
-      : is_temporary(is_temporary), ncell(domain->mesh->get_cell_count()),
-        npart_local(0), h_npart_cell(sycl_target, 1),
-        d_npart_cell(sycl_target, 1), particle_group_version(1),
-        particle_group_pointer_map(std::make_shared<ParticleGroupPointerMap>(
-            sycl_target, &this->particle_dats_real, &this->particle_dats_int)),
-        domain(domain), sycl_target(sycl_target),
-        layer_compressor(sycl_target, ncell, particle_dats_real,
-                         particle_dats_int, particle_group_pointer_map),
-        cell_move_ctx(sycl_target, layer_compressor,
-                      particle_group_pointer_map) {
-    if (!this->is_temporary) {
-      const std::string name = "NESO_PARTICLES_NPART_CELL_HINT";
-      if (!this->sycl_target->parameters->contains(name)) {
-        auto v = std::make_shared<SizeTParameter>();
-        v->value = get_env_size_t(name, 0);
-        this->sycl_target->parameters->set(name, v);
-      }
-      auto v = this->sycl_target->parameters->get<SizeTParameter>(name);
-      this->npart_cell_hint = v->value;
-    }
-    this->global_move_ctx = std::make_shared<GlobalMove>(
-        sycl_target,
-        domain->mesh->get_mesh_hierarchy()->global_move_communication,
-        layer_compressor, this->particle_group_pointer_map);
-    this->setup_internal(domain, particle_spec, sycl_target);
-  }
+                SYCLTargetSharedPtr sycl_target, const bool is_temporary);
 
   /**
    * Construct a new ParticleGroup.
