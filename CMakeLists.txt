@@ -79,6 +79,7 @@ set(SRC_FILES
     ${SRC_DIR}/cartesian_mesh.cpp
     ${SRC_DIR}/cartesian_mesh/cartesian_cell_bin.cpp
     ${SRC_DIR}/cartesian_mesh/cartesian_h_mesh.cpp
+    ${SRC_DIR}/cartesian_mesh/subdivide_cells_cartesian_h_mesh.cpp
     ${SRC_DIR}/cartesian_mesh/cartesian_h_mesh_function.cpp
     ${SRC_DIR}/cartesian_mesh/cartesian_periodic.cpp
     ${SRC_DIR}/cartesian_mesh/cartesian_trajectory_intersection.cpp
@@ -161,6 +162,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/reduce_dat_cellwise.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/unseen_value_extractor.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cartesian_mesh/cartesian_h_mesh.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/cartesian_mesh/subdivide_cells_cartesian_h_mesh.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cartesian_mesh/cartesian_h_mesh_function.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cartesian_mesh/cartesian_cell_bin.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/cartesian_mesh/cartesian_periodic.hpp

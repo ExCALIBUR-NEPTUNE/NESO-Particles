@@ -36,6 +36,7 @@ set(TEST_SRCS
     ${TEST_DIR}/test_buffers.cpp
     ${TEST_DIR}/test_cell_dat.cpp
     ${TEST_DIR}/test_cartesian_h_mesh.cpp
+    ${TEST_DIR}/test_cartesian_h_mesh_collision_cells.cpp
     ${TEST_DIR}/test_cartesian_h_mesh_surface_functions.cpp
     ${TEST_DIR}/test_cartesian_h_mesh_surface_functions_integration.cpp
     ${TEST_DIR}/test_communication.cpp

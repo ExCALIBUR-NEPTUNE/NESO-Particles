@@ -34,6 +34,7 @@ TEST(CartesianHMesh, surface_functions_setup) {
   ASSERT_EQ(u0->boundary_group, 0);
 
   cti.free();
+  sycl_target->free();
   mesh->free();
 }
 
@@ -313,6 +314,7 @@ void surface_functions_wrapper(ParticleGroupSharedPtr A,
   }
 
   cti.free();
+  sycl_target->free();
 }
 
 } // namespace
@@ -332,6 +334,7 @@ TEST(CartesianHMesh, surface_functions_2d) {
 
   surface_functions_wrapper(A, sycl_target, mesh, boundary_groups, ndim);
 
+  sycl_target->free();
   mesh->free();
 }
 
@@ -351,5 +354,6 @@ TEST(CartesianHMesh, surface_functions_3d) {
 
   surface_functions_wrapper(A, sycl_target, mesh, boundary_groups, ndim);
 
+  sycl_target->free();
   mesh->free();
 }
