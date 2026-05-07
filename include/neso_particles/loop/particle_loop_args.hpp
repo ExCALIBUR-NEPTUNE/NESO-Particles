@@ -319,6 +319,8 @@ protected:
   std::size_t local_nbytes_group{0};
   /// Local memory required per work item
   std::size_t local_nbytes_item{0};
+  /// Total number of bytes required.
+  std::size_t total_nbytes_group{0};
 
   /// Recursively assemble the tuple args.
   template <size_t INDEX, typename U> inline void unpack_args(U a0) {
@@ -364,6 +366,7 @@ protected:
     };
     auto lambda_size = [&](auto... as) { (lambda_size_add(as), ...); };
     std::apply(lambda_size, this->args);
+    this->total_nbytes_group = num_bytes;
 
     // The amount of local space on the device and required number of local
     // bytes gives an upper bound on local size.

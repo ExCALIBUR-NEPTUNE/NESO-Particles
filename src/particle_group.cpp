@@ -1,8 +1,39 @@
 #include <neso_particles/common_impl.hpp>
+#include <neso_particles/loop/particle_loop_iteration_set_cache.hpp>
 #include <neso_particles/particle_group.hpp>
 #include <neso_particles/particle_group_impl.hpp>
 
 namespace NESO::Particles {
+
+ParticleGroup::ParticleGroup(DomainSharedPtr domain,
+                             ParticleSpec &particle_spec,
+                             SYCLTargetSharedPtr sycl_target,
+                             const bool is_temporary)
+    : is_temporary(is_temporary), ncell(domain->mesh->get_cell_count()),
+      npart_local(0), h_npart_cell(sycl_target, 1),
+      d_npart_cell(sycl_target, 1), particle_group_version(1),
+      particle_group_pointer_map(std::make_shared<ParticleGroupPointerMap>(
+          sycl_target, &this->particle_dats_real, &this->particle_dats_int)),
+      domain(domain), sycl_target(sycl_target),
+      layer_compressor(sycl_target, ncell, particle_dats_real,
+                       particle_dats_int, particle_group_pointer_map),
+      cell_move_ctx(sycl_target, layer_compressor, particle_group_pointer_map) {
+  if (!this->is_temporary) {
+    const std::string name = "NESO_PARTICLES_NPART_CELL_HINT";
+    if (!this->sycl_target->parameters->contains(name)) {
+      auto v = std::make_shared<SizeTParameter>();
+      v->value = get_env_size_t(name, 0);
+      this->sycl_target->parameters->set(name, v);
+    }
+    auto v = this->sycl_target->parameters->get<SizeTParameter>(name);
+    this->npart_cell_hint = v->value;
+  }
+  this->global_move_ctx = std::make_shared<GlobalMove>(
+      sycl_target,
+      domain->mesh->get_mesh_hierarchy()->global_move_communication,
+      layer_compressor, this->particle_group_pointer_map);
+  this->setup_internal(domain, particle_spec, sycl_target);
+}
 
 void ParticleGroup::get_new_layers(const int npart,
                                    const INT *RESTRICT cells_ptr,
@@ -29,6 +60,15 @@ void ParticleGroup::get_new_layers(const int npart,
         .wait_and_throw();
     buffer_memcpy(this->h_npart_cell, this->d_npart_cell).wait_and_throw();
   }
+}
+
+void ParticleGroup::invalidate_group_version() {
+  this->particle_group_version++;
+  // Ensure this value is never 0.
+  if (this->particle_group_version == 0) {
+    this->particle_group_version++;
+  }
+  this->particle_loop_iteration_set_cache->clear();
 }
 
 bool ParticleGroup::check_validation(ParticleDatVersionTracker &to_check,
@@ -132,6 +172,11 @@ void ParticleGroup::setup_internal(DomainSharedPtr domain,
   // call the callback on the local mapper to complete the setup of that
   // object
   this->domain->local_mapper->particle_group_callback(*this);
+
+  this->particle_loop_iteration_set_cache = std::make_shared<
+      ParticleLoopImplementation::ParticleLoopIterationSetCache>(
+      this->sycl_target, this->ncell, this->mpi_rank_dat->h_npart_cell,
+      this->mpi_rank_dat->d_npart_cell);
 }
 
 ParticleSetSharedPtr

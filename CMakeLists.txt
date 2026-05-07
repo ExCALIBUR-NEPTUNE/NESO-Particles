@@ -117,6 +117,7 @@ set(SRC_FILES
     ${SRC_DIR}/loop/particle_loop_args.cpp
     ${SRC_DIR}/loop/particle_loop_base.cpp
     ${SRC_DIR}/loop/particle_loop_iteration_set.cpp
+    ${SRC_DIR}/loop/particle_loop_iteration_set_cache.cpp
     ${SRC_DIR}/loop/particle_loop_index.cpp
     ${SRC_DIR}/loop/particle_loop_utility.cpp
     ${SRC_DIR}/loop/pli_particle_dat.cpp
@@ -263,6 +264,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_utility.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_index.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_iteration_set.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_iteration_set_cache.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_args_impl.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_impl.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/loop/particle_loop_reduction.hpp

@@ -643,3 +643,61 @@ TEST(ParticleLoop, particle_loop_block_device) {
 
   sycl_target->free();
 }
+
+namespace {
+
+struct TestParticleLoopIterationSetCache
+    : public ParticleLoopImplementation::ParticleLoopIterationSetCache {
+
+  template <typename... ARGS>
+  TestParticleLoopIterationSetCache(ARGS... args)
+      : ParticleLoopIterationSetCache(args...) {}
+
+  MAKE_WRAP_METHOD(clear)
+  MAKE_GETTER_METHOD(sycl_target)
+  MAKE_GETTER_METHOD(ncell)
+  MAKE_GETTER_METHOD(h_npart_cell)
+  MAKE_GETTER_METHOD(d_npart_cell)
+  MAKE_GETTER_METHOD(cache)
+};
+
+} // namespace
+
+TEST(ParticleLoop, iteration_set_cache) {
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_SELF);
+  const int cell_count = 127;
+  std::vector<int> h_npart_cell(cell_count);
+
+  std::size_t correct_total_size = 0;
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    h_npart_cell.at(cellx) = cellx;
+    correct_total_size += cellx;
+  }
+  BufferDevice<int> d_npart_cell(sycl_target, h_npart_cell);
+
+  TestParticleLoopIterationSetCache cache(
+      sycl_target, cell_count, h_npart_cell.data(), d_npart_cell.ptr);
+
+  ASSERT_EQ(cache.get_sycl_target(), sycl_target);
+  ASSERT_EQ(cache.get_ncell(), cell_count);
+  ASSERT_EQ(cache.get_h_npart_cell(), h_npart_cell.data());
+  ASSERT_EQ(cache.get_d_npart_cell(), d_npart_cell.ptr);
+
+  ASSERT_EQ(cache.get_cache().size(), 0);
+
+  std::size_t total_size = 0;
+  cache.get(0, cell_count, 1, 1, 0, 1, &total_size);
+
+  ASSERT_EQ(total_size, correct_total_size);
+  ASSERT_EQ(cache.get_cache().size(), 1);
+  cache.clear();
+  ASSERT_EQ(cache.get_cache().size(), 0);
+
+  for (int ix = 1; ix < 127; ix++) {
+    cache.get(0, ix, 1, 1, 0, 1);
+    ASSERT_TRUE(cache.get_cache().size() > 0);
+    ASSERT_TRUE(cache.get_cache().size() < 33);
+  }
+
+  sycl_target->free();
+}

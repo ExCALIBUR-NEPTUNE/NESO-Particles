@@ -196,7 +196,7 @@ std::vector<ParticleLoopBlockHost> &ParticleLoopBlockIterationSet::get_generic(
     for (std::size_t cellx = start; cellx < end; cellx++) {
       const std::size_t npart =
           static_cast<std::size_t>(this->h_npart_cell[cellx]);
-      this->iteration_set_size += npart;
+      this->iteration_set_size += (npart - min_occupancy);
       cell_max_occ = std::max(cell_max_occ, npart);
     }
     // Subtract of the block already completed as this is a peel loop.
