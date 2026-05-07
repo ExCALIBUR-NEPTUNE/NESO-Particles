@@ -377,18 +377,18 @@ TEST(Benchmark, flops_fma_REAL) {
     for (int pxx = 0; pxx < s; pxx++) {
       const int px = std::pow(2, pxx);
 
-      // auto cdc_coeffs = std::make_shared<CellDatConst<REAL>>(
-      //     sycl_target, cell_count, px, mdim);
-
       auto cdc_coeffs = std::make_shared<CellDatConst<REAL>>(
-          sycl_target, cell_count, mdim, px);
+          sycl_target, cell_count, px, mdim);
+
+      // auto cdc_coeffs = std::make_shared<CellDatConst<REAL>>(
+      //     sycl_target, cell_count, mdim, px);
 
       auto coeffs = cdc_coeffs->get_all_cells();
       for (int cellx = 0; cellx < cell_count; cellx++) {
         for (int cx = 0; cx < mdim; cx++) {
           for (int rx = 0; rx < px; rx++) {
-            // coeffs.at(cellx)->at(rx, cx) = std::fmod(x, 1.0);
-            coeffs.at(cellx)->at(cx, rx) = std::fmod(x, 1.0);
+            coeffs.at(cellx)->at(rx, cx) = std::fmod(x, 1.0);
+            // coeffs.at(cellx)->at(cx, rx) = std::fmod(x, 1.0);
             x += xx;
           }
         }
@@ -398,35 +398,37 @@ TEST(Benchmark, flops_fma_REAL) {
       auto loop = particle_loop(
           A,
           [=](auto X, auto FX, auto COEFFS) {
-            // REAL fx = 0.0;
-            // for(int dx=0 ; dx<mdim ; dx++){
-            //   const REAL x = X.at(dx);
-            //   REAL fx = 0.0;
-            //   for(int ox=0 ; ox<px ; ox++){
-            //      fx = Kernel::fma(x, fx, COEFFS.at(ox, dx));
-            //     //fx = Kernel::fma(x, fx, COEFFS.at(dx, ox));
-            //   }
-            //   FX.at(dx) = fx;
-            // }
-
-            REAL fx[mdim];
-            REAL x[mdim];
-
             for (int dx = 0; dx < mdim; dx++) {
-              fx[dx] = 0.0;
-              x[dx] = X.at(dx);
-            }
-
-            for (int ox = 0; ox < px; ox++) {
-              for (int dx = 0; dx < mdim; dx++) {
-                // fx[dx] = Kernel::fma(x[dx], fx[dx], COEFFS.at(ox, dx));
-                fx[dx] = Kernel::fma(x[dx], fx[dx], COEFFS.at(dx, ox));
+              const REAL x = X.at(dx);
+              REAL fx = 0.0;
+              for (int ox = 0; ox < px; ox++) {
+                // fx = Kernel::fma(x, fx, COEFFS.at(ox, dx));
+                //  fx = Kernel::fma(x, fx, COEFFS.at(dx, ox));
+                fx = x * fx + COEFFS.at(ox, dx);
+                // fx =x * fx + COEFFS.at(dx, ox);
               }
+              FX.at(dx) = fx;
             }
 
-            for (int dx = 0; dx < mdim; dx++) {
-              FX.at(dx) = fx[dx];
-            }
+            // REAL fx[mdim];
+            // REAL x[mdim];
+            //
+            // for (int dx = 0; dx < mdim; dx++) {
+            //   fx[dx] = 0.0;
+            //   x[dx] = X.at(dx);
+            // }
+            //
+            // for (int ox = 0; ox < px; ox++) {
+            //   for (int dx = 0; dx < mdim; dx++) {
+            //     // fx[dx] = Kernel::fma(x[dx], fx[dx], COEFFS.at(ox, dx));
+            //     // fx[dx] = Kernel::fma(x[dx], fx[dx], COEFFS.at(dx, ox));
+            //     fx[dx] = x[dx] * fx[dx] + COEFFS.at(dx, ox);
+            //   }
+            // }
+            //
+            // for (int dx = 0; dx < mdim; dx++) {
+            //   FX.at(dx) = fx[dx];
+            // }
           },
           Access::read(Sym<REAL>("X")), Access::write(Sym<REAL>("FX")),
           Access::read(cdc_coeffs));
