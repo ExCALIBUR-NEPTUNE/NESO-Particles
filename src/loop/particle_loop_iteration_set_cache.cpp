@@ -15,7 +15,7 @@ const std::vector<ParticleLoopBlockHost> *ParticleLoopIterationSetCache::get(
     std::size_t local_size, const std::size_t num_bytes_local,
     const std::size_t stride, std::size_t *iteration_set_size) {
 
-  if (this->cache.size() > cache_size_limit) {
+  if (this->cache.size() > (cache_size_limit - 1)) {
     this->clear();
   }
 

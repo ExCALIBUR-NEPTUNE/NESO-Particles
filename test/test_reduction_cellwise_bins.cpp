@@ -213,15 +213,15 @@ void reduction_wrapper(const int num_components, OP op) {
 } // namespace
 
 TEST(ReductionContextCellwiseBins, dims_types) {
-  //reduction_wrapper<int>(5, Kernel::plus<int>());
+  // reduction_wrapper<int>(5, Kernel::plus<int>());
   reduction_wrapper<REAL>(5, Kernel::plus<REAL>());
-  //reduction_wrapper<INT>(5, Kernel::plus<INT>());
+  // reduction_wrapper<INT>(5, Kernel::plus<INT>());
   //
-  //reduction_wrapper<int>(3, Kernel::minimum<int>());
-  //reduction_wrapper<REAL>(3, Kernel::minimum<REAL>());
-  //reduction_wrapper<INT>(3, Kernel::minimum<INT>());
+  // reduction_wrapper<int>(3, Kernel::minimum<int>());
+  // reduction_wrapper<REAL>(3, Kernel::minimum<REAL>());
+  // reduction_wrapper<INT>(3, Kernel::minimum<INT>());
   //
-  //reduction_wrapper<int>(1, Kernel::maximum<int>());
-  //reduction_wrapper<REAL>(1, Kernel::maximum<REAL>());
-  //reduction_wrapper<INT>(1, Kernel::maximum<INT>());
+  // reduction_wrapper<int>(1, Kernel::maximum<int>());
+  // reduction_wrapper<REAL>(1, Kernel::maximum<REAL>());
+  // reduction_wrapper<INT>(1, Kernel::maximum<INT>());
 }
