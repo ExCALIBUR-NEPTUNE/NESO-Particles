@@ -13,6 +13,7 @@
 #include "neso_particles/cartesian_mesh/cartesian_cell_bin.hpp"
 #include "neso_particles/cartesian_mesh/cartesian_periodic.hpp"
 #include "neso_particles/cartesian_mesh/cartesian_trajectory_intersection.hpp"
+#include "neso_particles/cartesian_mesh/subdivide_cells_cartesian_h_mesh.hpp"
 #include "neso_particles/cell_dat.hpp"
 #include "neso_particles/compute_target.hpp"
 #include "neso_particles/containers/blocked_binary_tree.hpp"
