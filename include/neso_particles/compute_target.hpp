@@ -21,6 +21,16 @@
 
 namespace NESO::Particles {
 
+// Passed to SYCLTarget constructor to indicate that the default SYCL device
+// should be used.
+static constexpr int DEVICE_DEFAULT = 0;
+// Passed to SYCLTarget constructor to indicate that the default GPU SYCL device
+// should be used.
+static constexpr int DEVICE_GPU = 1;
+// Passed to SYCLTarget constructor to indicate that the default CPU SYCL device
+// should be used.
+static constexpr int DEVICE_CPU = -1;
+
 /**
  * Wrapper for SYCL STD library allocator for host allocations.
  *

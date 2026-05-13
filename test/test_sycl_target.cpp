@@ -629,3 +629,9 @@ TEST(SYCLTarget, profile_region) {
   ASSERT_EQ(sycl_target->profile_map.regions.size(), 0);
   sycl_target->free();
 }
+
+TEST(SYCLTarget, device_selectors) {
+  ASSERT_EQ(DEVICE_DEFAULT, 0);
+  ASSERT_EQ(DEVICE_GPU, 1);
+  ASSERT_EQ(DEVICE_CPU, -1);
+}

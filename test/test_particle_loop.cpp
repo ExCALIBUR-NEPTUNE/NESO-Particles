@@ -48,13 +48,13 @@ ParticleGroupSharedPtr particle_loop_common(const int N = 1093) {
 
   for (int px = 0; px < N; px++) {
     for (int dimx = 0; dimx < ndim; dimx++) {
-      initial_distribution[Sym<REAL>("P")][px][dimx] = positions[dimx][px];
+      initial_distribution.at(Sym<REAL>("P"), px, dimx) = positions[dimx][px];
     }
     for (int dimx = 0; dimx < 3; dimx++) {
-      initial_distribution[Sym<REAL>("V")][px][dimx] = velocities[dimx][px];
+      initial_distribution.at(Sym<REAL>("V"), px, dimx) = velocities[dimx][px];
     }
-    initial_distribution[Sym<INT>("CELL_ID")][px][0] = 0;
-    initial_distribution[Sym<INT>("ID")][px][0] = px + id_offset;
+    initial_distribution.at(Sym<INT>("CELL_ID"), px, 0) = 0;
+    initial_distribution.at(Sym<INT>("ID"), px, 0) = px + id_offset;
   }
 
   A->add_particles_local(initial_distribution);
