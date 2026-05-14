@@ -18,7 +18,7 @@ namespace NESO::Particles {
 
 class H5Part {
 
-private:
+protected:
   SYCLTargetSharedPtr sycl_target;
   std::string filename;
   CommPair &comm_pair;
@@ -193,37 +193,19 @@ private:
   /**
    * Open the file if it is closed.
    */
-  inline void open_read_write() {
-    if (this->is_closed) {
-      this->plist_id = H5Pcreate(H5P_FILE_ACCESS);
-      H5CHK(H5Pset_fapl_mpio(this->plist_id, this->comm_pair.comm_parent,
-                             MPI_INFO_NULL));
-      H5CHK(this->file_id =
-                H5Fopen(this->filename.c_str(), H5F_ACC_RDWR, this->plist_id));
-      this->is_closed = false;
-    }
-  }
+  void open_read_write();
 
   /**
    * Open the file if it is closed.
    */
-  inline void open_read() {
-    if (this->is_closed) {
-      this->plist_id = H5Pcreate(H5P_FILE_ACCESS);
-      H5CHK(H5Pset_fapl_mpio(this->plist_id, this->comm_pair.comm_parent,
-                             MPI_INFO_NULL));
-      H5CHK(this->file_id = H5Fopen(this->filename.c_str(), H5F_ACC_RDONLY,
-                                    this->plist_id));
-      this->is_closed = false;
-    }
-  }
+  void open_read();
 
   /**
    *  Write ParticleDats as 2D arrays in the HDF5 file.
    *  TODO This needs better testing if anyone wants it and for it to be made
    * public.
    */
-  inline void enable_multi_dim_mode() { this->multi_dim_mode = true; }
+  void enable_multi_dim_mode();
 
   template <typename GROUP_TYPE>
   inline void write_inner(std::shared_ptr<GROUP_TYPE> group) {
@@ -328,24 +310,37 @@ public:
    *
    *  @param filename Output filename, e.g. "foo.h5part".
    *  @param particle_group ParticleGroupSharedPtr instance.
+   *  @param syms SymStore containing Sym<REAL> and Sym<INT> instances.
+   */
+  H5Part(std::string filename, ParticleGroupSharedPtr particle_group,
+         SymStore syms);
+
+  /**
+   *  Construct a H5Part writer for a given set of ParticleDats described by
+   *  Sym<type>(name) instances. Must be called collectively on the
+   * communicator.
+   *
+   *  @param filename Output filename, e.g. "foo.h5part".
+   *  @param particle_group ParticleGroupSharedPtr instance.
    *  @param args Remaining arguments (variable length) should be sym instances
    *  indicating which ParticleDats are to be written.
    */
   template <typename... T>
   H5Part(std::string filename, ParticleGroupSharedPtr particle_group,
          T &&...args)
-      : sycl_target(particle_group->sycl_target), filename(filename),
-        comm_pair(particle_group->sycl_target->comm_pair),
-        sym_store(std::forward<T>(args)...), particle_group(particle_group),
-        particle_sub_group(nullptr), multi_dim_mode(false) {
-    this->plist_id = H5Pcreate(H5P_FILE_ACCESS);
-    H5CHK(H5Pset_fapl_mpio(this->plist_id, this->comm_pair.comm_parent,
-                           MPI_INFO_NULL));
-    this->file_id = H5Fcreate(this->filename.c_str(), H5F_ACC_TRUNC,
-                              H5P_DEFAULT, this->plist_id);
-    this->is_closed = false;
-    this->step = 0;
-  }
+      : H5Part(filename, particle_group, SymStore(args...)) {}
+
+  /**
+   *  Construct a H5Part writer for a given set of ParticleDats described by
+   *  Sym<type>(name) instances. Must be called collectively on the
+   *  communicator.
+   *
+   *  @param filename Output filename, e.g. "foo.h5part".
+   *  @param particle_sub_group ParticleSubGroupSharedPtr instance.
+   *  @param syms SymStore containing Sym<REAL> and Sym<INT> instances.
+   */
+  H5Part(std::string filename, ParticleSubGroupSharedPtr particle_sub_group,
+         SymStore syms);
 
   /**
    *  Construct a H5Part writer for a given set of ParticleDats described by
@@ -360,9 +355,7 @@ public:
   template <typename... T>
   H5Part(std::string filename, ParticleSubGroupSharedPtr particle_sub_group,
          T &&...args)
-      : H5Part(filename, get_particle_group(particle_sub_group), args...) {
-    this->particle_sub_group = particle_sub_group;
-  }
+      : H5Part(filename, particle_sub_group, SymStore(args...)) {}
 
   /**
    *  Construct a H5Part reader. Must be called collectively on the
@@ -371,13 +364,7 @@ public:
    *  @param filename Name of file to open for read access, e.g. "foo.h5part".
    *  @param sycl_target SYCLTarget to use for computation/communcation.
    */
-  H5Part(std::string filename, SYCLTargetSharedPtr sycl_target)
-      : sycl_target(sycl_target), filename(filename),
-        comm_pair(sycl_target->comm_pair), particle_group(nullptr),
-        particle_sub_group(nullptr), multi_dim_mode(false) {
-    this->is_closed = true;
-    this->step = 0;
-  }
+  H5Part(std::string filename, SYCLTargetSharedPtr sycl_target);
 
   /**
    *  Close the H5Part writer. Must be called before execution completes. Must
@@ -385,13 +372,7 @@ public:
    *  after calling write to close the file such that if the simulation errors
    *  the particle trajectory is readable.
    */
-  inline void close() {
-    if (!this->is_closed) {
-      H5CHK(H5Fclose(this->file_id));
-      H5CHK(H5Pclose(this->plist_id));
-    }
-    this->is_closed = true;
-  };
+  void close();
 
   /**
    * Write the current particle data to the HDF5 file as a new time step. Must
@@ -479,6 +460,19 @@ public:
    *
    *  @param filename Output filename, e.g. "foo.h5part".
    *  @param particle_group ParticleGroupSharedPtr instance.
+   *  @param syms SymStore containing Sym<REAL> and Sym<INT> instances.
+   */
+  H5Part([[maybe_unused]] std::string filename,
+         [[maybe_unused]] ParticleGroupSharedPtr particle_group,
+         [[maybe_unused]] SymStore syms) {}
+
+  /**
+   *  Construct a H5Part writer for a given set of ParticleDats described by
+   *  Sym<type>(name) instances. Must be called collectively on the
+   * communicator.
+   *
+   *  @param filename Output filename, e.g. "foo.h5part".
+   *  @param particle_group ParticleGroupSharedPtr instance.
    *  @param args Remaining arguments (variable length) should be sym instances
    *  indicating which ParticleDats are to be written.
    */
@@ -486,6 +480,21 @@ public:
   H5Part([[maybe_unused]] std::string filename,
          [[maybe_unused]] ParticleGroupSharedPtr particle_group,
          [[maybe_unused]] T... args){};
+
+  /**
+   *  Construct a H5Part writer for a given set of ParticleDats described by
+   *  Sym<type>(name) instances. Must be called collectively on the
+   *  communicator.
+   *
+   *  @param filename Output filename, e.g. "foo.h5part".
+   *  @param particle_sub_group ParticleSubGroupSharedPtr instance.
+   *  @param args Remaining arguments (variable length) should be sym instances
+   *  indicating which ParticleDats are to be written.
+   */
+  template <typename... T>
+  H5Part([[maybe_unused]] std::string filename,
+         [[maybe_unused]] ParticleSubGroupSharedPtr particle_sub_group,
+         [[maybe_unused]] T &&...args) {}
 
   /**
    *  Construct a H5Part writer for a given set of ParticleDats described by

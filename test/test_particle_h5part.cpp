@@ -1,5 +1,15 @@
 #include "include/test_neso_particles.hpp"
 
+#ifdef NESO_PARTICLES_HDF5
+struct TestH5Part : public H5Part {
+
+  template <typename... ARGS> TestH5Part(ARGS... args) : H5Part(args...) {}
+
+  MAKE_GETTER_METHOD(sym_store);
+};
+
+#endif
+
 TEST(ParticleIO, h5_part_write_particle_group) {
 
 #ifdef NESO_PARTICLES_HDF5
@@ -38,12 +48,51 @@ TEST(ParticleIO, h5_part_write_particle_group) {
                                   ParticleProp(Sym<REAL>("FOO"), 3),
                                   domain->mesh->get_cell_count()));
 
-  H5Part h5parte(get_test_root_file("test_empty_dump.h5part"), A,
-                 Sym<REAL>("P"), Sym<REAL>("V"), Sym<INT>("ID"),
-                 Sym<INT>("ID2"), Sym<INT>("NESO_MPI_RANK"));
-
+  TestH5Part h5parte(get_test_root_file("test_empty_dump.h5part"), A,
+                     Sym<REAL>("P"), Sym<REAL>("V"), Sym<INT>("ID"),
+                     Sym<INT>("ID2"), Sym<INT>("NESO_MPI_RANK"));
   h5parte.write();
   h5parte.close();
+  {
+    auto sym_store = h5parte.get_sym_store();
+
+    std::set<Sym<REAL>> s_real;
+    s_real.insert(sym_store.syms_real.begin(), sym_store.syms_real.end());
+    ASSERT_EQ(s_real.count(Sym<REAL>("P")), 1);
+    ASSERT_EQ(s_real.count(Sym<REAL>("V")), 1);
+
+    std::set<Sym<INT>> s_int;
+    s_int.insert(sym_store.syms_int.begin(), sym_store.syms_int.end());
+    ASSERT_EQ(s_int.count(Sym<INT>("ID")), 1);
+    ASSERT_EQ(s_int.count(Sym<INT>("ID2")), 1);
+    ASSERT_EQ(s_int.count(Sym<INT>("NESO_MPI_RANK")), 1);
+  }
+
+  SymStore sym_store;
+  sym_store.push(Sym<REAL>("P"));
+  sym_store.push(Sym<REAL>("V"));
+  sym_store.push(Sym<INT>("ID"));
+  sym_store.push(Sym<INT>("NESO_MPI_RANK"));
+
+  TestH5Part h5partf(get_test_root_file("test_empty_dump.h5part"), A,
+                     sym_store);
+  h5partf.write();
+  h5partf.close();
+
+  {
+    auto sym_store = h5partf.get_sym_store();
+
+    std::set<Sym<REAL>> s_real;
+    s_real.insert(sym_store.syms_real.begin(), sym_store.syms_real.end());
+    ASSERT_EQ(s_real.count(Sym<REAL>("P")), 1);
+    ASSERT_EQ(s_real.count(Sym<REAL>("V")), 1);
+
+    std::set<Sym<INT>> s_int;
+    s_int.insert(sym_store.syms_int.begin(), sym_store.syms_int.end());
+    ASSERT_EQ(s_int.count(Sym<INT>("ID")), 1);
+    ASSERT_EQ(s_int.count(Sym<INT>("ID2")), 0);
+    ASSERT_EQ(s_int.count(Sym<INT>("NESO_MPI_RANK")), 1);
+  }
 
   std::mt19937 rng_pos(52234234);
   std::mt19937 rng_vel(52234231);

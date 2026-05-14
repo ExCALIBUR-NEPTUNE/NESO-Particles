@@ -216,8 +216,6 @@ public:
  */
 class SymStore {
 private:
-  void push(Sym<REAL> pp) { this->syms_real.push_back(pp); }
-  void push(Sym<INT> pp) { this->syms_int.push_back(pp); }
   template <typename... T> void push(Sym<REAL> pp, T &&...args) {
     this->syms_real.push_back(pp);
     this->push(std::forward<T>(args)...);
@@ -281,6 +279,20 @@ public:
       this->push(prop.sym);
     }
   }
+
+  /**
+   * Push Sym into store.
+   *
+   * @param sym Sym to push into the store.
+   */
+  inline void push(Sym<REAL> pp) { this->syms_real.push_back(pp); }
+
+  /**
+   * Push Sym into store.
+   *
+   * @param sym Sym to push into the store.
+   */
+  inline void push(Sym<INT> pp) { this->syms_int.push_back(pp); }
 
   SymStore(){};
   ~SymStore(){};
