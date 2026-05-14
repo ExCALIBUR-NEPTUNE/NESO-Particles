@@ -44,6 +44,67 @@ template void H5Part::write_dat_column_wise<ParticleSubGroup, INT>(
     ParticleDatSharedPtr<INT> dat, hid_t dxpl, hid_t group_step, hid_t memspace,
     hid_t filespace, bool is_position);
 
+void H5Part::open_read_write() {
+  if (this->is_closed) {
+    this->plist_id = H5Pcreate(H5P_FILE_ACCESS);
+    H5CHK(H5Pset_fapl_mpio(this->plist_id, this->comm_pair.comm_parent,
+                           MPI_INFO_NULL));
+    H5CHK(this->file_id =
+              H5Fopen(this->filename.c_str(), H5F_ACC_RDWR, this->plist_id));
+    this->is_closed = false;
+  }
+}
+
+void H5Part::open_read() {
+  if (this->is_closed) {
+    this->plist_id = H5Pcreate(H5P_FILE_ACCESS);
+    H5CHK(H5Pset_fapl_mpio(this->plist_id, this->comm_pair.comm_parent,
+                           MPI_INFO_NULL));
+    H5CHK(this->file_id =
+              H5Fopen(this->filename.c_str(), H5F_ACC_RDONLY, this->plist_id));
+    this->is_closed = false;
+  }
+}
+
+void H5Part::enable_multi_dim_mode() { this->multi_dim_mode = true; }
+
+H5Part::H5Part(std::string filename, ParticleGroupSharedPtr particle_group,
+               SymStore syms)
+    : sycl_target(particle_group->sycl_target), filename(filename),
+      comm_pair(particle_group->sycl_target->comm_pair), sym_store(syms),
+      particle_group(particle_group), particle_sub_group(nullptr),
+      multi_dim_mode(false) {
+  this->plist_id = H5Pcreate(H5P_FILE_ACCESS);
+  H5CHK(H5Pset_fapl_mpio(this->plist_id, this->comm_pair.comm_parent,
+                         MPI_INFO_NULL));
+  this->file_id = H5Fcreate(this->filename.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT,
+                            this->plist_id);
+  this->is_closed = false;
+  this->step = 0;
+}
+
+H5Part::H5Part(std::string filename,
+               ParticleSubGroupSharedPtr particle_sub_group, SymStore syms)
+    : H5Part(filename, get_particle_group(particle_sub_group), syms) {
+  this->particle_sub_group = particle_sub_group;
+}
+
+H5Part::H5Part(std::string filename, SYCLTargetSharedPtr sycl_target)
+    : sycl_target(sycl_target), filename(filename),
+      comm_pair(sycl_target->comm_pair), particle_group(nullptr),
+      particle_sub_group(nullptr), multi_dim_mode(false) {
+  this->is_closed = true;
+  this->step = 0;
+}
+
+void H5Part::close() {
+  if (!this->is_closed) {
+    H5CHK(H5Fclose(this->file_id));
+    H5CHK(H5Pclose(this->plist_id));
+  }
+  this->is_closed = true;
+}
+
 void H5Part::write(INT step_in) {
   NESOASSERT(this->particle_group != nullptr,
              "There is no particle group to write from, maybe this H5Part "
