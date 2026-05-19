@@ -117,6 +117,38 @@ std::vector<PetscInt> get_global_distributed_points_map(DM &dm_distributed,
   }
 }
 
+VTK::CellType get_vtk_cell_type(const DMPolytopeType petsc_cell_type) {
+  switch (petsc_cell_type) {
+  case DM_POLYTOPE_POINT:
+    return VTK::CellType::point;
+  case DM_POLYTOPE_SEGMENT:
+    return VTK::CellType::line;
+  case DM_POLYTOPE_POINT_PRISM_TENSOR:
+    return VTK::CellType::line;
+  case DM_POLYTOPE_TRIANGLE:
+    return VTK::CellType::triangle;
+  case DM_POLYTOPE_QUADRILATERAL:
+    return VTK::CellType::quadrilateral;
+  case DM_POLYTOPE_SEG_PRISM_TENSOR:
+    return VTK::CellType::quadrilateral;
+  case DM_POLYTOPE_TETRAHEDRON:
+    return VTK::CellType::tetrahedron;
+  case DM_POLYTOPE_PYRAMID:
+    return VTK::CellType::pyramid;
+  case DM_POLYTOPE_TRI_PRISM:
+    return VTK::CellType::wedge;
+  case DM_POLYTOPE_TRI_PRISM_TENSOR:
+    return VTK::CellType::wedge;
+  case DM_POLYTOPE_HEXAHEDRON:
+    return VTK::CellType::hex;
+  case DM_POLYTOPE_QUAD_PRISM_TENSOR:
+    return VTK::CellType::hex;
+  default:
+    NESOASSERT(false, "Unknown point type: " + std::to_string(petsc_cell_type));
+    return VTK::CellType::point;
+  }
+}
+
 bool dm_from_serialised_cells(
     std::list<DMPlexCellSerialise> &serialised_cells, DM &dm_prototype, DM &dm,
     std::map<PetscInt, std::tuple<int, PetscInt, PetscInt>>
@@ -482,6 +514,14 @@ void DMPlexHelper::get_cell_vertex_average(const PetscInt cell,
   }
 }
 
+DMPolytopeType DMPlexHelper::get_cell_type(const PetscInt cell) {
+  DMPolytopeType cell_type;
+  const PetscInt petsc_index = this->map_np_to_petsc.at(cell);
+  this->check_valid_petsc_cell(petsc_index);
+  PETSCCHK(DMPlexGetCellType(this->dm, petsc_index, &cell_type));
+  return cell_type;
+}
+
 int DMPlexHelper::contains_point(std::vector<PetscScalar> &point) {
   const PetscInt ndim = this->ndim;
   NESOASSERT(point.size() == static_cast<std::size_t>(ndim),
@@ -646,14 +686,13 @@ std::vector<VTK::UnstructuredCell> DMPlexHelper::get_vtk_cell_data() {
   const int cell_count = this->get_cell_count();
   std::vector<VTK::UnstructuredCell> data(cell_count);
   std::vector<std::vector<REAL>> vertices;
-  NESOASSERT(this->ndim == 2, "Only implemented in 2D.");
   for (int cellx = 0; cellx < cell_count; cellx++) {
     vertices.clear();
     this->get_cell_vertices(cellx, vertices);
     const int num_vertices = vertices.size();
     data.at(cellx).num_points = num_vertices;
-    data.at(cellx).cell_type = num_vertices == 3 ? VTK::CellType::triangle
-                                                 : VTK::CellType::quadrilateral;
+    const auto cell_type = this->get_cell_type(cellx);
+    data.at(cellx).cell_type = get_vtk_cell_type(cell_type);
     data.at(cellx).points.reserve(num_vertices * 3);
     for (int vx = 0; vx < num_vertices; vx++) {
       for (int dx = 0; dx < this->ndim; dx++) {

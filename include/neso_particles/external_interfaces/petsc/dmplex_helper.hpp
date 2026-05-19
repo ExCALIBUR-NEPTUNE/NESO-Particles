@@ -61,6 +61,14 @@ std::vector<PetscInt> get_global_distributed_points_map(DM &dm_distributed,
                                                         PetscSF &sf);
 
 /**
+ * Get the VTK cell type that corresponds to a PETSc DMPlex cell type.
+ *
+ * @param petsc_cell_type Input DMPlex cell type.
+ * @returns VTK cell type.
+ */
+VTK::CellType get_vtk_cell_type(const DMPolytopeType petsc_cell_type);
+
+/**
  * Class to determine new local indices from global indices when constructing
  * halos.
  */
@@ -350,6 +358,14 @@ public:
    * @param[in, out] average Vector of average of vertices.
    */
   void get_cell_vertex_average(const PetscInt cell, std::vector<REAL> &average);
+
+  /**
+   * Get the cell type.
+   *
+   * @param cell Local cell index.
+   * @returns PETSc description of cell type.
+   */
+  DMPolytopeType get_cell_type(const PetscInt cell);
 
   /**
    * Determine if mesh contains a point.
