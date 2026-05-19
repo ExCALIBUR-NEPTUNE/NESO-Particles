@@ -300,9 +300,9 @@ bool DMPlexInterface::validate_halos(const bool fatal) {
                        MPI_COMM_WORLD));
   num_points++;
 
-  const int num_components = 1 + 1 + 4 + 1;
+  const int num_components = 1 + 1 + 6 + 1;
   auto I = [=](const int rx, const int cx) { return rx * num_components + cx; };
-  const int num_components_real = 8;
+  const int num_components_real = 8 * 3; // hex with 3 reals per corner
   auto F = [=](const int rx, const int cx) {
     return rx * num_components_real + cx;
   };
@@ -335,7 +335,7 @@ bool DMPlexInterface::validate_halos(const bool fatal) {
       PETSCCHK(DMPlexGetConeSize(dm, point, &cone_size));
       int_data.at(I(global_point, 1)) = cone_size;
 
-      lambda_assert_true(cone_size < 5);
+      lambda_assert_true(cone_size < 7);
 
       const PetscInt *cone;
       PETSCCHK(DMPlexGetCone(dm, point, &cone));
@@ -345,7 +345,7 @@ bool DMPlexInterface::validate_halos(const bool fatal) {
             this->dmh->get_point_global_index(cone[cx]);
       }
 
-      int_data.at(I(global_point, 6)) = rank;
+      int_data.at(I(global_point, num_components - 1)) = rank;
 
       // REAL data
       PetscBool is_dg;
@@ -354,7 +354,7 @@ bool DMPlexInterface::validate_halos(const bool fatal) {
       PetscScalar *coords = nullptr;
       PETSCCHK(DMPlexGetCellCoordinates(dm, point, &is_dg, &num_coords, &array,
                                         &coords));
-      lambda_assert_true(num_coords <= 8);
+      lambda_assert_true(num_coords <= num_components_real);
       for (int cx = 0; cx < num_coords; cx++) {
         real_data.at(F(global_point, cx)) = coords[cx];
       }
@@ -402,7 +402,8 @@ bool DMPlexInterface::validate_halos(const bool fatal) {
 
       const int rank_held = map_halo_to_rank.at(hpoint);
       if (depth == 2) {
-        lambda_assert_eq(rank_held, int_rdata.at(I(global_point, 6)));
+        lambda_assert_eq(rank_held,
+                         int_rdata.at(I(global_point, num_components - 1)));
       }
 
       // REAL data
@@ -412,7 +413,7 @@ bool DMPlexInterface::validate_halos(const bool fatal) {
       PetscScalar *coords = nullptr;
       PETSCCHK(DMPlexGetCellCoordinates(dm_halo, hpoint, &is_dg, &num_coords,
                                         &array, &coords));
-      lambda_assert_true(num_coords <= 8);
+      lambda_assert_true(num_coords <= num_components_real);
 
       std::set<std::tuple<double, double>> correct, to_test;
       for (int cx = 0; cx < num_coords; cx += 2) {

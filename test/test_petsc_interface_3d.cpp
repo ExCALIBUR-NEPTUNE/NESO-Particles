@@ -45,14 +45,15 @@ TEST(PETSc, foo) {
     }
   }
 
-  // auto mesh =
-  //     std::make_shared<PetscInterface::DMPlexInterface>(dm, 0,
-  //     MPI_COMM_WORLD);
-  //
-  // const double volume = mesh->dmh->get_volume();
-  // ASSERT_NEAR(volume, 4.0, 1.0e-10);
-  //
-  // mesh->free();
+  auto mesh =
+      std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
+
+  ASSERT_TRUE(mesh->validate_halos(false));
+
+  const double volume = mesh->dmh->get_volume();
+  ASSERT_NEAR(volume, 8.0, 1.0e-10);
+
+  mesh->free();
 
   mesh_helper->free();
   PETSCCHK(DMDestroy(&dm));
