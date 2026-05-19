@@ -35,6 +35,16 @@ TEST(PETSc, foo) {
   vtkhdf.write(vtk_data);
   vtkhdf.close();
 
+  std::vector<PetscScalar> point{0.1, 0.1, 0.1};
+  mesh_helper->cell_contains_point_3d(0, point);
+
+  for (int cellx = 0; cellx < mesh_helper->get_cell_count(); cellx++) {
+    const bool contained = mesh_helper->cell_contains_point_3d(cellx, point);
+    if (contained) {
+      nprint("FOUND", cellx);
+    }
+  }
+
   // auto mesh =
   //     std::make_shared<PetscInterface::DMPlexInterface>(dm, 0,
   //     MPI_COMM_WORLD);

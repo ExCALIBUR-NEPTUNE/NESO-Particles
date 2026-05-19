@@ -376,6 +376,26 @@ public:
   int contains_point(std::vector<PetscScalar> &point);
 
   /**
+   * Determine if a 2D mesh cell contains a point.
+   *
+   * @param[in] index Local cell index.
+   * @param[in] point Point to test.
+   * @returns true if point contains cell.
+   */
+  bool cell_contains_point_2d(const PetscInt index,
+                              std::vector<PetscScalar> &point);
+
+  /**
+   * Determine if a 3D mesh cell contains a point.
+   *
+   * @param[in] index Local cell index.
+   * @param[in] point Point to test.
+   * @returns true if point contains cell.
+   */
+  bool cell_contains_point_3d(const PetscInt index,
+                              std::vector<PetscScalar> &point);
+
+  /**
    * Determine if mesh cell contains a point.
    *
    * @param[in] index Local cell index.

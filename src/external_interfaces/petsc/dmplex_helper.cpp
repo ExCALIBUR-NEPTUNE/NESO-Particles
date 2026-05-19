@@ -546,8 +546,8 @@ int DMPlexHelper::contains_point(std::vector<PetscScalar> &point) {
   return cells[0].index;
 }
 
-bool DMPlexHelper::cell_contains_point(const PetscInt index,
-                                       std::vector<PetscScalar> &point) {
+bool DMPlexHelper::cell_contains_point_2d(const PetscInt index,
+                                          std::vector<PetscScalar> &point) {
   const PetscInt ndim = this->ndim;
   NESOASSERT(point.size() == static_cast<std::size_t>(ndim),
              "Miss-match in point size and mesh dimension.");
@@ -626,6 +626,126 @@ bool DMPlexHelper::cell_contains_point(const PetscInt index,
                                         &tmp, &vertices));
 
   return contained;
+}
+
+bool DMPlexHelper::cell_contains_point_3d(const PetscInt index,
+                                          std::vector<PetscScalar> &point) {
+  NESOASSERT(this->ndim == 3, "Only implemented in 3D.");
+  const PetscInt ndim = this->ndim;
+  NESOASSERT(point.size() == static_cast<std::size_t>(ndim),
+             "Miss-match in point size and mesh dimension.");
+  this->check_valid_local_cell(index);
+  const PetscInt petsc_index = this->map_np_to_petsc.at(index);
+
+  bool contained = false;
+  const PetscScalar x0 = point.at(0);
+  const PetscScalar x1 = point.at(1);
+  const PetscScalar x2 = point.at(2);
+
+  PetscInt num_faces = 0;
+  PETSCCHK(DMPlexGetConeSize(this->dm, petsc_index, &num_faces));
+
+  const PetscScalar *tmp;
+  PetscScalar *vertices = nullptr;
+  PetscInt num_crossings = 0, num_coords;
+  PetscBool is_dg;
+
+  PETSCCHK(DMPlexGetCellCoordinates(dm, petsc_index, &is_dg, &num_coords, &tmp,
+                                    &vertices));
+  const int num_vertices = num_coords / 3;
+  std::vector<PetscScalar> h_vertices;
+  h_vertices.reserve(num_coords);
+  for (PetscInt ix = 0; ix < num_coords; ix++) {
+    h_vertices.push_back(vertices[ix]);
+  }
+  PETSCCHK(DMPlexRestoreCellCoordinates(dm, petsc_index, &is_dg, &num_coords,
+                                        &tmp, &vertices));
+
+  const PetscInt *cone = nullptr;
+  PETSCCHK(DMPlexGetCone(this->dm, petsc_index, &cone));
+
+  bool below_all_planes = true;
+
+  for (PetscInt facex = 0; facex < num_faces; facex++) {
+    const PetscInt face_petsc_index = cone[facex];
+
+    PETSCCHK(DMPlexGetCellCoordinates(dm, face_petsc_index, &is_dg, &num_coords,
+                                      &tmp, &vertices));
+    NESOASSERT(num_coords == 12 || num_coords == 9, "Unexpected num coords.");
+    const PetscInt c0 = 0;
+    const PetscInt c1 = 1;
+    const PetscInt c2 = num_coords == 12 ? 3 : 2;
+
+    const PetscScalar v0[3] = {vertices[3 * c1 + 0] - vertices[3 * c0 + 0],
+                               vertices[3 * c1 + 1] - vertices[3 * c0 + 1],
+                               vertices[3 * c1 + 2] - vertices[3 * c0 + 2]};
+
+    const PetscScalar v1[3] = {vertices[3 * c2 + 0] - vertices[3 * c0 + 0],
+                               vertices[3 * c2 + 1] - vertices[3 * c0 + 1],
+                               vertices[3 * c2 + 2] - vertices[3 * c0 + 2]};
+
+    PetscScalar n[3] = {0.0, 0.0, 0.0};
+    KERNEL_CROSS_PRODUCT_3D(v0[0], v0[1], v0[2], v1[0], v1[1], v1[2], n[0],
+                            n[1], n[2]);
+
+    int direction = 0;
+
+    for (PetscInt vx = 0; vx < num_vertices; vx++) {
+
+      // vector from first vertex to test point
+      const PetscScalar t0[3] = {h_vertices.at(3 * vx + 0) - vertices[0],
+                                 h_vertices.at(3 * vx + 1) - vertices[1],
+                                 h_vertices.at(3 * vx + 2) - vertices[2]};
+
+      const PetscScalar t0_dot_n =
+          KERNEL_DOT_PRODUCT_3D(t0[0], t0[1], t0[2], n[0], n[1], n[2]);
+
+      if (std::fabs(t0_dot_n) > 1.0e-6) {
+        const int to_test_direction = t0_dot_n > 0.0 ? 1 : -1;
+        if (direction == 0) {
+          direction = to_test_direction;
+        } else {
+          NESOASSERT(direction == to_test_direction,
+                     "Inconsistent directions.");
+        }
+      }
+    }
+
+    NESOASSERT(direction != 0, "Could not determine direction");
+    // normal points inwards
+    if (direction > 0) {
+      n[0] *= -1;
+      n[1] *= -1;
+      n[2] *= -1;
+    }
+
+    // Now normal point outwards
+    const PetscScalar t1[3] = {x0 - vertices[0], x1 - vertices[1],
+                               x2 - vertices[2]};
+
+    const PetscScalar t0_dot_n =
+        KERNEL_DOT_PRODUCT_3D(t1[0], t1[1], t1[2], n[0], n[1], n[2]);
+
+    if (t0_dot_n > 0.0) {
+      below_all_planes = false;
+    }
+
+    PETSCCHK(DMPlexRestoreCellCoordinates(dm, face_petsc_index, &is_dg,
+                                          &num_coords, &tmp, &vertices));
+  }
+
+  return below_all_planes;
+}
+
+bool DMPlexHelper::cell_contains_point(const PetscInt index,
+                                       std::vector<PetscScalar> &point) {
+
+  NESOASSERT(this->ndim != 1, "Only implemented in 2D and 3D.");
+  if (this->ndim == 2) {
+    return this->cell_contains_point_2d(index, point);
+  } else {
+    return this->cell_contains_point_3d(index, point);
+  }
 }
 
 PetscInt DMPlexHelper::get_num_labels() {
