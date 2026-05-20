@@ -19,6 +19,7 @@ class DMPlexLocalMapper : public LocalMapper {
 protected:
   std::unique_ptr<DMPlexHostMapper> mapper_host;
   std::unique_ptr<DMPlex2DMapper> mapper_2d;
+  std::unique_ptr<DMPlex3DMapper> mapper_3d;
   int ndim;
 
 public:
@@ -41,6 +42,9 @@ public:
     if (this->ndim == 2) {
       this->mapper_2d =
           std::make_unique<DMPlex2DMapper>(sycl_target, dmplex_interface);
+    } else if (this->ndim == 3) {
+      this->mapper_3d =
+          std::make_unique<DMPlex3DMapper>(sycl_target, dmplex_interface);
     } else {
       this->mapper_host =
           std::make_unique<DMPlexHostMapper>(sycl_target, dmplex_interface);
@@ -57,6 +61,8 @@ public:
                           const int map_cell = -1) override {
     if (this->mapper_2d) {
       this->mapper_2d->map(particle_group, map_cell);
+    } else if (this->mapper_3d) {
+      this->mapper_3d->map(particle_group, map_cell);
     } else {
       this->mapper_host->map(particle_group, map_cell);
     }
