@@ -6,6 +6,7 @@
 #include "../../particle_group.hpp"
 #include "dmplex_interface.hpp"
 #include "particle_cell_mapping/dmplex_2d_mapper.hpp"
+#include "particle_cell_mapping/dmplex_3d_mapper.hpp"
 #include "particle_cell_mapping/dmplex_host_mapper.hpp"
 #include <deque>
 

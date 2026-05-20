@@ -8,7 +8,7 @@
 
 using namespace NESO::Particles;
 
-TEST(PETSc, foo) {
+TEST(PETSc, dmplex_interface_3d_base) {
   std::filesystem::path gmsh_filepath;
   // GET_TEST_RESOURCE(gmsh_filepath,
   // "gmsh/reference_all_types_square_0.2.msh");
@@ -29,15 +29,15 @@ TEST(PETSc, foo) {
   auto mesh_helper =
       std::make_shared<PetscInterface::DMPlexHelper>(MPI_COMM_WORLD, dm);
 
-  auto vtk_data = mesh_helper->get_vtk_cell_data();
-
-  VTK::VTKHDF vtkhdf("foo.vtkhdf", MPI_COMM_WORLD);
-  vtkhdf.write(vtk_data);
-  vtkhdf.close();
+  // auto vtk_data = mesh_helper->get_vtk_cell_data();
+  // VTK::VTKHDF vtkhdf("foo.vtkhdf", MPI_COMM_WORLD);
+  // vtkhdf.write(vtk_data);
+  // vtkhdf.close();
 
   std::vector<PetscScalar> point{0.1, 0.1, 0.1};
   mesh_helper->cell_contains_point_3d(0, point);
 
+  nprint("TODO cleanup");
   for (int cellx = 0; cellx < mesh_helper->get_cell_count(); cellx++) {
     const bool contained = mesh_helper->cell_contains_point_3d(cellx, point);
     if (contained) {
@@ -59,4 +59,39 @@ TEST(PETSc, foo) {
   PETSCCHK(DMDestroy(&dm));
   PETSCCHK(PetscFinalize());
 }
+
+TEST(PETSc, foo) {
+  std::filesystem::path gmsh_filepath;
+  // GET_TEST_RESOURCE(gmsh_filepath,
+  // "gmsh/reference_all_types_square_0.2.msh");
+
+  nprint("TODO commit a mesh");
+  gmsh_filepath = get_env_string("GMSH_TMP", "");
+
+  PETSCCHK(PetscInitializeNoArguments());
+  DM dm;
+  PETSCCHK(DMPlexCreateGmshFromFile(MPI_COMM_WORLD,
+                                    gmsh_filepath.generic_string().c_str(),
+                                    (PetscBool)1, &dm));
+  PetscInterface::generic_distribute(&dm);
+
+  int rank = -1;
+  MPICHK(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
+
+  auto mesh =
+      std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
+
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+
+  auto mapper =
+      std::make_shared<PetscInterface::DMPlexLocalMapper>(sycl_target, mesh);
+  auto domain = std::make_shared<Domain>(mesh, mapper);
+
+  sycl_target->free();
+  mesh->free();
+
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
+
 #endif

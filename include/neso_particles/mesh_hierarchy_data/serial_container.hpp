@@ -112,7 +112,6 @@ public:
    * @param other Other instance containing serialised objects in its buffer.
    */
   inline void append(SerialContainer<T> &other) {
-    this->buffer.reserve(this->buffer.size() + other.buffer.size());
     this->buffer.insert(this->buffer.end(), other.buffer.begin(),
                         other.buffer.end());
   }
