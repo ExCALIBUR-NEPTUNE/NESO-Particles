@@ -1,5 +1,6 @@
 #ifdef NESO_PARTICLES_PETSC
 #include <neso_particles/external_interfaces/petsc/dmplex_interface.hpp>
+#include <unordered_map>
 
 namespace NESO::Particles::PetscInterface {
 
@@ -115,20 +116,34 @@ void DMPlexInterface::create_halos(ExternalCommon::MHGeomMap &mh_element_map) {
 
   std::map<INT, std::vector<DMPlexCellSerialise>> map_cell_dmplex;
   // reserve space
-  for (auto item : mh_element_map) {
+  for (auto &item : mh_element_map) {
     const INT mh_cell = item.first;
     map_cell_dmplex[mh_cell].reserve(item.second.size());
   }
+
   // create the objects
-  for (auto item : mh_element_map) {
-    const INT mh_cell = item.first;
-    for (auto dm_cell : item.second) {
-      map_cell_dmplex[mh_cell].push_back(this->dmh->get_copyable_cell(dm_cell));
+  {
+    std::unordered_map<INT, DMPlexCellSerialise> cache;
+    for (auto &item : mh_element_map) {
+      const INT mh_cell = item.first;
+      for (auto dm_cell : item.second) {
+        if (cache.count(dm_cell)) {
+          const auto &copyable_cell = cache[dm_cell];
+          map_cell_dmplex[mh_cell].push_back(copyable_cell);
+        } else {
+          const auto copyable_cell = this->dmh->get_copyable_cell(dm_cell);
+          map_cell_dmplex[mh_cell].push_back(copyable_cell);
+          cache[dm_cell] = copyable_cell;
+        }
+      }
     }
+    cache.clear();
   }
+
   // send the packed cells to the owning MPI ranks
   MeshHierarchyData::MeshHierarchyContainer mhc(this->mesh_hierarchy,
                                                 map_cell_dmplex);
+
   // Explicitly gather all cells this rank owns, this should be a lightweight
   // call as the constructor above should have gathered these.
   std::vector<INT> cells_to_gather;
@@ -183,6 +198,7 @@ void DMPlexInterface::create_halos(ExternalCommon::MHGeomMap &mh_element_map) {
   } else {
     this->dmh_halo = nullptr;
   }
+
   mhc.free();
 }
 
