@@ -21,8 +21,7 @@ struct Linear3DData {
   int owning_rank;
   int local_id;
   int num_vertices;
-  REAL vertices[8];
-  int faces[8];
+  REAL normal_origin[(3 + 3) * 6];
 };
 
 } // namespace Implementation3DLinear

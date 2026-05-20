@@ -719,6 +719,13 @@ bool DMPlexHelper::cell_contains_point_3d(const PetscInt index,
       n[2] *= -1;
     }
 
+    const REAL normalisation =
+        1.0 / std::sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+
+    n[0] *= normalisation;
+    n[1] *= normalisation;
+    n[2] *= normalisation;
+
     // Now normal point outwards
     const PetscScalar t1[3] = {x0 - vertices[0], x1 - vertices[1],
                                x2 - vertices[2]};
