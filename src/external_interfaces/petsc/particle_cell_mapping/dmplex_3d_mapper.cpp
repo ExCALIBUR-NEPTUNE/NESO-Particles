@@ -129,6 +129,7 @@ DMPlex3DMapper::DMPlex3DMapper(SYCLTargetSharedPtr sycl_target,
 
     tmp_data.owning_rank = owning_rank;
     tmp_data.local_id = local_id;
+    tmp_data.num_faces = num_faces;
 
     return tmp_data;
   };
@@ -219,6 +220,101 @@ DMPlex3DMapper::DMPlex3DMapper(SYCLTargetSharedPtr sycl_target,
   this->ep = std::make_unique<ErrorPropagate>(this->sycl_target);
 }
 
-void DMPlex3DMapper::map(ParticleGroup &particle_group, const int map_cell) {}
+void DMPlex3DMapper::map(ParticleGroup &particle_group, const int map_cell) {
+
+  auto dat_positions = particle_group.position_dat;
+  auto dat_cells = particle_group.cell_id_dat;
+  auto dat_ranks = particle_group.mpi_rank_dat;
+
+  auto k_overlay_mapper = this->overlay_mesh->get_device_mapper();
+  auto k_map_sizes = this->map_sizes->root;
+  auto k_map_candidates = this->map_candidates->root;
+  auto k_cell_data = this->cell_data->root;
+
+  auto map_loop = particle_loop(
+      "DMPlex3DMapper::map", dat_positions,
+      [=](auto P, auto CELL, auto RANK) {
+        // Find the cell in the overlayed mesh
+        const REAL x0 = P.at(0);
+        const REAL x1 = P.at(1);
+        const REAL x2 = P.at(2);
+        int cell_tuple[3] = {k_overlay_mapper.get_cell_in_dimension(0, x0),
+                             k_overlay_mapper.get_cell_in_dimension(1, x1),
+                             k_overlay_mapper.get_cell_in_dimension(2, x2)};
+        const int overlay_cell =
+            k_overlay_mapper.get_linear_cell_index(cell_tuple);
+        // Get the number of candidate cells
+        int num_candidates = 0;
+        k_map_sizes->get(overlay_cell, &num_candidates);
+        int *candidates = nullptr;
+        k_map_candidates->get(overlay_cell, &candidates);
+        // loop over candidates and test if point in cell
+        for (int cx = 0; cx < num_candidates; cx++) {
+
+          const int candidate = candidates[cx];
+          // Get the cell data for this candidate cell
+          Implementation3DLinear::Linear3DData const *cell_data = nullptr;
+          k_cell_data->get(candidate, &cell_data);
+
+          // Test if point in candidate cell
+          int num_crossings = 0;
+          const int num_faces = cell_data->num_faces;
+          const REAL *normal_origin = cell_data->normal_origin;
+
+          bool contained = true;
+          for (int facex = 0; facex < num_faces; facex++) {
+            const REAL normal[3] = {normal_origin[facex * 6 + 0],
+                                    normal_origin[facex * 6 + 1],
+                                    normal_origin[facex * 6 + 2]};
+            const REAL origin[3] = {normal_origin[facex * 6 + 3 + 0],
+                                    normal_origin[facex * 6 + 3 + 1],
+                                    normal_origin[facex * 6 + 3 + 2]};
+            const REAL t0[3] = {x0 - origin[0], x1 - origin[1], x2 - origin[2]};
+
+            const PetscScalar t0_dot_n = KERNEL_DOT_PRODUCT_3D(
+                t0[0], t0[1], t0[2], normal[0], normal[1], normal[2]);
+
+            if (t0_dot_n > 0.0) {
+              contained = false;
+            }
+          }
+
+          if (contained) {
+            CELL.at(0) = cell_data->local_id;
+            RANK.at(1) = cell_data->owning_rank;
+          }
+        }
+      },
+      Access::read(dat_positions), Access::write(dat_cells),
+      Access::write(dat_ranks));
+
+  if (map_cell > -1) {
+    map_loop->execute(map_cell);
+  } else {
+    map_loop->execute();
+  }
+
+  if (map_cell > -1) {
+    auto k_ep = this->ep->device_ptr();
+    particle_loop(
+        "DMPlex3DMapper::check", dat_positions,
+        [=](auto RANK) { NESO_KERNEL_ASSERT(RANK.at(1) > -1, k_ep); },
+        Access::read(dat_ranks))
+        ->execute(map_cell);
+    if (this->ep->get_flag()) {
+      auto ranks = dat_ranks->cell_dat.get_cell(map_cell);
+      auto positions = dat_positions->cell_dat.get_cell(map_cell);
+      for (int rx = 0; rx < ranks->nrow; rx++) {
+        if (ranks->at(rx, 1) < 0) {
+          nprint("-----------Failing particle info------------");
+          particle_group.print_particle(map_cell, rx);
+          nprint("--------------------------------------------");
+        }
+      }
+    }
+    this->ep->check_and_throw("DMPlex3DMapper Failed to find local cell for "
+                              "one or more particles.");
+  }
+}
 
 } // namespace NESO::Particles::PetscInterface

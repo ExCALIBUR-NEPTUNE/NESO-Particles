@@ -60,7 +60,7 @@ TEST(PETSc, dmplex_interface_3d_base) {
   PETSCCHK(PetscFinalize());
 }
 
-TEST(PETSc, foo) {
+TEST(PETSc, dmplex_3d_mapper) {
   std::filesystem::path gmsh_filepath;
   // GET_TEST_RESOURCE(gmsh_filepath,
   // "gmsh/reference_all_types_square_0.2.msh");
@@ -75,6 +75,7 @@ TEST(PETSc, foo) {
                                     (PetscBool)1, &dm));
   PetscInterface::generic_distribute(&dm);
 
+  const int ndim = 3;
   int rank = -1;
   MPICHK(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
 
@@ -86,6 +87,42 @@ TEST(PETSc, foo) {
   auto mapper =
       std::make_shared<PetscInterface::DMPlexLocalMapper>(sycl_target, mesh);
   auto domain = std::make_shared<Domain>(mesh, mapper);
+
+  ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
+                             ParticleProp(Sym<INT>("CELL_ID"), 1, true),
+                             ParticleProp(Sym<INT>("ID"), 1)};
+
+  auto A = std::make_shared<ParticleGroup>(domain, particle_spec, sycl_target);
+
+  std::mt19937 rng_pos(52234234 + rank);
+
+  REAL extents[3] = {2.0, 2.0, 2.0};
+
+  const int N = 255 * mesh->get_cell_count();
+  auto positions = uniform_within_extents(N, ndim, extents, rng_pos);
+
+  ParticleSet initial_distribution(N, particle_spec);
+
+  for (int px = 0; px < N; px++) {
+    for (int dimx = 0; dimx < ndim; dimx++) {
+      initial_distribution[Sym<REAL>("P")][px][dimx] =
+          positions[dimx][px] - 1.0;
+    }
+    initial_distribution[Sym<INT>("CELL_ID")][px][0] = 0;
+    initial_distribution[Sym<INT>("ID")][px][0] = px;
+  }
+  A->add_particles_local(initial_distribution);
+
+  mapper->map(*A);
+
+  auto vtk_data = mesh->dmh->get_vtk_cell_data();
+  VTK::VTKHDF vtkhdf("foo.vtkhdf", MPI_COMM_WORLD);
+  vtkhdf.write(vtk_data);
+  vtkhdf.close();
+
+  H5Part h5part("bar.h5part", A, Sym<INT>("CELL_ID"));
+  h5part.write();
+  h5part.close();
 
   sycl_target->free();
   mesh->free();
