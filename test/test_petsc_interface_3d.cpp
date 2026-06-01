@@ -99,7 +99,8 @@ TEST(PETSc, dmplex_3d_mapper) {
 
   REAL extents[3] = {2.0, 2.0, 2.0};
 
-  const int N = 255 * mesh->get_cell_count();
+  const int cell_count = mesh->get_cell_count();
+  const int N = 200 * cell_count;
   auto positions = uniform_within_extents(N, ndim, extents, rng_pos);
 
   ParticleSet initial_distribution(N, particle_spec);
@@ -114,16 +115,39 @@ TEST(PETSc, dmplex_3d_mapper) {
   }
   A->add_particles_local(initial_distribution);
 
-  mapper->map(*A);
+  A->hybrid_move();
+  A->cell_move();
 
-  auto vtk_data = mesh->dmh->get_vtk_cell_data();
-  VTK::VTKHDF vtkhdf("foo.vtkhdf", MPI_COMM_WORLD);
-  vtkhdf.write(vtk_data);
-  vtkhdf.close();
+  // auto vtk_data = mesh->dmh->get_vtk_cell_data();
+  // VTK::VTKHDF vtkhdf("foo.vtkhdf", MPI_COMM_WORLD);
+  // for(int cellx=0 ; cellx<cell_count ; cellx++){
+  //   vtk_data.at(cellx).cell_data["CELL_ID"] = cellx;
+  // }
+  // vtkhdf.write(vtk_data);
+  // vtkhdf.close();
+  // H5Part h5part("bar.h5part", A, Sym<INT>("CELL_ID"));
+  // const int Nsteps = 1;
+  // for(int stepx=0 ; stepx<Nsteps ; stepx++){
+  //   h5part.write();
+  //   h5part.close();
+  //   A->hybrid_move();
+  //   A->cell_move();
+  // }
 
-  H5Part h5part("bar.h5part", A, Sym<INT>("CELL_ID"));
-  h5part.write();
-  h5part.close();
+  std::vector<PetscScalar> point(3);
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    auto CELL_ID = A->get_cell(Sym<INT>("CELL_ID"), cellx);
+    auto P = A->get_cell(Sym<REAL>("P"), cellx);
+    const int nrow = CELL_ID->nrow;
+    for (int rowx = 0; rowx < nrow; rowx++) {
+      point[0] = P->at(rowx, 0);
+      point[1] = P->at(rowx, 1);
+      point[2] = P->at(rowx, 2);
+
+      const bool host_bool = mesh->dmh->cell_contains_point(cellx, point);
+      ASSERT_TRUE(host_bool);
+    }
+  }
 
   sycl_target->free();
   mesh->free();
