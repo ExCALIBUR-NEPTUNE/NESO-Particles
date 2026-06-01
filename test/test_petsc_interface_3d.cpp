@@ -29,6 +29,7 @@ TEST(PETSc, dmplex_interface_3d_base) {
   auto mesh_helper =
       std::make_shared<PetscInterface::DMPlexHelper>(MPI_COMM_WORLD, dm);
 
+  nprint("TODO fix ordering");
   // auto vtk_data = mesh_helper->get_vtk_cell_data();
   // VTK::VTKHDF vtkhdf("foo.vtkhdf", MPI_COMM_WORLD);
   // vtkhdf.write(vtk_data);
@@ -127,6 +128,52 @@ TEST(PETSc, dmplex_3d_mapper) {
   sycl_target->free();
   mesh->free();
 
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
+
+TEST(PETSc, foo) {
+  nprint("TODO REMOVE THIS TEST");
+
+  std::filesystem::path gmsh_filepath;
+  // GET_TEST_RESOURCE(gmsh_filepath,
+  // "gmsh/reference_all_types_square_0.2.msh");
+
+  nprint("TODO commit a mesh");
+  gmsh_filepath = get_env_string("GMSH_TMP", "");
+
+  PETSCCHK(PetscInitializeNoArguments());
+  DM dm;
+  PETSCCHK(DMPlexCreateGmshFromFile(MPI_COMM_WORLD,
+                                    gmsh_filepath.generic_string().c_str(),
+                                    (PetscBool)1, &dm));
+  PetscInterface::generic_distribute(&dm);
+
+  int rank = -1;
+  MPICHK(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
+
+  auto mesh_helper =
+      std::make_shared<PetscInterface::DMPlexHelper>(MPI_COMM_WORLD, dm);
+
+  auto vtk_data = mesh_helper->get_vtk_cell_data();
+
+  for (auto &element : vtk_data) {
+    const int num_vertices = element.points.size() / 3;
+    for (int vx = 0; vx < num_vertices; vx++) {
+      const REAL x = element.points.at(3 * vx + 0);
+      const REAL y = element.points.at(3 * vx + 1);
+      const REAL z = element.points.at(3 * vx + 2);
+      element.point_data["x"].push_back(x);
+      element.point_data["y"].push_back(y);
+      element.point_data["z"].push_back(z);
+    }
+  }
+
+  VTK::VTKHDF vtkhdf("foo.vtkhdf", MPI_COMM_WORLD);
+  vtkhdf.write(vtk_data);
+  vtkhdf.close();
+
+  mesh_helper->free();
   PETSCCHK(DMDestroy(&dm));
   PETSCCHK(PetscFinalize());
 }

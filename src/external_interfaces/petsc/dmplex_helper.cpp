@@ -463,16 +463,13 @@ void DMPlexHelper::get_generic_vertices(
                                         &array, &coords));
 }
 
-void DMPlexHelper::get_cell_vertices(const PetscInt cell,
-                                     std::vector<std::vector<REAL>> &vertices) {
-  this->check_valid_local_cell(cell);
+void DMPlexHelper::get_point_vertices(
+    const PetscInt petsc_index, std::vector<std::vector<REAL>> &vertices) {
 
   const PetscScalar *array;
   PetscScalar *coords = nullptr;
   PetscInt num_coords;
   PetscBool is_dg;
-  const PetscInt petsc_index = this->map_np_to_petsc.at(cell);
-  this->check_valid_petsc_cell(petsc_index);
   PETSCCHK(DMPlexGetCellCoordinates(dm, petsc_index, &is_dg, &num_coords,
                                     &array, &coords));
   NESOASSERT(coords != nullptr, "No vertices returned for cell.");
@@ -490,6 +487,17 @@ void DMPlexHelper::get_cell_vertices(const PetscInt cell,
   }
   PETSCCHK(DMPlexRestoreCellCoordinates(dm, petsc_index, &is_dg, &num_coords,
                                         &array, &coords));
+}
+
+void DMPlexHelper::get_cell_vertices(const PetscInt cell,
+                                     std::vector<std::vector<REAL>> &vertices) {
+  this->check_valid_local_cell(cell);
+
+  const PetscScalar *array;
+  const PetscInt petsc_index = this->map_np_to_petsc.at(cell);
+
+  this->check_valid_petsc_cell(petsc_index);
+  return this->get_point_vertices(cell, vertices);
 }
 
 void DMPlexHelper::get_cell_vertex_average(const PetscInt cell,
@@ -813,17 +821,25 @@ std::vector<VTK::UnstructuredCell> DMPlexHelper::get_vtk_cell_data() {
   const int cell_count = this->get_cell_count();
   std::vector<VTK::UnstructuredCell> data(cell_count);
   std::vector<std::vector<REAL>> vertices;
+  std::vector<PetscInt> order;
+
   for (int cellx = 0; cellx < cell_count; cellx++) {
+
+    const PetscInt petsc_index = this->map_np_to_petsc.at(cellx);
     vertices.clear();
     this->get_cell_vertices(cellx, vertices);
     const int num_vertices = vertices.size();
     data.at(cellx).num_points = num_vertices;
     const auto cell_type = this->get_cell_type(cellx);
-    data.at(cellx).cell_type = get_vtk_cell_type(cell_type);
+    const auto vtk_cell_type = get_vtk_cell_type(cell_type);
+
+    data.at(cellx).cell_type = vtk_cell_type;
     data.at(cellx).points.reserve(num_vertices * 3);
+    this->get_vtk_cell_vertex_order(cellx, order);
+
     for (int vx = 0; vx < num_vertices; vx++) {
       for (int dx = 0; dx < this->ndim; dx++) {
-        data.at(cellx).points.push_back(vertices.at(vx).at(dx));
+        data.at(cellx).points.push_back(vertices.at(order.at(vx)).at(dx));
       }
       for (int dx = this->ndim; dx < 3; dx++) {
         data.at(cellx).points.push_back(0.0);
@@ -831,6 +847,28 @@ std::vector<VTK::UnstructuredCell> DMPlexHelper::get_vtk_cell_data() {
     }
   }
   return data;
+}
+
+void DMPlexHelper::get_vtk_cell_vertex_order(const PetscInt cell,
+                                             std::vector<PetscInt> &order) {
+
+  std::map<VTK::CellType, std::vector<int>> map_shape_to_order;
+  map_shape_to_order[VTK::CellType::point] = {0};
+  map_shape_to_order[VTK::CellType::line] = {0, 1};
+  map_shape_to_order[VTK::CellType::triangle] = {0, 1, 2};
+  map_shape_to_order[VTK::CellType::quadrilateral] = {0, 1, 2, 3};
+  map_shape_to_order[VTK::CellType::tetrahedron] = {0, 1, 2, 3};
+  map_shape_to_order[VTK::CellType::pyramid] = {0, 1, 3, 2, 4};
+  map_shape_to_order[VTK::CellType::wedge] = {0, 1, 2, 3, 4, 5};
+  map_shape_to_order[VTK::CellType::hex] = {1, 2, 6, 7, 0, 3, 5, 4};
+
+  const PetscInt petsc_index = this->map_np_to_petsc.at(cell);
+  const auto cell_type = this->get_cell_type(cell);
+  const auto vtk_cell_type = get_vtk_cell_type(cell_type);
+  const auto &ref_order = map_shape_to_order.at(vtk_cell_type);
+
+  order.clear();
+  order.insert(order.end(), ref_order.begin(), ref_order.end());
 }
 
 void DMPlexHelper::print() {

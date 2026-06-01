@@ -234,6 +234,9 @@ protected:
 
   ExternalCommon::BoundingBoxSharedPtr bounding_box;
 
+  void get_point_vertices(const PetscInt petsc_index,
+                          std::vector<std::vector<REAL>> &vertices);
+
 public:
   MPI_Comm comm;
   DM dm;
@@ -449,6 +452,16 @@ public:
    * implementation.
    */
   std::vector<VTK::UnstructuredCell> get_vtk_cell_data();
+
+  /**
+   * Get VTK vertex order for a cell. Returned array gives order such that
+   * For VTK vertex i, order[i] gives the DMPlex vertex.
+   *
+   * @param[in] cell Local cell index in [0, cell_count).
+   * @param[in, out] order Vector containing reordering.
+   */
+  void get_vtk_cell_vertex_order(const PetscInt cell,
+                                 std::vector<PetscInt> &order);
 
   /**
    * Print to stdout information about the held DMPlex.
