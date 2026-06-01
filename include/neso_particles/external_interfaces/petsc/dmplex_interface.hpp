@@ -43,6 +43,8 @@ public:
   MPI_Comm comm;
   std::shared_ptr<DMPlexHelper> dmh;
   std::shared_ptr<DMPlexHelper> dmh_halo;
+
+  // Map from local id -> {remote rank, remote local ID, global index}.
   std::map<PetscInt, std::tuple<int, PetscInt, PetscInt>>
       map_local_lid_remote_lid;
 

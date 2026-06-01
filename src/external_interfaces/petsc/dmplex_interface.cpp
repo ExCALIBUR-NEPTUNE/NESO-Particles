@@ -417,7 +417,7 @@ bool DMPlexInterface::validate_halos(const bool fatal) {
       }
 
       const int rank_held = map_halo_to_rank.at(hpoint);
-      if (depth == 2) {
+      if (depth == this->ndim) {
         lambda_assert_eq(rank_held,
                          int_rdata.at(I(global_point, num_components - 1)));
       }
@@ -431,13 +431,24 @@ bool DMPlexInterface::validate_halos(const bool fatal) {
                                         &array, &coords));
       lambda_assert_true(num_coords <= num_components_real);
 
-      std::set<std::tuple<double, double>> correct, to_test;
-      for (int cx = 0; cx < num_coords; cx += 2) {
-        correct.insert({real_rdata.at(F(global_point, cx)),
-                        real_rdata.at(F(global_point, cx + 1))});
-        to_test.insert({coords[cx], coords[cx + 1]});
+      if (this->ndim == 2) {
+        std::set<std::tuple<double, double>> correct, to_test;
+        for (int cx = 0; cx < num_coords; cx += 2) {
+          correct.insert({real_rdata.at(F(global_point, cx)),
+                          real_rdata.at(F(global_point, cx + 1))});
+          to_test.insert({coords[cx], coords[cx + 1]});
+        }
+        lambda_assert_eq(to_test, correct);
+      } else if (this->ndim == 3) {
+        std::set<std::tuple<double, double, double>> correct, to_test;
+        for (int cx = 0; cx < num_coords; cx += 3) {
+          correct.insert({real_rdata.at(F(global_point, cx)),
+                          real_rdata.at(F(global_point, cx + 1)),
+                          real_rdata.at(F(global_point, cx + 2))});
+          to_test.insert({coords[cx], coords[cx + 1], coords[cx + 2]});
+        }
+        lambda_assert_eq(to_test, correct);
       }
-      lambda_assert_eq(to_test, correct);
 
       PETSCCHK(DMPlexRestoreCellCoordinates(dm_halo, hpoint, &is_dg,
                                             &num_coords, &array, &coords));

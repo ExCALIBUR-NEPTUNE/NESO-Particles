@@ -1,3 +1,4 @@
+#ifdef NESO_PARTICLES_PETSC
 #include <neso_particles/external_interfaces/petsc/particle_cell_mapping/dmplex_3d_mapper.hpp>
 
 namespace NESO::Particles::PetscInterface {
@@ -318,3 +319,4 @@ void DMPlex3DMapper::map(ParticleGroup &particle_group, const int map_cell) {
 }
 
 } // namespace NESO::Particles::PetscInterface
+#endif

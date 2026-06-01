@@ -49,7 +49,9 @@ TEST(PETSc, dmplex_interface_3d_base) {
   auto mesh =
       std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
 
-  ASSERT_TRUE(mesh->validate_halos(false));
+  // ASSERT_TRUE(mesh->validate_halos(false));
+  nprint("TODO revert to false");
+  ASSERT_TRUE(mesh->validate_halos(true));
 
   const double volume = mesh->dmh->get_volume();
   ASSERT_NEAR(volume, 8.0, 1.0e-10);
