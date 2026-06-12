@@ -159,8 +159,6 @@ TEST(PETSc, dmplex_3d_mapper) {
 }
 
 TEST(PETSc, foo) {
-  nprint("TODO REMOVE THIS TEST");
-
   std::filesystem::path gmsh_filepath;
   // GET_TEST_RESOURCE(gmsh_filepath,
   // "gmsh/reference_all_types_square_0.2.msh");
@@ -178,28 +176,50 @@ TEST(PETSc, foo) {
   int rank = -1;
   MPICHK(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
 
-  auto mesh_helper =
-      std::make_shared<PetscInterface::DMPlexHelper>(MPI_COMM_WORLD, dm);
-
-  auto vtk_data = mesh_helper->get_vtk_cell_data();
-
-  for (auto &element : vtk_data) {
-    const int num_vertices = element.points.size() / 3;
-    for (int vx = 0; vx < num_vertices; vx++) {
-      const REAL x = element.points.at(3 * vx + 0);
-      const REAL y = element.points.at(3 * vx + 1);
-      const REAL z = element.points.at(3 * vx + 2);
-      element.point_data["x"].push_back(x);
-      element.point_data["y"].push_back(y);
-      element.point_data["z"].push_back(z);
-    }
+  if (rank == 0) {
+    PetscInterface::print_transitive_closure(dm, 1467);
   }
 
-  VTK::VTKHDF vtkhdf("foo.vtkhdf", MPI_COMM_WORLD);
-  vtkhdf.write(vtk_data);
-  vtkhdf.close();
+  auto mesh =
+      std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
 
-  mesh_helper->free();
+  {
+    auto vtk_data = mesh->dmh->get_vtk_cell_data();
+
+    for (auto &element : vtk_data) {
+      const int num_vertices = element.points.size() / 3;
+      for (int vx = 0; vx < num_vertices; vx++) {
+        const REAL x = element.points.at(3 * vx + 0);
+        const REAL y = element.points.at(3 * vx + 1);
+        const REAL z = element.points.at(3 * vx + 2);
+        element.point_data["x"].push_back(x);
+        element.point_data["y"].push_back(y);
+        element.point_data["z"].push_back(z);
+      }
+      element.cell_data["rank"] = rank;
+    }
+
+    VTK::VTKHDF vtkhdf("foo.vtkhdf", MPI_COMM_WORLD);
+    vtkhdf.write(vtk_data);
+    vtkhdf.close();
+  }
+
+  nprint("BEFORE HALO VTK");
+
+  {
+    auto vtk_data = mesh->dmh_halo->get_vtk_cell_data();
+
+    for (auto &element : vtk_data) {
+      element.cell_data["rank"] = rank;
+    }
+
+    VTK::VTKHDF vtkhdf("foo_halo_" + std::to_string(rank) + ".vtkhdf",
+                       MPI_COMM_SELF);
+    vtkhdf.write(vtk_data);
+    vtkhdf.close();
+  }
+
+  mesh->free();
   PETSCCHK(DMDestroy(&dm));
   PETSCCHK(PetscFinalize());
 }

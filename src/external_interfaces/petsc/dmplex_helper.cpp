@@ -32,6 +32,29 @@ void setup_coordinate_section(DM &dm, const PetscInt vertex_start,
   PETSCCHK(PetscSectionSetUp(coord_section));
 }
 
+void print_transitive_closure(DM &dm, const PetscInt point) {
+  PetscInt num_points = 0;
+  PetscInt *points = NULL;
+  PetscInt depth = 0;
+
+  PETSCCHK(
+      DMPlexGetTransitiveClosure(dm, point, PETSC_TRUE, &num_points, &points));
+
+  nprint("transitive closure for point:", point);
+
+  for (PetscInt px = 0; px < num_points; px++) {
+    const PetscInt pointx = points[2 * px];
+    const PetscInt orientation = points[2 * px + 1];
+    PETSCCHK(DMPlexGetPointDepth(dm, pointx, &depth));
+
+    nprint("\tcone index:", px, "point:", pointx, "orientation:", orientation,
+           "depth:", depth);
+  }
+
+  PETSCCHK(DMPlexRestoreTransitiveClosure(dm, point, PETSC_TRUE, &num_points,
+                                          &points));
+}
+
 void setup_local_coordinate_vector(DM &dm, Vec &coordinates) {
   PetscSection coord_section;
   PETSCCHK(DMGetCoordinateSection(dm, &coord_section));
@@ -149,10 +172,178 @@ VTK::CellType get_vtk_cell_type(const DMPolytopeType petsc_cell_type) {
   }
 }
 
+void HaloDMIndexMapper::get_depth_stratum(const PetscInt depth, PetscInt *start,
+                                          PetscInt *end) {
+  *start = this->depth_starts.at(depth);
+  *end = this->depth_ends.at(depth);
+}
+
+PetscInt HaloDMIndexMapper::get_local_point_index(const PetscInt point) {
+  const auto local_point = this->map_global_to_local.at(point);
+  return local_point;
+}
+
+HaloDMIndexMapper::HaloDMIndexMapper(
+    std::vector<CellSTDRepresentation> &cells) {
+  this->chart_start = 0;
+  this->chart_end = 0;
+
+  if (cells.size() > 0) {
+
+    std::map<PetscInt, std::set<PetscInt>> map_depth_to_points;
+    for (auto &cx : cells) {
+      for (auto &px : cx.point_cones) {
+        const auto point = px.first;
+        const auto depth = cx.get_point_depth(point);
+        map_depth_to_points[depth].insert(point);
+      }
+    }
+    this->depth_max = std::numeric_limits<PetscInt>::lowest();
+    this->depth_min = std::numeric_limits<PetscInt>::max();
+    for (auto &depth_points : map_depth_to_points) {
+      this->depth_max = std::max(this->depth_max, depth_points.first);
+      this->depth_min = std::min(this->depth_min, depth_points.first);
+    }
+    NESOASSERT(this->depth_min == 0,
+               "Expected minium depth to be 0 for vertices.");
+
+    // Get the ranges for the local indices for the new DM
+    std::vector<PetscInt> starting_indices(this->depth_max + 1);
+    this->depth_starts.resize(this->depth_max + 1);
+    this->depth_ends.resize(this->depth_max + 1);
+    this->depth_starts.at(0) = 0;
+    this->depth_ends.at(0) = map_depth_to_points.at(0).size();
+    starting_indices.at(0) = 0;
+    for (int depth = 1; depth <= this->depth_max; depth++) {
+      const PetscInt prev_end = this->depth_ends.at(depth - 1);
+      this->depth_starts.at(depth) = prev_end;
+      this->depth_ends.at(depth) =
+          prev_end + map_depth_to_points.at(depth).size();
+      starting_indices.at(depth) = prev_end;
+    }
+
+    // Get the new indices for points
+    for (auto &depth_points : map_depth_to_points) {
+      const PetscInt depth = depth_points.first;
+      for (const PetscInt global_point : depth_points.second) {
+        const PetscInt local_point = starting_indices.at(depth)++;
+        this->map_global_to_local[global_point] = local_point;
+        this->chart_end++;
+      }
+    }
+
+    for (int depth = 0; depth <= this->depth_max; depth++) {
+      const PetscInt end_index = this->depth_ends.at(depth);
+      NESOASSERT(end_index == starting_indices.at(depth),
+                 "Error mapping old indices to new indices");
+    }
+    NESOASSERT(this->chart_end ==
+                   this->depth_ends.at(this->depth_ends.size() - 1),
+               "Error mapping chart start/end=.");
+  }
+}
+
+namespace {
+bool std_cell_representation_is_self_consistent(
+    std::vector<CellSTDRepresentation> &std_rep_cells) {
+
+  bool v = true;
+
+  std::map<PetscInt, std::vector<PetscInt>> map_point_to_cone;
+
+  for (auto &std_cell : std_rep_cells) {
+    for (auto &point_spec : std_cell.point_cones) {
+      const PetscInt global_point = point_spec.first;
+      const auto &cone = point_spec.second;
+
+      if (map_point_to_cone.count(global_point)) {
+        bool same = cone.size() == map_point_to_cone[global_point].size();
+        if (same) {
+          for (int ix = 0; ix < cone.size(); ix++) {
+            if (same) {
+              same = cone[ix] == map_point_to_cone[global_point][ix];
+            }
+          }
+        }
+
+        if (!same) {
+          v = false;
+        }
+      } else {
+        map_point_to_cone[global_point] = cone;
+      }
+    }
+  }
+
+  return v;
+}
+
+bool std_cell_representation_matches_dm(
+    std::vector<CellSTDRepresentation> &std_rep_cells,
+    HaloDMIndexMapper &index_mapper, DM dm) {
+  bool v = true;
+
+  std::set<PetscInt> checked_global_points;
+  std::vector<PetscInt> cone_local;
+
+  for (auto &std_cell : std_rep_cells) {
+    for (auto &point_spec : std_cell.point_cones) {
+      const PetscInt global_point = point_spec.first;
+      if (!checked_global_points.count(global_point)) {
+        checked_global_points.insert(global_point);
+        const PetscInt local_point =
+            index_mapper.get_local_point_index(global_point);
+
+        cone_local.clear();
+        auto &cone_global = point_spec.second;
+        int lx = 0;
+        for (auto gx : cone_global) {
+          cone_local.push_back(index_mapper.get_local_point_index(gx));
+          lx++;
+        }
+
+        const PetscInt *cone = nullptr;
+        const PetscInt *ornt = nullptr;
+        PETSCCHK(DMPlexGetOrientedCone(dm, local_point, &cone, &ornt));
+        PetscInt cone_size = 0;
+        PETSCCHK(DMPlexGetConeSize(dm, local_point, &cone_size));
+
+        const bool size_matches =
+            cone_size ==
+            std_cell.point_cone_orientations.at(global_point).size();
+
+        bool entries_match = true;
+
+        if (size_matches) {
+          for (PetscInt ix = 0; ix < cone_size; ix++) {
+            const bool entry_matches =
+                (cone_local.at(ix) == cone[ix]) &&
+                (std_cell.point_cone_orientations.at(global_point).at(ix) ==
+                 ornt[ix]);
+            if (!entry_matches) {
+              entries_match = false;
+            }
+          }
+        }
+
+        PETSCCHK(DMPlexRestoreOrientedCone(dm, local_point, &cone, &ornt));
+
+        if (!(entries_match && size_matches)) {
+          v = false;
+        }
+      }
+    }
+  }
+
+  return v;
+}
+} // namespace
+
 bool dm_from_serialised_cells(
     std::list<DMPlexCellSerialise> &serialised_cells, DM &dm_prototype, DM &dm,
     std::map<PetscInt, std::tuple<int, PetscInt, PetscInt>>
-        &map_local_lid_remote_lid) {
+        &map_local_lid_remote_lid,
+    const bool additional_checks) {
 
   const PetscInt num_cells = serialised_cells.size();
   std::vector<CellSTDRepresentation> std_rep_cells(num_cells);
@@ -205,29 +396,45 @@ bool dm_from_serialised_cells(
         }
       }
     }
+    NESOASSERT((!additional_checks) ||
+                   std_cell_representation_is_self_consistent(std_rep_cells),
+               "std_cell_representation_is_self_consistent check failed.");
 
     PETSCCHK(DMSetUp(dm));
     std::vector<PetscInt> cone_local;
     points_set.clear();
-    for (auto &std_cell : std_rep_cells) {
-      for (auto &point_spec : std_cell.point_cones) {
-        const PetscInt global_point = point_spec.first;
-        if (!points_set.count(global_point)) {
-          points_set.insert(global_point);
-          const PetscInt local_point =
-              index_mapper.get_local_point_index(global_point);
-          auto &cone_global = point_spec.second;
-          cone_local.clear();
-          cone_local.reserve(cone_global.size());
-          for (auto gx : cone_global) {
-            cone_local.push_back(index_mapper.get_local_point_index(gx));
-          }
-          PETSCCHK(DMPlexSetCone(dm, local_point, cone_local.data()));
-          PETSCCHK(DMPlexSetConeOrientation(
-              dm, local_point,
-              std_cell.point_cone_orientations.at(global_point).data()));
-          if (!map_local_lid_remote_lid.count(local_point)) {
-            map_local_lid_remote_lid[local_point] = {-1, -1, global_point};
+
+    PetscInt prototype_depth = 0;
+    PETSCCHK(DMPlexGetDepth(dm_prototype, &prototype_depth));
+
+    for (PetscInt depthx = 0; depthx <= prototype_depth; depthx++) {
+      for (auto &std_cell : std_rep_cells) {
+        for (auto &point_spec : std_cell.point_cones) {
+          const PetscInt global_point = point_spec.first;
+
+          if (std_cell.get_point_depth(global_point) == depthx) {
+
+            if (!points_set.count(global_point)) {
+              points_set.insert(global_point);
+              const PetscInt local_point =
+                  index_mapper.get_local_point_index(global_point);
+
+              auto &cone_global = point_spec.second;
+              cone_local.clear();
+
+              int lx = 0;
+              for (auto gx : cone_global) {
+                cone_local.push_back(index_mapper.get_local_point_index(gx));
+                lx++;
+              }
+              PETSCCHK(DMPlexSetCone(dm, local_point, cone_local.data()));
+              PETSCCHK(DMPlexSetConeOrientation(
+                  dm, local_point,
+                  std_cell.point_cone_orientations.at(global_point).data()));
+              if (!map_local_lid_remote_lid.count(local_point)) {
+                map_local_lid_remote_lid[local_point] = {-1, -1, global_point};
+              }
+            }
           }
         }
       }
@@ -262,6 +469,10 @@ bool dm_from_serialised_cells(
     PETSCCHK(DMSetCoordinatesLocal(dm, coordinates));
     PETSCCHK(VecDestroy(&coordinates));
   }
+
+  NESOASSERT((!additional_checks) || std_cell_representation_matches_dm(
+                                         std_rep_cells, index_mapper, dm),
+             "std_cell_representation_matches_dm check failed.");
 
   return num_cells > 0;
 }
@@ -497,7 +708,7 @@ void DMPlexHelper::get_cell_vertices(const PetscInt cell,
   const PetscInt petsc_index = this->map_np_to_petsc.at(cell);
 
   this->check_valid_petsc_cell(petsc_index);
-  return this->get_point_vertices(cell, vertices);
+  return this->get_point_vertices(petsc_index, vertices);
 }
 
 void DMPlexHelper::get_cell_vertex_average(const PetscInt cell,

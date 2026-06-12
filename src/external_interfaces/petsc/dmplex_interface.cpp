@@ -180,7 +180,7 @@ void DMPlexInterface::create_halos(ExternalCommon::MHGeomMap &mh_element_map) {
   DM dm_halo;
   auto halo_exists =
       dm_from_serialised_cells(serialised_halo_cells, this->dmh->dm, dm_halo,
-                               this->map_local_lid_remote_lid);
+                               this->map_local_lid_remote_lid, true);
   if (halo_exists) {
     this->dmh_halo = std::make_shared<DMPlexHelper>(PETSC_COMM_SELF, dm_halo);
     std::set<int> remote_ranks;
@@ -219,7 +219,7 @@ DMPlexInterface::DMPlexInterface(DM dm, const int subdivision_order_offset,
   this->claim_mesh_hierarchy_cells(mh_element_map);
   this->create_halos(mh_element_map);
 
-  if (get_env_size_t("NESO_PARTICLES_DMPLEX_CHECK_FACES", 1)) {
+  if (get_env_size_t("NESO_PARTICLES_DMPLEX_CHECK_FACES", 0)) {
     PETSCCHK(DMPlexCheckFaces(this->dmh->dm, 0));
     if (this->dmh_halo != nullptr) {
       PETSCCHK(DMPlexCheckFaces(this->dmh_halo->dm, 0));

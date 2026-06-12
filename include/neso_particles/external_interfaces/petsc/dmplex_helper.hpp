@@ -38,6 +38,14 @@ void setup_coordinate_section(DM &dm, const PetscInt vertex_start,
                               const PetscInt vertex_end);
 
 /**
+ * Helper function to print transitive closure and orientations.
+ *
+ * @param dm Input DMPlex.
+ * @param point PETSc DMPlex pointin DM.
+ */
+void print_transitive_closure(DM &dm, const PetscInt point);
+
+/**
  * Setup a PETSc vector in which coordinates can be get/set for local mesh. See
  * DMPlexBuildCoordinatesFromCellList.
  *
@@ -88,11 +96,7 @@ struct HaloDMIndexMapper {
    * @param[in, out] start First PETSc point index for given depth.
    * @param[in, out] end Last PETSc point index plus one for given depth.
    */
-  inline void get_depth_stratum(const PetscInt depth, PetscInt *start,
-                                PetscInt *end) {
-    *start = this->depth_starts.at(depth);
-    *end = this->depth_ends.at(depth);
-  }
+  void get_depth_stratum(const PetscInt depth, PetscInt *start, PetscInt *end);
 
   /**
    * Get the new local point index for a global point index.
@@ -100,10 +104,7 @@ struct HaloDMIndexMapper {
    * @param point Global point index.
    * @returns Local point index for a new DM.
    */
-  inline PetscInt get_local_point_index(const PetscInt point) {
-    const auto local_point = this->map_global_to_local.at(point);
-    return local_point;
-  }
+  PetscInt get_local_point_index(const PetscInt point);
 
   /**
    * Create an instance from STD representation on cells, e.g. after cells have
@@ -112,64 +113,7 @@ struct HaloDMIndexMapper {
    * @param cells Vector of cells which require new local indices for all the
    * points contained.
    */
-  HaloDMIndexMapper(std::vector<CellSTDRepresentation> &cells) {
-    this->chart_start = 0;
-    this->chart_end = 0;
-
-    if (cells.size() > 0) {
-
-      std::map<PetscInt, std::set<PetscInt>> map_depth_to_points;
-      for (auto &cx : cells) {
-        for (auto &px : cx.point_cones) {
-          const auto point = px.first;
-          const auto depth = cx.get_point_depth(point);
-          map_depth_to_points[depth].insert(point);
-        }
-      }
-      this->depth_max = std::numeric_limits<PetscInt>::lowest();
-      this->depth_min = std::numeric_limits<PetscInt>::max();
-      for (auto &depth_points : map_depth_to_points) {
-        this->depth_max = std::max(this->depth_max, depth_points.first);
-        this->depth_min = std::min(this->depth_min, depth_points.first);
-      }
-      NESOASSERT(this->depth_min == 0,
-                 "Expected minium depth to be 0 for vertices.");
-
-      // Get the ranges for the local indices for the new DM
-      std::vector<PetscInt> starting_indices(this->depth_max + 1);
-      this->depth_starts.resize(this->depth_max + 1);
-      this->depth_ends.resize(this->depth_max + 1);
-      this->depth_starts.at(0) = 0;
-      this->depth_ends.at(0) = map_depth_to_points.at(0).size();
-      starting_indices.at(0) = 0;
-      for (int depth = 1; depth <= this->depth_max; depth++) {
-        const PetscInt prev_end = this->depth_ends.at(depth - 1);
-        this->depth_starts.at(depth) = prev_end;
-        this->depth_ends.at(depth) =
-            prev_end + map_depth_to_points.at(depth).size();
-        starting_indices.at(depth) = prev_end;
-      }
-
-      // Get the new indices for points
-      for (auto &depth_points : map_depth_to_points) {
-        const PetscInt depth = depth_points.first;
-        for (const PetscInt global_point : depth_points.second) {
-          const PetscInt local_point = starting_indices.at(depth)++;
-          this->map_global_to_local[global_point] = local_point;
-          this->chart_end++;
-        }
-      }
-
-      for (int depth = 0; depth <= this->depth_max; depth++) {
-        const PetscInt end_index = this->depth_ends.at(depth);
-        NESOASSERT(end_index == starting_indices.at(depth),
-                   "Error mapping old indices to new indices");
-      }
-      NESOASSERT(this->chart_end ==
-                     this->depth_ends.at(this->depth_ends.size() - 1),
-                 "Error mapping chart start/end=.");
-    }
-  }
+  HaloDMIndexMapper(std::vector<CellSTDRepresentation> &cells);
 };
 
 /**
@@ -183,12 +127,15 @@ struct HaloDMIndexMapper {
  * @param[in, out] map_local_lid_remote_lid A map from the new local cell
  * indices to a tuple of {original owning rank, original local id on owning
  * rank, global petsc index of cell}.
+ * @param[in] additional_checks When set to true perform additional internal
+ * tests.
  * @returns True if the constructed DMPlex is not empty otherwise false.
  */
 bool dm_from_serialised_cells(
     std::list<DMPlexCellSerialise> &serialised_cells, DM &dm_prototype, DM &dm,
     std::map<PetscInt, std::tuple<int, PetscInt, PetscInt>>
-        &map_local_lid_remote_lid);
+        &map_local_lid_remote_lid,
+    const bool additional_checks);
 
 /**
  * Helper class that wraps a PETSc DMPlex and simplifies common operations.
