@@ -176,10 +176,6 @@ TEST(PETSc, foo) {
   int rank = -1;
   MPICHK(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
 
-  if (rank == 0) {
-    PetscInterface::print_transitive_closure(dm, 1467);
-  }
-
   auto mesh =
       std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
 
