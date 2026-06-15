@@ -381,6 +381,61 @@ inline bool plane_intersection_3d_xy_plane_aligned(
 }
 
 /**
+ * Line segment - Triangle intersection test, in 3D, using the Möller–Trumbore
+ * intersection algorithm.
+ *
+ * @param[in] line_origin Origin point of line.
+ * @param[in] line_direction Direction of line.
+ * @param[in] triangle_vertex_0 First vertex of triangle.
+ * @param[in] triangle_vertex_1 First vertex of triangle.
+ * @param[in] triangle_vertex_2 First vertex of triangle.
+ * @param[in, out] intersection_point Point of intersection.
+ * @param[in] tol_plane Tolerance for the line segment embedded in the plane of
+ * the triangle, default 0.0.
+ * @param[in] tol_contained Tolerance for intersection, default 0.0.
+ */
+inline bool line_triangle_intersection_moller_trumbore(
+    const sycl::marray<REAL, 3> &line_origin,
+    const sycl::marray<REAL, 3> &line_direction,
+    const sycl::marray<REAL, 3> &triangle_vertex_0,
+    const sycl::marray<REAL, 3> &triangle_vertex_1,
+    const sycl::marray<REAL, 3> &triangle_vertex_2,
+    sycl::marray<REAL, 3> &intersection_point, const REAL tol_plane = 0.0,
+    const REAL tol_contained = 0.0) {
+  const sycl::marray<REAL, 3> &D = line_direction;
+  const sycl::marray<REAL, 3> E_1 = triangle_vertex_1 - triangle_vertex_0;
+  const sycl::marray<REAL, 3> E_2 = triangle_vertex_2 - triangle_vertex_0;
+  const sycl::marray<REAL, 3> T = line_origin - triangle_vertex_0;
+  const sycl::marray<REAL, 3> P = sycl::cross(D, E_2);
+  const sycl::marray<REAL, 3> Q = sycl::cross(T, E_1);
+
+  const REAL determinate = sycl::dot(P, E_1);
+
+  const bool line_in_plane = sycl::fabs(determinate) <= tol_plane;
+  const REAL scale_factor = line_in_plane ? 1.0 : 1.0 / determinate;
+
+  const sycl::marray<REAL, 3> scale_factor_vector{scale_factor, scale_factor,
+                                                  scale_factor};
+
+  const sycl::marray<REAL, 3> tuv_unscaled{sycl::dot(Q, E_2), sycl::dot(P, T),
+                                           sycl::dot(Q, D)};
+
+  const sycl::marray<REAL, 3> tuv = scale_factor_vector * tuv_unscaled;
+
+  const REAL u = tuv[1];
+  const REAL v = tuv[2];
+
+  const bool bary_sum_test = (u + v) <= 1.0 + tol_contained;
+  const bool u_test = u >= -tol_contained;
+  const bool v_test = u >= -tol_contained;
+
+  intersection_point = (1.0 - u - v) * triangle_vertex_0 +
+                       u * triangle_vertex_1 + v * triangle_vertex_2;
+
+  return (!line_in_plane) && bary_sum_test && u_test && v_test;
+}
+
+/**
  * Naively invert a matrix. The error bars on this call may be quite large.
  * This function uses row-major format.
  *
