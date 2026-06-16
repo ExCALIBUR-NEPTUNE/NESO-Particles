@@ -573,6 +573,34 @@ TEST(DeviceFunctions, line_triangle_intersection_moller_trumbore) {
   ASSERT_NEAR(intersection_point[1], 1.25, 1.0e-14);
   ASSERT_NEAR(intersection_point[2], 0.0, 1.0e-14);
 
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+
+  std::vector<sycl::marray<REAL, 3>> h_test = {intersection_point};
+  BufferDevice<sycl::marray<REAL, 3>> d_test(sycl_target, h_test);
+  auto *k_test = d_test.ptr;
+
+  BufferDevice<int> d_flag(sycl_target, std::vector<int>({0}));
+  auto *k_flag = d_flag.ptr;
+
+  sycl_target->queue
+      .single_task([=]() {
+        sycl::marray<REAL, 3> bary_coords{0.0, 0.0, 0.0};
+        k_flag[0] = line_triangle_intersection_moller_trumbore(
+            line_origin, line_direction, v0, v1, v2, bary_coords);
+        evaluate_barycentric_coordinates(bary_coords, v0, v1, v2, *k_test);
+      })
+      .wait_and_throw();
+
+  auto h_flag = d_flag.get();
+  d_test.get(h_test);
+
+  ASSERT_TRUE(h_flag[0]);
+  ASSERT_NEAR(h_test[0][0], 1.25, 1.0e-14);
+  ASSERT_NEAR(h_test[0][1], 1.25, 1.0e-14);
+  ASSERT_NEAR(h_test[0][2], 0.0, 1.0e-14);
+
+  sycl_target->free();
+
   std::mt19937 rng(5234234);
   const int num_samples = 100000;
   std::uniform_real_distribution<REAL> dist_bary(-0.2, 1.2);

@@ -30,7 +30,7 @@ struct BoundaryInteractionNormalData2D {
  * Device type to help finding the normal vector for a particle-boundary
  * interaction.
  */
-struct BoundaryNormalMapper {
+struct BoundaryNormalMapper2D {
   // Root of the tree containing normal data.
   BlockedBinaryNode<INT, BoundaryInteractionNormalData2D, 8> *root;
 
@@ -274,7 +274,7 @@ public:
    *
    * @returns Device copyable and callable mapper.
    */
-  BoundaryNormalMapper get_device_normal_mapper();
+  BoundaryNormalMapper2D get_device_normal_mapper();
 
   /**
    * Free the instance. Must be called. Collective on the communicator.

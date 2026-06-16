@@ -64,6 +64,48 @@ inline std::uint32_t popcount(const std::uint8_t x) {
 #endif
 #endif
 
+// Are we using an AdaptiveCpp CUDA pass?
+#ifdef __ACPP_ENABLE_CUDA_TARGET__
+// Is this not the nvcxx backend?
+#ifndef __NVCOMPILER
+
+#define NESO_PARTICLES_PATCH_CUDA_MARRAY
+
+#endif
+#endif
+
+#ifdef NESO_PARTICLES_PATCH_CUDA_MARRAY
+
+inline sycl::marray<REAL, 3> cross(const sycl::marray<REAL, 3> &a,
+                                   const sycl::marray<REAL, 3> &b) {
+  sycl::marray<REAL, 3> c;
+
+  KERNEL_CROSS_PRODUCT_3D(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]);
+
+  return c;
+}
+
+inline REAL dot(const sycl::marray<REAL, 3> &a,
+                const sycl::marray<REAL, 3> &b) {
+  return KERNEL_DOT_PRODUCT_3D(a[0], a[1], a[2], b[0], b[1], b[2]);
+}
+
+#else
+
+template <std::size_t N>
+inline sycl::marray<REAL, N> cross(const sycl::marray<REAL, N> &a,
+                                   const sycl::marray<REAL, N> &b) {
+  return sycl::cross(a, b);
+}
+
+template <std::size_t N>
+inline REAL dot(const sycl::marray<REAL, N> &a,
+                const sycl::marray<REAL, N> &b) {
+  return sycl::dot(a, b);
+}
+
+#endif
+
 namespace Private {
 // ACPP does not seem to define a sycl::sincos(REAL, REAL*)
 template <class, class = void> struct sincos_exists_for_t : std::false_type {};
@@ -427,10 +469,10 @@ inline bool line_triangle_intersection_moller_trumbore(
   const sycl::marray<REAL, 3> E_1 = triangle_vertex_1 - triangle_vertex_0;
   const sycl::marray<REAL, 3> E_2 = triangle_vertex_2 - triangle_vertex_0;
   const sycl::marray<REAL, 3> T = line_origin - triangle_vertex_0;
-  const sycl::marray<REAL, 3> P = sycl::cross(D, E_2);
-  const sycl::marray<REAL, 3> Q = sycl::cross(T, E_1);
+  const sycl::marray<REAL, 3> P = Kernel::cross(D, E_2);
+  const sycl::marray<REAL, 3> Q = Kernel::cross(T, E_1);
 
-  const REAL determinate = sycl::dot(E_1, P);
+  const REAL determinate = Kernel::dot(E_1, P);
 
   const bool line_in_plane = sycl::fabs(determinate) <= tol_plane;
   const REAL scale_factor = line_in_plane ? 1.0 : 1.0 / determinate;
@@ -438,8 +480,8 @@ inline bool line_triangle_intersection_moller_trumbore(
   const sycl::marray<REAL, 3> scale_factor_vector{scale_factor, scale_factor,
                                                   scale_factor};
 
-  const sycl::marray<REAL, 3> tuv_unscaled{sycl::dot(Q, E_2), sycl::dot(P, T),
-                                           sycl::dot(Q, D)};
+  const sycl::marray<REAL, 3> tuv_unscaled{
+      Kernel::dot(Q, E_2), Kernel::dot(P, T), Kernel::dot(Q, D)};
 
   const sycl::marray<REAL, 3> tuv = scale_factor_vector * tuv_unscaled;
 

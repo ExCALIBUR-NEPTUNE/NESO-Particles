@@ -56,6 +56,7 @@ set(SRC_FILES
     ${SRC_DIR}/algorithms/reduce_dat_cellwise.cpp
     ${SRC_DIR}/algorithms/unseen_value_extractor.cpp
     ${SRC_DIR}/external_interfaces/petsc/boundary_interaction/boundary_interaction_2d.cpp
+    ${SRC_DIR}/external_interfaces/petsc/boundary_interaction/boundary_interaction_3d.cpp
     ${SRC_DIR}/external_interfaces/petsc/boundary_interaction/boundary_interaction_common.cpp
     ${SRC_DIR}/external_interfaces/petsc/dmplex_cell_serialise.cpp
     ${SRC_DIR}/external_interfaces/petsc/dmplex_interface.cpp
@@ -234,6 +235,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/common/quadrature_point_mapper.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/boundary_interaction/boundary_interaction.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/boundary_interaction/boundary_interaction_2d.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/boundary_interaction/boundary_interaction_3d.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/boundary_interaction/boundary_interaction_common.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/dmplex_cell_serialise.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/dmplex_helper.hpp

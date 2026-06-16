@@ -83,8 +83,8 @@ void BoundaryInteraction2D::collect_cells() {
   }
 }
 
-BoundaryNormalMapper BoundaryInteraction2D::get_device_normal_mapper() {
-  BoundaryNormalMapper mapper;
+BoundaryNormalMapper2D BoundaryInteraction2D::get_device_normal_mapper() {
+  BoundaryNormalMapper2D mapper;
   mapper.root = this->d_map_edge_normals->root;
   return mapper;
 }
