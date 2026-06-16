@@ -552,3 +552,96 @@ TEST(DeviceFunctions, div_round_up) {
   ASSERT_EQ(div_round_up(4, 2), 2);
   ASSERT_EQ(div_round_up(5, 2), 3);
 }
+
+TEST(DeviceFunctions, line_triangle_intersection_moller_trumbore) {
+
+  sycl::marray<REAL, 3> line_origin{1.25, 1.25, -1.0};
+  sycl::marray<REAL, 3> line_direction{0.0, 0.0, 1.0};
+  sycl::marray<REAL, 3> v0{1.0, 1.0, 0.0};
+  sycl::marray<REAL, 3> v1{2.0, 1.0, 0.0};
+  sycl::marray<REAL, 3> v2{2.0, 2.0, 0.0};
+  sycl::marray<REAL, 3> intersection_point{0.0, 0.0, 0.0};
+  sycl::marray<REAL, 3> bary_coords{0.0, 0.0, 0.0};
+
+  bool contained = line_triangle_intersection_moller_trumbore(
+      line_origin, line_direction, v0, v1, v2, bary_coords);
+
+  evaluate_barycentric_coordinates(bary_coords, v0, v1, v2, intersection_point);
+
+  ASSERT_TRUE(contained);
+  ASSERT_NEAR(intersection_point[0], 1.25, 1.0e-14);
+  ASSERT_NEAR(intersection_point[1], 1.25, 1.0e-14);
+  ASSERT_NEAR(intersection_point[2], 0.0, 1.0e-14);
+
+  std::mt19937 rng(5234234);
+  const int num_samples = 100000;
+  std::uniform_real_distribution<REAL> dist_bary(-0.2, 1.2);
+  std::uniform_real_distribution<REAL> dist_direction(-1.0, 1.0);
+
+  auto lambda_test_triangle = [&](const auto v0, const auto v1, const auto v2) {
+    const sycl::marray<REAL, 3> E1 = v1 - v0;
+    const sycl::marray<REAL, 3> E2 = v2 - v0;
+    const sycl::marray<REAL, 3> normal = sycl::cross(E1, E2);
+    sycl::marray<REAL, 3> to_test_intersection_point =
+        sycl::marray<REAL, 3>(0.0, 0.0, 0.0);
+
+    for (int testx = 0; testx < num_samples; testx++) {
+
+      const REAL l1 = dist_bary(rng);
+      const REAL l2 = dist_bary(rng);
+      const REAL l0 = 1.0 - l1 - l2;
+
+      const bool in_triangle = (l0 >= 0.0) && (l1 >= 0.0) && (l2 >= 0.0);
+
+      sycl::marray<REAL, 3> correct_intersection_point =
+          l0 * v0 + l1 * v1 + l2 * v2;
+
+      sycl::marray<REAL, 3> direction_out{
+          dist_direction(rng), dist_direction(rng), dist_direction(rng)};
+
+      const bool in_plane = std::fabs(sycl::dot(normal, direction_out)) <= 0.0;
+
+      const bool correct_contained = (!in_plane) && in_triangle;
+
+      sycl::marray<REAL, 3> line_direction = -1 * direction_out;
+      sycl::marray<REAL, 3> line_origin =
+          correct_intersection_point + direction_out;
+
+      const bool to_test_contained = line_triangle_intersection_moller_trumbore(
+          line_origin, line_direction, v0, v1, v2, bary_coords, 1.0e-15,
+          1.0e-15);
+
+      evaluate_barycentric_coordinates(bary_coords, v0, v1, v2,
+                                       to_test_intersection_point);
+
+      const auto diff = correct_intersection_point - to_test_intersection_point;
+      const REAL err = std::sqrt(sycl::dot(diff, diff));
+
+      ASSERT_NEAR(err, 0.0, 1.0e-14);
+
+      // If the test point is contained then the test with 1E-15 padding should
+      // also be contained.
+      if (correct_contained) {
+        ASSERT_TRUE(to_test_contained);
+      } else {
+
+        const REAL ll0 = bary_coords[0];
+        const REAL ll1 = bary_coords[1];
+        const REAL ll2 = bary_coords[2];
+
+        const REAL tol = 1.0e-14;
+
+        const bool test_sum = ll0 + ll1 + ll2 <= 1.0 + tol;
+        const bool test_ll0 = ll0 >= -tol;
+        const bool test_ll1 = ll1 >= -tol;
+        const bool test_ll2 = ll2 >= -tol;
+
+        const bool near_enough = test_ll0 && test_ll1 && test_ll2 && test_sum;
+
+        ASSERT_TRUE((!to_test_contained) || near_enough);
+      }
+    }
+  };
+
+  lambda_test_triangle(v0, v1, v2);
+}

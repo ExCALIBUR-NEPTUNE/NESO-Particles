@@ -381,15 +381,36 @@ inline bool plane_intersection_3d_xy_plane_aligned(
 }
 
 /**
+ * Helper function to evaluate Barycentric coordinates using a set of vertices
+ * for a triangle.
+ *
+ * @param[in] bary_coords Barycentric coordinates.
+ * @param[in] triangle_vertex_0 First vertex of triangle.
+ * @param[in] triangle_vertex_1 Second vertex of triangle.
+ * @param[in] triangle_vertex_2 Third vertex of triangle.
+ * @param[in, out] coords Output evaluation.
+ */
+inline void
+evaluate_barycentric_coordinates(const sycl::marray<REAL, 3> &bary_coords,
+                                 const sycl::marray<REAL, 3> &triangle_vertex_0,
+                                 const sycl::marray<REAL, 3> &triangle_vertex_1,
+                                 const sycl::marray<REAL, 3> &triangle_vertex_2,
+                                 sycl::marray<REAL, 3> &coords) {
+  coords = bary_coords[0] * triangle_vertex_0 +
+           bary_coords[1] * triangle_vertex_1 +
+           bary_coords[2] * triangle_vertex_2;
+}
+
+/**
  * Line segment - Triangle intersection test, in 3D, using the Möller–Trumbore
  * intersection algorithm.
  *
  * @param[in] line_origin Origin point of line.
  * @param[in] line_direction Direction of line.
  * @param[in] triangle_vertex_0 First vertex of triangle.
- * @param[in] triangle_vertex_1 First vertex of triangle.
- * @param[in] triangle_vertex_2 First vertex of triangle.
- * @param[in, out] intersection_point Point of intersection.
+ * @param[in] triangle_vertex_1 Second vertex of triangle.
+ * @param[in] triangle_vertex_2 Third vertex of triangle.
+ * @param[in, out] bary_coords Point of intersection in Barycentric coordinates.
  * @param[in] tol_plane Tolerance for the line segment embedded in the plane of
  * the triangle, default 0.0.
  * @param[in] tol_contained Tolerance for intersection, default 0.0.
@@ -400,7 +421,7 @@ inline bool line_triangle_intersection_moller_trumbore(
     const sycl::marray<REAL, 3> &triangle_vertex_0,
     const sycl::marray<REAL, 3> &triangle_vertex_1,
     const sycl::marray<REAL, 3> &triangle_vertex_2,
-    sycl::marray<REAL, 3> &intersection_point, const REAL tol_plane = 0.0,
+    sycl::marray<REAL, 3> &bary_coords, const REAL tol_plane = 0.0,
     const REAL tol_contained = 0.0) {
   const sycl::marray<REAL, 3> &D = line_direction;
   const sycl::marray<REAL, 3> E_1 = triangle_vertex_1 - triangle_vertex_0;
@@ -409,7 +430,7 @@ inline bool line_triangle_intersection_moller_trumbore(
   const sycl::marray<REAL, 3> P = sycl::cross(D, E_2);
   const sycl::marray<REAL, 3> Q = sycl::cross(T, E_1);
 
-  const REAL determinate = sycl::dot(P, E_1);
+  const REAL determinate = sycl::dot(E_1, P);
 
   const bool line_in_plane = sycl::fabs(determinate) <= tol_plane;
   const REAL scale_factor = line_in_plane ? 1.0 : 1.0 / determinate;
@@ -425,16 +446,14 @@ inline bool line_triangle_intersection_moller_trumbore(
   const REAL u = tuv[1];
   const REAL v = tuv[2];
 
+  // const bool bary_sum_test = (1.0 - (u + v)) >= -tol_contained;
   const bool bary_sum_test = (u + v) <= 1.0 + tol_contained;
-  const bool u_test = u >= -tol_contained;
-  const bool v_test = u >= -tol_contained;
+  const bool u_test = (u >= -tol_contained);
+  const bool v_test = (v >= -tol_contained);
 
-  intersection_point = (1.0 - u - v) * triangle_vertex_0 +
-                       u * triangle_vertex_1 + v * triangle_vertex_2;
-
-  return (!line_in_plane) && bary_sum_test && u_test && v_test;
+  bary_coords = sycl::marray<REAL, 3>(1.0 - u - v, u, v);
+  return (!line_in_plane) && bary_sum_test && (u_test) && (v_test);
 }
-
 /**
  * Naively invert a matrix. The error bars on this call may be quite large.
  * This function uses row-major format.
