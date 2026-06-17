@@ -563,8 +563,10 @@ TEST(DeviceFunctions, line_triangle_intersection_moller_trumbore) {
   sycl::marray<REAL, 3> intersection_point{0.0, 0.0, 0.0};
   sycl::marray<REAL, 3> bary_coords{0.0, 0.0, 0.0};
 
+  REAL t = 0.0;
+
   bool contained = line_triangle_intersection_moller_trumbore(
-      line_origin, line_direction, v0, v1, v2, bary_coords);
+      line_origin, line_direction, v0, v1, v2, bary_coords, t);
 
   evaluate_barycentric_coordinates(bary_coords, v0, v1, v2, intersection_point);
 
@@ -585,8 +587,9 @@ TEST(DeviceFunctions, line_triangle_intersection_moller_trumbore) {
   sycl_target->queue
       .single_task([=]() {
         sycl::marray<REAL, 3> bary_coords{0.0, 0.0, 0.0};
+        REAL t = 0.0;
         k_flag[0] = line_triangle_intersection_moller_trumbore(
-            line_origin, line_direction, v0, v1, v2, bary_coords);
+            line_origin, line_direction, v0, v1, v2, bary_coords, t);
         evaluate_barycentric_coordinates(bary_coords, v0, v1, v2, *k_test);
       })
       .wait_and_throw();
@@ -636,7 +639,7 @@ TEST(DeviceFunctions, line_triangle_intersection_moller_trumbore) {
           correct_intersection_point + direction_out;
 
       const bool to_test_contained = line_triangle_intersection_moller_trumbore(
-          line_origin, line_direction, v0, v1, v2, bary_coords, 1.0e-15,
+          line_origin, line_direction, v0, v1, v2, bary_coords, t, 1.0e-15,
           1.0e-15);
 
       evaluate_barycentric_coordinates(bary_coords, v0, v1, v2,

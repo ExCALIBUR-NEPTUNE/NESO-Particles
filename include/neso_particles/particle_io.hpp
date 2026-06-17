@@ -515,13 +515,13 @@ public:
    *  Close the H5Part writer. Must be called. Must be called collectively on
    *  the communicator.
    */
-  inline void close() {};
+  inline void close(){};
 
   /**
    * Write the current particle data to the HDF5 file as a new time step. Must
    * be called collectively on the communicator.
    */
-  inline void write([[maybe_unused]] INT step_in = -1) {};
+  inline void write([[maybe_unused]] INT step_in = -1){};
 };
 
 #endif

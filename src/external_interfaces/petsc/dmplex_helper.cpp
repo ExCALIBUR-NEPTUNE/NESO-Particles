@@ -172,6 +172,106 @@ VTK::CellType get_vtk_cell_type(const DMPolytopeType petsc_cell_type) {
   }
 }
 
+void split_quadrilateral_into_two_triangles(
+    DM dm, const PetscInt quad_index,
+    std::array<std::array<PetscInt, 3>, 2> &triangle_indices) {
+
+  PetscInt start = 0, end = 0;
+  PETSCCHK(DMPlexGetDepthStratum(dm, 2, &start, &end));
+  NESOASSERT(start <= quad_index && quad_index < end,
+             "Invalid index for quadrilateral.");
+
+  PetscInt cone_size = 0;
+  PETSCCHK(DMPlexGetConeSize(dm, quad_index, &cone_size));
+
+  NESOASSERT(cone_size == 4,
+             "Expected quadrilateral to have a cone size of four.");
+
+  const PetscInt *cone = nullptr;
+  PETSCCHK(DMPlexGetCone(dm, quad_index, &cone));
+
+  const PetscInt *ornt = nullptr;
+  PETSCCHK(DMPlexGetConeOrientation(dm, quad_index, &ornt));
+
+  // Get the vertices from the quad in order.
+  PetscInt last_vertex = -1;
+  const PetscInt *edge_cone = nullptr;
+
+  std::array<PetscInt, 4> vertices;
+  for (int edgex = 0; edgex < 4; edgex++) {
+    const PetscInt edge_index = cone[edgex];
+    PETSCCHK(DMPlexGetCone(dm, edge_index, &edge_cone));
+    PetscInt v0 = -1, v1 = -1;
+    v0 = edge_cone[0];
+    v1 = edge_cone[1];
+    if (ornt[edgex]) { // If the orientation of the edge is not 0 then the
+                       // direction of the edge should be reversed.
+      const PetscInt vt = v0;
+      v0 = v1;
+      v1 = vt;
+    }
+
+    NESOASSERT(edgex == 0 || v0 == last_vertex,
+               "Vertices in quad are not forming a loop. This vertex is: " +
+                   std::to_string(v0) +
+                   " last vertex was: " + std::to_string(last_vertex));
+    last_vertex = v1;
+    vertices.at(edgex) = v0;
+  }
+
+  // For the four vertices [0,1,2,3] there are two possible splits. 1) the new
+  // edge [0,2] or 2) the new edge [1,3]. We compare the lengths of these two
+  // new possible edges and choose the shortest edge.
+
+  auto lambda_get_coords = [&](const PetscInt petsc_index) {
+    const PetscScalar *array;
+    PetscScalar *coords = nullptr;
+    PetscInt num_coords;
+    PetscBool is_dg;
+    PETSCCHK(DMPlexGetCellCoordinates(dm, petsc_index, &is_dg, &num_coords,
+                                      &array, &coords));
+    NESOASSERT(coords != nullptr, "No vertices returned for cell.");
+    NESOASSERT(num_coords == 3 || num_coords == 2,
+               "Expected two or three coordinates.");
+
+    std::vector<PetscScalar> verticest(num_coords);
+    for (int dx = 0; dx < num_coords; dx++) {
+      verticest.at(dx) = coords[dx];
+    }
+
+    PETSCCHK(DMPlexRestoreCellCoordinates(dm, petsc_index, &is_dg, &num_coords,
+                                          &array, &coords));
+
+    return verticest;
+  };
+
+  auto lambda_distance2 = [&](const auto &a, const auto &b) {
+    const std::size_t N = a.size();
+    PetscScalar d2 = 0.0;
+    for (std::size_t ix = 0; ix < N; ix++) {
+      const auto diff = a.at(ix) - b.at(ix);
+      d2 += diff * diff;
+    }
+    return d2;
+  };
+
+  auto coords0 = lambda_get_coords(vertices.at(0));
+  auto coords1 = lambda_get_coords(vertices.at(1));
+  auto coords2 = lambda_get_coords(vertices.at(2));
+  auto coords3 = lambda_get_coords(vertices.at(3));
+
+  const PetscScalar distance_02 = lambda_distance2(coords0, coords1);
+  const PetscScalar distance_13 = lambda_distance2(coords1, coords3);
+
+  if (distance_02 <= distance_13) {
+    triangle_indices.at(0) = {vertices.at(0), vertices.at(1), vertices.at(2)};
+    triangle_indices.at(1) = {vertices.at(0), vertices.at(2), vertices.at(3)};
+  } else {
+    triangle_indices.at(0) = {vertices.at(0), vertices.at(1), vertices.at(3)};
+    triangle_indices.at(1) = {vertices.at(1), vertices.at(2), vertices.at(3)};
+  }
+}
+
 void HaloDMIndexMapper::get_depth_stratum(const PetscInt depth, PetscInt *start,
                                           PetscInt *end) {
   *start = this->depth_starts.at(depth);

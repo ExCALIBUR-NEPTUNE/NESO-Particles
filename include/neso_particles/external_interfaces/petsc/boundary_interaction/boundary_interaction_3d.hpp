@@ -14,8 +14,8 @@ namespace NESO::Particles::PetscInterface {
  * Type to point to the boundary elements that intersect a MeshHierarchy cell.
  */
 struct BoundaryInteractionCellData3D {
-  int num_edges;
-  REAL *d_real;
+  int num_facets;
+  sycl::marray<REAL, 3> *d_real;
   int *d_int;
 };
 
@@ -53,10 +53,10 @@ struct BoundaryNormalMapper3D {
 
 /**
  * Implementation of identifying the intersection of particle trajectories of
- * 2D meshes (with 1D) boundaries. For an instance of this class named b2d
- * users should call @ref pre_integration prior to modifying particle positions
- * and @ref post_integration after modifying particles positions. The
- * constructor and free calls must be collective on the communicator.
+ * 3D meshes (with 2D) boundaries. Users should call @ref pre_integration prior
+ * to modifying particle positions and @ref post_integration after modifying
+ * particles positions. The constructor and free calls must be collective on the
+ * communicator.
  *
  * For creating particle loops which interact with the boundary the normal
  * vector for each boundary element can be identified via the helper struct
@@ -64,11 +64,12 @@ struct BoundaryNormalMapper3D {
  */
 class BoundaryInteraction3D : public BoundaryInteractionCommon {
 protected:
-  // An edge has two vertices and each vertex has a coordinate in 2D. Then the
-  // normal vector.
-  static constexpr int ncomp_real = 2 * 2 + 2;
+  // An triangle has three vertices and each vertex has a coordinate in 3D. Then
+  // the normal vector in 3D.
+  static constexpr int ncomp_real = 3 * 3 + 3;
 
-  // label id, global edge point index
+  // label id, global face point index - note that quads will be broken into two
+  // triangles and hence exist twice.
   static constexpr int ncomp_int = 2;
 
   static constexpr REAL padding = 1.0e-8;
@@ -87,12 +88,12 @@ protected:
 
   std::stack<std::shared_ptr<BufferDevice<REAL>>> stack_d_real;
   std::stack<std::shared_ptr<BufferDevice<int>>> stack_d_int;
-  std::set<int> pushed_edge_data;
+  std::set<int> pushed_facet_data;
 
   std::shared_ptr<BlockedBinaryTree<INT, BoundaryInteractionCellData3D, 8>>
-      d_map_edge_discovery;
+      d_map_facet_discovery;
   std::shared_ptr<BlockedBinaryTree<INT, BoundaryInteractionNormalData3D, 8>>
-      d_map_edge_normals;
+      d_map_facet_normals;
 
   void collect_cells();
 
@@ -119,31 +120,35 @@ protected:
       BoundaryInteractionCellData3D *data = nullptr;
       if (root->get_location(linear_cell, &exists, &data)) {
         if (*exists) {
-          const REAL xa = a[0];
-          const REAL ya = a[1];
-          const REAL xb = b[0];
-          const REAL yb = b[1];
-          REAL xi, yi, l0;
+          const sycl::marray<REAL, 3> aa{a[0], a[1], a[2]};
+          const sycl::marray<REAL, 3> bb{b[0], b[1], b[2]};
+          const sycl::marray<REAL, 3> direction = bb - aa;
+          sycl::marray<REAL, 3> intersection_point{0.0, 0.0, 0.0};
+          sycl::marray<REAL, 3> bary_coords{0.0, 0.0, 0.0};
+
           bool new_intersection_found = false;
 
-          for (int edgex = 0; edgex < (data->num_edges); edgex++) {
-            const REAL x0 = data->d_real[edgex * 4 + 0];
-            const REAL y0 = data->d_real[edgex * 4 + 1];
-            const REAL x1 = data->d_real[edgex * 4 + 2];
-            const REAL y1 = data->d_real[edgex * 4 + 3];
-            const INT group_id = data->d_int[edgex * 2 + 0];
-            const INT edge_id = data->d_int[edgex * 2 + 1];
+          for (int facetx = 0; facetx < (data->num_facets); facetx++) {
+            const sycl::marray<REAL, 3> &v0 = data->d_real[facetx * 3 + 0];
+            const sycl::marray<REAL, 3> &v1 = data->d_real[facetx * 3 + 1];
+            const sycl::marray<REAL, 3> &v2 = data->d_real[facetx * 3 + 2];
+            const INT group_id = data->d_int[facetx * 2 + 0];
+            const INT edge_id = data->d_int[facetx * 2 + 1];
 
-            const bool intersects = line_segment_intersection_2d(
-                x0, y0, x1, y1, xa, ya, xb, yb, xi, yi, l0, tol);
-
-            const REAL xd = a[0] - xi;
-            const REAL yd = a[1] - yi;
-            const REAL d2 = xd * xd + yd * yd;
+            REAL d2 = 0.0;
+            const bool intersects = line_triangle_intersection_moller_trumbore(
+                aa, direction, v0, v1, v2, bary_coords, d2,
+                0.0, // We assume here that the intersection test only fails
+                     // when the plane detection test is truely zero.
+                tol);
 
             if (intersects && (d2 < current_distance)) {
-              P[0] = xi;
-              P[1] = yi;
+              evaluate_barycentric_coordinates(bary_coords, v0, v1, v2,
+                                               intersection_point);
+
+              P[0] = intersection_point[0];
+              P[1] = intersection_point[1];
+              P[2] = intersection_point[2];
               C[0] = 1;
               C[1] = group_id;
               C[2] = edge_id;
@@ -157,6 +162,7 @@ protected:
             if (root_normals->get_location(C[2], &exists, &normal_data)) {
               NORMAL[0] = normal_data->d_normal[0];
               NORMAL[1] = normal_data->d_normal[1];
+              NORMAL[2] = normal_data->d_normal[2];
             }
           }
         }
@@ -174,8 +180,8 @@ protected:
     TrajectoryIntersect3D intersect_object;
     intersect_object.max_distance = std::numeric_limits<REAL>::max();
     intersect_object.epsilon = std::numeric_limits<REAL>::min();
-    intersect_object.root = this->d_map_edge_discovery->root;
-    intersect_object.root_normals = this->d_map_edge_normals->root;
+    intersect_object.root = this->d_map_facet_discovery->root;
+    intersect_object.root_normals = this->d_map_facet_normals->root;
     intersect_object.tol = this->tol;
 
     auto particle_group = get_particle_group(particles);
@@ -190,7 +196,7 @@ protected:
         sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<INT>{},
         sycl_target);
 
-    d_real->realloc_no_copy(npart_local * 4);
+    d_real->realloc_no_copy(npart_local * 6);
     d_int->realloc_no_copy(npart_local * 3);
     auto k_real = d_real->ptr;
     auto k_int = d_int->ptr;
@@ -217,7 +223,7 @@ protected:
 
         // We can now create the EphemeralDats that describe the standard
         // boundary.
-        add_boundary_interaction_ephemeral_dats(m[k_group], 2);
+        add_boundary_interaction_ephemeral_dats(m[k_group], 3);
 
         // Assemble the standard boundary data
         particle_loop(
@@ -225,10 +231,11 @@ protected:
             [=](auto INDEX, auto INTERSECTION_POINT, auto INTERSECTION_NORMAL,
                 auto INTERSECTION_METADATA) {
               const INT index = INDEX.get_local_linear_index();
-              INTERSECTION_POINT.at_ephemeral(0) = k_real[index * 4 + 0];
-              INTERSECTION_POINT.at_ephemeral(1) = k_real[index * 4 + 1];
-              INTERSECTION_NORMAL.at_ephemeral(0) = k_real[index * 4 + 2];
-              INTERSECTION_NORMAL.at_ephemeral(1) = k_real[index * 4 + 3];
+              for (int dx = 0; dx < 3; dx++) {
+                INTERSECTION_POINT.at_ephemeral(dx) = k_real[index * 6 + dx];
+                INTERSECTION_NORMAL.at_ephemeral(dx) =
+                    k_real[index * 6 + 3 + dx];
+              }
               INTERSECTION_METADATA.at_ephemeral(0) = k_group;
               INTERSECTION_METADATA.at_ephemeral(1) = k_int[index * 3 + 2];
             },
@@ -313,7 +320,7 @@ public:
    *
    * @param sycl_target Compute device to use to identify intersections of
    * trajectories and the boundary.
-   * @param mesh 2D DMPlex mesh interface to use.
+   * @param mesh 3D DMPlex mesh interface to use.
    * @param boundary_groups Map from group IDs to the boundary labels (i.e.
    * gmsh physical lines) that form the group.
    * @param tol Tolerance for intersection of trajectories and the line

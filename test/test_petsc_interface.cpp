@@ -1471,4 +1471,25 @@ TEST(PETSc, dmplex_mesh_coupler_dg0_integration) {
   PETSCCHK(PetscFinalize());
 }
 
+TEST(PETSc, split_quadrilateral_into_two_triangles) {
+
+  PETSCCHK(PetscInitializeNoArguments());
+  DM dm = get_simple_square();
+
+  std::array<std::array<PetscInt, 3>, 2> triangle_indices;
+  PetscInterface::split_quadrilateral_into_two_triangles(dm, 0,
+                                                         triangle_indices);
+
+  ASSERT_EQ(triangle_indices.at(0).at(0), 5);
+  ASSERT_EQ(triangle_indices.at(0).at(1), 6);
+  ASSERT_EQ(triangle_indices.at(0).at(2), 7);
+
+  ASSERT_EQ(triangle_indices.at(1).at(0), 5);
+  ASSERT_EQ(triangle_indices.at(1).at(1), 7);
+  ASSERT_EQ(triangle_indices.at(1).at(2), 8);
+
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
+
 #endif

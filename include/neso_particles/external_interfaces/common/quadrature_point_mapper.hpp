@@ -194,9 +194,7 @@ typedef std::shared_ptr<QuadraturePointMapper> QuadraturePointMapperSharedPtr;
 namespace {
 template <std::size_t N> struct InterpTupleType {};
 
-template <> struct InterpTupleType<1> {
-  using type = Tuple::Tuple<REAL>;
-};
+template <> struct InterpTupleType<1> { using type = Tuple::Tuple<REAL>; };
 template <> struct InterpTupleType<2> {
   using type = Tuple::Tuple<REAL, REAL>;
 };

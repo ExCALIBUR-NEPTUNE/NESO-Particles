@@ -241,6 +241,16 @@ template <typename T> inline void nprint_inner(std::vector<T> &t) {
   std::cout << "}";
 }
 
+template <typename T, std::size_t N>
+inline void nprint_inner(std::array<T, N> &t) {
+  std::cout << "{";
+  for (auto ix : t) {
+    nprint_inner(ix);
+    std::cout << " ";
+  }
+  std::cout << "}";
+}
+
 template <typename U> inline void nprint_recurse(int flag, U next) {
   if (flag) {
     std::cout << " ";

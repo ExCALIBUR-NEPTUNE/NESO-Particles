@@ -10,16 +10,17 @@ BoundaryInteraction3D::get_bounding_box(const int index) {
   NESOASSERT(this->facets_real != nullptr, "Expected a non-nullptr.");
   auto bb = std::make_shared<ExternalCommon::BoundingBox>();
   std::vector<REAL> bbv(6);
-  bbv.at(2) = 0.0;
-  bbv.at(5) = 0.0;
 
-  for (int vx = 0; vx < 2; vx++) {
-    auto x = this->facets_real[index * this->ncomp_real + vx * 2 + 0];
-    auto y = this->facets_real[index * this->ncomp_real + vx * 2 + 1];
+  for (int vx = 0; vx < 3; vx++) {
+    auto x = this->facets_real[index * this->ncomp_real + vx * 3 + 0];
+    auto y = this->facets_real[index * this->ncomp_real + vx * 3 + 1];
+    auto z = this->facets_real[index * this->ncomp_real + vx * 3 + 2];
     bbv.at(0) = x - this->padding;
     bbv.at(1) = y - this->padding;
+    bbv.at(2) = z - this->padding;
     bbv.at(3) = x + this->padding;
     bbv.at(4) = y + this->padding;
+    bbv.at(5) = z + this->padding;
     auto bbt = std::make_shared<ExternalCommon::BoundingBox>(bbv);
     bb->expand(bbt);
   }
@@ -50,7 +51,7 @@ void BoundaryInteraction3D::collect_cells() {
         index++;
 
         // Is this edge in the map of edge data for interactions?
-        if (this->pushed_edge_data.count(edge_id) == 0) {
+        if (this->pushed_facet_data.count(edge_id) == 0) {
           std::vector<REAL> h_norm(2);
           h_norm.at(0) = this->facets_real[ix * ncomp_real + 4];
           h_norm.at(1) = this->facets_real[ix * ncomp_real + 5];
@@ -59,8 +60,8 @@ void BoundaryInteraction3D::collect_cells() {
           this->stack_d_real.push(t_norm);
           BoundaryInteractionNormalData3D dnorm;
           dnorm.d_normal = t_norm->ptr;
-          this->d_map_edge_normals->add(edge_id, dnorm);
-          this->pushed_edge_data.insert(edge_id);
+          this->d_map_facet_normals->add(edge_id, dnorm);
+          this->pushed_facet_data.insert(edge_id);
         }
       }
 
@@ -74,10 +75,11 @@ void BoundaryInteraction3D::collect_cells() {
       this->stack_d_int.push(t_int);
 
       BoundaryInteractionCellData3D d;
-      d.num_edges = num_edges;
-      d.d_real = t_real->ptr;
+      d.num_facets = num_edges;
+      nprint("fix below");
+      // d.d_real = t_real->ptr; TODO
       d.d_int = t_int->ptr;
-      this->d_map_edge_discovery->add(cell, d);
+      this->d_map_facet_discovery->add(cell, d);
     }
     this->collected_mh_cells.insert(cell);
   }
@@ -85,7 +87,7 @@ void BoundaryInteraction3D::collect_cells() {
 
 BoundaryNormalMapper3D BoundaryInteraction3D::get_device_normal_mapper() {
   BoundaryNormalMapper3D mapper;
-  mapper.root = this->d_map_edge_normals->root;
+  mapper.root = this->d_map_facet_normals->root;
   return mapper;
 }
 
@@ -133,6 +135,8 @@ BoundaryInteraction3D::BoundaryInteraction3D(
   // Keep and flatten the points/labels of interest
   std::vector<PetscInt> facet_labels;
   std::vector<PetscInt> facet_indices;
+
+  int num_triangles_local = 0;
   for (auto &item : face_sets) {
     if (labels.count(item.first)) {
       facet_labels.reserve(facet_labels.size() + item.second.size());
@@ -142,6 +146,11 @@ BoundaryInteraction3D::BoundaryInteraction3D(
         facet_labels.push_back(item.first);
         // push back the petsc point index
         facet_indices.push_back(fx);
+
+        // If the facet is a quad then we will split that quad into two
+        // triangles.
+        const auto cell_type = this->mesh->dmh->get_cell_type(fx);
+        num_triangles_local += cell_type == DM_POLYTOPE_TRIANGLE ? 1 : 2;
       }
     }
   }
@@ -150,48 +159,90 @@ BoundaryInteraction3D::BoundaryInteraction3D(
   int num_facets_local = facet_labels.size();
 
   // space to store the local contributions
-  std::vector<REAL> local_real(num_facets_local * ncomp_real);
-  std::vector<int> local_int(num_facets_local * ncomp_int);
+  std::vector<REAL> local_real(num_triangles_local * ncomp_real);
+  std::vector<int> local_int(num_triangles_local * ncomp_int);
 
   // collect the local edges to send
+  // This index is incremented inside the inner loop once for a triangle and
+  // twice for a quad.
+  int output_index = 0;
   std::vector<std::vector<REAL>> coords;
   for (int ix = 0; ix < num_facets_local; ix++) {
     const PetscInt index = facet_indices.at(ix);
     // Collect the vertex coords
     this->mesh->dmh->get_generic_vertices(index, coords);
-    NESOASSERT(coords.size() == 2,
-               "Expected an edge to only have two vertices.");
-    NESOASSERT(coords.at(0).size() == 2,
-               "Expected edge vertex to be embedded in 3D.");
-    NESOASSERT(coords.at(1).size() == 2,
-               "Expected edge vertex to be embedded in 3D.");
+    NESOASSERT(coords.size() == 9 || coords.size() == 12,
+               "Expected a facet to only have three or four vertices.");
+    NESOASSERT(coords.at(0).size() == 3 && coords.at(1).size() == 3 &&
+                   coords.at(2).size() == 3,
+               "Expected face vertex to be embedded in 3D.");
 
     const REAL x0 = coords.at(0).at(0);
     const REAL y0 = coords.at(0).at(1);
-    const REAL x1 = coords.at(1).at(0);
-    const REAL y1 = coords.at(1).at(1);
+    const REAL z0 = coords.at(0).at(1);
+
+    const sycl::marray<REAL, 3> v0{coords.at(0).at(0), coords.at(0).at(1),
+                                   coords.at(0).at(2)};
+
+    const sycl::marray<REAL, 3> v1{coords.at(1).at(0), coords.at(1).at(1),
+                                   coords.at(1).at(2)};
+
+    const sycl::marray<REAL, 3> v2{coords.at(2).at(0), coords.at(2).at(1),
+                                   coords.at(2).at(2)};
 
     // compute the normal to the facet
-    const REAL dx = x1 - x0;
-    const REAL dy = y1 - y0;
-    const REAL n0t = -dy;
-    const REAL n1t = dx;
-    const REAL l = 1.0 / std::sqrt(n0t * n0t + n1t * n1t);
-    const REAL n0 = n0t * l;
-    const REAL n1 = n1t * l;
+    const sycl::marray<REAL, 3> E1 = v1 - v0;
+    const sycl::marray<REAL, 3> E2 = v2 - v0;
+    const sycl::marray<REAL, 3> normal = sycl::cross(E1, E2);
 
-    local_real.at(ix * ncomp_real + 0) = x0;
-    local_real.at(ix * ncomp_real + 1) = y0;
-    local_real.at(ix * ncomp_real + 2) = x1;
-    local_real.at(ix * ncomp_real + 3) = y1;
-    local_real.at(ix * ncomp_real + 4) = n0;
-    local_real.at(ix * ncomp_real + 5) = n1;
+    const REAL l = 1.0 / std::sqrt(sycl::dot(normal, normal));
+    const sycl::marray<REAL, 3> unit_normal = l * normal;
 
-    // collect the label index and edge global id
-    const PetscInt facet_global_id =
-        this->mesh->dmh->get_point_global_index(index);
-    local_int.at(ix * ncomp_int + 0) = facet_labels.at(ix);
-    local_int.at(ix * ncomp_int + 1) = facet_global_id;
+    auto lambda_write_normal_int = [&](auto jx) {
+      local_real.at(jx * ncomp_real + 9) = unit_normal[0];
+      local_real.at(jx * ncomp_real + 10) = unit_normal[1];
+      local_real.at(jx * ncomp_real + 11) = unit_normal[2];
+
+      // collect the label index and edge global id
+      const PetscInt facet_global_id =
+          this->mesh->dmh->get_point_global_index(index);
+      local_int.at(jx * ncomp_int + 0) = facet_labels.at(ix);
+      local_int.at(jx * ncomp_int + 1) = facet_global_id;
+    };
+
+    if (coords.size() == 3) {
+      for (int cx = 0; cx < 3; cx++) {
+        for (int dx = 0; dx < 3; dx++) {
+          local_real.at(output_index * ncomp_real + cx * 3 + dx) =
+              coords.at(cx).at(dx);
+        }
+      }
+      lambda_write_normal_int(output_index);
+      output_index++;
+    } else {
+
+      std::array<std::array<PetscInt, 3>, 2> triangle_indices;
+      split_quadrilateral_into_two_triangles(this->mesh->dmh->dm, index,
+                                             triangle_indices);
+
+      auto lambda_assemble_coords = [&](const std::array<PetscInt, 3> &indices,
+                                        int offset) {
+        coords.clear();
+        for (PetscInt vx : indices) {
+          this->mesh->dmh->get_generic_vertices(vx, coords);
+          NESOASSERT(coords.size() == 1, "Unexpected number of vertices.");
+          for (int dx = 0; dx < 3; dx++) {
+            local_real.at(output_index * ncomp_real + offset * 3 + dx) =
+                coords.at(cx).at(dx);
+            TODO
+          }
+        }
+      };
+
+      lambda_write_normal_int(output_index);
+      lambda_write_normal_int(output_index + 1);
+      output_index += 2;
+    }
   }
 
   facet_labels.clear();
@@ -267,10 +318,10 @@ BoundaryInteraction3D::BoundaryInteraction3D(
     }
   }
 
-  this->d_map_edge_discovery = std::make_shared<
+  this->d_map_facet_discovery = std::make_shared<
       BlockedBinaryTree<INT, BoundaryInteractionCellData3D, 8>>(
       this->sycl_target);
-  this->d_map_edge_normals = std::make_shared<
+  this->d_map_facet_normals = std::make_shared<
       BlockedBinaryTree<INT, BoundaryInteractionNormalData3D, 8>>(
       this->sycl_target);
 }

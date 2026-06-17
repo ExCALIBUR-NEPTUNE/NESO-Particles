@@ -77,6 +77,18 @@ std::vector<PetscInt> get_global_distributed_points_map(DM &dm_distributed,
 VTK::CellType get_vtk_cell_type(const DMPolytopeType petsc_cell_type);
 
 /**
+ * Split a linear quadrilateral into two linear triangles.
+ *
+ * @param[in] dm DMPlex containing quadrilateral to split.
+ * @param[in] quad_index PETSc point index of quadrilateral.
+ * @param[in, out] triangle_indices Two arrays of PETSc point indices of
+ * vertices.
+ */
+void split_quadrilateral_into_two_triangles(
+    DM dm, const PetscInt quad_index,
+    std::array<std::array<PetscInt, 3>, 2> &triangle_indices);
+
+/**
  * Class to determine new local indices from global indices when constructing
  * halos.
  */
@@ -284,7 +296,7 @@ public:
   get_cell_bounding_box(const PetscInt cell);
 
   /**
-   * Get the vertices of an edge using a PETSc index.
+   * Get the vertices of a point using a PETSc index.
    *
    * @param[in] petsc_index PETSc point index.
    * @param[in, out] vertices Vector of vertices.

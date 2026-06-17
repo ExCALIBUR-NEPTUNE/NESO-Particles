@@ -64,8 +64,9 @@ public:
    */
   ParticleLoop(const std::string name, ParticleGroupSharedPtr particle_group,
                KERNEL kernel, ARGS... args)
-      : ParticleLoopBase(name, particle_group),
-        ParticleLoopArgs<ARGS...>(args...), kernel(kernel) {
+      : ParticleLoopBase(name, particle_group), ParticleLoopArgs<ARGS...>(
+                                                    args...),
+        kernel(kernel) {
     this->sycl_target = particle_group->sycl_target;
     this->particle_group_ptr = this->particle_group_shrptr.get();
     this->loop_type = "ParticleLoop";
