@@ -199,7 +199,7 @@ public:
   /**
    * Close the HDF5 file. This must be called collectively on the communicator.
    */
-  inline void close(){};
+  inline void close() {};
 
   /**
    * Create a new VTKHDF file. Must be called collectively on the communicator.

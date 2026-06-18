@@ -4,6 +4,7 @@
 #include "../../../boundary/boundary_interaction_specification.hpp"
 #include "../../../containers/blocked_binary_tree.hpp"
 #include "../../../device_functions.hpp"
+#include "../../../mesh_hierarchy_data/mesh_hierarchy_data.hpp"
 #include "boundary_interaction_common.hpp"
 #include <cmath>
 #include <numeric>
@@ -52,6 +53,16 @@ struct BoundaryNormalMapper3D {
 };
 
 /**
+ * Type for storing triangle information in a MeshHierarchyContainer.
+ */
+struct BoundaryInteraction3DTriangle {
+  REAL vertices[3][3];
+  REAL normal[3];
+  int label_id;
+  int face_id;
+};
+
+/**
  * Implementation of identifying the intersection of particle trajectories of
  * 3D meshes (with 2D) boundaries. Users should call @ref pre_integration prior
  * to modifying particle positions and @ref post_integration after modifying
@@ -64,29 +75,19 @@ struct BoundaryNormalMapper3D {
  */
 class BoundaryInteraction3D : public BoundaryInteractionCommon {
 protected:
-  // An triangle has three vertices and each vertex has a coordinate in 3D. Then
-  // the normal vector in 3D.
-  static constexpr int ncomp_real = 3 * 3 + 3;
-
-  // label id, global face point index - note that quads will be broken into two
-  // triangles and hence exist twice.
-  static constexpr int ncomp_int = 2;
-
+  // Bounding box padding.
   static constexpr REAL padding = 1.0e-8;
 
-  std::map<INT, std::set<int>> map_mh_index_to_index;
+  std::shared_ptr<MeshHierarchyData::MeshHierarchyContainer<
+      MeshHierarchyData::GenericSerialContainer<BoundaryInteraction3DTriangle>>>
+      mesh_hierarchy_data_triangles;
 
-  int num_facets_global;
-  MPI_Win facets_win_real;
-  REAL *facets_base_real = nullptr;
-  REAL *facets_real = nullptr;
-  MPI_Win facets_win_int;
-  int *facets_base_int = nullptr;
-  int *facets_int = nullptr;
-
-  ExternalCommon::BoundingBoxSharedPtr get_bounding_box(const int index);
+  ExternalCommon::BoundingBoxSharedPtr
+  get_bounding_box(const BoundaryInteraction3DTriangle &triangle);
 
   std::stack<std::shared_ptr<BufferDevice<REAL>>> stack_d_real;
+  std::stack<std::shared_ptr<BufferDevice<sycl::marray<REAL, 3>>>>
+      stack_d_marray_real;
   std::stack<std::shared_ptr<BufferDevice<int>>> stack_d_int;
   std::set<int> pushed_facet_data;
 

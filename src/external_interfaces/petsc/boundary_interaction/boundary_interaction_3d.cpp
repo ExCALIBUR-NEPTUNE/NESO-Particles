@@ -5,16 +5,15 @@
 
 namespace NESO::Particles::PetscInterface {
 
-ExternalCommon::BoundingBoxSharedPtr
-BoundaryInteraction3D::get_bounding_box(const int index) {
-  NESOASSERT(this->facets_real != nullptr, "Expected a non-nullptr.");
+ExternalCommon::BoundingBoxSharedPtr BoundaryInteraction3D::get_bounding_box(
+    const BoundaryInteraction3DTriangle &triangle) {
   auto bb = std::make_shared<ExternalCommon::BoundingBox>();
   std::vector<REAL> bbv(6);
 
   for (int vx = 0; vx < 3; vx++) {
-    auto x = this->facets_real[index * this->ncomp_real + vx * 3 + 0];
-    auto y = this->facets_real[index * this->ncomp_real + vx * 3 + 1];
-    auto z = this->facets_real[index * this->ncomp_real + vx * 3 + 2];
+    auto x = triangle.vertices[vx][0];
+    auto y = triangle.vertices[vx][1];
+    auto z = triangle.vertices[vx][2];
     bbv.at(0) = x - this->padding;
     bbv.at(1) = y - this->padding;
     bbv.at(2) = z - this->padding;
@@ -29,55 +28,79 @@ BoundaryInteraction3D::get_bounding_box(const int index) {
 }
 
 void BoundaryInteraction3D::collect_cells() {
-  for (auto cell : this->required_mh_cells) {
-    // Does the mh cell actually have any edges intersecting it?
-    if (this->map_mh_index_to_index.count(cell)) {
-      const int num_edges = this->map_mh_index_to_index.at(cell).size();
 
+  {
+    std::vector<INT> gather_cells;
+    gather_cells.reserve(this->required_mh_cells.size());
+    for (auto &cellx : this->required_mh_cells) {
+      gather_cells.push_back(cellx);
+    }
+    this->mesh_hierarchy_data_triangles->gather(gather_cells);
+    gather_cells.clear();
+  }
+
+  std::vector<
+      MeshHierarchyData::GenericSerialContainer<BoundaryInteraction3DTriangle>>
+      triangles;
+
+  std::vector<sycl::marray<REAL, 3>> h_real;
+  std::vector<int> h_int;
+  for (auto cell : this->required_mh_cells) {
+
+    this->mesh_hierarchy_data_triangles->get(cell, triangles);
+    // Does the mh cell actually have any edges intersecting it?
+
+    const std::size_t num_triangles = triangles.size();
+    if (num_triangles > 0) {
       // get the real and int data for the mh cell
-      std::vector<REAL> h_real(num_edges * 4);
-      std::vector<int> h_int(num_edges * ncomp_int);
-      int index = 0;
-      for (auto ix : this->map_mh_index_to_index.at(cell)) {
-        for (int cx = 0; cx < 4; cx++) {
-          h_real.at(index * 4 + cx) = this->facets_real[ix * ncomp_real + cx];
+
+      h_real.reserve(num_triangles * 3);
+      h_int.reserve(num_triangles * 2);
+
+      for (std::size_t tx = 0; tx < num_triangles; tx++) {
+
+        const BoundaryInteraction3DTriangle &triangle = triangles.at(tx).obj;
+
+        for (int vx = 0; vx < 3; vx++) {
+          sycl::marray<REAL, 3> tmp_array{triangle.vertices[vx][0],
+                                          triangle.vertices[vx][1],
+                                          triangle.vertices[vx][2]};
+          h_real.push_back(tmp_array);
         }
 
-        const auto label = this->facets_int[ix * ncomp_int + 0];
-        const auto edge_id = this->facets_int[ix * ncomp_int + 1];
-        const auto group_id = this->map_label_to_groups.at(label);
-        h_int.at(index * ncomp_int + 0) = group_id;
-        h_int.at(index * ncomp_int + 1) = edge_id;
-        index++;
+        const PetscInt label_id = triangle.label_id;
+        const auto group_id = this->map_label_to_groups.at(label_id);
+        const auto face_id = triangle.face_id;
+        h_int.push_back(group_id);
+        h_int.push_back(face_id);
 
-        // Is this edge in the map of edge data for interactions?
-        if (this->pushed_facet_data.count(edge_id) == 0) {
-          std::vector<REAL> h_norm(2);
-          h_norm.at(0) = this->facets_real[ix * ncomp_real + 4];
-          h_norm.at(1) = this->facets_real[ix * ncomp_real + 5];
+        if (this->pushed_facet_data.count(face_id) == 0) {
+          std::vector<REAL> h_norm(3);
+          for (int dx = 0; dx < 3; dx++) {
+            h_norm.at(dx) = triangle.normal[dx];
+          }
           auto t_norm =
               std::make_shared<BufferDevice<REAL>>(this->sycl_target, h_norm);
           this->stack_d_real.push(t_norm);
           BoundaryInteractionNormalData3D dnorm;
           dnorm.d_normal = t_norm->ptr;
-          this->d_map_facet_normals->add(edge_id, dnorm);
-          this->pushed_facet_data.insert(edge_id);
+          this->d_map_facet_normals->add(face_id, dnorm);
+          this->pushed_facet_data.insert(face_id);
         }
       }
 
       // push cell data onto device
-      auto t_real =
-          std::make_shared<BufferDevice<REAL>>(this->sycl_target, h_real);
+      auto t_real = std::make_shared<BufferDevice<sycl::marray<REAL, 3>>>(
+          this->sycl_target, h_real);
       auto t_int =
           std::make_shared<BufferDevice<int>>(this->sycl_target, h_int);
 
-      this->stack_d_real.push(t_real);
+      this->stack_d_marray_real.push(t_real);
       this->stack_d_int.push(t_int);
 
       BoundaryInteractionCellData3D d;
-      d.num_facets = num_edges;
-      nprint("fix below");
-      // d.d_real = t_real->ptr; TODO
+      d.num_facets = num_triangles;
+      d.d_real = t_real->ptr;
       d.d_int = t_int->ptr;
       this->d_map_facet_discovery->add(cell, d);
     }
@@ -92,16 +115,7 @@ BoundaryNormalMapper3D BoundaryInteraction3D::get_device_normal_mapper() {
 }
 
 void BoundaryInteraction3D::free() {
-  if (this->facets_real != nullptr) {
-    MPICHK(MPI_Win_free(&this->facets_win_real));
-    this->facets_base_real = nullptr;
-    this->facets_real = nullptr;
-  }
-  if (this->facets_int != nullptr) {
-    MPICHK(MPI_Win_free(&this->facets_win_int));
-    this->facets_base_int = nullptr;
-    this->facets_int = nullptr;
-  }
+  this->mesh_hierarchy_data_triangles->free();
 }
 
 std::map<PetscInt, ParticleSubGroupSharedPtr>
@@ -158,15 +172,13 @@ BoundaryInteraction3D::BoundaryInteraction3D(
 
   int num_facets_local = facet_labels.size();
 
-  // space to store the local contributions
-  std::vector<REAL> local_real(num_triangles_local * ncomp_real);
-  std::vector<int> local_int(num_triangles_local * ncomp_int);
+  std::map<INT, std::vector<BoundaryInteraction3DTriangle>>
+      staged_mesh_hierarchy_data;
 
   // collect the local edges to send
-  // This index is incremented inside the inner loop once for a triangle and
-  // twice for a quad.
-  int output_index = 0;
   std::vector<std::vector<REAL>> coords;
+  std::deque<std::pair<INT, double>> cells;
+  auto mesh_hierarchy = this->mesh->get_mesh_hierarchy();
   for (int ix = 0; ix < num_facets_local; ix++) {
     const PetscInt index = facet_indices.at(ix);
     // Collect the vertex coords
@@ -198,132 +210,77 @@ BoundaryInteraction3D::BoundaryInteraction3D(
     const REAL l = 1.0 / std::sqrt(sycl::dot(normal, normal));
     const sycl::marray<REAL, 3> unit_normal = l * normal;
 
-    auto lambda_write_normal_int = [&](auto jx) {
-      local_real.at(jx * ncomp_real + 9) = unit_normal[0];
-      local_real.at(jx * ncomp_real + 10) = unit_normal[1];
-      local_real.at(jx * ncomp_real + 11) = unit_normal[2];
+    BoundaryInteraction3DTriangle triangle_data0;
+    BoundaryInteraction3DTriangle triangle_data1;
+    const PetscInt facet_global_id =
+        this->mesh->dmh->get_point_global_index(index);
 
-      // collect the label index and edge global id
-      const PetscInt facet_global_id =
-          this->mesh->dmh->get_point_global_index(index);
-      local_int.at(jx * ncomp_int + 0) = facet_labels.at(ix);
-      local_int.at(jx * ncomp_int + 1) = facet_global_id;
-    };
+    ExternalCommon::BoundingBoxSharedPtr bounding_box = nullptr;
+
+    bool is_triangle = false;
 
     if (coords.size() == 3) {
+      is_triangle = true;
       for (int cx = 0; cx < 3; cx++) {
         for (int dx = 0; dx < 3; dx++) {
-          local_real.at(output_index * ncomp_real + cx * 3 + dx) =
-              coords.at(cx).at(dx);
+          triangle_data0.vertices[cx][dx] = coords.at(cx).at(dx);
         }
       }
-      lambda_write_normal_int(output_index);
-      output_index++;
+      triangle_data0.label_id = facet_labels.at(ix);
+      triangle_data0.face_id = facet_global_id;
+      bounding_box = this->get_bounding_box(triangle_data0);
     } else {
-
+      is_triangle = false;
       std::array<std::array<PetscInt, 3>, 2> triangle_indices;
       split_quadrilateral_into_two_triangles(this->mesh->dmh->dm, index,
                                              triangle_indices);
 
-      auto lambda_assemble_coords = [&](const std::array<PetscInt, 3> &indices,
-                                        int offset) {
-        coords.clear();
-        for (PetscInt vx : indices) {
-          this->mesh->dmh->get_generic_vertices(vx, coords);
-          NESOASSERT(coords.size() == 1, "Unexpected number of vertices.");
-          for (int dx = 0; dx < 3; dx++) {
-            local_real.at(output_index * ncomp_real + offset * 3 + dx) =
-                coords.at(cx).at(dx);
-            TODO
-          }
+      for (int cx = 0; cx < 3; cx++) {
+        const PetscInt vx = triangle_indices.at(0).at(cx);
+        this->mesh->dmh->get_generic_vertices(vx, coords);
+        NESOASSERT(coords.size() == 1, "Expect coords to be size 1.");
+
+        for (int dx = 0; dx < 3; dx++) {
+          triangle_data0.vertices[cx][dx] = coords.at(0).at(dx);
         }
-      };
+      }
+      triangle_data0.label_id = facet_labels.at(ix);
+      triangle_data0.face_id = facet_global_id;
 
-      lambda_write_normal_int(output_index);
-      lambda_write_normal_int(output_index + 1);
-      output_index += 2;
+      for (int cx = 0; cx < 3; cx++) {
+        const PetscInt vx = triangle_indices.at(1).at(cx);
+        this->mesh->dmh->get_generic_vertices(vx, coords);
+        NESOASSERT(coords.size() == 1, "Expect coords to be size 1.");
+
+        for (int dx = 0; dx < 3; dx++) {
+          triangle_data1.vertices[cx][dx] = coords.at(0).at(dx);
+        }
+      }
+      triangle_data1.label_id = facet_labels.at(ix);
+      triangle_data1.face_id = facet_global_id;
+
+      bounding_box = this->get_bounding_box(triangle_data0);
+      bounding_box->expand(this->get_bounding_box(triangle_data1));
     }
-  }
 
-  facet_labels.clear();
-  facet_indices.clear();
-
-  MPI_Comm comm_intra = this->sycl_target->comm_pair.comm_intra;
-  MPI_Comm comm_inter = this->sycl_target->comm_pair.comm_inter;
-  int rank_intra = this->sycl_target->comm_pair.rank_intra;
-
-  std::vector<REAL> node_real;
-  std::vector<int> node_int;
-
-  gather_v(local_real, comm_intra, 0, node_real);
-  gather_v(local_int, comm_intra, 0, node_int);
-  local_real.clear();
-  local_int.clear();
-
-  std::vector<REAL> global_real;
-  std::vector<int> global_int;
-
-  int num_facets_global_tmp = 0;
-  if (rank_intra == 0) {
-    all_gather_v(node_real, comm_inter, global_real);
-    all_gather_v(node_int, comm_inter, global_int);
-    num_facets_global_tmp = global_int.size() / ncomp_int;
-  }
-  node_real.clear();
-  node_int.clear();
-
-  // Allocate the shared space to store the edges
-  MPICHK(MPI_Win_allocate_shared(
-      num_facets_global_tmp * ncomp_real * sizeof(REAL), sizeof(REAL),
-      MPI_INFO_NULL, comm_intra, (void *)&this->facets_base_real,
-      &this->facets_win_real));
-  MPICHK(MPI_Win_allocate_shared(
-      num_facets_global_tmp * ncomp_int * sizeof(int), sizeof(int),
-      MPI_INFO_NULL, comm_intra, (void *)&this->facets_base_int,
-      &this->facets_win_int));
-  // Get the pointers to the shared space on each rank
-  MPI_Aint win_size_tmp;
-  int disp_unit_tmp;
-  MPICHK(MPI_Win_shared_query(this->facets_win_real, 0, &win_size_tmp,
-                              &disp_unit_tmp, (void *)&this->facets_real));
-  MPICHK(MPI_Win_shared_query(this->facets_win_int, 0, &win_size_tmp,
-                              &disp_unit_tmp, (void *)&this->facets_int));
-
-  // On node rank zero copy the data into the shared region.
-  if (rank_intra == 0) {
-    std::memcpy(this->facets_real, global_real.data(),
-                num_facets_global_tmp * ncomp_real * sizeof(REAL));
-    std::memcpy(this->facets_int, global_int.data(),
-                num_facets_global_tmp * ncomp_int * sizeof(int));
-  }
-  global_real.clear();
-  global_int.clear();
-
-  // On each node the rank where rank_intra == 0 now holds all the boundary
-  // edges.
-  MPICHK(MPI_Bcast(&num_facets_global_tmp, 1, MPI_INT, 0, comm_intra));
-  this->num_facets_global = num_facets_global_tmp;
-  // Wait for node rank 0 to populate shared memory
-  MPICHK(MPI_Barrier(comm_intra));
-
-  // build map from mesh hierarchy cells to indices in the edge data store
-  auto mesh_hierarchy = this->mesh->get_mesh_hierarchy();
-  std::deque<std::pair<INT, double>> cells;
-  for (int ex = 0; ex < this->num_facets_global; ex++) {
     cells.clear();
-    auto bb = this->get_bounding_box(ex);
-    ExternalCommon::bounding_box_map(bb, mesh_hierarchy, cells);
+    ExternalCommon::bounding_box_map(bounding_box, mesh_hierarchy, cells);
     for (auto &cx_w : cells) {
-      this->map_mh_index_to_index[cx_w.first].insert(ex);
+      if (is_triangle) {
+        staged_mesh_hierarchy_data[cx_w.first].push_back(triangle_data0);
+      } else {
+        staged_mesh_hierarchy_data[cx_w.first].push_back(triangle_data0);
+        staged_mesh_hierarchy_data[cx_w.first].push_back(triangle_data1);
+      }
     }
   }
 
-  this->d_map_facet_discovery = std::make_shared<
-      BlockedBinaryTree<INT, BoundaryInteractionCellData3D, 8>>(
-      this->sycl_target);
-  this->d_map_facet_normals = std::make_shared<
-      BlockedBinaryTree<INT, BoundaryInteractionNormalData3D, 8>>(
-      this->sycl_target);
+  this->mesh_hierarchy_data_triangles =
+      std::make_shared<MeshHierarchyData::MeshHierarchyContainer<
+          MeshHierarchyData::GenericSerialContainer<
+              BoundaryInteraction3DTriangle>>>(mesh_hierarchy,
+                                               staged_mesh_hierarchy_data);
+  staged_mesh_hierarchy_data.clear();
 }
 
 template std::map<PetscInt, ParticleSubGroupSharedPtr>

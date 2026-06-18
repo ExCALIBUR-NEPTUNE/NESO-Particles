@@ -282,6 +282,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_hierarchy.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_hierarchy_data/mesh_hierarchy_container.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_hierarchy_data/mesh_hierarchy_data.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/mesh_hierarchy_data/generic_serial_container.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_hierarchy_data/serial_container.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_hierarchy_data/serial_interface.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_interface.hpp

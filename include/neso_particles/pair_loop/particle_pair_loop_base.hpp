@@ -131,7 +131,9 @@ template <typename OBJ> struct B {
 /**
  * Metafunction for getting the unannotated loop type.
  */
-template <typename ARG> struct StripPairGroupAnnotation { using type = ARG; };
+template <typename ARG> struct StripPairGroupAnnotation {
+  using type = ARG;
+};
 /**
  * Metafunction for getting the unannotated loop type.
  */
@@ -152,15 +154,21 @@ struct MaskUndefined {};
 /**
  * Metafunction for determining if the arg is annotated or not.
  */
-template <typename ARG> struct GetAnotateMask { using mask = MaskUndefined; };
+template <typename ARG> struct GetAnotateMask {
+  using mask = MaskUndefined;
+};
 /**
  * Metafunction for determining if the arg is annotated or not.
  */
-template <typename ARG> struct GetAnotateMask<A<ARG>> { using mask = MaskA; };
+template <typename ARG> struct GetAnotateMask<A<ARG>> {
+  using mask = MaskA;
+};
 /**
  * Metafunction for determining if the arg is annotated or not.
  */
-template <typename ARG> struct GetAnotateMask<B<ARG>> { using mask = MaskB; };
+template <typename ARG> struct GetAnotateMask<B<ARG>> {
+  using mask = MaskB;
+};
 
 template <typename ARG> struct IsAnnotatedB {};
 template <> struct IsAnnotatedB<MaskB &> {

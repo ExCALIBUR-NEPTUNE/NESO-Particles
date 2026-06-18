@@ -253,8 +253,7 @@ public:
     const int num_events = this->events.size();
     fh << "{\n";
     fh << "\"rank\":" << rank << ",\n";
-    fh << "\"events\":"
-       << "[\n";
+    fh << "\"events\":" << "[\n";
     int ei = 0;
     for (const auto &ex : this->events) {
       const auto e0 = std::get<0>(ex);
