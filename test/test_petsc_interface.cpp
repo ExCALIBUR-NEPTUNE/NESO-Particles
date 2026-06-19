@@ -1480,13 +1480,31 @@ TEST(PETSc, split_quadrilateral_into_two_triangles) {
   PetscInterface::split_quadrilateral_into_two_triangles(dm, 0,
                                                          triangle_indices);
 
-  ASSERT_EQ(triangle_indices.at(0).at(0), 5);
-  ASSERT_EQ(triangle_indices.at(0).at(1), 6);
-  ASSERT_EQ(triangle_indices.at(0).at(2), 7);
+  std::array<std::set<PetscInt>, 2> split0 = {std::set<PetscInt>{5, 6, 7},
+                                              std::set<PetscInt>{5, 7, 8}};
+  std::array<std::set<PetscInt>, 2> split1 = {std::set<PetscInt>{5, 6, 8},
+                                              std::set<PetscInt>{6, 7, 8}};
 
-  ASSERT_EQ(triangle_indices.at(1).at(0), 5);
-  ASSERT_EQ(triangle_indices.at(1).at(1), 7);
-  ASSERT_EQ(triangle_indices.at(1).at(2), 8);
+  std::array<std::set<PetscInt>, 2> split_test = {
+      std::set<PetscInt>{
+          triangle_indices.at(0).at(0),
+          triangle_indices.at(0).at(1),
+          triangle_indices.at(0).at(2),
+      },
+      std::set<PetscInt>{
+          triangle_indices.at(1).at(0),
+          triangle_indices.at(1).at(1),
+          triangle_indices.at(1).at(2),
+      },
+  };
+
+  const bool test_is_split_0 =
+      (split0.at(0) == split_test.at(0)) && (split0.at(1) == split_test.at(1));
+
+  const bool test_is_split_1 =
+      (split1.at(0) == split_test.at(0)) && (split1.at(1) == split_test.at(1));
+
+  ASSERT_TRUE(test_is_split_0 || test_is_split_1);
 
   PETSCCHK(DMDestroy(&dm));
   PETSCCHK(PetscFinalize());

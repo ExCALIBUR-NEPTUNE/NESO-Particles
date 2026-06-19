@@ -158,6 +158,43 @@ TEST(PETSc, dmplex_3d_mapper) {
   PETSCCHK(PetscFinalize());
 }
 
+TEST(PETScBoundary3D, setup) {
+  std::filesystem::path gmsh_filepath;
+  // GET_TEST_RESOURCE(gmsh_filepath,
+  // "gmsh/reference_all_types_square_0.2.msh");
+
+  nprint("TODO commit a mesh");
+  gmsh_filepath = get_env_string("GMSH_TMP", "");
+
+  PETSCCHK(PetscInitializeNoArguments());
+  DM dm;
+  PETSCCHK(DMPlexCreateGmshFromFile(MPI_COMM_WORLD,
+                                    gmsh_filepath.generic_string().c_str(),
+                                    (PetscBool)1, &dm));
+  PetscInterface::generic_distribute(&dm);
+
+  int rank = -1;
+  MPICHK(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
+
+  auto mesh =
+      std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
+
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+
+  std::map<PetscInt, std::vector<PetscInt>> boundary_groups;
+  boundary_groups[0] = {100, 200, 300, 400, 500, 600};
+
+  auto boundary_interaction =
+      std::make_shared<PetscInterface::BoundaryInteraction3D>(
+          sycl_target, mesh, boundary_groups, 1.0e-14);
+
+  boundary_interaction->free();
+  sycl_target->free();
+  mesh->free();
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
+
 TEST(PETSc, foo) {
   std::filesystem::path gmsh_filepath;
   // GET_TEST_RESOURCE(gmsh_filepath,

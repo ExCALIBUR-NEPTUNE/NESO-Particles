@@ -190,33 +190,40 @@ void split_quadrilateral_into_two_triangles(
   const PetscInt *cone = nullptr;
   PETSCCHK(DMPlexGetCone(dm, quad_index, &cone));
 
-  const PetscInt *ornt = nullptr;
-  PETSCCHK(DMPlexGetConeOrientation(dm, quad_index, &ornt));
-
   // Get the vertices from the quad in order.
   PetscInt last_vertex = -1;
   const PetscInt *edge_cone = nullptr;
 
   std::array<PetscInt, 4> vertices;
+  std::map<PetscInt, std::set<PetscInt>> map_vertex_to_neighbours;
+
+  PetscInt first_vertex = -1;
   for (int edgex = 0; edgex < 4; edgex++) {
     const PetscInt edge_index = cone[edgex];
     PETSCCHK(DMPlexGetCone(dm, edge_index, &edge_cone));
-    PetscInt v0 = -1, v1 = -1;
-    v0 = edge_cone[0];
-    v1 = edge_cone[1];
-    if (ornt[edgex]) { // If the orientation of the edge is not 0 then the
-                       // direction of the edge should be reversed.
-      const PetscInt vt = v0;
-      v0 = v1;
-      v1 = vt;
+    const auto v0 = edge_cone[0];
+    const auto v1 = edge_cone[1];
+
+    if (edgex == 0) {
+      first_vertex = v0;
     }
 
-    NESOASSERT(edgex == 0 || v0 == last_vertex,
-               "Vertices in quad are not forming a loop. This vertex is: " +
-                   std::to_string(v0) +
-                   " last vertex was: " + std::to_string(last_vertex));
-    last_vertex = v1;
-    vertices.at(edgex) = v0;
+    map_vertex_to_neighbours[v0].insert(v1);
+    map_vertex_to_neighbours[v1].insert(v0);
+  }
+
+  PetscInt current_vertex = first_vertex;
+  for (int edgex = 0; edgex < 4; edgex++) {
+
+    vertices.at(edgex) = current_vertex;
+    // get a neighbour vertex
+    const PetscInt next_vertex =
+        *map_vertex_to_neighbours.at(current_vertex).begin();
+    // Remove the current point from the neighbours of the next point such that
+    // the loop never travels backwards.
+    map_vertex_to_neighbours.at(next_vertex).erase(current_vertex);
+
+    current_vertex = next_vertex;
   }
 
   // For the four vertices [0,1,2,3] there are two possible splits. 1) the new
@@ -833,7 +840,21 @@ void DMPlexHelper::get_cell_vertex_average(const PetscInt cell,
   }
 }
 
+/**
+ * Get the point type.
+ *
+ * @param point_index Local point index.
+ * @returns PETSc description of cell type.
+ */
+DMPolytopeType DMPlexHelper::get_point_type(const PetscInt point_index) {
+  this->check_valid_petsc_point(point_index);
+  DMPolytopeType cell_type;
+  PETSCCHK(DMPlexGetCellType(this->dm, point_index, &cell_type));
+  return cell_type;
+}
+
 DMPolytopeType DMPlexHelper::get_cell_type(const PetscInt cell) {
+  this->check_valid_local_cell(cell);
   DMPolytopeType cell_type;
   const PetscInt petsc_index = this->map_np_to_petsc.at(cell);
   this->check_valid_petsc_cell(petsc_index);

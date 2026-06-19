@@ -163,7 +163,7 @@ BoundaryInteraction3D::BoundaryInteraction3D(
 
         // If the facet is a quad then we will split that quad into two
         // triangles.
-        const auto cell_type = this->mesh->dmh->get_cell_type(fx);
+        const auto cell_type = this->mesh->dmh->get_point_type(fx);
         num_triangles_local += cell_type == DM_POLYTOPE_TRIANGLE ? 1 : 2;
       }
     }
@@ -184,7 +184,7 @@ BoundaryInteraction3D::BoundaryInteraction3D(
     const PetscInt index = facet_indices.at(ix);
     // Collect the vertex coords
     this->mesh->dmh->get_generic_vertices(index, coords);
-    NESOASSERT(coords.size() == 9 || coords.size() == 12,
+    NESOASSERT(coords.size() == 3 || coords.size() == 4,
                "Expected a facet to only have three or four vertices.");
     NESOASSERT(coords.at(0).size() == 3 && coords.at(1).size() == 3 &&
                    coords.at(2).size() == 3,

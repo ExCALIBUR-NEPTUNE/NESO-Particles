@@ -322,6 +322,14 @@ public:
   void get_cell_vertex_average(const PetscInt cell, std::vector<REAL> &average);
 
   /**
+   * Get the point type.
+   *
+   * @param point_index Local point index.
+   * @returns PETSc description of cell type.
+   */
+  DMPolytopeType get_point_type(const PetscInt point_index);
+
+  /**
    * Get the cell type.
    *
    * @param cell Local cell index.
