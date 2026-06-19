@@ -86,8 +86,9 @@ protected:
   get_bounding_box(const BoundaryInteraction3DTriangle &triangle);
 
   std::stack<std::shared_ptr<BufferDevice<REAL>>> stack_d_real;
-  std::stack<std::shared_ptr<BufferDevice<sycl::marray<REAL, 3>>>>
-      stack_d_marray_real;
+  // There is a compilation issue (bug?) when this stack is a shared_ptr to a
+  // DeviceBuffer<sycl::marray<REAL, 3>> hence we use void.
+  std::stack<std::shared_ptr<void>> stack_void;
   std::stack<std::shared_ptr<BufferDevice<int>>> stack_d_int;
   std::set<int> pushed_facet_data;
 

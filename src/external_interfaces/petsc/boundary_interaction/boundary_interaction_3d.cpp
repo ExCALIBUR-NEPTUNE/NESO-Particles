@@ -54,8 +54,8 @@ void BoundaryInteraction3D::collect_cells() {
     if (num_triangles > 0) {
       // get the real and int data for the mh cell
 
-      h_real.reserve(num_triangles * 3);
-      h_int.reserve(num_triangles * 2);
+      h_real.resize(num_triangles * 3);
+      h_int.resize(num_triangles * 2);
 
       for (std::size_t tx = 0; tx < num_triangles; tx++) {
 
@@ -65,14 +65,14 @@ void BoundaryInteraction3D::collect_cells() {
           sycl::marray<REAL, 3> tmp_array{triangle.vertices[vx][0],
                                           triangle.vertices[vx][1],
                                           triangle.vertices[vx][2]};
-          h_real.push_back(tmp_array);
+          h_real.at(tx * 3 + vx) = tmp_array;
         }
 
         const PetscInt label_id = triangle.label_id;
         const auto group_id = this->map_label_to_groups.at(label_id);
         const auto face_id = triangle.face_id;
-        h_int.push_back(group_id);
-        h_int.push_back(face_id);
+        h_int.at(tx * 2 + 0) = group_id;
+        h_int.at(tx * 2 + 1) = face_id;
 
         if (this->pushed_facet_data.count(face_id) == 0) {
           std::vector<REAL> h_norm(3);
@@ -95,7 +95,7 @@ void BoundaryInteraction3D::collect_cells() {
       auto t_int =
           std::make_shared<BufferDevice<int>>(this->sycl_target, h_int);
 
-      this->stack_d_marray_real.push(t_real);
+      this->stack_void.push(t_real);
       this->stack_d_int.push(t_int);
 
       BoundaryInteractionCellData3D d;
@@ -172,7 +172,8 @@ BoundaryInteraction3D::BoundaryInteraction3D(
 
   int num_facets_local = facet_labels.size();
 
-  std::map<INT, std::vector<BoundaryInteraction3DTriangle>>
+  std::map<INT, std::vector<MeshHierarchyData::GenericSerialContainer<
+                    BoundaryInteraction3DTriangle>>>
       staged_mesh_hierarchy_data;
 
   // collect the local edges to send
@@ -267,10 +268,10 @@ BoundaryInteraction3D::BoundaryInteraction3D(
     ExternalCommon::bounding_box_map(bounding_box, mesh_hierarchy, cells);
     for (auto &cx_w : cells) {
       if (is_triangle) {
-        staged_mesh_hierarchy_data[cx_w.first].push_back(triangle_data0);
+        staged_mesh_hierarchy_data[cx_w.first].emplace_back(triangle_data0);
       } else {
-        staged_mesh_hierarchy_data[cx_w.first].push_back(triangle_data0);
-        staged_mesh_hierarchy_data[cx_w.first].push_back(triangle_data1);
+        staged_mesh_hierarchy_data[cx_w.first].emplace_back(triangle_data0);
+        staged_mesh_hierarchy_data[cx_w.first].emplace_back(triangle_data1);
       }
     }
   }

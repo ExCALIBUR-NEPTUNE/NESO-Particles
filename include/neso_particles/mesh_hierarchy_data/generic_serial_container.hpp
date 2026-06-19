@@ -24,11 +24,6 @@ template <typename T> struct GenericSerialContainer : public SerialInterface {
    */
   GenericSerialContainer(const T &a) : obj(a) {}
 
-  /**
-   * Create container around an object.
-   */
-  GenericSerialContainer(const T a) : obj(a) {}
-
   virtual ~GenericSerialContainer() = default;
   virtual inline std::size_t get_num_bytes() const override {
     return sizeof(T);
