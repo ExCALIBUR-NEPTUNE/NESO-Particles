@@ -68,6 +68,7 @@ set(SRC_FILES
     ${SRC_DIR}/external_interfaces/petsc/particle_cell_mapping/dmplex_host_mapper.cpp
     ${SRC_DIR}/external_interfaces/petsc/project_evaluate/dmplex_project_evaluate_barycentric.cpp
     ${SRC_DIR}/external_interfaces/petsc/project_evaluate/dmplex_project_evaluate_dg.cpp
+    ${SRC_DIR}/external_interfaces/common/bounding_box.cpp
     ${SRC_DIR}/external_interfaces/common/dof_mapper_dg.cpp
     ${SRC_DIR}/external_interfaces/common/local_claim.cpp
     ${SRC_DIR}/external_interfaces/common/overlay_cartesian_mesh.cpp

@@ -719,8 +719,7 @@ ExternalCommon::BoundingBoxSharedPtr DMPlexHelper::get_bounding_box() {
 }
 
 ExternalCommon::BoundingBoxSharedPtr
-DMPlexHelper::get_cell_bounding_box(const PetscInt cell) {
-  this->check_valid_local_cell(cell);
+DMPlexHelper::get_point_bounding_box(const PetscInt petsc_index) {
 
   std::vector<REAL> bb = {
       std::numeric_limits<REAL>::max(),    std::numeric_limits<REAL>::max(),
@@ -736,8 +735,7 @@ DMPlexHelper::get_cell_bounding_box(const PetscInt cell) {
   PetscScalar *coords = nullptr;
   PetscInt num_coords;
   PetscBool is_dg;
-  const PetscInt petsc_index = this->map_np_to_petsc.at(cell);
-  this->check_valid_petsc_cell(petsc_index);
+  this->check_valid_petsc_point(petsc_index);
   PETSCCHK(DMPlexGetCellCoordinates(dm, petsc_index, &is_dg, &num_coords,
                                     &array, &coords));
   NESOASSERT(coords != nullptr, "No vertices returned for cell.");
@@ -752,6 +750,14 @@ DMPlexHelper::get_cell_bounding_box(const PetscInt cell) {
   PETSCCHK(DMPlexRestoreCellCoordinates(dm, petsc_index, &is_dg, &num_coords,
                                         &array, &coords));
   return std::make_shared<ExternalCommon::BoundingBox>(bb);
+}
+
+ExternalCommon::BoundingBoxSharedPtr
+DMPlexHelper::get_cell_bounding_box(const PetscInt cell) {
+  this->check_valid_local_cell(cell);
+  const PetscInt petsc_index = this->map_np_to_petsc.at(cell);
+  this->check_valid_petsc_cell(petsc_index);
+  return this->get_point_bounding_box(petsc_index);
 }
 
 void DMPlexHelper::get_generic_vertices(

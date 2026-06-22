@@ -158,6 +158,22 @@ TEST(PETSc, dmplex_3d_mapper) {
   PETSCCHK(PetscFinalize());
 }
 
+namespace {
+
+struct BoundaryInteraction3DTest : PetscInterface::BoundaryInteraction3D {
+
+  template <typename... ARGS>
+  BoundaryInteraction3DTest(ARGS... args) : BoundaryInteraction3D(args...) {}
+
+  MAKE_GETTER_METHOD(required_mh_cells);
+  MAKE_GETTER_METHOD(collected_mh_cells);
+  MAKE_GETTER_METHOD(padding);
+  MAKE_WRAP_METHOD(collect_cells);
+  MAKE_WRAP_METHOD(get_labels);
+};
+
+} // namespace
+
 TEST(PETScBoundary3D, setup) {
   std::filesystem::path gmsh_filepath;
   // GET_TEST_RESOURCE(gmsh_filepath,
@@ -178,15 +194,58 @@ TEST(PETScBoundary3D, setup) {
 
   auto mesh =
       std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
+  auto mesh_hierarchy = mesh->get_mesh_hierarchy();
 
   auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
 
   std::map<PetscInt, std::vector<PetscInt>> boundary_groups;
   boundary_groups[0] = {100, 200, 300, 400, 500, 600};
 
-  auto boundary_interaction =
-      std::make_shared<PetscInterface::BoundaryInteraction3D>(
-          sycl_target, mesh, boundary_groups, 1.0e-14);
+  auto boundary_interaction = std::make_shared<BoundaryInteraction3DTest>(
+      sycl_target, mesh, boundary_groups, 1.0e-14);
+
+  auto &required_mh_cells = boundary_interaction->get_required_mh_cells();
+
+  auto labels = boundary_interaction->wrap_get_labels();
+
+  // map from label to petsc point indices in the dm for the facets
+  auto face_sets = mesh->dmh->get_face_sets();
+
+  std::deque<std::pair<INT, double>> cells;
+  auto padding = boundary_interaction->get_padding();
+
+  for (auto &item : face_sets) {
+    if (labels.count(item.first)) {
+      for (auto &point_id : item.second) {
+        auto label_id = item.first;
+        // If the facet is a quad then we will split that quad into two
+        // triangles.
+        const auto cell_type = mesh->dmh->get_point_type(point_id);
+        const bool is_triangle = cell_type == DM_POLYTOPE_TRIANGLE;
+
+        auto bounding_box = mesh->dmh->get_point_bounding_box(point_id);
+        bounding_box->expand({padding, padding, padding});
+
+        cells.clear();
+        ExternalCommon::bounding_box_map(bounding_box, mesh_hierarchy, cells);
+
+        for (auto &cell_weight : cells) {
+          required_mh_cells.insert(cell_weight.first);
+        }
+      }
+    }
+  }
+
+  boundary_interaction->wrap_collect_cells();
+
+
+
+
+
+
+
+
+
 
   boundary_interaction->free();
   sycl_target->free();

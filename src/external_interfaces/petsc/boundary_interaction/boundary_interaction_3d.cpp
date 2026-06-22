@@ -282,6 +282,14 @@ BoundaryInteraction3D::BoundaryInteraction3D(
               BoundaryInteraction3DTriangle>>>(mesh_hierarchy,
                                                staged_mesh_hierarchy_data);
   staged_mesh_hierarchy_data.clear();
+
+  this->d_map_facet_discovery = std::make_shared<
+      BlockedBinaryTree<INT, BoundaryInteractionCellData3D, 8>>(
+      this->sycl_target);
+
+  this->d_map_facet_normals = std::make_shared<
+      BlockedBinaryTree<INT, BoundaryInteractionNormalData3D, 8>>(
+      this->sycl_target);
 }
 
 template std::map<PetscInt, ParticleSubGroupSharedPtr>

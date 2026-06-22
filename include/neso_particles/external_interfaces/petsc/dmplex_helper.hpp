@@ -287,6 +287,15 @@ public:
   ExternalCommon::BoundingBoxSharedPtr get_bounding_box();
 
   /**
+   * Get a bounding box for a mesh point (assumes linear mesh).
+   *
+   * @param petsc_index Local point index.
+   * @returns Bounding box for the point.
+   */
+  ExternalCommon::BoundingBoxSharedPtr
+  get_point_bounding_box(const PetscInt petsc_index);
+
+  /**
    * Get a bounding box for a mesh cell (assumes linear mesh).
    *
    * @param cell Local cell index.
