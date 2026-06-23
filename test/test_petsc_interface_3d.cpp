@@ -168,8 +168,16 @@ struct BoundaryInteraction3DTest : PetscInterface::BoundaryInteraction3D {
   MAKE_GETTER_METHOD(required_mh_cells);
   MAKE_GETTER_METHOD(collected_mh_cells);
   MAKE_GETTER_METHOD(padding);
+  MAKE_GETTER_METHOD(d_map_facet_discovery);
   MAKE_WRAP_METHOD(collect_cells);
   MAKE_WRAP_METHOD(get_labels);
+};
+
+struct BoundaryTriangleTest {
+  REAL vertices[3][3];
+  int face_id;
+  int label_id;
+  int type;
 };
 
 } // namespace
@@ -214,6 +222,12 @@ TEST(PETScBoundary3D, setup) {
   std::deque<std::pair<INT, double>> cells;
   auto padding = boundary_interaction->get_padding();
 
+  std::vector<std::vector<REAL>> coords;
+  int triangle_index = 0;
+
+  std::vector<BoundaryTriangleTest> h_triangles;
+  std::vector<int> h_map_to_test;
+
   for (auto &item : face_sets) {
     if (labels.count(item.first)) {
       for (auto &point_id : item.second) {
@@ -226,11 +240,63 @@ TEST(PETScBoundary3D, setup) {
         auto bounding_box = mesh->dmh->get_point_bounding_box(point_id);
         bounding_box->expand({padding, padding, padding});
 
+        const PetscInt facet_global_id =
+            mesh->dmh->get_point_global_index(point_id);
+
         cells.clear();
         ExternalCommon::bounding_box_map(bounding_box, mesh_hierarchy, cells);
 
         for (auto &cell_weight : cells) {
           required_mh_cells.insert(cell_weight.first);
+        }
+
+        auto lambda_push_triangle = [&](auto &t) {
+          h_triangles.push_back(t);
+          for (auto &cell_weight : cells) {
+            h_map_to_test.push_back(cell_weight.first);
+            h_map_to_test.push_back(triangle_index);
+          }
+        };
+
+        if (is_triangle) {
+          mesh->dmh->get_generic_vertices(point_id, coords);
+          ASSERT_EQ(coords.size(), 3);
+
+          BoundaryTriangleTest triangle;
+
+          for (int dx = 0; dx < 3; dx++) {
+            for (int cx = 0; cx < 3; cx++) {
+              triangle.vertices[dx][cx] = coords.at(dx).at(cx);
+            }
+          }
+          triangle.face_id = point_id;
+          triangle.label_id = facet_global_id;
+          triangle.type = 1;
+          lambda_push_triangle(triangle);
+          triangle_index++;
+
+        } else {
+
+          std::array<std::array<PetscInt, 3>, 2> triangle_indices;
+          PetscInterface::split_quadrilateral_into_two_triangles(
+              mesh->dmh->dm, point_id, triangle_indices);
+
+          for (int tx : {0, 1}) {
+            BoundaryTriangleTest triangle;
+            for (int vx : {0, 1, 2}) {
+              const PetscInt inner_point_id = triangle_indices.at(tx).at(vx);
+              mesh->dmh->get_generic_vertices(inner_point_id, coords);
+              ASSERT_EQ(coords.size(), 1);
+              for (int cx : {0, 1, 2}) {
+                triangle.vertices[vx][cx] = coords.at(0).at(cx);
+              }
+              triangle.face_id = facet_global_id;
+              triangle.label_id = label_id;
+              triangle.type = 2 + tx;
+            }
+            lambda_push_triangle(triangle);
+            triangle_index++;
+          }
         }
       }
     }
@@ -238,14 +304,60 @@ TEST(PETScBoundary3D, setup) {
 
   boundary_interaction->wrap_collect_cells();
 
+  BufferDevice<BoundaryTriangleTest> d_triangles(sycl_target, h_triangles);
+  auto k_triangles = d_triangles.ptr;
+  BufferDevice<int> d_map_to_test(sycl_target, h_map_to_test);
+  auto k_map_to_test = d_map_to_test.ptr;
 
+  auto k_intersect_object_root =
+      boundary_interaction->get_d_map_facet_discovery()->root;
 
+  ErrorPropagate ep(sycl_target);
+  auto k_ep = ep.device_ptr();
 
+  sycl_target->queue
+      .parallel_for(
+          sycl::range<1>(h_triangles.size()),
+          [=](auto idx) {
+            const std::size_t index = idx.get_id(0);
+            const int mh_cell = k_map_to_test[2 * index + 0];
+            const int triangle_index = k_map_to_test[2 * index + 1];
+            const auto &triangle = k_triangles[triangle_index];
 
+            bool *exists = nullptr;
+            PetscInterface::BoundaryInteractionCellData3D *data = nullptr;
+            if (k_intersect_object_root->get_location(mh_cell, &exists,
+                                                      &data)) {
 
+              NESO_KERNEL_ASSERT(*exists, k_ep);
+              // naively find the triangle in this MH cell
+              const int num_facets = data->num_facets;
+              bool found = false;
 
+              for (int fx = 0; (fx < num_facets) && (!found); fx++) {
+                bool all_close = true;
+                for (int vx = 0; vx < 3; vx++) {
+                  for (int cx = 0; cx < 3; cx++) {
+                    const REAL coord_to_find = triangle.vertices[vx][cx];
+                    const REAL coord_of_cand = data->d_real[fx * 3 + vx][cx];
+                    const REAL err = Kernel::abs(coord_of_cand - coord_to_find);
 
+                    if (err > 1.0e-15) {
+                      all_close = false;
+                    }
+                  }
+                }
+                found = all_close;
+              }
 
+              NESO_KERNEL_ASSERT(found, k_ep);
+            } else {
+              NESO_KERNEL_ASSERT(false, k_ep);
+            }
+          })
+      .wait_and_throw();
+
+  ASSERT_FALSE(ep.get_flag());
 
   boundary_interaction->free();
   sycl_target->free();
