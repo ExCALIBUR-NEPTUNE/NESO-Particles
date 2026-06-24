@@ -179,6 +179,7 @@ BoundaryInteraction3D::BoundaryInteraction3D(
   // collect the local edges to send
   std::vector<std::vector<REAL>> coords;
   std::deque<std::pair<INT, double>> cells;
+  std::vector<REAL> normal_vector;
   auto mesh_hierarchy = this->mesh->get_mesh_hierarchy();
   for (int ix = 0; ix < num_facets_local; ix++) {
     const PetscInt index = facet_indices.at(ix);
@@ -190,26 +191,7 @@ BoundaryInteraction3D::BoundaryInteraction3D(
                    coords.at(2).size() == 3,
                "Expected face vertex to be embedded in 3D.");
 
-    const REAL x0 = coords.at(0).at(0);
-    const REAL y0 = coords.at(0).at(1);
-    const REAL z0 = coords.at(0).at(1);
-
-    const sycl::marray<REAL, 3> v0{coords.at(0).at(0), coords.at(0).at(1),
-                                   coords.at(0).at(2)};
-
-    const sycl::marray<REAL, 3> v1{coords.at(1).at(0), coords.at(1).at(1),
-                                   coords.at(1).at(2)};
-
-    const sycl::marray<REAL, 3> v2{coords.at(2).at(0), coords.at(2).at(1),
-                                   coords.at(2).at(2)};
-
-    // compute the normal to the facet
-    const sycl::marray<REAL, 3> E1 = v1 - v0;
-    const sycl::marray<REAL, 3> E2 = v2 - v0;
-    const sycl::marray<REAL, 3> normal = sycl::cross(E1, E2);
-
-    const REAL l = 1.0 / std::sqrt(sycl::dot(normal, normal));
-    const sycl::marray<REAL, 3> unit_normal = l * normal;
+    this->mesh->dmh->get_linear_normal_vector(index, normal_vector);
 
     BoundaryInteraction3DTriangle triangle_data0;
     BoundaryInteraction3DTriangle triangle_data1;
@@ -220,6 +202,14 @@ BoundaryInteraction3D::BoundaryInteraction3D(
 
     bool is_triangle = false;
 
+    auto lambda_set_common = [&](auto &triangle) {
+      triangle.label_id = facet_labels.at(ix);
+      triangle.face_id = facet_global_id;
+      for (int dx = 0; dx < 3; dx++) {
+        triangle.normal[dx] = normal_vector[dx];
+      }
+    };
+
     if (coords.size() == 3) {
       is_triangle = true;
       for (int cx = 0; cx < 3; cx++) {
@@ -227,8 +217,7 @@ BoundaryInteraction3D::BoundaryInteraction3D(
           triangle_data0.vertices[cx][dx] = coords.at(cx).at(dx);
         }
       }
-      triangle_data0.label_id = facet_labels.at(ix);
-      triangle_data0.face_id = facet_global_id;
+      lambda_set_common(triangle_data0);
       bounding_box = this->get_bounding_box(triangle_data0);
     } else {
       is_triangle = false;
@@ -245,8 +234,7 @@ BoundaryInteraction3D::BoundaryInteraction3D(
           triangle_data0.vertices[cx][dx] = coords.at(0).at(dx);
         }
       }
-      triangle_data0.label_id = facet_labels.at(ix);
-      triangle_data0.face_id = facet_global_id;
+      lambda_set_common(triangle_data0);
 
       for (int cx = 0; cx < 3; cx++) {
         const PetscInt vx = triangle_indices.at(1).at(cx);
@@ -257,8 +245,7 @@ BoundaryInteraction3D::BoundaryInteraction3D(
           triangle_data1.vertices[cx][dx] = coords.at(0).at(dx);
         }
       }
-      triangle_data1.label_id = facet_labels.at(ix);
-      triangle_data1.face_id = facet_global_id;
+      lambda_set_common(triangle_data1);
 
       bounding_box = this->get_bounding_box(triangle_data0);
       bounding_box->expand(this->get_bounding_box(triangle_data1));
@@ -284,11 +271,13 @@ BoundaryInteraction3D::BoundaryInteraction3D(
   staged_mesh_hierarchy_data.clear();
 
   this->d_map_facet_discovery = std::make_shared<
-      BlockedBinaryTree<INT, BoundaryInteractionCellData3D, 8>>(
+      BlockedBinaryTree<INT, BoundaryInteractionCellData3D,
+                        NESO_PARTICLES_BLOCKED_BINARY_TREE_WIDTH>>(
       this->sycl_target);
 
   this->d_map_facet_normals = std::make_shared<
-      BlockedBinaryTree<INT, BoundaryInteractionNormalData3D, 8>>(
+      BlockedBinaryTree<INT, BoundaryInteractionNormalData3D,
+                        NESO_PARTICLES_BLOCKED_BINARY_TREE_WIDTH>>(
       this->sycl_target);
 }
 

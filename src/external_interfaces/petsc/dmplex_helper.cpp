@@ -1254,6 +1254,82 @@ REAL DMPlexHelper::get_volume() {
   return this->volume;
 }
 
+void DMPlexHelper::get_linear_normal_vector(const PetscInt point_index,
+                                            std::vector<REAL> &normal_vector) {
+
+  PetscInt depth = -1;
+  PETSCCHK(DMPlexGetPointDepth(dm, point_index, &depth));
+  NESOASSERT(depth == 2, "Only implemented for linear 2D faces on 3D meshes.");
+
+  std::vector<std::vector<REAL>> vertices;
+  this->get_generic_vertices(point_index, vertices);
+  NESOASSERT(vertices.size() > 2, "Expected at least two vertices.");
+
+  std::array<REAL, 3> v0 = {vertices.at(0).at(0), vertices.at(0).at(1),
+                            vertices.at(0).at(2)};
+  std::array<REAL, 3> v1 = {vertices.at(1).at(0), vertices.at(1).at(1),
+                            vertices.at(1).at(2)};
+  std::array<REAL, 3> v2 = {vertices.at(2).at(0), vertices.at(2).at(1),
+                            vertices.at(2).at(2)};
+
+  std::array<REAL, 3> E01 = {0.0, 0.0, 0.0};
+  std::array<REAL, 3> E02 = {0.0, 0.0, 0.0};
+  for (int dx = 0; dx < 3; dx++) {
+    E01[dx] = v1[dx] - v0[dx];
+    E02[dx] = v2[dx] - v0[dx];
+  }
+
+  normal_vector.clear();
+  normal_vector.resize(3);
+  KERNEL_CROSS_PRODUCT_3D(E01[0], E01[1], E01[2], E02[0], E02[1], E02[2],
+                          normal_vector[0], normal_vector[1], normal_vector[2]);
+
+  // Normalise the vector
+  const REAL normal_length2 = KERNEL_DOT_PRODUCT_3D(
+      normal_vector[0], normal_vector[1], normal_vector[2], normal_vector[0],
+      normal_vector[1], normal_vector[2]);
+
+  const REAL norm_scaling = 1.0 / std::sqrt(normal_length2);
+  normal_vector[0] *= norm_scaling;
+  normal_vector[1] *= norm_scaling;
+  normal_vector[2] *= norm_scaling;
+
+  // Now that we have a normal vector we orientate it to point away from the
+  // first element in the support if there is a support.
+  PetscInt support_size = -1;
+  PETSCCHK(DMPlexGetSupportSize(dm, point_index, &support_size));
+
+  if (support_size > 0) {
+    const PetscInt *support = nullptr;
+    PETSCCHK(DMPlexGetSupport(dm, point_index, &support));
+    const PetscInt point_index_support = support[0];
+
+    this->get_generic_vertices(point_index_support, vertices);
+
+    std::array<REAL, 3> average = {0.0, 0.0, 0.0};
+    const REAL scaling = 1.0 / average.size();
+    for (auto &vx : vertices) {
+      average[0] += vx.at(0) * scaling;
+      average[1] += vx.at(1) * scaling;
+      average[2] += vx.at(2) * scaling;
+    }
+
+    // Vector from v0 to the test point
+    std::array<REAL, 3> Etest = {average[0] - v0[0], average[1] - v0[1],
+                                 average[2] - v0[2]};
+
+    const REAL Etest_dot_normal =
+        KERNEL_DOT_PRODUCT_3D(Etest[0], Etest[1], Etest[2], normal_vector[0],
+                              normal_vector[1], normal_vector[2]);
+
+    if (Etest_dot_normal > 0.0) {
+      normal_vector[0] *= -1.0;
+      normal_vector[1] *= -1.0;
+      normal_vector[2] *= -1.0;
+    }
+  }
+}
+
 std::tuple<std::shared_ptr<CellDatConst<int>>,
            std::shared_ptr<CellDatConst<REAL>>>
 get_cell_vertices_cdc(SYCLTargetSharedPtr sycl_target,

@@ -457,6 +457,17 @@ public:
    * communicator.
    */
   REAL get_volume();
+
+  /**
+   * Get the normal vector for a linear quadrilateral or linear triangle. The
+   * direction is determined to be the outward direction of the first element in
+   * the support of the quadrilateral or triangle.
+   *
+   * @param[in] point_index PETSc point index of the face.
+   * @param[in, out] normal_vetor Output normal vector.
+   */
+  void get_linear_normal_vector(const PetscInt point_index,
+                                std::vector<REAL> &normal_vector);
 };
 
 /**

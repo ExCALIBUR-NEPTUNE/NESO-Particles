@@ -33,7 +33,8 @@ struct BoundaryInteractionNormalData3D {
  */
 struct BoundaryNormalMapper3D {
   // Root of the tree containing normal data.
-  BlockedBinaryNode<INT, BoundaryInteractionNormalData3D, 8> *root;
+  BlockedBinaryNode<INT, BoundaryInteractionNormalData3D,
+                    NESO_PARTICLES_BLOCKED_BINARY_TREE_WIDTH> *root;
 
   /**
    * Get a pointer to the normal data for an edge element.
@@ -92,9 +93,11 @@ protected:
   std::stack<std::shared_ptr<BufferDevice<int>>> stack_d_int;
   std::set<int> pushed_facet_data;
 
-  std::shared_ptr<BlockedBinaryTree<INT, BoundaryInteractionCellData3D, 8>>
+  std::shared_ptr<BlockedBinaryTree<INT, BoundaryInteractionCellData3D,
+                                    NESO_PARTICLES_BLOCKED_BINARY_TREE_WIDTH>>
       d_map_facet_discovery;
-  std::shared_ptr<BlockedBinaryTree<INT, BoundaryInteractionNormalData3D, 8>>
+  std::shared_ptr<BlockedBinaryTree<INT, BoundaryInteractionNormalData3D,
+                                    NESO_PARTICLES_BLOCKED_BINARY_TREE_WIDTH>>
       d_map_facet_normals;
 
   void collect_cells();
@@ -102,8 +105,10 @@ protected:
   struct TrajectoryIntersect3D {
     REAL max_distance;
     REAL epsilon;
-    BlockedBinaryNode<INT, BoundaryInteractionCellData3D, 8> *root;
-    BlockedBinaryNode<INT, BoundaryInteractionNormalData3D, 8> *root_normals;
+    BlockedBinaryNode<INT, BoundaryInteractionCellData3D,
+                      NESO_PARTICLES_BLOCKED_BINARY_TREE_WIDTH> *root;
+    BlockedBinaryNode<INT, BoundaryInteractionNormalData3D,
+                      NESO_PARTICLES_BLOCKED_BINARY_TREE_WIDTH> *root_normals;
     REAL tol;
 
     inline bool boundary_elements_exist() const {

@@ -169,14 +169,17 @@ struct BoundaryInteraction3DTest : PetscInterface::BoundaryInteraction3D {
   MAKE_GETTER_METHOD(collected_mh_cells);
   MAKE_GETTER_METHOD(padding);
   MAKE_GETTER_METHOD(d_map_facet_discovery);
+  MAKE_GETTER_METHOD(map_label_to_groups);
+  MAKE_GETTER_METHOD(d_map_facet_normals);
   MAKE_WRAP_METHOD(collect_cells);
   MAKE_WRAP_METHOD(get_labels);
 };
 
 struct BoundaryTriangleTest {
   REAL vertices[3][3];
+  REAL normal[3];
   int face_id;
-  int label_id;
+  int group_id;
   int type;
 };
 
@@ -215,6 +218,7 @@ TEST(PETScBoundary3D, setup) {
   auto &required_mh_cells = boundary_interaction->get_required_mh_cells();
 
   auto labels = boundary_interaction->wrap_get_labels();
+  auto &map_label_to_groups = boundary_interaction->get_map_label_to_groups();
 
   // map from label to petsc point indices in the dm for the facets
   auto face_sets = mesh->dmh->get_face_sets();
@@ -223,6 +227,7 @@ TEST(PETScBoundary3D, setup) {
   auto padding = boundary_interaction->get_padding();
 
   std::vector<std::vector<REAL>> coords;
+  std::vector<REAL> normal_vector;
   int triangle_index = 0;
 
   std::vector<BoundaryTriangleTest> h_triangles;
@@ -237,11 +242,13 @@ TEST(PETScBoundary3D, setup) {
         const auto cell_type = mesh->dmh->get_point_type(point_id);
         const bool is_triangle = cell_type == DM_POLYTOPE_TRIANGLE;
 
+        mesh->dmh->get_linear_normal_vector(point_id, normal_vector);
         auto bounding_box = mesh->dmh->get_point_bounding_box(point_id);
         bounding_box->expand({padding, padding, padding});
 
         const PetscInt facet_global_id =
             mesh->dmh->get_point_global_index(point_id);
+        const int group_id = map_label_to_groups.at(label_id);
 
         cells.clear();
         ExternalCommon::bounding_box_map(bounding_box, mesh_hierarchy, cells);
@@ -268,9 +275,10 @@ TEST(PETScBoundary3D, setup) {
             for (int cx = 0; cx < 3; cx++) {
               triangle.vertices[dx][cx] = coords.at(dx).at(cx);
             }
+            triangle.normal[dx] = normal_vector.at(dx);
           }
-          triangle.face_id = point_id;
-          triangle.label_id = facet_global_id;
+          triangle.face_id = facet_global_id;
+          triangle.group_id = group_id;
           triangle.type = 1;
           lambda_push_triangle(triangle);
           triangle_index++;
@@ -290,10 +298,11 @@ TEST(PETScBoundary3D, setup) {
               for (int cx : {0, 1, 2}) {
                 triangle.vertices[vx][cx] = coords.at(0).at(cx);
               }
-              triangle.face_id = facet_global_id;
-              triangle.label_id = label_id;
-              triangle.type = 2 + tx;
+              triangle.normal[vx] = normal_vector.at(vx);
             }
+            triangle.face_id = facet_global_id;
+            triangle.group_id = group_id;
+            triangle.type = 2 + tx;
             lambda_push_triangle(triangle);
             triangle_index++;
           }
@@ -311,13 +320,15 @@ TEST(PETScBoundary3D, setup) {
 
   auto k_intersect_object_root =
       boundary_interaction->get_d_map_facet_discovery()->root;
+  auto k_map_facet_normals =
+      boundary_interaction->get_d_map_facet_normals()->root;
 
   ErrorPropagate ep(sycl_target);
   auto k_ep = ep.device_ptr();
 
   sycl_target->queue
       .parallel_for(
-          sycl::range<1>(h_triangles.size()),
+          sycl::range<1>(h_map_to_test.size() / 2),
           [=](auto idx) {
             const std::size_t index = idx.get_id(0);
             const int mh_cell = k_map_to_test[2 * index + 0];
@@ -326,13 +337,13 @@ TEST(PETScBoundary3D, setup) {
 
             bool *exists = nullptr;
             PetscInterface::BoundaryInteractionCellData3D *data = nullptr;
+            bool found = false;
             if (k_intersect_object_root->get_location(mh_cell, &exists,
                                                       &data)) {
 
               NESO_KERNEL_ASSERT(*exists, k_ep);
               // naively find the triangle in this MH cell
               const int num_facets = data->num_facets;
-              bool found = false;
 
               for (int fx = 0; (fx < num_facets) && (!found); fx++) {
                 bool all_close = true;
@@ -348,12 +359,32 @@ TEST(PETScBoundary3D, setup) {
                   }
                 }
                 found = all_close;
-              }
+                if (all_close) {
+                  NESO_KERNEL_ASSERT(
+                      triangle.group_id == data->d_int[fx * 2 + 0], k_ep);
+                  NESO_KERNEL_ASSERT(
+                      triangle.face_id == data->d_int[fx * 2 + 1], k_ep);
 
-              NESO_KERNEL_ASSERT(found, k_ep);
-            } else {
-              NESO_KERNEL_ASSERT(false, k_ep);
+                  PetscInterface::BoundaryInteractionNormalData3D *normal_data =
+                      nullptr;
+                  if (k_map_facet_normals->get_location(
+                          triangle.face_id, &exists, &normal_data)) {
+
+                    const REAL err0 = Kernel::abs(triangle.normal[0] -
+                                                  normal_data->d_normal[0]);
+                    const REAL err1 = Kernel::abs(triangle.normal[1] -
+                                                  normal_data->d_normal[1]);
+                    const REAL err2 = Kernel::abs(triangle.normal[2] -
+                                                  normal_data->d_normal[2]);
+
+                    NESO_KERNEL_ASSERT(err0 < 1.0e-15, k_ep);
+                    NESO_KERNEL_ASSERT(err1 < 1.0e-15, k_ep);
+                    NESO_KERNEL_ASSERT(err2 < 1.0e-15, k_ep);
+                  }
+                }
+              }
             }
+            NESO_KERNEL_ASSERT(found, k_ep);
           })
       .wait_and_throw();
 
