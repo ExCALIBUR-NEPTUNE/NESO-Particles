@@ -346,7 +346,7 @@ add_library(NESO-Particles::NESO-Particles ALIAS NESO-Particles)
 
 # Set standard
 if(NOT DEFINED CMAKE_CXX_STANDARD)
-    set(CMAKE_CXX_STANDARD 17)
+  set(CMAKE_CXX_STANDARD 17)
 endif()
 message(STATUS CMAKE_CXX_STANDARD " is " ${CMAKE_CXX_STANDARD})
 
