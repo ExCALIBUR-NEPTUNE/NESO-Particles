@@ -32,7 +32,8 @@ struct BoundaryInteractionNormalData2D {
  */
 struct BoundaryNormalMapper2D {
   // Root of the tree containing normal data.
-  BlockedBinaryNode<INT, BoundaryInteractionNormalData2D, 8> *root;
+  BlockedBinaryNode<INT, BoundaryInteractionNormalData2D,
+                    NESO_PARTICLES_BLOCKED_BINARY_TREE_WIDTH> *root;
 
   /**
    * Get a pointer to the normal data for an edge element.
@@ -89,9 +90,11 @@ protected:
   std::stack<std::shared_ptr<BufferDevice<int>>> stack_d_int;
   std::set<int> pushed_edge_data;
 
-  std::shared_ptr<BlockedBinaryTree<INT, BoundaryInteractionCellData2D, 8>>
+  std::shared_ptr<BlockedBinaryTree<INT, BoundaryInteractionCellData2D,
+                                    NESO_PARTICLES_BLOCKED_BINARY_TREE_WIDTH>>
       d_map_edge_discovery;
-  std::shared_ptr<BlockedBinaryTree<INT, BoundaryInteractionNormalData2D, 8>>
+  std::shared_ptr<BlockedBinaryTree<INT, BoundaryInteractionNormalData2D,
+                                    NESO_PARTICLES_BLOCKED_BINARY_TREE_WIDTH>>
       d_map_edge_normals;
 
   void collect_cells();
@@ -99,8 +102,10 @@ protected:
   struct TrajectoryIntersect2D {
     REAL max_distance;
     REAL epsilon;
-    BlockedBinaryNode<INT, BoundaryInteractionCellData2D, 8> *root;
-    BlockedBinaryNode<INT, BoundaryInteractionNormalData2D, 8> *root_normals;
+    BlockedBinaryNode<INT, BoundaryInteractionCellData2D,
+                      NESO_PARTICLES_BLOCKED_BINARY_TREE_WIDTH> *root;
+    BlockedBinaryNode<INT, BoundaryInteractionNormalData2D,
+                      NESO_PARTICLES_BLOCKED_BINARY_TREE_WIDTH> *root_normals;
     REAL tol;
 
     inline bool boundary_elements_exist() const {

@@ -268,10 +268,12 @@ BoundaryInteraction2D::BoundaryInteraction2D(
   }
 
   this->d_map_edge_discovery = std::make_shared<
-      BlockedBinaryTree<INT, BoundaryInteractionCellData2D, 8>>(
+      BlockedBinaryTree<INT, BoundaryInteractionCellData2D,
+                        NESO_PARTICLES_BLOCKED_BINARY_TREE_WIDTH>>(
       this->sycl_target);
   this->d_map_edge_normals = std::make_shared<
-      BlockedBinaryTree<INT, BoundaryInteractionNormalData2D, 8>>(
+      BlockedBinaryTree<INT, BoundaryInteractionNormalData2D,
+                        NESO_PARTICLES_BLOCKED_BINARY_TREE_WIDTH>>(
       this->sycl_target);
 }
 
