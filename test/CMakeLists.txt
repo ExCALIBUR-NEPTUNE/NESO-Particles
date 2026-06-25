@@ -155,7 +155,7 @@ foreach(TEST ${TEST_SRCS})
 
   set_target_properties(
     ${TEST_NAME}
-    PROPERTIES CXX_STANDARD 17
+    PROPERTIES CXX_STANDARD ${CMAKE_CXX_STANDARD}
                CXX_STANDARD_REQUIRED ON
                CXX_EXTENSIONS OFF)
 
@@ -178,7 +178,7 @@ target_compile_options(${EXECUTABLE} PRIVATE "-Wpedantic;-Wall;-Wextra")
 
 set_target_properties(
   ${EXECUTABLE}
-  PROPERTIES CXX_STANDARD 17
+  PROPERTIES CXX_STANDARD ${CMAKE_CXX_STANDARD}
              CXX_STANDARD_REQUIRED ON
              CXX_EXTENSIONS OFF)
 
