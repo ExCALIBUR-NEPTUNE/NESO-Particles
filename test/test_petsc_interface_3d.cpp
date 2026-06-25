@@ -397,6 +397,192 @@ TEST(PETScBoundary3D, setup) {
   PETSCCHK(PetscFinalize());
 }
 
+TEST(PETScBoundary3D, detection) {
+  std::filesystem::path gmsh_filepath;
+  // GET_TEST_RESOURCE(gmsh_filepath,
+  // "gmsh/reference_all_types_square_0.2.msh");
+
+  nprint("TODO commit a mesh");
+  gmsh_filepath = get_env_string("GMSH_TMP", "");
+  const int ndim = 3;
+
+  PETSCCHK(PetscInitializeNoArguments());
+  DM dm;
+  PETSCCHK(DMPlexCreateGmshFromFile(MPI_COMM_WORLD,
+                                    gmsh_filepath.generic_string().c_str(),
+                                    (PetscBool)1, &dm));
+  PetscInterface::generic_distribute(&dm);
+
+  int rank = -1;
+  MPICHK(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
+
+  auto mesh =
+      std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
+  auto mesh_hierarchy = mesh->get_mesh_hierarchy();
+
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+
+  auto mapper =
+      std::make_shared<PetscInterface::DMPlexLocalMapper>(sycl_target, mesh);
+  auto domain = std::make_shared<Domain>(mesh, mapper);
+
+  ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
+                             ParticleProp(Sym<INT>("CELL_ID"), 1, true),
+                             ParticleProp(Sym<INT>("ID"), 1),
+                             ParticleProp(Sym<REAL>("V"), ndim),
+                             ParticleProp(Sym<REAL>("IP"), ndim),
+                             ParticleProp(Sym<REAL>("IN"), ndim),
+                             ParticleProp(Sym<INT>("IM"), 2)};
+
+  auto A = std::make_shared<ParticleGroup>(domain, particle_spec, sycl_target);
+
+  std::mt19937 rng(52234234 + rank);
+  REAL extents[3] = {2.0, 2.0, 2.0};
+
+  const int cell_count = mesh->get_cell_count();
+  const int N = 10 * cell_count;
+  auto positions = uniform_within_extents(N, ndim, extents, rng);
+
+  ParticleSet initial_distribution(N, particle_spec);
+
+  for (int px = 0; px < N; px++) {
+    for (int dimx = 0; dimx < ndim; dimx++) {
+      initial_distribution[Sym<REAL>("P")][px][dimx] =
+          positions[dimx][px] - 1.0;
+    }
+    initial_distribution[Sym<INT>("CELL_ID")][px][0] = 0;
+    initial_distribution[Sym<INT>("ID")][px][0] = px;
+  }
+  A->add_particles_local(initial_distribution);
+
+  A->hybrid_move();
+  A->cell_move();
+
+  std::uniform_real_distribution<> rng_dist(-1.0, 1.0);
+  auto rng_lambda = [&]() -> REAL { return rng_dist(rng); };
+  const int rng_ncomp = 3;
+  auto rng_device_kernel =
+      host_per_particle_block_rng<REAL>(rng_lambda, rng_ncomp);
+
+  particle_loop(
+      A,
+      [=](auto INDEX, auto V, auto RNG) {
+        REAL v0 = RNG.at(INDEX, 0);
+        REAL v1 = RNG.at(INDEX, 1);
+        REAL v2 = RNG.at(INDEX, 2);
+
+        const REAL l2 = v0 * v0 + v1 * v1 + v2 * v2;
+        const REAL l = l2 != 0.0 ? 1.0 / Kernel::sqrt(l2) : 1.0;
+        if (l2 == 0.0) {
+          v0 = 1.0;
+        }
+        V.at(0) = l * v0;
+        V.at(1) = l * v1;
+        V.at(2) = l * v2;
+      },
+      Access::read(ParticleLoopIndex{}), Access::write(Sym<REAL>("V")),
+      Access::read(rng_device_kernel))
+      ->execute();
+
+  std::vector<int> faces = {100, 200, 300, 400, 500, 600};
+  std::map<PetscInt, std::vector<PetscInt>> boundary_groups;
+  for (int ix : faces) {
+    boundary_groups[ix] = {ix};
+  }
+
+  std::map<PetscInt, std::array<REAL, 3>> map_face_normal;
+  map_face_normal[100] = {0.0, -1.0, 0.0};
+  map_face_normal[200] = {0.0, 1.0, 0.0};
+  map_face_normal[300] = {1.0, 0.0, 0.0};
+  map_face_normal[400] = {-1.0, 0.0, 0.0};
+  map_face_normal[500] = {0.0, 0.0, -1.0};
+  map_face_normal[600] = {0.0, 0.0, 1.0};
+
+  auto boundary_interaction = std::make_shared<BoundaryInteraction3DTest>(
+      sycl_target, mesh, boundary_groups, 1.0e-14);
+
+  boundary_interaction->pre_integration(A);
+
+  particle_loop(
+      A,
+      [=](auto P, auto V) {
+        for (int dx = 0; dx < 3; dx++) {
+          P.at(dx) += 100.0 * V.at(dx);
+        }
+      },
+      Access::write(Sym<REAL>("P")), Access::read(Sym<REAL>("V")))
+      ->execute();
+
+  auto groups = boundary_interaction->post_integration(A);
+
+  int count = 0;
+  for (auto &gx : groups) {
+    count += gx.second->get_npart_local();
+
+    copy_ephemeral_dat_to_particle_dat(
+        gx.second, BoundaryInteractionSpecification::intersection_point,
+        Sym<REAL>("IP"));
+    copy_ephemeral_dat_to_particle_dat(
+        gx.second, BoundaryInteractionSpecification::intersection_normal,
+        Sym<REAL>("IN"));
+    copy_ephemeral_dat_to_particle_dat(
+        gx.second, BoundaryInteractionSpecification::intersection_metadata,
+        Sym<INT>("IM"));
+  }
+  ASSERT_EQ(count, A->get_npart_local());
+
+  std::vector<REAL> h_normal(601 * 3);
+
+  for (auto fx : faces) {
+    for (int dx = 0; dx < 3; dx++) {
+      h_normal.at(fx * 3 + dx) = map_face_normal.at(fx).at(dx);
+    }
+  }
+
+  BufferDevice<REAL> d_normal(sycl_target, h_normal);
+  REAL *k_normal = d_normal.ptr;
+
+  ErrorPropagate ep(sycl_target);
+  auto k_ep = ep.device_ptr();
+
+  std::cout << std::setprecision(15);
+
+  particle_loop(
+      A,
+      [=](auto IP, auto IN, auto IM) {
+        const INT group_id = IM.at(0);
+        const REAL n[3] = {k_normal[group_id * 3 + 0],
+                           k_normal[group_id * 3 + 1],
+                           k_normal[group_id * 3 + 2]};
+
+        const REAL errn0 = Kernel::abs(IN.at(0) - n[0]);
+        const REAL errn1 = Kernel::abs(IN.at(1) - n[1]);
+        const REAL errn2 = Kernel::abs(IN.at(2) - n[2]);
+
+        const bool all_closen =
+            errn0 < 1.0e-15 && errn1 < 1.0e-15 && errn2 < 1.0e-15;
+
+        NESO_KERNEL_ASSERT(all_closen, k_ep);
+
+        for (int dx = 0; dx < 3; dx++) {
+          const bool in_bounds =
+              (IP.at(dx) >= (-1.0 - 1.0e-14)) && (IP.at(dx) <= (1.0 + 1.0e-14));
+          NESO_KERNEL_ASSERT(in_bounds, k_ep);
+        }
+      },
+      Access::read(Sym<REAL>("IP")), Access::read(Sym<REAL>("IN")),
+      Access::read(Sym<INT>("IM")))
+      ->execute();
+
+  ASSERT_FALSE(ep.get_flag());
+
+  boundary_interaction->free();
+  sycl_target->free();
+  mesh->free();
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
+
 TEST(PETSc, foo) {
   std::filesystem::path gmsh_filepath;
   // GET_TEST_RESOURCE(gmsh_filepath,

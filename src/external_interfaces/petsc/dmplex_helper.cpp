@@ -1307,7 +1307,7 @@ void DMPlexHelper::get_linear_normal_vector(const PetscInt point_index,
     this->get_generic_vertices(point_index_support, vertices);
 
     std::array<REAL, 3> average = {0.0, 0.0, 0.0};
-    const REAL scaling = 1.0 / average.size();
+    const REAL scaling = 1.0 / vertices.size();
     for (auto &vx : vertices) {
       average[0] += vx.at(0) * scaling;
       average[1] += vx.at(1) * scaling;
