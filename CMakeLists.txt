@@ -351,7 +351,12 @@ add_library(NESO-Particles SHARED ${SRC_FILES} ${HEADER_FILES})
 add_library(NESO-Particles::NESO-Particles ALIAS NESO-Particles)
 
 # Set standard
-set_property(TARGET NESO-Particles PROPERTY CXX_STANDARD 17)
+if(NOT DEFINED CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 17)
+endif()
+message(STATUS CMAKE_CXX_STANDARD " is " ${CMAKE_CXX_STANDARD})
+
+set_property(TARGET NESO-Particles PROPERTY CXX_STANDARD ${CMAKE_CXX_STANDARD})
 
 # Makes it easy to install + adds the files to the INCLUDE property of the lib
 # i.e. don't need target_include_dir.. also no GLOBS

@@ -20,8 +20,8 @@ template <> struct CellwisePairListAbsolute<ParticleGroup, CellwisePairList> {
   ParticleGroupSharedPtr A;
   ParticleGroupSharedPtr B;
   CellwisePairListSharedPtr pair_list;
-  CellwisePairListAbsolute<ParticleGroup, CellwisePairList>() = default;
-  ~CellwisePairListAbsolute<ParticleGroup, CellwisePairList>() = default;
+  CellwisePairListAbsolute() = default;
+  ~CellwisePairListAbsolute() = default;
 
   /**
    * Create cell wise pair list where the pair indices correspond to particle
@@ -31,9 +31,8 @@ template <> struct CellwisePairListAbsolute<ParticleGroup, CellwisePairList> {
    * @param B Second ParticleGroup which suppies the "j" particles.
    * @param pair_list Pair list of particle pairs.
    */
-  CellwisePairListAbsolute<ParticleGroup, CellwisePairList>(
-      ParticleGroupSharedPtr A, ParticleGroupSharedPtr B,
-      CellwisePairListSharedPtr pair_list)
+  CellwisePairListAbsolute(ParticleGroupSharedPtr A, ParticleGroupSharedPtr B,
+                           CellwisePairListSharedPtr pair_list)
       : A(A), B(B), pair_list(pair_list) {}
 };
 
@@ -46,10 +45,8 @@ struct CellwisePairListAbsolute<ParticleGroup, CellwisePairListBlockInterface> {
   ParticleGroupSharedPtr A;
   ParticleGroupSharedPtr B;
   CellwisePairListBlockInterfaceSharedPtr pair_list;
-  CellwisePairListAbsolute<ParticleGroup, CellwisePairListBlockInterface>() =
-      default;
-  ~CellwisePairListAbsolute<ParticleGroup, CellwisePairListBlockInterface>() =
-      default;
+  CellwisePairListAbsolute() = default;
+  ~CellwisePairListAbsolute() = default;
 
   /**
    * Create cell wise pair list where the pair indices correspond to particle
@@ -59,9 +56,8 @@ struct CellwisePairListAbsolute<ParticleGroup, CellwisePairListBlockInterface> {
    * @param B Second ParticleGroup which suppies the "j" particles.
    * @param pair_list Pair list of particle pairs.
    */
-  CellwisePairListAbsolute<ParticleGroup, CellwisePairListBlockInterface>(
-      ParticleGroupSharedPtr A, ParticleGroupSharedPtr B,
-      CellwisePairListBlockInterfaceSharedPtr pair_list)
+  CellwisePairListAbsolute(ParticleGroupSharedPtr A, ParticleGroupSharedPtr B,
+                           CellwisePairListBlockInterfaceSharedPtr pair_list)
       : A(A), B(B), pair_list(pair_list) {}
 };
 

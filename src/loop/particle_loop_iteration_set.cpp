@@ -175,8 +175,12 @@ std::vector<ParticleLoopBlockHost> &ParticleLoopBlockIterationSet::get_generic(
   min_occupancy *= (local_size * stride);
   this->iteration_set_size = min_occupancy * range_cell_count;
   if (min_occupancy > 0) {
-    ParticleLoopBlockDevice block_device{cell_startv, 0, this->d_npart_cell,
-                                         stride};
+    ParticleLoopBlockDevice block_device;
+    block_device.offset_cell = cell_startv;
+    block_device.offset_layer = 0;
+    block_device.d_npart_cell = this->d_npart_cell;
+    block_device.stride = stride;
+
     this->iteration_set.emplace_back(
         block_device, false, local_size,
         this->sycl_target->device_limits.validate_nd_range(sycl::nd_range<2>(
@@ -204,8 +208,12 @@ std::vector<ParticleLoopBlockHost> &ParticleLoopBlockIterationSet::get_generic(
     if (cell_max_occ > 0) {
       const std::size_t global_range = this->get_global_size(
           get_next_multiple(cell_max_occ, stride) / stride, local_size);
-      ParticleLoopBlockDevice block_device{start, min_occupancy / stride,
-                                           this->d_npart_cell, stride};
+      ParticleLoopBlockDevice block_device;
+      block_device.offset_cell = start;
+      block_device.offset_layer = min_occupancy / stride;
+      block_device.d_npart_cell = this->d_npart_cell;
+      block_device.stride = stride;
+
       this->iteration_set.emplace_back(
           block_device, true, local_size,
           this->sycl_target->device_limits.validate_nd_range(
