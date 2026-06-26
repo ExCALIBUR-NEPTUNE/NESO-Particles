@@ -307,15 +307,14 @@ protected:
 public:
   SYCLTargetSharedPtr sycl_target{nullptr};
   std::string name;
-  virtual ~ParticlePairLoopArgs<ARGS...>() = default;
+  virtual ~ParticlePairLoopArgs() = default;
 
-  ParticlePairLoopArgs<ARGS...>(SYCLTargetSharedPtr sycl_target,
-                                std::string &name,
-                                ParticleGroupSharedPtr particle_group_A,
-                                ParticleGroupSharedPtr particle_group_B,
-                                ParticleSubGroupSharedPtr particle_sub_group_A,
-                                ParticleSubGroupSharedPtr particle_sub_group_B,
-                                ARGS... args)
+  ParticlePairLoopArgs(SYCLTargetSharedPtr sycl_target, std::string &name,
+                       ParticleGroupSharedPtr particle_group_A,
+                       ParticleGroupSharedPtr particle_group_B,
+                       ParticleSubGroupSharedPtr particle_sub_group_A,
+                       ParticleSubGroupSharedPtr particle_sub_group_B,
+                       ARGS... args)
       : particle_group_A(particle_group_A), particle_group_B(particle_group_B),
         particle_sub_group_A(particle_sub_group_A),
         particle_sub_group_B(particle_sub_group_B), sycl_target(sycl_target),

@@ -260,7 +260,7 @@ public:
    * Note that the copy operator creates shallow copies of the array.
    */
   LocalArray<T> &operator=(const LocalArray<T> &) = default;
-  LocalArray<T>(const LocalArray<T> &) = default;
+  LocalArray(const LocalArray<T> &) = default;
   /**
    *  Create a new LocalArray on a compute target and given size.
    *

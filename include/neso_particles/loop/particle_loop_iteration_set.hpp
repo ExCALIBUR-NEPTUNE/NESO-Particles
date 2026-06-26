@@ -146,9 +146,8 @@ struct ParticleLoopBlockDevice {
         block * stride;
     return last_index;
   }
-
-  ParticleLoopBlockDevice() = default;
 };
+
 static_assert(std::is_trivially_copyable<ParticleLoopBlockDevice>::value ==
               true);
 
