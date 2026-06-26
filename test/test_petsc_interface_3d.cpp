@@ -583,6 +583,185 @@ TEST(PETScBoundary3D, detection) {
   PETSCCHK(PetscFinalize());
 }
 
+TEST(PETScBoundary3D, reflection) {
+  std::filesystem::path gmsh_filepath;
+  // GET_TEST_RESOURCE(gmsh_filepath,
+  // "gmsh/reference_all_types_square_0.2.msh");
+
+  nprint("TODO commit a mesh");
+  gmsh_filepath = get_env_string("GMSH_TMP", "");
+  const int ndim = 3;
+  const int Nsteps = 1000;
+  const REAL dt = 0.01;
+
+  PETSCCHK(PetscInitializeNoArguments());
+  DM dm;
+  PETSCCHK(DMPlexCreateGmshFromFile(MPI_COMM_WORLD,
+                                    gmsh_filepath.generic_string().c_str(),
+                                    (PetscBool)1, &dm));
+  PetscInterface::generic_distribute(&dm);
+
+  int rank = -1;
+  MPICHK(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
+
+  auto mesh =
+      std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
+  auto mesh_hierarchy = mesh->get_mesh_hierarchy();
+
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+
+  auto mapper =
+      std::make_shared<PetscInterface::DMPlexLocalMapper>(sycl_target, mesh);
+  auto domain = std::make_shared<Domain>(mesh, mapper);
+
+  ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
+                             ParticleProp(Sym<INT>("CELL_ID"), 1, true),
+                             ParticleProp(Sym<INT>("ID"), 1),
+                             ParticleProp(Sym<REAL>("V"), ndim),
+                             ParticleProp(Sym<REAL>("TSP"), 2),
+                             ParticleProp(Sym<REAL>("IP"), ndim),
+                             ParticleProp(Sym<REAL>("IN"), ndim),
+                             ParticleProp(Sym<INT>("IM"), 2)};
+
+  auto A = std::make_shared<ParticleGroup>(domain, particle_spec, sycl_target);
+
+  std::mt19937 rng(52234234 + rank);
+  REAL extents[3] = {2.0, 2.0, 2.0};
+
+  const int cell_count = mesh->get_cell_count();
+  const int N = 1 * cell_count;
+  auto positions = uniform_within_extents(N, ndim, extents, rng);
+
+  ParticleSet initial_distribution(N, particle_spec);
+
+  for (int px = 0; px < N; px++) {
+    for (int dimx = 0; dimx < ndim; dimx++) {
+      initial_distribution[Sym<REAL>("P")][px][dimx] =
+          positions[dimx][px] - 1.0;
+    }
+    initial_distribution[Sym<INT>("CELL_ID")][px][0] = 0;
+    initial_distribution[Sym<INT>("ID")][px][0] = px;
+  }
+  A->add_particles_local(initial_distribution);
+
+  A->hybrid_move();
+  A->cell_move();
+
+  std::uniform_real_distribution<> rng_dist(-1.0, 1.0);
+  auto rng_lambda = [&]() -> REAL { return rng_dist(rng); };
+  const int rng_ncomp = 3;
+  auto rng_device_kernel =
+      host_per_particle_block_rng<REAL>(rng_lambda, rng_ncomp);
+
+  particle_loop(
+      A,
+      [=](auto INDEX, auto V, auto RNG) {
+        REAL v0 = RNG.at(INDEX, 0);
+        REAL v1 = RNG.at(INDEX, 1);
+        REAL v2 = RNG.at(INDEX, 2);
+
+        const REAL l2 = v0 * v0 + v1 * v1 + v2 * v2;
+        const REAL l = l2 != 0.0 ? 1.0 / Kernel::sqrt(l2) : 1.0;
+        if (l2 == 0.0) {
+          v0 = 1.0;
+        }
+        V.at(0) = l * v0;
+        V.at(1) = l * v1;
+        V.at(2) = l * v2;
+      },
+      Access::read(ParticleLoopIndex{}), Access::write(Sym<REAL>("V")),
+      Access::read(rng_device_kernel))
+      ->execute();
+
+  std::vector<int> faces = {100, 200, 300, 400, 500, 600};
+  std::map<PetscInt, std::vector<PetscInt>> boundary_groups;
+  boundary_groups[0] = faces;
+
+  auto boundary_interaction = std::make_shared<BoundaryInteraction3DTest>(
+      sycl_target, mesh, boundary_groups, 1.0e-14);
+
+  auto reflection = std::make_shared<BoundaryReflection>(3, 1.0e-10);
+
+  auto lambda_apply_boundary_conditions = [&](auto aa) {
+    auto sub_groups = boundary_interaction->post_integration(aa);
+
+    for (auto &gx : sub_groups) {
+      reflection->execute(gx.second, Sym<REAL>("P"), Sym<REAL>("V"),
+                          Sym<REAL>("TSP"),
+                          boundary_interaction->previous_position_sym);
+    }
+  };
+
+  auto lambda_apply_timestep_reset = [&](auto aa) {
+    particle_loop(
+        aa,
+        [=](auto TSP) {
+          TSP.at(0) = 0.0;
+          TSP.at(1) = 0.0;
+        },
+        Access::write(Sym<REAL>("TSP")))
+        ->execute();
+  };
+  auto lambda_apply_advection_step =
+      [=](ParticleSubGroupSharedPtr iteration_set) -> void {
+    particle_loop(
+        "euler_advection", iteration_set,
+        [=](auto V, auto P, auto TSP) {
+          const REAL dt_left = dt - TSP.at(0);
+          if (dt_left > 0.0) {
+            for (int dx = 0; dx < 3; dx++) {
+              P.at(dx) += dt_left * V.at(dx);
+            }
+            TSP.at(0) = dt;
+            TSP.at(1) = dt_left;
+          }
+        },
+        Access::read(Sym<REAL>("V")), Access::write(Sym<REAL>("P")),
+        Access::write(Sym<REAL>("TSP")))
+        ->execute();
+  };
+  auto lambda_pre_advection = [&](auto aa) {
+    boundary_interaction->pre_integration(aa);
+  };
+  auto lambda_find_partial_moves = [&](auto aa) {
+    return static_particle_sub_group(
+        aa, [=](auto TSP) { return TSP.at(0) < dt; },
+        Access::read(Sym<REAL>("TSP")));
+  };
+  auto lambda_partial_moves_remaining = [&](auto aa) -> bool {
+    const int size = get_npart_global(aa);
+    return size > 0;
+  };
+  auto lambda_apply_timestep = [&](auto aa) {
+    lambda_apply_timestep_reset(aa);
+    lambda_pre_advection(aa);
+    lambda_apply_advection_step(aa);
+    lambda_apply_boundary_conditions(aa);
+    aa = lambda_find_partial_moves(aa);
+    while (lambda_partial_moves_remaining(aa)) {
+      lambda_pre_advection(aa);
+      lambda_apply_advection_step(aa);
+      lambda_apply_boundary_conditions(aa);
+      aa = lambda_find_partial_moves(aa);
+    }
+  };
+
+  H5Part h5part("trajectory.h5part", A, Sym<REAL>("V"));
+  for (int stepx = 0; stepx < Nsteps; stepx++) {
+    lambda_apply_timestep(static_particle_sub_group(A));
+    A->hybrid_move();
+    A->cell_move();
+    h5part.write();
+  }
+  h5part.close();
+
+  boundary_interaction->free();
+  sycl_target->free();
+  mesh->free();
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
+
 TEST(PETSc, foo) {
   std::filesystem::path gmsh_filepath;
   // GET_TEST_RESOURCE(gmsh_filepath,

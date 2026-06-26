@@ -143,11 +143,14 @@ protected:
             const INT edge_id = data->d_int[facetx * 2 + 1];
 
             REAL d2 = 0.0;
-            const bool intersects = line_triangle_intersection_moller_trumbore(
+            bool intersects = line_triangle_intersection_moller_trumbore(
                 aa, direction, v0, v1, v2, bary_coords, d2,
                 0.0, // We assume here that the intersection test only fails
                      // when the plane detection test is truely zero.
                 tol);
+
+            const bool intersection_before_b = d2 <= 1.0;
+            intersects = intersects && intersection_before_b;
 
             if (intersects && (d2 < current_distance)) {
               evaluate_barycentric_coordinates(bary_coords, v0, v1, v2,
