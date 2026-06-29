@@ -10,11 +10,7 @@ using namespace NESO::Particles;
 
 TEST(PETSc, dmplex_interface_3d_base) {
   std::filesystem::path gmsh_filepath;
-  // GET_TEST_RESOURCE(gmsh_filepath,
-  // "gmsh/reference_all_types_square_0.2.msh");
-
-  nprint("TODO commit a mesh");
-  gmsh_filepath = get_env_string("GMSH_TMP", "");
+  GET_TEST_RESOURCE(gmsh_filepath, "gmsh/mixed_ref_cube_0.8.msh");
 
   PETSCCHK(PetscInitializeNoArguments());
   DM dm;
@@ -29,35 +25,18 @@ TEST(PETSc, dmplex_interface_3d_base) {
   auto mesh_helper =
       std::make_shared<PetscInterface::DMPlexHelper>(MPI_COMM_WORLD, dm);
 
-  nprint("TODO fix ordering");
-  // auto vtk_data = mesh_helper->get_vtk_cell_data();
-  // VTK::VTKHDF vtkhdf("foo.vtkhdf", MPI_COMM_WORLD);
-  // vtkhdf.write(vtk_data);
-  // vtkhdf.close();
-
   std::vector<PetscScalar> point{0.1, 0.1, 0.1};
   mesh_helper->cell_contains_point_3d(0, point);
-
-  nprint("TODO cleanup");
-  for (int cellx = 0; cellx < mesh_helper->get_cell_count(); cellx++) {
-    const bool contained = mesh_helper->cell_contains_point_3d(cellx, point);
-    if (contained) {
-      nprint("FOUND", cellx);
-    }
-  }
 
   auto mesh =
       std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
 
-  // ASSERT_TRUE(mesh->validate_halos(false));
-  nprint("TODO revert to false");
-  ASSERT_TRUE(mesh->validate_halos(true));
+  ASSERT_TRUE(mesh->validate_halos(false));
 
   const double volume = mesh->dmh->get_volume();
   ASSERT_NEAR(volume, 8.0, 1.0e-10);
 
   mesh->free();
-
   mesh_helper->free();
   PETSCCHK(DMDestroy(&dm));
   PETSCCHK(PetscFinalize());
@@ -65,11 +44,7 @@ TEST(PETSc, dmplex_interface_3d_base) {
 
 TEST(PETSc, dmplex_3d_mapper) {
   std::filesystem::path gmsh_filepath;
-  // GET_TEST_RESOURCE(gmsh_filepath,
-  // "gmsh/reference_all_types_square_0.2.msh");
-
-  nprint("TODO commit a mesh");
-  gmsh_filepath = get_env_string("GMSH_TMP", "");
+  GET_TEST_RESOURCE(gmsh_filepath, "gmsh/mixed_ref_cube_0.8.msh");
 
   PETSCCHK(PetscInitializeNoArguments());
   DM dm;
@@ -119,22 +94,6 @@ TEST(PETSc, dmplex_3d_mapper) {
 
   A->hybrid_move();
   A->cell_move();
-
-  // auto vtk_data = mesh->dmh->get_vtk_cell_data();
-  // VTK::VTKHDF vtkhdf("foo.vtkhdf", MPI_COMM_WORLD);
-  // for(int cellx=0 ; cellx<cell_count ; cellx++){
-  //   vtk_data.at(cellx).cell_data["CELL_ID"] = cellx;
-  // }
-  // vtkhdf.write(vtk_data);
-  // vtkhdf.close();
-  // H5Part h5part("bar.h5part", A, Sym<INT>("CELL_ID"));
-  // const int Nsteps = 1;
-  // for(int stepx=0 ; stepx<Nsteps ; stepx++){
-  //   h5part.write();
-  //   h5part.close();
-  //   A->hybrid_move();
-  //   A->cell_move();
-  // }
 
   std::vector<PetscScalar> point(3);
   for (int cellx = 0; cellx < cell_count; cellx++) {
@@ -187,11 +146,7 @@ struct BoundaryTriangleTest {
 
 TEST(PETScBoundary3D, setup) {
   std::filesystem::path gmsh_filepath;
-  // GET_TEST_RESOURCE(gmsh_filepath,
-  // "gmsh/reference_all_types_square_0.2.msh");
-
-  nprint("TODO commit a mesh");
-  gmsh_filepath = get_env_string("GMSH_TMP", "");
+  GET_TEST_RESOURCE(gmsh_filepath, "gmsh/mixed_ref_cube_0.8.msh");
 
   PETSCCHK(PetscInitializeNoArguments());
   DM dm;
@@ -399,11 +354,8 @@ TEST(PETScBoundary3D, setup) {
 
 TEST(PETScBoundary3D, detection) {
   std::filesystem::path gmsh_filepath;
-  // GET_TEST_RESOURCE(gmsh_filepath,
-  // "gmsh/reference_all_types_square_0.2.msh");
+  GET_TEST_RESOURCE(gmsh_filepath, "gmsh/mixed_ref_cube_0.8.msh");
 
-  nprint("TODO commit a mesh");
-  gmsh_filepath = get_env_string("GMSH_TMP", "");
   const int ndim = 3;
 
   PETSCCHK(PetscInitializeNoArguments());
@@ -418,7 +370,6 @@ TEST(PETScBoundary3D, detection) {
 
   auto mesh =
       std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
-  auto mesh_hierarchy = mesh->get_mesh_hierarchy();
 
   auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
 
@@ -585,11 +536,8 @@ TEST(PETScBoundary3D, detection) {
 
 TEST(PETScBoundary3D, reflection) {
   std::filesystem::path gmsh_filepath;
-  // GET_TEST_RESOURCE(gmsh_filepath,
-  // "gmsh/reference_all_types_square_0.2.msh");
+  GET_TEST_RESOURCE(gmsh_filepath, "gmsh/mixed_ref_cube_0.8.msh");
 
-  nprint("TODO commit a mesh");
-  gmsh_filepath = get_env_string("GMSH_TMP", "");
   const int ndim = 3;
   const int Nsteps = 100;
   const REAL dt = 0.05;
@@ -606,29 +554,6 @@ TEST(PETScBoundary3D, reflection) {
 
   auto mesh =
       std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
-
-  //{
-  //  auto vtk_data = mesh->dmh->get_vtk_cell_data();
-  //
-  //  for (auto &element : vtk_data) {
-  //    const int num_vertices = element.points.size() / 3;
-  //    for (int vx = 0; vx < num_vertices; vx++) {
-  //      const REAL x = element.points.at(3 * vx + 0);
-  //      const REAL y = element.points.at(3 * vx + 1);
-  //      const REAL z = element.points.at(3 * vx + 2);
-  //      element.point_data["x"].push_back(x);
-  //      element.point_data["y"].push_back(y);
-  //      element.point_data["z"].push_back(z);
-  //    }
-  //    element.cell_data["rank"] = rank;
-  //  }
-  //
-  //  VTK::VTKHDF vtkhdf("foo.vtkhdf", MPI_COMM_WORLD);
-  //  vtkhdf.write(vtk_data);
-  //  vtkhdf.close();
-  //}
-
-  auto mesh_hierarchy = mesh->get_mesh_hierarchy();
 
   auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
 

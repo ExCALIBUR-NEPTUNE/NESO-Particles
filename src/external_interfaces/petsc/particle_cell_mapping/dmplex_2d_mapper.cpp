@@ -110,11 +110,9 @@ DMPlex2DMapper::DMPlex2DMapper(SYCLTargetSharedPtr sycl_target,
       }
       // Record the description of this cell
 
-      const PetscInt point_index =
-          dmplex_interface->dmh_halo->get_dmplex_cell_index(cx);
-      auto id_rank = dmplex_interface->map_local_lid_remote_lid.at(point_index);
       const PetscInt petsc_index =
           dmplex_interface->dmh_halo->get_dmplex_cell_index(cx);
+      auto id_rank = dmplex_interface->map_local_lid_remote_lid.at(petsc_index);
 
       auto tmp_data =
           lambda_populate_cell_data(dmh_halo->dm, petsc_index,

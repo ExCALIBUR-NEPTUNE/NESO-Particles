@@ -46,6 +46,7 @@ protected:
 public:
   SYCLTargetSharedPtr sycl_target;
   DMPlexInterfaceSharedPtr dmplex_interface;
+  REAL tol;
 
   /**
    * Create mapper for a compute target and 3D DMPlex.
@@ -53,9 +54,11 @@ public:
    * @param sycl_target Compute target to create mapper on.
    * @param dmplex_interface DMPlexInterface containing 3D DMPlex to create
    * mapper for.
+   * @param tol Tolerance for mapping.
    */
   DMPlex3DMapper(SYCLTargetSharedPtr sycl_target,
-                 DMPlexInterfaceSharedPtr dmplex_interface);
+                 DMPlexInterfaceSharedPtr dmplex_interface,
+                 const REAL tol = 0.0);
 
   /**
    * Map particles into cells.

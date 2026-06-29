@@ -4,8 +4,9 @@
 namespace NESO::Particles::PetscInterface {
 
 DMPlex3DMapper::DMPlex3DMapper(SYCLTargetSharedPtr sycl_target,
-                               DMPlexInterfaceSharedPtr dmplex_interface)
-    : sycl_target(sycl_target), dmplex_interface(dmplex_interface) {
+                               DMPlexInterfaceSharedPtr dmplex_interface,
+                               const REAL tol)
+    : sycl_target(sycl_target), dmplex_interface(dmplex_interface), tol(tol) {
 
   constexpr int ndim = 3;
   auto dmh = dmplex_interface->dmh;
@@ -44,7 +45,7 @@ DMPlex3DMapper::DMPlex3DMapper(SYCLTargetSharedPtr sycl_target,
 
     const PetscScalar *tmp;
     PetscScalar *vertices = nullptr;
-    PetscInt num_crossings = 0, num_coords;
+    PetscInt num_coords;
     PetscBool is_dg;
 
     PETSCCHK(DMPlexGetCellCoordinates(dm, petsc_index, &is_dg, &num_coords,
@@ -166,11 +167,9 @@ DMPlex3DMapper::DMPlex3DMapper(SYCLTargetSharedPtr sycl_target,
       }
       // Record the description of this cell
 
-      const PetscInt point_index =
-          dmplex_interface->dmh_halo->get_dmplex_cell_index(cx);
-      auto id_rank = dmplex_interface->map_local_lid_remote_lid.at(point_index);
       const PetscInt petsc_index =
           dmplex_interface->dmh_halo->get_dmplex_cell_index(cx);
+      auto id_rank = dmplex_interface->map_local_lid_remote_lid.at(petsc_index);
 
       auto tmp_data =
           lambda_populate_cell_data(dmh_halo->dm, petsc_index,
@@ -231,6 +230,7 @@ void DMPlex3DMapper::map(ParticleGroup &particle_group, const int map_cell) {
   auto k_map_sizes = this->map_sizes->root;
   auto k_map_candidates = this->map_candidates->root;
   auto k_cell_data = this->cell_data->root;
+  const REAL k_tol = this->tol;
 
   auto map_loop = particle_loop(
       "DMPlex3DMapper::map", dat_positions,
@@ -258,7 +258,6 @@ void DMPlex3DMapper::map(ParticleGroup &particle_group, const int map_cell) {
           k_cell_data->get(candidate, &cell_data);
 
           // Test if point in candidate cell
-          int num_crossings = 0;
           const int num_faces = cell_data->num_faces;
           const REAL *normal_origin = cell_data->normal_origin;
 
@@ -275,7 +274,7 @@ void DMPlex3DMapper::map(ParticleGroup &particle_group, const int map_cell) {
             const PetscScalar t0_dot_n = KERNEL_DOT_PRODUCT_3D(
                 t0[0], t0[1], t0[2], normal[0], normal[1], normal[2]);
 
-            if (t0_dot_n > 0.0) {
+            if (t0_dot_n > k_tol) {
               contained = false;
             }
           }
