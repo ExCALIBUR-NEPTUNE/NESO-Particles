@@ -1471,4 +1471,43 @@ TEST(PETSc, dmplex_mesh_coupler_dg0_integration) {
   PETSCCHK(PetscFinalize());
 }
 
+TEST(PETSc, split_quadrilateral_into_two_triangles) {
+
+  PETSCCHK(PetscInitializeNoArguments());
+  DM dm = get_simple_square();
+
+  std::array<std::array<PetscInt, 3>, 2> triangle_indices;
+  PetscInterface::split_quadrilateral_into_two_triangles(dm, 0,
+                                                         triangle_indices);
+
+  std::array<std::set<PetscInt>, 2> split0 = {std::set<PetscInt>{5, 6, 7},
+                                              std::set<PetscInt>{5, 7, 8}};
+  std::array<std::set<PetscInt>, 2> split1 = {std::set<PetscInt>{5, 6, 8},
+                                              std::set<PetscInt>{6, 7, 8}};
+
+  std::array<std::set<PetscInt>, 2> split_test = {
+      std::set<PetscInt>{
+          triangle_indices.at(0).at(0),
+          triangle_indices.at(0).at(1),
+          triangle_indices.at(0).at(2),
+      },
+      std::set<PetscInt>{
+          triangle_indices.at(1).at(0),
+          triangle_indices.at(1).at(1),
+          triangle_indices.at(1).at(2),
+      },
+  };
+
+  const bool test_is_split_0 =
+      (split0.at(0) == split_test.at(0)) && (split0.at(1) == split_test.at(1));
+
+  const bool test_is_split_1 =
+      (split1.at(0) == split_test.at(0)) && (split1.at(1) == split_test.at(1));
+
+  ASSERT_TRUE(test_is_split_0 || test_is_split_1);
+
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
+
 #endif

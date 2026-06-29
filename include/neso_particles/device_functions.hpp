@@ -64,6 +64,48 @@ inline std::uint32_t popcount(const std::uint8_t x) {
 #endif
 #endif
 
+// Are we using an AdaptiveCpp CUDA pass?
+#ifdef __ACPP_ENABLE_CUDA_TARGET__
+// Is this not the nvcxx backend?
+#ifndef __NVCOMPILER
+
+#define NESO_PARTICLES_PATCH_CUDA_MARRAY
+
+#endif
+#endif
+
+#ifdef NESO_PARTICLES_PATCH_CUDA_MARRAY
+
+inline sycl::marray<REAL, 3> cross(const sycl::marray<REAL, 3> &a,
+                                   const sycl::marray<REAL, 3> &b) {
+  sycl::marray<REAL, 3> c;
+
+  KERNEL_CROSS_PRODUCT_3D(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]);
+
+  return c;
+}
+
+inline REAL dot(const sycl::marray<REAL, 3> &a,
+                const sycl::marray<REAL, 3> &b) {
+  return KERNEL_DOT_PRODUCT_3D(a[0], a[1], a[2], b[0], b[1], b[2]);
+}
+
+#else
+
+template <std::size_t N>
+inline sycl::marray<REAL, N> cross(const sycl::marray<REAL, N> &a,
+                                   const sycl::marray<REAL, N> &b) {
+  return sycl::cross(a, b);
+}
+
+template <std::size_t N>
+inline REAL dot(const sycl::marray<REAL, N> &a,
+                const sycl::marray<REAL, N> &b) {
+  return sycl::dot(a, b);
+}
+
+#endif
+
 namespace Private {
 // ACPP does not seem to define a sycl::sincos(REAL, REAL*)
 template <class, class = void> struct sincos_exists_for_t : std::false_type {};
@@ -380,6 +422,84 @@ inline bool plane_intersection_3d_xy_plane_aligned(
   return is_crossed && (!colocated) && in_bounds_x && in_bounds_y;
 }
 
+/**
+ * Helper function to evaluate Barycentric coordinates using a set of vertices
+ * for a triangle.
+ *
+ * @param[in] bary_coords Barycentric coordinates.
+ * @param[in] triangle_vertex_0 First vertex of triangle.
+ * @param[in] triangle_vertex_1 Second vertex of triangle.
+ * @param[in] triangle_vertex_2 Third vertex of triangle.
+ * @param[in, out] coords Output evaluation.
+ */
+inline void
+evaluate_barycentric_coordinates(const sycl::marray<REAL, 3> &bary_coords,
+                                 const sycl::marray<REAL, 3> &triangle_vertex_0,
+                                 const sycl::marray<REAL, 3> &triangle_vertex_1,
+                                 const sycl::marray<REAL, 3> &triangle_vertex_2,
+                                 sycl::marray<REAL, 3> &coords) {
+  coords = bary_coords[0] * triangle_vertex_0 +
+           bary_coords[1] * triangle_vertex_1 +
+           bary_coords[2] * triangle_vertex_2;
+}
+
+/**
+ * Line segment - Triangle intersection test, in 3D, using the Möller–Trumbore
+ * intersection algorithm.
+ *
+ * @param[in] line_origin Origin point of line.
+ * @param[in] line_direction Direction of line.
+ * @param[in] triangle_vertex_0 First vertex of triangle.
+ * @param[in] triangle_vertex_1 Second vertex of triangle.
+ * @param[in] triangle_vertex_2 Third vertex of triangle.
+ * @param[in, out] bary_coords Point of intersection in Barycentric coordinates.
+ * @param[in, out] parameterised_distance Point of intersection in terms of
+ * direction vector.
+ * @param[in] tol_plane Tolerance for the line segment embedded in the plane of
+ * the triangle, default 0.0.
+ * @param[in] tol_contained Tolerance for intersection, default 0.0.
+ */
+inline bool line_triangle_intersection_moller_trumbore(
+    const sycl::marray<REAL, 3> &line_origin,
+    const sycl::marray<REAL, 3> &line_direction,
+    const sycl::marray<REAL, 3> &triangle_vertex_0,
+    const sycl::marray<REAL, 3> &triangle_vertex_1,
+    const sycl::marray<REAL, 3> &triangle_vertex_2,
+    sycl::marray<REAL, 3> &bary_coords, REAL &parameterised_distance,
+    const REAL tol_plane = 0.0, const REAL tol_contained = 0.0) {
+  const sycl::marray<REAL, 3> &D = line_direction;
+  const sycl::marray<REAL, 3> E_1 = triangle_vertex_1 - triangle_vertex_0;
+  const sycl::marray<REAL, 3> E_2 = triangle_vertex_2 - triangle_vertex_0;
+  const sycl::marray<REAL, 3> T = line_origin - triangle_vertex_0;
+  const sycl::marray<REAL, 3> P = Kernel::cross(D, E_2);
+  const sycl::marray<REAL, 3> Q = Kernel::cross(T, E_1);
+
+  const REAL determinate = Kernel::dot(E_1, P);
+
+  const bool line_in_plane = sycl::fabs(determinate) <= tol_plane;
+  const REAL scale_factor = line_in_plane ? 1.0 : 1.0 / determinate;
+
+  const sycl::marray<REAL, 3> scale_factor_vector{scale_factor, scale_factor,
+                                                  scale_factor};
+
+  const sycl::marray<REAL, 3> tuv_unscaled{
+      Kernel::dot(Q, E_2), Kernel::dot(P, T), Kernel::dot(Q, D)};
+
+  const sycl::marray<REAL, 3> tuv = scale_factor_vector * tuv_unscaled;
+
+  parameterised_distance = tuv[0];
+  const REAL u = tuv[1];
+  const REAL v = tuv[2];
+
+  // const bool bary_sum_test = (1.0 - (u + v)) >= -tol_contained;
+  const bool bary_sum_test = (u + v) <= 1.0 + tol_contained;
+  const bool t_test = parameterised_distance >= 0.0;
+  const bool u_test = (u >= -tol_contained);
+  const bool v_test = (v >= -tol_contained);
+
+  bary_coords = sycl::marray<REAL, 3>(1.0 - u - v, u, v);
+  return (!line_in_plane) && bary_sum_test && t_test && (u_test) && (v_test);
+}
 /**
  * Naively invert a matrix. The error bars on this call may be quite large.
  * This function uses row-major format.

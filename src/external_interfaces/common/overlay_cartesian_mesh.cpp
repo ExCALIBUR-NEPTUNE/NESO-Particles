@@ -162,7 +162,7 @@ void OverlayCartesianMesh::get_intersecting_cells(
     size *= (cell_upper - cell_lower);
   }
   cells.reserve(size);
-  std::vector<int> index(2);
+  std::vector<int> index(this->ndim);
   this->get_all_cells(0, cell_starts, cell_ends, index, cells);
 }
 

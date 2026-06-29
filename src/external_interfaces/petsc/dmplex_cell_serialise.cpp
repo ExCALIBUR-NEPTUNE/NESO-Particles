@@ -2,6 +2,7 @@
 
 #include <neso_particles/common_impl.hpp>
 #include <neso_particles/external_interfaces/petsc/dmplex_cell_serialise.hpp>
+#include <neso_particles/external_interfaces/petsc/dmplex_helper.hpp>
 namespace NESO::Particles::PetscInterface {
 
 void CellSTDRepresentation::traverse_cell_specification(
@@ -41,6 +42,7 @@ CellSTDRepresentation::CellSTDRepresentation(
   for (auto hx : map_per_height) {
     for (auto ix : hx.second) {
       const PetscInt point_rename = rename_function(ix);
+
       PetscInt cone_size;
       PETSCCHK(DMPlexGetConeSize(dm, ix, &cone_size));
       const PetscInt *cone;

@@ -56,6 +56,7 @@ set(SRC_FILES
     ${SRC_DIR}/algorithms/reduce_dat_cellwise.cpp
     ${SRC_DIR}/algorithms/unseen_value_extractor.cpp
     ${SRC_DIR}/external_interfaces/petsc/boundary_interaction/boundary_interaction_2d.cpp
+    ${SRC_DIR}/external_interfaces/petsc/boundary_interaction/boundary_interaction_3d.cpp
     ${SRC_DIR}/external_interfaces/petsc/boundary_interaction/boundary_interaction_common.cpp
     ${SRC_DIR}/external_interfaces/petsc/dmplex_cell_serialise.cpp
     ${SRC_DIR}/external_interfaces/petsc/dmplex_interface.cpp
@@ -63,9 +64,11 @@ set(SRC_FILES
     ${SRC_DIR}/external_interfaces/petsc/dmplex_mesh_coupler_dg0.cpp
     ${SRC_DIR}/external_interfaces/petsc/dmplex_utility.cpp
     ${SRC_DIR}/external_interfaces/petsc/particle_cell_mapping/dmplex_2d_mapper.cpp
+    ${SRC_DIR}/external_interfaces/petsc/particle_cell_mapping/dmplex_3d_mapper.cpp
     ${SRC_DIR}/external_interfaces/petsc/particle_cell_mapping/dmplex_host_mapper.cpp
     ${SRC_DIR}/external_interfaces/petsc/project_evaluate/dmplex_project_evaluate_barycentric.cpp
     ${SRC_DIR}/external_interfaces/petsc/project_evaluate/dmplex_project_evaluate_dg.cpp
+    ${SRC_DIR}/external_interfaces/common/bounding_box.cpp
     ${SRC_DIR}/external_interfaces/common/dof_mapper_dg.cpp
     ${SRC_DIR}/external_interfaces/common/local_claim.cpp
     ${SRC_DIR}/external_interfaces/common/overlay_cartesian_mesh.cpp
@@ -233,6 +236,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/common/quadrature_point_mapper.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/boundary_interaction/boundary_interaction.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/boundary_interaction/boundary_interaction_2d.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/boundary_interaction/boundary_interaction_3d.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/boundary_interaction/boundary_interaction_common.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/dmplex_cell_serialise.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/dmplex_helper.hpp
@@ -243,6 +247,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/dmplex_utility.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/petsc_api_redirection.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/particle_cell_mapping/dmplex_2d_mapper.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/particle_cell_mapping/dmplex_3d_mapper.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/particle_cell_mapping/dmplex_host_mapper.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/petsc_common.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/petsc_utility.hpp
@@ -278,6 +283,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_hierarchy.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_hierarchy_data/mesh_hierarchy_container.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_hierarchy_data/mesh_hierarchy_data.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/mesh_hierarchy_data/generic_serial_container.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_hierarchy_data/serial_container.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_hierarchy_data/serial_interface.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/mesh_interface.hpp

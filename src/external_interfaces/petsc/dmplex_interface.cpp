@@ -1,5 +1,6 @@
 #ifdef NESO_PARTICLES_PETSC
 #include <neso_particles/external_interfaces/petsc/dmplex_interface.hpp>
+#include <unordered_map>
 
 namespace NESO::Particles::PetscInterface {
 
@@ -115,20 +116,34 @@ void DMPlexInterface::create_halos(ExternalCommon::MHGeomMap &mh_element_map) {
 
   std::map<INT, std::vector<DMPlexCellSerialise>> map_cell_dmplex;
   // reserve space
-  for (auto item : mh_element_map) {
+  for (auto &item : mh_element_map) {
     const INT mh_cell = item.first;
     map_cell_dmplex[mh_cell].reserve(item.second.size());
   }
+
   // create the objects
-  for (auto item : mh_element_map) {
-    const INT mh_cell = item.first;
-    for (auto dm_cell : item.second) {
-      map_cell_dmplex[mh_cell].push_back(this->dmh->get_copyable_cell(dm_cell));
+  {
+    std::unordered_map<INT, DMPlexCellSerialise> cache;
+    for (auto &item : mh_element_map) {
+      const INT mh_cell = item.first;
+      for (auto dm_cell : item.second) {
+        if (cache.count(dm_cell)) {
+          const auto &copyable_cell = cache[dm_cell];
+          map_cell_dmplex[mh_cell].push_back(copyable_cell);
+        } else {
+          const auto copyable_cell = this->dmh->get_copyable_cell(dm_cell);
+          map_cell_dmplex[mh_cell].push_back(copyable_cell);
+          cache[dm_cell] = copyable_cell;
+        }
+      }
     }
+    cache.clear();
   }
+
   // send the packed cells to the owning MPI ranks
   MeshHierarchyData::MeshHierarchyContainer mhc(this->mesh_hierarchy,
                                                 map_cell_dmplex);
+
   // Explicitly gather all cells this rank owns, this should be a lightweight
   // call as the constructor above should have gathered these.
   std::vector<INT> cells_to_gather;
@@ -165,7 +180,7 @@ void DMPlexInterface::create_halos(ExternalCommon::MHGeomMap &mh_element_map) {
   DM dm_halo;
   auto halo_exists =
       dm_from_serialised_cells(serialised_halo_cells, this->dmh->dm, dm_halo,
-                               this->map_local_lid_remote_lid);
+                               this->map_local_lid_remote_lid, true);
   if (halo_exists) {
     this->dmh_halo = std::make_shared<DMPlexHelper>(PETSC_COMM_SELF, dm_halo);
     std::set<int> remote_ranks;
@@ -183,6 +198,7 @@ void DMPlexInterface::create_halos(ExternalCommon::MHGeomMap &mh_element_map) {
   } else {
     this->dmh_halo = nullptr;
   }
+
   mhc.free();
 }
 
@@ -203,7 +219,7 @@ DMPlexInterface::DMPlexInterface(DM dm, const int subdivision_order_offset,
   this->claim_mesh_hierarchy_cells(mh_element_map);
   this->create_halos(mh_element_map);
 
-  if (get_env_size_t("NESO_PARTICLES_DMPLEX_CHECK_FACES", 1)) {
+  if (get_env_size_t("NESO_PARTICLES_DMPLEX_CHECK_FACES", 0)) {
     PETSCCHK(DMPlexCheckFaces(this->dmh->dm, 0));
     if (this->dmh_halo != nullptr) {
       PETSCCHK(DMPlexCheckFaces(this->dmh_halo->dm, 0));
@@ -300,9 +316,9 @@ bool DMPlexInterface::validate_halos(const bool fatal) {
                        MPI_COMM_WORLD));
   num_points++;
 
-  const int num_components = 1 + 1 + 4 + 1;
+  const int num_components = 1 + 1 + 6 + 1;
   auto I = [=](const int rx, const int cx) { return rx * num_components + cx; };
-  const int num_components_real = 8;
+  const int num_components_real = 8 * 3; // hex with 3 reals per corner
   auto F = [=](const int rx, const int cx) {
     return rx * num_components_real + cx;
   };
@@ -335,7 +351,7 @@ bool DMPlexInterface::validate_halos(const bool fatal) {
       PETSCCHK(DMPlexGetConeSize(dm, point, &cone_size));
       int_data.at(I(global_point, 1)) = cone_size;
 
-      lambda_assert_true(cone_size < 5);
+      lambda_assert_true(cone_size < 7);
 
       const PetscInt *cone;
       PETSCCHK(DMPlexGetCone(dm, point, &cone));
@@ -345,7 +361,7 @@ bool DMPlexInterface::validate_halos(const bool fatal) {
             this->dmh->get_point_global_index(cone[cx]);
       }
 
-      int_data.at(I(global_point, 6)) = rank;
+      int_data.at(I(global_point, num_components - 1)) = rank;
 
       // REAL data
       PetscBool is_dg;
@@ -354,7 +370,7 @@ bool DMPlexInterface::validate_halos(const bool fatal) {
       PetscScalar *coords = nullptr;
       PETSCCHK(DMPlexGetCellCoordinates(dm, point, &is_dg, &num_coords, &array,
                                         &coords));
-      lambda_assert_true(num_coords <= 8);
+      lambda_assert_true(num_coords <= num_components_real);
       for (int cx = 0; cx < num_coords; cx++) {
         real_data.at(F(global_point, cx)) = coords[cx];
       }
@@ -401,8 +417,9 @@ bool DMPlexInterface::validate_halos(const bool fatal) {
       }
 
       const int rank_held = map_halo_to_rank.at(hpoint);
-      if (depth == 2) {
-        lambda_assert_eq(rank_held, int_rdata.at(I(global_point, 6)));
+      if (depth == this->ndim) {
+        lambda_assert_eq(rank_held,
+                         int_rdata.at(I(global_point, num_components - 1)));
       }
 
       // REAL data
@@ -412,15 +429,26 @@ bool DMPlexInterface::validate_halos(const bool fatal) {
       PetscScalar *coords = nullptr;
       PETSCCHK(DMPlexGetCellCoordinates(dm_halo, hpoint, &is_dg, &num_coords,
                                         &array, &coords));
-      lambda_assert_true(num_coords <= 8);
+      lambda_assert_true(num_coords <= num_components_real);
 
-      std::set<std::tuple<double, double>> correct, to_test;
-      for (int cx = 0; cx < num_coords; cx += 2) {
-        correct.insert({real_rdata.at(F(global_point, cx)),
-                        real_rdata.at(F(global_point, cx + 1))});
-        to_test.insert({coords[cx], coords[cx + 1]});
+      if (this->ndim == 2) {
+        std::set<std::tuple<double, double>> correct, to_test;
+        for (int cx = 0; cx < num_coords; cx += 2) {
+          correct.insert({real_rdata.at(F(global_point, cx)),
+                          real_rdata.at(F(global_point, cx + 1))});
+          to_test.insert({coords[cx], coords[cx + 1]});
+        }
+        lambda_assert_eq(to_test, correct);
+      } else if (this->ndim == 3) {
+        std::set<std::tuple<double, double, double>> correct, to_test;
+        for (int cx = 0; cx < num_coords; cx += 3) {
+          correct.insert({real_rdata.at(F(global_point, cx)),
+                          real_rdata.at(F(global_point, cx + 1)),
+                          real_rdata.at(F(global_point, cx + 2))});
+          to_test.insert({coords[cx], coords[cx + 1], coords[cx + 2]});
+        }
+        lambda_assert_eq(to_test, correct);
       }
-      lambda_assert_eq(to_test, correct);
 
       PETSCCHK(DMPlexRestoreCellCoordinates(dm_halo, hpoint, &is_dg,
                                             &num_coords, &array, &coords));

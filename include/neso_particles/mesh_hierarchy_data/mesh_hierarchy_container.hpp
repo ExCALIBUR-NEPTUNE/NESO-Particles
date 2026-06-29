@@ -287,6 +287,7 @@ public:
     int mpi_size;
     MPICHK(MPI_Comm_size(this->comm, &mpi_size));
 
+    std::vector<MHCellBuffer> tmp_cell;
     for (auto &item : data) {
       const INT cell = item.first;
       // get the rank which owns the cell
@@ -294,13 +295,13 @@ public:
       if ((-1 < rank) && (rank < mpi_size)) {
         // pack the original vector
         SerialContainer<T> cell_contents(item.second);
-        std::vector<MHCellBuffer> tmp_cell;
         tmp_cell.emplace_back(cell, cell_contents.buffer);
         SerialContainer<MHCellBuffer> tmp_packed_cell(tmp_cell);
         // append the data on the store for the owning rank
         map_rank_buffers[rank].append(tmp_packed_cell);
         // record this rank as one of interest
         ranks_set.insert(rank);
+        tmp_cell.clear();
       }
     }
 

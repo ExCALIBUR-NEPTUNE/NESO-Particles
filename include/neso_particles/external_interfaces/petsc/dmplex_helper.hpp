@@ -38,6 +38,14 @@ void setup_coordinate_section(DM &dm, const PetscInt vertex_start,
                               const PetscInt vertex_end);
 
 /**
+ * Helper function to print transitive closure and orientations.
+ *
+ * @param dm Input DMPlex.
+ * @param point PETSc DMPlex pointin DM.
+ */
+void print_transitive_closure(DM &dm, const PetscInt point);
+
+/**
  * Setup a PETSc vector in which coordinates can be get/set for local mesh. See
  * DMPlexBuildCoordinatesFromCellList.
  *
@@ -61,6 +69,26 @@ std::vector<PetscInt> get_global_distributed_points_map(DM &dm_distributed,
                                                         PetscSF &sf);
 
 /**
+ * Get the VTK cell type that corresponds to a PETSc DMPlex cell type.
+ *
+ * @param petsc_cell_type Input DMPlex cell type.
+ * @returns VTK cell type.
+ */
+VTK::CellType get_vtk_cell_type(const DMPolytopeType petsc_cell_type);
+
+/**
+ * Split a linear quadrilateral into two linear triangles.
+ *
+ * @param[in] dm DMPlex containing quadrilateral to split.
+ * @param[in] quad_index PETSc point index of quadrilateral.
+ * @param[in, out] triangle_indices Two arrays of PETSc point indices of
+ * vertices.
+ */
+void split_quadrilateral_into_two_triangles(
+    DM dm, const PetscInt quad_index,
+    std::array<std::array<PetscInt, 3>, 2> &triangle_indices);
+
+/**
  * Class to determine new local indices from global indices when constructing
  * halos.
  */
@@ -80,11 +108,7 @@ struct HaloDMIndexMapper {
    * @param[in, out] start First PETSc point index for given depth.
    * @param[in, out] end Last PETSc point index plus one for given depth.
    */
-  inline void get_depth_stratum(const PetscInt depth, PetscInt *start,
-                                PetscInt *end) {
-    *start = this->depth_starts.at(depth);
-    *end = this->depth_ends.at(depth);
-  }
+  void get_depth_stratum(const PetscInt depth, PetscInt *start, PetscInt *end);
 
   /**
    * Get the new local point index for a global point index.
@@ -92,10 +116,7 @@ struct HaloDMIndexMapper {
    * @param point Global point index.
    * @returns Local point index for a new DM.
    */
-  inline PetscInt get_local_point_index(const PetscInt point) {
-    const auto local_point = this->map_global_to_local.at(point);
-    return local_point;
-  }
+  PetscInt get_local_point_index(const PetscInt point);
 
   /**
    * Create an instance from STD representation on cells, e.g. after cells have
@@ -104,64 +125,7 @@ struct HaloDMIndexMapper {
    * @param cells Vector of cells which require new local indices for all the
    * points contained.
    */
-  HaloDMIndexMapper(std::vector<CellSTDRepresentation> &cells) {
-    this->chart_start = 0;
-    this->chart_end = 0;
-
-    if (cells.size() > 0) {
-
-      std::map<PetscInt, std::set<PetscInt>> map_depth_to_points;
-      for (auto &cx : cells) {
-        for (auto &px : cx.point_cones) {
-          const auto point = px.first;
-          const auto depth = cx.get_point_depth(point);
-          map_depth_to_points[depth].insert(point);
-        }
-      }
-      this->depth_max = std::numeric_limits<PetscInt>::lowest();
-      this->depth_min = std::numeric_limits<PetscInt>::max();
-      for (auto &depth_points : map_depth_to_points) {
-        this->depth_max = std::max(this->depth_max, depth_points.first);
-        this->depth_min = std::min(this->depth_min, depth_points.first);
-      }
-      NESOASSERT(this->depth_min == 0,
-                 "Expected minium depth to be 0 for vertices.");
-
-      // Get the ranges for the local indices for the new DM
-      std::vector<PetscInt> starting_indices(this->depth_max + 1);
-      this->depth_starts.resize(this->depth_max + 1);
-      this->depth_ends.resize(this->depth_max + 1);
-      this->depth_starts.at(0) = 0;
-      this->depth_ends.at(0) = map_depth_to_points.at(0).size();
-      starting_indices.at(0) = 0;
-      for (int depth = 1; depth <= this->depth_max; depth++) {
-        const PetscInt prev_end = this->depth_ends.at(depth - 1);
-        this->depth_starts.at(depth) = prev_end;
-        this->depth_ends.at(depth) =
-            prev_end + map_depth_to_points.at(depth).size();
-        starting_indices.at(depth) = prev_end;
-      }
-
-      // Get the new indices for points
-      for (auto &depth_points : map_depth_to_points) {
-        const PetscInt depth = depth_points.first;
-        for (const PetscInt global_point : depth_points.second) {
-          const PetscInt local_point = starting_indices.at(depth)++;
-          this->map_global_to_local[global_point] = local_point;
-          this->chart_end++;
-        }
-      }
-
-      for (int depth = 0; depth <= this->depth_max; depth++) {
-        const PetscInt end_index = this->depth_ends.at(depth);
-        NESOASSERT(end_index == starting_indices.at(depth),
-                   "Error mapping old indices to new indices");
-      }
-      NESOASSERT(this->chart_end ==
-                     this->depth_ends.at(this->depth_ends.size() - 1),
-                 "Error mapping chart start/end=.");
-    }
-  }
+  HaloDMIndexMapper(std::vector<CellSTDRepresentation> &cells);
 };
 
 /**
@@ -175,12 +139,15 @@ struct HaloDMIndexMapper {
  * @param[in, out] map_local_lid_remote_lid A map from the new local cell
  * indices to a tuple of {original owning rank, original local id on owning
  * rank, global petsc index of cell}.
+ * @param[in] additional_checks When set to true perform additional internal
+ * tests.
  * @returns True if the constructed DMPlex is not empty otherwise false.
  */
 bool dm_from_serialised_cells(
     std::list<DMPlexCellSerialise> &serialised_cells, DM &dm_prototype, DM &dm,
     std::map<PetscInt, std::tuple<int, PetscInt, PetscInt>>
-        &map_local_lid_remote_lid);
+        &map_local_lid_remote_lid,
+    const bool additional_checks);
 
 /**
  * Helper class that wraps a PETSc DMPlex and simplifies common operations.
@@ -225,6 +192,9 @@ protected:
   }
 
   ExternalCommon::BoundingBoxSharedPtr bounding_box;
+
+  void get_point_vertices(const PetscInt petsc_index,
+                          std::vector<std::vector<REAL>> &vertices);
 
 public:
   MPI_Comm comm;
@@ -317,6 +287,15 @@ public:
   ExternalCommon::BoundingBoxSharedPtr get_bounding_box();
 
   /**
+   * Get a bounding box for a mesh point (assumes linear mesh).
+   *
+   * @param petsc_index Local point index.
+   * @returns Bounding box for the point.
+   */
+  ExternalCommon::BoundingBoxSharedPtr
+  get_point_bounding_box(const PetscInt petsc_index);
+
+  /**
    * Get a bounding box for a mesh cell (assumes linear mesh).
    *
    * @param cell Local cell index.
@@ -326,7 +305,7 @@ public:
   get_cell_bounding_box(const PetscInt cell);
 
   /**
-   * Get the vertices of an edge using a PETSc index.
+   * Get the vertices of a point using a PETSc index.
    *
    * @param[in] petsc_index PETSc point index.
    * @param[in, out] vertices Vector of vertices.
@@ -352,12 +331,48 @@ public:
   void get_cell_vertex_average(const PetscInt cell, std::vector<REAL> &average);
 
   /**
+   * Get the point type.
+   *
+   * @param point_index Local point index.
+   * @returns PETSc description of cell type.
+   */
+  DMPolytopeType get_point_type(const PetscInt point_index);
+
+  /**
+   * Get the cell type.
+   *
+   * @param cell Local cell index.
+   * @returns PETSc description of cell type.
+   */
+  DMPolytopeType get_cell_type(const PetscInt cell);
+
+  /**
    * Determine if mesh contains a point.
    *
    * @param[in] point Point to test.
    * @returns Negative value if point not located, otherwise owning cell.
    */
   int contains_point(std::vector<PetscScalar> &point);
+
+  /**
+   * Determine if a 2D mesh cell contains a point.
+   *
+   * @param[in] index Local cell index.
+   * @param[in] point Point to test.
+   * @returns true if point contains cell.
+   */
+  bool cell_contains_point_2d(const PetscInt index,
+                              std::vector<PetscScalar> &point);
+
+  /**
+   * Determine if a 3D mesh cell contains a point.
+   *
+   * @param[in] index Local cell index.
+   * @param[in] point Point to test.
+   * @returns true if point contains cell.
+   */
+  bool cell_contains_point_3d(const PetscInt index,
+                              std::vector<PetscScalar> &point);
 
   /**
    * Determine if mesh cell contains a point.
@@ -415,6 +430,16 @@ public:
   std::vector<VTK::UnstructuredCell> get_vtk_cell_data();
 
   /**
+   * Get VTK vertex order for a cell. Returned array gives order such that
+   * For VTK vertex i, order[i] gives the DMPlex vertex.
+   *
+   * @param[in] cell Local cell index in [0, cell_count).
+   * @param[in, out] order Vector containing reordering.
+   */
+  void get_vtk_cell_vertex_order(const PetscInt cell,
+                                 std::vector<PetscInt> &order);
+
+  /**
    * Print to stdout information about the held DMPlex.
    */
   void print();
@@ -432,6 +457,17 @@ public:
    * communicator.
    */
   REAL get_volume();
+
+  /**
+   * Get the normal vector for a linear quadrilateral or linear triangle. The
+   * direction is determined to be the outward direction of the first element in
+   * the support of the quadrilateral or triangle.
+   *
+   * @param[in] point_index PETSc point index of the face.
+   * @param[in, out] normal_vetor Output normal vector.
+   */
+  void get_linear_normal_vector(const PetscInt point_index,
+                                std::vector<REAL> &normal_vector);
 };
 
 /**

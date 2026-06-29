@@ -1,14 +1,14 @@
 #ifdef NESO_PARTICLES_PETSC
-#include <neso_particles/common_impl.hpp>
-#include <neso_particles/external_interfaces/petsc/particle_cell_mapping/dmplex_2d_mapper.hpp>
+#include <neso_particles/external_interfaces/petsc/particle_cell_mapping/dmplex_3d_mapper.hpp>
 
 namespace NESO::Particles::PetscInterface {
 
-DMPlex2DMapper::DMPlex2DMapper(SYCLTargetSharedPtr sycl_target,
-                               DMPlexInterfaceSharedPtr dmplex_interface)
-    : sycl_target(sycl_target), dmplex_interface(dmplex_interface) {
+DMPlex3DMapper::DMPlex3DMapper(SYCLTargetSharedPtr sycl_target,
+                               DMPlexInterfaceSharedPtr dmplex_interface,
+                               const REAL tol)
+    : sycl_target(sycl_target), dmplex_interface(dmplex_interface), tol(tol) {
 
-  constexpr int ndim = 2;
+  constexpr int ndim = 3;
   auto dmh = dmplex_interface->dmh;
   auto dmh_halo = dmplex_interface->dmh_halo;
 
@@ -28,7 +28,7 @@ DMPlex2DMapper::DMPlex2DMapper(SYCLTargetSharedPtr sycl_target,
 
   // Make the lookup table for the vertex data
   this->cell_data =
-      std::make_unique<LookupTable<int, Implementation2DLinear::Linear2DData>>(
+      std::make_unique<LookupTable<int, Implementation3DLinear::Linear3DData>>(
           this->sycl_target, num_total_cells);
 
   // For each local and halo cell find the overlay cells they intersect with
@@ -37,45 +37,102 @@ DMPlex2DMapper::DMPlex2DMapper(SYCLTargetSharedPtr sycl_target,
   // Helper lambda to populate the cell data
   auto lambda_populate_cell_data =
       [&](DM &dm, PetscInt petsc_index, const int owning_rank,
-          const int local_id) -> Implementation2DLinear::Linear2DData {
-    Implementation2DLinear::Linear2DData tmp_data;
-    PetscBool is_dg;
+          const int local_id) -> Implementation3DLinear::Linear3DData {
+    Implementation3DLinear::Linear3DData tmp_data;
+
+    PetscInt num_faces = 0;
+    PETSCCHK(DMPlexGetConeSize(dm, petsc_index, &num_faces));
+
+    const PetscScalar *tmp;
+    PetscScalar *vertices = nullptr;
     PetscInt num_coords;
-    const PetscScalar *array;
-    PetscScalar *coords = nullptr;
+    PetscBool is_dg;
 
     PETSCCHK(DMPlexGetCellCoordinates(dm, petsc_index, &is_dg, &num_coords,
-                                      &array, &coords));
-    for (int cx = 0; cx < num_coords; cx++) {
-      tmp_data.vertices[cx] = coords[cx];
+                                      &tmp, &vertices));
+    const int num_vertices = num_coords / 3;
+    std::vector<PetscScalar> h_vertices;
+    h_vertices.reserve(num_coords);
+    for (PetscInt ix = 0; ix < num_coords; ix++) {
+      h_vertices.push_back(vertices[ix]);
     }
-    NESOASSERT((num_coords == 6) || (num_coords == 8),
-               "Unexpected number of coordinates.");
-    if (num_coords == 8) {
-      tmp_data.num_vertices = 4;
-      // {0, 1, 1, 2, 2, 3, 3, 0};
-      tmp_data.faces[0] = 0;
-      tmp_data.faces[1] = 1;
-      tmp_data.faces[2] = 1;
-      tmp_data.faces[3] = 2;
-      tmp_data.faces[4] = 2;
-      tmp_data.faces[5] = 3;
-      tmp_data.faces[6] = 3;
-      tmp_data.faces[7] = 0;
-    } else {
-      tmp_data.num_vertices = 3;
-      // {0, 1, 1, 2, 2, 0};
-      tmp_data.faces[0] = 0;
-      tmp_data.faces[1] = 1;
-      tmp_data.faces[2] = 1;
-      tmp_data.faces[3] = 2;
-      tmp_data.faces[4] = 2;
-      tmp_data.faces[5] = 0;
+    PETSCCHK(DMPlexRestoreCellCoordinates(dm, petsc_index, &is_dg, &num_coords,
+                                          &tmp, &vertices));
+
+    const PetscInt *cone = nullptr;
+    PETSCCHK(DMPlexGetCone(dm, petsc_index, &cone));
+
+    for (PetscInt facex = 0; facex < num_faces; facex++) {
+      const PetscInt face_petsc_index = cone[facex];
+
+      PETSCCHK(DMPlexGetCellCoordinates(dm, face_petsc_index, &is_dg,
+                                        &num_coords, &tmp, &vertices));
+      NESOASSERT(num_coords == 12 || num_coords == 9, "Unexpected num coords.");
+      const PetscInt c0 = 0;
+      const PetscInt c1 = 1;
+      const PetscInt c2 = num_coords == 12 ? 3 : 2;
+
+      const PetscScalar v0[3] = {vertices[3 * c1 + 0] - vertices[3 * c0 + 0],
+                                 vertices[3 * c1 + 1] - vertices[3 * c0 + 1],
+                                 vertices[3 * c1 + 2] - vertices[3 * c0 + 2]};
+
+      const PetscScalar v1[3] = {vertices[3 * c2 + 0] - vertices[3 * c0 + 0],
+                                 vertices[3 * c2 + 1] - vertices[3 * c0 + 1],
+                                 vertices[3 * c2 + 2] - vertices[3 * c0 + 2]};
+
+      PetscScalar n[3] = {0.0, 0.0, 0.0};
+      KERNEL_CROSS_PRODUCT_3D(v0[0], v0[1], v0[2], v1[0], v1[1], v1[2], n[0],
+                              n[1], n[2]);
+
+      int direction = 0;
+
+      for (PetscInt vx = 0; vx < num_vertices; vx++) {
+
+        // vector from first vertex to test point
+        const PetscScalar t0[3] = {h_vertices.at(3 * vx + 0) - vertices[0],
+                                   h_vertices.at(3 * vx + 1) - vertices[1],
+                                   h_vertices.at(3 * vx + 2) - vertices[2]};
+
+        const PetscScalar t0_dot_n =
+            KERNEL_DOT_PRODUCT_3D(t0[0], t0[1], t0[2], n[0], n[1], n[2]);
+
+        if (std::fabs(t0_dot_n) > 1.0e-6) {
+          const int to_test_direction = t0_dot_n > 0.0 ? 1 : -1;
+          if (direction == 0) {
+            direction = to_test_direction;
+          } else {
+            NESOASSERT(direction == to_test_direction,
+                       "Inconsistent directions.");
+          }
+        }
+      }
+
+      NESOASSERT(direction != 0, "Could not determine direction");
+      // normal points inwards
+      if (direction > 0) {
+        n[0] *= -1;
+        n[1] *= -1;
+        n[2] *= -1;
+      }
+
+      const REAL normalisation =
+          1.0 / std::sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+
+      tmp_data.normal_origin[facex * 6 + 0 + 0] = normalisation * n[0];
+      tmp_data.normal_origin[facex * 6 + 0 + 1] = normalisation * n[1];
+      tmp_data.normal_origin[facex * 6 + 0 + 2] = normalisation * n[2];
+      tmp_data.normal_origin[facex * 6 + 3 + 0] = vertices[0];
+      tmp_data.normal_origin[facex * 6 + 3 + 1] = vertices[1];
+      tmp_data.normal_origin[facex * 6 + 3 + 2] = vertices[2];
+
+      PETSCCHK(DMPlexRestoreCellCoordinates(dm, face_petsc_index, &is_dg,
+                                            &num_coords, &tmp, &vertices));
     }
+
     tmp_data.owning_rank = owning_rank;
     tmp_data.local_id = local_id;
-    PETSCCHK(DMPlexRestoreCellCoordinates(dm, petsc_index, &is_dg, &num_coords,
-                                          &array, &coords));
+    tmp_data.num_faces = num_faces;
+
     return tmp_data;
   };
 
@@ -163,7 +220,7 @@ DMPlex2DMapper::DMPlex2DMapper(SYCLTargetSharedPtr sycl_target,
   this->ep = std::make_unique<ErrorPropagate>(this->sycl_target);
 }
 
-void DMPlex2DMapper::map(ParticleGroup &particle_group, const int map_cell) {
+void DMPlex3DMapper::map(ParticleGroup &particle_group, const int map_cell) {
 
   auto dat_positions = particle_group.position_dat;
   auto dat_cells = particle_group.cell_id_dat;
@@ -173,15 +230,18 @@ void DMPlex2DMapper::map(ParticleGroup &particle_group, const int map_cell) {
   auto k_map_sizes = this->map_sizes->root;
   auto k_map_candidates = this->map_candidates->root;
   auto k_cell_data = this->cell_data->root;
+  const REAL k_tol = this->tol;
 
   auto map_loop = particle_loop(
-      "DMPlex2DMapper::map", dat_positions,
+      "DMPlex3DMapper::map", dat_positions,
       [=](auto P, auto CELL, auto RANK) {
         // Find the cell in the overlayed mesh
         const REAL x0 = P.at(0);
         const REAL x1 = P.at(1);
-        int cell_tuple[2] = {k_overlay_mapper.get_cell_in_dimension(0, x0),
-                             k_overlay_mapper.get_cell_in_dimension(1, x1)};
+        const REAL x2 = P.at(2);
+        int cell_tuple[3] = {k_overlay_mapper.get_cell_in_dimension(0, x0),
+                             k_overlay_mapper.get_cell_in_dimension(1, x1),
+                             k_overlay_mapper.get_cell_in_dimension(2, x2)};
         const int overlay_cell =
             k_overlay_mapper.get_linear_cell_index(cell_tuple);
         // Get the number of candidate cells
@@ -191,48 +251,35 @@ void DMPlex2DMapper::map(ParticleGroup &particle_group, const int map_cell) {
         k_map_candidates->get(overlay_cell, &candidates);
         // loop over candidates and test if point in cell
         for (int cx = 0; cx < num_candidates; cx++) {
+
           const int candidate = candidates[cx];
           // Get the cell data for this candidate cell
-          Implementation2DLinear::Linear2DData const *cell_data = nullptr;
+          Implementation3DLinear::Linear3DData const *cell_data = nullptr;
           k_cell_data->get(candidate, &cell_data);
+
           // Test if point in candidate cell
-          int num_crossings = 0;
-          const int num_vertices = cell_data->num_vertices;
-          const int *faces = cell_data->faces;
-          const REAL *vertices = cell_data->vertices;
+          const int num_faces = cell_data->num_faces;
+          const REAL *normal_origin = cell_data->normal_origin;
 
-          for (int facex = 0; facex < num_vertices; facex++) {
-            const REAL xi_t = vertices[faces[2 * facex + 0] * 2 + 0];
-            const REAL yi_t = vertices[faces[2 * facex + 0] * 2 + 1];
-            const REAL xj_t = vertices[faces[2 * facex + 1] * 2 + 0];
-            const REAL yj_t = vertices[faces[2 * facex + 1] * 2 + 1];
-            REAL xi = 0.0;
-            REAL yi = 0.0;
-            REAL xj = 0.0;
-            REAL yj = 0.0;
+          bool contained = true;
+          for (int facex = 0; facex < num_faces; facex++) {
+            const REAL normal[3] = {normal_origin[facex * 6 + 0],
+                                    normal_origin[facex * 6 + 1],
+                                    normal_origin[facex * 6 + 2]};
+            const REAL origin[3] = {normal_origin[facex * 6 + 3 + 0],
+                                    normal_origin[facex * 6 + 3 + 1],
+                                    normal_origin[facex * 6 + 3 + 2]};
+            const REAL t0[3] = {x0 - origin[0], x1 - origin[1], x2 - origin[2]};
 
-            consistent_line_orientation_2d(xi_t, yi_t, xj_t, yj_t, &xi, &yi,
-                                           &xj, &yj);
+            const PetscScalar t0_dot_n = KERNEL_DOT_PRODUCT_3D(
+                t0[0], t0[1], t0[2], normal[0], normal[1], normal[2]);
 
-            // Is the point in a corner
-            if ((x0 == xj) && (x1 == yj)) {
-              num_crossings = 1;
-              break;
-            }
-            if ((yj > x1) != (yi > x1)) {
-              REAL determinate = (x0 - xj) * (yi - yj) - (xi - xj) * (x1 - yj);
-              if (determinate == 0) {
-                // Point is on line
-                num_crossings = 1;
-                break;
-              }
-              if ((determinate < 0) != (yi < yj)) {
-                num_crossings++;
-              }
+            if (t0_dot_n > k_tol) {
+              contained = false;
             }
           }
-          // If the number of crossings is odd then the point is in the cell.
-          if (num_crossings % 2) {
+
+          if (contained) {
             CELL.at(0) = cell_data->local_id;
             RANK.at(1) = cell_data->owning_rank;
           }
@@ -250,7 +297,7 @@ void DMPlex2DMapper::map(ParticleGroup &particle_group, const int map_cell) {
   if (map_cell > -1) {
     auto k_ep = this->ep->device_ptr();
     particle_loop(
-        "DMPlex2DMapper::check", dat_positions,
+        "DMPlex3DMapper::check", dat_positions,
         [=](auto RANK) { NESO_KERNEL_ASSERT(RANK.at(1) > -1, k_ep); },
         Access::read(dat_ranks))
         ->execute(map_cell);
@@ -265,11 +312,10 @@ void DMPlex2DMapper::map(ParticleGroup &particle_group, const int map_cell) {
         }
       }
     }
-    this->ep->check_and_throw("DMPlex2DMapper Failed to find local cell for "
+    this->ep->check_and_throw("DMPlex3DMapper Failed to find local cell for "
                               "one or more particles.");
   }
 }
 
 } // namespace NESO::Particles::PetscInterface
-
 #endif

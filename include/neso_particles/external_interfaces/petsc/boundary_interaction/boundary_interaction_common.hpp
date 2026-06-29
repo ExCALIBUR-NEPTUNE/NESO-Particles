@@ -112,8 +112,8 @@ protected:
             REAL current_distance;
             intersect_object.reset(current_distance);
 
-            REAL k_intersection_point[2] = {0.0, 0.0};
-            REAL k_intersection_normal[2] = {0.0, 0.0};
+            REAL k_intersection_point[3] = {0.0, 0.0, 0.0};
+            REAL k_intersection_normal[3] = {0.0, 0.0, 0.0};
             INT k_intersection_metadata[3] = {0, 0, 0};
 
             // loop over the grid of MH cells
@@ -143,20 +143,21 @@ protected:
             }
             // If an intersection was found
             if (k_intersection_metadata[0]) {
-              // TODO make this ordering better
               d_int[INDEX.get_local_linear_index() * 3 + 0] = 1;
               d_int[INDEX.get_local_linear_index() * 3 + 1] =
                   k_intersection_metadata[1];
               d_int[INDEX.get_local_linear_index() * 3 + 2] =
                   k_intersection_metadata[2];
-              d_real[INDEX.get_local_linear_index() * 4 + 0] =
-                  k_intersection_point[0];
-              d_real[INDEX.get_local_linear_index() * 4 + 1] =
-                  k_intersection_point[1];
-              d_real[INDEX.get_local_linear_index() * 4 + 2] =
-                  k_intersection_normal[0];
-              d_real[INDEX.get_local_linear_index() * 4 + 3] =
-                  k_intersection_normal[1];
+
+              const int stride = 2 * k_ndim;
+              for (int dx = 0; dx < k_ndim; dx++) {
+                d_real[INDEX.get_local_linear_index() * stride + dx] =
+                    k_intersection_point[dx];
+              }
+              for (int dx = 0; dx < k_ndim; dx++) {
+                d_real[INDEX.get_local_linear_index() * stride + k_ndim + dx] =
+                    k_intersection_normal[dx];
+              }
             }
           },
           Access::read(ParticleLoopIndex{}),

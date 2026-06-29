@@ -20,25 +20,7 @@ struct EmptySerialise : public SerialInterface {
               [[maybe_unused]] const std::size_t num_bytes) override {}
 };
 
-struct IntSerialise : public SerialInterface {
-  int a;
-  virtual ~IntSerialise() = default;
-  virtual inline std::size_t get_num_bytes() const override {
-    return sizeof(int);
-  }
-  virtual inline void
-  serialise([[maybe_unused]] std::byte *buffer,
-            [[maybe_unused]] const std::size_t num_bytes) const override {
-    ASSERT_EQ(num_bytes, sizeof(int));
-    std::memcpy(buffer, &this->a, sizeof(int));
-  }
-  virtual inline void
-  deserialise([[maybe_unused]] const std::byte *buffer,
-              [[maybe_unused]] const std::size_t num_bytes) override {
-    ASSERT_EQ(num_bytes, sizeof(int));
-    std::memcpy(&this->a, buffer, sizeof(int));
-  }
-};
+using IntSerialise = MeshHierarchyData::GenericSerialContainer<int>;
 
 struct IntTuple : public SerialInterface {
   int rank_source;
@@ -85,7 +67,7 @@ TEST(SerialContainer, size_int) {
   const int N = 16;
   std::vector<IntSerialise> int_objs(N);
   for (int ix = 0; ix < N; ix++) {
-    int_objs.at(ix).a = ix + 1;
+    int_objs.at(ix).obj = ix + 1;
   }
 
   SerialContainer<IntSerialise> sce(int_objs);
@@ -106,7 +88,7 @@ TEST(SerialContainer, size_int) {
   sc_unpack.get(unpacked_int_objs);
   ASSERT_EQ(unpacked_int_objs.size(), N);
   for (int ix = 0; ix < N; ix++) {
-    ASSERT_EQ(unpacked_int_objs.at(ix).a, ix + 1);
+    ASSERT_EQ(unpacked_int_objs.at(ix).obj, ix + 1);
   }
 }
 
@@ -116,10 +98,10 @@ TEST(SerialContainer, append) {
   std::vector<IntSerialise> a(N);
   std::vector<IntSerialise> b(M);
   for (int ix = 0; ix < N; ix++) {
-    a.at(ix).a = ix + 1;
+    a.at(ix).obj = ix + 1;
   }
   for (int ix = 0; ix < M; ix++) {
-    b.at(ix).a = ix + 100;
+    b.at(ix).obj = ix + 100;
   }
 
   SerialContainer<IntSerialise> sa(a);
@@ -133,10 +115,10 @@ TEST(SerialContainer, append) {
   std::vector<IntSerialise> c;
   se.get(c);
   for (int ix = 0; ix < N; ix++) {
-    ASSERT_EQ(c.at(ix).a, ix + 1);
+    ASSERT_EQ(c.at(ix).obj, ix + 1);
   }
   for (int ix = 0; ix < M; ix++) {
-    ASSERT_EQ(c.at(ix + N).a, ix + 100);
+    ASSERT_EQ(c.at(ix + N).obj, ix + 100);
   }
 }
 

@@ -83,8 +83,8 @@ void BoundaryInteraction2D::collect_cells() {
   }
 }
 
-BoundaryNormalMapper BoundaryInteraction2D::get_device_normal_mapper() {
-  BoundaryNormalMapper mapper;
+BoundaryNormalMapper2D BoundaryInteraction2D::get_device_normal_mapper() {
+  BoundaryNormalMapper2D mapper;
   mapper.root = this->d_map_edge_normals->root;
   return mapper;
 }
@@ -268,10 +268,12 @@ BoundaryInteraction2D::BoundaryInteraction2D(
   }
 
   this->d_map_edge_discovery = std::make_shared<
-      BlockedBinaryTree<INT, BoundaryInteractionCellData2D, 8>>(
+      BlockedBinaryTree<INT, BoundaryInteractionCellData2D,
+                        NESO_PARTICLES_BLOCKED_BINARY_TREE_WIDTH>>(
       this->sycl_target);
   this->d_map_edge_normals = std::make_shared<
-      BlockedBinaryTree<INT, BoundaryInteractionNormalData2D, 8>>(
+      BlockedBinaryTree<INT, BoundaryInteractionNormalData2D,
+                        NESO_PARTICLES_BLOCKED_BINARY_TREE_WIDTH>>(
       this->sycl_target);
 }
 

@@ -148,6 +148,14 @@ TEST(ExternalCommon, bounding_box_expand) {
   ASSERT_EQ(bb->lower(1), 0.0);
   ASSERT_EQ(bb->upper(0), 2.0);
   ASSERT_EQ(bb->upper(1), 2.0);
+
+  bb->expand({0.1, 1.0, 2.0});
+  ASSERT_EQ(bb->lower(0), -1.1);
+  ASSERT_EQ(bb->lower(1), -1.0);
+  ASSERT_EQ(bb->lower(2), -2.0);
+  ASSERT_EQ(bb->upper(0), 2.1);
+  ASSERT_EQ(bb->upper(1), 3.0);
+  ASSERT_EQ(bb->upper(2), 2.0);
 }
 
 TEST(ExternalCommon, dof_mapper_dg) {

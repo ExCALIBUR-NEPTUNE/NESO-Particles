@@ -8,6 +8,7 @@
 #include <iostream>
 #include <mpi.h>
 #include <numeric>
+#include <set>
 #include <vector>
 
 namespace NESO::Particles {
@@ -233,6 +234,25 @@ template <typename T>
 template <typename T> inline void nprint_inner(T t) { std::cout << t; }
 
 template <typename T> inline void nprint_inner(std::vector<T> &t) {
+  std::cout << "{";
+  for (auto ix : t) {
+    nprint_inner(ix);
+    std::cout << " ";
+  }
+  std::cout << "}";
+}
+
+template <typename T> inline void nprint_inner(std::set<T> &t) {
+  std::cout << "{";
+  for (auto ix : t) {
+    nprint_inner(ix);
+    std::cout << " ";
+  }
+  std::cout << "}";
+}
+
+template <typename T, std::size_t N>
+inline void nprint_inner(std::array<T, N> &t) {
   std::cout << "{";
   for (auto ix : t) {
     nprint_inner(ix);

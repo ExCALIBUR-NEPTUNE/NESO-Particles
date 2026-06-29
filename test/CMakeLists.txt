@@ -55,6 +55,7 @@ set(TEST_SRCS
     ${TEST_DIR}/test_mesh_hierarchy.cpp
     ${TEST_DIR}/test_parallel_initialisation.cpp
     ${TEST_DIR}/test_petsc_interface.cpp
+    ${TEST_DIR}/test_petsc_interface_3d.cpp
     ${TEST_DIR}/test_petsc_interface_from_plex.cpp
     ${TEST_DIR}/test_petsc_boundary_interface_a.cpp
     ${TEST_DIR}/test_petsc_boundary_interface_b.cpp
