@@ -124,14 +124,14 @@ struct BoundaryInteraction3DTest : PetscInterface::BoundaryInteraction3D {
   template <typename... ARGS>
   BoundaryInteraction3DTest(ARGS... args) : BoundaryInteraction3D(args...) {}
 
-  MAKE_GETTER_METHOD(required_mh_cells);
-  MAKE_GETTER_METHOD(collected_mh_cells);
-  MAKE_GETTER_METHOD(padding);
-  MAKE_GETTER_METHOD(d_map_facet_discovery);
-  MAKE_GETTER_METHOD(map_label_to_groups);
-  MAKE_GETTER_METHOD(d_map_facet_normals);
-  MAKE_WRAP_METHOD(collect_cells);
-  MAKE_WRAP_METHOD(get_labels);
+  MAKE_GETTER_METHOD(required_mh_cells)
+  MAKE_GETTER_METHOD(collected_mh_cells)
+  MAKE_GETTER_METHOD(padding)
+  MAKE_GETTER_METHOD(d_map_facet_discovery)
+  MAKE_GETTER_METHOD(map_label_to_groups)
+  MAKE_GETTER_METHOD(d_map_facet_normals)
+  MAKE_WRAP_METHOD(collect_cells)
+  MAKE_WRAP_METHOD(get_labels)
 };
 
 struct BoundaryTriangleTest {
