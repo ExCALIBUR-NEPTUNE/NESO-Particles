@@ -591,8 +591,8 @@ TEST(PETScBoundary3D, reflection) {
   nprint("TODO commit a mesh");
   gmsh_filepath = get_env_string("GMSH_TMP", "");
   const int ndim = 3;
-  const int Nsteps = 1000;
-  const REAL dt = 0.01;
+  const int Nsteps = 100;
+  const REAL dt = 0.05;
 
   PETSCCHK(PetscInitializeNoArguments());
   DM dm;
@@ -606,6 +606,28 @@ TEST(PETScBoundary3D, reflection) {
 
   auto mesh =
       std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
+
+  //{
+  //  auto vtk_data = mesh->dmh->get_vtk_cell_data();
+  //
+  //  for (auto &element : vtk_data) {
+  //    const int num_vertices = element.points.size() / 3;
+  //    for (int vx = 0; vx < num_vertices; vx++) {
+  //      const REAL x = element.points.at(3 * vx + 0);
+  //      const REAL y = element.points.at(3 * vx + 1);
+  //      const REAL z = element.points.at(3 * vx + 2);
+  //      element.point_data["x"].push_back(x);
+  //      element.point_data["y"].push_back(y);
+  //      element.point_data["z"].push_back(z);
+  //    }
+  //    element.cell_data["rank"] = rank;
+  //  }
+  //
+  //  VTK::VTKHDF vtkhdf("foo.vtkhdf", MPI_COMM_WORLD);
+  //  vtkhdf.write(vtk_data);
+  //  vtkhdf.close();
+  //}
+
   auto mesh_hierarchy = mesh->get_mesh_hierarchy();
 
   auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
@@ -618,10 +640,8 @@ TEST(PETScBoundary3D, reflection) {
                              ParticleProp(Sym<INT>("CELL_ID"), 1, true),
                              ParticleProp(Sym<INT>("ID"), 1),
                              ParticleProp(Sym<REAL>("V"), ndim),
-                             ParticleProp(Sym<REAL>("TSP"), 2),
-                             ParticleProp(Sym<REAL>("IP"), ndim),
-                             ParticleProp(Sym<REAL>("IN"), ndim),
-                             ParticleProp(Sym<INT>("IM"), 2)};
+                             ParticleProp(Sym<REAL>("U"), ndim),
+                             ParticleProp(Sym<REAL>("TSP"), 2)};
 
   auto A = std::make_shared<ParticleGroup>(domain, particle_spec, sycl_target);
 
@@ -629,7 +649,7 @@ TEST(PETScBoundary3D, reflection) {
   REAL extents[3] = {2.0, 2.0, 2.0};
 
   const int cell_count = mesh->get_cell_count();
-  const int N = 1 * cell_count;
+  const int N = 10 * cell_count;
   auto positions = uniform_within_extents(N, ndim, extents, rng);
 
   ParticleSet initial_distribution(N, particle_spec);
@@ -680,15 +700,69 @@ TEST(PETScBoundary3D, reflection) {
   auto boundary_interaction = std::make_shared<BoundaryInteraction3DTest>(
       sycl_target, mesh, boundary_groups, 1.0e-14);
 
+  auto ep = std::make_shared<ErrorPropagate>(sycl_target);
+  auto k_ep = ep->device_ptr();
+
   auto reflection = std::make_shared<BoundaryReflection>(3, 1.0e-10);
 
   auto lambda_apply_boundary_conditions = [&](auto aa) {
     auto sub_groups = boundary_interaction->post_integration(aa);
 
     for (auto &gx : sub_groups) {
+
+      particle_loop(
+          gx.second,
+          [=](auto V, auto U) {
+            for (int dx = 0; dx < 3; dx++) {
+              U.at(dx) = V.at(dx);
+            }
+          },
+          Access::read(Sym<REAL>("V")), Access::write(Sym<REAL>("U")))
+          ->execute();
+
       reflection->execute(gx.second, Sym<REAL>("P"), Sym<REAL>("V"),
                           Sym<REAL>("TSP"),
                           boundary_interaction->previous_position_sym);
+
+      particle_loop(
+          gx.second,
+          [=](auto V, auto U) {
+            const REAL V_mag =
+                V.at(0) * V.at(0) + V.at(1) * V.at(1) + V.at(2) * V.at(2);
+            const REAL U_mag =
+                U.at(0) * U.at(0) + U.at(1) * U.at(1) + U.at(2) * U.at(2);
+
+            NESO_KERNEL_ASSERT(Kernel::abs(V_mag - U_mag) < 1.0e-14, k_ep);
+
+            if ((Kernel::abs(V.at(0)) > 1.0e-14) &&
+                (Kernel::abs(V.at(1)) > 1.0e-14) &&
+                (Kernel::abs(V.at(2)) > 1.0e-14)) {
+              const bool x_flipped = Kernel::abs(V.at(0) + U.at(0)) < 1.0e-15;
+              const bool y_flipped = Kernel::abs(V.at(1) + U.at(1)) < 1.0e-15;
+              const bool z_flipped = Kernel::abs(V.at(2) + U.at(2)) < 1.0e-15;
+              if (x_flipped) {
+                NESO_KERNEL_ASSERT(Kernel::abs(V.at(1) - U.at(1)) < 1.0e-15,
+                                   k_ep);
+                NESO_KERNEL_ASSERT(Kernel::abs(V.at(2) - U.at(2)) < 1.0e-15,
+                                   k_ep);
+              }
+              if (y_flipped) {
+                NESO_KERNEL_ASSERT(Kernel::abs(V.at(0) - U.at(0)) < 1.0e-15,
+                                   k_ep);
+                NESO_KERNEL_ASSERT(Kernel::abs(V.at(2) - U.at(2)) < 1.0e-15,
+                                   k_ep);
+              }
+              if (z_flipped) {
+                NESO_KERNEL_ASSERT(Kernel::abs(V.at(0) - U.at(0)) < 1.0e-15,
+                                   k_ep);
+                NESO_KERNEL_ASSERT(Kernel::abs(V.at(1) - U.at(1)) < 1.0e-15,
+                                   k_ep);
+              }
+            }
+          },
+          Access::read(Sym<REAL>("V")), Access::write(Sym<REAL>("U")))
+          ->execute();
+      ASSERT_EQ(ep->get_flag(), 0);
     }
   };
 
@@ -746,79 +820,17 @@ TEST(PETScBoundary3D, reflection) {
     }
   };
 
-  H5Part h5part("trajectory.h5part", A, Sym<REAL>("V"));
+  // H5Part h5part("trajectory.h5part", A, Sym<REAL>("V"));
   for (int stepx = 0; stepx < Nsteps; stepx++) {
     lambda_apply_timestep(static_particle_sub_group(A));
     A->hybrid_move();
     A->cell_move();
-    h5part.write();
+    // h5part.write();
   }
-  h5part.close();
+  // h5part.close();
 
   boundary_interaction->free();
   sycl_target->free();
-  mesh->free();
-  PETSCCHK(DMDestroy(&dm));
-  PETSCCHK(PetscFinalize());
-}
-
-TEST(PETSc, foo) {
-  std::filesystem::path gmsh_filepath;
-  // GET_TEST_RESOURCE(gmsh_filepath,
-  // "gmsh/reference_all_types_square_0.2.msh");
-
-  nprint("TODO commit a mesh");
-  gmsh_filepath = get_env_string("GMSH_TMP", "");
-
-  PETSCCHK(PetscInitializeNoArguments());
-  DM dm;
-  PETSCCHK(DMPlexCreateGmshFromFile(MPI_COMM_WORLD,
-                                    gmsh_filepath.generic_string().c_str(),
-                                    (PetscBool)1, &dm));
-  PetscInterface::generic_distribute(&dm);
-
-  int rank = -1;
-  MPICHK(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
-
-  auto mesh =
-      std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
-
-  {
-    auto vtk_data = mesh->dmh->get_vtk_cell_data();
-
-    for (auto &element : vtk_data) {
-      const int num_vertices = element.points.size() / 3;
-      for (int vx = 0; vx < num_vertices; vx++) {
-        const REAL x = element.points.at(3 * vx + 0);
-        const REAL y = element.points.at(3 * vx + 1);
-        const REAL z = element.points.at(3 * vx + 2);
-        element.point_data["x"].push_back(x);
-        element.point_data["y"].push_back(y);
-        element.point_data["z"].push_back(z);
-      }
-      element.cell_data["rank"] = rank;
-    }
-
-    VTK::VTKHDF vtkhdf("foo.vtkhdf", MPI_COMM_WORLD);
-    vtkhdf.write(vtk_data);
-    vtkhdf.close();
-  }
-
-  nprint("BEFORE HALO VTK");
-
-  {
-    auto vtk_data = mesh->dmh_halo->get_vtk_cell_data();
-
-    for (auto &element : vtk_data) {
-      element.cell_data["rank"] = rank;
-    }
-
-    VTK::VTKHDF vtkhdf("foo_halo_" + std::to_string(rank) + ".vtkhdf",
-                       MPI_COMM_SELF);
-    vtkhdf.write(vtk_data);
-    vtkhdf.close();
-  }
-
   mesh->free();
   PETSCCHK(DMDestroy(&dm));
   PETSCCHK(PetscFinalize());
