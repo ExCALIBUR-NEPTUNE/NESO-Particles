@@ -98,6 +98,7 @@ set(SRC_FILES
     ${SRC_DIR}/containers/index_map.cpp
     ${SRC_DIR}/containers/local_array.cpp
     ${SRC_DIR}/containers/mask_array.cpp
+    ${SRC_DIR}/containers/particle_mask.cpp
     ${SRC_DIR}/containers/particle_set_device.cpp
     ${SRC_DIR}/containers/sym_vector.cpp
     ${SRC_DIR}/containers/sym_vector_pointer_cache.cpp
@@ -207,6 +208,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/lookup_table.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/nd_local_array.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/mask_array.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/containers/particle_mask.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/index_map.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/particle_set_device.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/product_matrix.hpp
