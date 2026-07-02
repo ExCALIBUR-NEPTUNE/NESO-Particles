@@ -111,6 +111,7 @@ set(SRC_FILES
     ${SRC_DIR}/global_mapping.cpp
     ${SRC_DIR}/parallel_initialisation.cpp
     ${SRC_DIR}/packing_unpacking.cpp
+    ${SRC_DIR}/particle_linear_index.cpp
     ${SRC_DIR}/pair_loop/cellwise_pair_list.cpp
     ${SRC_DIR}/pair_loop/cellwise_pair_list_simple.cpp
     ${SRC_DIR}/pair_loop/cellwise_pair_list_host.cpp
@@ -312,6 +313,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_group_pointer_map.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_group_temporary.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_io.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/particle_linear_index.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_remover.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_set.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_spec.hpp

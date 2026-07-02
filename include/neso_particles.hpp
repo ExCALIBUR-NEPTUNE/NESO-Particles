@@ -51,6 +51,7 @@
 #include "neso_particles/particle_group.hpp"
 #include "neso_particles/particle_group_temporary.hpp"
 #include "neso_particles/particle_io.hpp"
+#include "neso_particles/particle_linear_index.hpp"
 #include "neso_particles/particle_remover.hpp"
 #include "neso_particles/particle_set.hpp"
 #include "neso_particles/particle_spec.hpp"

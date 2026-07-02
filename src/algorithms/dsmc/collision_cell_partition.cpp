@@ -1,5 +1,6 @@
 #include <limits>
 #include <neso_particles/algorithms/dsmc/collision_cell_partition.hpp>
+#include <neso_particles/particle_linear_index.hpp>
 
 namespace NESO::Particles::DSMC {
 
@@ -180,6 +181,41 @@ void CollisionCellPartition::construct(
                   collision_cell_component);
 }
 
+namespace {
+
+struct ReplacementAA {
+  inline INT get_num_pairs(const INT num_particles_a, const INT) const {
+    constexpr int max_int = std::numeric_limits<int>::max();
+    // If A == B then we need at least two particles in the collision
+    // cell. Otherwise we need at least one of each type.
+    return num_particles_a >= 2 ? max_int : 0;
+  }
+};
+struct ReplacementAB {
+  inline INT get_num_pairs(const INT num_particles_a,
+                           const INT num_particles_b) const {
+    constexpr int max_int = std::numeric_limits<int>::max();
+    // If A == B then we need at least two particles in the collision
+    // cell. Otherwise we need at least one of each type.
+    return (num_particles_a >= 1) && (num_particles_b >= 1) ? max_int : 0;
+  }
+};
+
+struct NoReplacementAA {
+  inline INT get_num_pairs(const INT num_particles_a, const INT) const {
+    return num_particles_a / 2;
+  }
+};
+
+struct NoReplacementAB {
+  inline INT get_num_pairs(const INT num_particles_a,
+                           const INT num_particles_b) const {
+    return sycl::min(num_particles_a, num_particles_b);
+    ;
+  }
+};
+} // namespace
+
 void CollisionCellPartition::get_max_num_pairs(
     const INT species_id_a, const INT species_id_b, const bool replacement,
     std::vector<std::vector<int>> &map_cells_to_counts) {
@@ -206,74 +242,124 @@ void CollisionCellPartition::get_max_num_pairs(
       this->sycl_target->device_limits.validate_range_global(
           sycl::range<2>(k_cell_count, k_max_num_collision_cells));
 
+  const std::size_t local_size =
+      sycl_target->parameters->template get<SizeTParameter>("LOOP_LOCAL_SIZE")
+          ->value;
+
+  sycl::nd_range<3> iteration_set_mask =
+      this->sycl_target->device_limits.validate_nd_range(sycl::nd_range<3>(
+          sycl::range<3>(k_cell_count, k_max_num_collision_cells, local_size),
+          sycl::range<3>(1, 1, local_size)));
+
   const bool k_a_is_b = species_id_a == species_id_b;
   const auto k_map = this->get_device();
+  const bool k_masks_set = this->particle_mask != nullptr;
+  const MaskArrayDevice k_mask_array_device =
+      k_masks_set ? this->particle_mask->get_device() : MaskArrayDevice{};
+  const ParticleLinearIndexDevice k_particle_linear_index =
+      get_particle_linear_index_device(
+          get_particle_group(this->particle_sub_group));
+
+  auto lambda_get_num_pairs_event =
+      [&](auto pair_count_instance) -> sycl::event {
+    return sycl_target->queue.parallel_for(
+        iteration_set, [=](sycl::item<2> ix) {
+          const std::size_t cell_mesh = ix.get_id(0);
+          const std::size_t cell_collision = ix.get_id(1);
+
+          INT num_particles_a = 0;
+          INT num_particles_b = 0;
+
+          num_particles_a = k_map.get_num_particles_cell_species(
+              cell_mesh, cell_collision, linear_species_id_a);
+
+          if (!k_a_is_b) {
+            num_particles_b = k_map.get_num_particles_cell_species(
+                cell_mesh, cell_collision, linear_species_id_b);
+          }
+
+          const int num_pairs = pair_count_instance.get_num_pairs(
+              num_particles_a, num_particles_b);
+
+          k_counts[cell_mesh * k_max_num_collision_cells + cell_collision] =
+              num_pairs;
+        });
+  };
+
+  auto lambda_get_num_pairs_mask_event =
+      [&](auto pair_count_instance) -> sycl::event {
+    return this->sycl_target->queue.parallel_for(
+        iteration_set_mask, [=](sycl::nd_item<3> ix) {
+          const std::size_t cell_mesh = ix.get_global_id(0);
+          const std::size_t cell_collision = ix.get_global_id(1);
+          auto group = ix.get_group();
+          const std::size_t local_id = ix.get_local_linear_id();
+
+          auto lambda_get_num_particles = [&](const auto linear_species_id) {
+            const INT num_particles_unmasked =
+                k_map.get_num_particles_cell_species(cell_mesh, cell_collision,
+                                                     linear_species_id);
+
+            int count_local = 0;
+            for (std::size_t px = local_id; px < num_particles_unmasked;
+                 px += local_size) {
+              const auto layer = k_map.get_particle_layer(
+                  cell_mesh, cell_collision, linear_species_id, px);
+              const auto linear_index =
+                  k_particle_linear_index.get_local_linear_index(cell_mesh,
+                                                                 layer);
+              const bool mask = k_mask_array_device.get(linear_index, 0);
+              count_local += mask ? 1 : 0;
+            }
+
+            const int num_particles =
+                sycl::reduce_over_group(group, count_local, sycl::plus<int>{});
+
+            return num_particles;
+          };
+
+          const INT num_particles_a =
+              lambda_get_num_particles(linear_species_id_a);
+          INT num_particles_b = 0;
+          if (!k_a_is_b) {
+            num_particles_b = lambda_get_num_particles(linear_species_id_b);
+          }
+
+          const int num_pairs = pair_count_instance.get_num_pairs(
+              num_particles_a, num_particles_b);
+
+          k_counts[cell_mesh * k_max_num_collision_cells + cell_collision] =
+              num_pairs;
+        });
+  };
 
   if (replacement) {
     if (k_a_is_b) {
-      e0 = this->sycl_target->queue.parallel_for(
-          iteration_set, [=](sycl::item<2> ix) {
-            const std::size_t cell_mesh = ix.get_id(0);
-            const std::size_t cell_collision = ix.get_id(1);
-            constexpr int max_int = std::numeric_limits<int>::max();
-            const INT num_particles_a = k_map.get_num_particles_cell_species(
-                cell_mesh, cell_collision, linear_species_id_a);
-
-            // If A == B then we need at least two particles in the collision
-            // cell. Otherwise we need at least one of each type.
-            const int num_pairs = num_particles_a >= 2 ? max_int : 0;
-
-            k_counts[cell_mesh * k_max_num_collision_cells + cell_collision] =
-                num_pairs;
-          });
+      if (k_masks_set) {
+        e0 = lambda_get_num_pairs_mask_event(ReplacementAA{});
+      } else {
+        e0 = lambda_get_num_pairs_event(ReplacementAA{});
+      }
     } else {
-      e0 = this->sycl_target->queue.parallel_for(
-          iteration_set, [=](sycl::item<2> ix) {
-            const std::size_t cell_mesh = ix.get_id(0);
-            const std::size_t cell_collision = ix.get_id(1);
-            constexpr int max_int = std::numeric_limits<int>::max();
-
-            const INT num_particles_a = k_map.get_num_particles_cell_species(
-                cell_mesh, cell_collision, linear_species_id_a);
-            const INT num_particles_b = k_map.get_num_particles_cell_species(
-                cell_mesh, cell_collision, linear_species_id_b);
-
-            // If A == B then we need at least two particles in the collision
-            // cell. Otherwise we need at least one of each type.
-            const int num_pairs =
-                (num_particles_a >= 1) && (num_particles_b >= 1) ? max_int : 0;
-            k_counts[cell_mesh * k_max_num_collision_cells + cell_collision] =
-                num_pairs;
-          });
+      if (k_masks_set) {
+        e0 = lambda_get_num_pairs_mask_event(ReplacementAB{});
+      } else {
+        e0 = lambda_get_num_pairs_event(ReplacementAB{});
+      }
     }
   } else {
     if (k_a_is_b) {
-      e0 = this->sycl_target->queue.parallel_for(
-          iteration_set, [=](sycl::item<2> ix) {
-            const std::size_t cell_mesh = ix.get_id(0);
-            const std::size_t cell_collision = ix.get_id(1);
-            const INT num_particles_a = k_map.get_num_particles_cell_species(
-                cell_mesh, cell_collision, linear_species_id_a);
-            const int num_pairs = num_particles_a / 2;
-            k_counts[cell_mesh * k_max_num_collision_cells + cell_collision] =
-                num_pairs;
-          });
+      if (k_masks_set) {
+        e0 = lambda_get_num_pairs_mask_event(NoReplacementAA{});
+      } else {
+        e0 = lambda_get_num_pairs_event(NoReplacementAA{});
+      }
     } else {
-      e0 = this->sycl_target->queue.parallel_for(
-          iteration_set, [=](sycl::item<2> ix) {
-            const std::size_t cell_mesh = ix.get_id(0);
-            const std::size_t cell_collision = ix.get_id(1);
-
-            const INT num_particles_a = k_map.get_num_particles_cell_species(
-                cell_mesh, cell_collision, linear_species_id_a);
-            const INT num_particles_b = k_map.get_num_particles_cell_species(
-                cell_mesh, cell_collision, linear_species_id_b);
-
-            const int num_pairs = sycl::min(num_particles_a, num_particles_b);
-
-            k_counts[cell_mesh * k_max_num_collision_cells + cell_collision] =
-                num_pairs;
-          });
+      if (k_masks_set) {
+        e0 = lambda_get_num_pairs_mask_event(NoReplacementAB{});
+      } else {
+        e0 = lambda_get_num_pairs_event(NoReplacementAB{});
+      }
     }
   }
 
