@@ -2,11 +2,11 @@
 
 namespace NESO::Particles {
 
-CellwisePairListHost::CellwisePairListHost(const int cell_count)
-    : cell_count(cell_count) {}
+CellwisePairListHost::CellwisePairListHost(const int num_mesh_cells)
+    : num_mesh_cells(num_mesh_cells) {}
 
 void CellwisePairListHost::push_back(const int cell, const int i, const int j) {
-  NESOASSERT((0 <= cell) && (cell < this->cell_count), "Bad cell index.");
+  NESOASSERT((0 <= cell) && (cell < this->num_mesh_cells), "Bad cell index.");
   const int wave =
       std::max(this->get_next_wave(cell, i), this->get_next_wave(cell, j));
   const int oi = i < j ? i : j;
@@ -18,7 +18,7 @@ void CellwisePairListHost::push_back(const int cell, const int i, const int j) {
 }
 
 int CellwisePairListHost::get_next_wave(const int cell, const int layer) {
-  NESOASSERT((0 <= cell) && (cell < this->cell_count), "Bad cell index.");
+  NESOASSERT((0 <= cell) && (cell < this->num_mesh_cells), "Bad cell index.");
   if (this->map_particles_to_wave.count({cell, layer})) {
     return this->map_particles_to_wave[{cell, layer}];
   } else {
@@ -28,7 +28,7 @@ int CellwisePairListHost::get_next_wave(const int cell, const int layer) {
 
 void CellwisePairListHost::set_next_wave(const int cell, const int layer,
                                          const int wave) {
-  NESOASSERT((0 <= cell) && (cell < this->cell_count), "Bad cell index.");
+  NESOASSERT((0 <= cell) && (cell < this->num_mesh_cells), "Bad cell index.");
   NESOASSERT((0 <= wave) && (wave <= (this->map_wave_to_pairs[cell].size())),
              "Next wave cannot be set beyond the current max wave + 1.");
   this->map_particles_to_wave[{cell, layer}] = wave;

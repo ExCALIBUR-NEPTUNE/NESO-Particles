@@ -49,6 +49,7 @@ set(SRC_FILES
     ${SRC_DIR}/algorithms/common.cpp
     ${SRC_DIR}/algorithms/dsmc/pair_sampler_ntc.cpp
     ${SRC_DIR}/algorithms/dsmc/pair_sampler_no_replacement.cpp
+    ${SRC_DIR}/algorithms/dsmc/collision_cell_num_pairs.cpp
     ${SRC_DIR}/algorithms/dsmc/collision_cell_partition.cpp
     ${SRC_DIR}/algorithms/particle_data_movement.cpp
     ${SRC_DIR}/algorithms/subdivide_cells_voronoi.cpp
@@ -157,6 +158,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/common.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/dsmc.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/cellwise_all_to_all.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/collision_cell_num_pairs.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/collision_cell_partition.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/pair_sampler_ntc.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/pair_sampler_no_replacement.hpp

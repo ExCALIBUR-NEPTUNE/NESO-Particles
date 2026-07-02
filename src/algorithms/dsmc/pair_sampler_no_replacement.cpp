@@ -3,36 +3,36 @@
 namespace NESO::Particles::DSMC {
 
 PairSamplerNoReplacement::PairSamplerNoReplacement(
-    SYCLTargetSharedPtr sycl_target, const int cell_count,
+    SYCLTargetSharedPtr sycl_target, const int num_mesh_cells,
     std::shared_ptr<RNGGenerationFunction<REAL>> rng_generation_function)
-    : sycl_target(sycl_target), cell_count(cell_count),
+    : sycl_target(sycl_target), num_mesh_cells(num_mesh_cells),
       rng_generation_function(rng_generation_function) {
 
-  this->d_pair_list =
-      std::make_unique<CellDat<int>>(this->sycl_target, this->cell_count, 2);
+  this->d_pair_list = std::make_unique<CellDat<int>>(this->sycl_target,
+                                                     this->num_mesh_cells, 2);
 
-  this->h_wave_count.resize(this->cell_count);
+  this->h_wave_count.resize(this->num_mesh_cells);
   std::fill(this->h_wave_count.begin(), this->h_wave_count.end(), 1);
   this->d_wave_count =
       std::make_unique<BufferDevice<int>>(sycl_target, this->h_wave_count);
 
   this->d_wave_offsets =
-      std::make_unique<BufferDevice<int>>(sycl_target, this->cell_count);
+      std::make_unique<BufferDevice<int>>(sycl_target, this->num_mesh_cells);
   this->sycl_target->queue
-      .fill<int>(this->d_wave_offsets->ptr, 0, this->cell_count)
+      .fill<int>(this->d_wave_offsets->ptr, 0, this->num_mesh_cells)
       .wait_and_throw();
 
-  this->h_pair_counts.resize(this->cell_count);
-  this->d_pair_counts =
-      std::make_unique<BufferDevice<int>>(this->sycl_target, this->cell_count);
+  this->h_pair_counts.resize(this->num_mesh_cells);
+  this->d_pair_counts = std::make_unique<BufferDevice<int>>(
+      this->sycl_target, this->num_mesh_cells);
 
-  this->h_pair_counts_es.resize(this->cell_count);
-  this->d_pair_counts_es =
-      std::make_unique<BufferDevice<INT>>(this->sycl_target, this->cell_count);
+  this->h_pair_counts_es.resize(this->num_mesh_cells);
+  this->d_pair_counts_es = std::make_unique<BufferDevice<INT>>(
+      this->sycl_target, this->num_mesh_cells);
 
-  this->h_num_collision_cells.resize(this->cell_count);
-  this->d_num_collision_cells =
-      std::make_unique<BufferDevice<int>>(this->sycl_target, this->cell_count);
+  this->h_num_collision_cells.resize(this->num_mesh_cells);
+  this->d_num_collision_cells = std::make_unique<BufferDevice<int>>(
+      this->sycl_target, this->num_mesh_cells);
 
   this->d_max_pair_count =
       std::make_unique<BufferDevice<INT>>(this->sycl_target, 1);
@@ -43,7 +43,7 @@ PairSamplerNoReplacement::PairSamplerNoReplacement(
 void PairSamplerNoReplacement::sample(
     CollisionCellPartitionSharedPtr collision_cell_partition,
     const INT species_id_a, const INT species_id_b,
-    const std::vector<std::vector<int>> &map_cells_to_counts) {
+    const std::vector<std::vector<int>> &map_cells_to_num_pairs) {
 
   auto r0 = this->sycl_target->profile_map.start_region(
       "PairSamplerNoReplacement", "sample");
@@ -53,7 +53,7 @@ void PairSamplerNoReplacement::sample(
   const int linear_species_id_b =
       collision_cell_partition->get_linear_species_id(species_id_b);
 
-  NESOASSERT(this->cell_count == collision_cell_partition->cell_count,
+  NESOASSERT(this->num_mesh_cells == collision_cell_partition->num_mesh_cells,
              "Cell count missmatch.");
 
   const INT max_num_collision_cells =
@@ -64,7 +64,7 @@ void PairSamplerNoReplacement::sample(
           sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<int>{},
           sycl_target);
   d_pair_counts_ccell->realloc_no_copy(max_num_collision_cells *
-                                       this->cell_count);
+                                       this->num_mesh_cells);
   auto k_pair_counts_ccell = d_pair_counts_ccell->ptr;
 
   auto d_pair_counts_ccell_es =
@@ -72,18 +72,18 @@ void PairSamplerNoReplacement::sample(
           sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<int>{},
           sycl_target);
   d_pair_counts_ccell_es->realloc_no_copy(max_num_collision_cells *
-                                          this->cell_count);
+                                          this->num_mesh_cells);
   auto k_pair_counts_ccell_es = d_pair_counts_ccell_es->ptr;
 
   EventStack es;
-  for (INT mx = 0; mx < this->cell_count; mx++) {
-    const auto num_collision_cells = map_cells_to_counts.at(mx).size();
+  for (INT mx = 0; mx < this->num_mesh_cells; mx++) {
+    const auto num_collision_cells = map_cells_to_num_pairs.at(mx).size();
     NESOASSERT(num_collision_cells <= max_num_collision_cells,
                "More cell counts than collision cells passed.");
 
     es.push(this->sycl_target->queue.memcpy(
         k_pair_counts_ccell + mx * max_num_collision_cells,
-        map_cells_to_counts[mx].data(), num_collision_cells * sizeof(int)));
+        map_cells_to_num_pairs[mx].data(), num_collision_cells * sizeof(int)));
 
     this->h_num_collision_cells.at(mx) = static_cast<int>(num_collision_cells);
   }
@@ -91,13 +91,13 @@ void PairSamplerNoReplacement::sample(
   auto k_num_collision_cells = this->d_num_collision_cells->ptr;
   es.push(this->sycl_target->queue.memcpy(k_num_collision_cells,
                                           this->h_num_collision_cells.data(),
-                                          this->cell_count * sizeof(int)));
+                                          this->num_mesh_cells * sizeof(int)));
 
   auto d_counts =
       get_resource<BufferDevice<INT>, ResourceStackInterfaceBufferDevice<INT>>(
           sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<INT>{},
           sycl_target);
-  d_counts->realloc_no_copy(this->cell_count);
+  d_counts->realloc_no_copy(this->num_mesh_cells);
   INT *k_counts = d_counts->ptr;
 
   es.wait();
@@ -111,9 +111,9 @@ void PairSamplerNoReplacement::sample(
 
   this->sycl_target->queue
       .parallel_for(
-          this->sycl_target->device_limits.validate_nd_range(
-              sycl::nd_range<2>(sycl::range<2>(this->cell_count, local_size),
-                                sycl::range<2>(1, local_size))),
+          this->sycl_target->device_limits.validate_nd_range(sycl::nd_range<2>(
+              sycl::range<2>(this->num_mesh_cells, local_size),
+              sycl::range<2>(1, local_size))),
           [=](sycl::nd_item<2> ix) {
             const std::size_t mesh_cell = ix.get_global_id(0);
             const std::size_t local_id = ix.get_global_id(1);
@@ -139,28 +139,28 @@ void PairSamplerNoReplacement::sample(
   auto k_pair_counts = this->d_pair_counts->ptr;
 
   auto e1 = this->sycl_target->queue.parallel_for(
-      sycl::range<1>(this->cell_count),
+      sycl::range<1>(this->num_mesh_cells),
       [=](auto ix) { k_pair_counts[ix] = static_cast<int>(k_counts[ix]); });
   auto e3 =
       this->sycl_target->queue.memcpy(this->h_pair_counts.data(), k_pair_counts,
-                                      this->cell_count * sizeof(int), e1);
+                                      this->num_mesh_cells * sizeof(int), e1);
 
   e1.wait_and_throw();
   e3.wait_and_throw();
 
-  joint_exclusive_scan_blocking(this->sycl_target, this->cell_count, k_counts,
-                                k_pair_counts_es);
+  joint_exclusive_scan_blocking(this->sycl_target, this->num_mesh_cells,
+                                k_counts, k_pair_counts_es);
   auto e2 = this->sycl_target->queue.memcpy(this->h_pair_counts_es.data(),
                                             k_pair_counts_es,
-                                            this->cell_count * sizeof(INT));
+                                            this->num_mesh_cells * sizeof(INT));
 
   // We need the exscan of the pairs in each collision cell (mesh cell wise)
   // such that we can sample pairs with work items per collision cell.
-  auto e4 = joint_exclusive_scan_n(this->sycl_target, this->cell_count,
+  auto e4 = joint_exclusive_scan_n(this->sycl_target, this->num_mesh_cells,
                                    max_num_collision_cells, k_pair_counts_ccell,
                                    k_pair_counts_ccell_es);
 
-  auto e7 = reduce_values(this->sycl_target, this->cell_count, k_counts,
+  auto e7 = reduce_values(this->sycl_target, this->num_mesh_cells, k_counts,
                           sycl::maximum<INT>{}, this->d_max_pair_count->ptr);
 
   INT max_pair_count = 0;
@@ -168,13 +168,13 @@ void PairSamplerNoReplacement::sample(
   INT last_count_es = 0;
 
   auto e5 = this->sycl_target->queue.memcpy(
-      &last_count, k_counts + this->cell_count - 1, sizeof(INT));
+      &last_count, k_counts + this->num_mesh_cells - 1, sizeof(INT));
   auto e6 = this->sycl_target->queue.memcpy(
-      &last_count_es, k_pair_counts_es + this->cell_count - 1, sizeof(INT));
+      &last_count_es, k_pair_counts_es + this->num_mesh_cells - 1, sizeof(INT));
   auto e8 = this->sycl_target->queue.memcpy(
       &max_pair_count, this->d_max_pair_count->ptr, sizeof(INT), e7);
 
-  for (int cx = 0; cx < this->cell_count; cx++) {
+  for (int cx = 0; cx < this->num_mesh_cells; cx++) {
     const auto current_size = static_cast<int>(this->d_pair_list->nrow[cx]);
     const auto required_size = this->h_pair_counts[cx];
     if (required_size > current_size) {
@@ -220,7 +220,7 @@ void PairSamplerNoReplacement::sample(
 
   sycl::nd_range<2> iteration_set(
       sycl::range<2>(
-          this->cell_count,
+          this->num_mesh_cells,
           get_next_multiple(max_num_collision_cells, local_size_sample)),
       sycl::range<2>(1, local_size_sample));
 
@@ -357,7 +357,7 @@ void PairSamplerNoReplacement::sample(
 
   this->d_pair_list_device = {this->h_wave_count.data(),
                               this->d_wave_count->ptr,
-                              this->cell_count,
+                              this->num_mesh_cells,
                               this->d_wave_offsets->ptr,
                               this->d_pair_list->device_ptr(),
                               this->d_pair_counts->ptr,
@@ -378,13 +378,13 @@ CellwisePairListDevice PairSamplerNoReplacement::get_pair_list() {
 CellwisePairListHostMap PairSamplerNoReplacement::get_host_pair_list() {
   CellwisePairListHostMap l;
 
-  for (int cx = 0; cx < this->cell_count; cx++) {
+  for (int cx = 0; cx < this->num_mesh_cells; cx++) {
     auto pairs = this->d_pair_list->get_cell(cx);
 
     const int wave_count = this->h_wave_count.at(cx);
     int index = 0;
     for (int wavex = 0; wavex < wave_count; wavex++) {
-      const auto pair_count = this->h_pair_counts[wavex * cell_count + cx];
+      const auto pair_count = this->h_pair_counts[wavex * num_mesh_cells + cx];
       for (int px = 0; px < pair_count; px++) {
         l[cx][wavex].first.push_back(pairs->at(index, 0));
         l[cx][wavex].second.push_back(pairs->at(index, 1));

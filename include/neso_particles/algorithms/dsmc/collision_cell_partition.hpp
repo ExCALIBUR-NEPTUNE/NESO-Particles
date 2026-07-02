@@ -19,7 +19,7 @@ struct CollisionCellPartitionDevice {
   BlockedBinaryNode<INT, INT, NESO_PARTICLES_BLOCKED_BINARY_TREE_WIDTH>
       *d_species_map_root{nullptr};
 
-  INT mesh_cell_count{0};
+  INT num_mesh_cells{0};
   INT max_num_collision_cells{0};
   INT max_num_species{0};
   int const *d_map_entries;
@@ -119,7 +119,7 @@ public:
   SYCLTargetSharedPtr sycl_target;
 
   // Number of mesh cells
-  int cell_count{0};
+  int num_mesh_cells{0};
 
   // The ParticleSubGroup from the last construct.
   ParticleSubGroupSharedPtr particle_sub_group;
@@ -128,7 +128,7 @@ public:
   std::vector<INT> species_ids;
 
   // Current number of collision cells for each mesh cell.
-  std::vector<int> collision_cell_counts;
+  std::vector<int> num_collision_cells;
 
   // Maximum number of collision cells over all mesh cells.
   INT max_num_collision_cells{0};
@@ -142,12 +142,13 @@ public:
    * into mesh cells then DSMC collision cells.
    *
    * @param sycl_target SYCLTarget to use.
-   * @param cell_count Number of local mesh cells (not the number of collision
-   * cells).
+   * @param num_mesh_cells Number of local mesh cells (not the number of
+   * collision cells).
    * @param species_ids Vector containing all permissible species IDs that could
    * be encountered.
    */
-  CollisionCellPartition(SYCLTargetSharedPtr sycl_target, const int cell_count,
+  CollisionCellPartition(SYCLTargetSharedPtr sycl_target,
+                         const int num_mesh_cells,
                          std::vector<INT> species_ids);
 
   /**
@@ -157,7 +158,7 @@ public:
    *
    * @param particle_sub_group The set of particles which are partitioned into
    * species and dsmc cells.
-   * @param collision_cell_counts Vector of length cell_count containing the
+   * @param num_collision_cells Vector of length num_mesh_cells containing the
    * number of collision cells in each mesh cell.
    * @param species_id_sym Sym describing which ParticleDat contains the species
    * ID.
@@ -169,7 +170,7 @@ public:
    * contains the collision cell ID.
    */
   void construct(ParticleSubGroupSharedPtr particle_sub_group,
-                 const std::vector<int> &collision_cell_counts,
+                 const std::vector<int> &num_collision_cells,
                  Sym<INT> species_id_sym, const int species_id_component,
                  Sym<INT> collision_cell_sym,
                  const int collision_cell_component);
@@ -185,7 +186,7 @@ public:
    * species and dsmc cells.
    * @param particle_mask Particle masks that indicate if a particle is
    * available.
-   * @param collision_cell_counts Vector of length cell_count containing the
+   * @param num_collision_cells Vector of length num_mesh_cells containing the
    * number of collision cells in each mesh cell.
    * @param species_id_sym Sym describing which ParticleDat contains the species
    * ID.
@@ -198,7 +199,7 @@ public:
    */
   void construct(ParticleSubGroupSharedPtr particle_sub_group,
                  ParticleMaskSharedPtr particle_mask,
-                 const std::vector<int> &collision_cell_counts,
+                 const std::vector<int> &num_collision_cells,
                  Sym<INT> species_id_sym, const int species_id_component,
                  Sym<INT> collision_cell_sym,
                  const int collision_cell_component);
@@ -215,13 +216,13 @@ public:
    * @param[in] species_id_b Species ID of B.
    * @param[in] replacement Indicate if pairs are chosen with (true) or without
    * replacement (false).
-   * @param[in, out] map_cells_to_counts Output map from [mesh cell][collision
+   * @param[in, out] map_cell_to_num_pairs Output map from [mesh cell][collision
    * cell] to maximum number of pairs that can be formed. The passed argument
    * will be resized as needed.
    */
   void get_max_num_pairs(const INT species_id_a, const INT species_id_b,
                          const bool replacement,
-                         std::vector<std::vector<int>> &map_cells_to_counts);
+                         std::vector<std::vector<int>> &map_cell_to_num_pairs);
 
   /**
    * @param species_id Species ID as stored on particles.

@@ -40,16 +40,16 @@ public:
   virtual ~PairSamplerNTC() = default;
 
   SYCLTargetSharedPtr sycl_target{nullptr};
-  int cell_count{0};
+  int num_mesh_cells{0};
   std::shared_ptr<RNGGenerationFunction<REAL>> rng_generation_function{nullptr};
 
   PairSamplerNTC(
-      SYCLTargetSharedPtr sycl_target, const int cell_count,
+      SYCLTargetSharedPtr sycl_target, const int num_mesh_cells,
       std::shared_ptr<RNGGenerationFunction<REAL>> rng_generation_function);
 
   void sample(ParticleSubGroupSharedPtr sub_group_a,
               ParticleSubGroupSharedPtr sub_group_b,
-              std::vector<int> &new_sample_counts);
+              std::vector<int> &new_num_pairs);
 
   virtual CellwisePairListBlockDevice get_pair_list() override;
 };

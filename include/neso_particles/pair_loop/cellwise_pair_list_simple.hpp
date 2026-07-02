@@ -41,7 +41,7 @@ public:
   /// Compute device holding pairs.
   SYCLTargetSharedPtr sycl_target;
   /// Number of cells to hold pairs for.
-  int cell_count{0};
+  int num_mesh_cells{0};
 
   /// Disable (implicit) copies.
   CellwisePairListSimple(const CellwisePairListSimple &st) = delete;
@@ -51,9 +51,10 @@ public:
 
   /**
    * @param sycl_target Compute device for pairs.
-   * @param cell_count Number of cells to hold pairs for.
+   * @param num_mesh_cells Number of cells to hold pairs for.
    */
-  CellwisePairListSimple(SYCLTargetSharedPtr sycl_target, const int cell_count);
+  CellwisePairListSimple(SYCLTargetSharedPtr sycl_target,
+                         const int num_mesh_cells);
 
   /**
    * Host callable utility method to push pairs (i,j) onto the cell list for

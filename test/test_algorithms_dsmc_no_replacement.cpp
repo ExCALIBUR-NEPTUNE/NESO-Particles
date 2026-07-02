@@ -62,7 +62,7 @@ TEST(DSMCCollisionCells, collision_cell_partition) {
 
   auto d_collision_cell_partition = collision_cell_partition->get_device();
 
-  ASSERT_EQ(d_collision_cell_partition.mesh_cell_count, cell_count);
+  ASSERT_EQ(d_collision_cell_partition.num_mesh_cells, cell_count);
   ASSERT_EQ(d_collision_cell_partition.max_num_collision_cells, 7);
   ASSERT_EQ(d_collision_cell_partition.max_num_species, 2);
 

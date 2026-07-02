@@ -50,7 +50,7 @@ public:
   SYCLTargetSharedPtr sycl_target;
 
   // Number of mesh cells
-  int cell_count{0};
+  int num_mesh_cells{0};
 
   // RNG Generation function.
   std::shared_ptr<RNGGenerationFunction<REAL>> rng_generation_function;
@@ -59,11 +59,11 @@ public:
    * Create a sampler for a given compute target and mesh cell count.
    *
    * @param sycl_target Compute device to use.
-   * @param cell_count Mesh cell count.
+   * @param num_mesh_cells Mesh cell count.
    * @param rng_generation_function Source of random samples.
    */
   PairSamplerNoReplacement(
-      SYCLTargetSharedPtr sycl_target, const int cell_count,
+      SYCLTargetSharedPtr sycl_target, const int num_mesh_cells,
       std::shared_ptr<RNGGenerationFunction<REAL>> rng_generation_function);
 
   /**
@@ -73,12 +73,12 @@ public:
    * within those collision cells.
    * @param species_id_a First species ID.
    * @param species_id_b Second species ID.
-   * @param map_cells_to_counts Map from mesh cell to counts for each collision
-   * cell.
+   * @param map_cells_to_num_pairs Map from mesh cell to counts for each
+   * collision cell.
    */
   void sample(CollisionCellPartitionSharedPtr collision_cell_partition,
               const INT species_id_a, const INT species_id_b,
-              const std::vector<std::vector<int>> &map_cells_to_counts);
+              const std::vector<std::vector<int>> &map_cells_to_num_pairs);
 
   /**
    * Get a description of the pair list accessible on the device.

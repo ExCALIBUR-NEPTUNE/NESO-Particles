@@ -5,11 +5,12 @@
 namespace NESO::Particles::DSMC {
 
 CollisionCellPartition::CollisionCellPartition(SYCLTargetSharedPtr sycl_target,
-                                               const int cell_count,
+                                               const int num_mesh_cells,
                                                std::vector<INT> species_ids)
-    : sycl_target(sycl_target), cell_count(cell_count) {
+    : sycl_target(sycl_target), num_mesh_cells(num_mesh_cells) {
 
-  NESOASSERT(cell_count > 0, "Bad cell count: " + std::to_string(cell_count));
+  NESOASSERT(num_mesh_cells > 0,
+             "Bad cell count: " + std::to_string(num_mesh_cells));
 
   this->h_map_species_id_linear_id =
       std::make_unique<BlockedBinaryTree<INT, INT>>(this->sycl_target);
@@ -35,34 +36,34 @@ CollisionCellPartition::CollisionCellPartition(SYCLTargetSharedPtr sycl_target,
     this->num_species = index;
   }
 
-  this->collision_cell_counts.resize(this->cell_count);
+  this->num_collision_cells.resize(this->num_mesh_cells);
 }
 
 void CollisionCellPartition::construct(
     ParticleSubGroupSharedPtr particle_sub_group,
-    const std::vector<int> &collision_cell_counts, Sym<INT> species_id_sym,
+    const std::vector<int> &num_collision_cells, Sym<INT> species_id_sym,
     const int species_id_component, Sym<INT> collision_cell_sym,
     const int collision_cell_component) {
 
   auto r0 = this->sycl_target->profile_map.start_region(
       "CollisionCellPartition", "construct");
 
-  NESOASSERT(collision_cell_counts.size() >= this->cell_count,
-             "collision_cell_counts vector is too small.");
+  NESOASSERT(num_collision_cells.size() >= this->num_mesh_cells,
+             "num_collision_cells vector is too small.");
 
   this->particle_sub_group = particle_sub_group;
 
   // These two loops could be on device if needed.
-  std::copy(collision_cell_counts.begin(),
-            collision_cell_counts.begin() + this->cell_count,
-            this->collision_cell_counts.begin());
+  std::copy(num_collision_cells.begin(),
+            num_collision_cells.begin() + this->num_mesh_cells,
+            this->num_collision_cells.begin());
   const int max_num_collision_cells = *std::max_element(
-      this->collision_cell_counts.begin(), this->collision_cell_counts.end());
+      this->num_collision_cells.begin(), this->num_collision_cells.end());
   this->max_num_collision_cells = max_num_collision_cells;
 
   const INT layer_matrix_total_size =
       static_cast<INT>(max_num_collision_cells) *
-      static_cast<INT>(this->cell_count) * this->num_species;
+      static_cast<INT>(this->num_mesh_cells) * this->num_species;
 
   auto d_cell_counts =
       get_resource<BufferDevice<INT>, ResourceStackInterfaceBufferDevice<INT>>(
@@ -172,11 +173,11 @@ void CollisionCellPartition::construct(
 void CollisionCellPartition::construct(
     ParticleSubGroupSharedPtr particle_sub_group,
     ParticleMaskSharedPtr particle_mask,
-    const std::vector<int> &collision_cell_counts, Sym<INT> species_id_sym,
+    const std::vector<int> &num_collision_cells, Sym<INT> species_id_sym,
     const int species_id_component, Sym<INT> collision_cell_sym,
     const int collision_cell_component) {
   this->particle_mask = particle_mask;
-  this->construct(particle_sub_group, collision_cell_counts, species_id_sym,
+  this->construct(particle_sub_group, num_collision_cells, species_id_sym,
                   species_id_component, collision_cell_sym,
                   collision_cell_component);
 }
@@ -213,7 +214,7 @@ struct NoReplacementPairCounter {
 
 void CollisionCellPartition::get_max_num_pairs(
     const INT species_id_a, const INT species_id_b, const bool replacement,
-    std::vector<std::vector<int>> &map_cells_to_counts) {
+    std::vector<std::vector<int>> &map_cell_to_num_pairs) {
 
   auto r0 = this->sycl_target->profile_map.start_region(
       "CollisionCellPartition", "get_max_num_pairs");
@@ -222,7 +223,7 @@ void CollisionCellPartition::get_max_num_pairs(
   const INT linear_species_id_b = this->get_linear_species_id(species_id_b);
 
   const auto k_max_num_collision_cells = this->max_num_collision_cells;
-  const auto k_cell_count = this->cell_count;
+  const auto k_cell_count = this->num_mesh_cells;
 
   auto d_counts =
       get_resource<BufferDevice<int>, ResourceStackInterfaceBufferDevice<int>>(
@@ -395,19 +396,19 @@ void CollisionCellPartition::get_max_num_pairs(
     }
   }
 
-  map_cells_to_counts.resize(k_cell_count);
+  map_cell_to_num_pairs.resize(k_cell_count);
   for (int cellx = 0; cellx < k_cell_count; cellx++) {
-    const auto num_collision_cells = this->collision_cell_counts.at(cellx);
-    map_cells_to_counts.at(cellx).resize(num_collision_cells);
+    const auto num_collision_cells = this->num_collision_cells.at(cellx);
+    map_cell_to_num_pairs.at(cellx).resize(num_collision_cells);
   }
 
   e0.wait_and_throw();
 
   EventStack es;
   for (int cellx = 0; cellx < k_cell_count; cellx++) {
-    const auto num_collision_cells = this->collision_cell_counts.at(cellx);
+    const auto num_collision_cells = this->num_collision_cells.at(cellx);
     es.push(this->sycl_target->queue.memcpy(
-        map_cells_to_counts.at(cellx).data(),
+        map_cell_to_num_pairs.at(cellx).data(),
         k_counts + cellx * k_max_num_collision_cells,
         num_collision_cells * sizeof(int)));
   }
@@ -433,7 +434,7 @@ CollisionCellPartitionDevice CollisionCellPartition::get_device() {
 
   return {this->d_collision_cell_offsets->ptr,
           this->h_map_species_id_linear_id->root,
-          this->cell_count,
+          this->num_mesh_cells,
           this->max_num_collision_cells,
           this->num_species,
           this->d_map_entries->ptr};
