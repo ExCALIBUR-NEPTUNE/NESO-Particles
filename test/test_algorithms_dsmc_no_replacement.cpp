@@ -8,9 +8,12 @@ TEST(DSMCCollisionCells, collision_cell_partition) {
   const int ny = 33;
   const int nz = 48;
 
-  auto [A, sycl_target, cell_count] =
+  auto [A, sycl_target, cell_count_t] =
       particle_loop_create_common(npart_cell, ndim, nx, ny, nz);
+  const auto cell_count = cell_count_t;
+
   A->add_particle_dat(Sym<INT>("SPECIES_ID"), 1);
+  A->add_particle_dat(Sym<INT>("MASK"), 1);
   A->add_particle_dat(Sym<INT>("COLLISION_CELL"), 1);
 
   const int rank = sycl_target->comm_pair.rank_parent;
@@ -30,13 +33,16 @@ TEST(DSMCCollisionCells, collision_cell_partition) {
 
   particle_loop(
       A,
-      [=](auto INDEX, auto SPECIES_ID, auto COLLISION_CELL, auto RNG) {
+      [=](auto INDEX, auto SPECIES_ID, auto COLLISION_CELL, auto RNG,
+          auto MASK) {
         SPECIES_ID.at(0) =
             RNG.at(INDEX, 0) < 0.8 ? species_id_offset : species_id_offset + 1;
         COLLISION_CELL.at(0) = INDEX.layer % num_collision_cells;
+        MASK.at(0) = 0.5 < RNG.at(INDEX, 1) ? 0 : 1;
       },
       Access::read(ParticleLoopIndex{}), Access::write(Sym<INT>("SPECIES_ID")),
-      Access::write(Sym<INT>("COLLISION_CELL")), Access::read(rng_kernel))
+      Access::write(Sym<INT>("COLLISION_CELL")), Access::read(rng_kernel),
+      Access::write(Sym<INT>("MASK")))
       ->execute();
 
   std::vector<INT> species_ids(num_species);
@@ -63,6 +69,9 @@ TEST(DSMCCollisionCells, collision_cell_partition) {
   auto cdc_counts = std::make_shared<CellDatConst<int>>(
       sycl_target, cell_count, num_collision_cells, num_species);
   cdc_counts->fill(0);
+  auto cdc_counts_masked = std::make_shared<CellDatConst<int>>(
+      sycl_target, cell_count, num_collision_cells, num_species);
+  cdc_counts_masked->fill(0);
 
   particle_loop(
       aa,
@@ -73,6 +82,17 @@ TEST(DSMCCollisionCells, collision_cell_partition) {
       Access::read(Sym<INT>("SPECIES_ID")),
       Access::read(Sym<INT>("COLLISION_CELL")),
       Access::reduce(cdc_counts, Kernel::plus<int>()))
+      ->execute();
+
+  particle_loop(
+      aa,
+      [=](auto SPECIES_ID, auto MASK, auto COLLISION_CELL, auto CDC_COUNTS) {
+        CDC_COUNTS.combine(COLLISION_CELL.at(0),
+                           SPECIES_ID.at(0) - species_id_offset, MASK.at(0));
+      },
+      Access::read(Sym<INT>("SPECIES_ID")), Access::read(Sym<INT>("MASK")),
+      Access::read(Sym<INT>("COLLISION_CELL")),
+      Access::reduce(cdc_counts_masked, Kernel::plus<int>()))
       ->execute();
 
   ErrorPropagate ep(sycl_target);
@@ -114,99 +134,129 @@ TEST(DSMCCollisionCells, collision_cell_partition) {
 
   ASSERT_FALSE(ep.get_flag());
 
-  auto h_counts = cdc_counts->get_all_cells();
-
-  std::map<int, std::map<int, int>> correct_num_collisions_no_replacement00;
-  std::map<int, std::map<int, int>> correct_num_collisions_no_replacement01;
-  std::map<int, std::map<int, int>> correct_num_collisions_no_replacement11;
-  std::map<int, std::map<int, int>> correct_num_collisions_replacement00;
-  std::map<int, std::map<int, int>> correct_num_collisions_replacement01;
-  std::map<int, std::map<int, int>> correct_num_collisions_replacement11;
-
   int correct_max = 0;
-  for (int cellx = 0; cellx < cell_count; cellx++) {
-    for (int rx = 0; rx < num_collision_cells; rx++) {
-      for (int cx = 0; cx < num_species; cx++) {
-        correct_max = std::max(correct_max, h_counts.at(cellx)->at(rx, cx));
+
+  auto lambda_set_correct_max = [&](auto &h_counts) {
+    std::map<int, std::map<int, int>> correct_num_collisions_no_replacement00;
+    std::map<int, std::map<int, int>> correct_num_collisions_no_replacement01;
+    std::map<int, std::map<int, int>> correct_num_collisions_no_replacement11;
+    std::map<int, std::map<int, int>> correct_num_collisions_replacement00;
+    std::map<int, std::map<int, int>> correct_num_collisions_replacement01;
+    std::map<int, std::map<int, int>> correct_num_collisions_replacement11;
+
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      for (int rx = 0; rx < num_collision_cells; rx++) {
+        for (int cx = 0; cx < num_species; cx++) {
+          correct_max = std::max(correct_max, h_counts.at(cellx)->at(rx, cx));
+        }
       }
+    }
+  };
 
-      const int npart0 = h_counts.at(cellx)->at(rx, 0);
-      const int npart1 = h_counts.at(cellx)->at(rx, 1);
+  auto lambda_test_num_pairs = [&](auto &h_counts) {
+    std::map<int, std::map<int, int>> correct_num_collisions_no_replacement00;
+    std::map<int, std::map<int, int>> correct_num_collisions_no_replacement01;
+    std::map<int, std::map<int, int>> correct_num_collisions_no_replacement11;
+    std::map<int, std::map<int, int>> correct_num_collisions_replacement00;
+    std::map<int, std::map<int, int>> correct_num_collisions_replacement01;
+    std::map<int, std::map<int, int>> correct_num_collisions_replacement11;
 
-      correct_num_collisions_no_replacement00[cellx][rx] = npart0 / 2;
-      correct_num_collisions_no_replacement01[cellx][rx] =
-          std::min(npart0, npart1);
-      correct_num_collisions_no_replacement11[cellx][rx] = npart1 / 2;
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      for (int rx = 0; rx < num_collision_cells; rx++) {
 
-      constexpr int max_int = std::numeric_limits<int>::max();
-      correct_num_collisions_replacement00[cellx][rx] =
-          (npart0 > 1) ? max_int : 0;
-      correct_num_collisions_replacement01[cellx][rx] =
-          (npart0 > 0) && (npart1 > 0) ? max_int : 0;
-      correct_num_collisions_replacement11[cellx][rx] =
-          (npart1 > 1) ? max_int : 0;
-    }
-  }
+        const int npart0 = h_counts.at(cellx)->at(rx, 0);
+        const int npart1 = h_counts.at(cellx)->at(rx, 1);
 
-  std::vector<std::vector<int>> to_test_num_collisions;
-  collision_cell_partition->get_max_num_pairs(0 + species_id_offset,
-                                              0 + species_id_offset, false,
-                                              to_test_num_collisions);
-  for (int cellx = 0; cellx < cell_count; cellx++) {
-    for (int rx = 0; rx < num_collision_cells; rx++) {
-      ASSERT_EQ(to_test_num_collisions.at(cellx).at(rx),
-                correct_num_collisions_no_replacement00.at(cellx).at(rx));
-    }
-  }
-  collision_cell_partition->get_max_num_pairs(0 + species_id_offset,
-                                              1 + species_id_offset, false,
-                                              to_test_num_collisions);
-  for (int cellx = 0; cellx < cell_count; cellx++) {
-    for (int rx = 0; rx < num_collision_cells; rx++) {
-      ASSERT_EQ(to_test_num_collisions.at(cellx).at(rx),
-                correct_num_collisions_no_replacement01.at(cellx).at(rx));
-    }
-  }
-  collision_cell_partition->get_max_num_pairs(1 + species_id_offset,
-                                              1 + species_id_offset, false,
-                                              to_test_num_collisions);
-  for (int cellx = 0; cellx < cell_count; cellx++) {
-    for (int rx = 0; rx < num_collision_cells; rx++) {
-      ASSERT_EQ(to_test_num_collisions.at(cellx).at(rx),
-                correct_num_collisions_no_replacement11.at(cellx).at(rx));
-    }
-  }
+        correct_num_collisions_no_replacement00[cellx][rx] = npart0 / 2;
+        correct_num_collisions_no_replacement01[cellx][rx] =
+            std::min(npart0, npart1);
+        correct_num_collisions_no_replacement11[cellx][rx] = npart1 / 2;
 
-  collision_cell_partition->get_max_num_pairs(0 + species_id_offset,
-                                              0 + species_id_offset, true,
-                                              to_test_num_collisions);
-  for (int cellx = 0; cellx < cell_count; cellx++) {
-    for (int rx = 0; rx < num_collision_cells; rx++) {
-      ASSERT_EQ(to_test_num_collisions.at(cellx).at(rx),
-                correct_num_collisions_replacement00.at(cellx).at(rx));
+        constexpr int max_int = std::numeric_limits<int>::max();
+        correct_num_collisions_replacement00[cellx][rx] =
+            (npart0 > 1) ? max_int : 0;
+        correct_num_collisions_replacement01[cellx][rx] =
+            (npart0 > 0) && (npart1 > 0) ? max_int : 0;
+        correct_num_collisions_replacement11[cellx][rx] =
+            (npart1 > 1) ? max_int : 0;
+      }
     }
-  }
-  collision_cell_partition->get_max_num_pairs(0 + species_id_offset,
-                                              1 + species_id_offset, true,
-                                              to_test_num_collisions);
-  for (int cellx = 0; cellx < cell_count; cellx++) {
-    for (int rx = 0; rx < num_collision_cells; rx++) {
-      ASSERT_EQ(to_test_num_collisions.at(cellx).at(rx),
-                correct_num_collisions_replacement01.at(cellx).at(rx));
-    }
-  }
-  collision_cell_partition->get_max_num_pairs(1 + species_id_offset,
-                                              1 + species_id_offset, true,
-                                              to_test_num_collisions);
-  for (int cellx = 0; cellx < cell_count; cellx++) {
-    for (int rx = 0; rx < num_collision_cells; rx++) {
-      ASSERT_EQ(to_test_num_collisions.at(cellx).at(rx),
-                correct_num_collisions_replacement11.at(cellx).at(rx));
-    }
-  }
 
-  ASSERT_EQ(correct_max,
-            collision_cell_partition->max_collision_cell_occupancy);
+    std::vector<std::vector<int>> to_test_num_collisions;
+    collision_cell_partition->get_max_num_pairs(0 + species_id_offset,
+                                                0 + species_id_offset, false,
+                                                to_test_num_collisions);
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      for (int rx = 0; rx < num_collision_cells; rx++) {
+        ASSERT_EQ(to_test_num_collisions.at(cellx).at(rx),
+                  correct_num_collisions_no_replacement00.at(cellx).at(rx));
+      }
+    }
+    collision_cell_partition->get_max_num_pairs(0 + species_id_offset,
+                                                1 + species_id_offset, false,
+                                                to_test_num_collisions);
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      for (int rx = 0; rx < num_collision_cells; rx++) {
+        ASSERT_EQ(to_test_num_collisions.at(cellx).at(rx),
+                  correct_num_collisions_no_replacement01.at(cellx).at(rx));
+      }
+    }
+    collision_cell_partition->get_max_num_pairs(1 + species_id_offset,
+                                                1 + species_id_offset, false,
+                                                to_test_num_collisions);
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      for (int rx = 0; rx < num_collision_cells; rx++) {
+        ASSERT_EQ(to_test_num_collisions.at(cellx).at(rx),
+                  correct_num_collisions_no_replacement11.at(cellx).at(rx));
+      }
+    }
+
+    collision_cell_partition->get_max_num_pairs(0 + species_id_offset,
+                                                0 + species_id_offset, true,
+                                                to_test_num_collisions);
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      for (int rx = 0; rx < num_collision_cells; rx++) {
+        ASSERT_EQ(to_test_num_collisions.at(cellx).at(rx),
+                  correct_num_collisions_replacement00.at(cellx).at(rx));
+      }
+    }
+    collision_cell_partition->get_max_num_pairs(0 + species_id_offset,
+                                                1 + species_id_offset, true,
+                                                to_test_num_collisions);
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      for (int rx = 0; rx < num_collision_cells; rx++) {
+        ASSERT_EQ(to_test_num_collisions.at(cellx).at(rx),
+                  correct_num_collisions_replacement01.at(cellx).at(rx));
+      }
+    }
+    collision_cell_partition->get_max_num_pairs(1 + species_id_offset,
+                                                1 + species_id_offset, true,
+                                                to_test_num_collisions);
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      for (int rx = 0; rx < num_collision_cells; rx++) {
+        ASSERT_EQ(to_test_num_collisions.at(cellx).at(rx),
+                  correct_num_collisions_replacement11.at(cellx).at(rx));
+      }
+    }
+
+    ASSERT_EQ(correct_max,
+              collision_cell_partition->max_collision_cell_occupancy);
+  };
+
+  auto h_counts = cdc_counts->get_all_cells();
+  lambda_set_correct_max(h_counts);
+  lambda_test_num_pairs(h_counts);
+
+  auto particle_mask = std::make_shared<ParticleMask>(sycl_target);
+  particle_mask->reset(A);
+  particle_mask->set(A, Sym<INT>("MASK"), 0);
+
+  collision_cell_partition->construct(aa, particle_mask, collision_cell_counts,
+                                      Sym<INT>("SPECIES_ID"), 0,
+                                      Sym<INT>("COLLISION_CELL"), 0);
+
+  auto h_counts_masked = cdc_counts_masked->get_all_cells();
+  lambda_test_num_pairs(h_counts_masked);
 
   sycl_target->free();
   A->domain->mesh->free();
