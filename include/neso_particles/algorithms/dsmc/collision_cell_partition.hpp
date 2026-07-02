@@ -3,6 +3,7 @@
 
 #include "../../compute_target.hpp"
 #include "../../containers/blocked_binary_tree.hpp"
+#include "../../containers/particle_mask.hpp"
 #include "../../particle_sub_group/particle_sub_group.hpp"
 #include <memory>
 #include <vector>
@@ -103,6 +104,7 @@ protected:
   std::map<INT, INT> map_species_id_to_linear;
 
   std::unique_ptr<BufferDevice<INT>> d_max_collision_cell_occupancy;
+  ParticleMaskSharedPtr particle_mask = nullptr;
 
 public:
   /// Disable (implicit) copies.
@@ -162,6 +164,31 @@ public:
    * contains the collision cell ID.
    */
   void construct(ParticleSubGroupSharedPtr particle_sub_group,
+                 const std::vector<int> &collision_cell_counts,
+                 Sym<INT> species_id_sym, const int species_id_component,
+                 Sym<INT> collision_cell_sym,
+                 const int collision_cell_component);
+
+  /**
+   * Construct the internal representation from a ParticleSubGroup.
+   *
+   * @param particle_sub_group The set of particles which are partitioned into
+   * species and dsmc cells.
+   * @param particle_mask Particle masks that indicate if a particle is
+   * available.
+   * @param collision_cell_counts Vector of length cell_count containing the
+   * number of collision cells in each mesh cell.
+   * @param species_id_sym Sym describing which ParticleDat contains the species
+   * ID.
+   * @param species_id_component Describe which ParticleDat component describes
+   * the species.
+   * @param collision_cell_sym Sym describing which ParticleDat contains the
+   * collision cell ID.
+   * @param collision_cell_component Describe which ParticleDat component
+   * contains the collision cell ID.
+   */
+  void construct(ParticleSubGroupSharedPtr particle_sub_group,
+                 ParticleMaskSharedPtr particle_mask,
                  const std::vector<int> &collision_cell_counts,
                  Sym<INT> species_id_sym, const int species_id_component,
                  Sym<INT> collision_cell_sym,

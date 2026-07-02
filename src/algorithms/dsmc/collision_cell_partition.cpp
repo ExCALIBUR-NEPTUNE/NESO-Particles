@@ -168,6 +168,18 @@ void CollisionCellPartition::construct(
   this->sycl_target->profile_map.end_region(r0);
 }
 
+void CollisionCellPartition::construct(
+    ParticleSubGroupSharedPtr particle_sub_group,
+    ParticleMaskSharedPtr particle_mask,
+    const std::vector<int> &collision_cell_counts, Sym<INT> species_id_sym,
+    const int species_id_component, Sym<INT> collision_cell_sym,
+    const int collision_cell_component) {
+  this->particle_mask = particle_mask;
+  this->construct(particle_sub_group, collision_cell_counts, species_id_sym,
+                  species_id_component, collision_cell_sym,
+                  collision_cell_component);
+}
+
 void CollisionCellPartition::get_max_num_pairs(
     const INT species_id_a, const INT species_id_b, const bool replacement,
     std::vector<std::vector<int>> &map_cells_to_counts) {
