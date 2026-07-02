@@ -91,6 +91,8 @@ struct CollisionCellPartitionDevice {
 
 /**
  * Holds a map from (mesh cell, collision cell, species ID) to particle layers.
+ * Particles may be masked off by passing a ParticleMask to the construct call.
+ * Particles exist in the map independently of the mask values.
  */
 class CollisionCellPartition {
 protected:
@@ -131,7 +133,8 @@ public:
   // Maximum number of collision cells over all mesh cells.
   INT max_num_collision_cells{0};
 
-  // Maximum occupancy of a collision cell for any species.
+  // Maximum occupancy of a collision cell for any species. This value ignores
+  // values of masks.
   INT max_collision_cell_occupancy{0};
 
   /**
@@ -148,7 +151,9 @@ public:
                          std::vector<INT> species_ids);
 
   /**
-   * Construct the internal representation from a ParticleSubGroup.
+   * Construct the internal representation from a ParticleSubGroup. This
+   * construct method enables all particles, i.e. there are no masks values
+   * used.
    *
    * @param particle_sub_group The set of particles which are partitioned into
    * species and dsmc cells.
@@ -170,7 +175,11 @@ public:
                  const int collision_cell_component);
 
   /**
-   * Construct the internal representation from a ParticleSubGroup.
+   * Construct the internal representation from a ParticleSubGroup. Particles
+   * may be masked off, or on, from pair selection after construct is called by
+   * updating the ParticleMask that is passed here. Particles exist in this data
+   * structure indpendently of the mask value. The current value of the mask is
+   * taken into account when get_max_num_pairs is called.
    *
    * @param particle_sub_group The set of particles which are partitioned into
    * species and dsmc cells.
@@ -199,6 +208,8 @@ public:
    * and B for each collision cell. Note that in the case of replacement these
    * values are identical to determining if there are two or more particles in
    * the collision cell. In this scenario the return values are 0 or INT_MAX.
+   * This method will use the current values of the ParticleMask provided if a
+   * ParticleMask was provided at construction time.
    *
    * @param[in] species_id_a Species ID of A.
    * @param[in] species_id_b Species ID of B.
