@@ -1,6 +1,7 @@
 #include <limits>
 #include <neso_particles/algorithms/dsmc/collision_cell_partition.hpp>
 #include <neso_particles/particle_linear_index.hpp>
+#include <type_traits>
 
 namespace NESO::Particles::DSMC {
 
@@ -214,7 +215,7 @@ struct NoReplacementPairCounter {
 
 void CollisionCellPartition::get_max_num_pairs(
     const INT species_id_a, const INT species_id_b, const bool replacement,
-    std::vector<std::vector<int>> &map_cell_to_num_pairs) {
+    CollisionCellNumPairsSharedPtr &map_cell_to_num_pairs) {
 
   auto r0 = this->sycl_target->profile_map.start_region(
       "CollisionCellPartition", "get_max_num_pairs");
@@ -396,24 +397,22 @@ void CollisionCellPartition::get_max_num_pairs(
     }
   }
 
-  map_cell_to_num_pairs.resize(k_cell_count);
-  for (int cellx = 0; cellx < k_cell_count; cellx++) {
-    const auto num_collision_cells = this->num_collision_cells.at(cellx);
-    map_cell_to_num_pairs.at(cellx).resize(num_collision_cells);
+  if (map_cell_to_num_pairs.get() == nullptr) {
+    map_cell_to_num_pairs = this->get_collision_cell_num_pairs_instance();
+  }
+  if ((map_cell_to_num_pairs->num_mesh_cells != this->num_mesh_cells) ||
+      (map_cell_to_num_pairs->max_num_collision_cells !=
+       this->max_num_collision_cells)) {
+    map_cell_to_num_pairs = this->get_collision_cell_num_pairs_instance();
   }
 
   e0.wait_and_throw();
 
-  EventStack es;
-  for (int cellx = 0; cellx < k_cell_count; cellx++) {
-    const auto num_collision_cells = this->num_collision_cells.at(cellx);
-    es.push(this->sycl_target->queue.memcpy(
-        map_cell_to_num_pairs.at(cellx).data(),
-        k_counts + cellx * k_max_num_collision_cells,
-        num_collision_cells * sizeof(int)));
-  }
+  e0 = this->sycl_target->queue.memcpy(
+      map_cell_to_num_pairs->get_host_pointer(), k_counts,
+      k_cell_count * k_max_num_collision_cells * sizeof(int));
 
-  es.wait();
+  e0.wait_and_throw();
 
   restore_resource(sycl_target->resource_stack_map,
                    ResourceStackKeyBufferDevice<int>{}, d_counts);
@@ -438,6 +437,12 @@ CollisionCellPartitionDevice CollisionCellPartition::get_device() {
           this->max_num_collision_cells,
           this->num_species,
           this->d_map_entries->ptr};
+}
+
+CollisionCellNumPairsSharedPtr
+CollisionCellPartition::get_collision_cell_num_pairs_instance() {
+  return std::make_shared<CollisionCellNumPairs>(
+      this->sycl_target, this->num_mesh_cells, this->max_num_collision_cells);
 }
 
 } // namespace NESO::Particles::DSMC

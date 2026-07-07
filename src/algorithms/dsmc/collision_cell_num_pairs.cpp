@@ -22,4 +22,12 @@ int &CollisionCellNumPairs::at(const int mesh_cell, const int collision_cell) {
       ->h_entries[mesh_cell * this->max_num_collision_cells + collision_cell];
 }
 
+int *CollisionCellNumPairs::get_host_pointer() {
+  return this->h_entries.data();
+}
+
+void CollisionCellNumPairs::fill(const int value) {
+  std::fill(this->h_entries.begin(), this->h_entries.end(), value);
+}
+
 } // namespace NESO::Particles::DSMC

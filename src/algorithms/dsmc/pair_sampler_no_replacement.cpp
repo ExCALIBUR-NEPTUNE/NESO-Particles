@@ -43,7 +43,7 @@ PairSamplerNoReplacement::PairSamplerNoReplacement(
 void PairSamplerNoReplacement::sample(
     CollisionCellPartitionSharedPtr collision_cell_partition,
     const INT species_id_a, const INT species_id_b,
-    const std::vector<std::vector<int>> &map_cells_to_num_pairs) {
+    CollisionCellNumPairsSharedPtr &map_cell_to_num_pairs) {
 
   auto r0 = this->sycl_target->profile_map.start_region(
       "PairSamplerNoReplacement", "sample");
@@ -58,6 +58,14 @@ void PairSamplerNoReplacement::sample(
 
   const INT max_num_collision_cells =
       collision_cell_partition->max_num_collision_cells;
+
+  NESOASSERT(map_cell_to_num_pairs != nullptr,
+             "Bad number of pairs instance passed.");
+  NESOASSERT(max_num_collision_cells ==
+                 map_cell_to_num_pairs->max_num_collision_cells,
+             "Missmatch in max number of collision cells.");
+  NESOASSERT(this->num_mesh_cells == map_cell_to_num_pairs->num_mesh_cells,
+             "Missmatch in number of mesh cells.");
 
   auto d_pair_counts_ccell =
       get_resource<BufferDevice<int>, ResourceStackInterfaceBufferDevice<int>>(
@@ -75,24 +83,24 @@ void PairSamplerNoReplacement::sample(
                                           this->num_mesh_cells);
   auto k_pair_counts_ccell_es = d_pair_counts_ccell_es->ptr;
 
-  EventStack es;
   for (INT mx = 0; mx < this->num_mesh_cells; mx++) {
-    const auto num_collision_cells = map_cells_to_num_pairs.at(mx).size();
+    const auto num_collision_cells =
+        collision_cell_partition->num_collision_cells.at(mx);
     NESOASSERT(num_collision_cells <= max_num_collision_cells,
                "More cell counts than collision cells passed.");
-
-    es.push(this->sycl_target->queue.memcpy(
-        k_pair_counts_ccell + mx * max_num_collision_cells,
-        map_cells_to_num_pairs[mx].data(), num_collision_cells * sizeof(int)));
-
     this->h_num_collision_cells.at(mx) = static_cast<int>(num_collision_cells);
   }
+
+  EventStack es;
+
+  es.push(this->sycl_target->queue.memcpy(
+      k_pair_counts_ccell, map_cell_to_num_pairs->get_host_pointer(),
+      this->num_mesh_cells * max_num_collision_cells * sizeof(int)));
 
   auto k_num_collision_cells = this->d_num_collision_cells->ptr;
   es.push(this->sycl_target->queue.memcpy(k_num_collision_cells,
                                           this->h_num_collision_cells.data(),
                                           this->num_mesh_cells * sizeof(int)));
-
   auto d_counts =
       get_resource<BufferDevice<INT>, ResourceStackInterfaceBufferDevice<INT>>(
           sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<INT>{},

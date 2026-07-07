@@ -73,12 +73,12 @@ public:
    * within those collision cells.
    * @param species_id_a First species ID.
    * @param species_id_b Second species ID.
-   * @param map_cells_to_num_pairs Map from mesh cell to counts for each
+   * @param map_cell_to_num_pairs Map from mesh cell to counts for each
    * collision cell.
    */
   void sample(CollisionCellPartitionSharedPtr collision_cell_partition,
               const INT species_id_a, const INT species_id_b,
-              const std::vector<std::vector<int>> &map_cells_to_num_pairs);
+              CollisionCellNumPairsSharedPtr &map_cell_to_num_pairs);
 
   /**
    * Get a description of the pair list accessible on the device.

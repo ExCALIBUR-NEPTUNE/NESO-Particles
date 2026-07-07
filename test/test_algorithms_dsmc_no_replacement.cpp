@@ -182,13 +182,14 @@ TEST(DSMCCollisionCells, collision_cell_partition) {
       }
     }
 
-    std::vector<std::vector<int>> to_test_num_collisions;
+    auto to_test_num_collisions =
+        collision_cell_partition->get_collision_cell_num_pairs_instance();
     collision_cell_partition->get_max_num_pairs(0 + species_id_offset,
                                                 0 + species_id_offset, false,
                                                 to_test_num_collisions);
     for (int cellx = 0; cellx < cell_count; cellx++) {
       for (int rx = 0; rx < num_collision_cells; rx++) {
-        ASSERT_EQ(to_test_num_collisions.at(cellx).at(rx),
+        ASSERT_EQ(to_test_num_collisions->at(cellx, rx),
                   correct_num_collisions_no_replacement00.at(cellx).at(rx));
       }
     }
@@ -197,7 +198,7 @@ TEST(DSMCCollisionCells, collision_cell_partition) {
                                                 to_test_num_collisions);
     for (int cellx = 0; cellx < cell_count; cellx++) {
       for (int rx = 0; rx < num_collision_cells; rx++) {
-        ASSERT_EQ(to_test_num_collisions.at(cellx).at(rx),
+        ASSERT_EQ(to_test_num_collisions->at(cellx, rx),
                   correct_num_collisions_no_replacement01.at(cellx).at(rx));
       }
     }
@@ -206,7 +207,7 @@ TEST(DSMCCollisionCells, collision_cell_partition) {
                                                 to_test_num_collisions);
     for (int cellx = 0; cellx < cell_count; cellx++) {
       for (int rx = 0; rx < num_collision_cells; rx++) {
-        ASSERT_EQ(to_test_num_collisions.at(cellx).at(rx),
+        ASSERT_EQ(to_test_num_collisions->at(cellx, rx),
                   correct_num_collisions_no_replacement11.at(cellx).at(rx));
       }
     }
@@ -216,7 +217,7 @@ TEST(DSMCCollisionCells, collision_cell_partition) {
                                                 to_test_num_collisions);
     for (int cellx = 0; cellx < cell_count; cellx++) {
       for (int rx = 0; rx < num_collision_cells; rx++) {
-        ASSERT_EQ(to_test_num_collisions.at(cellx).at(rx),
+        ASSERT_EQ(to_test_num_collisions->at(cellx, rx),
                   correct_num_collisions_replacement00.at(cellx).at(rx));
       }
     }
@@ -225,7 +226,7 @@ TEST(DSMCCollisionCells, collision_cell_partition) {
                                                 to_test_num_collisions);
     for (int cellx = 0; cellx < cell_count; cellx++) {
       for (int rx = 0; rx < num_collision_cells; rx++) {
-        ASSERT_EQ(to_test_num_collisions.at(cellx).at(rx),
+        ASSERT_EQ(to_test_num_collisions->at(cellx, rx),
                   correct_num_collisions_replacement01.at(cellx).at(rx));
       }
     }
@@ -234,7 +235,7 @@ TEST(DSMCCollisionCells, collision_cell_partition) {
                                                 to_test_num_collisions);
     for (int cellx = 0; cellx < cell_count; cellx++) {
       for (int rx = 0; rx < num_collision_cells; rx++) {
-        ASSERT_EQ(to_test_num_collisions.at(cellx).at(rx),
+        ASSERT_EQ(to_test_num_collisions->at(cellx, rx),
                   correct_num_collisions_replacement11.at(cellx).at(rx));
       }
     }
@@ -323,13 +324,9 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement) {
   ASSERT_EQ(0, pair_sampler_no_replacement->get_num_pairs());
 
   // Sample no pairs and check output
-  std::vector<std::vector<int>> map_cells_to_counts(cell_count);
-  for (int cx = 0; cx < cell_count; cx++) {
-    const auto collision_cell_count = collision_cell_counts.at(cx);
-    map_cells_to_counts.at(cx).resize(collision_cell_count);
-    std::fill(map_cells_to_counts.at(cx).begin(),
-              map_cells_to_counts.at(cx).end(), 0);
-  }
+  auto map_cells_to_counts =
+      collision_cell_partition->get_collision_cell_num_pairs_instance();
+  map_cells_to_counts->fill(0);
 
   pair_sampler_no_replacement->sample(collision_cell_partition,
                                       species_id_offset, species_id_offset + 1,
@@ -391,7 +388,8 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement) {
   const auto cell_count_t = cell_count;
   auto A_t = A;
   auto lambda_check = [&](const INT species_id_a, const INT species_id_b) {
-    std::vector<std::vector<int>> max_num_pairs_per_cell;
+    auto max_num_pairs_per_cell =
+        collision_cell_partition->get_collision_cell_num_pairs_instance();
     collision_cell_partition->get_max_num_pairs(species_id_a, species_id_b,
                                                 false, max_num_pairs_per_cell);
 
@@ -399,19 +397,19 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement) {
     std::fill(num_pairs_per_mesh_cell.begin(), num_pairs_per_mesh_cell.end(),
               0);
     INT npair_total = 0;
+
+    map_cells_to_counts->fill(0);
+
     for (int cx = 0; cx < cell_count_t; cx++) {
       const auto collision_cell_count = collision_cell_counts.at(cx);
-      map_cells_to_counts.at(cx).resize(collision_cell_count);
-      std::fill(map_cells_to_counts.at(cx).begin(),
-                map_cells_to_counts.at(cx).end(), 0);
 
       int npair = 0;
       for (int rx = 0; rx < collision_cell_count; rx++) {
-        const int max_num_pairs = max_num_pairs_per_cell.at(cx).at(rx);
+        const int max_num_pairs = max_num_pairs_per_cell->at(cx, rx);
         if (max_num_pairs > 0) {
           std::uniform_int_distribution<int> rng_int(0, max_num_pairs);
           const int num_pairs_to_sample = rng_int(rng_state);
-          map_cells_to_counts.at(cx).at(rx) = num_pairs_to_sample;
+          map_cells_to_counts->at(cx, rx) = num_pairs_to_sample;
           npair += num_pairs_to_sample;
         }
       }
@@ -544,13 +542,9 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement_correctness) {
                                                        rng_function);
 
   // Sample no pairs and check output
-  std::vector<std::vector<int>> map_cells_to_counts(cell_count);
-  for (int cx = 0; cx < cell_count; cx++) {
-    const auto collision_cell_count = collision_cell_counts.at(cx);
-    map_cells_to_counts.at(cx).resize(collision_cell_count);
-    std::fill(map_cells_to_counts.at(cx).begin(),
-              map_cells_to_counts.at(cx).end(), 0);
-  }
+  auto map_cells_to_counts =
+      collision_cell_partition->get_collision_cell_num_pairs_instance();
+  map_cells_to_counts->fill(0);
 
   // Get a linear index for each particle for species/collision cell.
   auto cdc_counts = std::make_shared<CellDatConst<int>>(
@@ -584,22 +578,21 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement_correctness) {
   }
 
   auto lambda_check = [&](const INT species_id_a, const INT species_id_b) {
-    std::vector<std::vector<int>> max_num_pairs_per_cell;
+    auto max_num_pairs_per_cell =
+        collision_cell_partition->get_collision_cell_num_pairs_instance();
     collision_cell_partition->get_max_num_pairs(species_id_a, species_id_b,
                                                 false, max_num_pairs_per_cell);
 
+    map_cells_to_counts->fill(0);
     for (int cx = 0; cx < cell_count; cx++) {
       const auto collision_cell_count = collision_cell_counts.at(cx);
-      map_cells_to_counts.at(cx).resize(collision_cell_count);
-      std::fill(map_cells_to_counts.at(cx).begin(),
-                map_cells_to_counts.at(cx).end(), 0);
 
       for (int rx = 0; rx < collision_cell_count; rx++) {
-        const int max_num_pairs = max_num_pairs_per_cell.at(cx).at(rx);
+        const int max_num_pairs = max_num_pairs_per_cell->at(cx, rx);
         if (max_num_pairs > 0) {
           std::uniform_int_distribution<int> rng_int(0, max_num_pairs - 1);
           const int num_pairs_to_sample = rng_int(rng_state);
-          map_cells_to_counts.at(cx).at(rx) = num_pairs_to_sample;
+          map_cells_to_counts->at(cx, rx) = num_pairs_to_sample;
         }
       }
     }
@@ -747,13 +740,9 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement_bias) {
                                                        rng_function);
 
   // Sample no pairs and check output
-  std::vector<std::vector<int>> map_cells_to_counts(cell_count);
-  for (int cx = 0; cx < cell_count; cx++) {
-    const auto collision_cell_count = collision_cell_counts.at(cx);
-    map_cells_to_counts.at(cx).resize(collision_cell_count);
-    std::fill(map_cells_to_counts.at(cx).begin(),
-              map_cells_to_counts.at(cx).end(), 0);
-  }
+  auto map_cells_to_counts =
+      collision_cell_partition->get_collision_cell_num_pairs_instance();
+  map_cells_to_counts->fill(0);
 
   // Get a linear index for each particle for species/collision cell.
   auto cdc_counts = std::make_shared<CellDatConst<int>>(
@@ -787,19 +776,18 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement_bias) {
   }
 
   auto lambda_check = [&](const INT species_id_a, const INT species_id_b) {
-    std::vector<std::vector<int>> max_num_pairs_per_cell;
+    auto max_num_pairs_per_cell =
+        collision_cell_partition->get_collision_cell_num_pairs_instance();
     collision_cell_partition->get_max_num_pairs(species_id_a, species_id_b,
                                                 false, max_num_pairs_per_cell);
 
+    map_cells_to_counts->fill(0);
     for (int cx = 0; cx < cell_count; cx++) {
       const auto collision_cell_count = collision_cell_counts.at(cx);
-      map_cells_to_counts.at(cx).resize(collision_cell_count);
-      std::fill(map_cells_to_counts.at(cx).begin(),
-                map_cells_to_counts.at(cx).end(), 0);
 
       for (int rx = 0; rx < collision_cell_count; rx++) {
-        const int max_num_pairs = max_num_pairs_per_cell.at(cx).at(rx);
-        map_cells_to_counts.at(cx).at(rx) = max_num_pairs;
+        const int max_num_pairs = max_num_pairs_per_cell->at(cx, rx);
+        map_cells_to_counts->at(cx, rx) = max_num_pairs;
       }
     }
 
@@ -850,7 +838,7 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement_bias) {
            collision_cellx++) {
 
         const int max_num_pairs =
-            max_num_pairs_per_cell.at(mesh_cellx).at(collision_cellx);
+            max_num_pairs_per_cell->at(mesh_cellx, collision_cellx);
 
         for (int speciesx : {species_id_a, species_id_b}) {
           const int num_particles =

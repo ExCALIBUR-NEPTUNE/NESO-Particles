@@ -5,6 +5,7 @@
 #include "../../containers/blocked_binary_tree.hpp"
 #include "../../containers/particle_mask.hpp"
 #include "../../particle_sub_group/particle_sub_group.hpp"
+#include "collision_cell_num_pairs.hpp"
 #include <memory>
 #include <vector>
 
@@ -217,12 +218,11 @@ public:
    * @param[in] replacement Indicate if pairs are chosen with (true) or without
    * replacement (false).
    * @param[in, out] map_cell_to_num_pairs Output map from [mesh cell][collision
-   * cell] to maximum number of pairs that can be formed. The passed argument
-   * will be resized as needed.
+   * cell] to maximum number of pairs that can be formed.
    */
   void get_max_num_pairs(const INT species_id_a, const INT species_id_b,
                          const bool replacement,
-                         std::vector<std::vector<int>> &map_cell_to_num_pairs);
+                         CollisionCellNumPairsSharedPtr &map_cell_to_num_pairs);
 
   /**
    * @param species_id Species ID as stored on particles.
@@ -234,6 +234,13 @@ public:
    * @returns The device description of the maps.
    */
   CollisionCellPartitionDevice get_device();
+
+  /**
+   * @returns A CollisionCellNumPairs instance suitably sized for the number of
+   * mesh cells and collision cells currently specified.
+   */
+
+  CollisionCellNumPairsSharedPtr get_collision_cell_num_pairs_instance();
 };
 
 using CollisionCellPartitionSharedPtr = std::shared_ptr<CollisionCellPartition>;

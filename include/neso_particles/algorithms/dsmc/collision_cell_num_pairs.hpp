@@ -15,8 +15,6 @@ class CollisionCellPartition;
  */
 class CollisionCellNumPairs {
 
-  friend class CollisionCellPartition;
-
 protected:
   std::vector<int, HostAllocator<int>> h_entries;
 
@@ -47,7 +45,22 @@ public:
    * @returns Modifiable reference to value.
    */
   int &at(const int mesh_cell, const int collision_cell);
+
+  /**
+   * @returns Host pointer to map. Data is stored mesh cells slowest then
+   * collision cells.
+   */
+  int *get_host_pointer();
+
+  /**
+   * Set all entries to the same value.
+   *
+   * @param value Value to set.
+   */
+  void fill(const int value);
 };
+
+using CollisionCellNumPairsSharedPtr = std::shared_ptr<CollisionCellNumPairs>;
 
 } // namespace NESO::Particles::DSMC
 
