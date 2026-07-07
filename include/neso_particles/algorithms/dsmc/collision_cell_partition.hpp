@@ -241,6 +241,11 @@ public:
    */
 
   CollisionCellNumPairsSharedPtr get_collision_cell_num_pairs_instance();
+
+  /**
+   * @returns The current ParticleMask in use. This method may return a nullptr.
+   */
+  ParticleMaskSharedPtr get_particle_mask();
 };
 
 using CollisionCellPartitionSharedPtr = std::shared_ptr<CollisionCellPartition>;

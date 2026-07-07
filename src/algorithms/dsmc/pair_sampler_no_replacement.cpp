@@ -1,4 +1,6 @@
 #include <neso_particles/algorithms/dsmc/pair_sampler_no_replacement.hpp>
+#include <neso_particles/particle_linear_index.hpp>
+#include <neso_particles/particle_sub_group/particle_sub_group_utility.hpp>
 
 namespace NESO::Particles::DSMC {
 
@@ -234,6 +236,18 @@ void PairSamplerNoReplacement::sample(
 
   const bool k_a_is_b = linear_species_id_a == linear_species_id_b;
 
+  // When particles are masked off then we need to remove these particles before
+  // sampling.
+  auto particle_mask = collision_cell_partition->get_particle_mask();
+  MaskArrayDevice k_particle_mask;
+  const bool k_particle_mask_set = particle_mask != nullptr;
+  if (k_particle_mask_set) {
+    k_particle_mask = particle_mask->get_device();
+  }
+  // We need a linear index for the particle.
+  const auto k_particle_linear_index = get_particle_linear_index_device(
+      get_particle_group(collision_cell_partition->particle_sub_group));
+
   this->sycl_target->queue
       .submit([&](sycl::handler &cgh) {
         sycl::local_accessor<int, 2> la_indices_a(
@@ -269,14 +283,72 @@ void PairSamplerNoReplacement::sample(
                 int *current_num_particles_b =
                     k_a_is_b ? current_num_particles_a : &num_particles_b;
 
+                auto lambda_remove_index =
+                    [&](const int to_remove_index, int *num_particles,
+                        const sycl::local_accessor<int, 2> &indices) {
+                      const int num_particles_m1 = (*num_particles) - 1;
+                      // Copy the last entry downwards.
+                      indices[to_remove_index][local_id] =
+                          indices[num_particles_m1][local_id];
+                      // Decrement the number of particles.
+                      *num_particles = num_particles_m1;
+                    };
+
+                // When particles are not masked we use local layer indices and
+                // convert these to actual particle layers later. The number of
+                // sampled particles may be much smaller than the number of
+                // particles in the map and hence this avoids reading in the
+                // entire map.
+                auto lambda_populate_indices_direct =
+                    [&](const int num_particles,
+                        const sycl::local_accessor<int, 2> &indices) {
+                      for (int ix = 0; ix < num_particles; ix++) {
+                        indices[ix][local_id] = ix;
+                      }
+                    };
+
+                // When particles are masked then we have to inspect all the
+                // masks at least once which means we need to retrieve the
+                // indices here. If we are using actual particle indices here
+                // then we avoid revisiting the map later.
+                auto lambda_populate_indices_from_map =
+                    [&](const int linear_species_id, int *num_particles,
+                        const sycl::local_accessor<int, 2> &indices) {
+                      const int num_particles_start = *num_particles;
+                      int num_particles_end = 0;
+                      for (int ix = 0; ix < num_particles_start; ix++) {
+                        const int particle_layer =
+                            k_collision_cell_partition.get_particle_layer(
+                                mesh_cell, collision_cell, linear_species_id,
+                                ix);
+                        const INT linear_particle_index =
+                            k_particle_linear_index.get_local_linear_index(
+                                mesh_cell, particle_layer);
+                        const bool mask_value =
+                            k_particle_mask.get(linear_particle_index, 0);
+
+                        if (mask_value) {
+                          indices[num_particles_end][local_id] = particle_layer;
+                          num_particles_end++;
+                        }
+                      }
+                      *num_particles = num_particles_end;
+                    };
+
                 // Create the indices that we use to track available particle
                 // indices.
-                for (int ix = 0; ix < num_particles_a; ix++) {
-                  la_indices_a[ix][local_id] = ix;
-                }
-                if (!k_a_is_b) {
-                  for (int ix = 0; ix < num_particles_b; ix++) {
-                    la_indices_b[ix][local_id] = ix;
+                if (k_particle_mask_set) {
+                  lambda_populate_indices_from_map(
+                      linear_species_id_a, &num_particles_a, la_indices_a);
+                  if (!k_a_is_b) {
+                    lambda_populate_indices_from_map(
+                        linear_species_id_b, &num_particles_b, la_indices_b);
+                  }
+                } else {
+                  lambda_populate_indices_direct(num_particles_a, la_indices_a);
+                  if (!k_a_is_b) {
+                    lambda_populate_indices_direct(num_particles_b,
+                                                   la_indices_b);
                   }
                 }
 
@@ -298,9 +370,6 @@ void PairSamplerNoReplacement::sample(
                         int *num_particles,
                         const sycl::local_accessor<int, 2> &indices) -> int {
                   const int start_num_particles = *num_particles;
-                  const int end_num_particles = start_num_particles - 1;
-                  *num_particles = end_num_particles;
-
                   const REAL ratio = static_cast<REAL>(start_num_particles);
                   const int index0 = uniform_sample * ratio;
                   const int index1 = Kernel::max(0, index0);
@@ -308,10 +377,8 @@ void PairSamplerNoReplacement::sample(
                       Kernel::min(start_num_particles - 1, index1);
 
                   const int sampled_index = indices[index2][local_id];
-                  const int to_move_index =
-                      indices[start_num_particles - 1][local_id];
-                  indices[index2][local_id] = to_move_index;
 
+                  lambda_remove_index(index2, num_particles, indices);
                   return sampled_index;
                 };
 
@@ -332,17 +399,23 @@ void PairSamplerNoReplacement::sample(
                       lambda_sample_index(local_id, rng_sample_b,
                                           current_num_particles_b, b_indices);
 
-                  // convert the map indices into actual particle indices
+                  int particle_index_a = index_a;
+                  int particle_index_b = index_b;
 
-                  const int particle_index_a =
-                      k_collision_cell_partition.get_particle_layer(
-                          mesh_cell, collision_cell, linear_species_id_a,
-                          index_a);
+                  // Convert the map indices into actual particle indices when
+                  // in non-masked mode. In masked mode we already converted the
+                  // indices when the masks were inspected above.
+                  if (!k_particle_mask_set) {
+                    particle_index_a =
+                        k_collision_cell_partition.get_particle_layer(
+                            mesh_cell, collision_cell, linear_species_id_a,
+                            index_a);
 
-                  const int particle_index_b =
-                      k_collision_cell_partition.get_particle_layer(
-                          mesh_cell, collision_cell, linear_species_id_b,
-                          index_b);
+                    particle_index_b =
+                        k_collision_cell_partition.get_particle_layer(
+                            mesh_cell, collision_cell, linear_species_id_b,
+                            index_b);
+                  }
 
                   k_pair_list[mesh_cell][0][offset_collision_cell + pairx] =
                       particle_index_a;

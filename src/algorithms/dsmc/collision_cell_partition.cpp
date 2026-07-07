@@ -445,4 +445,8 @@ CollisionCellPartition::get_collision_cell_num_pairs_instance() {
       this->sycl_target, this->num_mesh_cells, this->max_num_collision_cells);
 }
 
+ParticleMaskSharedPtr CollisionCellPartition::get_particle_mask() {
+  return this->particle_mask;
+}
+
 } // namespace NESO::Particles::DSMC
