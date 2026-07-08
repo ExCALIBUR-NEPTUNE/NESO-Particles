@@ -259,6 +259,26 @@ TEST(DSMCCollisionCells, collision_cell_partition) {
   auto h_counts_masked = cdc_counts_masked->get_all_cells();
   lambda_test_num_pairs(h_counts_masked);
 
+  {
+    auto particle_mask = std::make_shared<ParticleMask>(sycl_target);
+    particle_mask->reset(A);
+
+    collision_cell_partition->construct(
+        aa, particle_mask, collision_cell_counts, Sym<INT>("SPECIES_ID"), 0,
+        Sym<INT>("COLLISION_CELL"), 0);
+
+    ASSERT_EQ(collision_cell_partition->get_particle_mask(), particle_mask);
+  }
+
+  {
+    auto collision_cell_num_pairs =
+        collision_cell_partition->get_collision_cell_num_pairs_instance();
+
+    ASSERT_EQ(collision_cell_num_pairs->num_mesh_cells, cell_count);
+    ASSERT_EQ(collision_cell_num_pairs->max_num_collision_cells,
+              collision_cell_partition->max_num_collision_cells);
+  }
+
   sycl_target->free();
   A->domain->mesh->free();
 }
