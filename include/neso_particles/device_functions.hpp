@@ -820,6 +820,54 @@ inline void bitonic8(GROUP_TYPE group, VALUE_TYPE *s_ptr) {
   }
 }
 
+/**
+ * In place reduction of values block-wise. i.e. the local memory holds
+ *
+ * [a_0,..., a_{n-1}, b_0,...,b_{n-1},.....]
+ *
+ * and the final dimension of the work-group is of size n. On return the local
+ * memory will hold
+ *
+ * [a_0 + ... + a_{n-1}, u_1,..., u_{n-1},
+ *  b_0 + ... + b_{n-1}, u_1,..., u_{n-1},
+ *  ...
+ *  ]
+ *
+ *  where u_* are undefined values.
+ *
+ *  @param[in, out] la_reduction Local memory containing values.
+ *  @param[in] work_item SYCL work item providing the group over which to
+ * perform reduction.
+ *  @param[in] binop Binary operation used to combine elements.
+ *  @returns True on the work-items that have local indices that hold the
+ * reduced values otherwise false.
+ */
+template <int GROUP_DIM, typename T, typename OP_TYPE>
+inline bool reduce_over_group_block_wise(T *la_reduction,
+                                         sycl::nd_item<GROUP_DIM> work_item,
+                                         OP_TYPE binop) {
+
+  auto group = work_item.get_group();
+  constexpr int last_dim = GROUP_DIM - 1;
+  const std::size_t num_elements = group.get_local_range(last_dim);
+  const std::size_t local_id = work_item.get_local_linear_id();
+  const std::size_t block_id = local_id / num_elements;
+  const std::size_t block_local_id = local_id - block_id * num_elements;
+
+  sycl::group_barrier(group, sycl::memory_scope::work_group);
+
+  for (std::size_t s = num_elements / 2; s > 0; s >>= 1) {
+    if (block_local_id < s) {
+      const T value_curr = la_reduction[local_id];
+      const T value_recv = la_reduction[local_id + s];
+      la_reduction[local_id] = binop(value_curr, value_recv);
+    }
+    sycl::group_barrier(group, sycl::memory_scope::work_group);
+  }
+
+  return block_local_id == 0;
+}
+
 } // namespace Kernel
 
 } // namespace NESO::Particles

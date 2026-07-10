@@ -224,6 +224,18 @@ void PairSamplerNoReplacement::sample(
   const INT k_max_collision_cell_occupancy =
       collision_cell_partition->max_collision_cell_occupancy;
 
+  const std::size_t min_local_memory_required =
+      k_max_collision_cell_occupancy * 2 * sizeof(int);
+
+  NESOASSERT(
+      min_local_memory_required <=
+          this->sycl_target->device_limits.local_mem_size,
+      "Number of particles of a species in a collision cell exceeds the local "
+      "memory available on this compute device. The limit of the number of "
+      "particles of a species in a collision cell is: " +
+          std::to_string(this->sycl_target->device_limits.local_mem_size /
+                         (2 * sizeof(int))));
+
   const std::size_t local_size_sample =
       this->sycl_target->get_num_local_work_items(
           sizeof(int) * 2 * k_max_collision_cell_occupancy, local_size);
