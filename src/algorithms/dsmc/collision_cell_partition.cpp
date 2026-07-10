@@ -53,6 +53,8 @@ void CollisionCellPartition::construct(
              "num_collision_cells vector is too small.");
 
   this->particle_sub_group = particle_sub_group;
+  NESOASSERT(this->particle_sub_group != nullptr,
+             "particle_sub_group is nullptr, has construct been called?");
 
   // These two loops could be on device if needed.
   std::copy(num_collision_cells.begin(),
@@ -220,6 +222,8 @@ void CollisionCellPartition::get_max_num_pairs(
   auto r0 = this->sycl_target->profile_map.start_region(
       "CollisionCellPartition", "get_max_num_pairs");
 
+  sycl::event e0;
+
   const INT linear_species_id_a = this->get_linear_species_id(species_id_a);
   const INT linear_species_id_b = this->get_linear_species_id(species_id_b);
 
@@ -233,167 +237,176 @@ void CollisionCellPartition::get_max_num_pairs(
   d_counts->realloc_no_copy(k_max_num_collision_cells * k_cell_count);
   auto *k_counts = d_counts->ptr;
 
-  sycl::event e0;
+  if (this->max_collision_cell_occupancy > 0) {
 
-  sycl::range<2> iteration_set =
-      this->sycl_target->device_limits.validate_range_global(
-          sycl::range<2>(k_cell_count, k_max_num_collision_cells));
+    sycl::range<2> iteration_set =
+        this->sycl_target->device_limits.validate_range_global(
+            sycl::range<2>(k_cell_count, k_max_num_collision_cells));
 
-  const std::size_t local_size =
-      sycl_target->parameters->template get<SizeTParameter>("LOOP_LOCAL_SIZE")
-          ->value;
+    const std::size_t local_size =
+        sycl_target->parameters->template get<SizeTParameter>("LOOP_LOCAL_SIZE")
+            ->value;
 
-  sycl::nd_range<3> iteration_set_mask =
-      this->sycl_target->device_limits.validate_nd_range(sycl::nd_range<3>(
-          sycl::range<3>(k_cell_count, k_max_num_collision_cells, local_size),
-          sycl::range<3>(1, 1, local_size)));
+    sycl::nd_range<3> iteration_set_mask =
+        this->sycl_target->device_limits.validate_nd_range(sycl::nd_range<3>(
+            sycl::range<3>(k_cell_count, k_max_num_collision_cells, local_size),
+            sycl::range<3>(1, 1, local_size)));
 
-  const bool k_a_is_b = species_id_a == species_id_b;
-  const auto k_map = this->get_device();
-  const bool k_masks_set = this->particle_mask != nullptr;
-  const MaskArrayDevice k_mask_array_device =
-      k_masks_set ? this->particle_mask->get_device() : MaskArrayDevice{};
-  const ParticleLinearIndexDevice k_particle_linear_index =
-      get_particle_linear_index_device(
-          get_particle_group(this->particle_sub_group));
+    const bool k_a_is_b = species_id_a == species_id_b;
+    const auto k_map = this->get_device();
+    const bool k_masks_set = this->particle_mask != nullptr;
+    const MaskArrayDevice k_mask_array_device =
+        k_masks_set ? this->particle_mask->get_device() : MaskArrayDevice{};
+    const ParticleLinearIndexDevice k_particle_linear_index =
+        get_particle_linear_index_device(
+            get_particle_group(this->particle_sub_group));
 
-  auto lambda_get_num_pairs_event =
-      [&](auto pair_count_instance) -> sycl::event {
-    if (k_a_is_b) {
-      return sycl_target->queue.parallel_for(
-          iteration_set, [=](sycl::item<2> ix) {
-            const std::size_t cell_mesh = ix.get_id(0);
-            const std::size_t cell_collision = ix.get_id(1);
+    auto lambda_get_num_pairs_event =
+        [&](auto pair_count_instance) -> sycl::event {
+      if (k_a_is_b) {
+        return sycl_target->queue.parallel_for(
+            iteration_set, [=](sycl::item<2> ix) {
+              const std::size_t cell_mesh = ix.get_id(0);
+              const std::size_t cell_collision = ix.get_id(1);
 
-            const INT num_particles_a = k_map.get_num_particles_cell_species(
-                cell_mesh, cell_collision, linear_species_id_a);
-            const INT num_particles_b = 0;
-            const int num_pairs = pair_count_instance.get_num_pairs_aa(
-                num_particles_a, num_particles_b);
+              const INT num_particles_a = k_map.get_num_particles_cell_species(
+                  cell_mesh, cell_collision, linear_species_id_a);
+              const INT num_particles_b = 0;
+              const int num_pairs = pair_count_instance.get_num_pairs_aa(
+                  num_particles_a, num_particles_b);
 
-            k_counts[cell_mesh * k_max_num_collision_cells + cell_collision] =
-                num_pairs;
-          });
+              k_counts[cell_mesh * k_max_num_collision_cells + cell_collision] =
+                  num_pairs;
+            });
 
-    } else {
-      return sycl_target->queue.parallel_for(
-          iteration_set, [=](sycl::item<2> ix) {
-            const std::size_t cell_mesh = ix.get_id(0);
-            const std::size_t cell_collision = ix.get_id(1);
+      } else {
+        return sycl_target->queue.parallel_for(
+            iteration_set, [=](sycl::item<2> ix) {
+              const std::size_t cell_mesh = ix.get_id(0);
+              const std::size_t cell_collision = ix.get_id(1);
 
-            const INT num_particles_a = k_map.get_num_particles_cell_species(
-                cell_mesh, cell_collision, linear_species_id_a);
-            const INT num_particles_b = k_map.get_num_particles_cell_species(
-                cell_mesh, cell_collision, linear_species_id_b);
+              const INT num_particles_a = k_map.get_num_particles_cell_species(
+                  cell_mesh, cell_collision, linear_species_id_a);
+              const INT num_particles_b = k_map.get_num_particles_cell_species(
+                  cell_mesh, cell_collision, linear_species_id_b);
 
-            const int num_pairs = pair_count_instance.get_num_pairs_ab(
-                num_particles_a, num_particles_b);
+              const int num_pairs = pair_count_instance.get_num_pairs_ab(
+                  num_particles_a, num_particles_b);
 
-            k_counts[cell_mesh * k_max_num_collision_cells + cell_collision] =
-                num_pairs;
-          });
-    }
-  };
+              k_counts[cell_mesh * k_max_num_collision_cells + cell_collision] =
+                  num_pairs;
+            });
+      }
+    };
 
-  auto lambda_get_num_pairs_mask_event =
-      [&](auto pair_count_instance) -> sycl::event {
-    if (k_a_is_b) {
-      return this->sycl_target->queue.parallel_for(
-          iteration_set_mask, [=](sycl::nd_item<3> ix) {
-            const std::size_t cell_mesh = ix.get_global_id(0);
-            const std::size_t cell_collision = ix.get_global_id(1);
-            auto group = ix.get_group();
-            const std::size_t local_id = ix.get_local_linear_id();
+    auto lambda_get_num_pairs_mask_event =
+        [&](auto pair_count_instance) -> sycl::event {
+      if (k_a_is_b) {
+        return this->sycl_target->queue.parallel_for(
+            iteration_set_mask, [=](sycl::nd_item<3> ix) {
+              const std::size_t cell_mesh = ix.get_global_id(0);
+              const std::size_t cell_collision = ix.get_global_id(1);
+              auto group = ix.get_group();
+              const std::size_t local_id = ix.get_local_linear_id();
 
-            auto lambda_get_num_particles = [&](const auto linear_species_id) {
-              const INT num_particles_unmasked =
-                  k_map.get_num_particles_cell_species(
-                      cell_mesh, cell_collision, linear_species_id);
+              auto lambda_get_num_particles =
+                  [&](const auto linear_species_id) {
+                    const INT num_particles_unmasked =
+                        k_map.get_num_particles_cell_species(
+                            cell_mesh, cell_collision, linear_species_id);
 
-              int count_local = 0;
-              for (std::size_t px = local_id; px < num_particles_unmasked;
-                   px += local_size) {
-                const auto layer = k_map.get_particle_layer(
-                    cell_mesh, cell_collision, linear_species_id, px);
-                const auto linear_index =
-                    k_particle_linear_index.get_local_linear_index(cell_mesh,
-                                                                   layer);
-                const bool mask = k_mask_array_device.get(linear_index, 0);
-                count_local += mask ? 1 : 0;
+                    int count_local = 0;
+                    for (std::size_t px = local_id; px < num_particles_unmasked;
+                         px += local_size) {
+                      const auto layer = k_map.get_particle_layer(
+                          cell_mesh, cell_collision, linear_species_id, px);
+                      const auto linear_index =
+                          k_particle_linear_index.get_local_linear_index(
+                              cell_mesh, layer);
+                      const bool mask =
+                          k_mask_array_device.get(linear_index, 0);
+                      count_local += mask ? 1 : 0;
+                    }
+
+                    const int num_particles = sycl::reduce_over_group(
+                        group, count_local, sycl::plus<int>{});
+
+                    return num_particles;
+                  };
+              const INT num_particles_a =
+                  lambda_get_num_particles(linear_species_id_a);
+              const INT num_particles_b = 0;
+
+              const int num_pairs = pair_count_instance.get_num_pairs_aa(
+                  num_particles_a, num_particles_b);
+
+              if (group.leader()) {
+                k_counts[cell_mesh * k_max_num_collision_cells +
+                         cell_collision] = num_pairs;
               }
+            });
 
-              const int num_particles = sycl::reduce_over_group(
-                  group, count_local, sycl::plus<int>{});
+      } else {
+        return this->sycl_target->queue.parallel_for(
+            iteration_set_mask, [=](sycl::nd_item<3> ix) {
+              const std::size_t cell_mesh = ix.get_global_id(0);
+              const std::size_t cell_collision = ix.get_global_id(1);
+              auto group = ix.get_group();
+              const std::size_t local_id = ix.get_local_linear_id();
 
-              return num_particles;
-            };
-            const INT num_particles_a =
-                lambda_get_num_particles(linear_species_id_a);
-            const INT num_particles_b = 0;
+              auto lambda_get_num_particles =
+                  [&](const auto linear_species_id) {
+                    const INT num_particles_unmasked =
+                        k_map.get_num_particles_cell_species(
+                            cell_mesh, cell_collision, linear_species_id);
 
-            const int num_pairs = pair_count_instance.get_num_pairs_aa(
-                num_particles_a, num_particles_b);
+                    int count_local = 0;
+                    for (std::size_t px = local_id; px < num_particles_unmasked;
+                         px += local_size) {
+                      const auto layer = k_map.get_particle_layer(
+                          cell_mesh, cell_collision, linear_species_id, px);
+                      const auto linear_index =
+                          k_particle_linear_index.get_local_linear_index(
+                              cell_mesh, layer);
+                      const bool mask =
+                          k_mask_array_device.get(linear_index, 0);
+                      count_local += mask ? 1 : 0;
+                    }
 
-            k_counts[cell_mesh * k_max_num_collision_cells + cell_collision] =
-                num_pairs;
-          });
+                    const int num_particles = sycl::reduce_over_group(
+                        group, count_local, sycl::plus<int>{});
 
-    } else {
-      return this->sycl_target->queue.parallel_for(
-          iteration_set_mask, [=](sycl::nd_item<3> ix) {
-            const std::size_t cell_mesh = ix.get_global_id(0);
-            const std::size_t cell_collision = ix.get_global_id(1);
-            auto group = ix.get_group();
-            const std::size_t local_id = ix.get_local_linear_id();
+                    return num_particles;
+                  };
 
-            auto lambda_get_num_particles = [&](const auto linear_species_id) {
-              const INT num_particles_unmasked =
-                  k_map.get_num_particles_cell_species(
-                      cell_mesh, cell_collision, linear_species_id);
+              const INT num_particles_a =
+                  lambda_get_num_particles(linear_species_id_a);
+              const INT num_particles_b =
+                  lambda_get_num_particles(linear_species_id_b);
 
-              int count_local = 0;
-              for (std::size_t px = local_id; px < num_particles_unmasked;
-                   px += local_size) {
-                const auto layer = k_map.get_particle_layer(
-                    cell_mesh, cell_collision, linear_species_id, px);
-                const auto linear_index =
-                    k_particle_linear_index.get_local_linear_index(cell_mesh,
-                                                                   layer);
-                const bool mask = k_mask_array_device.get(linear_index, 0);
-                count_local += mask ? 1 : 0;
+              const int num_pairs = pair_count_instance.get_num_pairs_ab(
+                  num_particles_a, num_particles_b);
+
+              if (group.leader()) {
+                k_counts[cell_mesh * k_max_num_collision_cells +
+                         cell_collision] = num_pairs;
               }
+            });
+      }
+    };
 
-              const int num_particles = sycl::reduce_over_group(
-                  group, count_local, sycl::plus<int>{});
-
-              return num_particles;
-            };
-
-            const INT num_particles_a =
-                lambda_get_num_particles(linear_species_id_a);
-            const INT num_particles_b =
-                lambda_get_num_particles(linear_species_id_b);
-
-            const int num_pairs = pair_count_instance.get_num_pairs_ab(
-                num_particles_a, num_particles_b);
-
-            k_counts[cell_mesh * k_max_num_collision_cells + cell_collision] =
-                num_pairs;
-          });
-    }
-  };
-
-  if (replacement) {
-    if (k_masks_set) {
-      e0 = lambda_get_num_pairs_mask_event(ReplacementPairCounter{});
+    if (replacement) {
+      if (k_masks_set) {
+        e0 = lambda_get_num_pairs_mask_event(ReplacementPairCounter{});
+      } else {
+        e0 = lambda_get_num_pairs_event(ReplacementPairCounter{});
+      }
     } else {
-      e0 = lambda_get_num_pairs_event(ReplacementPairCounter{});
-    }
-  } else {
-    if (k_masks_set) {
-      e0 = lambda_get_num_pairs_mask_event(NoReplacementPairCounter{});
-    } else {
-      e0 = lambda_get_num_pairs_event(NoReplacementPairCounter{});
+      if (k_masks_set) {
+        e0 = lambda_get_num_pairs_mask_event(NoReplacementPairCounter{});
+      } else {
+        e0 = lambda_get_num_pairs_event(NoReplacementPairCounter{});
+      }
     }
   }
 
@@ -408,11 +421,17 @@ void CollisionCellPartition::get_max_num_pairs(
 
   e0.wait_and_throw();
 
-  e0 = this->sycl_target->queue.memcpy(
-      map_cell_to_num_pairs->get_host_pointer(), k_counts,
-      k_cell_count * k_max_num_collision_cells * sizeof(int));
+  if (this->max_collision_cell_occupancy > 0) {
 
-  e0.wait_and_throw();
+    e0 = this->sycl_target->queue.memcpy(
+        map_cell_to_num_pairs->get_host_pointer(), k_counts,
+        k_cell_count * k_max_num_collision_cells * sizeof(int));
+
+    e0.wait_and_throw();
+
+  } else {
+    map_cell_to_num_pairs->fill(0);
+  }
 
   restore_resource(sycl_target->resource_stack_map,
                    ResourceStackKeyBufferDevice<int>{}, d_counts);

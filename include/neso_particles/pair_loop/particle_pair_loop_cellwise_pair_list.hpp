@@ -81,6 +81,8 @@ public:
   submit([[maybe_unused]] const std::optional<int> cell_start = std::nullopt,
          [[maybe_unused]] const std::optional<int> cell_end =
              std::nullopt) override {
+    this->profile_region = this->sycl_target->profile_map.start_region(
+        "ParticlePairLoopCellwisePairList", this->name);
 
     const auto k_pair_list = this->pair_list.pair_list->get_pair_list();
     this->h_pair_list_device = k_pair_list;
