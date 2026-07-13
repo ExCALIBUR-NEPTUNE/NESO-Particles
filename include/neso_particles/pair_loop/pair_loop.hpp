@@ -6,6 +6,7 @@
 #include "cellwise_pair_list_block.hpp"
 #include "cellwise_pair_list_host.hpp"
 #include "cellwise_pair_list_simple.hpp"
+#include "pair_utility.hpp"
 #include "particle_pair_loop_args.hpp"
 #include "particle_pair_loop_base.hpp"
 #include "particle_pair_loop_cellwise_pair_list.hpp"

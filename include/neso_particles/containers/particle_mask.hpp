@@ -167,7 +167,7 @@ public:
 
   /**
    * Set the masks from a ParticleDat Sym and component. Calls reset using the
-   * ParticleGroup.
+   * ParticleGroup. Calls reset before setting.
    *
    * @param particle_group ParticleGroup to set from.
    * @param sym Sym for ParticleDat to set from.
@@ -175,6 +175,14 @@ public:
    */
   void set(ParticleGroupSharedPtr particle_group, Sym<INT> sym,
            const int component);
+
+  /**
+   * Set all the masks to a specified value. Calls reset before setting.
+   *
+   * @param particle_group ParticleGroup to set from.
+   * @param value Value to set.
+   */
+  void set(ParticleGroupSharedPtr particle_group, const bool value);
 
   /**
    * Store the masks in a ParticleDat Sym and component.

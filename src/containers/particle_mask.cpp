@@ -59,6 +59,26 @@ void ParticleMask::set(ParticleGroupSharedPtr particle_group, Sym<INT> sym,
       ->execute();
 }
 
+void ParticleMask::set(ParticleGroupSharedPtr particle_group,
+                       const bool value) {
+
+  const auto npart_local = particle_group->get_npart_local();
+  if (this->size != npart_local) {
+    this->reset(particle_group);
+  }
+
+  const bool k_value = value;
+  auto k_mask_array_device = this->get_device();
+
+  particle_loop(
+      particle_group,
+      [=](auto INDEX) {
+        k_mask_array_device.set(INDEX.get_local_linear_index(), 0, k_value);
+      },
+      Access::read(ParticleLoopIndex{}))
+      ->execute();
+}
+
 void ParticleMask::get(ParticleGroupSharedPtr particle_group, Sym<INT> sym,
                        const int component) {
 

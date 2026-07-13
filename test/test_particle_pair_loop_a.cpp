@@ -853,3 +853,91 @@ TEST(ParticlePairLoop, cell_wise_pair_list_waves) {
   sycl_target->free();
   A->domain->mesh->free();
 }
+
+TEST(ParticlePairLoop, mask_off_referenced_particles) {
+
+  int npart_cell = 20;
+  const int ndim = 2;
+  const int nx = 16;
+  const int ny = 33;
+  const int nz = 48;
+
+  auto [A, sycl_target, cell_count] =
+      particle_loop_create_common(npart_cell, ndim, nx, ny, nz);
+  A->add_particle_dat(Sym<INT>("NEIGHBOURS"), 1);
+
+  auto reset_loop = particle_loop(
+      A, [=](auto NN) { NN.at(0) = 0; }, Access::write(Sym<INT>("NEIGHBOURS")));
+
+  reset_loop->execute();
+
+  auto cellwise_pair_listA =
+      std::make_shared<CellwisePairListSimple>(sycl_target, cell_count);
+
+  std::vector<int> c;
+  std::vector<int> i;
+  std::vector<int> j;
+
+  c.reserve(cell_count * npart_cell / 2);
+  i.reserve(cell_count * npart_cell / 2);
+  j.reserve(cell_count * npart_cell / 2);
+
+  std::mt19937 rng(9124234 + sycl_target->comm_pair.rank_parent);
+
+  INT total_num_pairs = 0;
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    npart_cell = A->get_npart_cell(cellx);
+    std::vector<int> pairs(npart_cell);
+    std::iota(pairs.begin(), pairs.end(), 0);
+    std::shuffle(pairs.begin(), pairs.end(), rng);
+    for (int px = 0; px < (npart_cell / 4); px++) {
+      c.push_back(cellx);
+      i.push_back(pairs.at(2 * px));
+      j.push_back(pairs.at(2 * px + 1));
+      total_num_pairs++;
+    }
+  }
+
+  cellwise_pair_listA->push_back(c, i, j);
+
+  auto particle_mask = std::make_shared<ParticleMask>(sycl_target);
+  particle_mask->set(A, true);
+
+  mask_off_referenced_particles(
+      CellwisePairListAbsolute<ParticleGroup, CellwisePairList>(
+          A, A, cellwise_pair_listA),
+      particle_mask);
+
+  ASSERT_EQ(particle_mask->get_num_masks_true(),
+            A->get_npart_local() - total_num_pairs * 2);
+
+  auto pl0 = particle_pair_loop(
+      "particle_pair_loop_test",
+      {CellwisePairListAbsolute<ParticleGroup, CellwisePairList>(
+          A, A, cellwise_pair_listA)},
+      [](auto NN_i, auto NN_j) {
+        NN_i.at(0) = 1;
+        NN_j.at(0) = 1;
+      },
+      Access::A(Access::write(Sym<INT>("NEIGHBOURS"))),
+      Access::B(Access::write(Sym<INT>("NEIGHBOURS"))));
+
+  pl0->execute();
+
+  ErrorPropagate ep(sycl_target);
+  auto k_ep = ep.device_ptr();
+
+  particle_loop(
+      A,
+      [=](auto INDEX, auto NN, auto MASK) {
+        const bool nn_set = NN.at(0) == 1;
+        NESO_KERNEL_ASSERT(nn_set != MASK.get(INDEX), k_ep);
+      },
+      Access::read(ParticleLoopIndex{}), Access::read(Sym<INT>("NEIGHBOURS")),
+      Access::read(particle_mask))
+      ->execute();
+
+  ASSERT_FALSE(ep.get_flag());
+
+  sycl_target->free();
+}

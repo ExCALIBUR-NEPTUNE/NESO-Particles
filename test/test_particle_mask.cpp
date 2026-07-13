@@ -95,6 +95,14 @@ TEST(ParticleMask, base) {
   ASSERT_EQ(particle_mask->get_num_masks_true(),
             static_cast<std::size_t>(A->get_npart_local()));
 
+  particle_mask->set(A, false);
+
+  ASSERT_EQ(particle_mask->get_num_masks_true(), 0);
+
+  particle_mask->set(A, true);
+  ASSERT_EQ(particle_mask->get_num_masks_true(),
+            static_cast<std::size_t>(A->get_npart_local()));
+
   sycl_target->free();
   A->domain->mesh->free();
 }
