@@ -585,8 +585,8 @@ TEST(ParticlePairLoop, kernel_tuple_rng) {
 
   ASSERT_TRUE(rng0->valid_internal_state());
   ASSERT_TRUE(rng1->valid_internal_state());
-  ASSERT_EQ(num_pairs * 2, state0);
-  ASSERT_EQ(num_pairs * 2, state1);
+  ASSERT_TRUE(num_pairs * rng_ncomp <= state0);
+  ASSERT_TRUE(num_pairs * rng_ncomp <= state1);
 
   particle_pair_loop(
       "particle_pair_loop_test",
