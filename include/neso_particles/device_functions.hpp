@@ -69,12 +69,30 @@ inline std::uint32_t popcount(const std::uint8_t x) {
 // Is this not the nvcxx backend?
 #ifndef __NVCOMPILER
 
-#define NESO_PARTICLES_PATCH_CUDA_MARRAY
+#define NESO_PARTICLES_PATCH_MARRAY
 
 #endif
 #endif
 
-#ifdef NESO_PARTICLES_PATCH_CUDA_MARRAY
+#if defined(__ACPP__) || defined(__ADAPTIVECPP__)
+
+#if defined(ACPP_VERSION_MAJOR) && (ACPP_VERSION_MAJOR < 25)
+#define NESO_PARTICLES_PATCH_MARRAY
+#endif
+
+#if defined(ACPP_VERSION_MAJOR) && (ACPP_VERSION_MAJOR == 25) &&               \
+    defined(ACPP_VERSION_MINOR) && (ACPP_VERSION_MINOR < 10)
+#define NESO_PARTICLES_PATCH_MARRAY
+#endif
+
+#endif
+
+#ifdef NESO_PARTICLES_PATCH_MARRAY
+
+/**
+ *  - ACPP cuda llvm marray not implemented for dot/cross.
+ *  - ACPP omp (library-only only?) sycl::dot(marray) not implemented?
+ */
 
 inline sycl::marray<REAL, 3> cross(const sycl::marray<REAL, 3> &a,
                                    const sycl::marray<REAL, 3> &b) {
@@ -85,9 +103,14 @@ inline sycl::marray<REAL, 3> cross(const sycl::marray<REAL, 3> &a,
   return c;
 }
 
-inline REAL dot(const sycl::marray<REAL, 3> &a,
-                const sycl::marray<REAL, 3> &b) {
-  return KERNEL_DOT_PRODUCT_3D(a[0], a[1], a[2], b[0], b[1], b[2]);
+template <std::size_t N>
+inline REAL dot(const sycl::marray<REAL, N> &a,
+                const sycl::marray<REAL, N> &b) {
+  REAL v = 0.0;
+  for (std::size_t ix = 0; ix < N; ix++) {
+    v += a[ix] * b[ix];
+  }
+  return v;
 }
 
 #else
