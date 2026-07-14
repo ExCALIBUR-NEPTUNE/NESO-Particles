@@ -195,6 +195,21 @@ inline void post_loop(ParticleLoopGlobalInfo *global_info,
 
 } // namespace ParticleLoopImplementation
 
+namespace ParticlePairLoopImplementation {
+
+/**
+ * Create the kernel argument for a TupleRNG.
+ */
+template <typename... T>
+inline void create_kernel_arg(
+    [[maybe_unused]] ParticlePairLoopIteration &iteration,
+    [[maybe_unused]] ParticleLoopImplementation::ParticleLoopIteration
+        &iteration_particle,
+    Access::TupleRNG::Read<T...> &rhs, Access::TupleRNG::Read<T...> &lhs) {
+  lhs = rhs;
+}
+} // namespace ParticlePairLoopImplementation
+
 /**
  * Helper function to create a tuple of KernelRNG/TupleRNG instances.
  *

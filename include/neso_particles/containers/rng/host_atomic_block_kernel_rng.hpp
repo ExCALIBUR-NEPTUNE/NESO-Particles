@@ -276,7 +276,7 @@ public:
    * @returns True if no errors have been detected otherwise false.
    */
   virtual inline bool valid_internal_state() override {
-    return this->internal_state_is_valid;
+    return (this->internal_state_is_valid) && (this->internal_state == 0);
   }
 
   /**

@@ -1,6 +1,7 @@
 #ifndef _NESO_PARTICLES_CONTAINERS_RNG_NULL_KERNEL_RNG_H_
 #define _NESO_PARTICLES_CONTAINERS_RNG_NULL_KERNEL_RNG_H_
 
+#include "../../pair_loop/particle_pair_loop_index.hpp"
 #include "kernel_rng.hpp"
 
 namespace NESO::Particles {
@@ -29,6 +30,18 @@ template <typename T> struct NullKernelRNGDevice {
   inline const T
   at([[maybe_unused]] const Access::LoopIndex::Read &particle_index,
      [[maybe_unused]] const int &component, bool *valid_sample) const {
+    *valid_sample = false;
+    return static_cast<T>(0);
+  }
+
+  /**
+   * @param[in] pair_index Unused, exists to match API.
+   * @param[in] component Unused, exists to match API.
+   * @param[in, out] valid_sample Will be set to false.
+   * @returns 0.
+   */
+  inline auto at([[maybe_unused]] const Access::PairLoopIndex::Read &pair_index,
+                 [[maybe_unused]] const int component, bool *valid_sample) {
     *valid_sample = false;
     return static_cast<T>(0);
   }

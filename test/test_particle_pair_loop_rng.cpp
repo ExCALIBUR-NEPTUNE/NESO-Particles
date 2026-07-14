@@ -491,3 +491,185 @@ TEST(ParticlePairLoopBlock, multiple_lists) {
   sycl_target->free();
   A->domain->mesh->free();
 }
+
+TEST(ParticlePairLoop, kernel_tuple_rng) {
+
+  int npart_cell = 10;
+  const int ndim = 2;
+  const int nx = 16;
+  const int ny = 33;
+  const int nz = 48;
+
+  auto [A, sycl_target, cell_count] =
+      particle_loop_create_common(npart_cell, ndim, nx, ny, nz);
+
+  const int ncomp_samples = 2;
+  A->add_particle_dat(Sym<INT>("SAMPLES"), ncomp_samples);
+
+  auto reset_loop = particle_loop(
+      A,
+      [=](auto SS) {
+        for (int ix = 0; ix < ncomp_samples; ix++) {
+          SS.at(ix) = -1;
+        }
+      },
+      Access::write(Sym<INT>("SAMPLES")));
+
+  reset_loop->execute();
+
+  auto cellwise_pair_listA =
+      std::make_shared<CellwisePairListSimple>(sycl_target, cell_count);
+
+  std::vector<int> c;
+  std::vector<int> i;
+  std::vector<int> j;
+
+  c.reserve(cell_count * npart_cell / 2);
+  i.reserve(cell_count * npart_cell / 2);
+  j.reserve(cell_count * npart_cell / 2);
+
+  std::mt19937 rng(9124234 + sycl_target->comm_pair.rank_parent);
+
+  INT num_pairs = 0;
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    npart_cell = A->get_npart_cell(cellx);
+    std::vector<int> pairs(npart_cell);
+    std::iota(pairs.begin(), pairs.end(), 0);
+    std::shuffle(pairs.begin(), pairs.end(), rng);
+    for (int px = 0; px < (npart_cell / 2); px++) {
+      c.push_back(cellx);
+      i.push_back(pairs.at(2 * px));
+      j.push_back(pairs.at(2 * px + 1));
+      num_pairs++;
+    }
+  }
+
+  cellwise_pair_listA->push_back(c, i, j);
+
+  REAL state0 = 0;
+  auto lambda_s0 = [&]() -> REAL { return (state0++) * 2; };
+  INT state1 = 0;
+  auto lambda_s1 = [&]() -> INT { return (state1++) * 3; };
+
+  const int rng_ncomp = 2;
+
+  auto rng0 = host_per_particle_block_rng<REAL>(lambda_s0, rng_ncomp);
+  auto rng1 = host_atomic_block_kernel_rng<INT>(lambda_s1, rng_ncomp);
+
+  auto tr = tuple_rng(rng0, rng1);
+
+  ErrorPropagate ep(sycl_target);
+  auto k_ep = ep.device_ptr();
+
+  auto pl0 = particle_pair_loop(
+      "particle_pair_loop_test",
+      {CellwisePairListAbsolute<ParticleGroup, CellwisePairList>(
+          A, A, cellwise_pair_listA)},
+      [=](auto PAIR_INDEX, auto RNG, auto SS_i, auto SS_j) {
+        bool valid = true;
+        SS_i.at(0) = Access::TupleRNG::get<0>(RNG).at(PAIR_INDEX, 0, &valid);
+        NESO_KERNEL_ASSERT(valid, k_ep);
+        SS_j.at(0) = Access::TupleRNG::get<0>(RNG).at(PAIR_INDEX, 1, &valid);
+        NESO_KERNEL_ASSERT(valid, k_ep);
+        SS_i.at(1) = Access::TupleRNG::get<1>(RNG).at(PAIR_INDEX, 0, &valid);
+        NESO_KERNEL_ASSERT(valid, k_ep);
+        SS_j.at(1) = Access::TupleRNG::get<1>(RNG).at(PAIR_INDEX, 1, &valid);
+        NESO_KERNEL_ASSERT(valid, k_ep);
+      },
+      Access::read(ParticlePairLoopIndex{}), Access::read(tr),
+      Access::A(Access::write(Sym<INT>("SAMPLES"))),
+      Access::B(Access::write(Sym<INT>("SAMPLES"))));
+
+  pl0->execute();
+  ASSERT_FALSE(ep.get_flag());
+
+  ASSERT_TRUE(rng0->valid_internal_state());
+  ASSERT_TRUE(rng1->valid_internal_state());
+  ASSERT_EQ(num_pairs * 2, state0);
+  ASSERT_EQ(num_pairs * 2, state1);
+
+  particle_pair_loop(
+      "particle_pair_loop_test",
+      {CellwisePairListAbsolute<ParticleGroup, CellwisePairList>(
+          A, A, cellwise_pair_listA)},
+      [=](auto SS_i, auto SS_j) {
+        bool valid = SS_i.at(0) % 2 == 0;
+        NESO_KERNEL_ASSERT(valid, k_ep);
+        valid = SS_j.at(0) % 2 == 0;
+        NESO_KERNEL_ASSERT(valid, k_ep);
+        valid = SS_i.at(1) % 3 == 0;
+        NESO_KERNEL_ASSERT(valid, k_ep);
+        valid = SS_j.at(1) % 3 == 0;
+        NESO_KERNEL_ASSERT(valid, k_ep);
+      },
+      Access::A(Access::read(Sym<INT>("SAMPLES"))),
+      Access::B(Access::read(Sym<INT>("SAMPLES"))))
+      ->execute();
+
+  ASSERT_FALSE(ep.get_flag());
+
+  sycl_target->free();
+}
+
+TEST(ParticlePairLoop, null_kernel_rng) {
+
+  int npart_cell = 10;
+  const int ndim = 2;
+  const int nx = 16;
+  const int ny = 33;
+  const int nz = 48;
+
+  auto [A, sycl_target, cell_count] =
+      particle_loop_create_common(npart_cell, ndim, nx, ny, nz);
+
+  auto cellwise_pair_listA =
+      std::make_shared<CellwisePairListSimple>(sycl_target, cell_count);
+
+  std::vector<int> c;
+  std::vector<int> i;
+  std::vector<int> j;
+
+  c.reserve(cell_count * npart_cell / 2);
+  i.reserve(cell_count * npart_cell / 2);
+  j.reserve(cell_count * npart_cell / 2);
+
+  std::mt19937 rng(9124234 + sycl_target->comm_pair.rank_parent);
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    npart_cell = A->get_npart_cell(cellx);
+    std::vector<int> pairs(npart_cell);
+    std::iota(pairs.begin(), pairs.end(), 0);
+    std::shuffle(pairs.begin(), pairs.end(), rng);
+    for (int px = 0; px < (npart_cell / 2); px++) {
+      c.push_back(cellx);
+      i.push_back(pairs.at(2 * px));
+      j.push_back(pairs.at(2 * px + 1));
+    }
+  }
+
+  cellwise_pair_listA->push_back(c, i, j);
+
+  auto nrng = null_kernel_rng<REAL>();
+
+  ErrorPropagate ep(sycl_target);
+  auto k_ep = ep.device_ptr();
+
+  particle_pair_loop(
+      "particle_pair_loop_test",
+      {CellwisePairListAbsolute<ParticleGroup, CellwisePairList>(
+          A, A, cellwise_pair_listA)},
+      [=](auto PAIR_INDEX, auto RNG) {
+        bool valid = true;
+        const auto v = RNG.at(PAIR_INDEX, 0, &valid);
+        NESO_KERNEL_ASSERT(!valid, k_ep);
+        NESO_KERNEL_ASSERT(v == 0.0, k_ep);
+      },
+      Access::read(ParticlePairLoopIndex{}), Access::read(nrng))
+      ->execute();
+
+  ASSERT_FALSE(ep.get_flag());
+
+  ASSERT_TRUE(nrng->valid_internal_state());
+
+  sycl_target->free();
+}
