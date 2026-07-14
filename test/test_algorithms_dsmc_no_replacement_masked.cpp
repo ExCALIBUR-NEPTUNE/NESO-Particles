@@ -139,7 +139,7 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement_masked) {
   };
 
   lambda_check(species_id_offset + 0, species_id_offset + 1);
-  lambda_check(species_id_offset + 0, species_id_offset + 1);
+  lambda_check(species_id_offset + 0, species_id_offset + 0);
   lambda_check(species_id_offset + 1, species_id_offset + 0);
 
   sycl_target->free();

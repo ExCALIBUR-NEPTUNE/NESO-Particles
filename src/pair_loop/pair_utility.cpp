@@ -27,10 +27,12 @@ void mask_off_referenced_particles(
                                                              INDEX_A.layer);
           k_particle_mask.set(linear_index_a, 0, false);
         }
-        const INT linear_index_b =
-            k_particle_linear_index.get_local_linear_index(INDEX_B.cell,
-                                                           INDEX_B.layer);
-        k_particle_mask.set(linear_index_b, 0, false);
+        {
+          const INT linear_index_b =
+              k_particle_linear_index.get_local_linear_index(INDEX_B.cell,
+                                                             INDEX_B.layer);
+          k_particle_mask.set(linear_index_b, 0, false);
+        }
       },
       Access::A(Access::read(ParticlePairLoopIndex{})),
       Access::B(Access::read(ParticlePairLoopIndex{})))
