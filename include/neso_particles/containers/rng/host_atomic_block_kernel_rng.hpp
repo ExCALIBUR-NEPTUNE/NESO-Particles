@@ -75,11 +75,13 @@ protected:
     if (!this->d_counters.count(sycl_target)) {
       this->d_counters[sycl_target] =
           std::make_shared<BufferDevice<int>>(sycl_target, 2);
+      sycl_target->queue
+          .fill(this->d_counters[sycl_target]->ptr, static_cast<int>(0), 2)
+          .wait_and_throw();
     }
   }
 
   inline int *get_counter_ptr(SYCLTargetSharedPtr sycl_target) {
-    this->create_counter(sycl_target);
     return this->d_counters.at(sycl_target)->ptr;
   }
 
@@ -136,9 +138,11 @@ public:
                "overlapping execution.");
     this->internal_state = 1;
 
+    auto sycl_target = global_info->particle_group->sycl_target;
+    this->create_counter(sycl_target);
+
     if (this->num_components > 0) {
       const auto num_particles = get_loop_iteration_set_size(global_info);
-      auto sycl_target = global_info->particle_group->sycl_target;
       auto t0 = profile_timestamp();
 
       // Create num_particles * num_components random numbers from the RNG
@@ -171,6 +175,7 @@ public:
               std::min(num_random_numbers, current_count);
           this->generation_function->draw_random_samples(
               sycl_target, d_ptr, num_required, this->block_size);
+
           if (num_required < current_count) {
             this->set_num_values(sycl_target, num_required);
           }
