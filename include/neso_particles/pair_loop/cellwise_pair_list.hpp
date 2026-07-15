@@ -44,6 +44,14 @@ struct CellwisePairListDevice {
   }
 
   /**
+   * @param cell Cell to retrieve number of waves for.
+   * @returns The number of waves for the given cell.
+   */
+  inline int get_num_waves_host(const int cell) const {
+    return this->h_wave_count[cell];
+  }
+
+  /**
    * @param wave Wave to retrieve number of pairs for.
    * @param cell Cell to retrieve number of pairs for.
    * @returns The number of pairs in the given wave and given cell.
@@ -139,6 +147,16 @@ public:
    * pairs will be enabled.
    */
   virtual PairMaskSharedPtr get_pair_mask() = 0;
+
+  /**
+   * Get the number of pairs of particles across mesh cells [cell_start,
+   * cell_end).
+   *
+   * @param cell_start First mesh cell.
+   * @param cell_end Last plus one mesh cell.
+   * @returns Number of pairs of particles.
+   */
+  virtual INT get_num_pairs_range(const int cell_start, const int cell_end);
 };
 
 using CellwisePairListSharedPtr = std::shared_ptr<CellwisePairList>;

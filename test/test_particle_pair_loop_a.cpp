@@ -26,16 +26,40 @@ TEST(ParticlePairLoop, cellwise_pair_list) {
   std::vector<int> h_i(num_samples);
   std::vector<int> h_j(num_samples);
 
+  std::vector<INT> h_num_pairs(cell_count);
+  std::fill(h_num_pairs.begin(), h_num_pairs.end(), 0);
+
   for (int ix = 0; ix < num_samples; ix++) {
-    h_c[ix] = dist(rng);
+    const auto cell = dist(rng);
+    h_c[ix] = cell;
     h_i[ix] = dist(rng);
     h_j[ix] = dist(rng);
     h_correct[h_c[ix]].first.push_back(h_i[ix]);
     h_correct[h_c[ix]].second.push_back(h_j[ix]);
+    h_num_pairs[cell]++;
   }
 
   cellwise_pair_list->push_back(h_c, h_i, h_j);
   ASSERT_EQ(num_samples, cellwise_pair_list->get_num_pairs());
+
+  for (int sx = 0; sx < 10; sx++) {
+    const int cell0 = dist(rng);
+    const int cell1 =
+        (cell0 + std::min(dist(rng) + 1, cell_count - 2)) % cell_count;
+
+    const int cell_start = std::min(cell0, cell1);
+    const int cell_end = std::max(cell0, cell1);
+
+    INT correct = 0;
+    for (int cellx = cell_start; cellx < cell_end; cellx++) {
+      correct += h_num_pairs.at(cellx);
+    }
+
+    ASSERT_TRUE(cell_start < cell_end);
+    const INT to_test =
+        cellwise_pair_list->get_num_pairs_range(cell_start, cell_end);
+    ASSERT_EQ(correct, to_test);
+  }
 
   {
     auto h_to_test = cellwise_pair_list->get_host_pair_list();
