@@ -2,6 +2,7 @@
 #define _NESO_PARTICLES_CELL_DAT_CONST_H_
 
 #include "../loop/particle_loop_base.hpp"
+#include "../pair_loop/particle_pair_loop_base.hpp"
 #include "cell_data.hpp"
 
 namespace NESO::Particles {
@@ -536,6 +537,90 @@ pre_loop(ParticleLoopGlobalInfo *global_info,
 }
 
 } // namespace ParticleLoopImplementation
+
+namespace ParticlePairLoopImplementation {
+
+/**
+ * Function to create the kernel argument for CellDatConst read
+ * access in a pair loop.
+ */
+template <typename T>
+inline void create_kernel_arg(
+    [[maybe_unused]] ParticlePairLoopIteration &iteration,
+    [[maybe_unused]] ParticleLoopImplementation::ParticleLoopIteration
+        &iteration_particle,
+    CellDatConstDeviceTypeConst<T> &rhs, Access::CellDatConst::Read<T> &lhs) {
+
+  T const *ptr = rhs.ptr + iteration_particle.cellx * rhs.stride;
+  lhs.ptr = ptr;
+  lhs.nrow = rhs.nrow;
+}
+
+/**
+ * Function to create the kernel argument for CellDatConst add
+ * access in a pair loop.
+ */
+template <typename T>
+inline void create_kernel_arg(
+    [[maybe_unused]] ParticlePairLoopIteration &iteration,
+    [[maybe_unused]] ParticleLoopImplementation::ParticleLoopIteration
+        &iteration_particle,
+    CellDatConstDeviceType<T> &rhs, Access::CellDatConst::Write<T> &lhs) {
+
+  T *ptr = rhs.ptr + iteration_particle.cellx * rhs.stride;
+  lhs.ptr = ptr;
+  lhs.nrow = rhs.nrow;
+}
+
+/**
+ * Function to create the kernel argument for CellDatConst add
+ * access in a pair loop.
+ */
+template <typename T>
+inline void create_kernel_arg(
+    [[maybe_unused]] ParticlePairLoopIteration &iteration,
+    [[maybe_unused]] ParticleLoopImplementation::ParticleLoopIteration
+        &iteration_particle,
+    CellDatConstDeviceType<T> &rhs, Access::CellDatConst::Add<T> &lhs) {
+
+  T *ptr = rhs.ptr + iteration_particle.cellx * rhs.stride;
+  lhs.ptr = ptr;
+  lhs.nrow = rhs.nrow;
+}
+
+/**
+ * Function to create the kernel argument for CellDatConst min
+ * access in a pair loop.
+ */
+template <typename T>
+inline void create_kernel_arg(
+    [[maybe_unused]] ParticlePairLoopIteration &iteration,
+    [[maybe_unused]] ParticleLoopImplementation::ParticleLoopIteration
+        &iteration_particle,
+    CellDatConstDeviceType<T> &rhs, Access::CellDatConst::Min<T> &lhs) {
+
+  T *ptr = rhs.ptr + iteration_particle.cellx * rhs.stride;
+  lhs.ptr = ptr;
+  lhs.nrow = rhs.nrow;
+}
+
+/**
+ * Function to create the kernel argument for CellDatConst max
+ * access in a pair loop.
+ */
+template <typename T>
+inline void create_kernel_arg(
+    [[maybe_unused]] ParticlePairLoopIteration &iteration,
+    [[maybe_unused]] ParticleLoopImplementation::ParticleLoopIteration
+        &iteration_particle,
+    CellDatConstDeviceType<T> &rhs, Access::CellDatConst::Max<T> &lhs) {
+
+  T *ptr = rhs.ptr + iteration_particle.cellx * rhs.stride;
+  lhs.ptr = ptr;
+  lhs.nrow = rhs.nrow;
+}
+
+} // namespace ParticlePairLoopImplementation
 
 namespace Private {
 template <typename T>
