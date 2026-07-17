@@ -20,6 +20,9 @@ void DeviceLimits::setup_env() {
   this->wgl.max_work_group_size =
       get_env_size_t("NESO_PARTICLES_DEVICE_LIMIT_WORK_GROUP_SIZE",
                      this->wgl.max_work_group_size);
+  this->wgl.max_sub_group_size =
+      get_env_size_t("NESO_PARTICLES_DEVICE_LIMIT_SUB_GROUP_SIZE",
+                     this->wgl.max_sub_group_size);
 }
 
 void DeviceLimits::setup_generic() {
@@ -37,6 +40,16 @@ void DeviceLimits::setup_generic() {
 
   NESOASSERT(local_mem_exists, "Local memory does not exist.");
   this->local_mem_size = device.get_info<sycl::info::device::local_mem_size>();
+
+  std::vector<std::size_t> sub_group_sizes =
+      device.get_info<sycl::info::device::sub_group_sizes>();
+
+  std::size_t max_provided = 0;
+  for (auto &sx : sub_group_sizes) {
+    max_provided = std::max(max_provided, sx);
+  }
+
+  this->wgl.max_sub_group_size = max_provided;
 }
 
 void DeviceLimits::setup_nvidia() {
@@ -58,6 +71,7 @@ void DeviceLimits::print() {
   auto d3 = Private::get_max_global_workgroup<3>(this->wgl);
   nprint("3D:", d3.get(0), d3.get(1), d3.get(2));
   nprint("Workgroup size limit:", this->wgl.max_work_group_size);
+  nprint("Sub-group size limit:", this->wgl.max_sub_group_size);
   auto local_mem_exists =
       this->device.get_info<sycl::info::device::local_mem_type>() !=
       sycl::info::local_mem_type::none;

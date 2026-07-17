@@ -16,6 +16,7 @@ struct WorkGroupLimits {
   sycl::range<2> max_global_workgroup_2;
   sycl::range<3> max_global_workgroup_3;
   std::size_t max_work_group_size;
+  std::size_t max_sub_group_size;
 };
 
 template <int N>

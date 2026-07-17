@@ -34,6 +34,10 @@ struct TestParticleGroup;
 class DescendantProducts;
 class ParticleSubGroup;
 class ParticleGroupTemporary;
+class ParticleGroup;
+struct ParticleLinearIndexDevice;
+ParticleLinearIndexDevice
+get_particle_linear_index_device(std::shared_ptr<ParticleGroup> particle_group);
 namespace ParticleSubGroupImplementation {
 class SubGroupSelector;
 class SubGroupSelectorBase;
@@ -128,6 +132,8 @@ class ParticleGroup {
   get_sym_vector_cache_dispatch(ParticleGroup *particle_group,
                                 ParticleSubGroup *particle_sub_group);
   friend INT *Private::get_npart_cell_es_device_ptr(
+      std::shared_ptr<ParticleGroup> particle_group);
+  friend ParticleLinearIndexDevice get_particle_linear_index_device(
       std::shared_ptr<ParticleGroup> particle_group);
 
 protected:

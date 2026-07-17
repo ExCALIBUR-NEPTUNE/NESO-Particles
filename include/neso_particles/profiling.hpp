@@ -226,7 +226,7 @@ public:
    * @param profile_region ProfileRegion to end and add to internal container.
    */
   inline void end_region(std::optional<ProfileRegion> &profile_region) {
-    if (this->enabled) {
+    if (this->enabled && profile_region) {
       profile_region.value().end();
       this->regions.push_back(profile_region.value());
     }

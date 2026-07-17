@@ -34,7 +34,7 @@ protected:
 
 public:
   /// Number of cells to hold pairs for.
-  int cell_count{0};
+  int num_mesh_cells{0};
 
   /// Disable (implicit) copies.
   CellwisePairListHost(const CellwisePairListHost &st) = delete;
@@ -43,9 +43,9 @@ public:
   ~CellwisePairListHost() = default;
 
   /**
-   * @param cell_count Number of cells to hold pairs for.
+   * @param num_mesh_cells Number of cells to hold pairs for.
    */
-  CellwisePairListHost(const int cell_count);
+  CellwisePairListHost(const int num_mesh_cells);
 
   /**
    * Adds a pair of particles to the pair list for a given cell.

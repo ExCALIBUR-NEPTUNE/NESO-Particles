@@ -63,6 +63,9 @@ void SYCLTarget::print_info_inner() {
 #ifdef NESO_PARTICLES_MPI_NEIGHBOUR_ALL_TO_ALL_FIX
   mods += "mpi_neighbour_all_to_all_fix ";
 #endif
+#ifdef NESO_PARTICLES_PATCH_MARRAY
+  mods += "patched_marray ";
+#endif
 
   if (device_aware_mpi_enabled()) {
     mods += "device_aware_mpi ";

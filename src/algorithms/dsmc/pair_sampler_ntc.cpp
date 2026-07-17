@@ -3,18 +3,19 @@
 namespace NESO::Particles::DSMC {
 
 PairSamplerNTC::PairSamplerNTC(
-    SYCLTargetSharedPtr sycl_target, const int cell_count,
+    SYCLTargetSharedPtr sycl_target, const int num_mesh_cells,
     std::shared_ptr<RNGGenerationFunction<REAL>> rng_generation_function)
     : d_wave_counts(
-          std::make_shared<BufferDevice<int>>(sycl_target, cell_count)),
-      h_pair_counts(std::vector<int>(cell_count)),
+          std::make_shared<BufferDevice<int>>(sycl_target, num_mesh_cells)),
+      h_pair_counts(std::vector<int>(num_mesh_cells)),
       d_pair_counts(
-          std::make_shared<BufferDevice<int>>(sycl_target, cell_count)),
-      h_pair_counts_es(std::vector<INT>(cell_count)),
+          std::make_shared<BufferDevice<int>>(sycl_target, num_mesh_cells)),
+      h_pair_counts_es(std::vector<INT>(num_mesh_cells)),
       d_pair_counts_es(
-          std::make_shared<BufferDevice<INT>>(sycl_target, cell_count)),
-      d_pair_list(std::make_shared<BufferDevice<int>>(sycl_target, cell_count)),
-      sycl_target(sycl_target), cell_count(cell_count),
+          std::make_shared<BufferDevice<INT>>(sycl_target, num_mesh_cells)),
+      d_pair_list(
+          std::make_shared<BufferDevice<int>>(sycl_target, num_mesh_cells)),
+      sycl_target(sycl_target), num_mesh_cells(num_mesh_cells),
       rng_generation_function(rng_generation_function) {
 
   this->block_size = this->sycl_target->parameters
@@ -27,27 +28,28 @@ PairSamplerNTC::PairSamplerNTC(
 
 void PairSamplerNTC::sample(ParticleSubGroupSharedPtr sub_group_a,
                             ParticleSubGroupSharedPtr sub_group_b,
-                            std::vector<int> &new_sample_counts) {
+                            std::vector<int> &new_num_pairs) {
 
   auto r0 =
       this->sycl_target->profile_map.start_region("PairSamplerNTC", "sample");
 
-  NESOASSERT(static_cast<int>(new_sample_counts.size()) == this->cell_count,
-             "new_sample_counts size does not match the cell count.");
+  NESOASSERT(static_cast<int>(new_num_pairs.size()) == this->num_mesh_cells,
+             "new_num_pairs size does not match the cell count.");
 
   auto particle_group = get_particle_group(sub_group_a);
   NESOASSERT(particle_group == get_particle_group(sub_group_b),
              "Passed particle sub groups are from different parent particle "
              "groups.");
-  NESOASSERT(particle_group->domain->mesh->get_cell_count() == this->cell_count,
+  NESOASSERT(particle_group->domain->mesh->get_cell_count() ==
+                 this->num_mesh_cells,
              "Missmatch in cell counts.");
 
   const bool a_is_b = sub_group_a == sub_group_b;
 
   INT exscan = 0;
   int max_num_blocks = 0;
-  for (int cx = 0; cx < cell_count; cx++) {
-    this->h_pair_counts[cx] = new_sample_counts[cx];
+  for (int cx = 0; cx < num_mesh_cells; cx++) {
+    this->h_pair_counts[cx] = new_num_pairs[cx];
     const auto required_size = this->h_pair_counts[cx];
 
     if (a_is_b) {
@@ -74,7 +76,7 @@ void PairSamplerNTC::sample(ParticleSubGroupSharedPtr sub_group_a,
   this->d_pair_counts_es->set(this->h_pair_counts_es);
   int *k_pair_counts = this->d_pair_counts->ptr;
   INT *k_pair_counts_es = this->d_pair_counts_es->ptr;
-  this->d_wave_counts->realloc_no_copy(max_num_blocks * cell_count);
+  this->d_wave_counts->realloc_no_copy(max_num_blocks * num_mesh_cells);
   int *k_wave_counts = this->d_wave_counts->ptr;
 
   auto d_real_samples = get_resource<BufferDevice<REAL>,
@@ -114,7 +116,7 @@ void PairSamplerNTC::sample(ParticleSubGroupSharedPtr sub_group_a,
       .wait_and_throw();
 
   int max_npart_cell = 0;
-  for (int cellx = 0; cellx < this->cell_count; cellx++) {
+  for (int cellx = 0; cellx < this->num_mesh_cells; cellx++) {
     max_npart_cell = std::max(max_npart_cell, h_npart_cell[cellx]);
   }
 
@@ -126,13 +128,14 @@ void PairSamplerNTC::sample(ParticleSubGroupSharedPtr sub_group_a,
              "Required local memory size is less than available local "
              "memory. Please raise an issue if this is actually a problem.");
 
-  const auto k_cell_count = this->cell_count;
+  const auto k_cell_count = this->num_mesh_cells;
   const auto k_block_size = this->block_size;
 
   if (this->sycl_target->device.is_cpu()) {
 
-    auto nd_iteration_set = this->sycl_target->device_limits.validate_nd_range(
-        sycl::nd_range<1>(sycl::range<1>(this->cell_count), sycl::range<1>(1)));
+    auto nd_iteration_set =
+        this->sycl_target->device_limits.validate_nd_range(sycl::nd_range<1>(
+            sycl::range<1>(this->num_mesh_cells), sycl::range<1>(1)));
 
     this->sycl_target->queue
         .submit([&](sycl::handler &cgh) {
@@ -213,9 +216,10 @@ void PairSamplerNTC::sample(ParticleSubGroupSharedPtr sub_group_a,
 
   } else {
 
-    auto nd_iteration_set = this->sycl_target->device_limits.validate_nd_range(
-        sycl::nd_range<2>(sycl::range<2>(this->cell_count, this->block_size),
-                          sycl::range<2>(1, this->block_size)));
+    auto nd_iteration_set =
+        this->sycl_target->device_limits.validate_nd_range(sycl::nd_range<2>(
+            sycl::range<2>(this->num_mesh_cells, this->block_size),
+            sycl::range<2>(1, this->block_size)));
 
     this->sycl_target->queue
         .submit([&](sycl::handler &cgh) {
@@ -382,7 +386,7 @@ void PairSamplerNTC::sample(ParticleSubGroupSharedPtr sub_group_a,
 
   this->d_pair_list_block_device = {this->pair_count,
                                     this->block_size,
-                                    this->cell_count,
+                                    this->num_mesh_cells,
                                     this->max_wave_count,
                                     this->d_wave_counts->ptr,
                                     this->d_pair_counts->ptr,

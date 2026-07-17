@@ -3,7 +3,9 @@
 
 #include "../../compute_target.hpp"
 #include "../../containers/blocked_binary_tree.hpp"
+#include "../../containers/particle_mask.hpp"
 #include "../../particle_sub_group/particle_sub_group.hpp"
+#include "collision_cell_num_pairs.hpp"
 #include <memory>
 #include <vector>
 
@@ -18,7 +20,7 @@ struct CollisionCellPartitionDevice {
   BlockedBinaryNode<INT, INT, NESO_PARTICLES_BLOCKED_BINARY_TREE_WIDTH>
       *d_species_map_root{nullptr};
 
-  INT mesh_cell_count{0};
+  INT num_mesh_cells{0};
   INT max_num_collision_cells{0};
   INT max_num_species{0};
   int const *d_map_entries;
@@ -90,6 +92,8 @@ struct CollisionCellPartitionDevice {
 
 /**
  * Holds a map from (mesh cell, collision cell, species ID) to particle layers.
+ * Particles may be masked off by passing a ParticleMask to the construct call.
+ * Particles exist in the map independently of the mask values.
  */
 class CollisionCellPartition {
 protected:
@@ -103,6 +107,7 @@ protected:
   std::map<INT, INT> map_species_id_to_linear;
 
   std::unique_ptr<BufferDevice<INT>> d_max_collision_cell_occupancy;
+  ParticleMaskSharedPtr particle_mask = nullptr;
 
 public:
   /// Disable (implicit) copies.
@@ -115,7 +120,7 @@ public:
   SYCLTargetSharedPtr sycl_target;
 
   // Number of mesh cells
-  int cell_count{0};
+  int num_mesh_cells{0};
 
   // The ParticleSubGroup from the last construct.
   ParticleSubGroupSharedPtr particle_sub_group;
@@ -124,12 +129,13 @@ public:
   std::vector<INT> species_ids;
 
   // Current number of collision cells for each mesh cell.
-  std::vector<int> collision_cell_counts;
+  std::vector<int> num_collision_cells;
 
   // Maximum number of collision cells over all mesh cells.
   INT max_num_collision_cells{0};
 
-  // Maximum occupancy of a collision cell for any species.
+  // Maximum occupancy of a collision cell for any species. This value ignores
+  // values of masks.
   INT max_collision_cell_occupancy{0};
 
   /**
@@ -137,20 +143,23 @@ public:
    * into mesh cells then DSMC collision cells.
    *
    * @param sycl_target SYCLTarget to use.
-   * @param cell_count Number of local mesh cells (not the number of collision
-   * cells).
+   * @param num_mesh_cells Number of local mesh cells (not the number of
+   * collision cells).
    * @param species_ids Vector containing all permissible species IDs that could
    * be encountered.
    */
-  CollisionCellPartition(SYCLTargetSharedPtr sycl_target, const int cell_count,
+  CollisionCellPartition(SYCLTargetSharedPtr sycl_target,
+                         const int num_mesh_cells,
                          std::vector<INT> species_ids);
 
   /**
-   * Construct the internal representation from a ParticleSubGroup.
+   * Construct the internal representation from a ParticleSubGroup. This
+   * construct method enables all particles, i.e. there are no masks values
+   * used.
    *
    * @param particle_sub_group The set of particles which are partitioned into
    * species and dsmc cells.
-   * @param collision_cell_counts Vector of length cell_count containing the
+   * @param num_collision_cells Vector of length num_mesh_cells containing the
    * number of collision cells in each mesh cell.
    * @param species_id_sym Sym describing which ParticleDat contains the species
    * ID.
@@ -162,7 +171,36 @@ public:
    * contains the collision cell ID.
    */
   void construct(ParticleSubGroupSharedPtr particle_sub_group,
-                 const std::vector<int> &collision_cell_counts,
+                 const std::vector<int> &num_collision_cells,
+                 Sym<INT> species_id_sym, const int species_id_component,
+                 Sym<INT> collision_cell_sym,
+                 const int collision_cell_component);
+
+  /**
+   * Construct the internal representation from a ParticleSubGroup. Particles
+   * may be masked off, or on, from pair selection after construct is called by
+   * updating the ParticleMask that is passed here. Particles exist in this data
+   * structure indpendently of the mask value. The current value of the mask is
+   * taken into account when get_max_num_pairs is called.
+   *
+   * @param particle_sub_group The set of particles which are partitioned into
+   * species and dsmc cells.
+   * @param particle_mask Particle masks that indicate if a particle is
+   * available.
+   * @param num_collision_cells Vector of length num_mesh_cells containing the
+   * number of collision cells in each mesh cell.
+   * @param species_id_sym Sym describing which ParticleDat contains the species
+   * ID.
+   * @param species_id_component Describe which ParticleDat component describes
+   * the species.
+   * @param collision_cell_sym Sym describing which ParticleDat contains the
+   * collision cell ID.
+   * @param collision_cell_component Describe which ParticleDat component
+   * contains the collision cell ID.
+   */
+  void construct(ParticleSubGroupSharedPtr particle_sub_group,
+                 ParticleMaskSharedPtr particle_mask,
+                 const std::vector<int> &num_collision_cells,
                  Sym<INT> species_id_sym, const int species_id_component,
                  Sym<INT> collision_cell_sym,
                  const int collision_cell_component);
@@ -172,18 +210,19 @@ public:
    * and B for each collision cell. Note that in the case of replacement these
    * values are identical to determining if there are two or more particles in
    * the collision cell. In this scenario the return values are 0 or INT_MAX.
+   * This method will use the current values of the ParticleMask provided if a
+   * ParticleMask was provided at construction time.
    *
    * @param[in] species_id_a Species ID of A.
    * @param[in] species_id_b Species ID of B.
    * @param[in] replacement Indicate if pairs are chosen with (true) or without
    * replacement (false).
-   * @param[in, out] map_cells_to_counts Output map from [mesh cell][collision
-   * cell] to maximum number of pairs that can be formed. The passed argument
-   * will be resized as needed.
+   * @param[in, out] map_cell_to_num_pairs Output map from [mesh cell][collision
+   * cell] to maximum number of pairs that can be formed.
    */
   void get_max_num_pairs(const INT species_id_a, const INT species_id_b,
                          const bool replacement,
-                         std::vector<std::vector<int>> &map_cells_to_counts);
+                         CollisionCellNumPairsSharedPtr &map_cell_to_num_pairs);
 
   /**
    * @param species_id Species ID as stored on particles.
@@ -195,6 +234,18 @@ public:
    * @returns The device description of the maps.
    */
   CollisionCellPartitionDevice get_device();
+
+  /**
+   * @returns A CollisionCellNumPairs instance suitably sized for the number of
+   * mesh cells and collision cells currently specified.
+   */
+
+  CollisionCellNumPairsSharedPtr get_collision_cell_num_pairs_instance();
+
+  /**
+   * @returns The current ParticleMask in use. This method may return a nullptr.
+   */
+  ParticleMaskSharedPtr get_particle_mask();
 };
 
 using CollisionCellPartitionSharedPtr = std::shared_ptr<CollisionCellPartition>;

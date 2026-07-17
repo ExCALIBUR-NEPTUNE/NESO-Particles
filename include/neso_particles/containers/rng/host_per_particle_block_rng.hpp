@@ -195,7 +195,9 @@ public:
     this->internal_state = 0;
   }
 
-  virtual inline bool valid_internal_state() override { return true; };
+  virtual inline bool valid_internal_state() override {
+    return this->internal_state == 0;
+  };
 };
 
 /**

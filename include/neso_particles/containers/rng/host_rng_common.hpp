@@ -200,6 +200,12 @@ protected:
       return nullptr;
     }
 
+    auto lambda_set_reallocated = [&](const bool value) {
+      if (reallocated != nullptr) {
+        *reallocated = value;
+      }
+    };
+
     const std::size_t padded_size = std::max(
         required_size,
         static_cast<std::size_t>(static_cast<REAL>(required_size) * 1.1));
@@ -207,15 +213,14 @@ protected:
     if (!this->d_buffers.count(sycl_target)) {
       this->d_buffers[sycl_target] =
           std::make_unique<BufferDevice<T>>(sycl_target, padded_size);
+      lambda_set_reallocated(true);
     } else {
       if (this->d_buffers.at(sycl_target)->size < required_size) {
         this->d_buffers.at(sycl_target)->realloc(padded_size, this->max_factor);
       }
+      lambda_set_reallocated(false);
     }
 
-    if (reallocated != nullptr) {
-      *reallocated = false;
-    }
     return this->d_buffers.at(sycl_target)->ptr;
   }
 

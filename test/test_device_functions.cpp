@@ -676,3 +676,74 @@ TEST(DeviceFunctions, line_triangle_intersection_moller_trumbore) {
 
   lambda_test_triangle(v0, v1, v2);
 }
+
+TEST(DeviceFunctions, reduce_over_group_block_wise) {
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+
+  const std::size_t local_size =
+      sycl_target->parameters->template get<SizeTParameter>("LOOP_LOCAL_SIZE")
+          ->value;
+
+  for (std::size_t block_size = 1; block_size <= local_size; block_size *= 2) {
+    const std::size_t d1 = block_size;
+    const std::size_t d0 = local_size / d1;
+    ASSERT_EQ(d1 * d0, local_size);
+
+    const std::size_t n0 = 23;
+    const std::size_t n1 = 31;
+    const std::size_t e0 = d0 * n0;
+    const std::size_t e1 = d1 * n1;
+
+    std::vector<int> h_source(e0 * e1);
+    std::iota(h_source.begin(), h_source.end(), 0);
+
+    BufferDevice<int> d_source(sycl_target, h_source);
+    int *k_source = d_source.ptr;
+    BufferDevice<int> d_dest(sycl_target, h_source);
+    int *k_dest = d_dest.ptr;
+
+    sycl_target->queue
+        .submit([=](auto &cgh) {
+          sycl::local_accessor<int, 1> local_memory(sycl::range<1>(local_size),
+                                                    cgh);
+
+          cgh.parallel_for(
+              sycl::nd_range<2>(sycl::range<2>(e0, e1), sycl::range<2>(d0, d1)),
+              [=](sycl::nd_item<2> idx) {
+                const std::size_t gid = idx.get_global_linear_id();
+                const std::size_t lid = idx.get_local_linear_id();
+                local_memory[lid] = k_source[gid];
+
+                const bool contributed = Kernel::reduce_over_group_block_wise(
+                    &local_memory[0], idx, sycl::plus<int>{});
+
+                k_dest[gid] = contributed ? local_memory[lid] : -1;
+              });
+        })
+        .wait_and_throw();
+
+    auto h_dest = d_dest.get();
+    auto h_correct = d_dest.get();
+
+    std::fill(h_correct.begin(), h_correct.end(), -2);
+
+    for (std::size_t r0 = 0; r0 < e0; r0++) {
+      for (std::size_t b1 = 0; b1 < n1; b1++) {
+
+        const std::size_t start = r0 * e1 + b1 * d1;
+        const std::size_t end = start + d1;
+
+        int acc = 0;
+        for (std::size_t ix = start; ix < end; ix++) {
+          acc += h_source.at(ix);
+          h_correct.at(ix) = -1;
+        }
+        h_correct.at(start) = acc;
+      }
+    }
+
+    ASSERT_EQ(h_correct, h_dest);
+  }
+
+  sycl_target->free();
+}

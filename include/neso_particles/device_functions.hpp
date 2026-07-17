@@ -69,12 +69,30 @@ inline std::uint32_t popcount(const std::uint8_t x) {
 // Is this not the nvcxx backend?
 #ifndef __NVCOMPILER
 
-#define NESO_PARTICLES_PATCH_CUDA_MARRAY
+#define NESO_PARTICLES_PATCH_MARRAY
 
 #endif
 #endif
 
-#ifdef NESO_PARTICLES_PATCH_CUDA_MARRAY
+#if defined(__ACPP__) || defined(__ADAPTIVECPP__)
+
+#if defined(ACPP_VERSION_MAJOR) && (ACPP_VERSION_MAJOR < 25)
+#define NESO_PARTICLES_PATCH_MARRAY
+#endif
+
+#if defined(ACPP_VERSION_MAJOR) && (ACPP_VERSION_MAJOR == 25) &&               \
+    defined(ACPP_VERSION_MINOR) && (ACPP_VERSION_MINOR < 10)
+#define NESO_PARTICLES_PATCH_MARRAY
+#endif
+
+#endif
+
+#ifdef NESO_PARTICLES_PATCH_MARRAY
+
+/**
+ *  - ACPP cuda llvm marray not implemented for dot/cross.
+ *  - ACPP omp (library-only only?) sycl::dot(marray) not implemented?
+ */
 
 inline sycl::marray<REAL, 3> cross(const sycl::marray<REAL, 3> &a,
                                    const sycl::marray<REAL, 3> &b) {
@@ -85,9 +103,14 @@ inline sycl::marray<REAL, 3> cross(const sycl::marray<REAL, 3> &a,
   return c;
 }
 
-inline REAL dot(const sycl::marray<REAL, 3> &a,
-                const sycl::marray<REAL, 3> &b) {
-  return KERNEL_DOT_PRODUCT_3D(a[0], a[1], a[2], b[0], b[1], b[2]);
+template <std::size_t N>
+inline REAL dot(const sycl::marray<REAL, N> &a,
+                const sycl::marray<REAL, N> &b) {
+  REAL v = 0.0;
+  for (std::size_t ix = 0; ix < N; ix++) {
+    v += a[ix] * b[ix];
+  }
+  return v;
 }
 
 #else
@@ -818,6 +841,54 @@ inline void bitonic8(GROUP_TYPE group, VALUE_TYPE *s_ptr) {
     sycl::group_barrier(group);
     s_ptr[i0] = v0;
   }
+}
+
+/**
+ * In place reduction of values block-wise. i.e. the local memory holds
+ *
+ * [a_0,..., a_{n-1}, b_0,...,b_{n-1},.....]
+ *
+ * and the final dimension of the work-group is of size n. On return the local
+ * memory will hold
+ *
+ * [a_0 + ... + a_{n-1}, u_1,..., u_{n-1},
+ *  b_0 + ... + b_{n-1}, u_1,..., u_{n-1},
+ *  ...
+ *  ]
+ *
+ *  where u_* are undefined values.
+ *
+ *  @param[in, out] la_reduction Local memory containing values.
+ *  @param[in] work_item SYCL work item providing the group over which to
+ * perform reduction.
+ *  @param[in] binop Binary operation used to combine elements.
+ *  @returns True on the work-items that have local indices that hold the
+ * reduced values otherwise false.
+ */
+template <int GROUP_DIM, typename T, typename OP_TYPE>
+inline bool reduce_over_group_block_wise(T *la_reduction,
+                                         sycl::nd_item<GROUP_DIM> work_item,
+                                         OP_TYPE binop) {
+
+  auto group = work_item.get_group();
+  constexpr int last_dim = GROUP_DIM - 1;
+  const std::size_t num_elements = group.get_local_range(last_dim);
+  const std::size_t local_id = work_item.get_local_linear_id();
+  const std::size_t block_id = local_id / num_elements;
+  const std::size_t block_local_id = local_id - block_id * num_elements;
+
+  sycl::group_barrier(group, sycl::memory_scope::work_group);
+
+  for (std::size_t s = num_elements / 2; s > 0; s >>= 1) {
+    if (block_local_id < s) {
+      const T value_curr = la_reduction[local_id];
+      const T value_recv = la_reduction[local_id + s];
+      la_reduction[local_id] = binop(value_curr, value_recv);
+    }
+    sycl::group_barrier(group, sycl::memory_scope::work_group);
+  }
+
+  return block_local_id == 0;
 }
 
 } // namespace Kernel

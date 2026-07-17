@@ -1,6 +1,7 @@
 #ifndef _NESO_PARTICLES_PAIR_LOOP_PAIR_LOOP_ARGS_HPP_
 #define _NESO_PARTICLES_PAIR_LOOP_PAIR_LOOP_ARGS_HPP_
 
+#include "../containers/cell_dat_const.hpp"
 #include "../containers/rng/kernel_rng.hpp"
 #include "../loop/particle_loop_args.hpp"
 #include "../particle_sub_group/particle_sub_group_base.hpp"

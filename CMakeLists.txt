@@ -49,6 +49,7 @@ set(SRC_FILES
     ${SRC_DIR}/algorithms/common.cpp
     ${SRC_DIR}/algorithms/dsmc/pair_sampler_ntc.cpp
     ${SRC_DIR}/algorithms/dsmc/pair_sampler_no_replacement.cpp
+    ${SRC_DIR}/algorithms/dsmc/collision_cell_num_pairs.cpp
     ${SRC_DIR}/algorithms/dsmc/collision_cell_partition.cpp
     ${SRC_DIR}/algorithms/particle_data_movement.cpp
     ${SRC_DIR}/algorithms/subdivide_cells_voronoi.cpp
@@ -98,6 +99,7 @@ set(SRC_FILES
     ${SRC_DIR}/containers/index_map.cpp
     ${SRC_DIR}/containers/local_array.cpp
     ${SRC_DIR}/containers/mask_array.cpp
+    ${SRC_DIR}/containers/particle_mask.cpp
     ${SRC_DIR}/containers/particle_set_device.cpp
     ${SRC_DIR}/containers/sym_vector.cpp
     ${SRC_DIR}/containers/sym_vector_pointer_cache.cpp
@@ -110,11 +112,13 @@ set(SRC_FILES
     ${SRC_DIR}/global_mapping.cpp
     ${SRC_DIR}/parallel_initialisation.cpp
     ${SRC_DIR}/packing_unpacking.cpp
+    ${SRC_DIR}/particle_linear_index.cpp
     ${SRC_DIR}/pair_loop/cellwise_pair_list.cpp
     ${SRC_DIR}/pair_loop/cellwise_pair_list_simple.cpp
     ${SRC_DIR}/pair_loop/cellwise_pair_list_host.cpp
     ${SRC_DIR}/pair_loop/cellwise_pair_list_block.cpp
     ${SRC_DIR}/pair_loop/pair_mask.cpp
+    ${SRC_DIR}/pair_loop/pair_utility.cpp
     ${SRC_DIR}/particle_dat.cpp
     ${SRC_DIR}/particle_group.cpp
     ${SRC_DIR}/particle_set.cpp
@@ -155,6 +159,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/common.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/dsmc.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/cellwise_all_to_all.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/collision_cell_num_pairs.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/collision_cell_partition.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/pair_sampler_ntc.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/pair_sampler_no_replacement.hpp
@@ -207,6 +212,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/lookup_table.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/nd_local_array.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/mask_array.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/containers/particle_mask.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/index_map.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/particle_set_device.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/product_matrix.hpp
@@ -296,6 +302,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/cellwise_pair_list_host.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/pair_loop.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/pair_mask.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/pair_utility.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/particle_pair_loop_args.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/particle_pair_loop_base.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/pair_loop/particle_pair_loop_index.hpp
@@ -310,6 +317,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_group_pointer_map.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_group_temporary.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_io.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/particle_linear_index.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_remover.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_set.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_spec.hpp
