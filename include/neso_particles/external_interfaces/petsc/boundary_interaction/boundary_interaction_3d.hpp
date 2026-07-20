@@ -281,7 +281,7 @@ protected:
   }
 
 public:
-  /// Tolerance for line-line intersections.
+  /// Tolerance for intersections.
   REAL tol;
 
   /**
@@ -296,7 +296,7 @@ public:
   /**
    * Free the instance. Must be called. Collective on the communicator.
    */
-  void free();
+  virtual void free() override;
 
   /**
    * Call after updating to find particles whose trajectories intersect the
@@ -308,8 +308,8 @@ public:
    * constructor, to a ParticleSubGroup of particles which crossed the boundary
    * elements which form the boundary group.
    */
-  [[nodiscard]] std::map<PetscInt, ParticleSubGroupSharedPtr>
-  post_integration(std::shared_ptr<ParticleGroup> particles);
+  [[nodiscard]] virtual std::map<PetscInt, ParticleSubGroupSharedPtr>
+  post_integration(std::shared_ptr<ParticleGroup> particles) override;
 
   /**
    * Call after updating to find particles whose trajectories intersect the
@@ -321,8 +321,8 @@ public:
    * constructor, to a ParticleSubGroup of particles which crossed the boundary
    * elements which form the boundary group.
    */
-  [[nodiscard]] std::map<PetscInt, ParticleSubGroupSharedPtr>
-  post_integration(std::shared_ptr<ParticleSubGroup> particles);
+  [[nodiscard]] virtual std::map<PetscInt, ParticleSubGroupSharedPtr>
+  post_integration(std::shared_ptr<ParticleSubGroup> particles) override;
 
   /**
    * Create an instance of the class for a particular mesh. This constructor

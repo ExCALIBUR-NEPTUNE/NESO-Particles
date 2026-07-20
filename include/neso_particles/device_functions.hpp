@@ -33,8 +33,11 @@ template <typename T> inline auto atan2(const T y, const T x) {
   return sycl::atan2(y, x);
 }
 template <typename T> inline auto rsqrt(const T x) { return sycl::rsqrt(x); }
+template <typename T> inline auto asin(const T x) { return sycl::asin(x); }
 template <typename T> inline auto sin(const T x) { return sycl::sin(x); }
+template <typename T> inline auto acos(const T x) { return sycl::acos(x); }
 template <typename T> inline auto cos(const T x) { return sycl::cos(x); }
+template <typename T> inline auto atan(const T x) { return sycl::atan(x); }
 template <typename T> inline auto tan(const T x) { return sycl::tan(x); }
 template <typename T> inline auto log(const T x) { return sycl::log(x); }
 template <typename T> inline auto log2(const T x) { return sycl::log2(x); }

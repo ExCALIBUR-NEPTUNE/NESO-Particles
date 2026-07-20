@@ -34,6 +34,7 @@
 #include "neso_particles/device_functions.hpp"
 #include "neso_particles/domain.hpp"
 #include "neso_particles/error_propagate.hpp"
+#include "neso_particles/generic_function.hpp"
 #include "neso_particles/global_mapping.hpp"
 #include "neso_particles/local_mapping.hpp"
 #include "neso_particles/local_move.hpp"

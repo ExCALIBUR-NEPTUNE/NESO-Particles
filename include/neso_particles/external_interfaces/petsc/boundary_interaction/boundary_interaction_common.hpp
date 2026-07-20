@@ -344,6 +344,37 @@ public:
   Sym<REAL> previous_position_sym;
 
   /**
+   * Free the instance. Must be called. Collective on the communicator.
+   */
+  virtual void free() = 0;
+
+  /**
+   * Call after updating to find particles whose trajectories intersect the
+   * DMPlex boundary.
+   *
+   * @param particles Collection of particles, either a ParticleGroup or
+   * ParticleSubGroup, to identify trajectory-boundary intersections of.
+   * @returns Map from boundary groups ids, which were passed in the
+   * constructor, to a ParticleSubGroup of particles which crossed the boundary
+   * elements which form the boundary group.
+   */
+  [[nodiscard]] virtual std::map<PetscInt, ParticleSubGroupSharedPtr>
+  post_integration(std::shared_ptr<ParticleGroup> particles) = 0;
+
+  /**
+   * Call after updating to find particles whose trajectories intersect the
+   * DMPlex boundary.
+   *
+   * @param particles Collection of particles, either a ParticleGroup or
+   * ParticleSubGroup, to identify trajectory-boundary intersections of.
+   * @returns Map from boundary groups ids, which were passed in the
+   * constructor, to a ParticleSubGroup of particles which crossed the boundary
+   * elements which form the boundary group.
+   */
+  [[nodiscard]] virtual std::map<PetscInt, ParticleSubGroupSharedPtr>
+  post_integration(std::shared_ptr<ParticleSubGroup> particles) = 0;
+
+  /**
    * This method should be called with a collection of particles prior to
    * updating the positions of these particles.
    *
