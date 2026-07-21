@@ -234,6 +234,7 @@ public:
                   ParticleLoopImplementation::ParticleLoopIteration iteration_B;
 
                   iteration.pair_index = linear_index;
+                  iteration.loop_pair_index = linear_index;
 
                   iteration_A.local_sycl_index = idx.get_local_linear_id();
                   iteration_A.local_sycl_range =
@@ -328,6 +329,7 @@ public:
                   ParticleLoopImplementation::ParticleLoopIteration iteration_B;
 
                   iteration.pair_index = linear_index;
+                  iteration.loop_pair_index = linear_index;
 
                   iteration_A.local_sycl_index = idx.get_local_linear_id();
                   iteration_A.local_sycl_range =

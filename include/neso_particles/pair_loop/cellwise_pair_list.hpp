@@ -75,7 +75,7 @@ struct CellwisePairListDevice {
    * @param pair_index Pair index to retrieve index for.
    * @returns The linear index of the pair in this pair list.
    */
-  inline int get_pair_linear_index(const int wave, const int cell,
+  inline INT get_pair_linear_index(const int wave, const int cell,
                                    const int pair_index) const {
     return this->d_pair_counts_es[cell * this->max_wave_count + wave] +
            pair_index;
