@@ -111,6 +111,15 @@ public:
          [[maybe_unused]] const std::optional<int> cell_end =
              std::nullopt) override {
 
+    NESOASSERT(
+        cell_start == std::nullopt,
+        "ParticlePairLoopCellwisePairListBlock does not support "
+        "execution over a range of cells. (offset for loop linear index)");
+    NESOASSERT(
+        cell_end == std::nullopt,
+        "ParticlePairLoopCellwisePairListBlock does not support "
+        "execution over a range of cells. (offset for loop linear index)");
+
     this->profile_region = this->sycl_target->profile_map.start_region(
         "ParticlePairLoopCellwisePairListBlock", this->name);
 

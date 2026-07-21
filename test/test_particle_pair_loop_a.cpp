@@ -578,7 +578,7 @@ TEST(CellwisePairListHost, device) {
 
           for (int ix = 0; ix < num_pairs; ix++) {
             const int linear_index =
-                h_pair_counts_es[wavex * cell_count + cellx] + ix;
+                h_pair_counts_es[cellx * max_wave_count + wavex] + ix;
             linear_to_test.insert(linear_index);
           }
         }

@@ -177,13 +177,16 @@ void CellwisePairListSimple::set(CellwisePairListHostSharedPtr pair_list) {
         const int num_pairs_wave = m[cellx].at(wavex).first.size();
         this->h_pair_counts.at(wavex * num_mesh_cells + cellx) = num_pairs_wave;
         this->h_wave_offsets.at(wavex * num_mesh_cells + cellx) = num_pairs;
-        // We might want to swap the ordering of linear_offset here to make
-        // cells faster than waves.
-        this->h_pair_counts_es.at(wavex * num_mesh_cells + cellx) =
+        this->h_pair_counts_es.at(cellx * max_wave_count + wavex) =
             linear_offset;
         num_pairs += num_pairs_wave;
         linear_offset += num_pairs_wave;
       }
+      for (int wavex = wave_count; wavex < max_wave_count; wavex++) {
+        this->h_pair_counts_es.at(cellx * max_wave_count + wavex) =
+            linear_offset;
+      }
+
       total_num_pairs += static_cast<std::size_t>(num_pairs);
       if (num_pairs) {
         this->d_pair_list->set_nrow(cellx, num_pairs);
