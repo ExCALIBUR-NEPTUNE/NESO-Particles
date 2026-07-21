@@ -65,6 +65,48 @@ template <typename T, std::size_t N> struct Add {
   }
 };
 
+/**
+ * ParticleLoop access type for NDLocalArray Max access.
+ */
+template <typename T, std::size_t N> struct Max {
+  /// Pointer to underlying data for the array.
+  T *RESTRICT ptr;
+  NDIndex<N> index;
+  template <typename... I> inline T fetch_max(I... ix) {
+    auto tuple_index = Tuple::to_tuple(ix...);
+
+    auto lambda_index_wrapper = [&](auto... ax) {
+      return this->index.get_linear_index(ax...);
+    };
+    const auto index =
+        Tuple::apply_truncated<N>(lambda_index_wrapper, tuple_index);
+
+    const T value = Tuple::get_last_arg(ix...);
+    return atomic_fetch_max(&ptr[index], value);
+  }
+};
+
+/**
+ * ParticleLoop access type for NDLocalArray Min access.
+ */
+template <typename T, std::size_t N> struct Min {
+  /// Pointer to underlying data for the array.
+  T *RESTRICT ptr;
+  NDIndex<N> index;
+  template <typename... I> inline T fetch_min(I... ix) {
+    auto tuple_index = Tuple::to_tuple(ix...);
+
+    auto lambda_index_wrapper = [&](auto... ax) {
+      return this->index.get_linear_index(ax...);
+    };
+    const auto index =
+        Tuple::apply_truncated<N>(lambda_index_wrapper, tuple_index);
+
+    const T value = Tuple::get_last_arg(ix...);
+    return atomic_fetch_min(&ptr[index], value);
+  }
+};
+
 } // namespace Access::NDLocalArray
 
 namespace ParticleLoopImplementation {
@@ -92,6 +134,22 @@ struct KernelParameter<Access::Add<NDLocalArray<T, N>>> {
 };
 
 /**
+ *  KernelParameter type for max access to a NDLocalArray.
+ */
+template <typename T, std::size_t N>
+struct KernelParameter<Access::Max<NDLocalArray<T, N>>> {
+  using type = Access::NDLocalArray::Max<T, N>;
+};
+
+/**
+ *  KernelParameter type for min access to a NDLocalArray.
+ */
+template <typename T, std::size_t N>
+struct KernelParameter<Access::Min<NDLocalArray<T, N>>> {
+  using type = Access::NDLocalArray::Min<T, N>;
+};
+
+/**
  *  Loop parameter for read access of a NDLocalArray.
  */
 template <typename T, std::size_t N>
@@ -111,6 +169,22 @@ struct LoopParameter<Access::Write<NDLocalArray<T, N>>> {
 template <typename T, std::size_t N>
 struct LoopParameter<Access::Add<NDLocalArray<T, N>>> {
   using type = Access::NDLocalArray::Add<T, N>;
+};
+
+/**
+ *  Loop parameter for max access of a NDLocalArray.
+ */
+template <typename T, std::size_t N>
+struct LoopParameter<Access::Max<NDLocalArray<T, N>>> {
+  using type = Access::NDLocalArray::Max<T, N>;
+};
+
+/**
+ *  Loop parameter for min access of a NDLocalArray.
+ */
+template <typename T, std::size_t N>
+struct LoopParameter<Access::Min<NDLocalArray<T, N>>> {
+  using type = Access::NDLocalArray::Min<T, N>;
 };
 
 /**
@@ -147,6 +221,28 @@ create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
 }
 
 /**
+ * Method to compute access to a NDLocalArray (max)
+ */
+template <typename T, std::size_t N>
+inline Access::NDLocalArray::Max<T, N>
+create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
+                [[maybe_unused]] sycl::handler &cgh,
+                Access::Max<NDLocalArray<T, N> *> &a) {
+  return {a.obj->impl_get(), a.obj->index};
+}
+
+/**
+ * Method to compute access to a NDLocalArray (min)
+ */
+template <typename T, std::size_t N>
+inline Access::NDLocalArray::Min<T, N>
+create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
+                [[maybe_unused]] sycl::handler &cgh,
+                Access::Min<NDLocalArray<T, N> *> &a) {
+  return {a.obj->impl_get(), a.obj->index};
+}
+
+/**
  *  Function to create the kernel argument for NDLocalArray read access.
  */
 template <typename T, std::size_t N>
@@ -174,6 +270,28 @@ inline void
 create_kernel_arg([[maybe_unused]] ParticleLoopIteration &iterationx,
                   Access::NDLocalArray::Add<T, N> &rhs,
                   Access::NDLocalArray::Add<T, N> &lhs) {
+  lhs = rhs;
+}
+
+/**
+ *  Function to create the kernel argument for NDLocalArray max access.
+ */
+template <typename T, std::size_t N>
+inline void
+create_kernel_arg([[maybe_unused]] ParticleLoopIteration &iterationx,
+                  Access::NDLocalArray::Max<T, N> &rhs,
+                  Access::NDLocalArray::Max<T, N> &lhs) {
+  lhs = rhs;
+}
+
+/**
+ *  Function to create the kernel argument for NDLocalArray min access.
+ */
+template <typename T, std::size_t N>
+inline void
+create_kernel_arg([[maybe_unused]] ParticleLoopIteration &iterationx,
+                  Access::NDLocalArray::Min<T, N> &rhs,
+                  Access::NDLocalArray::Min<T, N> &lhs) {
   lhs = rhs;
 }
 
@@ -226,6 +344,35 @@ inline void create_kernel_arg(
   lhs = rhs;
 }
 
+/**
+ *  Function to create the kernel argument for NDLocalArray max
+ * access in a pair loop.
+ */
+template <typename T, std::size_t N>
+inline void create_kernel_arg(
+    [[maybe_unused]] ParticlePairLoopIteration &iteration,
+    [[maybe_unused]] ParticleLoopImplementation::ParticleLoopIteration
+        &iteration_particle,
+    Access::NDLocalArray::Max<T, N> &rhs,
+    Access::NDLocalArray::Max<T, N> &lhs) {
+
+  lhs = rhs;
+}
+/**
+ *  Function to create the kernel argument for NDLocalArray min
+ * access in a pair loop.
+ */
+template <typename T, std::size_t N>
+inline void create_kernel_arg(
+    [[maybe_unused]] ParticlePairLoopIteration &iteration,
+    [[maybe_unused]] ParticleLoopImplementation::ParticleLoopIteration
+        &iteration_particle,
+    Access::NDLocalArray::Min<T, N> &rhs,
+    Access::NDLocalArray::Min<T, N> &lhs) {
+
+  lhs = rhs;
+}
+
 } // namespace ParticlePairLoopImplementation
 
 /**
@@ -246,6 +393,14 @@ template <typename T, std::size_t N> class NDLocalArray {
   ParticleLoopImplementation::create_loop_arg<T, N>(
       ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
       sycl::handler &cgh, Access::Add<NDLocalArray<T, N> *> &a);
+  friend Access::NDLocalArray::Max<T, N>
+  ParticleLoopImplementation::create_loop_arg<T, N>(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      sycl::handler &cgh, Access::Max<NDLocalArray<T, N> *> &a);
+  friend Access::NDLocalArray::Min<T, N>
+  ParticleLoopImplementation::create_loop_arg<T, N>(
+      ParticleLoopImplementation::ParticleLoopGlobalInfo *global_info,
+      sycl::handler &cgh, Access::Min<NDLocalArray<T, N> *> &a);
 
 protected:
   std::shared_ptr<BufferDevice<T>> buffer;
