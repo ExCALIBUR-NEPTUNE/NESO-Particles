@@ -11,8 +11,6 @@ namespace NESO::Particles {
  */
 class GenericFunction {
 
-  friend class CartesianTrajectoryIntersection;
-
 protected:
 #ifdef NESO_PARTICLES_TEST_COMPILATION
 public:
