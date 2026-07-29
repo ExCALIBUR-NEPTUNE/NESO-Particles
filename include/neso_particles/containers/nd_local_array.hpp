@@ -527,6 +527,13 @@ public:
   }
 };
 
+extern template class NDLocalArray<REAL, 2>;
+extern template class NDLocalArray<INT, 2>;
+extern template class NDLocalArray<int, 2>;
+extern template class NDLocalArray<REAL, 3>;
+extern template class NDLocalArray<INT, 3>;
+extern template class NDLocalArray<int, 3>;
+
 template <typename T, std::size_t N>
 using NDLocalArraySharedPtr = std::shared_ptr<NDLocalArray<T, N>>;
 
