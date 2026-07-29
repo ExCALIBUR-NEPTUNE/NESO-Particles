@@ -308,13 +308,14 @@ TEST(ParticlePairLoop, particle_pair_loop_index) {
 
   auto [A, sycl_target, cell_count] =
       particle_loop_create_common(npart_cell, ndim, nx, ny, nz);
-  A->add_particle_dat(Sym<INT>("NEIGHBOURS"), 2);
+  A->add_particle_dat(Sym<INT>("NEIGHBOURS"), 3);
 
   auto reset_loop = particle_loop(
       A,
       [=](auto NN) {
-        NN.at(0) = 0;
-        NN.at(1) = 0;
+        for (int ix = 0; ix < 3; ix++) {
+          NN.at(ix) = 0;
+        }
       },
       Access::write(Sym<INT>("NEIGHBOURS")));
 
@@ -347,14 +348,69 @@ TEST(ParticlePairLoop, particle_pair_loop_index) {
 
   cellwise_pair_listA->push_back(c, i, j);
 
+  ErrorPropagate ep(sycl_target);
+  auto k_ep = ep.device_ptr();
+
+  auto k_pair_list = cellwise_pair_listA->get_pair_list();
+
+  BufferDevice<INT> d_offsets(sycl_target, cell_count);
+
+  auto h_offsets = d_offsets.get();
+  std::fill(h_offsets.begin(), h_offsets.end(), 0);
+  d_offsets.set(h_offsets);
+  auto k_offsets = d_offsets.ptr;
+
+  sycl_target->queue
+      .parallel_for(sycl::range<1>(cell_count),
+                    [=](auto idx) {
+                      k_offsets[idx] =
+                          k_pair_list.get_pair_linear_index(0, // wave
+                                                            idx,
+                                                            0 // index in cell
+                          );
+                    })
+      .wait_and_throw();
+
+  int width = 1;
+  while (width < cell_count) {
+
+    for (int cellx = 0; cellx < cell_count; cellx += width) {
+
+      const int cell_start = cellx;
+      const int cell_end = std::min(cellx + width, cell_count);
+
+      particle_pair_loop(
+          "particle_pair_loop_test",
+          {CellwisePairListAbsolute<ParticleGroup, CellwisePairList>(
+              A, A, cellwise_pair_listA)},
+          [=](auto PAIR_INDEX) {
+            const INT offset = k_offsets[cell_start];
+            const INT loop_index = PAIR_INDEX.get_loop_linear_index();
+            const INT local_index = PAIR_INDEX.get_local_linear_index();
+
+            NESO_KERNEL_ASSERT(offset + loop_index == local_index, k_ep);
+          },
+          Access::read(ParticlePairLoopIndex{}))
+          ->execute(cell_start, cell_end);
+      ASSERT_FALSE(ep.get_flag());
+    }
+
+    width *= 2;
+  }
+
   auto pl0 = particle_pair_loop(
       "particle_pair_loop_test",
       {CellwisePairListAbsolute<ParticleGroup, CellwisePairList>(
           A, A, cellwise_pair_listA)},
-      [](auto PAIR_INDEX, auto NN_i, auto NN_j) {
+      [=](auto PAIR_INDEX, auto NN_i, auto NN_j) {
         NN_i.at(0) = PAIR_INDEX.get_loop_linear_index();
         NN_i.at(1) = 1;
+        NN_i.at(2) = PAIR_INDEX.get_local_linear_index();
+
         NN_j.at(1) = 2;
+
+        NESO_KERNEL_ASSERT(
+            PAIR_INDEX.linear_index == PAIR_INDEX.loop_linear_index, k_ep);
       },
       Access::read(ParticlePairLoopIndex{}),
       Access::A(Access::write(Sym<INT>("NEIGHBOURS"))),
@@ -362,15 +418,25 @@ TEST(ParticlePairLoop, particle_pair_loop_index) {
 
   pl0->execute();
 
+  ASSERT_FALSE(ep.get_flag());
+
   std::set<INT> linear_ids_to_test;
+  std::set<INT> linear_ids_to_test2;
   for (int cellx = 0; cellx < cell_count; cellx++) {
     auto NN = A->get_cell(Sym<INT>("NEIGHBOURS"), cellx);
     const int nrow = NN->nrow;
     for (int rowx = 0; rowx < nrow; rowx++) {
       if (NN->at(rowx, 1) == 1) {
-        const INT linear_id = NN->at(rowx, 0);
-        ASSERT_FALSE(linear_ids_to_test.count(linear_id));
-        linear_ids_to_test.insert(linear_id);
+        {
+          const INT linear_id = NN->at(rowx, 0);
+          ASSERT_FALSE(linear_ids_to_test.count(linear_id));
+          linear_ids_to_test.insert(linear_id);
+        }
+        {
+          const INT linear_id = NN->at(rowx, 2);
+          ASSERT_FALSE(linear_ids_to_test2.count(linear_id));
+          linear_ids_to_test2.insert(linear_id);
+        }
       }
     }
   }
@@ -382,6 +448,7 @@ TEST(ParticlePairLoop, particle_pair_loop_index) {
     linear_ids_correct.insert(ix);
   }
   ASSERT_EQ(linear_ids_correct, linear_ids_to_test);
+  ASSERT_EQ(linear_ids_correct, linear_ids_to_test2);
 
   sycl_target->free();
 }
@@ -578,7 +645,7 @@ TEST(CellwisePairListHost, device) {
 
           for (int ix = 0; ix < num_pairs; ix++) {
             const int linear_index =
-                h_pair_counts_es[wavex * cell_count + cellx] + ix;
+                h_pair_counts_es[cellx * max_wave_count + wavex] + ix;
             linear_to_test.insert(linear_index);
           }
         }

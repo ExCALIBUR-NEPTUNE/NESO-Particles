@@ -296,8 +296,9 @@ void PairSamplerNoReplacement::sample(
                     k_a_is_b ? current_num_particles_a : &num_particles_b;
 
                 auto lambda_remove_index =
-                    [&](const int to_remove_index, int *num_particles,
-                        const sycl::local_accessor<int, 2> &indices) {
+                    [](const std::size_t &local_id, const int to_remove_index,
+                       int *num_particles,
+                       const sycl::local_accessor<int, 2> &indices) {
                       const int num_particles_m1 = (*num_particles) - 1;
                       // Copy the last entry downwards.
                       indices[to_remove_index][local_id] =
@@ -312,8 +313,8 @@ void PairSamplerNoReplacement::sample(
                 // particles in the map and hence this avoids reading in the
                 // entire map.
                 auto lambda_populate_indices_direct =
-                    [&](const int num_particles,
-                        const sycl::local_accessor<int, 2> &indices) {
+                    [](const std::size_t local_id, const int num_particles,
+                       const sycl::local_accessor<int, 2> &indices) {
                       for (int ix = 0; ix < num_particles; ix++) {
                         indices[ix][local_id] = ix;
                       }
@@ -324,8 +325,14 @@ void PairSamplerNoReplacement::sample(
                 // indices here. If we are using actual particle indices here
                 // then we avoid revisiting the map later.
                 auto lambda_populate_indices_from_map =
-                    [&](const int linear_species_id, int *num_particles,
-                        const sycl::local_accessor<int, 2> &indices) {
+                    [](const std::size_t &local_id,
+                       const auto &k_collision_cell_partition,
+                       const std::size_t &mesh_cell,
+                       const std::size_t &collision_cell,
+                       const auto &k_particle_linear_index,
+                       const auto &k_particle_mask, const int linear_species_id,
+                       int *num_particles,
+                       const sycl::local_accessor<int, 2> &indices) {
                       const int num_particles_start = *num_particles;
                       int num_particles_end = 0;
                       for (int ix = 0; ix < num_particles_start; ix++) {
@@ -351,15 +358,21 @@ void PairSamplerNoReplacement::sample(
                 // indices.
                 if (k_particle_mask_set) {
                   lambda_populate_indices_from_map(
+                      local_id, k_collision_cell_partition, mesh_cell,
+                      collision_cell, k_particle_linear_index, k_particle_mask,
                       linear_species_id_a, &num_particles_a, la_indices_a);
                   if (!k_a_is_b) {
                     lambda_populate_indices_from_map(
-                        linear_species_id_b, &num_particles_b, la_indices_b);
+                        local_id, k_collision_cell_partition, mesh_cell,
+                        collision_cell, k_particle_linear_index,
+                        k_particle_mask, linear_species_id_b, &num_particles_b,
+                        la_indices_b);
                   }
                 } else {
-                  lambda_populate_indices_direct(num_particles_a, la_indices_a);
+                  lambda_populate_indices_direct(local_id, num_particles_a,
+                                                 la_indices_a);
                   if (!k_a_is_b) {
-                    lambda_populate_indices_direct(num_particles_b,
+                    lambda_populate_indices_direct(local_id, num_particles_b,
                                                    la_indices_b);
                   }
                 }
@@ -378,9 +391,9 @@ void PairSamplerNoReplacement::sample(
                                            collision_cell];
 
                 auto lambda_sample_index =
-                    [&](const std::size_t &local_id, const REAL uniform_sample,
-                        int *num_particles,
-                        const sycl::local_accessor<int, 2> &indices) -> int {
+                    [](auto &lambda_remove_index, const std::size_t &local_id,
+                       const REAL uniform_sample, int *num_particles,
+                       const sycl::local_accessor<int, 2> &indices) -> int {
                   const int start_num_particles = *num_particles;
                   const REAL ratio = static_cast<REAL>(start_num_particles);
                   const int index0 = uniform_sample * ratio;
@@ -390,7 +403,7 @@ void PairSamplerNoReplacement::sample(
 
                   const int sampled_index = indices[index2][local_id];
 
-                  lambda_remove_index(index2, num_particles, indices);
+                  lambda_remove_index(local_id, index2, num_particles, indices);
                   return sampled_index;
                 };
 
@@ -403,13 +416,13 @@ void PairSamplerNoReplacement::sample(
                   const REAL rng_sample_b =
                       k_real_samples[rng_index + k_pair_count];
 
-                  const int index_a =
-                      lambda_sample_index(local_id, rng_sample_a,
-                                          current_num_particles_a, a_indices);
+                  const int index_a = lambda_sample_index(
+                      lambda_remove_index, local_id, rng_sample_a,
+                      current_num_particles_a, a_indices);
 
-                  const int index_b =
-                      lambda_sample_index(local_id, rng_sample_b,
-                                          current_num_particles_b, b_indices);
+                  const int index_b = lambda_sample_index(
+                      lambda_remove_index, local_id, rng_sample_b,
+                      current_num_particles_b, b_indices);
 
                   int particle_index_a = index_a;
                   int particle_index_b = index_b;

@@ -58,7 +58,7 @@ inline void wrapper_collision_cells(ParticleGroupSharedPtr A,
     particle_loop(
         B,
         [=](auto P, auto CDC_ORIGIN, auto CDC_NUM_SUBDIVISIONS, auto D) {
-          int cells[3];
+          int cells[3] = {0, 0, 0};
 
           const int num_cells_dim = 1 << CDC_NUM_SUBDIVISIONS.at(0, 0);
           const REAL cell_width = k_cell_width_fine / num_cells_dim;

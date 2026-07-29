@@ -14,6 +14,7 @@ namespace Access::PairLoopIndex {
  */
 struct Read {
   INT linear_index{-1};
+  INT loop_linear_index{-1};
 
   /// The cell containing the particle. Use Access::A and Access::B to
   /// distinguish between a and b.
@@ -26,7 +27,12 @@ struct Read {
   /**
    * @returns The linear index of the pair in the loop.
    */
-  inline INT get_loop_linear_index() const { return linear_index; }
+  inline INT get_loop_linear_index() const { return loop_linear_index; }
+
+  /**
+   * @returns The linear index of the pair in the pair list.
+   */
+  inline INT get_local_linear_index() const { return linear_index; }
 };
 
 } // namespace Access::PairLoopIndex
@@ -77,6 +83,7 @@ inline void create_kernel_arg(
     Access::PairLoopIndex::Read &lhs) {
 
   lhs.linear_index = iteration.pair_index;
+  lhs.loop_linear_index = iteration.loop_pair_index;
   lhs.cell = iteration_particle.cellx;
   lhs.layer = iteration_particle.layerx;
 }
