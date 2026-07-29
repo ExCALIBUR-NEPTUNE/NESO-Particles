@@ -11,8 +11,6 @@ namespace NESO::Particles {
  */
 class GenericFunction {
 
-  friend class CartesianTrajectoryIntersection;
-
 protected:
 #ifdef NESO_PARTICLES_TEST_COMPILATION
 public:
@@ -61,7 +59,7 @@ public:
   int cell_dof_count{0};
 
   GenericFunction() = default;
-  ~GenericFunction() = default;
+  virtual ~GenericFunction() = default;
 
   /**
    * Create a function on a mesh on the passed entities.
