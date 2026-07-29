@@ -16,7 +16,7 @@ INT CellwisePairList::get_num_pairs_range(const int cell_start,
   NESOASSERT(cell_start < cell_end,
              "Bad cell_start<cell_end: " + std::to_string(cell_start) + " < " +
                  std::to_string(cell_end));
-  NESOASSERT(cell_end < pair_list_device.cell_count,
+  NESOASSERT(cell_end <= pair_list_device.cell_count,
              "Bad cell_end: " + std::to_string(cell_end));
 
   // The h_pair_counts array in the pair list data structure is actually waves

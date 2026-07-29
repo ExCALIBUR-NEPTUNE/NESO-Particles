@@ -175,7 +175,7 @@ TEST(ParticlePairLoopBlock, local_array_read_write_add) {
   A->domain->mesh->free();
 }
 
-TEST(ParticlePairLoopBlock, nd_local_array_read_write_add) {
+TEST(ParticlePairLoopBlock, nd_local_array_read_write_add_max_min) {
 
   int npart_cell = 127;
   const int ndim = 2;
@@ -280,6 +280,100 @@ TEST(ParticlePairLoopBlock, nd_local_array_read_write_add) {
   auto h_ndla_int_npair = ndla_int_npair->get();
   for (int ix = 0; ix < total_num_pairs; ix++) {
     ASSERT_EQ(h_ndla_int_npair.at(ix), ix + 42);
+  }
+
+  {
+
+    auto ndla_real =
+        std::make_shared<NDLocalArray<REAL, 2>>(sycl_target, cell_count, 2);
+    ndla_real->fill(-10000.0);
+
+    auto cdc_real =
+        std::make_shared<CellDatConst<REAL>>(sycl_target, cell_count, 2, 1);
+    cdc_real->fill(-10000.0);
+
+    particle_pair_loop(
+        {CellwisePairListAbsolute<ParticleGroup,
+                                  CellwisePairListBlockInterface>(
+            A, A, pair_sampler_ntc)},
+        [=](auto INDEX, auto NDLA_REAL, auto CDC_REAL, auto P_A) {
+          for (int dx = 0; dx < 2; dx++) {
+            const REAL p = P_A.at(dx);
+            CDC_REAL.fetch_max(dx, 0, p);
+            NDLA_REAL.fetch_max(INDEX.cell, dx, p);
+          }
+        },
+        Access::A(Access::read(ParticlePairLoopIndex{})),
+        Access::max(ndla_real), Access::max(cdc_real),
+        Access::A(Access::read(Sym<REAL>("P"))))
+        ->execute();
+
+    ErrorPropagate ep(sycl_target);
+    auto k_ep = ep.device_ptr();
+
+    particle_pair_loop(
+        {CellwisePairListAbsolute<ParticleGroup,
+                                  CellwisePairListBlockInterface>(
+            A, A, pair_sampler_ntc)},
+        [=](auto INDEX, auto NDLA_REAL, auto CDC_REAL, auto P_A) {
+          for (int dx = 0; dx < 2; dx++) {
+            NESO_KERNEL_ASSERT(CDC_REAL.at(dx, 0) >= P_A.at(dx), k_ep);
+            NESO_KERNEL_ASSERT(
+                CDC_REAL.at(dx, 0) == NDLA_REAL.at(INDEX.cell, dx), k_ep);
+          }
+        },
+        Access::A(Access::read(ParticlePairLoopIndex{})),
+        Access::read(ndla_real), Access::read(cdc_real),
+        Access::A(Access::read(Sym<REAL>("P"))))
+        ->execute();
+    ASSERT_FALSE(ep.get_flag());
+  }
+  {
+
+    auto ndla_real =
+        std::make_shared<NDLocalArray<REAL, 2>>(sycl_target, cell_count, 2);
+    ndla_real->fill(10000.0);
+
+    auto cdc_real =
+        std::make_shared<CellDatConst<REAL>>(sycl_target, cell_count, 2, 1);
+    cdc_real->fill(10000.0);
+
+    particle_pair_loop(
+        {CellwisePairListAbsolute<ParticleGroup,
+                                  CellwisePairListBlockInterface>(
+            A, A, pair_sampler_ntc)},
+        [=](auto INDEX, auto NDLA_REAL, auto CDC_REAL, auto P_A) {
+          for (int dx = 0; dx < 2; dx++) {
+            const REAL p = P_A.at(dx);
+            CDC_REAL.fetch_min(dx, 0, p);
+            NDLA_REAL.fetch_min(INDEX.cell, dx, p);
+          }
+        },
+        Access::A(Access::read(ParticlePairLoopIndex{})),
+        Access::min(ndla_real), Access::min(cdc_real),
+        Access::A(Access::read(Sym<REAL>("P"))))
+        ->execute();
+
+    ErrorPropagate ep(sycl_target);
+    auto k_ep = ep.device_ptr();
+
+    particle_pair_loop(
+        {CellwisePairListAbsolute<ParticleGroup,
+                                  CellwisePairListBlockInterface>(
+            A, A, pair_sampler_ntc)},
+        [=](auto INDEX, auto NDLA_REAL, auto CDC_REAL, auto P_A) {
+          for (int dx = 0; dx < 2; dx++) {
+            NESO_KERNEL_ASSERT(CDC_REAL.at(dx, 0) <= P_A.at(dx), k_ep);
+            NESO_KERNEL_ASSERT(
+                CDC_REAL.at(dx, 0) == NDLA_REAL.at(INDEX.cell, dx), k_ep);
+          }
+        },
+        Access::A(Access::read(ParticlePairLoopIndex{})),
+        Access::read(ndla_real), Access::read(cdc_real),
+        Access::A(Access::read(Sym<REAL>("P"))))
+        ->execute();
+
+    ASSERT_FALSE(ep.get_flag());
   }
 
   sycl_target->free();

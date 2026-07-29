@@ -300,6 +300,8 @@ void ParticleGroup::add_particle_dat(ParticleDatSharedPtr<REAL> particle_dat) {
     this->particle_dats_real[particle_dat->sym] = particle_dat;
     // Does this dat hold particle positions?
     if (particle_dat->positions) {
+      NESOWARN(this->position_dat == nullptr,
+               "A ParticleDat for positions has already been added.");
       this->position_dat = particle_dat;
       this->position_sym = std::make_shared<Sym<REAL>>(particle_dat->sym.name);
     }
@@ -311,6 +313,8 @@ void ParticleGroup::add_particle_dat(ParticleDatSharedPtr<INT> particle_dat) {
     this->particle_dats_int[particle_dat->sym] = particle_dat;
     // Does this dat hold particle cell ids?
     if (particle_dat->positions) {
+      NESOWARN(this->cell_id_dat == nullptr,
+               "A ParticleDat for cell IDs has already been added.");
       this->cell_id_dat = particle_dat;
       this->cell_id_sym = std::make_shared<Sym<INT>>(particle_dat->sym.name);
     }

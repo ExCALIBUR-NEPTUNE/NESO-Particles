@@ -229,6 +229,8 @@ struct ParticlePairLoopIteration {
   sycl::nd_item<3> *work_item{nullptr};
   /// The linear index of the pair of particles.
   INT pair_index{0};
+  /// The linear index of the pair of particles within the loop.
+  INT loop_pair_index{0};
 };
 
 } // namespace ParticlePairLoopImplementation

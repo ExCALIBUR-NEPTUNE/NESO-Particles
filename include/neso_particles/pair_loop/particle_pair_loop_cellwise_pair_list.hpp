@@ -136,6 +136,11 @@ public:
                       idx.get_group().get_local_linear_range();
 
                   const int wave_count = k_pair_list.get_num_waves(index_cell);
+                  const INT pair_index_offset =
+                      k_pair_list.get_pair_linear_index(0, // wave
+                                                        cell_start_actual,
+                                                        0 // index in cell
+                      );
 
                   if (wavex < wave_count) {
 
@@ -148,6 +153,8 @@ public:
 
                       const INT pair_index = k_pair_list.get_pair_linear_index(
                           wavex, index_cell, index_pair);
+                      const INT loop_pair_index =
+                          pair_index - pair_index_offset;
 
                       const bool mask =
                           k_pair_list.mask_array.get(pair_index, 0);
@@ -156,7 +163,10 @@ public:
 
                         ParticlePairLoopImplementation::
                             ParticlePairLoopIteration iteration;
+
                         iteration.work_item = &idx;
+                        iteration.pair_index = pair_index;
+                        iteration.loop_pair_index = loop_pair_index;
 
                         ParticleLoopImplementation::ParticleLoopIteration
                             iteration_A;
@@ -169,8 +179,6 @@ public:
                         const int particle_index_b =
                             k_pair_list.get_particle_index_j(wavex, index_cell,
                                                              index_pair);
-
-                        iteration.pair_index = pair_index;
 
                         iteration_A.local_sycl_index =
                             idx.get_local_linear_id();
@@ -226,6 +234,11 @@ public:
                 idx.get_group().get_local_linear_range();
 
             const int wave_count = k_pair_list.get_num_waves(index_cell);
+            const INT pair_index_offset =
+                k_pair_list.get_pair_linear_index(0, // wave
+                                                  cell_start_actual,
+                                                  0 // index in cell
+                );
 
             for (int wavex = 0; wavex < wave_count; wavex++) {
 
@@ -238,12 +251,15 @@ public:
 
                 const INT pair_index = k_pair_list.get_pair_linear_index(
                     wavex, index_cell, index_pair);
+                const INT loop_pair_index = pair_index - pair_index_offset;
                 const bool mask = k_pair_list.mask_array.get(pair_index, 0);
 
                 if (mask) {
                   ParticlePairLoopImplementation::ParticlePairLoopIteration
                       iteration;
                   iteration.work_item = &idx;
+                  iteration.pair_index = pair_index;
+                  iteration.loop_pair_index = loop_pair_index;
 
                   ParticleLoopImplementation::ParticleLoopIteration iteration_A;
                   ParticleLoopImplementation::ParticleLoopIteration iteration_B;
@@ -252,8 +268,6 @@ public:
                       wavex, index_cell, index_pair);
                   const int particle_index_b = k_pair_list.get_particle_index_j(
                       wavex, index_cell, index_pair);
-
-                  iteration.pair_index = pair_index;
 
                   iteration_A.local_sycl_index = idx.get_local_linear_id();
                   iteration_A.local_sycl_range =
