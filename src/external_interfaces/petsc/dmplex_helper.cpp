@@ -191,7 +191,6 @@ void split_quadrilateral_into_two_triangles(
   PETSCCHK(DMPlexGetCone(dm, quad_index, &cone));
 
   // Get the vertices from the quad in order.
-  PetscInt last_vertex = -1;
   const PetscInt *edge_cone = nullptr;
 
   std::array<PetscInt, 4> vertices;
@@ -817,7 +816,6 @@ void DMPlexHelper::get_cell_vertices(const PetscInt cell,
                                      std::vector<std::vector<REAL>> &vertices) {
   this->check_valid_local_cell(cell);
 
-  const PetscScalar *array;
   const PetscInt petsc_index = this->map_np_to_petsc.at(cell);
 
   this->check_valid_petsc_cell(petsc_index);
@@ -983,7 +981,6 @@ bool DMPlexHelper::cell_contains_point_3d(const PetscInt index,
   this->check_valid_local_cell(index);
   const PetscInt petsc_index = this->map_np_to_petsc.at(index);
 
-  bool contained = false;
   const PetscScalar x0 = point.at(0);
   const PetscScalar x1 = point.at(1);
   const PetscScalar x2 = point.at(2);
@@ -993,7 +990,7 @@ bool DMPlexHelper::cell_contains_point_3d(const PetscInt index,
 
   const PetscScalar *tmp;
   PetscScalar *vertices = nullptr;
-  PetscInt num_crossings = 0, num_coords;
+  PetscInt num_coords;
   PetscBool is_dg;
 
   PETSCCHK(DMPlexGetCellCoordinates(dm, petsc_index, &is_dg, &num_coords, &tmp,

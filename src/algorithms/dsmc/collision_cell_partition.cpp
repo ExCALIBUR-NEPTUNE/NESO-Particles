@@ -334,27 +334,35 @@ void CollisionCellPartition::get_max_num_pairs(
             const std::size_t l1 = ix.get_local_id(1);
             const std::size_t e1 = ix.get_local_range(1);
 
-            auto lambda_get_num_particles = [&](const auto linear_species_id) {
-              const INT num_particles_unmasked =
-                  k_map.get_num_particles_cell_species(
-                      cell_mesh, cell_collision, linear_species_id);
+            auto lambda_get_num_particles =
+                [cell_mesh, cell_collision, l2,
+                 e2](const auto &k_map, const auto &k_particle_linear_index,
+                     const auto &k_mask_array_device,
+                     const auto linear_species_id) {
+                  const INT num_particles_unmasked =
+                      k_map.get_num_particles_cell_species(
+                          cell_mesh, cell_collision, linear_species_id);
 
-              int count_local = 0;
-              for (std::size_t px = l2; px < num_particles_unmasked; px += e2) {
-                const auto layer = k_map.get_particle_layer(
-                    cell_mesh, cell_collision, linear_species_id, px);
-                const auto linear_index =
-                    k_particle_linear_index.get_local_linear_index(cell_mesh,
-                                                                   layer);
-                const bool mask = k_mask_array_device.get(linear_index, 0);
-                count_local += mask ? 1 : 0;
-              }
+                  int count_local = 0;
+                  for (std::size_t px = l2; px < num_particles_unmasked;
+                       px += e2) {
+                    const auto layer = k_map.get_particle_layer(
+                        cell_mesh, cell_collision, linear_species_id, px);
+                    const auto linear_index =
+                        k_particle_linear_index.get_local_linear_index(
+                            cell_mesh, layer);
+                    const bool mask = k_mask_array_device.get(linear_index, 0);
+                    count_local += mask ? 1 : 0;
+                  }
 
-              return count_local;
-            };
+                  return count_local;
+                };
             const int num_particles_a_local =
-                workitem_active ? lambda_get_num_particles(linear_species_id_a)
-                                : 0;
+                workitem_active
+                    ? lambda_get_num_particles(k_map, k_particle_linear_index,
+                                               k_mask_array_device,
+                                               linear_species_id_a)
+                    : 0;
             const int num_particles_b = 0;
 
             la_counts[l1 * e2 + l2] = num_particles_a_local;
@@ -394,27 +402,35 @@ void CollisionCellPartition::get_max_num_pairs(
             const std::size_t l1 = ix.get_local_id(1);
             const std::size_t e1 = ix.get_local_range(1);
 
-            auto lambda_get_num_particles = [&](const auto linear_species_id) {
-              const INT num_particles_unmasked =
-                  k_map.get_num_particles_cell_species(
-                      cell_mesh, cell_collision, linear_species_id);
+            auto lambda_get_num_particles =
+                [cell_mesh, cell_collision, l2,
+                 e2](const auto &k_map, const auto &k_particle_linear_index,
+                     const auto &k_mask_array_device,
+                     const auto linear_species_id) {
+                  const INT num_particles_unmasked =
+                      k_map.get_num_particles_cell_species(
+                          cell_mesh, cell_collision, linear_species_id);
 
-              int count_local = 0;
-              for (std::size_t px = l2; px < num_particles_unmasked; px += e2) {
-                const auto layer = k_map.get_particle_layer(
-                    cell_mesh, cell_collision, linear_species_id, px);
-                const auto linear_index =
-                    k_particle_linear_index.get_local_linear_index(cell_mesh,
-                                                                   layer);
-                const bool mask = k_mask_array_device.get(linear_index, 0);
-                count_local += mask ? 1 : 0;
-              }
+                  int count_local = 0;
+                  for (std::size_t px = l2; px < num_particles_unmasked;
+                       px += e2) {
+                    const auto layer = k_map.get_particle_layer(
+                        cell_mesh, cell_collision, linear_species_id, px);
+                    const auto linear_index =
+                        k_particle_linear_index.get_local_linear_index(
+                            cell_mesh, layer);
+                    const bool mask = k_mask_array_device.get(linear_index, 0);
+                    count_local += mask ? 1 : 0;
+                  }
 
-              return count_local;
-            };
+                  return count_local;
+                };
             const int num_particles_a_local =
-                workitem_active ? lambda_get_num_particles(linear_species_id_a)
-                                : 0;
+                workitem_active
+                    ? lambda_get_num_particles(k_map, k_particle_linear_index,
+                                               k_mask_array_device,
+                                               linear_species_id_a)
+                    : 0;
             la_counts[l1 * e2 + l2] = num_particles_a_local;
             const bool is_root = Kernel::reduce_over_group_block_wise(
                 la_counts.get_multi_ptr<sycl::access::decorated::no>().get(),
@@ -423,8 +439,11 @@ void CollisionCellPartition::get_max_num_pairs(
             const int num_particles_a = la_counts[l1 * e2 + l2];
 
             const int num_particles_b_local =
-                workitem_active ? lambda_get_num_particles(linear_species_id_b)
-                                : 0;
+                workitem_active
+                    ? lambda_get_num_particles(k_map, k_particle_linear_index,
+                                               k_mask_array_device,
+                                               linear_species_id_b)
+                    : 0;
 
             la_counts[l1 * e2 + l2] = num_particles_b_local;
             Kernel::reduce_over_group_block_wise(
