@@ -587,7 +587,7 @@ public:
                "Passed array has different dimension extents to this array.");
 
     T *k_a = this->buffer->ptr;
-    T const *RESTRICT const k_b = second_array->buffer->ptr;
+    U const *RESTRICT const k_b = second_array->buffer->ptr;
     BINOP k_binop = binop;
 
     this->sycl_target->queue
