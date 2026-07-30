@@ -1,5 +1,5 @@
-#ifndef _NESO_PARTICLES_ND_ARRAY_H_
-#define _NESO_PARTICLES_ND_ARRAY_H_
+#ifndef _NESO_PARTICLES_ND_HOST_ARRAY_H_
+#define _NESO_PARTICLES_ND_HOST_ARRAY_H_
 
 #include "compute_target.hpp"
 #include "containers/nd_index.hpp"
@@ -10,13 +10,13 @@ namespace NESO::Particles {
 /**
  * Generic N-Dimensional array type on the host allocated in pinned memory.
  */
-template <typename T, std::size_t N> class NDArray {
+template <typename T, std::size_t N> class NDHostArray {
 protected:
   std::vector<T, HostAllocator<T>> h_buffer;
 
 public:
-  ~NDArray() = default;
-  NDArray() = delete;
+  ~NDHostArray() = default;
+  NDHostArray() = delete;
 
   /// The compute device which the array is notionally in pinned memory for.
   SYCLTargetSharedPtr sycl_target = nullptr;
@@ -25,12 +25,12 @@ public:
   NDIndex<N> index;
 
   /**
-   * Create a NDArray on a compute device with a given shape.
+   * Create a NDHostArray on a compute device with a given shape.
    *
    * @param sycl_target Compute device to create local array on.
    * @param index NDIndex that describes the extent of all the dimensions.
    */
-  NDArray(SYCLTargetSharedPtr sycl_target, NDIndex<N> index)
+  NDHostArray(SYCLTargetSharedPtr sycl_target, NDIndex<N> index)
       : h_buffer(std::vector<T, HostAllocator<T>>(
             index.size(), HostAllocator<int>(sycl_target->queue))),
         sycl_target(sycl_target), index(index) {
@@ -38,15 +38,15 @@ public:
   }
 
   /**
-   * Create a NDArray on a compute device with a given shape.
+   * Create a NDHostArray on a compute device with a given shape.
    *
    * @param sycl_target Compute device to create local array on.
    * @param shape Parameter pack of size N which defines the extent of the
    * array in each of the N dimensions.
    */
   template <typename... SHAPE>
-  NDArray(SYCLTargetSharedPtr sycl_target, SHAPE... shape)
-      : NDArray(sycl_target, nd_index<N>(shape...)) {
+  NDHostArray(SYCLTargetSharedPtr sycl_target, SHAPE... shape)
+      : NDHostArray(sycl_target, nd_index<N>(shape...)) {
     static_assert(sizeof...(shape) == N, "Missmatch between shape size and N.");
   }
 
@@ -65,14 +65,15 @@ public:
   }
 
   /**
-   * Copy the entries from another NDArray into this array.
+   * Copy the entries from another NDHostArray into this array.
    *
-   * @param nd_array Another NDArray of the same size.
+   * @param nd_host_array Another NDHostArray of the same size.
    */
-  inline void set(std::shared_ptr<NDArray<T, N>> nd_array) {
-    NESOASSERT(this->index == nd_array->index, "NDArray size missmatch.");
+  inline void set(std::shared_ptr<NDHostArray<T, N>> nd_host_array) {
+    NESOASSERT(this->index == nd_host_array->index,
+               "NDHostArray size missmatch.");
     const std::size_t size = this->index.size() * sizeof(T);
-    std::memcpy(this->h_buffer.data(), nd_array->h_buffer.data(), size);
+    std::memcpy(this->h_buffer.data(), nd_host_array->h_buffer.data(), size);
   }
 
   /**
@@ -91,30 +92,31 @@ public:
   }
 
   /**
-   * Copy the entries into another NDArray. If the passed NDArray is a nullptr
-   * then a new array will be created.
+   * Copy the entries into another NDHostArray. If the passed NDHostArray is a
+   * nullptr then a new array will be created.
    *
-   * @param nd_array NDArray to copy entries into.
+   * @param nd_host_array NDHostArray to copy entries into.
    */
-  inline void get(std::shared_ptr<NDArray<T, N>> &nd_array) {
+  inline void get(std::shared_ptr<NDHostArray<T, N>> &nd_host_array) {
 
-    if (nd_array == nullptr) {
-      nd_array =
-          std::make_shared<NDArray<T, N>>(this->sycl_target, this->index);
+    if (nd_host_array == nullptr) {
+      nd_host_array =
+          std::make_shared<NDHostArray<T, N>>(this->sycl_target, this->index);
     }
 
-    NESOASSERT(this->index == nd_array->index, "NDArray size missmatch.");
+    NESOASSERT(this->index == nd_host_array->index,
+               "NDHostArray size missmatch.");
     const std::size_t size = this->index.size() * sizeof(T);
-    std::memcpy(nd_array->h_buffer.data(), this->h_buffer.data(), size);
+    std::memcpy(nd_host_array->h_buffer.data(), this->h_buffer.data(), size);
   }
 
   /**
    * Copy the entries into a std::vector. Index is linearised slowest to
    * fastest. Output vector is resized if the vector is not the same size as the
-   * NDArray.
+   * NDHostArray.
    *
    * @param std_vector Vector to copy entries into. Resized if not the same size
-   * as the NDArray.
+   * as the NDHostArray.
    */
   inline void get(std::vector<T> &std_vector) {
 
@@ -138,15 +140,15 @@ public:
   }
 };
 
-extern template class NDArray<REAL, 2>;
-extern template class NDArray<INT, 2>;
-extern template class NDArray<int, 2>;
-extern template class NDArray<REAL, 3>;
-extern template class NDArray<INT, 3>;
-extern template class NDArray<int, 3>;
+extern template class NDHostArray<REAL, 2>;
+extern template class NDHostArray<INT, 2>;
+extern template class NDHostArray<int, 2>;
+extern template class NDHostArray<REAL, 3>;
+extern template class NDHostArray<INT, 3>;
+extern template class NDHostArray<int, 3>;
 
 template <typename T, std::size_t N>
-using NDArraySharedPtr = std::shared_ptr<NDArray<T, N>>;
+using NDHostArraySharedPtr = std::shared_ptr<NDHostArray<T, N>>;
 
 /**
  * Helper function to create a new ND array from a set of dimension extents.
@@ -155,9 +157,9 @@ using NDArraySharedPtr = std::shared_ptr<NDArray<T, N>>;
  *  @param index NDIndex of dimensions.
  */
 template <typename T, std::size_t N>
-inline NDArraySharedPtr<T, N> nd_array(SYCLTargetSharedPtr sycl_target,
-                                       NDIndex<N> index) {
-  return std::make_shared<NDArray<T, N>>(sycl_target, index);
+inline NDHostArraySharedPtr<T, N> nd_host_array(SYCLTargetSharedPtr sycl_target,
+                                                NDIndex<N> index) {
+  return std::make_shared<NDHostArray<T, N>>(sycl_target, index);
 }
 
 /**
@@ -168,9 +170,9 @@ inline NDArraySharedPtr<T, N> nd_array(SYCLTargetSharedPtr sycl_target,
  * array in each of the N dimensions.
  */
 template <typename T, std::size_t N, typename... SHAPE>
-inline NDArraySharedPtr<T, N> nd_array(SYCLTargetSharedPtr sycl_target,
-                                       SHAPE... shape) {
-  return nd_array<T, N>(sycl_target, nd_index<N>(shape...));
+inline NDHostArraySharedPtr<T, N> nd_host_array(SYCLTargetSharedPtr sycl_target,
+                                                SHAPE... shape) {
+  return nd_host_array<T, N>(sycl_target, nd_index<N>(shape...));
 }
 
 } // namespace NESO::Particles

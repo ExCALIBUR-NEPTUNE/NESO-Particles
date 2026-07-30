@@ -1,6 +1,6 @@
 #include "include/test_neso_particles.hpp"
 
-TEST(NDArray, base) {
+TEST(NDHostArray, base) {
   auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
 
   auto i0 = nd_index<1>(1);
@@ -10,10 +10,10 @@ TEST(NDArray, base) {
   ASSERT_FALSE(i0 == i1);
   ASSERT_TRUE(i1 == i2);
 
-  [[maybe_unused]] auto a1 = nd_array<int, 1>(sycl_target, 0);
+  [[maybe_unused]] auto a1 = nd_host_array<int, 1>(sycl_target, 0);
 
-  auto a2 = nd_array<int, 1>(sycl_target, 8);
-  auto a3 = nd_array<int, 1>(sycl_target, 8);
+  auto a2 = nd_host_array<int, 1>(sycl_target, 8);
+  auto a3 = nd_host_array<int, 1>(sycl_target, 8);
 
   ASSERT_EQ(a2->index.size(), 8);
 
