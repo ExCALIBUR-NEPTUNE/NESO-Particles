@@ -4,6 +4,7 @@
 #include "../compute_target.hpp"
 #include "../loop/access_descriptors.hpp"
 #include "../loop/particle_loop_base.hpp"
+#include "../nd_host_array.hpp"
 #include "../pair_loop/particle_pair_loop_base.hpp"
 #include "nd_index.hpp"
 #include "tuple.hpp"
@@ -487,6 +488,22 @@ public:
   }
 
   /**
+   * Copy the values from the NDHostArray into an NDLocalArray.
+   *
+   * @param nd_host_array Source array.
+   */
+  inline void set(NDHostArraySharedPtr<T, N> &nd_host_array) {
+
+    NESOASSERT(nd_host_array->index == this->index,
+               "Shape of passed NDHostArray does not match the shape of the "
+               "NDLocalArray");
+
+    this->sycl_target->queue
+        .memcpy(this->buffer->ptr, nd_host_array->ptr(), this->size * sizeof(T))
+        .wait_and_throw();
+  }
+
+  /**
    * Asynchronously get the values in the local array into a std::vector.
    *
    * @param[in, out] data Input vector to copy values from NDLocalArray into.
@@ -524,6 +541,60 @@ public:
     std::vector<T> data(this->size);
     this->get(data);
     return data;
+  }
+
+  /**
+   * Copy the values from the NDLocalArray into an NDHostArray.
+   *
+   * @param[in, out] nd_host_array Destination array, will be allocated if
+   * nullptr.
+   */
+  inline void get(NDHostArraySharedPtr<T, N> &nd_host_array) {
+    if (nd_host_array == nullptr) {
+      nd_host_array =
+          NESO::Particles::nd_host_array<T, N>(this->sycl_target, this->index);
+    } else {
+      NESOASSERT(nd_host_array->index == this->index,
+                 "Shape of passed NDHostArray does not match the shape of the "
+                 "NDLocalArray");
+    }
+
+    this->sycl_target->queue
+        .memcpy(nd_host_array->ptr(), this->buffer->ptr, this->size * sizeof(T))
+        .wait_and_throw();
+  }
+
+  /**
+   * Update each held entry a as
+   *
+   * a <- binop(a, b)
+   *
+   * where the entries b are supplied by another NDLocalArray and binop is a
+   * provided binary operator.
+   *
+   * @param second_array Second array, i.e. b, for the binary combination.
+   * @param binop Binary operation to use to combine elements, must be a device
+   * copyable object with a cell method that takes two arguments of type T and
+   * U.
+   */
+  template <typename U, typename BINOP>
+  inline void combine(std::shared_ptr<NDLocalArray<U, N>> second_array,
+                      BINOP binop) {
+
+    NESOASSERT(second_array.get() != this,
+               "Second array is the same as this array.");
+    NESOASSERT(this->index == second_array->index,
+               "Passed array has different dimension extents to this array.");
+
+    T *k_a = this->buffer->ptr;
+    T const *RESTRICT const k_b = second_array->buffer->ptr;
+    BINOP k_binop = binop;
+
+    this->sycl_target->queue
+        .parallel_for(this->sycl_target->device_limits.validate_range_global(
+                          sycl::range<1>(this->size)),
+                      [=](auto idx) { k_a[idx] = k_binop(k_a[idx], k_b[idx]); })
+        .wait_and_throw();
   }
 };
 
