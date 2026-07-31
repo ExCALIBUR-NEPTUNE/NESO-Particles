@@ -285,6 +285,13 @@ TEST(DSMCCollisionCells, collision_cell_partition) {
     collision_cell_partition->get_num_unmasked_particles(species_id,
                                                          num_particles);
 
+    NDLocalArraySharedPtr<int, 2> num_particles_to_test_ndla_device = nullptr;
+    collision_cell_partition->get_num_unmasked_particles(
+        species_id, num_particles_to_test_ndla_device);
+
+    NDHostArraySharedPtr<int, 2> num_particles_ndla = nullptr;
+    num_particles_to_test_ndla_device->get(num_particles_ndla);
+
     auto ndla_correct_counts = std::make_shared<NDLocalArray<int, 2>>(
         sycl_target, cell_count, num_collision_cells);
     ndla_correct_counts->fill(0);
@@ -314,6 +321,10 @@ TEST(DSMCCollisionCells, collision_cell_partition) {
             num_particles_correct->at(mesh_cellx, collision_cellx);
 
         ASSERT_EQ(to_test, correct);
+
+        const int to_test_ndla = num_particles->at(mesh_cellx, collision_cellx);
+
+        ASSERT_EQ(to_test_ndla, correct);
       }
     }
   };

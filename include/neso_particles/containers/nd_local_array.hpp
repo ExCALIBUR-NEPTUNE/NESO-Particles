@@ -432,18 +432,27 @@ public:
    * Create a NDLocalArray on a compute device with a given shape.
    *
    * @param sycl_target Compute device to create local array on.
+   * @param index Specification of the extent of each dimension.
+   */
+  NDLocalArray(SYCLTargetSharedPtr sycl_target, NDIndex<N> index)
+      : sycl_target(sycl_target), index(index) {
+    this->size = this->index.size();
+    this->buffer =
+        std::make_shared<BufferDevice<T>>(this->sycl_target, this->size);
+    this->fill(T());
+  }
+
+  /**
+   * Create a NDLocalArray on a compute device with a given shape.
+   *
+   * @param sycl_target Compute device to create local array on.
    * @param shape Parameter pack of size N which defines the extent of the
    * array in each of the N dimensions.
    */
   template <typename... SHAPE>
   NDLocalArray(SYCLTargetSharedPtr sycl_target, SHAPE... shape)
-      : sycl_target(sycl_target) {
+      : NDLocalArray(sycl_target, nd_index<N>(shape...)) {
     static_assert(sizeof...(shape) == N, "Missmatch between shape size and N.");
-    this->index = nd_index<N>(shape...);
-    this->size = this->index.size();
-    this->buffer =
-        std::make_shared<BufferDevice<T>>(this->sycl_target, this->size);
-    this->fill(T());
   }
 
   /**
@@ -457,6 +466,11 @@ public:
       sycl_target->queue.fill(ptr, value, this->size).wait_and_throw();
     }
   }
+
+  /**
+   * @returns Pointer to underlying data. Data is linearised slowest to fastest.
+   */
+  inline T *ptr() { return this->impl_get(); }
 
   /**
    * Asynchronously set the values in the local array to those in a std::vector.
