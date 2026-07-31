@@ -539,4 +539,54 @@ ParticleMaskSharedPtr CollisionCellPartition::get_particle_mask() {
   return this->particle_mask;
 }
 
+void CollisionCellPartition::get_num_unmasked_particles(
+    const INT species_id, NDHostArraySharedPtr<int, 2> &num_particles) {
+
+  auto required_size =
+      nd_index<2>(this->num_mesh_cells, this->max_num_collision_cells);
+  const std::size_t total_num_entries = required_size.size();
+
+  if (num_particles == nullptr) {
+    num_particles = nd_host_array<int, 2>(this->sycl_target, required_size);
+  } else {
+    NESOASSERT(num_particles->index == required_size,
+               "Miss-match of num_particles size and required size.");
+  }
+
+  auto d_cell_counts =
+      get_resource<BufferDevice<int>, ResourceStackInterfaceBufferDevice<int>>(
+          sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<int>{},
+          sycl_target);
+  d_cell_counts->realloc_no_copy(total_num_entries);
+  auto *k_cell_counts = d_cell_counts->ptr;
+
+  const auto k_map = this->get_device();
+
+  const auto k_cell_count = this->num_mesh_cells;
+  const auto k_max_num_collision_cells = this->max_num_collision_cells;
+  const INT linear_species_id = this->get_linear_species_id(species_id);
+
+  sycl::range<2> iteration_set =
+      this->sycl_target->device_limits.validate_range_global(
+          sycl::range<2>(k_cell_count, k_max_num_collision_cells));
+
+  auto e0 = this->sycl_target->queue.parallel_for(
+      iteration_set, [=](sycl::item<2> ix) {
+        const std::size_t cell_mesh = ix.get_id(0);
+        const std::size_t cell_collision = ix.get_id(1);
+
+        const auto num_particles = k_map.get_num_particles_cell_species(
+            cell_mesh, cell_collision, linear_species_id);
+        k_cell_counts[ix.get_linear_id()] = static_cast<int>(num_particles);
+      });
+
+  this->sycl_target->queue
+      .memcpy(num_particles->ptr(), k_cell_counts,
+              total_num_entries * sizeof(int), e0)
+      .wait_and_throw();
+
+  restore_resource(sycl_target->resource_stack_map,
+                   ResourceStackKeyBufferDevice<int>{}, d_cell_counts);
+}
+
 } // namespace NESO::Particles::DSMC
