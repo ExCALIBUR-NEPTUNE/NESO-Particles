@@ -241,7 +241,6 @@ public:
    * @returns A CollisionCellNumPairs instance suitably sized for the number of
    * mesh cells and collision cells currently specified.
    */
-
   CollisionCellNumPairsSharedPtr get_collision_cell_num_pairs_instance();
 
   /**

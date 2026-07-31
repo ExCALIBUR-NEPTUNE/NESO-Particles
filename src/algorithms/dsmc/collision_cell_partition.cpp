@@ -558,7 +558,7 @@ void CollisionCellPartition::get_num_unmasked_particles(
           sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<int>{},
           sycl_target);
   d_cell_counts->realloc_no_copy(total_num_entries);
-  auto * RESTRICT k_cell_counts = d_cell_counts->ptr;
+  auto *RESTRICT k_cell_counts = d_cell_counts->ptr;
 
   const auto k_map = this->get_device();
 
@@ -604,7 +604,7 @@ void CollisionCellPartition::get_num_unmasked_particles(
                "Miss-match of num_particles size and required size.");
   }
 
-  auto * RESTRICT k_cell_counts = num_particles->ptr();
+  auto *RESTRICT k_cell_counts = num_particles->ptr();
 
   const auto k_map = this->get_device();
 
