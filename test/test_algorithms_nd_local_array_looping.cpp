@@ -60,5 +60,25 @@ TEST(Algorithms, nd_local_array_loop_element_wise) {
     ASSERT_TRUE(err < 1.0e-14);
   }
 
+  // broadcast example
+  auto a3 = std::make_shared<NDLocalArray<REAL, 1>>(sycl_target, 1);
+  auto h3 = a3->get();
+  h3.at(0) = 3.1415;
+  a3->set(h3);
+
+  nd_local_array_loop_element_wise(
+      a0, [=](REAL a, REAL b) -> REAL { return a / b; }, a3, a1);
+
+  ASSERT_FALSE(ep.get_flag());
+
+  h0 = a0->get();
+
+  for (std::size_t ix = 0; ix < s; ix++) {
+
+    const REAL err = relative_error(3.1415 / h1.at(ix), h0.at(ix));
+
+    ASSERT_TRUE(err < 1.0e-14);
+  }
+
   sycl_target->free();
 }
