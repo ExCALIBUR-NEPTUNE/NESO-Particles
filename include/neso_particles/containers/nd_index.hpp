@@ -27,6 +27,9 @@ protected:
   }
 
 public:
+  /// The number of dimensions
+  static constexpr std::size_t ndim = N;
+
   /// The size of each dimension.
   int shape[N];
 

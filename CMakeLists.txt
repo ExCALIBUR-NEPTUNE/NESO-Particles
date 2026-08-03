@@ -167,6 +167,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/pair_sampler_no_replacement.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/cellwise_methods.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/particle_data_movement.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/nd_local_array_looping.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/subdivide_cells_voronoi.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/subdivide_cartesian_cells.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/reduce_dat_cellwise.hpp

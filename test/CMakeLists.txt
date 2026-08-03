@@ -29,6 +29,7 @@ set(TEST_SRCS
     ${TEST_DIR}/test_algorithms_dsmc_no_replacement.cpp
     ${TEST_DIR}/test_algorithms_dsmc_no_replacement_masked.cpp
     ${TEST_DIR}/test_algorithms_unseen_value_extractor.cpp
+    ${TEST_DIR}/test_algorithms_nd_local_array_looping.cpp
     ${TEST_DIR}/test_algorithms_subdivision_cells.cpp
     ${TEST_DIR}/test_boundary_mesh_interface_a.cpp
     ${TEST_DIR}/test_boundary_pbc.cpp
