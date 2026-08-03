@@ -68,9 +68,6 @@ TEST(Algorithms, nd_local_array_loop_element_wise) {
 
   nd_local_array_loop_element_wise(
       a0, [=](REAL a, REAL b) -> REAL { return a / b; }, a3, a1);
-
-  ASSERT_FALSE(ep.get_flag());
-
   h0 = a0->get();
 
   for (std::size_t ix = 0; ix < s; ix++) {

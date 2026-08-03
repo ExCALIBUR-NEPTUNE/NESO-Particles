@@ -11,11 +11,6 @@ namespace NDLocalArrayLoop {
 template <typename T> struct nd_local_array_element_ptr_type;
 
 template <typename T, std::size_t N>
-struct nd_local_array_element_ptr_type<NDLocalArray<T, N>> {
-  using type = T *;
-};
-
-template <typename T, std::size_t N>
 struct nd_local_array_element_ptr_type<NDLocalArraySharedPtr<T, N>> {
   using type = T *;
 };
