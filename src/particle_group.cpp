@@ -278,6 +278,70 @@ ParticleGroup::get_particles(const std::size_t num_particles,
   }
 }
 
+bool ParticleGroup::contains_dat(Sym<REAL> sym) {
+  return (bool)this->particle_dats_real.count(sym);
+}
+
+bool ParticleGroup::contains_dat(Sym<INT> sym) {
+  return (bool)this->particle_dats_int.count(sym);
+}
+
+bool ParticleGroup::contains_dat(Sym<REAL> sym, const int ncomp) {
+  if (!this->contains_dat(sym)) {
+    return false;
+  } else {
+    return this->get_dat(sym)->ncomp == ncomp;
+  }
+}
+
+bool ParticleGroup::contains_dat(Sym<INT> sym, const int ncomp) {
+  if (!this->contains_dat(sym)) {
+    return false;
+  } else {
+    return this->get_dat(sym)->ncomp == ncomp;
+  }
+}
+
+ParticleDatSharedPtr<REAL> ParticleGroup::get_dat(Sym<REAL> sym,
+                                                  const bool check_exists) {
+  if (check_exists) {
+    const bool dat_exists = this->contains_dat(sym);
+    NESOASSERT(dat_exists,
+               "This ParticleGroup does not contain the requested dat: " +
+                   sym.name);
+  }
+
+  return (*this)[sym];
+}
+
+ParticleDatSharedPtr<INT> ParticleGroup::get_dat(Sym<INT> sym,
+                                                 const bool check_exists) {
+  if (check_exists) {
+    const bool dat_exists = this->contains_dat(sym);
+    NESOASSERT(dat_exists,
+               "This ParticleGroup does not contain the requested dat: " +
+                   sym.name);
+  }
+
+  return (*this)[sym];
+}
+
+ParticleDatSharedPtr<REAL> &ParticleGroup::operator[](Sym<REAL> sym) {
+  return this->particle_dats_real.at(sym);
+};
+
+ParticleDatSharedPtr<INT> &ParticleGroup::operator[](Sym<INT> sym) {
+  return this->particle_dats_int.at(sym);
+};
+
+CellData<REAL> ParticleGroup::get_cell(Sym<REAL> sym, const int cell) {
+  return particle_dats_real[sym]->cell_dat.get_cell(cell);
+}
+
+CellData<INT> ParticleGroup::get_cell(Sym<INT> sym, const int cell) {
+  return particle_dats_int[sym]->cell_dat.get_cell(cell);
+}
+
 /**
  * Clear all particles from the ParticleGroup on the calling MPI rank.
  */
@@ -1175,7 +1239,16 @@ void ParticleGroup::cell_move() {
   this->cell_move_ctx.move();
   this->set_npart_cell_from_dat();
   this->invalidate_group_version();
-};
+}
+
+void ParticleGroup::set_npart_cell_from_dat() {
+  for (int cellx = 0; cellx < this->ncell; cellx++) {
+    this->h_npart_cell.ptr[cellx] = this->position_dat->h_npart_cell[cellx];
+  }
+  buffer_memcpy(this->d_npart_cell, this->h_npart_cell).wait_and_throw();
+  this->recompute_npart_cell_es();
+  this->invalidate_group_version();
+}
 
 void ParticleGroup::remove_particle_dat(Sym<REAL> sym) {
   NESOASSERT(this->particle_dats_real.count(sym) == 1,
