@@ -388,6 +388,18 @@ void ParticleGroup::add_particle_dat(ParticleDatSharedPtr<INT> particle_dat) {
   }
 }
 
+void ParticleGroup::add_particle_dat(const Sym<REAL> sym, const int ncomp) {
+  this->add_particle_dat(ParticleDat(this->sycl_target,
+                                     ParticleProp(sym, ncomp),
+                                     this->domain->mesh->get_cell_count()));
+}
+
+void ParticleGroup::add_particle_dat(const Sym<INT> sym, const int ncomp) {
+  this->add_particle_dat(ParticleDat(this->sycl_target,
+                                     ParticleProp(sym, ncomp),
+                                     this->domain->mesh->get_cell_count()));
+}
+
 void ParticleGroup::add_particles_local(
     std::shared_ptr<ProductMatrix> product_matrix) {
   this->add_particles_local(product_matrix, nullptr, nullptr, nullptr);
@@ -1250,6 +1262,106 @@ void ParticleGroup::set_npart_cell_from_dat() {
   buffer_memcpy(this->d_npart_cell, this->h_npart_cell).wait_and_throw();
   this->recompute_npart_cell_es();
   this->invalidate_group_version();
+}
+
+void ParticleGroup::print_inner(std::ostream &os, SymStore print_spec) {
+
+  os << "==============================================================="
+        "================="
+     << std::endl;
+  for (int cellx = 0; cellx < this->domain->mesh->get_cell_count(); cellx++) {
+    if (this->h_npart_cell.ptr[cellx] > 0) {
+
+      std::vector<CellData<REAL>> cell_data_real;
+      std::vector<CellData<INT>> cell_data_int;
+
+      int nrow = -1;
+      for (auto &symx : print_spec.syms_real) {
+        auto cell_data =
+            this->particle_dats_real[symx]->cell_dat.get_cell(cellx);
+        cell_data_real.push_back(cell_data);
+        if (nrow >= 0) {
+          NESOASSERT(nrow == cell_data->nrow, "nrow missmatch");
+        }
+        nrow = cell_data->nrow;
+      }
+      for (auto &symx : print_spec.syms_int) {
+        auto cell_data =
+            this->particle_dats_int[symx]->cell_dat.get_cell(cellx);
+        cell_data_int.push_back(cell_data);
+        if (nrow >= 0) {
+          NESOASSERT(nrow == cell_data->nrow, "nrow missmatch");
+        }
+        nrow = cell_data->nrow;
+      }
+
+      os << "------- " << cellx << " -------" << std::endl;
+      for (auto &symx : print_spec.syms_real) {
+        os << "| " << symx.name << " ";
+      }
+      for (auto &symx : print_spec.syms_int) {
+        os << "| " << symx.name << " ";
+      }
+      os << "|" << std::endl;
+
+      for (int rowx = 0; rowx < nrow; rowx++) {
+        for (auto &cx : cell_data_real) {
+          os << "| ";
+          for (int colx = 0; colx < cx->ncol; colx++) {
+            os << fixed_width_format((*cx)[colx][rowx]) << " ";
+          }
+        }
+        for (auto &cx : cell_data_int) {
+          os << "| ";
+          for (int colx = 0; colx < cx->ncol; colx++) {
+            os << fixed_width_format((*cx)[colx][rowx]) << " ";
+          }
+        }
+
+        os << "|" << std::endl;
+      }
+    }
+  }
+
+  os << "==============================================================="
+        "================="
+     << std::endl;
+}
+
+void ParticleGroup::print(std::ostream &os, SymStore print_spec) {
+  this->print_inner(os, print_spec);
+}
+
+void ParticleGroup::print(SymStore print_spec) {
+  this->print_inner(std::cout, print_spec);
+}
+
+void ParticleGroup::print_particle(std::ostream &os, const int cell,
+                                   const int layer) {
+  NESOASSERT(0 <= cell && cell < this->ncell, "Bad input cell.");
+  const auto nlayers = this->get_npart_cell(cell);
+  NESOASSERT(0 <= layer && layer < nlayers, "Bad input layer.");
+
+  auto lambda_print_dat = [&](auto sym, auto dat) {
+    os << "\t" << sym.name << ": ";
+    auto data = dat->cell_dat.get_cell(cell);
+    auto ncomp = dat->ncomp;
+    for (int cx = 0; cx < ncomp; cx++) {
+      os << data->at(layer, cx) << " ";
+    }
+    os << std::endl;
+  };
+
+  for (auto d : this->particle_dats_int) {
+    lambda_print_dat(d.first, d.second);
+  }
+  for (auto d : this->particle_dats_real) {
+    lambda_print_dat(d.first, d.second);
+  }
+}
+
+void ParticleGroup::print_particle(const int cell, const int layer) {
+  this->print_particle(std::cout, cell, layer);
 }
 
 void ParticleGroup::remove_particle_dat(Sym<REAL> sym) {

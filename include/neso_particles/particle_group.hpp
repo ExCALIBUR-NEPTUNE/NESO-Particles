@@ -466,11 +466,18 @@ public:
   /**
    * Add a new ParticleDat by specifying the Sym and number of components.
    *
-   * @param sym Sym<INT> or Sym<REAL> for new ParticleDat.
+   * @param sym Sym<REAL> for new ParticleDat.
    * @param ncomp Number of components for the new ParticleDat.
    */
-  template <typename T>
-  inline void add_particle_dat(const Sym<T> sym, const int ncomp);
+  void add_particle_dat(const Sym<REAL> sym, const int ncomp);
+
+  /**
+   * Add a new ParticleDat by specifying the Sym and number of components.
+   *
+   * @param sym Sym<INT> for new ParticleDat.
+   * @param ncomp Number of components for the new ParticleDat.
+   */
+  void add_particle_dat(const Sym<INT> sym, const int ncomp);
 
   /**
    *  Add particles to the ParticleGroup. Any rank may add particles that exist
@@ -778,7 +785,7 @@ public:
   void set_npart_cell_from_dat();
 
 protected:
-  inline void print_inner(std::ostream &os, SymStore print_spec);
+  void print_inner(std::ostream &os, SymStore print_spec);
 
 public:
   /**
@@ -788,7 +795,7 @@ public:
    *  @param os Output stream to print to.
    *  @param print_spec SymStore of data to print.
    */
-  inline void print(std::ostream &os, SymStore print_spec);
+  void print(std::ostream &os, SymStore print_spec);
 
   /**
    *  Print particle data for all particles for the specified ParticleDats.
@@ -827,7 +834,7 @@ public:
    *
    *  @param print_spec SymStore of data to print.
    */
-  inline void print(SymStore print_spec);
+  void print(SymStore print_spec);
 
   /**
    *  Print all particle data for a particle.
@@ -836,7 +843,7 @@ public:
    *  @param cell Cell of particle.
    *  @param layer Layer of particle.
    */
-  inline void print_particle(std::ostream &os, const int cell, const int layer);
+  void print_particle(std::ostream &os, const int cell, const int layer);
 
   /**
    *  Print all particle data for a particle.
@@ -844,7 +851,7 @@ public:
    *  @param cell Cell of particle.
    *  @param layer Layer of particle.
    */
-  inline void print_particle(const int cell, const int layer);
+  void print_particle(const int cell, const int layer);
 
   /**
    *  Remove a ParticleDat from the ParticleGroup
