@@ -335,10 +335,12 @@ ParticleDatSharedPtr<INT> &ParticleGroup::operator[](Sym<INT> sym) {
 };
 
 CellData<REAL> ParticleGroup::get_cell(Sym<REAL> sym, const int cell) {
+  NESOASSERT(this->contains_dat(sym), "Sym<REAL>(" + sym.name + ") not found.");
   return particle_dats_real[sym]->cell_dat.get_cell(cell);
 }
 
 CellData<INT> ParticleGroup::get_cell(Sym<INT> sym, const int cell) {
+  NESOASSERT(this->contains_dat(sym), "Sym<INT>(" + sym.name + ") not found.");
   return particle_dats_int[sym]->cell_dat.get_cell(cell);
 }
 
