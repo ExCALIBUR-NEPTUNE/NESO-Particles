@@ -3,7 +3,9 @@
 
 #include "../../compute_target.hpp"
 #include "../../containers/blocked_binary_tree.hpp"
+#include "../../containers/nd_local_array.hpp"
 #include "../../containers/particle_mask.hpp"
+#include "../../nd_host_array.hpp"
 #include "../../particle_sub_group/particle_sub_group.hpp"
 #include "collision_cell_num_pairs.hpp"
 #include <memory>
@@ -239,13 +241,36 @@ public:
    * @returns A CollisionCellNumPairs instance suitably sized for the number of
    * mesh cells and collision cells currently specified.
    */
-
   CollisionCellNumPairsSharedPtr get_collision_cell_num_pairs_instance();
 
   /**
    * @returns The current ParticleMask in use. This method may return a nullptr.
    */
   ParticleMaskSharedPtr get_particle_mask();
+
+  /**
+   * Get the number of unmasked particles of a particular species ID in each
+   * collision cell.
+   *
+   * @param[in] species_id Species ID of particles to get number of.
+   * @param[in, out] num_particles NDHostArray of particle numbers per collision
+   * cell. Should be of dimension 2 with extents num_mesh_cells and
+   * max_num_collision_cells. Will be allocated if nullptr.
+   */
+  void get_num_unmasked_particles(const INT species_id,
+                                  NDHostArraySharedPtr<int, 2> &num_particles);
+
+  /**
+   * Get the number of unmasked particles of a particular species ID in each
+   * collision cell.
+   *
+   * @param[in] species_id Species ID of particles to get number of.
+   * @param[in, out] num_particles NDLocalArray of particle numbers per
+   * collision cell. Should be of dimension 2 with extents num_mesh_cells and
+   * max_num_collision_cells. Will be allocated if nullptr.
+   */
+  void get_num_unmasked_particles(const INT species_id,
+                                  NDLocalArraySharedPtr<int, 2> &num_particles);
 };
 
 using CollisionCellPartitionSharedPtr = std::shared_ptr<CollisionCellPartition>;

@@ -98,6 +98,7 @@ set(SRC_FILES
     ${SRC_DIR}/containers/global_array.cpp
     ${SRC_DIR}/containers/index_map.cpp
     ${SRC_DIR}/containers/local_array.cpp
+    ${SRC_DIR}/containers/nd_local_array.cpp
     ${SRC_DIR}/containers/mask_array.cpp
     ${SRC_DIR}/containers/particle_mask.cpp
     ${SRC_DIR}/containers/particle_set_device.cpp
@@ -109,6 +110,7 @@ set(SRC_FILES
     ${SRC_DIR}/device_limits.cpp
     ${SRC_DIR}/departing_particle_identification.cpp
     ${SRC_DIR}/mesh_hierarchy.cpp
+    ${SRC_DIR}/nd_host_array.cpp
     ${SRC_DIR}/global_mapping.cpp
     ${SRC_DIR}/parallel_initialisation.cpp
     ${SRC_DIR}/packing_unpacking.cpp
@@ -165,6 +167,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/pair_sampler_no_replacement.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/cellwise_methods.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/particle_data_movement.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/nd_local_array_looping.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/subdivide_cells_voronoi.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/subdivide_cartesian_cells.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/reduce_dat_cellwise.hpp
@@ -340,6 +343,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/discard_sub_group_selector.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/truncate_sub_group_selector.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/disjoint_union_sub_group_selector.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/nd_host_array.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/profiling.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/sycl_typedefs.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/typedefs.hpp

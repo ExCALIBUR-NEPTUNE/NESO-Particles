@@ -27,6 +27,9 @@ protected:
   }
 
 public:
+  /// The number of dimensions
+  static constexpr std::size_t ndim = N;
+
   /// The size of each dimension.
   int shape[N];
 
@@ -53,6 +56,17 @@ public:
       s *= this->shape[ix];
     }
     return s;
+  }
+
+  template <std::size_t M> bool operator==(const NDIndex<M> &nd_index) const {
+    if constexpr (N != M) {
+      return false;
+    }
+    bool is_same = true;
+    for (std::size_t ix = 0; ix < N; ix++) {
+      is_same = is_same && (this->shape[ix] == nd_index.shape[ix]);
+    }
+    return is_same;
   }
 };
 

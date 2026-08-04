@@ -44,6 +44,7 @@
 #include "neso_particles/mesh_hierarchy_data/mesh_hierarchy_data.hpp"
 #include "neso_particles/mesh_interface.hpp"
 #include "neso_particles/mesh_interface_local_decomp.hpp"
+#include "neso_particles/nd_host_array.hpp"
 #include "neso_particles/pair_loop/pair_loop.hpp"
 #include "neso_particles/parallel_initialisation.hpp"
 #include "neso_particles/particle_dat.hpp"

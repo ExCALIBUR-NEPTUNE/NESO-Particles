@@ -8,8 +8,9 @@ TEST(DSMCCollisionCells, collision_cell_partition) {
   const int ny = 33;
   const int nz = 48;
 
-  auto [A, sycl_target, cell_count_t] =
+  auto [A, sycl_target_t, cell_count_t] =
       particle_loop_create_common(npart_cell, ndim, nx, ny, nz);
+  auto sycl_target = sycl_target_t;
   const auto cell_count = cell_count_t;
 
   A->add_particle_dat(Sym<INT>("SPECIES_ID"), 1);
@@ -278,6 +279,58 @@ TEST(DSMCCollisionCells, collision_cell_partition) {
     ASSERT_EQ(collision_cell_num_pairs->max_num_collision_cells,
               collision_cell_partition->max_num_collision_cells);
   }
+
+  auto lambda_num_particles = [&](auto species_id) {
+    NDHostArraySharedPtr<int, 2> num_particles = nullptr;
+    collision_cell_partition->get_num_unmasked_particles(species_id,
+                                                         num_particles);
+
+    NDLocalArraySharedPtr<int, 2> num_particles_to_test_ndla_device = nullptr;
+    collision_cell_partition->get_num_unmasked_particles(
+        species_id, num_particles_to_test_ndla_device);
+
+    NDHostArraySharedPtr<int, 2> num_particles_ndla = nullptr;
+    num_particles_to_test_ndla_device->get(num_particles_ndla);
+
+    auto ndla_correct_counts = std::make_shared<NDLocalArray<int, 2>>(
+        sycl_target, cell_count, num_collision_cells);
+    ndla_correct_counts->fill(0);
+
+    particle_loop(
+        aa,
+        [=](auto INDEX, auto SPECIES_ID, auto COLLISION_CELL,
+            auto NUM_PARTICLES) {
+          if (SPECIES_ID.at(0) == species_id) {
+            NUM_PARTICLES.fetch_add(INDEX.cell, COLLISION_CELL.at(0), 1);
+          }
+        },
+        Access::read(ParticleLoopIndex{}), Access::read(Sym<INT>("SPECIES_ID")),
+        Access::read(Sym<INT>("COLLISION_CELL")),
+        Access::add(ndla_correct_counts))
+        ->execute();
+
+    NDHostArraySharedPtr<int, 2> num_particles_correct = nullptr;
+    ndla_correct_counts->get(num_particles_correct);
+
+    for (int mesh_cellx = 0; mesh_cellx < cell_count; mesh_cellx++) {
+      for (int collision_cellx = 0; collision_cellx < num_collision_cells;
+           collision_cellx++) {
+
+        const int to_test = num_particles->at(mesh_cellx, collision_cellx);
+        const int correct =
+            num_particles_correct->at(mesh_cellx, collision_cellx);
+
+        ASSERT_EQ(to_test, correct);
+
+        const int to_test_ndla = num_particles->at(mesh_cellx, collision_cellx);
+
+        ASSERT_EQ(to_test_ndla, correct);
+      }
+    }
+  };
+
+  lambda_num_particles(species_id_offset + 0);
+  lambda_num_particles(species_id_offset + 1);
 
   sycl_target->free();
   A->domain->mesh->free();
