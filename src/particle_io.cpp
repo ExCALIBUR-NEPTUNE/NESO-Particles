@@ -223,6 +223,56 @@ ParticleSetSharedPtr H5Part::read(ParticleSpec &particle_spec, INT step,
   return particle_set;
 }
 
+bool H5Part::rescale_coefficient_is_set(Sym<REAL> sym) {
+  return this->rescale_coefficients_real.count(sym);
+}
+bool H5Part::rescale_coefficient_is_set(Sym<INT> sym) {
+  return this->rescale_coefficients_int.count(sym);
+}
+
+REAL H5Part::get_rescale_coefficient(Sym<REAL> sym) {
+  if (this->rescale_coefficient_is_set(sym)) {
+    return this->rescale_coefficients_real[sym];
+  } else {
+    return 1.0;
+  }
+}
+
+INT H5Part::get_rescale_coefficient(Sym<INT> sym) {
+  if (this->rescale_coefficient_is_set(sym)) {
+    return this->rescale_coefficients_int[sym];
+  } else {
+    return 1;
+  }
+}
+
+void H5Part::set_rescale_coefficient(Sym<REAL> sym, const REAL value) {
+  NESOASSERT(this->sym_store.contains(sym),
+             "This H5Part instance does not contain a Sym<REAL> with name: " +
+                 sym.name);
+  if (this->rescale_coefficient_is_set(sym)) {
+    this->rescale_coefficients_real.erase(sym);
+  }
+
+  if (value != 1.0) {
+    this->rescale_coefficients_real[sym] = value;
+  }
+}
+
+void H5Part::set_rescale_coefficient(Sym<INT> sym, const INT value) {
+  NESOASSERT(this->sym_store.contains(sym),
+             "This H5Part instance does not contain a Sym<INT> with name: " +
+                 sym.name);
+
+  if (this->rescale_coefficient_is_set(sym)) {
+    this->rescale_coefficients_int.erase(sym);
+  }
+
+  if (value != 1) {
+    this->rescale_coefficients_int[sym] = value;
+  }
+}
+
 } // namespace NESO::Particles
 
 #endif

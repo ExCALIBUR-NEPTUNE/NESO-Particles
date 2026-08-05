@@ -466,11 +466,18 @@ public:
   /**
    * Add a new ParticleDat by specifying the Sym and number of components.
    *
-   * @param sym Sym<INT> or Sym<REAL> for new ParticleDat.
+   * @param sym Sym<REAL> for new ParticleDat.
    * @param ncomp Number of components for the new ParticleDat.
    */
-  template <typename T>
-  inline void add_particle_dat(const Sym<T> sym, const int ncomp);
+  void add_particle_dat(const Sym<REAL> sym, const int ncomp);
+
+  /**
+   * Add a new ParticleDat by specifying the Sym and number of components.
+   *
+   * @param sym Sym<INT> for new ParticleDat.
+   * @param ncomp Number of components for the new ParticleDat.
+   */
+  void add_particle_dat(const Sym<INT> sym, const int ncomp);
 
   /**
    *  Add particles to the ParticleGroup. Any rank may add particles that exist
@@ -599,9 +606,7 @@ public:
    *  @param sym Symbol of ParticleDat.
    *  @returns True if ParticleDat exists on this ParticleGroup.
    */
-  inline bool contains_dat(Sym<REAL> sym) {
-    return (bool)this->particle_dats_real.count(sym);
-  }
+  bool contains_dat(Sym<REAL> sym);
 
   /**
    *  Determine if the ParticleGroup contains a ParticleDat of a given name.
@@ -609,9 +614,7 @@ public:
    *  @param sym Symbol of ParticleDat.
    *  @returns True if ParticleDat exists on this ParticleGroup.
    */
-  inline bool contains_dat(Sym<INT> sym) {
-    return (bool)this->particle_dats_int.count(sym);
-  }
+  bool contains_dat(Sym<INT> sym);
 
   /**
    * Determine if the ParticleGroup contains a ParticleDat with a given sym and
@@ -621,34 +624,37 @@ public:
    * @param ncomp Number of components the dat should have.
    * @returns True if a dat with the specified number of components is held.
    */
-  template <typename T> inline bool contains_dat(Sym<T> sym, const int ncomp) {
-    if (!this->contains_dat(sym)) {
-      return false;
-    } else {
-      return this->get_dat(sym)->ncomp == ncomp;
-    }
-  }
+  bool contains_dat(Sym<REAL> sym, const int ncomp);
 
   /**
-   * Template for get_dat method called like:
+   * Determine if the ParticleGroup contains a ParticleDat with a given sym and
+   * number of components.
+   *
+   * @param sym Sym<REAL> or Sym<INT> to check existence of.
+   * @param ncomp Number of components the dat should have.
+   * @returns True if a dat with the specified number of components is held.
+   */
+  bool contains_dat(Sym<INT> sym, const int ncomp);
+
+  /**
    * ParticleGroup::get_dat(Sym<REAL>("POS")) for a real valued ParticleDat.
    *
    * @param sym Sym of ParticleDat to retrieve.
    * @param check_exists Check if the dat exists, default true.
    * @returns ParticleDatSharedPtr<T> particle dat.
    */
-  template <typename T>
-  inline ParticleDatSharedPtr<T> get_dat(Sym<T> sym,
-                                         const bool check_exists = true) {
-    if (check_exists) {
-      const bool dat_exists = this->contains_dat(sym);
-      NESOASSERT(dat_exists,
-                 "This ParticleGroup does not contain the requested dat: " +
-                     sym.name);
-    }
+  ParticleDatSharedPtr<REAL> get_dat(Sym<REAL> sym,
+                                     const bool check_exists = true);
 
-    return (*this)[sym];
-  }
+  /**
+   * ParticleGroup::get_dat(Sym<REAL>("POS")) for a real valued ParticleDat.
+   *
+   * @param sym Sym of ParticleDat to retrieve.
+   * @param check_exists Check if the dat exists, default true.
+   * @returns ParticleDatSharedPtr<T> particle dat.
+   */
+  ParticleDatSharedPtr<INT> get_dat(Sym<INT> sym,
+                                    const bool check_exists = true);
 
   /**
    *  Users are recomended to use "get_dat" instead.
@@ -656,18 +662,15 @@ public:
    *
    *  @param sym Sym<REAL> of ParticleDat to access.
    */
-  inline ParticleDatSharedPtr<REAL> &operator[](Sym<REAL> sym) {
-    return this->particle_dats_real.at(sym);
-  };
+  ParticleDatSharedPtr<REAL> &operator[](Sym<REAL> sym);
+
   /**
    *  Users are recomended to use "get_dat" instead.
    *  Enables access to the ParticleDat instances using the subscript operators.
    *
    *  @param sym Sym<INT> of ParticleDat to access.
    */
-  inline ParticleDatSharedPtr<INT> &operator[](Sym<INT> sym) {
-    return this->particle_dats_int.at(sym);
-  };
+  ParticleDatSharedPtr<INT> &operator[](Sym<INT> sym);
 
   /**
    *  Get a CellData instance that holds all the particle data for a
@@ -677,9 +680,7 @@ public:
    *  @param cell Cell index to access.
    *  @returns CellData for requested cell.
    */
-  inline CellData<REAL> get_cell(Sym<REAL> sym, const int cell) {
-    return particle_dats_real[sym]->cell_dat.get_cell(cell);
-  }
+  CellData<REAL> get_cell(Sym<REAL> sym, const int cell);
 
   /**
    *  Get a CellData instance that holds all the particle data for a
@@ -689,9 +690,7 @@ public:
    *  @param cell Cell index to access.
    *  @returns CellData for requested cell.
    */
-  inline CellData<INT> get_cell(Sym<INT> sym, const int cell) {
-    return particle_dats_int[sym]->cell_dat.get_cell(cell);
-  }
+  CellData<INT> get_cell(Sym<INT> sym, const int cell);
 
   /**
    * Clear all particles from the ParticleGroup on the calling MPI rank.
@@ -783,17 +782,10 @@ public:
    *  Copy the particle counts per cell from the position ParticleDat to the
    *  npart cell array of the ParticleGroup.
    */
-  inline void set_npart_cell_from_dat() {
-    for (int cellx = 0; cellx < this->ncell; cellx++) {
-      this->h_npart_cell.ptr[cellx] = this->position_dat->h_npart_cell[cellx];
-    }
-    buffer_memcpy(this->d_npart_cell, this->h_npart_cell).wait_and_throw();
-    this->recompute_npart_cell_es();
-    this->invalidate_group_version();
-  }
+  void set_npart_cell_from_dat();
 
 protected:
-  inline void print_inner(std::ostream &os, SymStore print_spec);
+  void print_inner(std::ostream &os, SymStore print_spec);
 
 public:
   /**
@@ -803,7 +795,7 @@ public:
    *  @param os Output stream to print to.
    *  @param print_spec SymStore of data to print.
    */
-  inline void print(std::ostream &os, SymStore print_spec);
+  void print(std::ostream &os, SymStore print_spec);
 
   /**
    *  Print particle data for all particles for the specified ParticleDats.
@@ -842,7 +834,7 @@ public:
    *
    *  @param print_spec SymStore of data to print.
    */
-  inline void print(SymStore print_spec);
+  void print(SymStore print_spec);
 
   /**
    *  Print all particle data for a particle.
@@ -851,7 +843,7 @@ public:
    *  @param cell Cell of particle.
    *  @param layer Layer of particle.
    */
-  inline void print_particle(std::ostream &os, const int cell, const int layer);
+  void print_particle(std::ostream &os, const int cell, const int layer);
 
   /**
    *  Print all particle data for a particle.
@@ -859,7 +851,7 @@ public:
    *  @param cell Cell of particle.
    *  @param layer Layer of particle.
    */
-  inline void print_particle(const int cell, const int layer);
+  void print_particle(const int cell, const int layer);
 
   /**
    *  Remove a ParticleDat from the ParticleGroup

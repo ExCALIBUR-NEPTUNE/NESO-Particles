@@ -276,8 +276,10 @@ TEST(ParticleIO, h5_part_read_particle_group) {
       ParticleProp(Sym<REAL>("P"), ndim, true),
       ParticleProp(Sym<REAL>("P2"), ndim),
       ParticleProp(Sym<REAL>("V"), 3),
+      ParticleProp(Sym<REAL>("V_RESCALE"), 3),
       ParticleProp(Sym<INT>("CELL_ID"), 1, true),
       ParticleProp(Sym<INT>("ID"), 1),
+      ParticleProp(Sym<INT>("ID_RESCALE"), 1),
       ParticleProp(Sym<INT>("ID2"), 5),
   };
 
@@ -311,6 +313,7 @@ TEST(ParticleIO, h5_part_read_particle_group) {
   }
   for (int dimx = 0; dimx < 3; dimx++) {
     initial_distribution.set(Sym<REAL>("V"), dimx, velocities[dimx]);
+    initial_distribution.set(Sym<REAL>("V_RESCALE"), dimx, velocities[dimx]);
   }
 
   // determine which particles should end up on which rank
@@ -318,6 +321,7 @@ TEST(ParticleIO, h5_part_read_particle_group) {
   for (int px = 0; px < N; px++) {
     initial_distribution[Sym<INT>("CELL_ID")][px][0] = 0;
     initial_distribution[Sym<INT>("ID")][px][0] = px;
+    initial_distribution[Sym<INT>("ID_RESCALE")][px][0] = px;
 
     for (int ix = 0; ix < 5; ix++) {
       initial_distribution[Sym<INT>("ID2")][px][ix] = (px * 10 + ix) % 7;
@@ -339,17 +343,24 @@ TEST(ParticleIO, h5_part_read_particle_group) {
   {
     H5Part h5part(get_test_root_file("test_dump.h5part"), A, Sym<REAL>("P"),
                   Sym<REAL>("V"), Sym<INT>("ID"), Sym<INT>("ID2"),
-                  Sym<INT>("NESO_MPI_RANK"));
+                  Sym<INT>("NESO_MPI_RANK"), Sym<REAL>("V_RESCALE"),
+                  Sym<INT>("ID_RESCALE"));
+
+    h5part.set_rescale_coefficient(Sym<REAL>("V_RESCALE"), 0.5);
+    h5part.set_rescale_coefficient(Sym<INT>("ID_RESCALE"), 3);
 
     h5part.write();
     h5part.close();
   }
 
   {
-    ParticleSpec particle_spec_read(
-        ParticleProp(Sym<REAL>("P2"), ndim, true),
-        ParticleProp(Sym<REAL>("P"), ndim), ParticleProp(Sym<REAL>("V"), 3),
-        ParticleProp(Sym<INT>("ID"), 1), ParticleProp(Sym<INT>("ID2"), 5));
+    ParticleSpec particle_spec_read(ParticleProp(Sym<REAL>("P2"), ndim, true),
+                                    ParticleProp(Sym<REAL>("P"), ndim),
+                                    ParticleProp(Sym<REAL>("V"), 3),
+                                    ParticleProp(Sym<REAL>("V_RESCALE"), 3),
+                                    ParticleProp(Sym<INT>("ID"), 1),
+                                    ParticleProp(Sym<INT>("ID_RESCALE"), 1),
+                                    ParticleProp(Sym<INT>("ID2"), 5));
     H5Part h5part(get_test_root_file("test_dump.h5part"), sycl_target);
     auto particle_set = h5part.read(particle_spec_read, 0, true);
     h5part.close();
@@ -382,11 +393,12 @@ TEST(ParticleIO, h5_part_read_particle_group) {
         Access::read(Sym<REAL>("P")), Access::write(Sym<REAL>("P2")))
         ->execute();
 
-    auto lambda_test_wrapper = [&](auto px, auto la) {
+    auto lambda_test_wrapper = [&](auto px, auto la, auto rescale_value) {
       la->fill(-10000);
 
       auto ep = ErrorPropagate(sycl_target);
       auto k_ep = ep.device_ptr();
+
       auto sym = px.sym;
       const int ncomp = px.ncomp;
       particle_loop(
@@ -412,9 +424,11 @@ TEST(ParticleIO, h5_part_read_particle_group) {
             NESO_KERNEL_ASSERT(id_is_good, k_ep);
             if (id_is_good) {
               for (int cx = 0; cx < ncomp; cx++) {
-                const auto correct = LA.at(index * ncomp + cx);
+                const auto correct = LA.at(index * ncomp + cx) * rescale_value;
                 const auto to_test = DAT.at(cx);
-                NESO_KERNEL_ASSERT(correct == to_test, k_ep);
+
+                NESO_KERNEL_ASSERT(Kernel::abs(correct - to_test) <= 1.0e-15,
+                                   k_ep);
               }
             }
           },
@@ -423,11 +437,23 @@ TEST(ParticleIO, h5_part_read_particle_group) {
       ASSERT_FALSE(ep.get_flag());
     };
 
+    std::map<Sym<REAL>, REAL> scale_real;
+    std::map<Sym<INT>, INT> scale_int;
     for (auto &px : particle_spec_read.properties_int) {
-      lambda_test_wrapper(px, la_int);
+      scale_int[px.sym] = 1;
     }
     for (auto &px : particle_spec_read.properties_real) {
-      lambda_test_wrapper(px, la_real);
+      scale_real[px.sym] = 1.0;
+    }
+
+    scale_int[Sym<INT>("ID_RESCALE")] = 3;
+    scale_real[Sym<REAL>("V_RESCALE")] = 0.5;
+
+    for (auto &px : particle_spec_read.properties_int) {
+      lambda_test_wrapper(px, la_int, scale_int[px.sym]);
+    }
+    for (auto &px : particle_spec_read.properties_real) {
+      lambda_test_wrapper(px, la_real, scale_real[px.sym]);
     }
   }
 

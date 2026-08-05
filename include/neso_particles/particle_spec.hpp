@@ -216,26 +216,35 @@ public:
  */
 class SymStore {
 private:
+  std::set<Sym<REAL>> syms_set_real;
+  std::set<Sym<INT>> syms_set_int;
+
   template <typename... T> void push(Sym<REAL> pp, T &&...args) {
     this->syms_real.push_back(pp);
+    this->syms_set_real.insert(pp);
     this->push(std::forward<T>(args)...);
   }
   template <typename... T> void push(Sym<INT> pp, T &&...args) {
     this->syms_int.push_back(pp);
+    this->syms_set_int.insert(pp);
     this->push(std::forward<T>(args)...);
   }
   template <typename... T> void push(std::vector<Sym<REAL>> &pp) {
     this->syms_real.insert(this->syms_real.end(), pp.begin(), pp.end());
+    this->syms_set_real.insert(pp.begin(), pp.end());
   }
   template <typename... T> void push(std::vector<Sym<INT>> &pp) {
     this->syms_int.insert(this->syms_int.end(), pp.begin(), pp.end());
+    this->syms_set_int.insert(pp.begin(), pp.end());
   }
   template <typename... T> void push(std::vector<Sym<REAL>> &pp, T &&...args) {
     this->syms_real.insert(this->syms_real.end(), pp.begin(), pp.end());
+    this->syms_set_real.insert(pp.begin(), pp.end());
     this->push(std::forward<T>(args)...);
   }
   template <typename... T> void push(std::vector<Sym<INT>> &pp, T &&...args) {
     this->syms_int.insert(this->syms_int.end(), pp.begin(), pp.end());
+    this->syms_set_int.insert(pp.begin(), pp.end());
     this->push(std::forward<T>(args)...);
   }
 
@@ -285,14 +294,32 @@ public:
    *
    * @param sym Sym to push into the store.
    */
-  inline void push(Sym<REAL> pp) { this->syms_real.push_back(pp); }
+  inline void push(Sym<REAL> pp) {
+    this->syms_real.push_back(pp);
+    this->syms_set_real.insert(pp);
+  }
 
   /**
    * Push Sym into store.
    *
    * @param sym Sym to push into the store.
    */
-  inline void push(Sym<INT> pp) { this->syms_int.push_back(pp); }
+  inline void push(Sym<INT> pp) {
+    this->syms_int.push_back(pp);
+    this->syms_set_int.insert(pp);
+  }
+
+  /**
+   * @param sym Sym to test existance of.
+   * @returns True if sym is in the SymStore.
+   */
+  inline bool contains(Sym<REAL> sym) { return this->syms_set_real.count(sym); }
+
+  /**
+   * @param sym Sym to test existance of.
+   * @returns True if sym is in the SymStore.
+   */
+  inline bool contains(Sym<INT> sym) { return this->syms_set_int.count(sym); }
 
   SymStore(){};
   ~SymStore(){};

@@ -4,6 +4,7 @@
 #include "../compute_target.hpp"
 #include "../loop/access_descriptors.hpp"
 #include "../loop/particle_loop_base.hpp"
+#include "../nd_host_array.hpp"
 #include "../pair_loop/particle_pair_loop_base.hpp"
 #include "nd_index.hpp"
 #include "tuple.hpp"
@@ -431,18 +432,27 @@ public:
    * Create a NDLocalArray on a compute device with a given shape.
    *
    * @param sycl_target Compute device to create local array on.
+   * @param index Specification of the extent of each dimension.
+   */
+  NDLocalArray(SYCLTargetSharedPtr sycl_target, NDIndex<N> index)
+      : sycl_target(sycl_target), index(index) {
+    this->size = this->index.size();
+    this->buffer =
+        std::make_shared<BufferDevice<T>>(this->sycl_target, this->size);
+    this->fill(T());
+  }
+
+  /**
+   * Create a NDLocalArray on a compute device with a given shape.
+   *
+   * @param sycl_target Compute device to create local array on.
    * @param shape Parameter pack of size N which defines the extent of the
    * array in each of the N dimensions.
    */
   template <typename... SHAPE>
   NDLocalArray(SYCLTargetSharedPtr sycl_target, SHAPE... shape)
-      : sycl_target(sycl_target) {
+      : NDLocalArray(sycl_target, nd_index<N>(shape...)) {
     static_assert(sizeof...(shape) == N, "Missmatch between shape size and N.");
-    this->index = nd_index<N>(shape...);
-    this->size = this->index.size();
-    this->buffer =
-        std::make_shared<BufferDevice<T>>(this->sycl_target, this->size);
-    this->fill(T());
   }
 
   /**
@@ -456,6 +466,11 @@ public:
       sycl_target->queue.fill(ptr, value, this->size).wait_and_throw();
     }
   }
+
+  /**
+   * @returns Pointer to underlying data. Data is linearised slowest to fastest.
+   */
+  inline T *ptr() { return this->impl_get(); }
 
   /**
    * Asynchronously set the values in the local array to those in a std::vector.
@@ -484,6 +499,22 @@ public:
    */
   inline void set(const std::vector<T> &data) {
     this->set_async(data).wait_and_throw();
+  }
+
+  /**
+   * Copy the values from the NDHostArray into an NDLocalArray.
+   *
+   * @param nd_host_array Source array.
+   */
+  inline void set(NDHostArraySharedPtr<T, N> &nd_host_array) {
+
+    NESOASSERT(nd_host_array->index == this->index,
+               "Shape of passed NDHostArray does not match the shape of the "
+               "NDLocalArray");
+
+    this->sycl_target->queue
+        .memcpy(this->buffer->ptr, nd_host_array->ptr(), this->size * sizeof(T))
+        .wait_and_throw();
   }
 
   /**
@@ -525,7 +556,68 @@ public:
     this->get(data);
     return data;
   }
+
+  /**
+   * Copy the values from the NDLocalArray into an NDHostArray.
+   *
+   * @param[in, out] nd_host_array Destination array, will be allocated if
+   * nullptr.
+   */
+  inline void get(NDHostArraySharedPtr<T, N> &nd_host_array) {
+    if (nd_host_array == nullptr) {
+      nd_host_array =
+          NESO::Particles::nd_host_array<T, N>(this->sycl_target, this->index);
+    } else {
+      NESOASSERT(nd_host_array->index == this->index,
+                 "Shape of passed NDHostArray does not match the shape of the "
+                 "NDLocalArray");
+    }
+
+    this->sycl_target->queue
+        .memcpy(nd_host_array->ptr(), this->buffer->ptr, this->size * sizeof(T))
+        .wait_and_throw();
+  }
+
+  /**
+   * Update each held entry a as
+   *
+   * a <- binop(a, b)
+   *
+   * where the entries b are supplied by another NDLocalArray and binop is a
+   * provided binary operator.
+   *
+   * @param second_array Second array, i.e. b, for the binary combination.
+   * @param binop Binary operation to use to combine elements, must be a device
+   * copyable object with a cell method that takes two arguments of type T and
+   * U.
+   */
+  template <typename U, typename BINOP>
+  inline void combine(std::shared_ptr<NDLocalArray<U, N>> second_array,
+                      BINOP binop) {
+
+    NESOASSERT(second_array.get() != this,
+               "Second array is the same as this array.");
+    NESOASSERT(this->index == second_array->index,
+               "Passed array has different dimension extents to this array.");
+
+    T *RESTRICT k_a = this->buffer->ptr;
+    U const *RESTRICT const k_b = second_array->buffer->ptr;
+    BINOP k_binop = binop;
+
+    this->sycl_target->queue
+        .parallel_for(this->sycl_target->device_limits.validate_range_global(
+                          sycl::range<1>(this->size)),
+                      [=](auto idx) { k_a[idx] = k_binop(k_a[idx], k_b[idx]); })
+        .wait_and_throw();
+  }
 };
+
+extern template class NDLocalArray<REAL, 2>;
+extern template class NDLocalArray<INT, 2>;
+extern template class NDLocalArray<int, 2>;
+extern template class NDLocalArray<REAL, 3>;
+extern template class NDLocalArray<INT, 3>;
+extern template class NDLocalArray<int, 3>;
 
 template <typename T, std::size_t N>
 using NDLocalArraySharedPtr = std::shared_ptr<NDLocalArray<T, N>>;

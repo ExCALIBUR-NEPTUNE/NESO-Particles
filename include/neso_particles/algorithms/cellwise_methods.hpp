@@ -176,7 +176,7 @@ void get_broadcast_masks(std::array<int, SIZE> &masks, DAT &dat,
  *     a, b, c
  * );
  *
- * If the output dat, d, has shape NxM and ff any arguments have nrow==1 and
+ * If the output dat, d, has shape NxM and if any arguments have nrow==1 and
  * ncol==1 then these single values are logically broadcast to size NxM.
  *
  * @param result_dat CellDatConst to be overwritten with the result of the
