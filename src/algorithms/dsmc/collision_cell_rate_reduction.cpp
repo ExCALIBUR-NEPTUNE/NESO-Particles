@@ -119,7 +119,7 @@ void CollisionCellRateReduction::submit(
         const int cell_collision = k_max_indices[num_pairs + idx];
         const std::size_t index =
             cell_mesh * k_max_num_collision_cells + cell_collision;
-        atomic_fetch_add(k_max_dst + index, k_max_src[idx]);
+        atomic_fetch_max(k_max_dst + index, k_max_src[idx]);
       });
 
   // We have to wait for the fill from the reset of the add buffer to complete
