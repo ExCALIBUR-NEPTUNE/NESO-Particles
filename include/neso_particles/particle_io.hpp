@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
+#include <map>
 #include <mpi.h>
 #include <string>
 
@@ -32,6 +33,9 @@ protected:
 
   bool multi_dim_mode = false;
 
+  std::map<Sym<REAL>, REAL> rescale_coefficients_real;
+  std::map<Sym<INT>, INT> rescale_coefficients_int;
+
   // Get the HDF5 type that matches the datatype the particle data was cast to
   // when linearised on the host
   static inline hid_t memtypeid(ParticleDatSharedPtr<REAL>) {
@@ -42,6 +46,42 @@ protected:
   }
   static inline hid_t memtypeid(Sym<REAL>) { return H5T_NATIVE_DOUBLE; }
   static inline hid_t memtypeid(Sym<INT>) { return H5T_NATIVE_LLONG; }
+
+  template <typename GROUP_TYPE, typename T>
+  inline void linearise_data_on_device(std::shared_ptr<GROUP_TYPE> parent,
+                                       const std::int64_t npart_local,
+                                       ParticleDatSharedPtr<T> dat,
+                                       T *RESTRICT k_ptr) {
+    const auto ncomp = dat->ncomp;
+    if (this->rescale_coefficient_is_set(dat->sym)) {
+
+      const T rescale_coefficient = this->get_rescale_coefficient(dat->sym);
+      particle_loop(
+          "H5Part::linearise_data_on_device", parent,
+          [=](auto INDEX, auto DAT) {
+            const auto dst_index = INDEX.get_loop_linear_index();
+            for (int cx = 0; cx < ncomp; cx++) {
+              k_ptr[cx * npart_local + dst_index] =
+                  rescale_coefficient * DAT.at(cx);
+            }
+          },
+          Access::read(ParticleLoopIndex{}), Access::read(dat->sym))
+          ->execute();
+
+    } else {
+
+      particle_loop(
+          "H5Part::linearise_data_on_device", parent,
+          [=](auto INDEX, auto DAT) {
+            const auto dst_index = INDEX.get_loop_linear_index();
+            for (int cx = 0; cx < ncomp; cx++) {
+              k_ptr[cx * npart_local + dst_index] = DAT.at(cx);
+            }
+          },
+          Access::read(ParticleLoopIndex{}), Access::read(dat->sym))
+          ->execute();
+    }
+  }
 
   /**
    *  Write a ParticleDat to the HDF5 file where each component has its own
@@ -66,16 +106,7 @@ protected:
 
     auto k_ptr = dh_buffer->d_buffer.ptr;
 
-    particle_loop(
-        "H5Part::write_dat_column_wise", parent,
-        [=](auto INDEX, auto DAT) {
-          const auto dst_index = INDEX.get_loop_linear_index();
-          for (int cx = 0; cx < ncomp; cx++) {
-            k_ptr[cx * npart_local + dst_index] = DAT.at(cx);
-          }
-        },
-        Access::read(ParticleLoopIndex{}), Access::read(dat->sym))
-        ->execute();
+    this->linearise_data_on_device(parent, npart_local, dat, k_ptr);
 
     dh_buffer->device_to_host();
 
@@ -126,17 +157,7 @@ protected:
     dh_buffer->realloc_no_copy(ncomp * npart_local);
 
     auto k_ptr = dh_buffer->d_buffer.ptr;
-
-    particle_loop(
-        "H5Part::write_dat_column_wise", parent,
-        [=](auto INDEX, auto DAT) {
-          const auto dst_index = INDEX.get_loop_linear_index();
-          for (int cx = 0; cx < ncomp; cx++) {
-            k_ptr[cx * npart_local + dst_index] = DAT.at(cx);
-          }
-        },
-        Access::read(ParticleLoopIndex{}), Access::read(dat->sym))
-        ->execute();
+    this->linearise_data_on_device(parent, npart_local, dat, k_ptr);
 
     dh_buffer->device_to_host();
 
@@ -397,6 +418,47 @@ public:
    */
   [[nodiscard]] ParticleSetSharedPtr read(ParticleSpec &particle_spec, INT step,
                                           const bool use_xyz_positions);
+
+protected:
+  bool rescale_coefficient_is_set(Sym<REAL> sym);
+  bool rescale_coefficient_is_set(Sym<INT> sym);
+
+  /**
+   * Get the current coefficient particle data is multiplied by before writing
+   * to the HDF5 file.
+   *
+   * @param sym Sym for ParticleDat.
+   * @returns Coefficient particle data is multiplied by.
+   */
+  REAL get_rescale_coefficient(Sym<REAL> sym);
+
+  /**
+   * Get the current coefficient particle data is multiplied by before writing
+   * to the HDF5 file.
+   *
+   * @param sym Sym for ParticleDat.
+   * @returns Coefficient particle data is multiplied by.
+   */
+  INT get_rescale_coefficient(Sym<INT> sym);
+
+public:
+  /**
+   * Set a rescale coefficient for a Sym. Particle data is multiplied by this
+   * coefficient before writing to the HDF5 file.
+   *
+   * @param sym Sym for ParticleDat to set coefficient for.
+   * @param value Value of coefficient to set.
+   */
+  void set_rescale_coefficient(Sym<REAL> sym, const REAL value);
+
+  /**
+   * Set a rescale coefficient for a Sym. Particle data is multiplied by this
+   * coefficient before writing to the HDF5 file.
+   *
+   * @param sym Sym for ParticleDat to set coefficient for.
+   * @param value Value of coefficient to set.
+   */
+  void set_rescale_coefficient(Sym<INT> sym, const INT value);
 };
 
 extern template void
@@ -522,6 +584,26 @@ public:
    * be called collectively on the communicator.
    */
   inline void write([[maybe_unused]] INT step_in = -1) {};
+
+  /**
+   * Set a rescale coefficient for a Sym. Particle data is multiplied by this
+   * coefficient before writing to the HDF5 file.
+   *
+   * @param sym Sym for ParticleDat to set coefficient for.
+   * @param value Value of coefficient to set.
+   */
+  inline void set_rescale_coefficient([[maybe_unused]] Sym<REAL> sym,
+                                      [[maybe_unused]] const REAL value) {}
+
+  /**
+   * Set a rescale coefficient for a Sym. Particle data is multiplied by this
+   * coefficient before writing to the HDF5 file.
+   *
+   * @param sym Sym for ParticleDat to set coefficient for.
+   * @param value Value of coefficient to set.
+   */
+  inline void set_rescale_coefficient([[maybe_unused]] Sym<INT> sym,
+                                      [[maybe_unused]] const INT value) {}
 };
 
 #endif
