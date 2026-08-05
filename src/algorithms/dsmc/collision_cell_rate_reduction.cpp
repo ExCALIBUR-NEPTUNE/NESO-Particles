@@ -25,21 +25,20 @@ CollisionCellRateReduction::CollisionCellRateReduction(
       std::make_shared<BufferDevice<int>>(this->sycl_target, 16);
 }
 
-void CollisionCellRateReduction::reset(const int cell_start,
-                                       const int cell_end) {
+void CollisionCellRateReduction::reset() {
 
+  this->event_fill_plus.wait_and_throw();
   this->event_reduce_max.wait_and_throw();
   this->event_reduce_plus.wait_and_throw();
 
-  NESOASSERT(cell_start >= 0, "Bad cell_start.");
-  NESOASSERT(cell_end <= this->collision_cell_partition->num_mesh_cells,
-             "Bad cell_end.");
-  NESOASSERT(cell_start < cell_end,
-             "Bad relationship between cell_start and cell_end.");
-
   const INT max_num_collision_cells =
-      this->collision_cell_partition->max_num_collision_cells;
-  const INT num_mesh_cells = cell_end - cell_start;
+      std::max(this->collision_cell_partition->max_num_collision_cells,
+               static_cast<INT>(1));
+
+  NESOWARN(this->collision_cell_partition->max_num_collision_cells > 0,
+           "max_num_collision_cells is zero");
+
+  const INT num_mesh_cells = this->collision_cell_partition->num_mesh_cells;
   this->num_entries = num_mesh_cells * max_num_collision_cells;
 
   this->d_accumulation_max->realloc_no_copy(this->num_entries);
@@ -48,20 +47,29 @@ void CollisionCellRateReduction::reset(const int cell_start,
   this->event_fill_plus = this->sycl_target->queue.fill<REAL>(
       this->d_accumulation_plus->ptr, 0.0, this->num_entries);
 
-  this->cell_start = cell_start;
-  this->cell_end = cell_end;
+  this->last_reset_num_mesh_cells =
+      this->collision_cell_partition->num_mesh_cells;
+  this->last_reset_max_num_collision_cells =
+      this->collision_cell_partition->max_num_collision_cells;
+
+  // At the end of this call:
+  //  * There is a zero of the d_accumulation_plus buffer in flight.
 }
 
 void CollisionCellRateReduction::submit(
     CellwisePairListAbsolute<ParticleGroup, CellwisePairList> &pair_list,
-    Sym<INT> collision_cell_sym, const int collision_cell_component,
+    const int cell_start, const int cell_end, Sym<INT> collision_cell_sym,
+    const int collision_cell_component,
     LocalArraySharedPtr<REAL> device_rate_buffer) {
 
-  NESOASSERT(this->cell_start != -1, "Reset not called.");
-  NESOASSERT(this->cell_end != -1, "Reset not called.");
+  NESOASSERT(cell_start >= 0, "Bad cell_start.");
+  NESOASSERT(cell_end <= this->collision_cell_partition->num_mesh_cells,
+             "Bad cell_end.");
+  NESOASSERT(cell_start < cell_end,
+             "Bad relationship between cell_start and cell_end.");
 
-  const INT num_pairs = pair_list.pair_list->get_num_pairs_range(
-      this->cell_start, this->cell_end);
+  const INT num_pairs =
+      pair_list.pair_list->get_num_pairs_range(cell_start, cell_end);
 
   NESOASSERT(device_rate_buffer->size >= num_pairs,
              "device_rate_buffer is too small for the passed number of pairs.");
@@ -95,7 +103,7 @@ void CollisionCellRateReduction::submit(
       Access::read(ParticlePairLoopIndex{}), Access::read(collision_cell_sym)
 
           )
-      ->execute();
+      ->execute(cell_start, cell_end);
 
   // We cannot touch the accumulation arrays whilst a reduction ADD is occuring
   // or a reduce MAX is occuring. The event_reduce_max is waited on above.
@@ -136,18 +144,40 @@ void CollisionCellRateReduction::submit(
   this->event_reduce_plus = sycl_target->queue.parallel_for(
       iteration_set_plus, dependent_events_plus,
       [=](sycl::item<1> idx) { k_plus_dst[idx] += k_plus_src[idx]; });
+
+  // We cannot return control to the user until we have finished copying the
+  // supplied rates.
+  event_rate_copy.wait_and_throw();
+
+  // At the end of this call:
+  //  * There is a zero of the d_accumulation_plus buffer in flight still in
+  //  flight from reset.
+  //  * A zero of the d_accumulation_max buffer in flight.
+  //  * An atomic max loop in flight.
+  //  * An increment loop in flight.
 }
 
 void CollisionCellRateReduction::get(
     NDLocalArraySharedPtr<REAL, 2> &accumulated_rates) {
 
-  const int num_cells = this->cell_end - this->cell_start;
+  NESOASSERT(
+      this->last_reset_num_mesh_cells ==
+          this->collision_cell_partition->num_mesh_cells,
+      "Miss-match between the number of mesh cells held and number of mesh "
+      "cells in the CollisionCellPartition. Was reset called?");
+  NESOASSERT(this->last_reset_max_num_collision_cells ==
+                 this->collision_cell_partition->max_num_collision_cells,
+             "Miss-match between the max number of collision cells and "
+             "the max number of collision cells in the CollisionCellPartition. "
+             "Was reset called?");
+
+  const int num_mesh_cells = this->collision_cell_partition->num_mesh_cells;
   const auto max_num_collision_cells =
       this->collision_cell_partition->max_num_collision_cells;
-  auto shape = nd_index<2>(num_cells, max_num_collision_cells);
+  auto shape = nd_index<2>(num_mesh_cells, max_num_collision_cells);
   if (accumulated_rates == nullptr) {
     accumulated_rates = std::make_shared<NDLocalArray<REAL, 2>>(
-        sycl_target, num_cells, max_num_collision_cells);
+        sycl_target, num_mesh_cells, max_num_collision_cells);
   } else {
     NESOASSERT(accumulated_rates->index == shape,
                "accumulated_rates has incorrect shape.");
@@ -156,12 +186,34 @@ void CollisionCellRateReduction::get(
   REAL *RESTRICT k_output = accumulated_rates->ptr();
   REAL const *const RESTRICT k_input = this->d_accumulation_plus->ptr;
 
+  // If the user called reset then immediately called get then we have to wait
+  // on the zero of the d_accumulation_plus buffer. If submit was called then we
+  // have to wait on the reduce plus event. The reduce plus event is dependent
+  // on the reduce max event already.
   std::vector<sycl::event> dep_events = {this->event_fill_plus,
                                          this->event_reduce_plus};
 
   this->sycl_target->queue
       .memcpy(k_output, k_input,
-              num_cells * max_num_collision_cells * sizeof(REAL), dep_events)
+              num_mesh_cells * max_num_collision_cells * sizeof(REAL),
+              dep_events)
       .wait_and_throw();
+
+  // There should be no operations in flight at the end of this function call.
+  NESOASSERT(this->event_fill_plus
+                     .get_info<sycl::info::event::command_execution_status>() ==
+                 sycl::info::event_command_status::complete,
+             "This event should have completed. Please raise an issue on the "
+             "git repo.");
+  NESOASSERT(this->event_reduce_max
+                     .get_info<sycl::info::event::command_execution_status>() ==
+                 sycl::info::event_command_status::complete,
+             "This event should have completed. Please raise an issue on the "
+             "git repo.");
+  NESOASSERT(this->event_reduce_plus
+                     .get_info<sycl::info::event::command_execution_status>() ==
+                 sycl::info::event_command_status::complete,
+             "This event should have completed. Please raise an issue on the "
+             "git repo.");
 }
 } // namespace NESO::Particles::DSMC

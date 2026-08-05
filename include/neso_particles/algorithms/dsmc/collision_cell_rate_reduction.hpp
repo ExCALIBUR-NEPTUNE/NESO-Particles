@@ -31,8 +31,9 @@ protected:
   sycl::event event_reduce_plus;
 
   INT num_entries = -1;
-  int cell_start = -1;
-  int cell_end = -1;
+
+  int last_reset_num_mesh_cells = -1;
+  int last_reset_max_num_collision_cells = -1;
 
 public:
   /// Disable (implicit) copies.
@@ -54,32 +55,35 @@ public:
       CollisionCellPartitionSharedPtr collision_cell_partition);
 
   /**
-   * Defines the cell range([cell_start, cell_end)) over which reductions will
-   * be performed and resets the accumulation buffer to zero.
-   *
-   * @param cell_start First cell of cell block.
-   * @param cell_end Last cell plus one of cell block.
+   * Resets the accumulation buffer to zero and to be of size (num_mesh_cells) x
+   * (max_num_collision_cells) as defined by the CollisionCellPartition held.
    */
-  void reset(const int cell_start, const int cell_end);
+  void reset();
 
   /**
    * Submit a set of pairs and corresponding rates into the reduction instance.
+   * This call will populate the entries in [cell_start, cell_end) of the
+   * accumulation buffer.
    *
    * @param pair_list Pair list describing pairs.
+   * @param cell_start First cell of cell block.
+   * @param cell_end Last cell plus one of cell block.
    * @param collision_cell_sym ParticleDat containing the collision cell index.
    * @param collision_cell_component ParticleDat component containing the
    * collision cell index.
    * @param device_rate_buffer LocalArray containing a rate per pair in the pair
-   * list.
+   * list only for the pairs in [cell_start, cell_end). i.e. This buffer will be
+   * indexed using the loop linear index not the pair list linear index.
    */
   void
   submit(CellwisePairListAbsolute<ParticleGroup, CellwisePairList> &pair_list,
-         Sym<INT> collision_cell_sym, const int collision_cell_component,
+         const int cell_start, const int cell_end, Sym<INT> collision_cell_sym,
+         const int collision_cell_component,
          LocalArraySharedPtr<REAL> device_rate_buffer);
 
   /**
-   * Get the current accumulated rates in a 2D NDLocalArray of size (cell_end -
-   * cell_start) x (max_num_collision_cells).
+   * Get the current accumulated rates in a 2D NDLocalArray of size
+   * (num_mesh_cells) x (max_num_collision_cells).
    *
    * @param[in, out] accumulated_rates Buffer for reduced rates. Will be
    * allocated if nullptr.
