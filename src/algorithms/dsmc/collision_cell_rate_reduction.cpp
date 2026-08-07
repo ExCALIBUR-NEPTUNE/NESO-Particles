@@ -14,15 +14,89 @@ CollisionCellRateReduction::CollisionCellRateReduction(
       collision_cell_partition(collision_cell_partition)
 
 {
+
+  const auto num_mesh_cells = collision_cell_partition->num_mesh_cells;
+
   this->d_accumulation_max =
-      std::make_shared<BufferDevice<REAL>>(this->sycl_target, 16);
+      std::make_shared<BufferDevice<REAL>>(this->sycl_target, num_mesh_cells);
   this->d_accumulation_plus =
-      std::make_shared<BufferDevice<REAL>>(this->sycl_target, 16);
+      std::make_shared<BufferDevice<REAL>>(this->sycl_target, num_mesh_cells);
 
   this->d_staging_values =
-      std::make_shared<BufferDevice<REAL>>(this->sycl_target, 16);
+      std::make_shared<BufferDevice<REAL>>(this->sycl_target, num_mesh_cells);
   this->d_staging_indices =
-      std::make_shared<BufferDevice<int>>(this->sycl_target, 16);
+      std::make_shared<BufferDevice<int>>(this->sycl_target, num_mesh_cells);
+}
+
+void CollisionCellRateReduction::setup(const int num_contributors) {
+  this->num_contributors = num_contributors;
+}
+
+void CollisionCellRateReduction::resize() {
+
+  const int max_num_collision_cells_old =
+      this->last_reset_max_num_collision_cells;
+  const int max_num_collision_cells_new =
+      std::max(this->collision_cell_partition->max_num_collision_cells,
+               static_cast<INT>(1));
+
+  NESOWARN(this->collision_cell_partition->max_num_collision_cells > 0,
+           "max_num_collision_cells is zero");
+
+  const INT num_mesh_cells = this->collision_cell_partition->num_mesh_cells;
+
+  NESOASSERT((this->last_reset_num_mesh_cells < 0) ||
+                 (this->last_reset_num_mesh_cells == num_mesh_cells),
+             "The number of mesh cells has changed.");
+  this->last_reset_num_mesh_cells = num_mesh_cells;
+
+  const bool realloc =
+      max_num_collision_cells_new != max_num_collision_cells_old;
+
+  if (realloc) {
+
+    this->num_entries = num_mesh_cells * max_num_collision_cells_new;
+
+    this->d_accumulation_plus->realloc_no_copy(this->num_entries);
+
+    auto d_accumulation_max_new = std::make_shared<BufferDevice<REAL>>(
+        this->sycl_target, this->num_entries * this->num_contributors);
+
+    REAL const *const RESTRICT k_accumulation_old =
+        this->d_accumulation_max->ptr;
+    REAL *RESTRICT k_accumulation_new = d_accumulation_max_new->ptr;
+
+    auto iteration_set = this->sycl_target->device_limits.validate_range_global(
+        sycl::range<3>(this->num_contributors, num_mesh_cells,
+                       max_num_collision_cells_new));
+
+    const int k_max_num_collision_cells_old =
+        this->last_reset_max_num_collision_cells;
+
+    const std::size_t stride_old = num_mesh_cells * max_num_collision_cells_old;
+    const std::size_t stride_new = num_mesh_cells * max_num_collision_cells_new;
+
+    this->sycl_target->queue
+        .parallel_for(
+            iteration_set,
+            [=](sycl::item<3> idx) {
+              const std::size_t contributor = idx.get_id(0);
+              const std::size_t mesh_cell = idx.get_id(1);
+              const std::size_t collision_cell = idx.get_id(2);
+              const REAL value =
+                  (collision_cell < k_max_num_collision_cells_old)
+                      ? k_accumulation_old[stride_old * contributor +
+                                           mesh_cell *
+                                               max_num_collision_cells_old +
+                                           collision_cell]
+                      : 0.0;
+
+              k_accumulation_new[idx.get_linear_id()] = value;
+            })
+        .wait_and_throw();
+
+    this->d_accumulation_max = d_accumulation_max_new;
+  }
 }
 
 void CollisionCellRateReduction::reset() {
@@ -55,6 +129,10 @@ void CollisionCellRateReduction::reset() {
   // At the end of this call:
   //  * There is a zero of the d_accumulation_plus buffer in flight.
 }
+
+void CollisionCellRateReduction::update(const int contributor_id,
+                                        const std::vector<int> &cell_mask,
+                                        const REAL rate_init) {}
 
 void CollisionCellRateReduction::submit(
     CellwisePairListAbsolute<ParticleGroup, CellwisePairList> &pair_list,
@@ -183,37 +261,13 @@ void CollisionCellRateReduction::get(
                "accumulated_rates has incorrect shape.");
   }
 
-  REAL *RESTRICT k_output = accumulated_rates->ptr();
-  REAL const *const RESTRICT k_input = this->d_accumulation_plus->ptr;
-
-  // If the user called reset then immediately called get then we have to wait
-  // on the zero of the d_accumulation_plus buffer. If submit was called then we
-  // have to wait on the reduce plus event. The reduce plus event is dependent
-  // on the reduce max event already.
-  std::vector<sycl::event> dep_events = {this->event_fill_plus,
-                                         this->event_reduce_plus};
-
-  this->sycl_target->queue
-      .memcpy(k_output, k_input,
-              num_mesh_cells * max_num_collision_cells * sizeof(REAL),
-              dep_events)
-      .wait_and_throw();
-
-  // There should be no operations in flight at the end of this function call.
-  NESOASSERT(this->event_fill_plus
-                     .get_info<sycl::info::event::command_execution_status>() ==
-                 sycl::info::event_command_status::complete,
-             "This event should have completed. Please raise an issue on the "
-             "git repo.");
-  NESOASSERT(this->event_reduce_max
-                     .get_info<sycl::info::event::command_execution_status>() ==
-                 sycl::info::event_command_status::complete,
-             "This event should have completed. Please raise an issue on the "
-             "git repo.");
-  NESOASSERT(this->event_reduce_plus
-                     .get_info<sycl::info::event::command_execution_status>() ==
-                 sycl::info::event_command_status::complete,
-             "This event should have completed. Please raise an issue on the "
-             "git repo.");
+  {
+    REAL *RESTRICT k_output = accumulated_rates->ptr();
+    REAL const *const RESTRICT k_input = this->d_accumulation_plus->ptr;
+    this->sycl_target->queue
+        .memcpy(k_output, k_input,
+                num_mesh_cells * max_num_collision_cells * sizeof(REAL))
+        .wait_and_throw();
+  }
 }
 } // namespace NESO::Particles::DSMC
