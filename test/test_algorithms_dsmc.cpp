@@ -474,3 +474,73 @@ TEST(DSMC, ntc_pair_generation_aa_bb) {
   sycl_target->free();
   A->domain->mesh->free();
 }
+
+TEST(DSMC, collision_cell_rate_reduction) {
+
+  int npart_cell = 511;
+  const int ndim = 2;
+  const int nx = 16;
+  const int ny = 33;
+  const int nz = 48;
+
+  auto [A, sycl_target_t, cell_count_t] =
+      particle_loop_create_common(npart_cell, ndim, nx, ny, nz);
+  auto sycl_target = sycl_target_t;
+  const auto cell_count = cell_count_t;
+
+  A->add_particle_dat(Sym<INT>("SPECIES_ID"), 1);
+  A->add_particle_dat(Sym<INT>("MASK"), 1);
+  A->add_particle_dat(Sym<INT>("COLLISION_CELL"), 1);
+
+  const int rank = sycl_target->comm_pair.rank_parent;
+
+  std::mt19937 rng_state(52234234 + rank);
+  std::uniform_real_distribution<> rng_dist(0.0, 1.0);
+
+  auto rng_lambda = [&]() -> REAL { return rng_dist(rng_state); };
+
+  auto rng_kernel = host_per_particle_block_rng<REAL>(rng_lambda, 2);
+
+  auto aa = particle_sub_group(A, []() { return true; });
+
+  const int num_species = 2;
+  const int species_id_offset = 3;
+  const int num_collision_cells = 7;
+
+  particle_loop(
+      A,
+      [=](auto INDEX, auto SPECIES_ID, auto COLLISION_CELL, auto RNG,
+          auto MASK) {
+        SPECIES_ID.at(0) =
+            RNG.at(INDEX, 0) < 0.8 ? species_id_offset : species_id_offset + 1;
+
+        const int num_collision_cells_inner =
+            (INDEX.cell % num_collision_cells) + 1;
+
+        COLLISION_CELL.at(0) = INDEX.layer % num_collision_cells_inner;
+        MASK.at(0) = 0.5 < RNG.at(INDEX, 1) ? 0 : 1;
+      },
+      Access::read(ParticleLoopIndex{}), Access::write(Sym<INT>("SPECIES_ID")),
+      Access::write(Sym<INT>("COLLISION_CELL")), Access::read(rng_kernel),
+      Access::write(Sym<INT>("MASK")))
+      ->execute();
+
+  std::vector<INT> species_ids(num_species);
+  std::iota(species_ids.begin(), species_ids.end(), species_id_offset);
+
+  std::shared_ptr<DSMC::CollisionCellPartition> collision_cell_partition =
+      std::make_shared<DSMC::CollisionCellPartition>(sycl_target, cell_count,
+                                                     species_ids);
+
+  std::vector<int> collision_cell_counts(cell_count);
+  for (int cx = 0; cx < cell_count; cx++) {
+    collision_cell_counts.at(cx) = (cx % num_collision_cells) + 1;
+  }
+
+  collision_cell_partition->construct(aa, collision_cell_counts,
+                                      Sym<INT>("SPECIES_ID"), 0,
+                                      Sym<INT>("COLLISION_CELL"), 0);
+
+  sycl_target->free();
+  A->domain->mesh->free();
+}
