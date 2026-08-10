@@ -475,6 +475,24 @@ TEST(DSMC, ntc_pair_generation_aa_bb) {
   A->domain->mesh->free();
 }
 
+namespace {
+
+class TestCollisionCellRateReduction : public DSMC::CollisionCellRateReduction {
+public:
+  template <typename... ARGS>
+  TestCollisionCellRateReduction(ARGS... args)
+      : DSMC::CollisionCellRateReduction(args...) {}
+
+  MAKE_GETTER_METHOD(num_contributors)
+  MAKE_GETTER_METHOD(d_num_collision_cells)
+  MAKE_GETTER_METHOD(d_accumulation_max)
+  MAKE_GETTER_METHOD(num_entries)
+  MAKE_GETTER_METHOD(last_reset_num_mesh_cells)
+  MAKE_GETTER_METHOD(last_reset_max_num_collision_cells)
+};
+
+} // namespace
+
 TEST(DSMC, collision_cell_rate_reduction) {
 
   int npart_cell = 511;
@@ -540,6 +558,165 @@ TEST(DSMC, collision_cell_rate_reduction) {
   collision_cell_partition->construct(aa, collision_cell_counts,
                                       Sym<INT>("SPECIES_ID"), 0,
                                       Sym<INT>("COLLISION_CELL"), 0);
+
+  auto collision_cell_rate_reduction =
+      std::make_shared<TestCollisionCellRateReduction>(
+          collision_cell_partition);
+
+  ASSERT_EQ(collision_cell_rate_reduction->get_num_contributors(), -1);
+  ASSERT_EQ(collision_cell_rate_reduction->get_num_entries(), -1);
+  ASSERT_EQ(collision_cell_rate_reduction->get_last_reset_num_mesh_cells(), -1);
+  ASSERT_EQ(
+      collision_cell_rate_reduction->get_last_reset_max_num_collision_cells(),
+      -1);
+
+  const int num_contributors = 2;
+  collision_cell_rate_reduction->setup(num_contributors);
+  ASSERT_EQ(collision_cell_rate_reduction->get_num_contributors(), 2);
+
+  collision_cell_rate_reduction->resize();
+  ASSERT_EQ(collision_cell_rate_reduction->get_last_reset_num_mesh_cells(),
+            cell_count);
+  ASSERT_EQ(
+      collision_cell_rate_reduction->get_last_reset_max_num_collision_cells(),
+      num_collision_cells);
+
+  std::vector<int> h_tmp_int(cell_count);
+  sycl_target->queue
+      .memcpy(h_tmp_int.data(),
+              collision_cell_rate_reduction->get_d_num_collision_cells()->ptr,
+              cell_count * sizeof(int))
+      .wait_and_throw();
+
+  for (int cx = 0; cx < cell_count; cx++) {
+    ASSERT_EQ(h_tmp_int.at(cx), (cx % num_collision_cells) + 1);
+  }
+
+  std::vector<REAL> h_tmp_real(num_contributors * cell_count *
+                               num_collision_cells);
+  auto d_accumulation_max =
+      collision_cell_rate_reduction->get_d_accumulation_max();
+
+  ASSERT_TRUE(d_accumulation_max->size >=
+              static_cast<std::size_t>(num_contributors * cell_count *
+                                       num_collision_cells));
+
+  auto lambda_get_max = [&]() {
+    sycl_target->queue
+        .memcpy(h_tmp_real.data(), d_accumulation_max->ptr,
+                num_contributors * cell_count * num_collision_cells *
+                    sizeof(REAL))
+        .wait_and_throw();
+  };
+  lambda_get_max();
+
+  for (int contribx = 0; contribx < num_contributors; contribx++) {
+    const std::size_t offset = contribx * cell_count * num_collision_cells;
+    for (int mx = 0; mx < cell_count; mx++) {
+      for (int cx = 0; cx < num_collision_cells; cx++) {
+        ASSERT_EQ(h_tmp_real.at(offset + mx * num_collision_cells + cx), 0.0);
+      }
+    }
+  }
+
+  {
+    NDLocalArraySharedPtr<REAL, 2> ndla_add = nullptr;
+    collision_cell_rate_reduction->get(ndla_add);
+    ASSERT_TRUE(ndla_add != nullptr);
+
+    auto correct_shape = nd_index<2>(cell_count, num_collision_cells);
+    ASSERT_EQ(correct_shape, ndla_add->index);
+
+    NDHostArraySharedPtr<REAL, 2> h_ndla_add = nullptr;
+    ndla_add->get(h_ndla_add);
+
+    for (int mx = 0; mx < cell_count; mx++) {
+      for (int cx = 0; cx < num_collision_cells; cx++) {
+        ASSERT_EQ(h_ndla_add->at(mx, cx), 0.0);
+      }
+    }
+  }
+
+  std::vector<int> h_cell_mask(cell_count);
+  std::fill(h_cell_mask.begin(), h_cell_mask.end(), 0);
+  for (int mx = 0; mx < cell_count; mx++) {
+    if (mx % 2 == 0) {
+      h_cell_mask.at(mx) = 1;
+    }
+  }
+
+  std::map<int, std::map<int, REAL>> map_contrib_to_rate;
+  map_contrib_to_rate[0][0] = 0.0;
+  map_contrib_to_rate[1][0] = 0.0;
+  map_contrib_to_rate[0][1] = 0.0;
+  map_contrib_to_rate[1][1] = 0.0;
+
+  auto lambda_check_entries = [&]() {
+    lambda_get_max();
+
+    for (int contribx = 0; contribx < num_contributors; contribx++) {
+      const std::size_t offset = contribx * cell_count * num_collision_cells;
+      for (int mx = 0; mx < cell_count; mx++) {
+        for (int cx = 0; cx < num_collision_cells; cx++) {
+          const int keyx = mx % 2;
+          const REAL set_correct = map_contrib_to_rate.at(contribx).at(keyx);
+          const REAL to_test =
+              h_tmp_real.at(offset + mx * num_collision_cells + cx);
+
+          const REAL correct =
+              (cx < collision_cell_counts.at(mx)) ? set_correct : 0.0;
+
+          ASSERT_EQ(correct, to_test);
+        }
+      }
+    }
+  };
+
+  collision_cell_rate_reduction->update(0, h_cell_mask, 1.1);
+  map_contrib_to_rate[0][0] = 1.1;
+  lambda_check_entries();
+
+  collision_cell_rate_reduction->update(1, h_cell_mask, 2.1);
+  map_contrib_to_rate[1][0] = 2.1;
+  lambda_check_entries();
+
+  std::fill(h_cell_mask.begin(), h_cell_mask.end(), 0);
+  for (int mx = 0; mx < cell_count; mx++) {
+    if (mx % 2 == 1) {
+      h_cell_mask.at(mx) = 1;
+    }
+  }
+
+  collision_cell_rate_reduction->update(0, h_cell_mask, 3.1);
+  map_contrib_to_rate[0][1] = 3.1;
+  lambda_check_entries();
+  collision_cell_rate_reduction->update(1, h_cell_mask, 4.1);
+  map_contrib_to_rate[1][1] = 4.1;
+  lambda_check_entries();
+
+  {
+    NDLocalArraySharedPtr<REAL, 2> ndla_add = nullptr;
+    collision_cell_rate_reduction->get(ndla_add);
+    ASSERT_TRUE(ndla_add != nullptr);
+
+    auto correct_shape = nd_index<2>(cell_count, num_collision_cells);
+    ASSERT_EQ(correct_shape, ndla_add->index);
+
+    NDHostArraySharedPtr<REAL, 2> h_ndla_add = nullptr;
+    ndla_add->get(h_ndla_add);
+
+    for (int mx = 0; mx < cell_count; mx++) {
+      for (int cx = 0; cx < num_collision_cells; cx++) {
+        const REAL correct = cx < collision_cell_counts.at(mx)
+                                 ? mx % 2 == 0 ? 1.1 + 2.1 : 3.1 + 4.1
+                                 : 0.0;
+
+        const REAL to_test = h_ndla_add->at(mx, cx);
+        const REAL err = relative_error(correct, to_test);
+        ASSERT_TRUE(err < 1.0e-14);
+      }
+    }
+  }
 
   sycl_target->free();
   A->domain->mesh->free();

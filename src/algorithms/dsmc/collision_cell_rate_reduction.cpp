@@ -21,6 +21,13 @@ CollisionCellRateReduction::CollisionCellRateReduction(
   this->d_accumulation_max =
       std::make_shared<BufferDevice<REAL>>(this->sycl_target, num_mesh_cells);
 
+  this->sycl_target->queue
+      .fill<int>(this->d_num_collision_cells->ptr, 0, num_mesh_cells)
+      .wait_and_throw();
+  this->sycl_target->queue
+      .fill<REAL>(this->d_accumulation_max->ptr, 0.0, num_mesh_cells)
+      .wait_and_throw();
+
   this->d_staging_values =
       std::make_shared<BufferDevice<REAL>>(this->sycl_target, num_mesh_cells);
   this->d_staging_indices =
@@ -50,6 +57,7 @@ void CollisionCellRateReduction::resize() {
                  (this->last_reset_num_mesh_cells == num_mesh_cells),
              "The number of mesh cells has changed.");
   this->last_reset_num_mesh_cells = num_mesh_cells;
+  this->last_reset_max_num_collision_cells = max_num_collision_cells_new;
 
   auto e0 = this->sycl_target->queue.memcpy(
       this->d_num_collision_cells->ptr,
@@ -78,9 +86,6 @@ void CollisionCellRateReduction::resize() {
         sycl::range<3>(this->num_contributors, num_mesh_cells,
                        max_num_collision_cells_new));
 
-    const int k_max_num_collision_cells_old =
-        this->last_reset_max_num_collision_cells;
-
     const std::size_t stride_old = num_mesh_cells * max_num_collision_cells_old;
     const std::size_t stride_new = num_mesh_cells * max_num_collision_cells_new;
 
@@ -90,9 +95,9 @@ void CollisionCellRateReduction::resize() {
             [=](sycl::item<3> idx) {
               const std::size_t contributor = idx.get_id(0);
               const std::size_t mesh_cell = idx.get_id(1);
-              const std::size_t collision_cell = idx.get_id(2);
+              const int collision_cell = idx.get_id(2);
               const REAL value =
-                  (collision_cell < k_max_num_collision_cells_old)
+                  (collision_cell < max_num_collision_cells_old)
                       ? k_accumulation_old[stride_old * contributor +
                                            mesh_cell *
                                                max_num_collision_cells_old +
@@ -243,9 +248,8 @@ void CollisionCellRateReduction::update(const int contributor_id,
           sycl::range<2>(num_mesh_cells, max_num_collision_cells), e0,
           [=](sycl::item<2> idx) {
             const std::size_t mesh_cell = idx.get_id(0);
-            const std::size_t collision_cell = idx.get_id(1);
-            const std::size_t num_collision_cells =
-                k_num_collision_cells[mesh_cell];
+            const int collision_cell = idx.get_id(1);
+            const int num_collision_cells = k_num_collision_cells[mesh_cell];
             const bool mask_set = k_staging_indices[mesh_cell];
             if (mask_set) {
               const REAL value =
