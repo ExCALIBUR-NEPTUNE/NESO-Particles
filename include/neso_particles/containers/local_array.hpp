@@ -280,6 +280,11 @@ public:
   }
 
   /**
+   * @returns Pointer to underlying data.
+   */
+  inline T *ptr() { return this->impl_get(); }
+
+  /**
    *  Fill the array with a value.
    *
    *  @param value Value to fill the array with.
