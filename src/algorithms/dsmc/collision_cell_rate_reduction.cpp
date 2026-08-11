@@ -56,6 +56,7 @@ void CollisionCellRateReduction::resize() {
   NESOASSERT((this->last_reset_num_mesh_cells < 0) ||
                  (this->last_reset_num_mesh_cells == num_mesh_cells),
              "The number of mesh cells has changed.");
+  this->last_reset_num_contributors = this->num_contributors;
   this->last_reset_num_mesh_cells = num_mesh_cells;
   this->last_reset_max_num_collision_cells = max_num_collision_cells_new;
 
@@ -133,6 +134,8 @@ void CollisionCellRateReduction::update(
              "Bad cell_end.");
   NESOASSERT(cell_start < cell_end,
              "Bad relationship between cell_start and cell_end.");
+  NESOASSERT(this->last_reset_num_contributors == this->num_contributors,
+             "Missmatch in number of contributors: was resize called?");
 
   const INT num_pairs =
       pair_list.pair_list->get_num_pairs_range(cell_start, cell_end);
@@ -165,31 +168,33 @@ void CollisionCellRateReduction::update(
       ->execute(cell_start, cell_end);
   event_rate_copy.wait_and_throw();
 
-  sycl::range<1> iteration_set_max =
-      this->sycl_target->device_limits.validate_range_global(
-          sycl::range<1>(num_pairs));
+  if (num_pairs > 0) {
+    sycl::range<1> iteration_set_max =
+        this->sycl_target->device_limits.validate_range_global(
+            sycl::range<1>(num_pairs));
 
-  REAL const *const RESTRICT k_max_src = this->d_staging_values->ptr;
-  int const *const RESTRICT k_max_indices = this->d_staging_indices->ptr;
-  REAL *RESTRICT k_max_dst = this->d_accumulation_max->ptr;
+    REAL const *const RESTRICT k_max_src = this->d_staging_values->ptr;
+    int const *const RESTRICT k_max_indices = this->d_staging_indices->ptr;
+    REAL *RESTRICT k_max_dst = this->d_accumulation_max->ptr;
 
-  const auto k_max_num_collision_cells =
-      this->collision_cell_partition->max_num_collision_cells;
-  const auto num_mesh_cells = this->collision_cell_partition->num_mesh_cells;
+    const auto k_max_num_collision_cells =
+        this->collision_cell_partition->max_num_collision_cells;
+    const auto num_mesh_cells = this->collision_cell_partition->num_mesh_cells;
 
-  const std::size_t offset =
-      contributor_id * num_mesh_cells * k_max_num_collision_cells;
+    const std::size_t offset =
+        contributor_id * num_mesh_cells * k_max_num_collision_cells;
 
-  auto event_rate_max = this->sycl_target->queue.parallel_for(
-      iteration_set_max, [=](sycl::item<1> idx) {
-        const int cell_mesh = k_max_indices[idx];
-        const int cell_collision = k_max_indices[num_pairs + idx];
-        const std::size_t index =
-            offset + cell_mesh * k_max_num_collision_cells + cell_collision;
-        atomic_fetch_max(k_max_dst + index, k_max_src[idx]);
-      });
+    auto event_rate_max = this->sycl_target->queue.parallel_for(
+        iteration_set_max, [=](sycl::item<1> idx) {
+          const int cell_mesh = k_max_indices[idx];
+          const int cell_collision = k_max_indices[num_pairs + idx];
+          const std::size_t index =
+              offset + cell_mesh * k_max_num_collision_cells + cell_collision;
+          atomic_fetch_max(k_max_dst + index, k_max_src[idx]);
+        });
 
-  event_rate_max.wait_and_throw();
+    event_rate_max.wait_and_throw();
+  }
 
   this->sycl_target->profile_map.end_region(r0);
 }
@@ -201,6 +206,9 @@ void CollisionCellRateReduction::update(
     const int collision_cell_component,
     LocalArraySharedPtr<REAL> device_rate_buffer,
     const std::vector<int> &cell_mask, const REAL rate_init) {
+
+  NESOASSERT(this->last_reset_num_contributors == this->num_contributors,
+             "Missmatch in number of contributors: was resize called?");
 
   auto r0 = this->sycl_target->profile_map.start_region(
       "CollisionCellRateReduction", "update(1)");
@@ -229,6 +237,8 @@ void CollisionCellRateReduction::update(const int contributor_id,
              "Bad contributor ID passed: " + std::to_string(contributor_id));
   NESOASSERT(cell_mask.size() >= num_mesh_cells,
              "cell_mask has fewer entries than the number of mesh cells.");
+  NESOASSERT(this->last_reset_num_contributors == this->num_contributors,
+             "Missmatch in number of contributors: was resize called?");
 
   this->d_staging_indices->realloc_no_copy(num_mesh_cells);
   int *RESTRICT k_staging_indices = this->d_staging_indices->ptr;
@@ -245,7 +255,7 @@ void CollisionCellRateReduction::update(const int contributor_id,
 
   this->sycl_target->queue
       .parallel_for(
-          // We validate the iteration set in reset.
+          // We validate the iteration set in resize.
           sycl::range<2>(num_mesh_cells, max_num_collision_cells), e0,
           [=](sycl::item<2> idx) {
             const std::size_t mesh_cell = idx.get_id(0);
@@ -273,12 +283,14 @@ void CollisionCellRateReduction::get(
       this->last_reset_num_mesh_cells ==
           this->collision_cell_partition->num_mesh_cells,
       "Miss-match between the number of mesh cells held and number of mesh "
-      "cells in the CollisionCellPartition. Was reset called?");
+      "cells in the CollisionCellPartition. Was resize called?");
   NESOASSERT(this->last_reset_max_num_collision_cells ==
                  this->collision_cell_partition->max_num_collision_cells,
              "Miss-match between the max number of collision cells and "
              "the max number of collision cells in the CollisionCellPartition. "
-             "Was reset called?");
+             "Was resize called?");
+  NESOASSERT(this->last_reset_num_contributors == this->num_contributors,
+             "Missmatch in number of contributors: was resize called?");
 
   const int num_mesh_cells = this->collision_cell_partition->num_mesh_cells;
   const auto max_num_collision_cells =

@@ -29,6 +29,7 @@ protected:
   int num_contributors = -1;
   INT num_entries = -1;
 
+  int last_reset_num_contributors = -1;
   int last_reset_num_mesh_cells = -1;
   int last_reset_max_num_collision_cells = -1;
 
