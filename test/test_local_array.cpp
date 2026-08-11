@@ -143,3 +143,43 @@ TEST(NDLocalArray, nd_host_array) {
 
   sycl_target->free();
 }
+
+TEST(NDLocalArray, fill_rng) {
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+
+  auto a0 = std::make_shared<NDLocalArray<int, 2>>(sycl_target, 10, 2);
+
+  int state = 0;
+  auto lambda_sampler = [&]() -> int { return state++; };
+  auto rng_function =
+      std::make_shared<HostRNGGenerationFunction<int>>(lambda_sampler);
+  a0->fill(std::dynamic_pointer_cast<RNGGenerationFunction<int>>(rng_function));
+
+  auto h0 = a0->get();
+
+  for (int ix = 0; ix < 20; ix++) {
+    ASSERT_EQ(ix, h0.at(ix));
+  }
+
+  sycl_target->free();
+}
+
+TEST(NDHostArray, fill_rng) {
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+
+  auto a0 = std::make_shared<NDHostArray<int, 2>>(sycl_target, 10, 2);
+
+  int state = 0;
+  auto lambda_sampler = [&]() -> int { return state++; };
+  auto rng_function =
+      std::make_shared<HostRNGGenerationFunction<int>>(lambda_sampler);
+  a0->fill(std::dynamic_pointer_cast<RNGGenerationFunction<int>>(rng_function));
+
+  auto h0 = a0->get();
+
+  for (int ix = 0; ix < 20; ix++) {
+    ASSERT_EQ(ix, h0.at(ix));
+  }
+
+  sycl_target->free();
+}

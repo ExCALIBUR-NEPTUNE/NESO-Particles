@@ -201,6 +201,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/ephemeral_dats.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/nd_index.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/rng/rng.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/containers/rng/rng_generation_function.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/rng/kernel_rng.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/rng/host_rng_common.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/rng/host_per_particle_block_rng.hpp
