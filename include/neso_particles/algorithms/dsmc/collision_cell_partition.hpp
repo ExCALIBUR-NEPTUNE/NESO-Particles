@@ -7,7 +7,6 @@
 #include "../../containers/particle_mask.hpp"
 #include "../../nd_host_array.hpp"
 #include "../../particle_sub_group/particle_sub_group.hpp"
-#include "collision_cell_num_pairs.hpp"
 #include <memory>
 #include <vector>
 

@@ -70,8 +70,10 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement_masked) {
                                       Sym<INT>("SPECIES_ID"), 0,
                                       Sym<INT>("COLLISION_CELL"), 0);
 
+  auto max_num_pairs_shape =
+      collision_cell_partition->get_collision_cell_num_pairs_shape();
   auto max_num_pairs =
-      collision_cell_partition->get_collision_cell_num_pairs_instance();
+      std::make_shared<NDLocalArray<int, 2>>(sycl_target, max_num_pairs_shape);
 
   auto pair_sampler_no_replacement =
       std::make_shared<DSMC::PairSamplerNoReplacement>(sycl_target, cell_count,
