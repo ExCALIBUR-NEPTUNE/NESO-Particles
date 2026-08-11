@@ -619,16 +619,18 @@ TEST(DSMC, collision_cell_rate_reduction) {
     }
   }
 
-  {
+  auto lambda_get_wrapper = [&]() -> NDHostArraySharedPtr<REAL, 2> {
     NDLocalArraySharedPtr<REAL, 2> ndla_add = nullptr;
     collision_cell_rate_reduction->get(ndla_add);
-    ASSERT_TRUE(ndla_add != nullptr);
-
-    auto correct_shape = nd_index<2>(cell_count, num_collision_cells);
-    ASSERT_EQ(correct_shape, ndla_add->index);
-
     NDHostArraySharedPtr<REAL, 2> h_ndla_add = nullptr;
     ndla_add->get(h_ndla_add);
+    return h_ndla_add;
+  };
+
+  {
+    auto h_ndla_add = lambda_get_wrapper();
+    auto correct_shape = nd_index<2>(cell_count, num_collision_cells);
+    ASSERT_EQ(correct_shape, h_ndla_add->index);
 
     for (int mx = 0; mx < cell_count; mx++) {
       for (int cx = 0; cx < num_collision_cells; cx++) {
@@ -694,24 +696,139 @@ TEST(DSMC, collision_cell_rate_reduction) {
   map_contrib_to_rate[1][1] = 4.1;
   lambda_check_entries();
 
+  auto h_ndla_add = lambda_get_wrapper();
+
+  for (int mx = 0; mx < cell_count; mx++) {
+    for (int cx = 0; cx < num_collision_cells; cx++) {
+      const REAL correct = cx < collision_cell_counts.at(mx)
+                               ? mx % 2 == 0 ? 1.1 + 2.1 : 3.1 + 4.1
+                               : 0.0;
+
+      const REAL to_test = h_ndla_add->at(mx, cx);
+      const REAL err = relative_error(correct, to_test);
+      ASSERT_TRUE(err < 1.0e-14);
+    }
+  }
+
+  // test the pairwise part
   {
-    NDLocalArraySharedPtr<REAL, 2> ndla_add = nullptr;
-    collision_cell_rate_reduction->get(ndla_add);
-    ASSERT_TRUE(ndla_add != nullptr);
 
-    auto correct_shape = nd_index<2>(cell_count, num_collision_cells);
-    ASSERT_EQ(correct_shape, ndla_add->index);
+    auto cellwise_pair_listA =
+        std::make_shared<CellwisePairListSimple>(sycl_target, cell_count);
 
-    NDHostArraySharedPtr<REAL, 2> h_ndla_add = nullptr;
-    ndla_add->get(h_ndla_add);
+    std::vector<int> c;
+    std::vector<int> i;
+    std::vector<int> j;
+
+    c.reserve(cell_count * npart_cell / 2);
+    i.reserve(cell_count * npart_cell / 2);
+    j.reserve(cell_count * npart_cell / 2);
+
+    std::mt19937 rng(9124234 + sycl_target->comm_pair.rank_parent);
+
+    std::vector<REAL> h_rates0;
+    std::vector<REAL> h_rates1;
+
+    std::uniform_real_distribution<REAL> dist{
+        std::uniform_real_distribution<REAL>(10.0, 20.0)};
+
+    NDHostArray<REAL, 2> h_correct0(sycl_target, cell_count,
+                                    num_collision_cells);
+    NDHostArray<REAL, 2> h_correct1(sycl_target, cell_count,
+                                    num_collision_cells);
+
+    h_correct0.fill(0.0);
+    h_correct1.fill(0.0);
+
+    {
+      std::vector<int> cell_mask(cell_count);
+      std::fill(cell_mask.begin(), cell_mask.end(), 1);
+      collision_cell_rate_reduction->update(0, cell_mask, 0.0);
+      collision_cell_rate_reduction->update(1, cell_mask, 0.0);
+    }
+
+    INT num_pairs = 0;
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      npart_cell = A->get_npart_cell(cellx);
+      std::vector<int> pairs(npart_cell);
+      std::iota(pairs.begin(), pairs.end(), 0);
+      std::shuffle(pairs.begin(), pairs.end(), rng);
+
+      auto COLLISION_CELL = A->get_cell(Sym<INT>("COLLISION_CELL"), cellx);
+
+      for (int px = 0; px < (npart_cell / 2); px++) {
+        c.push_back(cellx);
+        const int ii = pairs.at(2 * px);
+        const int jj = pairs.at(2 * px + 1);
+        i.push_back(ii);
+        j.push_back(jj);
+
+        const REAL r0 = dist(rng);
+        const REAL r1 = dist(rng);
+
+        const INT collision_cell = COLLISION_CELL->at(ii, 0);
+
+        h_rates0.push_back(r0);
+        h_correct0.at(cellx, collision_cell) =
+            std::max(h_correct0.at(cellx, collision_cell), r0);
+
+        if (cellx >
+            0) { // This offsets the rates buffer as late we start at cell 1
+          h_rates1.push_back(r1);
+          h_correct1.at(cellx, collision_cell) =
+              std::max(h_correct1.at(cellx, collision_cell), r1);
+        }
+
+        num_pairs++;
+      }
+    }
+
+    cellwise_pair_listA->push_back(c, i, j);
+    c.clear();
+    i.clear();
+    j.clear();
+
+    CellwisePairListAbsolute<ParticleGroup, CellwisePairList> pair_list(
+        A, A, cellwise_pair_listA);
+
+    ASSERT_EQ(num_pairs, pair_list.pair_list->get_num_pairs());
+
+    auto device_rate_buffer0 =
+        std::make_shared<LocalArray<REAL>>(sycl_target, h_rates0);
+    auto device_rate_buffer1 =
+        std::make_shared<LocalArray<REAL>>(sycl_target, h_rates1);
+
+    collision_cell_rate_reduction->update(0, pair_list, 0, cell_count,
+                                          Sym<INT>("COLLISION_CELL"), 0,
+                                          device_rate_buffer0);
+
+    auto h_ndla_add0 = lambda_get_wrapper();
 
     for (int mx = 0; mx < cell_count; mx++) {
       for (int cx = 0; cx < num_collision_cells; cx++) {
-        const REAL correct = cx < collision_cell_counts.at(mx)
-                                 ? mx % 2 == 0 ? 1.1 + 2.1 : 3.1 + 4.1
-                                 : 0.0;
+        const REAL correct = h_correct0.at(mx, cx);
+        const REAL to_test = h_ndla_add0->at(mx, cx);
 
-        const REAL to_test = h_ndla_add->at(mx, cx);
+        const REAL err = relative_error(correct, to_test);
+        ASSERT_TRUE(err < 1.0e-14);
+      }
+    }
+
+    collision_cell_rate_reduction->update(1, pair_list, 1, cell_count - 1,
+                                          Sym<INT>("COLLISION_CELL"), 0,
+                                          device_rate_buffer1);
+
+    auto h_ndla_add1 = lambda_get_wrapper();
+
+    for (int mx = 0; mx < cell_count; mx++) {
+      for (int cx = 0; cx < num_collision_cells; cx++) {
+
+        const bool end_cell = (mx == 0) || (mx == cell_count - 1);
+        const REAL correct =
+            end_cell ? h_correct0.at(mx, cx)
+                     : h_correct0.at(mx, cx) + h_correct1.at(mx, cx);
+        const REAL to_test = h_ndla_add1->at(mx, cx);
+
         const REAL err = relative_error(correct, to_test);
         ASSERT_TRUE(err < 1.0e-14);
       }

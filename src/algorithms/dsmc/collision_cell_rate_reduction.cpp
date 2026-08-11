@@ -158,7 +158,8 @@ void CollisionCellRateReduction::update(
         k_staging_indices[num_pairs + linear_loop_index] =
             COLLISION_CELL.at(collision_cell_component);
       },
-      Access::read(ParticlePairLoopIndex{}), Access::read(collision_cell_sym)
+      Access::read(ParticlePairLoopIndex{}),
+      Access::A(Access::read(collision_cell_sym))
 
           )
       ->execute(cell_start, cell_end);
