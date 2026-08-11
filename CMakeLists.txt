@@ -346,6 +346,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/truncate_sub_group_selector.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/disjoint_union_sub_group_selector.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/nd_host_array.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/nd_host_array_impl.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/profiling.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/sycl_typedefs.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/typedefs.hpp

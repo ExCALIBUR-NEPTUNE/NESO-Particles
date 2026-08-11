@@ -68,6 +68,10 @@ public:
     }
     return is_same;
   }
+
+  template <std::size_t M> bool operator!=(const NDIndex<M> &nd_index) const {
+    return !((*this) == nd_index);
+  }
 };
 
 namespace {

@@ -217,7 +217,7 @@ struct NoReplacementPairCounter {
 
 void CollisionCellPartition::get_max_num_pairs(
     const INT species_id_a, const INT species_id_b, const bool replacement,
-    CollisionCellNumPairsSharedPtr &map_cell_to_num_pairs) {
+    NDLocalArraySharedPtr<int, 2> &map_cell_to_num_pairs) {
 
   auto r0 = this->sycl_target->profile_map.start_region(
       "CollisionCellPartition", "get_max_num_pairs");
@@ -481,13 +481,11 @@ void CollisionCellPartition::get_max_num_pairs(
     }
   }
 
-  if (map_cell_to_num_pairs.get() == nullptr) {
-    map_cell_to_num_pairs = this->get_collision_cell_num_pairs_instance();
-  }
-  if ((map_cell_to_num_pairs->num_mesh_cells != this->num_mesh_cells) ||
-      (map_cell_to_num_pairs->max_num_collision_cells !=
-       this->max_num_collision_cells)) {
-    map_cell_to_num_pairs = this->get_collision_cell_num_pairs_instance();
+  NDIndex<2> shape = this->get_collision_cell_num_pairs_shape();
+  if ((map_cell_to_num_pairs.get() == nullptr) ||
+      (map_cell_to_num_pairs->index != shape)) {
+    map_cell_to_num_pairs =
+        std::make_shared<NDLocalArray<int, 2>>(this->sycl_target, shape);
   }
 
   e0.wait_and_throw();
@@ -495,7 +493,7 @@ void CollisionCellPartition::get_max_num_pairs(
   if (this->max_collision_cell_occupancy > 0) {
 
     e0 = this->sycl_target->queue.memcpy(
-        map_cell_to_num_pairs->get_host_pointer(), k_counts,
+        map_cell_to_num_pairs->ptr(), k_counts,
         k_cell_count * k_max_num_collision_cells * sizeof(int));
 
     e0.wait_and_throw();
@@ -508,6 +506,22 @@ void CollisionCellPartition::get_max_num_pairs(
                    ResourceStackKeyBufferDevice<int>{}, d_counts);
 
   this->sycl_target->profile_map.end_region(r0);
+}
+
+void CollisionCellPartition::get_max_num_pairs(
+    const INT species_id_a, const INT species_id_b, const bool replacement,
+    NDHostArraySharedPtr<int, 2> &map_cell_to_num_pairs) {
+
+  NDIndex<2> shape = this->get_collision_cell_num_pairs_shape();
+  if ((map_cell_to_num_pairs.get() == nullptr) ||
+      (map_cell_to_num_pairs->index != shape)) {
+    map_cell_to_num_pairs =
+        std::make_shared<NDHostArray<int, 2>>(this->sycl_target, shape);
+  }
+
+  NDLocalArraySharedPtr<int, 2> tmp = nullptr;
+  this->get_max_num_pairs(species_id_a, species_id_b, replacement, tmp);
+  tmp->get(map_cell_to_num_pairs);
 }
 
 INT CollisionCellPartition::get_linear_species_id(const INT species_id) {
@@ -529,10 +543,8 @@ CollisionCellPartitionDevice CollisionCellPartition::get_device() {
           this->d_map_entries->ptr};
 }
 
-CollisionCellNumPairsSharedPtr
-CollisionCellPartition::get_collision_cell_num_pairs_instance() {
-  return std::make_shared<CollisionCellNumPairs>(
-      this->sycl_target, this->num_mesh_cells, this->max_num_collision_cells);
+NDIndex<2> CollisionCellPartition::get_collision_cell_num_pairs_shape() {
+  return nd_index<2>(this->num_mesh_cells, this->max_num_collision_cells);
 }
 
 ParticleMaskSharedPtr CollisionCellPartition::get_particle_mask() {

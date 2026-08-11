@@ -7,6 +7,8 @@
 
 namespace NESO::Particles {
 
+template <typename T, std::size_t N> class NDLocalArray;
+
 /**
  * Generic N-Dimensional array type on the host allocated in pinned memory.
  */
@@ -49,6 +51,15 @@ public:
       : NDHostArray(sycl_target, nd_index<N>(shape...)) {
     static_assert(sizeof...(shape) == N, "Missmatch between shape size and N.");
   }
+
+  /**
+   * Create a NDHostArray on a compute device with a given shape.
+   *
+   * @param sycl_target Compute device to create local array on.
+   * @param nd_local_array NDLocalArray to initialise NDHostArray with.
+   */
+  NDHostArray(SYCLTargetSharedPtr sycl_target,
+              std::shared_ptr<NDLocalArray<T, N>> &nd_local_array);
 
   /**
    * @returns Pointer to underlying data. Data is linearised slowest to fastest.

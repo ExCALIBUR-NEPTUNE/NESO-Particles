@@ -224,7 +224,26 @@ public:
    */
   void get_max_num_pairs(const INT species_id_a, const INT species_id_b,
                          const bool replacement,
-                         CollisionCellNumPairsSharedPtr &map_cell_to_num_pairs);
+                         NDLocalArraySharedPtr<int, 2> &map_cell_to_num_pairs);
+
+  /**
+   * Determine the maximum number of pairs that can be formed between species A
+   * and B for each collision cell. Note that in the case of replacement these
+   * values are identical to determining if there are two or more particles in
+   * the collision cell. In this scenario the return values are 0 or INT_MAX.
+   * This method will use the current values of the ParticleMask provided if a
+   * ParticleMask was provided at construction time.
+   *
+   * @param[in] species_id_a Species ID of A.
+   * @param[in] species_id_b Species ID of B.
+   * @param[in] replacement Indicate if pairs are chosen with (true) or without
+   * replacement (false).
+   * @param[in, out] map_cell_to_num_pairs Output map from [mesh cell][collision
+   * cell] to maximum number of pairs that can be formed.
+   */
+  void get_max_num_pairs(const INT species_id_a, const INT species_id_b,
+                         const bool replacement,
+                         NDHostArraySharedPtr<int, 2> &map_cell_to_num_pairs);
 
   /**
    * @param species_id Species ID as stored on particles.
@@ -238,10 +257,10 @@ public:
   CollisionCellPartitionDevice get_device();
 
   /**
-   * @returns A CollisionCellNumPairs instance suitably sized for the number of
-   * mesh cells and collision cells currently specified.
+   * @returns A NDIndex<2> instance suitably sized for the number of mesh cells
+   * and collision cells currently specified.
    */
-  CollisionCellNumPairsSharedPtr get_collision_cell_num_pairs_instance();
+  NDIndex<2> get_collision_cell_num_pairs_shape();
 
   /**
    * @returns The current ParticleMask in use. This method may return a nullptr.

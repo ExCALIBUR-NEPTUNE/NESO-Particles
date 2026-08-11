@@ -443,6 +443,18 @@ public:
   }
 
   /**
+   * Create a NDLocalArray on a compute device from a NDHostArray.
+   *
+   * @param sycl_target Compute device to create local array on.
+   * @param nd_host_array NDHostArray to copy to device.
+   */
+  NDLocalArray(SYCLTargetSharedPtr sycl_target,
+               NDHostArraySharedPtr<T, N> &nd_host_array)
+      : NDLocalArray(sycl_target, nd_host_array->index) {
+    this->set(nd_host_array);
+  }
+
+  /**
    * Create a NDLocalArray on a compute device with a given shape.
    *
    * @param sycl_target Compute device to create local array on.

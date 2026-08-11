@@ -1,4 +1,5 @@
 #include <neso_particles/nd_host_array.hpp>
+#include <neso_particles/nd_host_array_impl.hpp>
 
 namespace NESO::Particles {
 
