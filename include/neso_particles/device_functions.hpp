@@ -765,7 +765,10 @@ template <typename T> using minimum = sycl::minimum<T>;
 template <typename T> using maximum = sycl::maximum<T>;
 
 template <typename T> constexpr T get_identity(sycl::plus<T>) {
-  return static_cast<T>(0.0);
+  return static_cast<T>(0);
+}
+template <typename T> constexpr T get_identity(sycl::multiplies<T>) {
+  return static_cast<T>(1);
 }
 template <typename T> constexpr T get_identity(sycl::minimum<T>) {
   return static_cast<T>(std::numeric_limits<T>::max());
