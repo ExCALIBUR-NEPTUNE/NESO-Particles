@@ -184,7 +184,7 @@ BoundaryInteraction3D::BoundaryInteraction3D(
   for (int ix = 0; ix < num_facets_local; ix++) {
     const PetscInt index = facet_indices.at(ix);
     // Collect the vertex coords
-    this->mesh->dmh->get_generic_vertices(index, coords);
+    this->mesh->dmh->get_point_vertices(index, coords);
     NESOASSERT(coords.size() == 3 || coords.size() == 4,
                "Expected a facet to only have three or four vertices.");
     NESOASSERT(coords.at(0).size() == 3 && coords.at(1).size() == 3 &&
@@ -227,7 +227,7 @@ BoundaryInteraction3D::BoundaryInteraction3D(
 
       for (int cx = 0; cx < 3; cx++) {
         const PetscInt vx = triangle_indices.at(0).at(cx);
-        this->mesh->dmh->get_generic_vertices(vx, coords);
+        this->mesh->dmh->get_point_vertices(vx, coords);
         NESOASSERT(coords.size() == 1, "Expect coords to be size 1.");
 
         for (int dx = 0; dx < 3; dx++) {
@@ -238,7 +238,7 @@ BoundaryInteraction3D::BoundaryInteraction3D(
 
       for (int cx = 0; cx < 3; cx++) {
         const PetscInt vx = triangle_indices.at(1).at(cx);
-        this->mesh->dmh->get_generic_vertices(vx, coords);
+        this->mesh->dmh->get_point_vertices(vx, coords);
         NESOASSERT(coords.size() == 1, "Expect coords to be size 1.");
 
         for (int dx = 0; dx < 3; dx++) {

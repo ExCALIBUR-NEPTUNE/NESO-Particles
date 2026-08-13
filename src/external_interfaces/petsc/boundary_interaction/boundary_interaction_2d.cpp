@@ -158,7 +158,7 @@ BoundaryInteraction2D::BoundaryInteraction2D(
   for (int ix = 0; ix < num_facets_local; ix++) {
     const PetscInt index = facet_indices.at(ix);
     // Collect the vertex coords
-    this->mesh->dmh->get_generic_vertices(index, coords);
+    this->mesh->dmh->get_point_vertices(index, coords);
     NESOASSERT(coords.size() == 2,
                "Expected an edge to only have two vertices.");
     NESOASSERT(coords.at(0).size() == 2,

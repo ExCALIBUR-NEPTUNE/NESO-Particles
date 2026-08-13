@@ -221,7 +221,7 @@ TEST(PETScBoundary3D, setup) {
         };
 
         if (is_triangle) {
-          mesh->dmh->get_generic_vertices(point_id, coords);
+          mesh->dmh->get_point_vertices(point_id, coords);
           ASSERT_EQ(coords.size(), 3);
 
           BoundaryTriangleTest triangle;
@@ -248,7 +248,7 @@ TEST(PETScBoundary3D, setup) {
             BoundaryTriangleTest triangle;
             for (int vx : {0, 1, 2}) {
               const PetscInt inner_point_id = triangle_indices.at(tx).at(vx);
-              mesh->dmh->get_generic_vertices(inner_point_id, coords);
+              mesh->dmh->get_point_vertices(inner_point_id, coords);
               ASSERT_EQ(coords.size(), 1);
               for (int cx : {0, 1, 2}) {
                 triangle.vertices[vx][cx] = coords.at(0).at(cx);

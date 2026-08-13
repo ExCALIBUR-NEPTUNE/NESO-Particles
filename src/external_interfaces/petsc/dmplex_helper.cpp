@@ -759,33 +759,6 @@ DMPlexHelper::get_cell_bounding_box(const PetscInt cell) {
   return this->get_point_bounding_box(petsc_index);
 }
 
-void DMPlexHelper::get_generic_vertices(
-    const PetscInt petsc_index, std::vector<std::vector<REAL>> &vertices) {
-
-  const PetscScalar *array;
-  PetscScalar *coords = nullptr;
-  PetscInt num_coords;
-  PetscBool is_dg;
-  this->check_valid_petsc_point(petsc_index);
-  PETSCCHK(DMPlexGetCellCoordinates(dm, petsc_index, &is_dg, &num_coords,
-                                    &array, &coords));
-  NESOASSERT(coords != nullptr, "No vertices returned for cell.");
-  const PetscInt num_verts = num_coords / ndim;
-
-  vertices.clear();
-  vertices.reserve(num_verts);
-  for (PetscInt vx = 0; vx < num_verts; vx++) {
-    std::vector<REAL> tmp(ndim);
-    for (PetscInt dimx = 0; dimx < this->ndim; dimx++) {
-      const REAL cx = coords[vx * ndim + dimx];
-      tmp.at(dimx) = cx;
-    }
-    vertices.push_back(tmp);
-  }
-  PETSCCHK(DMPlexRestoreCellCoordinates(dm, petsc_index, &is_dg, &num_coords,
-                                        &array, &coords));
-}
-
 void DMPlexHelper::get_point_vertices(
     const PetscInt petsc_index, std::vector<std::vector<REAL>> &vertices) {
 
@@ -859,11 +832,8 @@ DMPolytopeType DMPlexHelper::get_point_type(const PetscInt point_index) {
 
 DMPolytopeType DMPlexHelper::get_cell_type(const PetscInt cell) {
   this->check_valid_local_cell(cell);
-  DMPolytopeType cell_type;
   const PetscInt petsc_index = this->map_np_to_petsc.at(cell);
-  this->check_valid_petsc_cell(petsc_index);
-  PETSCCHK(DMPlexGetCellType(this->dm, petsc_index, &cell_type));
-  return cell_type;
+  return this->get_point_type(petsc_index);
 }
 
 int DMPlexHelper::contains_point(std::vector<PetscScalar> &point) {
@@ -1152,41 +1122,55 @@ void DMPlexHelper::write_vtk(const std::string filename) {
   PETSCCHK(PetscViewerDestroy(&viewer));
 }
 
-std::vector<VTK::UnstructuredCell> DMPlexHelper::get_vtk_cell_data() {
-  const int cell_count = this->get_cell_count();
-  std::vector<VTK::UnstructuredCell> data(cell_count);
+const VTK::UnstructuredCell &
+DMPlexHelper::get_vtk_point_data(const PetscInt index) {
+
+  this->check_valid_petsc_point(index);
   std::vector<std::vector<REAL>> vertices;
   std::vector<PetscInt> order;
+  VTK::UnstructuredCell data;
 
-  for (int cellx = 0; cellx < cell_count; cellx++) {
-
-    const PetscInt petsc_index = this->map_np_to_petsc.at(cellx);
-    vertices.clear();
-    this->get_cell_vertices(cellx, vertices);
+  if (this->map_petsc_to_vtk.count(index) == 0) {
+    this->get_point_vertices(index, vertices);
     const int num_vertices = vertices.size();
-    data.at(cellx).num_points = num_vertices;
-    const auto cell_type = this->get_cell_type(cellx);
+    data.num_points = num_vertices;
+    const auto cell_type = this->get_point_type(index);
     const auto vtk_cell_type = get_vtk_cell_type(cell_type);
 
-    data.at(cellx).cell_type = vtk_cell_type;
-    data.at(cellx).points.reserve(num_vertices * 3);
-    this->get_vtk_cell_vertex_order(cellx, order);
+    data.cell_type = vtk_cell_type;
+    data.points.reserve(num_vertices * 3);
+    this->get_vtk_point_vertex_order(index, order);
 
     for (int vx = 0; vx < num_vertices; vx++) {
       for (int dx = 0; dx < this->ndim; dx++) {
-        data.at(cellx).points.push_back(vertices.at(order.at(vx)).at(dx));
+        data.points.push_back(vertices.at(order.at(vx)).at(dx));
       }
       for (int dx = this->ndim; dx < 3; dx++) {
-        data.at(cellx).points.push_back(0.0);
+        data.points.push_back(0.0);
       }
     }
+    this->map_petsc_to_vtk[index] = data;
+  }
+
+  return this->map_petsc_to_vtk.at(index);
+}
+
+std::vector<VTK::UnstructuredCell> DMPlexHelper::get_vtk_cell_data() {
+  const int cell_count = this->get_cell_count();
+  std::vector<VTK::UnstructuredCell> data;
+  data.reserve(cell_count);
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    const PetscInt petsc_index = this->map_np_to_petsc.at(cellx);
+    data.push_back(this->get_vtk_point_data(petsc_index));
   }
   return data;
 }
 
-void DMPlexHelper::get_vtk_cell_vertex_order(const PetscInt cell,
-                                             std::vector<PetscInt> &order) {
+void DMPlexHelper::get_vtk_point_vertex_order(const PetscInt index,
+                                              std::vector<PetscInt> &order) {
 
+  this->check_valid_petsc_point(index);
   std::map<VTK::CellType, std::vector<int>> map_shape_to_order;
   map_shape_to_order[VTK::CellType::point] = {0};
   map_shape_to_order[VTK::CellType::line] = {0, 1};
@@ -1197,8 +1181,7 @@ void DMPlexHelper::get_vtk_cell_vertex_order(const PetscInt cell,
   map_shape_to_order[VTK::CellType::wedge] = {0, 1, 2, 3, 4, 5};
   map_shape_to_order[VTK::CellType::hex] = {1, 2, 6, 7, 0, 3, 5, 4};
 
-  const PetscInt petsc_index = this->map_np_to_petsc.at(cell);
-  const auto cell_type = this->get_cell_type(cell);
+  const auto cell_type = this->get_point_type(index);
   const auto vtk_cell_type = get_vtk_cell_type(cell_type);
   const auto &ref_order = map_shape_to_order.at(vtk_cell_type);
 
@@ -1259,7 +1242,7 @@ void DMPlexHelper::get_linear_normal_vector(const PetscInt point_index,
   NESOASSERT(depth == 2, "Only implemented for linear 2D faces on 3D meshes.");
 
   std::vector<std::vector<REAL>> vertices;
-  this->get_generic_vertices(point_index, vertices);
+  this->get_point_vertices(point_index, vertices);
   NESOASSERT(vertices.size() > 2, "Expected at least two vertices.");
 
   std::array<REAL, 3> v0 = {vertices.at(0).at(0), vertices.at(0).at(1),
@@ -1301,7 +1284,7 @@ void DMPlexHelper::get_linear_normal_vector(const PetscInt point_index,
     PETSCCHK(DMPlexGetSupport(dm, point_index, &support));
     const PetscInt point_index_support = support[0];
 
-    this->get_generic_vertices(point_index_support, vertices);
+    this->get_point_vertices(point_index_support, vertices);
 
     std::array<REAL, 3> average = {0.0, 0.0, 0.0};
     const REAL scaling = 1.0 / vertices.size();

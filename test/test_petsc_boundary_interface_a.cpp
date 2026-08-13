@@ -109,7 +109,7 @@ TEST(PETScBoundary2D, constructor_2d) {
         test_int.push_back(face_id);
         test_int.push_back(facet_global_id);
 
-        mesh->dmh->get_generic_vertices(point_index, coords);
+        mesh->dmh->get_point_vertices(point_index, coords);
         const REAL x0 = coords.at(0).at(0);
         const REAL y0 = coords.at(0).at(1);
         const REAL x1 = coords.at(1).at(0);

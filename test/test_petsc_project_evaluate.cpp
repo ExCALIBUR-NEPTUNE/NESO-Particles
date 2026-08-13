@@ -821,4 +821,53 @@ TEST(PETSc, dmplex_project_simple_dg0) {
   PETSCCHK(PetscFinalize());
 }
 
+TEST(PETSc, dmplex_function) {
+  std::filesystem::path gmsh_filepath;
+  GET_TEST_RESOURCE(gmsh_filepath, "gmsh/reference_all_types_square_0.2.msh");
+
+  PETSCCHK(PetscInitializeNoArguments());
+  DM dm;
+  PETSCCHK(DMPlexCreateGmshFromFile(MPI_COMM_WORLD,
+                                    gmsh_filepath.generic_string().c_str(),
+                                    (PetscBool)1, &dm));
+  PetscInterface::generic_distribute(&dm);
+
+  auto mesh =
+      std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
+  auto sycl_target =
+      std::make_shared<SYCLTarget>(GPU_SELECTOR, mesh->get_comm());
+
+  std::vector<INT> cells;
+  mesh->dmh->get_cell_petsc_indices(cells);
+
+  auto f0 = std::make_shared<PetscInterface::DMPlexFunction>(
+      mesh, sycl_target, mesh->get_ndim(), cells, "DG", 0, 0);
+
+  const int cell_count = mesh->get_cell_count();
+
+  ASSERT_EQ(f0->cell_count, cell_count);
+  ASSERT_EQ(f0->ndim, mesh->get_ndim());
+
+  auto h_dofs0 = f0->get_dofs();
+  ASSERT_EQ(h_dofs0.size(), cell_count);
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    h_dofs0.at(cellx) = cellx;
+  }
+
+  f0->set_dofs(h_dofs0);
+  h_dofs0 = f0->get_dofs();
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    ASSERT_EQ(h_dofs0.at(cellx), cellx);
+  }
+
+  // f0->write_vtkhdf("test_dmplex_function.vtkhdf");
+
+  sycl_target->free();
+  mesh->free();
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
+
 #endif

@@ -11,6 +11,8 @@ namespace NESO::Particles::PetscInterface {
  */
 class DMPlexFunction : public GenericFunction {
 protected:
+  std::vector<VTK::UnstructuredCell> vtk_data;
+
   /**
    * Create a function on a mesh.
    *
@@ -41,7 +43,8 @@ public:
    * @param mesh Host mesh to create function on.
    * @param sycl_target Compute device holding the DOFs.
    * @param ndim Number of spatial dimensions function exists in.
-   * @param cells Locally owned mesh entities to create function over.
+   * @param cells Locally owned mesh entities to create function over. These
+   * must be point indices not cell indices.
    * @param function_space Type of function to create.
    * @param polynomial_order Polynomial order of function to create.
    * @param boundary_group Label, e.g. boundary group, for subset of the mesh
@@ -51,6 +54,14 @@ public:
                  const int ndim, const std::vector<INT> &cells,
                  const std::string function_space, const int polynomial_order,
                  const int boundary_group);
+
+  /**
+   * Write the function to a vtkhdf file. This function must be called
+   * collectively on the communicator.
+   *
+   * @param filename Output file name which should have vtkhdf extension.
+   */
+  virtual void write_vtkhdf(const std::string filename) override;
 };
 
 using DMPlexFunctionSharedPtr = std::shared_ptr<DMPlexFunction>;

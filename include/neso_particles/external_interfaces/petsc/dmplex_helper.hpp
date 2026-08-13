@@ -162,6 +162,7 @@ protected:
   std::vector<PetscInt> map_np_to_petsc;
   std::map<PetscInt, PetscInt> map_petsc_to_np;
   std::map<PetscInt, PetscInt> map_gobal_point_to_local_point;
+  std::map<PetscInt, VTK::UnstructuredCell> map_petsc_to_vtk;
   double volume;
   int ncells_global{-1};
 
@@ -193,14 +194,25 @@ protected:
 
   ExternalCommon::BoundingBoxSharedPtr bounding_box;
 
-  void get_point_vertices(const PetscInt petsc_index,
-                          std::vector<std::vector<REAL>> &vertices);
-
 public:
   MPI_Comm comm;
   DM dm;
   PetscInt ndim;
   PetscInt ncells;
+
+  /**
+   * @param[in, out] indices Populated with PETSc point indices for locally
+   * owned cells.
+   */
+  template <typename T>
+  inline void get_cell_petsc_indices(std::vector<T> &indices) {
+    if (indices.size() != static_cast<std::size_t>(this->ncells)) {
+      indices.resize(this->ncells);
+    }
+    for (int cellx = 0; cellx < this->ncells; cellx++) {
+      indices[cellx] = get_dmplex_cell_index(cellx);
+    }
+  }
 
   /**
    * Get a serialisable representation of a cell in the DMPlex.
@@ -310,8 +322,8 @@ public:
    * @param[in] petsc_index PETSc point index.
    * @param[in, out] vertices Vector of vertices.
    */
-  void get_generic_vertices(const PetscInt petsc_index,
-                            std::vector<std::vector<REAL>> &vertices);
+  void get_point_vertices(const PetscInt petsc_index,
+                          std::vector<std::vector<REAL>> &vertices);
 
   /**
    * Get the vertices of a cell.
@@ -422,6 +434,16 @@ public:
   void write_vtk(const std::string filename);
 
   /**
+   * Get VTK data for a point index.
+   *
+   * @param index PETSc point index of object to get unstructured cell
+   * representation of.
+   * @returns VTK data which can be passed to our VTKHDF
+   * implementation.
+   */
+  const VTK::UnstructuredCell &get_vtk_point_data(const PetscInt index);
+
+  /**
    * Get VTK data for all cells.
    *
    * @returns Vector of VTK data which can be passed to our VTKHDF
@@ -430,14 +452,14 @@ public:
   std::vector<VTK::UnstructuredCell> get_vtk_cell_data();
 
   /**
-   * Get VTK vertex order for a cell. Returned array gives order such that
+   * Get VTK vertex order for a point. Returned array gives order such that
    * For VTK vertex i, order[i] gives the DMPlex vertex.
    *
-   * @param[in] cell Local cell index in [0, cell_count).
+   * @param[in] index Local PETSc index.
    * @param[in, out] order Vector containing reordering.
    */
-  void get_vtk_cell_vertex_order(const PetscInt cell,
-                                 std::vector<PetscInt> &order);
+  void get_vtk_point_vertex_order(const PetscInt index,
+                                  std::vector<PetscInt> &order);
 
   /**
    * Print to stdout information about the held DMPlex.
