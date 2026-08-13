@@ -331,6 +331,8 @@ protected:
       std::optional<Sym<REAL>> previous_position_sym = std::nullopt);
 
 public:
+  virtual ~BoundaryInteractionCommon() = default;
+
   /// The compute device used to find intersections.
   SYCLTargetSharedPtr sycl_target;
   /// The interface to a DMPlex mesh.

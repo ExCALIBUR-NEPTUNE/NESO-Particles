@@ -269,6 +269,8 @@ protected:
   }
 
 public:
+  virtual ~BoundaryInteraction2D() = default;
+
   /// Tolerance for line-line intersections.
   REAL tol;
 
