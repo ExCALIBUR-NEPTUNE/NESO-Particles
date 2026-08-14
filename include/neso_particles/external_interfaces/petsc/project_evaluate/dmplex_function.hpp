@@ -12,6 +12,7 @@ namespace NESO::Particles::PetscInterface {
 class DMPlexFunction : public GenericFunction {
 protected:
   std::vector<VTK::UnstructuredCell> vtk_data;
+  std::vector<INT> cells_local;
 
   /**
    * Create a function on a mesh.
@@ -43,15 +44,15 @@ public:
    * @param mesh Host mesh to create function on.
    * @param sycl_target Compute device holding the DOFs.
    * @param ndim Number of spatial dimensions function exists in.
-   * @param cells Locally owned mesh entities to create function over. These
-   * must be point indices not cell indices.
+   * @param cells_local Locally owned mesh entities to create function over.
+   * These must be point indices not cell indices.
    * @param function_space Type of function to create.
    * @param polynomial_order Polynomial order of function to create.
    * @param boundary_group Label, e.g. boundary group, for subset of the mesh
    * this function is defined over.
    */
   DMPlexFunction(DMPlexInterfaceSharedPtr mesh, SYCLTargetSharedPtr sycl_target,
-                 const int ndim, const std::vector<INT> &cells,
+                 const int ndim, const std::vector<INT> &cells_local,
                  const std::string function_space, const int polynomial_order,
                  const int boundary_group);
 

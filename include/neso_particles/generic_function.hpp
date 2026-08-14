@@ -29,12 +29,12 @@ public:
    * @param cell_count Number of locally owned cells on the mesh.
    * @param function_space Type of function to create.
    * @param polynomial_order Polynomial order of function to create.
-   * @param boundary_group Label, e.g. boundary group, for subset of the mesh
+   * @param mesh_group Label, e.g. boundary group, for subset of the mesh
    * this function is defined over.
    */
   GenericFunction(SYCLTargetSharedPtr sycl_target, const int ndim,
                   const int cell_count, const std::string function_space,
-                  const int polynomial_order, const int boundary_group);
+                  const int polynomial_order, const int mesh_group);
 
 public:
   /// Compute device holding the DOFs
@@ -52,7 +52,7 @@ public:
   std::vector<INT> cells;
   /// If this function corresponds to a boundary group then this entry records
   /// the boundary group.
-  int boundary_group{0};
+  int mesh_group{0};
   /// Number of locally owned DOFs
   int local_dof_count{0};
   /// Number of DOFs per cell.
@@ -69,13 +69,13 @@ public:
    * @param cells Locally owned mesh entities to create function over.
    * @param function_space Type of function to create.
    * @param polynomial_order Polynomial order of function to create.
-   * @param boundary_group Label, e.g. boundary group, for subset of the mesh
+   * @param mesh_group Label, e.g. boundary group, for subset of the mesh
    * this function is defined over.
    */
   GenericFunction(SYCLTargetSharedPtr sycl_target, const int ndim,
                   const std::vector<INT> &cells,
                   const std::string function_space, const int polynomial_order,
-                  const int boundary_group);
+                  const int mesh_group);
 
   /**
    * Write the function to a vtkhdf file. This function must be called

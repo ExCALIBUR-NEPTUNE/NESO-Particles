@@ -8,10 +8,10 @@ GenericFunction::GenericFunction(SYCLTargetSharedPtr sycl_target,
                                  const int ndim, const int cell_count,
                                  const std::string function_space,
                                  const int polynomial_order,
-                                 const int boundary_group)
+                                 const int mesh_group)
     : sycl_target(sycl_target), ndim(ndim), cell_count(cell_count),
       function_space(function_space), polynomial_order(polynomial_order),
-      boundary_group(boundary_group) {
+      mesh_group(mesh_group) {
   const int ndof_per_cell = std::pow(polynomial_order + 1, ndim);
   this->cell_dof_count = ndof_per_cell;
   this->local_dof_count = cell_count * ndof_per_cell;
@@ -32,9 +32,9 @@ GenericFunction::GenericFunction(SYCLTargetSharedPtr sycl_target,
                                  const int ndim, const std::vector<INT> &cells,
                                  const std::string function_space,
                                  const int polynomial_order,
-                                 const int boundary_group)
+                                 const int mesh_group)
     : GenericFunction(sycl_target, ndim, cells.size(), function_space,
-                      polynomial_order, boundary_group) {
+                      polynomial_order, mesh_group) {
   this->cells = cells;
 }
 

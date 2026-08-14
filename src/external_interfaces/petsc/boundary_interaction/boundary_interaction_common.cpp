@@ -1,6 +1,7 @@
 #ifdef NESO_PARTICLES_PETSC
 
 #include <neso_particles/common_impl.hpp>
+#include <neso_particles/communication/communication_utility.hpp>
 #include <neso_particles/external_interfaces/petsc/boundary_interaction/boundary_interaction_common.hpp>
 
 namespace NESO::Particles::PetscInterface {
@@ -33,11 +34,46 @@ BoundaryInteractionCommon::BoundaryInteractionCommon(
     std::optional<Sym<REAL>> previous_position_sym)
     : sycl_target(sycl_target), mesh(mesh), boundary_groups(boundary_groups) {
 
+  {
+    std::set<int> contrib;
+    for (auto &bx : boundary_groups) {
+      contrib.insert(bx.first);
+    }
+
+    auto to_test = set_all_reduce_union(contrib, mesh->get_comm());
+    NESOASSERT(to_test == contrib,
+               "Missmatch in boundary group labels across ranks.");
+
+    for (auto &bx : boundary_groups) {
+      contrib.clear();
+      for (auto &lx : bx.second) {
+        contrib.insert(lx);
+      }
+      auto to_test = set_all_reduce_union(contrib, mesh->get_comm());
+      NESOASSERT(to_test == contrib,
+                 "Missmatch in boundary group DMPlex labels across ranks.");
+    }
+  }
+
+  auto face_sets = mesh->dmh->get_face_sets();
+
+  std::vector<INT> tmp_face_cells;
+
   for (auto &bx : boundary_groups) {
+    tmp_face_cells.clear();
     NESOASSERT(bx.first >= 0, "Group id cannot be negative.");
     for (auto &lx : bx.second) {
       this->map_label_to_groups[lx] = bx.first;
+
+      auto &labeled_face_points = face_sets[lx];
+      for (const INT fx : labeled_face_points) {
+        tmp_face_cells.push_back(fx);
+      }
     }
+
+    this->map_groups_boundary_interface[bx.first] =
+        std::make_shared<BoundaryMeshInterface>(mesh->get_comm(), sycl_target,
+                                                tmp_face_cells);
   }
 
   auto assign_sym = [=](auto &output_sym, auto &input_sym, auto default_sym) {
@@ -120,6 +156,32 @@ void BoundaryInteractionCommon::pre_integration(
       Access::read(position_dat->sym),
       Access::write(this->previous_position_sym))
       ->execute();
+}
+
+DMPlexFunctionSharedPtr
+BoundaryInteractionCommon::create_function(const int group,
+                                           const std::string function_space,
+                                           const int polynomial_order) {
+
+  NESOASSERT(boundary_groups.count(group),
+             "Passed group is not a group ID known to this instance.");
+
+  if (this->map_group_to_petsc_indices.count(group) == 0) {
+    auto face_sets = this->mesh->dmh->get_face_sets();
+    std::vector<INT> cells_tmp;
+    for (const PetscInt labelx : this->boundary_groups.at(group)) {
+      for (const PetscInt pointx : face_sets[labelx]) {
+        cells_tmp.push_back(static_cast<INT>(pointx));
+      }
+    }
+    this->map_group_to_petsc_indices[group] = cells_tmp;
+  }
+
+  const auto &cells = this->map_group_to_petsc_indices.at(group);
+
+  return std::make_shared<DMPlexFunction>(
+      this->mesh, this->sycl_target, this->mesh->get_ndim() - 1, cells,
+      function_space, polynomial_order, group);
 }
 
 } // namespace NESO::Particles::PetscInterface

@@ -5,11 +5,14 @@
 #include "../../../loop/particle_loop_functions.hpp"
 #include "../../../particle_sub_group/particle_sub_group.hpp"
 #include "../dmplex_interface.hpp"
+#include "../project_evaluate/dmplex_function.hpp"
 #include <map>
 #include <memory>
 #include <optional>
 #include <set>
 #include <vector>
+
+#include "../../../boundary/boundary_mesh_interface.hpp"
 
 namespace NESO::Particles::PetscInterface {
 
@@ -30,6 +33,10 @@ protected:
   std::shared_ptr<CellDatConst<int>> cdc_mh_max;
   std::set<INT> required_mh_cells;
   std::set<INT> collected_mh_cells;
+
+  std::map<int, std::vector<INT>> map_group_to_petsc_indices;
+  std::map<int, std::shared_ptr<BoundaryMeshInterface>>
+      map_groups_boundary_interface;
 
   void prepare_particle_group(ParticleGroupSharedPtr particle_group);
 
@@ -393,6 +400,19 @@ public:
    * positions are about to be updated, e.g. in a time stepping operation.
    */
   void pre_integration(std::shared_ptr<ParticleSubGroup> particles);
+
+  /**
+   * Create a function on a boundary group. Must be called collectively on the
+   * communicator.
+   *
+   * @param group ID of boundary group to create function on.
+   * @param function_space Family of function to create, e.g. "DG".
+   * @param polynomial_order Order of function to create, e.g. 0.
+   * @returns Function object on boundary.
+   */
+  DMPlexFunctionSharedPtr create_function(const int group,
+                                          const std::string function_space,
+                                          const int polynomial_order);
 };
 
 } // namespace NESO::Particles::PetscInterface

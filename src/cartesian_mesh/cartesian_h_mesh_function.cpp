@@ -9,6 +9,7 @@ CartesianHMeshFunction::CartesianHMeshFunction(
     : GenericFunction(sycl_target, ndim, cell_count, function_space,
                       polynomial_order, boundary_group) {
   this->mesh = mesh;
+  this->boundary_group = boundary_group;
 }
 
 CartesianHMeshFunction::CartesianHMeshFunction(CartesianHMeshSharedPtr mesh,

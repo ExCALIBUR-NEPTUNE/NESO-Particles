@@ -47,6 +47,9 @@ public:
   CartesianHMeshFunction() = default;
   virtual ~CartesianHMeshFunction() = default;
 
+  // The boundary group if this function is defined on a surface.
+  int boundary_group{-1};
+
   /**
    * Create a function on a mesh on the passed entities.
    *

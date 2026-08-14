@@ -25,25 +25,30 @@ DMPlexFunction::DMPlexFunction(DMPlexInterfaceSharedPtr mesh,
 
 DMPlexFunction::DMPlexFunction(DMPlexInterfaceSharedPtr mesh,
                                SYCLTargetSharedPtr sycl_target, const int ndim,
-                               const std::vector<INT> &cells,
+                               const std::vector<INT> &cells_local,
                                const std::string function_space,
                                const int polynomial_order,
                                const int boundary_group)
     :
 
-      GenericFunction(sycl_target, ndim, cells.size(), function_space,
+      GenericFunction(sycl_target, ndim, cells_local.size(), function_space,
                       polynomial_order, boundary_group)
 
 {
   this->mesh = mesh;
-  this->cells = cells;
+  this->cells_local = cells_local;
+  this->cells.clear();
+  this->cells.reserve(this->cells_local.size());
+  for (auto cx : this->cells_local) {
+    this->cells.push_back(this->mesh->dmh->get_point_global_index(cx));
+  }
 }
 
 void DMPlexFunction::write_vtkhdf(const std::string filename) {
 
-  if (this->vtk_data.size() != this->cells.size()) {
-    this->vtk_data.reserve(this->cells.size());
-    for (const INT pointx : this->cells) {
+  if (this->vtk_data.size() != this->cells_local.size()) {
+    this->vtk_data.reserve(this->cells_local.size());
+    for (const INT pointx : this->cells_local) {
       this->vtk_data.push_back(this->mesh->dmh->get_vtk_point_data(pointx));
     }
   }
