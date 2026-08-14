@@ -6,10 +6,15 @@
 
 namespace NESO::Particles::PetscInterface {
 
+class BoundaryInteractionCommon;
+
 /**
  * Generic type for functions on DMPlex volumes and surfaces.
  */
 class DMPlexFunction : public GenericFunction {
+
+  friend class BoundaryInteractionCommon;
+
 protected:
   std::vector<VTK::UnstructuredCell> vtk_data;
   std::vector<INT> cells_local;

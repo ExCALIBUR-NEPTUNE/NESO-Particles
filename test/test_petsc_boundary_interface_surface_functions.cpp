@@ -3,7 +3,7 @@
 #include "include/test_neso_particles.hpp"
 #include <neso_particles/external_interfaces/petsc/petsc_interface.hpp>
 
-TEST(PETScBoundary2D, setup) {
+TEST(PETScBoundary2D, setup_surface_functions) {
 
   PETSCCHK(PetscInitializeNoArguments());
   DM dm;

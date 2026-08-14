@@ -364,6 +364,7 @@ void CartesianTrajectoryIntersection::function_evaluate(
   const auto boundary_mesh_interface_version =
       boundary_mesh_interface->get_version_function_handle()();
 
+  // The function version is set to zero whenever the dofs are touched.
   if (func->version < boundary_mesh_interface_version) {
     const std::size_t tmp_buffer_size =
         num_accessible_geoms * func->cell_dof_count;
@@ -373,8 +374,8 @@ void CartesianTrajectoryIntersection::function_evaluate(
     func->version = boundary_mesh_interface_version;
   }
 
-  REAL *k_buffer = func->d_dofs_stage->ptr;
   if (!null_sub_group) {
+    REAL const *const RESTRICT k_buffer = func->d_dofs_stage->ptr;
     auto *k_tree_root = d_tree_root;
     NESOASSERT(particle_sub_group->contains_ephemeral_dat(
                    Sym<INT>("NESO_PARTICLES_BOUNDARY_METADATA")),
