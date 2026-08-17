@@ -206,8 +206,11 @@ void CartesianTrajectoryIntersection::function_project_initialise(
   func->d_dofs_stage->realloc_no_copy(tmp_buffer_size);
   REAL *k_buffer = func->d_dofs_stage->ptr;
 
-  if (tmp_buffer_size > 0) {
-    this->sycl_target->queue.fill<REAL>(k_buffer, (REAL)0.0, tmp_buffer_size)
+  // We zero the entire buffer here as later in project we do not reliably have
+  // the previously zeroed size.
+  const std::size_t buffer_size = func->d_dofs_stage->size;
+  if (buffer_size > 0) {
+    this->sycl_target->queue.fill<REAL>(k_buffer, (REAL)0.0, buffer_size)
         .wait_and_throw();
   }
   func->fill(0.0);
