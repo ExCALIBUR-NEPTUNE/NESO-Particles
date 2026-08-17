@@ -213,7 +213,8 @@ template <> struct NPToTestMapper<ParticleGroup> {
 inline std::tuple<ParticleGroupSharedPtr, SYCLTargetSharedPtr, int>
 particle_loop_create_common(const int npart_cell = 10, const int ndim = 2,
                             const int nx = 16, const int ny = 32,
-                            const int nz = 48, const REAL cell_extent = 1.0) {
+                            const int nz = 48, const REAL cell_extent = 1.0,
+                            const int subdivision_order = 0) {
   std::vector<int> dims(ndim);
   dims[0] = nx;
   dims[1] = ny;
@@ -221,7 +222,6 @@ particle_loop_create_common(const int npart_cell = 10, const int ndim = 2,
     dims[2] = nz;
   }
 
-  const int subdivision_order = 0;
   auto mesh = std::make_shared<CartesianHMesh>(MPI_COMM_WORLD, ndim, dims,
                                                cell_extent, subdivision_order);
 
