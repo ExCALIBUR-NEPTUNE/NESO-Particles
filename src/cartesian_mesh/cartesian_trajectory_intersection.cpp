@@ -206,8 +206,11 @@ void CartesianTrajectoryIntersection::function_project_initialise(
   func->d_dofs_stage->realloc_no_copy(tmp_buffer_size);
   REAL *k_buffer = func->d_dofs_stage->ptr;
 
-  if (tmp_buffer_size > 0) {
-    this->sycl_target->queue.fill(k_buffer, (REAL)0.0, tmp_buffer_size)
+  // We zero the entire buffer here as later in project we do not reliably have
+  // the previously zeroed size.
+  const std::size_t buffer_size = func->d_dofs_stage->size;
+  if (buffer_size > 0) {
+    this->sycl_target->queue.fill<REAL>(k_buffer, (REAL)0.0, buffer_size)
         .wait_and_throw();
   }
   func->fill(0.0);
@@ -269,7 +272,10 @@ void CartesianTrajectoryIntersection::function_project_contribute(
     ErrorPropagate ep_dof(this->sycl_target);
     auto k_ep_found = ep_found.device_ptr();
     auto k_ep_dof = ep_dof.device_ptr();
-    const REAL k_inverse_width = func->mesh->inverse_cell_width_fine;
+
+    auto ndim = this->mesh->get_ndim();
+    const REAL k_inverse_width =
+        std::pow(func->mesh->inverse_cell_width_fine, ndim - 1);
 
     auto lambda_dispatch = [&](auto extract_quantity) {
       particle_loop(

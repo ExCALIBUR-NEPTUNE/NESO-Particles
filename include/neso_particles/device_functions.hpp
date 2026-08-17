@@ -32,6 +32,9 @@ template <typename T> inline auto pow(const T x, const T y) {
 template <typename T> inline auto atan2(const T y, const T x) {
   return sycl::atan2(y, x);
 }
+template <typename T, typename U> inline auto copysign(const T y, const U x) {
+  return sycl::copysign(y, x);
+}
 template <typename T> inline auto rsqrt(const T x) { return sycl::rsqrt(x); }
 template <typename T> inline auto sin(const T x) { return sycl::sin(x); }
 template <typename T> inline auto cos(const T x) { return sycl::cos(x); }
@@ -42,6 +45,8 @@ template <typename T> inline auto log10(const T x) { return sycl::log10(x); }
 template <typename T> inline auto round(const T x) { return sycl::round(x); }
 template <typename T> inline auto tgamma(const T x) { return sycl::tgamma(x); }
 template <typename T> inline auto trunc(const T x) { return sycl::trunc(x); }
+template <typename T> inline auto ceil(const T x) { return sycl::ceil(x); }
+template <typename T> inline auto floor(const T x) { return sycl::floor(x); }
 template <typename T>
 inline auto clamp(const T x, const T minval, const T maxval) {
   return sycl::clamp(x, minval, maxval);
@@ -755,11 +760,15 @@ inline INT atomic_fetch_max(INT *ptr, const INT value) {
 namespace Kernel {
 
 template <typename T> using plus = sycl::plus<T>;
+template <typename T> using multiplies = sycl::multiplies<T>;
 template <typename T> using minimum = sycl::minimum<T>;
 template <typename T> using maximum = sycl::maximum<T>;
 
 template <typename T> constexpr T get_identity(sycl::plus<T>) {
-  return static_cast<T>(0.0);
+  return static_cast<T>(0);
+}
+template <typename T> constexpr T get_identity(sycl::multiplies<T>) {
+  return static_cast<T>(1);
 }
 template <typename T> constexpr T get_identity(sycl::minimum<T>) {
   return static_cast<T>(std::numeric_limits<T>::max());

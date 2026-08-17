@@ -183,8 +183,12 @@ TEST(DSMCCollisionCells, collision_cell_partition) {
       }
     }
 
-    auto to_test_num_collisions =
-        collision_cell_partition->get_collision_cell_num_pairs_instance();
+    auto to_test_num_collisions_shape =
+        collision_cell_partition->get_collision_cell_num_pairs_shape();
+
+    auto to_test_num_collisions = std::make_shared<NDHostArray<int, 2>>(
+        sycl_target, to_test_num_collisions_shape);
+
     collision_cell_partition->get_max_num_pairs(0 + species_id_offset,
                                                 0 + species_id_offset, false,
                                                 to_test_num_collisions);
@@ -272,11 +276,11 @@ TEST(DSMCCollisionCells, collision_cell_partition) {
   }
 
   {
-    auto collision_cell_num_pairs =
-        collision_cell_partition->get_collision_cell_num_pairs_instance();
+    auto collision_cell_num_pairs_shape =
+        collision_cell_partition->get_collision_cell_num_pairs_shape();
 
-    ASSERT_EQ(collision_cell_num_pairs->num_mesh_cells, cell_count);
-    ASSERT_EQ(collision_cell_num_pairs->max_num_collision_cells,
+    ASSERT_EQ(collision_cell_num_pairs_shape.shape[0], cell_count);
+    ASSERT_EQ(collision_cell_num_pairs_shape.shape[1],
               collision_cell_partition->max_num_collision_cells);
   }
 
@@ -344,8 +348,9 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement) {
   const int ny = 33;
   const int nz = 48;
 
-  auto [A, sycl_target, cell_count] =
+  auto [A, sycl_target_t, cell_count] =
       particle_loop_create_common(npart_cell, ndim, nx, ny, nz);
+  auto sycl_target = sycl_target_t;
   A->add_particle_dat(Sym<INT>("SPECIES_ID"), 1);
   A->add_particle_dat(Sym<INT>("COLLISION_CELL"), 1);
 
@@ -397,8 +402,11 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement) {
   ASSERT_EQ(0, pair_sampler_no_replacement->get_num_pairs());
 
   // Sample no pairs and check output
-  auto map_cells_to_counts =
-      collision_cell_partition->get_collision_cell_num_pairs_instance();
+  auto map_cells_to_counts_shape =
+      collision_cell_partition->get_collision_cell_num_pairs_shape();
+
+  auto map_cells_to_counts = std::make_shared<NDHostArray<int, 2>>(
+      sycl_target, map_cells_to_counts_shape);
   map_cells_to_counts->fill(0);
 
   pair_sampler_no_replacement->sample(collision_cell_partition,
@@ -461,8 +469,12 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement) {
   const auto cell_count_t = cell_count;
   auto A_t = A;
   auto lambda_check = [&](const INT species_id_a, const INT species_id_b) {
-    auto max_num_pairs_per_cell =
-        collision_cell_partition->get_collision_cell_num_pairs_instance();
+    auto max_num_pairs_per_cell_shape =
+        collision_cell_partition->get_collision_cell_num_pairs_shape();
+
+    auto max_num_pairs_per_cell = std::make_shared<NDHostArray<int, 2>>(
+        sycl_target, max_num_pairs_per_cell_shape);
+
     collision_cell_partition->get_max_num_pairs(species_id_a, species_id_b,
                                                 false, max_num_pairs_per_cell);
 
@@ -615,8 +627,12 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement_correctness) {
                                                        rng_function);
 
   // Sample no pairs and check output
-  auto map_cells_to_counts =
-      collision_cell_partition->get_collision_cell_num_pairs_instance();
+  auto map_cells_to_counts_shape =
+      collision_cell_partition->get_collision_cell_num_pairs_shape();
+
+  auto map_cells_to_counts = std::make_shared<NDHostArray<int, 2>>(
+      sycl_target, map_cells_to_counts_shape);
+
   map_cells_to_counts->fill(0);
 
   // Get a linear index for each particle for species/collision cell.
@@ -651,8 +667,11 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement_correctness) {
   }
 
   auto lambda_check = [&](const INT species_id_a, const INT species_id_b) {
-    auto max_num_pairs_per_cell =
-        collision_cell_partition->get_collision_cell_num_pairs_instance();
+    auto max_num_pairs_per_cell_shape =
+        collision_cell_partition->get_collision_cell_num_pairs_shape();
+    auto max_num_pairs_per_cell = std::make_shared<NDHostArray<int, 2>>(
+        sycl_target, max_num_pairs_per_cell_shape);
+
     collision_cell_partition->get_max_num_pairs(species_id_a, species_id_b,
                                                 false, max_num_pairs_per_cell);
 
@@ -813,8 +832,12 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement_bias) {
                                                        rng_function);
 
   // Sample no pairs and check output
-  auto map_cells_to_counts =
-      collision_cell_partition->get_collision_cell_num_pairs_instance();
+  auto map_cells_to_counts_shape =
+      collision_cell_partition->get_collision_cell_num_pairs_shape();
+
+  auto map_cells_to_counts = std::make_shared<NDHostArray<int, 2>>(
+      sycl_target, map_cells_to_counts_shape);
+
   map_cells_to_counts->fill(0);
 
   // Get a linear index for each particle for species/collision cell.
@@ -849,8 +872,11 @@ TEST(DSMCCollisionCells, pair_sampler_no_replacement_bias) {
   }
 
   auto lambda_check = [&](const INT species_id_a, const INT species_id_b) {
+    auto max_num_pairs_shape =
+        collision_cell_partition->get_collision_cell_num_pairs_shape();
     auto max_num_pairs_per_cell =
-        collision_cell_partition->get_collision_cell_num_pairs_instance();
+        std::make_shared<NDHostArray<int, 2>>(sycl_target, max_num_pairs_shape);
+
     collision_cell_partition->get_max_num_pairs(species_id_a, species_id_b,
                                                 false, max_num_pairs_per_cell);
 

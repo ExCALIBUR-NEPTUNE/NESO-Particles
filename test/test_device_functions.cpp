@@ -747,3 +747,27 @@ TEST(DeviceFunctions, reduce_over_group_block_wise) {
 
   sycl_target->free();
 }
+
+TEST(DeviceFunctions, unary_binary_ops) {
+
+  ASSERT_EQ(3, Kernel::plus<int>{}(1, 2));
+  ASSERT_EQ(1, Kernel::minimum<int>{}(1, 2));
+  ASSERT_EQ(2, Kernel::maximum<int>{}(1, 2));
+  ASSERT_EQ(15, Kernel::multiplies<int>{}(3, 5));
+  ASSERT_EQ(15.0, Kernel::ceil(14.5));
+  ASSERT_EQ(14.0, Kernel::floor(14.5));
+  ASSERT_EQ(-14.0, Kernel::copysign(14.0, -1.0));
+
+  ASSERT_EQ(0, Kernel::get_identity(Kernel::plus<int>{}));
+  ASSERT_EQ(0.0, Kernel::get_identity(Kernel::plus<REAL>{}));
+  ASSERT_EQ(1, Kernel::get_identity(Kernel::multiplies<int>{}));
+  ASSERT_EQ(1.0, Kernel::get_identity(Kernel::multiplies<REAL>{}));
+  ASSERT_EQ(std::numeric_limits<int>::max(),
+            Kernel::get_identity(Kernel::minimum<int>{}));
+  ASSERT_EQ(std::numeric_limits<REAL>::max(),
+            Kernel::get_identity(Kernel::minimum<REAL>{}));
+  ASSERT_EQ(std::numeric_limits<int>::lowest(),
+            Kernel::get_identity(Kernel::maximum<int>{}));
+  ASSERT_EQ(std::numeric_limits<REAL>::lowest(),
+            Kernel::get_identity(Kernel::maximum<REAL>{}));
+}

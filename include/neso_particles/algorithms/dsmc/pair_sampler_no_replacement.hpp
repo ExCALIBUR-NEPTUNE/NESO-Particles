@@ -78,7 +78,21 @@ public:
    */
   void sample(CollisionCellPartitionSharedPtr collision_cell_partition,
               const INT species_id_a, const INT species_id_b,
-              CollisionCellNumPairsSharedPtr &map_cell_to_num_pairs);
+              NDLocalArraySharedPtr<int, 2> &map_cell_to_num_pairs);
+
+  /**
+   * Sample pairs in each collision cell between species A and B.
+   *
+   * @param collision_cell_partition Map from collision cells to particles
+   * within those collision cells.
+   * @param species_id_a First species ID.
+   * @param species_id_b Second species ID.
+   * @param map_cell_to_num_pairs Map from mesh cell to counts for each
+   * collision cell.
+   */
+  void sample(CollisionCellPartitionSharedPtr collision_cell_partition,
+              const INT species_id_a, const INT species_id_b,
+              NDHostArraySharedPtr<int, 2> &map_cell_to_num_pairs);
 
   /**
    * Get a description of the pair list accessible on the device.
