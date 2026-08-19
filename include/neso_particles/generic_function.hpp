@@ -12,14 +12,11 @@ namespace NESO::Particles {
 class GenericFunction {
 
 protected:
-#ifdef NESO_PARTICLES_TEST_COMPILATION
-public:
-#endif
-
   std::shared_ptr<BufferDevice<REAL>> d_dofs;
   std::shared_ptr<BufferDevice<REAL>> d_dofs_stage;
   std::int64_t version{0};
   void reset_version();
+  int zeroed_stage_size{0};
 
   /**
    * Create a function on a mesh.
@@ -76,6 +73,43 @@ public:
                   const std::vector<INT> &cells,
                   const std::string function_space, const int polynomial_order,
                   const int mesh_group);
+
+  /**
+   * @returns Device pointer to owned DOFs.
+   */
+  REAL *get_dofs_device_pointer();
+
+  /**
+   * Realloc the staging area to be at east a required size discarding contents.
+   *
+   * @param num_entries.
+   */
+  void stage_realloc_no_copy(const int num_entries);
+
+  /**
+   * Realloc the staging area to be at east a required size keeping contents.
+   *
+   * @param num_entries.
+   */
+  void stage_realloc(const int num_entries);
+
+  /**
+   * Reset the zeroing index to zero.
+   */
+  void stage_zero_reset();
+
+  /**
+   * Extend the zeroed elements in the stage from the last zeroing end to a
+   * given number of entries.
+   *
+   * @param num_entries.
+   */
+  void stage_extend_zero(const int num_entries);
+
+  /**
+   * @returns Device pointer to stage DOFs.
+   */
+  REAL *stage_get_dofs_device_pointer();
 
   /**
    * Write the function to a vtkhdf file. This function must be called

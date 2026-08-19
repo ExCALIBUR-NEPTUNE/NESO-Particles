@@ -68,6 +68,9 @@ private:
   int local_rank{-1};
   std::string auto_profiling_prefix{""};
 
+  bool debug_fill_malloc_enabled{false};
+  std::byte debug_fill_malloc_value;
+
   void print_info_inner();
   std::size_t get_local_size();
 
@@ -143,6 +146,30 @@ public:
    * Free the SYCLTarget and underlying CommPair.
    */
   void free();
+
+  /**
+   * Fill all allocated memory with the provided value on allocation.
+   *
+   * @param flag When true enable filling, when false disable filling.
+   * @param value Value to fill allocated memory with. Default all bits set
+   * to 1.
+   */
+  void debug_set_malloc_fill(const bool flag,
+                             const std::byte value = ~std::byte{0});
+
+  /**
+   * @returns The current debug malloc fill value when seen as a certain type.
+   */
+  template <typename T> T debug_get_malloc_fill_value() {
+    T v;
+    unsigned char *vb = reinterpret_cast<unsigned char *>(&v);
+    unsigned char k_value =
+        std::to_integer<unsigned char>(this->debug_fill_malloc_value);
+    for (std::size_t ix = 0; ix < sizeof(T); ix++) {
+      std::fill(vb + ix, vb + ix + 1, k_value);
+    }
+    return v;
+  }
 
   /**
    * Allocate memory on device using sycl::malloc_device.

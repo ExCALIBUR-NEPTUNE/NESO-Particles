@@ -84,6 +84,128 @@ TEST(PETScBoundary2D, setup_surface_functions) {
   // f1->set_dofs(h_dofs1);
   // f1->write_vtkhdf("f1.vtkhdf");
 
+  auto mapper =
+      std::make_shared<PetscInterface::DMPlexLocalMapper>(sycl_target, mesh);
+  auto domain = std::make_shared<Domain>(mesh, mapper);
+
+  ParticleSpec particle_spec{
+      ParticleProp(Sym<REAL>("P"), ndim, true),
+      ParticleProp(Sym<REAL>("V"), 3),
+      ParticleProp(Sym<REAL>("E"), 3),
+      ParticleProp(Sym<REAL>("INTERSECTION_POINT"), ndim),
+      ParticleProp(Sym<REAL>("NORMAL"), ndim),
+      ParticleProp(Sym<INT>("METADATA"), 2),
+      ParticleProp(Sym<INT>("CELL_ID"), 1, true),
+      ParticleProp(Sym<INT>("ID"), 1)};
+
+  auto A = std::make_shared<ParticleGroup>(domain, particle_spec, sycl_target);
+
+  const int N = 10000;
+  int ncell_local = mesh->get_cell_count();
+  int ncell_global;
+
+  MPICHK(MPI_Allreduce(&ncell_local, &ncell_global, 1, MPI_INT, MPI_SUM,
+                       MPI_COMM_WORLD));
+  const int npart_per_cell = std::max(1, N / ncell_global);
+  const int rank = sycl_target->comm_pair.rank_parent;
+  const INT id_offset = rank * N;
+  std::mt19937 rng_pos(52234234 + rank);
+  std::mt19937 rng_vel(52234231 + rank);
+  std::vector<std::vector<double>> positions;
+  std::vector<int> cells;
+
+  uniform_within_dmplex_cells(mesh, npart_per_cell, positions, cells, &rng_pos);
+
+  const int N_actual = cells.size();
+  auto velocities =
+      NESO::Particles::normal_distribution(N_actual, 3, 0.0, 1.0, rng_vel);
+
+  ParticleSet initial_distribution(N_actual, particle_spec);
+
+  for (int px = 0; px < N_actual; px++) {
+    for (int dimx = 0; dimx < ndim; dimx++) {
+      initial_distribution[Sym<REAL>("P")][px][dimx] = positions[dimx][px];
+    }
+    for (int dimx = 0; dimx < 3; dimx++) {
+      initial_distribution[Sym<REAL>("V")][px][dimx] = velocities[dimx][px];
+    }
+    initial_distribution[Sym<INT>("CELL_ID")][px][0] = cells.at(px);
+    initial_distribution[Sym<INT>("ID")][px][0] = px + id_offset;
+  }
+
+  A->add_particles_local(initial_distribution);
+
+  auto lambda_set_dofs_simple = [&](auto &f) {
+    auto dofs = f->get_dofs();
+    int index = 0;
+    for (INT cx : f->cells) {
+      dofs.at(index++) = static_cast<REAL>(cx);
+    }
+    f->set_dofs(dofs);
+  };
+
+  lambda_set_dofs_simple(f1);
+  lambda_set_dofs_simple(f2);
+
+  particle_loop(
+      A,
+      [=](auto V) {
+        REAL Vmag = 0.0;
+        for (int dx = 0; dx < ndim; dx++) {
+          Vmag = V.at(dx) * V.at(dx);
+        }
+        const bool is_zero = Vmag == 0.0;
+        const REAL scaling = is_zero ? 0.0 : 1.0 / Kernel::sqrt(Vmag);
+
+        for (int dx = 0; dx < ndim; dx++) {
+          V.at(dx) = is_zero ? 1.0 : scaling * V.at(dx);
+        }
+      },
+      Access::write(Sym<REAL>("V")))
+      ->execute();
+
+  b2d->pre_integration(A);
+  particle_loop(
+      A,
+      [=](auto P, auto V) {
+        for (int dx = 0; dx < ndim; dx++) {
+          P.at(dx) += 1000.0 * V.at(dx);
+        }
+      },
+      Access::write(Sym<REAL>("P")), Access::read(Sym<REAL>("V")))
+      ->execute();
+  auto groups = b2d->post_integration(A);
+
+  b2d->function_evaluate(groups[1], Sym<REAL>("E"), 1, false, f1);
+  b2d->function_evaluate(groups[2], Sym<REAL>("E"), 1, false, f2);
+
+  particle_loop(
+      A,
+      [=](auto INTERSECTION_POINT, auto NORMAL, auto METADATA) {
+        for (int dx = 0; dx < ndim; dx++) {
+          INTERSECTION_POINT.at(dx) = -100000.0;
+          NORMAL.at(dx) = -100000.0;
+          METADATA.at(0) = -1;
+          METADATA.at(1) = -1;
+        }
+      },
+      Access::write(Sym<REAL>("INTERSECTION_POINT")),
+      Access::write(Sym<REAL>("NORMAL")), Access::write(Sym<INT>("METADATA")))
+      ->execute();
+
+  for (auto &gx : {groups[1], groups[2]}) {
+    copy_ephemeral_dat_to_particle_dat(
+        gx, Sym<REAL>("NESO_PARTICLES_BOUNDARY_INTERSECTION_POINT"),
+        Sym<REAL>("INTERSECTION_POINT"));
+    copy_ephemeral_dat_to_particle_dat(
+        gx, Sym<REAL>("NESO_PARTICLES_BOUNDARY_NORMAL"), Sym<REAL>("NORMAL"));
+    copy_ephemeral_dat_to_particle_dat(
+        gx, Sym<INT>("NESO_PARTICLES_BOUNDARY_METADATA"), Sym<INT>("METADATA"));
+  }
+
+  ErrorPropagate ep(sycl_target);
+  auto k_ep = ep.device_ptr();
+
   b2d->free();
   sycl_target->free();
   mesh->free();

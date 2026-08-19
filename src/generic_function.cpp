@@ -38,6 +38,46 @@ GenericFunction::GenericFunction(SYCLTargetSharedPtr sycl_target,
   this->cells = cells;
 }
 
+REAL *GenericFunction::get_dofs_device_pointer() { return this->d_dofs->ptr; }
+
+void GenericFunction::stage_realloc_no_copy(const int num_entries) {
+  if (num_entries > this->d_dofs_stage->size) {
+    this->d_dofs_stage->realloc_no_copy(num_entries);
+  }
+}
+
+void GenericFunction::stage_realloc(const int num_entries) {
+  if (num_entries > this->d_dofs_stage->size) {
+    this->d_dofs_stage->realloc(num_entries);
+  }
+}
+
+void GenericFunction::stage_zero_reset() { this->zeroed_stage_size = 0; }
+
+void GenericFunction::stage_extend_zero(const int num_entries) {
+
+  const int end_old = this->zeroed_stage_size;
+  const int end_new = num_entries;
+
+  if (end_new <= end_old) {
+    return;
+  }
+
+  NESOASSERT(end_new <= this->d_dofs_stage->size,
+             "Cannot zero past the end of the allocated stage buffer. Was "
+             "stage_realloc/stage_realloc_no_copy called?");
+
+  REAL *RESTRICT k_base_ptr = this->d_dofs_stage->ptr;
+  this->sycl_target->queue.fill(k_base_ptr + end_old, 0.0, end_new - end_old)
+      .wait_and_throw();
+
+  this->zeroed_stage_size = end_new;
+}
+
+REAL *GenericFunction::stage_get_dofs_device_pointer() {
+  return this->d_dofs_stage->ptr;
+}
+
 void GenericFunction::write_vtkhdf(const std::string filename) {
   NESOASSERT(false, "Error not implemented.");
 }

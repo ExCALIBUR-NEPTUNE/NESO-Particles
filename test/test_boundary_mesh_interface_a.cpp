@@ -572,3 +572,145 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
   bmi.free();
   sycl_target->free();
 }
+
+namespace {
+
+class TestGenericFunction : public GenericFunction {
+
+public:
+  template <typename... ARGS>
+  TestGenericFunction(ARGS... args) : GenericFunction(args...) {}
+
+  MAKE_GETTER_METHOD(d_dofs_stage);
+  MAKE_GETTER_METHOD(zeroed_stage_size);
+};
+
+} // namespace
+
+TEST(GenericFunction, base) {
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+  sycl_target->debug_set_malloc_fill(true);
+
+  const int ndim = 2;
+  const int cell_count = 16;
+
+  std::vector<INT> cells(cell_count);
+  std::iota(cells.begin(), cells.end(), 0);
+
+  auto f = std::make_shared<TestGenericFunction>(sycl_target, ndim, cells, "DG",
+                                                 0, -1);
+
+  ASSERT_EQ(f->sycl_target, sycl_target);
+  ASSERT_EQ(f->ndim, ndim);
+  ASSERT_EQ(f->cell_count, cell_count);
+  ASSERT_EQ(f->function_space, "DG");
+  ASSERT_EQ(f->polynomial_order, 0);
+  ASSERT_EQ(f->cells.size(), cells.size());
+  ASSERT_EQ(f->cells, cells);
+  ASSERT_EQ(f->mesh_group, -1);
+  ASSERT_EQ(f->local_dof_count, cells.size());
+  ASSERT_EQ(f->cell_dof_count, 1);
+
+  auto h_dofs = f->get_dofs();
+  ASSERT_EQ(h_dofs.size(), cell_count);
+
+  for (int ix = 0; ix < cell_count; ix++) {
+    ASSERT_EQ(h_dofs.at(ix), 0.0);
+    h_dofs.at(ix) = 3.14;
+  }
+
+  f->set_dofs(h_dofs);
+
+  sycl_target->queue
+      .memcpy(h_dofs.data(), f->get_dofs_device_pointer(),
+              cell_count * sizeof(REAL))
+      .wait_and_throw();
+
+  for (int ix = 0; ix < cell_count; ix++) {
+    ASSERT_EQ(h_dofs.at(ix), 3.14);
+  }
+
+  f->fill(6.28);
+  sycl_target->queue
+      .memcpy(h_dofs.data(), f->get_dofs_device_pointer(),
+              cell_count * sizeof(REAL))
+      .wait_and_throw();
+
+  for (int ix = 0; ix < cell_count; ix++) {
+    ASSERT_EQ(h_dofs.at(ix), 6.28);
+  }
+
+  auto d_dofs_stage = f->get_d_dofs_stage();
+
+  ASSERT_EQ(d_dofs_stage->size, cell_count);
+
+  std::vector<REAL> h_dofs_stage(cell_count);
+
+  auto lambda_stage_memcpy = [&](const std::size_t s) {
+    ASSERT_TRUE(d_dofs_stage->size >= s);
+    ASSERT_TRUE(h_dofs_stage.size() >= s);
+    sycl_target->queue
+        .memcpy(h_dofs_stage.data(), d_dofs_stage->ptr, s * sizeof(REAL))
+        .wait_and_throw();
+  };
+
+  lambda_stage_memcpy(cell_count);
+
+  for (int ix = 0; ix < cell_count; ix++) {
+    const REAL compare_value = sycl_target->debug_get_malloc_fill_value<REAL>();
+    if (std::isnan(compare_value)) {
+      ASSERT_TRUE(std::isnan(h_dofs_stage.at(ix)));
+    } else {
+      ASSERT_EQ(h_dofs_stage.at(ix), compare_value);
+    }
+  }
+
+  f->stage_zero_reset();
+  auto zeroed_stage_size = f->get_zeroed_stage_size();
+  ASSERT_EQ(zeroed_stage_size, 0);
+  f->stage_extend_zero(cell_count);
+
+  zeroed_stage_size = f->get_zeroed_stage_size();
+  ASSERT_EQ(zeroed_stage_size, cell_count);
+
+  lambda_stage_memcpy(cell_count);
+  for (int ix = 0; ix < cell_count; ix++) {
+    ASSERT_EQ(h_dofs_stage.at(ix), 0.0);
+  }
+
+  f->stage_realloc(2 * cell_count);
+  h_dofs_stage.resize(2 * cell_count);
+  lambda_stage_memcpy(2 * cell_count);
+
+  for (int ix = 0; ix < cell_count; ix++) {
+    ASSERT_EQ(h_dofs_stage.at(ix), 0.0);
+  }
+  for (int ix = 0; ix < cell_count; ix++) {
+    const REAL compare_value = sycl_target->debug_get_malloc_fill_value<REAL>();
+    if (std::isnan(compare_value)) {
+      ASSERT_TRUE(std::isnan(h_dofs_stage.at(ix + cell_count)));
+    } else {
+      ASSERT_EQ(h_dofs_stage.at(ix + cell_count), compare_value);
+    }
+  }
+
+  sycl_target->queue.fill<REAL>(d_dofs_stage->ptr, 3.14, cell_count)
+      .wait_and_throw();
+
+  f->stage_extend_zero(2 * cell_count);
+  zeroed_stage_size = f->get_zeroed_stage_size();
+  ASSERT_EQ(zeroed_stage_size, 2 * cell_count);
+
+  lambda_stage_memcpy(2 * cell_count);
+  for (int ix = 0; ix < cell_count; ix++) {
+    ASSERT_EQ(h_dofs_stage.at(ix), 3.14);
+  }
+  for (int ix = 0; ix < cell_count; ix++) {
+    ASSERT_EQ(h_dofs_stage.at(ix + cell_count), 0.0);
+  }
+
+  f->stage_realloc_no_copy(3 * cell_count);
+  ASSERT_TRUE(d_dofs_stage->size >= 3 * cell_count);
+
+  sycl_target->free();
+}

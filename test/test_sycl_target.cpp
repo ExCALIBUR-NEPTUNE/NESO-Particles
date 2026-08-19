@@ -635,3 +635,16 @@ TEST(SYCLTarget, device_selectors) {
   ASSERT_EQ(DEVICE_GPU, 1);
   ASSERT_EQ(DEVICE_CPU, -1);
 }
+
+TEST(SYCLTarget, debug_malloc_fill) {
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+  sycl_target->debug_set_malloc_fill(true);
+
+  std::uint16_t *v16 = static_cast<std::uint16_t *>(
+      sycl_target->malloc_host(sizeof(std::uint16_t)));
+
+  ASSERT_EQ(*v16, sycl_target->debug_get_malloc_fill_value<std::uint16_t>());
+
+  sycl_target->free(v16);
+  sycl_target->free();
+}

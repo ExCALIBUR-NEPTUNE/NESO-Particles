@@ -211,6 +211,10 @@ SYCLTarget::SYCLTarget(const int gpu_device, MPI_Comm comm, int local_rank)
 #ifndef NESO_PARTICLES_DISABLE_ATOMIC_SELFTEST
   this->device_limits.check_atomics_sanity(this->queue);
 #endif
+
+  if (get_env_size_t("NESO_PARTICLES_DEBUG_FILL_MALLOCS", 0)) {
+    this->debug_set_malloc_fill(true);
+  }
 }
 
 void SYCLTarget::print_device_info() {
@@ -252,6 +256,11 @@ void SYCLTarget::free() {
   this->comm_pair.free();
 }
 
+void SYCLTarget::debug_set_malloc_fill(const bool flag, const std::byte value) {
+  this->debug_fill_malloc_enabled = flag;
+  this->debug_fill_malloc_value = value;
+}
+
 void *SYCLTarget::malloc_device(const std::size_t size_bytes,
                                 const std::size_t align_bytes) {
 
@@ -264,9 +273,10 @@ void *SYCLTarget::malloc_device(const std::size_t size_bytes,
     }
   };
 
+  void *return_ptr = nullptr;
+
 #ifndef DEBUG_OOB_CHECK
-  void *ptr = lambda_alloc(size_bytes);
-  return ptr;
+  return_ptr = lambda_alloc(size_bytes);
 #else
   unsigned char *ptr =
       (unsigned char *)lambda_alloc(size_bytes + 2 * DEBUG_OOB_WIDTH);
@@ -281,8 +291,18 @@ void *SYCLTarget::malloc_device(const std::size_t size_bytes,
       .memcpy(ptr_user + size_bytes, this->ptr_bit_mask.data(), DEBUG_OOB_WIDTH)
       .wait();
 
-  return (void *)ptr_user;
+  return_ptr = (void *)ptr_user;
 #endif
+
+  if (this->debug_fill_malloc_enabled) {
+    unsigned char k_value =
+        std::to_integer<unsigned char>(this->debug_fill_malloc_value);
+
+    this->queue.fill<unsigned char>(return_ptr, k_value, size_bytes)
+        .wait_and_throw();
+  }
+
+  return return_ptr;
 }
 
 void *SYCLTarget::malloc_shared(const std::size_t size_bytes,
@@ -297,8 +317,10 @@ void *SYCLTarget::malloc_shared(const std::size_t size_bytes,
     }
   };
 
+  void *return_ptr = nullptr;
+
 #ifndef DEBUG_OOB_CHECK
-  return lambda_alloc(size_bytes);
+  return_ptr = lambda_alloc(size_bytes);
 #else
   unsigned char *ptr =
       (unsigned char *)lambda_alloc(size_bytes + 2 * DEBUG_OOB_WIDTH);
@@ -313,8 +335,18 @@ void *SYCLTarget::malloc_shared(const std::size_t size_bytes,
       .memcpy(ptr_user + size_bytes, this->ptr_bit_mask.data(), DEBUG_OOB_WIDTH)
       .wait();
 
-  return (void *)ptr_user;
+  return_ptr = (void *)ptr_user;
 #endif
+
+  if (this->debug_fill_malloc_enabled) {
+    unsigned char k_value =
+        std::to_integer<unsigned char>(this->debug_fill_malloc_value);
+
+    this->queue.fill<unsigned char>(return_ptr, k_value, size_bytes)
+        .wait_and_throw();
+  }
+
+  return return_ptr;
 }
 
 void *SYCLTarget::malloc_host(const std::size_t size_bytes,
@@ -329,8 +361,11 @@ void *SYCLTarget::malloc_host(const std::size_t size_bytes,
       return sycl::malloc_host(b, this->queue);
     }
   };
+
+  void *return_ptr = nullptr;
+
 #ifndef DEBUG_OOB_CHECK
-  return lambda_alloc(size_bytes);
+  return_ptr = lambda_alloc(size_bytes);
 #else
 
   unsigned char *ptr =
@@ -345,9 +380,19 @@ void *SYCLTarget::malloc_host(const std::size_t size_bytes,
       .memcpy(ptr_user + size_bytes, this->ptr_bit_mask.data(), DEBUG_OOB_WIDTH)
       .wait();
 
-  return (void *)ptr_user;
+  return_ptr = (void *)ptr_user;
   // return ptr;
 #endif
+
+  if (this->debug_fill_malloc_enabled) {
+    unsigned char k_value =
+        std::to_integer<unsigned char>(this->debug_fill_malloc_value);
+
+    std::fill(static_cast<unsigned char *>(return_ptr),
+              static_cast<unsigned char *>(return_ptr) + size_bytes, k_value);
+  }
+
+  return return_ptr;
 }
 
 void SYCLTarget::check_ptrs() {
