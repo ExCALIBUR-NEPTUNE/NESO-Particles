@@ -196,17 +196,7 @@ void CartesianTrajectoryIntersection::function_project_initialise(
 
   const int group = func->boundary_group;
   auto &boundary_mesh_interface = this->map_groups_boundary_interface.at(group);
-
-  auto [d_tree_root, num_accessible_geoms] =
-      boundary_mesh_interface->get_device_geom_id_to_seq();
-
-  const std::size_t tmp_buffer_size =
-      num_accessible_geoms * func->cell_dof_count;
-
-  func->stage_realloc_no_copy(tmp_buffer_size);
-  func->stage_zero_reset();
-  func->stage_extend_zero(tmp_buffer_size);
-  func->fill(0.0);
+  prepare_surface_function_project_initialise(boundary_mesh_interface, func);
 
   this->sycl_target->profile_map.end_region(r0);
 }
@@ -220,22 +210,19 @@ void CartesianTrajectoryIntersection::function_project_contribute(
       "CartesianTrajectoryIntersection", "function_project_contribute");
 
   const bool null_sub_group = particle_sub_group == nullptr;
-  const int group = func->boundary_group;
-  auto &boundary_mesh_interface = this->map_groups_boundary_interface.at(group);
+  auto &boundary_mesh_interface =
+      this->map_groups_boundary_interface.at(func->boundary_group);
 
   auto [d_tree_root, num_accessible_geoms] =
       boundary_mesh_interface->get_device_geom_id_to_seq();
 
-  const int k_num_accessible_geoms = num_accessible_geoms;
-  const auto cell_dof_count = func->cell_dof_count;
-  const int required_size = k_num_accessible_geoms * cell_dof_count;
-
-  func->stage_realloc(required_size);
-  func->stage_extend_zero(required_size);
-  REAL *k_buffer = func->stage_get_dofs_device_pointer();
+  prepare_surface_function_project_contribute(boundary_mesh_interface, func);
+  REAL *RESTRICT k_buffer = func->stage_get_dofs_device_pointer();
 
   if (!null_sub_group) {
     auto *k_tree_root = d_tree_root;
+    const auto k_num_accessible_geoms = num_accessible_geoms;
+
     NESOASSERT(particle_sub_group->contains_ephemeral_dat(
                    Sym<INT>("NESO_PARTICLES_BOUNDARY_METADATA")),
                "Boundary metadata not found on ParticleSubGroup.");
@@ -249,7 +236,10 @@ void CartesianTrajectoryIntersection::function_project_contribute(
     ErrorPropagate ep_dof(this->sycl_target);
     auto k_ep_found = ep_found.device_ptr();
     auto k_ep_dof = ep_dof.device_ptr();
-    const REAL k_inverse_width = func->mesh->inverse_cell_width_fine;
+
+    auto ndim = this->mesh->get_ndim();
+    const REAL k_inverse_width =
+        std::pow(func->mesh->inverse_cell_width_fine, ndim - 1);
 
     auto lambda_dispatch = [&](auto extract_quantity) {
       particle_loop(
@@ -296,18 +286,10 @@ void CartesianTrajectoryIntersection::function_project_contribute(
 
 void CartesianTrajectoryIntersection::function_project_finalise(
     CartesianHMeshFunctionSharedPtr func) {
-
   auto r0 = this->sycl_target->profile_map.start_region(
       "CartesianTrajectoryIntersection", "function_project_finalise");
-
-  const int group = func->boundary_group;
-  auto &boundary_mesh_interface = this->map_groups_boundary_interface.at(group);
-  boundary_mesh_interface->exchange_from_device(
-      func->stage_get_dofs_device_pointer(), func->cell_dof_count,
-      func->d_dofs->ptr);
-  func->reset_version();
-  NESOASSERT(func->version == 0, "Expected a version reset.");
-
+  prepare_surface_function_project_finalise(
+      this->map_groups_boundary_interface.at(func->boundary_group), func);
   this->sycl_target->profile_map.end_region(r0);
 }
 
@@ -336,25 +318,13 @@ void CartesianTrajectoryIntersection::function_evaluate(
       "CartesianTrajectoryIntersection", "function_evaluate");
 
   const bool null_sub_group = particle_sub_group == nullptr;
-  const int group = func->boundary_group;
-  auto &boundary_mesh_interface = this->map_groups_boundary_interface.at(group);
+  auto &boundary_mesh_interface =
+      this->map_groups_boundary_interface.at(func->boundary_group);
+
+  prepare_surface_function_evaluate(boundary_mesh_interface, func);
 
   auto [d_tree_root, num_accessible_geoms] =
       boundary_mesh_interface->get_device_geom_id_to_seq();
-
-  const auto boundary_mesh_interface_version =
-      boundary_mesh_interface->get_version_function_handle()();
-
-  // The function version is set to zero whenever the dofs are touched.
-  if (func->version < boundary_mesh_interface_version) {
-    const std::size_t tmp_buffer_size =
-        num_accessible_geoms * func->cell_dof_count;
-    func->stage_realloc_no_copy(tmp_buffer_size);
-    boundary_mesh_interface->reverse_exchange_from_device(
-        func->d_dofs->ptr, func->cell_dof_count,
-        func->stage_get_dofs_device_pointer());
-    func->version = boundary_mesh_interface_version;
-  }
 
   if (!null_sub_group) {
     REAL const *const RESTRICT k_buffer = func->stage_get_dofs_device_pointer();

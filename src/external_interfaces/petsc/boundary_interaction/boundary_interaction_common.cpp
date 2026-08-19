@@ -207,18 +207,7 @@ void BoundaryInteractionCommon::function_evaluate(
   auto [d_tree_root, num_accessible_geoms] =
       boundary_mesh_interface->get_device_geom_id_to_seq();
 
-  const auto boundary_mesh_interface_version =
-      boundary_mesh_interface->get_version_function_handle()();
-
-  // The function version is set to zero whenever the dofs are touched.
-  if (func->version < boundary_mesh_interface_version) {
-    const std::size_t tmp_buffer_size =
-        num_accessible_geoms * func->cell_dof_count;
-    func->d_dofs_stage->realloc_no_copy(tmp_buffer_size);
-    boundary_mesh_interface->reverse_exchange_from_device(
-        func->d_dofs->ptr, func->cell_dof_count, func->d_dofs_stage->ptr);
-    func->version = boundary_mesh_interface_version;
-  }
+  prepare_surface_function_evaluate(boundary_mesh_interface, func);
 
   if (!null_sub_group) {
     REAL const *const RESTRICT k_buffer = func->d_dofs_stage->ptr;

@@ -2,6 +2,67 @@
 
 namespace NESO::Particles {
 
+void prepare_surface_function_project_initialise(
+    BoundaryMeshInterfaceSharedPtr boundary_mesh_interface,
+    GenericFunctionSharedPtr func) {
+  auto [d_tree_root, num_accessible_geoms] =
+      boundary_mesh_interface->get_device_geom_id_to_seq();
+
+  const std::size_t tmp_buffer_size =
+      num_accessible_geoms * func->cell_dof_count;
+
+  func->stage_realloc_no_copy(tmp_buffer_size);
+  func->stage_zero_reset();
+  func->stage_extend_zero(tmp_buffer_size);
+  func->fill(0.0);
+}
+
+void prepare_surface_function_project_contribute(
+    BoundaryMeshInterfaceSharedPtr boundary_mesh_interface,
+    GenericFunctionSharedPtr func) {
+  auto [d_tree_root, num_accessible_geoms] =
+      boundary_mesh_interface->get_device_geom_id_to_seq();
+
+  const int k_num_accessible_geoms = num_accessible_geoms;
+  const auto cell_dof_count = func->cell_dof_count;
+  const int required_size = k_num_accessible_geoms * cell_dof_count;
+
+  func->stage_realloc(required_size);
+  func->stage_extend_zero(required_size);
+}
+
+void prepare_surface_function_project_finalise(
+    BoundaryMeshInterfaceSharedPtr boundary_mesh_interface,
+    GenericFunctionSharedPtr func) {
+  boundary_mesh_interface->exchange_from_device(
+      func->stage_get_dofs_device_pointer(), func->cell_dof_count,
+      func->d_dofs->ptr);
+  func->reset_version();
+  NESOASSERT(func->version == 0, "Expected a version reset.");
+}
+
+void prepare_surface_function_evaluate(
+    BoundaryMeshInterfaceSharedPtr boundary_mesh_interface,
+    GenericFunctionSharedPtr func) {
+
+  auto [d_tree_root, num_accessible_geoms] =
+      boundary_mesh_interface->get_device_geom_id_to_seq();
+
+  const auto boundary_mesh_interface_version =
+      boundary_mesh_interface->get_version_function_handle()();
+
+  // The function version is set to zero whenever the dofs are touched.
+  if (func->version < boundary_mesh_interface_version) {
+    const std::size_t tmp_buffer_size =
+        num_accessible_geoms * func->cell_dof_count;
+    func->stage_realloc_no_copy(tmp_buffer_size);
+    boundary_mesh_interface->reverse_exchange_from_device(
+        func->d_dofs->ptr, func->cell_dof_count,
+        func->stage_get_dofs_device_pointer());
+    func->version = boundary_mesh_interface_version;
+  }
+}
+
 void GenericFunction::reset_version() { this->version = 0; }
 
 GenericFunction::GenericFunction(SYCLTargetSharedPtr sycl_target,

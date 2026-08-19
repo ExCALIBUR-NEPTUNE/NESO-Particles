@@ -9,9 +9,10 @@ void mass_conservation_wrapper(const int ndim) {
   const int npart_cell = 4;
   const REAL dt = 0.20;
   const int Nsteps = 100;
+  const REAL cell_width = 0.2;
 
   auto [A_t, sycl_target, cell_count_t] =
-      particle_loop_create_common(npart_cell, ndim, nx, ny, nz);
+      particle_loop_create_common(npart_cell, ndim, nx, ny, nz, cell_width);
 
   auto A = A_t;
   A->add_particle_dat(Sym<REAL>("MASS"), 1);

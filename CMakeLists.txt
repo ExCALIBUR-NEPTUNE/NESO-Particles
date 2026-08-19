@@ -49,7 +49,6 @@ set(SRC_FILES
     ${SRC_DIR}/algorithms/common.cpp
     ${SRC_DIR}/algorithms/dsmc/pair_sampler_ntc.cpp
     ${SRC_DIR}/algorithms/dsmc/pair_sampler_no_replacement.cpp
-    ${SRC_DIR}/algorithms/dsmc/collision_cell_num_pairs.cpp
     ${SRC_DIR}/algorithms/dsmc/collision_cell_partition.cpp
     ${SRC_DIR}/algorithms/dsmc/collision_cell_rate_reduction.cpp
     ${SRC_DIR}/algorithms/particle_data_movement.cpp
@@ -164,7 +163,6 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/common.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/dsmc.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/cellwise_all_to_all.hpp
-    ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/collision_cell_num_pairs.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/collision_cell_partition.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/collision_cell_rate_reduction.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/pair_sampler_ntc.hpp
@@ -205,6 +203,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/ephemeral_dats.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/nd_index.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/rng/rng.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/containers/rng/rng_generation_function.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/rng/kernel_rng.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/rng/host_rng_common.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/containers/rng/host_per_particle_block_rng.hpp
@@ -350,6 +349,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/truncate_sub_group_selector.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/particle_sub_group/disjoint_union_sub_group_selector.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/nd_host_array.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/nd_host_array_impl.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/profiling.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/sycl_typedefs.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/typedefs.hpp

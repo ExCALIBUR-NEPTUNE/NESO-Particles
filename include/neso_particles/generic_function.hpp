@@ -1,15 +1,72 @@
 #ifndef _NESO_PARTICLES_GENERIC_FUNCTION_HPP_
 #define _NESO_PARTICLES_GENERIC_FUNCTION_HPP_
 
+#include "boundary/boundary_mesh_interface.hpp"
 #include "device_buffers.hpp"
 #include <string>
 
 namespace NESO::Particles {
 
+class GenericFunction;
+typedef std::shared_ptr<GenericFunction> GenericFunctionSharedPtr;
+
+/**
+ * Initialise a surface function for projection.
+ *
+ * @param boundary_mesh_interface BoundaryMeshInterface used for
+ * particle-surface intersections.
+ * @param func Function created using the BoundaryMeshInterface.
+ */
+void prepare_surface_function_project_initialise(
+    BoundaryMeshInterfaceSharedPtr boundary_mesh_interface,
+    GenericFunctionSharedPtr func);
+
+/**
+ * Prepare a surface function for projection contributions.
+ *
+ * @param boundary_mesh_interface BoundaryMeshInterface used for
+ * particle-surface intersections.
+ * @param func Function created using the BoundaryMeshInterface.
+ */
+void prepare_surface_function_project_contribute(
+    BoundaryMeshInterfaceSharedPtr boundary_mesh_interface,
+    GenericFunctionSharedPtr func);
+
+/**
+ * Finalise a surface function projection.
+ *
+ * @param boundary_mesh_interface BoundaryMeshInterface used for
+ * particle-surface intersections.
+ * @param func Function created using the BoundaryMeshInterface.
+ */
+void prepare_surface_function_project_finalise(
+    BoundaryMeshInterfaceSharedPtr boundary_mesh_interface,
+    GenericFunctionSharedPtr func);
+
+/**
+ * Communicate DOFs and prepare the staging DOFs for use in function evaluation
+ * at particle positions on a surface.
+ *
+ * @param boundary_mesh_interface BoundaryMeshInterface used for
+ * particle-surface intersections.
+ * @param func Function created using the BoundaryMeshInterface.
+ */
+void prepare_surface_function_evaluate(
+    BoundaryMeshInterfaceSharedPtr boundary_mesh_interface,
+    GenericFunctionSharedPtr func);
+
 /**
  * Generic function type to represent finite element functions.
  */
 class GenericFunction {
+
+  friend void prepare_surface_function_evaluate(
+      BoundaryMeshInterfaceSharedPtr boundary_mesh_interface,
+      GenericFunctionSharedPtr func);
+
+  friend void prepare_surface_function_project_finalise(
+      BoundaryMeshInterfaceSharedPtr boundary_mesh_interface,
+      GenericFunctionSharedPtr func);
 
 protected:
   std::shared_ptr<BufferDevice<REAL>> d_dofs;
@@ -140,7 +197,6 @@ public:
   virtual void set_dofs(std::vector<REAL> &h_dofs);
 };
 
-typedef std::shared_ptr<GenericFunction> GenericFunctionSharedPtr;
 } // namespace NESO::Particles
 
 #endif

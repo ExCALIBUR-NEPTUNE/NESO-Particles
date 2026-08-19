@@ -45,7 +45,7 @@ PairSamplerNoReplacement::PairSamplerNoReplacement(
 void PairSamplerNoReplacement::sample(
     CollisionCellPartitionSharedPtr collision_cell_partition,
     const INT species_id_a, const INT species_id_b,
-    CollisionCellNumPairsSharedPtr &map_cell_to_num_pairs) {
+    NDLocalArraySharedPtr<int, 2> &map_cell_to_num_pairs) {
 
   auto r0 = this->sycl_target->profile_map.start_region(
       "PairSamplerNoReplacement", "sample");
@@ -63,11 +63,13 @@ void PairSamplerNoReplacement::sample(
 
   NESOASSERT(map_cell_to_num_pairs != nullptr,
              "Bad number of pairs instance passed.");
-  NESOASSERT(max_num_collision_cells ==
-                 map_cell_to_num_pairs->max_num_collision_cells,
-             "Missmatch in max number of collision cells.");
-  NESOASSERT(this->num_mesh_cells == map_cell_to_num_pairs->num_mesh_cells,
+
+  auto shape = map_cell_to_num_pairs->index;
+
+  NESOASSERT(this->num_mesh_cells == shape.shape[0],
              "Missmatch in number of mesh cells.");
+  NESOASSERT(max_num_collision_cells == shape.shape[1],
+             "Missmatch in max number of collision cells.");
 
   auto d_pair_counts_ccell =
       get_resource<BufferDevice<int>, ResourceStackInterfaceBufferDevice<int>>(
@@ -96,7 +98,7 @@ void PairSamplerNoReplacement::sample(
   EventStack es;
 
   es.push(this->sycl_target->queue.memcpy(
-      k_pair_counts_ccell, map_cell_to_num_pairs->get_host_pointer(),
+      k_pair_counts_ccell, map_cell_to_num_pairs->ptr(),
       this->num_mesh_cells * max_num_collision_cells * sizeof(int)));
 
   auto k_num_collision_cells = this->d_num_collision_cells->ptr;
@@ -475,6 +477,15 @@ void PairSamplerNoReplacement::sample(
                               this->pair_mask->get_device()};
 
   this->sycl_target->profile_map.end_region(r0);
+}
+
+void PairSamplerNoReplacement::sample(
+    CollisionCellPartitionSharedPtr collision_cell_partition,
+    const INT species_id_a, const INT species_id_b,
+    NDHostArraySharedPtr<int, 2> &map_cell_to_num_pairs) {
+  auto tmp = std::make_shared<NDLocalArray<int, 2>>(this->sycl_target,
+                                                    map_cell_to_num_pairs);
+  this->sample(collision_cell_partition, species_id_a, species_id_b, tmp);
 }
 
 CellwisePairListDevice PairSamplerNoReplacement::get_pair_list() {
