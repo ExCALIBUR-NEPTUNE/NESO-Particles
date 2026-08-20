@@ -320,6 +320,130 @@ void BoundaryInteractionCommon::function_evaluate(
   this->sycl_target->profile_map.end_region(r0);
 }
 
+void BoundaryInteractionCommon::function_project(
+    ParticleSubGroupSharedPtr particle_sub_group, Sym<REAL> sym,
+    const int component, const bool is_ephemeral,
+    DMPlexFunctionSharedPtr func) {
+
+  auto r0 = this->sycl_target->profile_map.start_region(
+      "BoundaryInteractionCommon", "function_project");
+
+  this->function_project_initialise(func);
+  this->function_project_contribute(particle_sub_group, sym, component,
+                                    is_ephemeral, func);
+  this->function_project_finalise(func);
+
+  this->sycl_target->profile_map.end_region(r0);
+}
+
+void BoundaryInteractionCommon::function_project_initialise(
+    DMPlexFunctionSharedPtr func) {
+
+  auto r0 = this->sycl_target->profile_map.start_region(
+      "BoundaryInteractionCommon", "function_project_initialise");
+
+  const int group = func->mesh_group;
+  auto &boundary_mesh_interface = this->map_groups_boundary_interface.at(group);
+  prepare_surface_function_project_initialise(boundary_mesh_interface, func);
+
+  this->sycl_target->profile_map.end_region(r0);
+}
+
+void BoundaryInteractionCommon::function_project_contribute(
+    ParticleSubGroupSharedPtr particle_sub_group, Sym<REAL> sym,
+    const int component, const bool is_ephemeral,
+    DMPlexFunctionSharedPtr func) {
+
+  auto r0 = this->sycl_target->profile_map.start_region(
+      "BoundaryInteractionCommon", "function_project_contribute");
+
+  const bool null_sub_group = particle_sub_group == nullptr;
+  auto &boundary_mesh_interface =
+      this->map_groups_boundary_interface.at(func->mesh_group);
+
+  auto [d_tree_root, num_accessible_geoms] =
+      boundary_mesh_interface->get_device_geom_id_to_seq();
+
+  prepare_surface_function_project_contribute(boundary_mesh_interface, func);
+  REAL *RESTRICT k_buffer = func->stage_get_dofs_device_pointer();
+
+  NESOASSERT(func->function_space == "DG", "Only implemented for DG0");
+  NESOASSERT(func->polynomial_order == 0, "Only implemented for DG0");
+
+  if (!null_sub_group) {
+    auto *k_tree_root = d_tree_root;
+    const auto k_num_accessible_geoms = num_accessible_geoms;
+
+    NESOASSERT(particle_sub_group->contains_ephemeral_dat(
+                   Sym<INT>("NESO_PARTICLES_BOUNDARY_METADATA")),
+               "Boundary metadata not found on ParticleSubGroup.");
+    NESOASSERT(
+        (get_particle_group(particle_sub_group)->contains_dat(sym) &&
+         (!is_ephemeral)) ||
+            (particle_sub_group->contains_ephemeral_dat(sym) && is_ephemeral),
+        "Source particle data not found.");
+
+    ErrorPropagate ep_found(this->sycl_target);
+    ErrorPropagate ep_dof(this->sycl_target);
+    auto k_ep_found = ep_found.device_ptr();
+    auto k_ep_dof = ep_dof.device_ptr();
+
+    auto ndim = this->mesh->get_ndim();
+
+    nprint("TODO: inverse cell volume");
+
+    auto lambda_dispatch = [&](auto extract_quantity) {
+      particle_loop(
+          "BoundaryInteractionCommon::function_project_contribute",
+          particle_sub_group,
+          [=](auto BOUNDARY_METADATA, auto SYM) {
+            if (k_tree_root != nullptr) {
+              const INT *index;
+              bool found = false;
+              found =
+                  k_tree_root->get(BOUNDARY_METADATA.at_ephemeral(1), &index);
+#ifndef NDEBUG
+              NESO_KERNEL_ASSERT(found, k_ep_found);
+              const bool bad_index =
+                  ((*index) < 0) || ((*index) >= k_num_accessible_geoms);
+              NESO_KERNEL_ASSERT(!bad_index, k_ep_dof);
+#endif
+              if (found) {
+                const REAL value = extract_quantity(SYM, component);
+                atomic_fetch_add(&k_buffer[*index], value);
+              }
+            }
+          },
+          Access::read(Sym<INT>("NESO_PARTICLES_BOUNDARY_METADATA")),
+          Access::read(sym))
+          ->execute();
+    };
+
+    if (is_ephemeral) {
+      lambda_dispatch([](auto SYM, const int component) {
+        return SYM.at_ephemeral(component);
+      });
+    } else {
+      lambda_dispatch(
+          [](auto SYM, const int component) { return SYM.at(component); });
+    }
+    NESOASSERT(!ep_found.get_flag(),
+               "Failed to find index for hit geometry object.");
+    NESOASSERT(!ep_dof.get_flag(), "Bad index for hit geometry object.");
+  }
+
+  this->sycl_target->profile_map.end_region(r0);
+}
+
+void BoundaryInteractionCommon::function_project_finalise(
+    DMPlexFunctionSharedPtr func) {
+  auto r0 = this->sycl_target->profile_map.start_region(
+      "BoundaryInteractionCommon", "function_project_finalise");
+  prepare_surface_function_project_finalise(
+      this->map_groups_boundary_interface.at(func->mesh_group), func);
+  this->sycl_target->profile_map.end_region(r0);
+}
+
 } // namespace NESO::Particles::PetscInterface
 
 #endif

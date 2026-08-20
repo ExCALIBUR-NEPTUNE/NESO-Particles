@@ -430,6 +430,84 @@ public:
                                           const int polynomial_order);
 
   /**
+   * Project particle data onto a function defined on the surface. Uses the
+   * standardarised boundary interface on the sub group. This function call is
+   * equivalent to calling:
+   *
+   * function_project_initialise(func);
+   * function_project_contribute(particle_sub_group, sym, component,
+   *                             is_ephemeral, func);
+   * function_project_finalise(func);
+   *
+   * Must be called collectively on the communicator.
+   *
+   * @param particle_sub_group ParticleSubGroup to project onto function.
+   * @param sym Sym<REAL> Particle property to use as source weights.
+   * @param component Component of particle property to use as source weights.
+   * @param is_ephemeral Indicate if the particle weights are in an EphemeralDat
+   * or ParticleDat.
+   * @param func Function to project onto.
+   */
+  void function_project(ParticleSubGroupSharedPtr particle_sub_group,
+                        Sym<REAL> sym, const int component,
+                        const bool is_ephemeral, DMPlexFunctionSharedPtr func);
+
+  /**
+   * A function_project call is equivalent to calling:
+   *
+   * function_project_initialise(func);
+   * function_project_contribute(particle_sub_group, sym, component,
+   *                             is_ephemeral, func);
+   * function_project_finalise(func);
+   *
+   * This method initialises the destination function for projection. Must be
+   * called collectively on the communicator.
+   *
+   * @param func Function to project onto.
+   */
+  void function_project_initialise(DMPlexFunctionSharedPtr func);
+
+  /**
+   * A function_project call is equivalent to calling:
+   *
+   * function_project_initialise(func);
+   * function_project_contribute(particle_sub_group, sym, component,
+   *                             is_ephemeral, func);
+   * function_project_finalise(func);
+   *
+   * This method adds the contributions from the particles in the
+   * particle_sub_group to the projection. Must be called collectively on the
+   * communicator.
+   *
+   * @param particle_sub_group ParticleSubGroup to project onto function.
+   * @param sym Sym<REAL> Particle property to use as source weights.
+   * @param component Component of particle property to use as source weights.
+   * @param is_ephemeral Indicate if the particle weights are in an EphemeralDat
+   * or ParticleDat.
+   * @param func Function to project onto.
+   */
+  void function_project_contribute(ParticleSubGroupSharedPtr particle_sub_group,
+                                   Sym<REAL> sym, const int component,
+                                   const bool is_ephemeral,
+                                   DMPlexFunctionSharedPtr func);
+
+  /**
+   * A function_project call is equivalent to calling:
+   *
+   * function_project_initialise(func);
+   * function_project_contribute(particle_sub_group, sym, component,
+   *                             is_ephemeral, func);
+   * function_project_finalise(func);
+   *
+   * This method must be called after all contributions to the projection have
+   * been made with function_project_contribute. Must be called collectively on
+   * the communicator.
+   *
+   * @param func Function to project onto.
+   */
+  void function_project_finalise(DMPlexFunctionSharedPtr func);
+
+  /**
    * Evaluate particle data from a function defined on the surface. Uses the
    * standardarised boundary interface on the sub group. Must be called
    * collectively on the communicator.
