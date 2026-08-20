@@ -1,6 +1,7 @@
 #ifndef _NESO_PARTICLES_PETSC_BOUNDARY_INTERACTION_BOUNDARY_INTERACTION_COMMON_HPP_
 #define _NESO_PARTICLES_PETSC_BOUNDARY_INTERACTION_BOUNDARY_INTERACTION_COMMON_HPP_
 
+#include "../../../algorithms/unseen_value_extractor.hpp"
 #include "../../../containers/blocked_binary_tree.hpp"
 #include "../../../loop/particle_loop_functions.hpp"
 #include "../../../particle_sub_group/particle_sub_group.hpp"
@@ -37,6 +38,11 @@ protected:
   std::map<int, std::vector<INT>> map_group_to_petsc_indices;
   std::map<int, std::shared_ptr<BoundaryMeshInterface>>
       map_groups_boundary_interface;
+  std::map<int, std::shared_ptr<UnseenValueExtractor>>
+      map_groups_unseen_value_extractor;
+
+  // Map from edge global point to owning rank
+  std::map<PetscInt, int> map_global_point_to_rank;
 
   void prepare_particle_group(ParticleGroupSharedPtr particle_group);
 
@@ -337,6 +343,15 @@ protected:
       std::map<PetscInt, std::vector<PetscInt>> &boundary_groups,
       std::optional<Sym<REAL>> previous_position_sym = std::nullopt);
 
+  [[nodiscard]] virtual std::map<PetscInt, ParticleSubGroupSharedPtr>
+  post_integration_dimension(std::shared_ptr<ParticleGroup> particles) = 0;
+
+  [[nodiscard]] virtual std::map<PetscInt, ParticleSubGroupSharedPtr>
+  post_integration_dimension(std::shared_ptr<ParticleSubGroup> particles) = 0;
+
+  void extend_boundary_interfaces(
+      std::map<PetscInt, ParticleSubGroupSharedPtr> &groups);
+
 public:
   virtual ~BoundaryInteractionCommon() = default;
 
@@ -367,8 +382,8 @@ public:
    * constructor, to a ParticleSubGroup of particles which crossed the boundary
    * elements which form the boundary group.
    */
-  [[nodiscard]] virtual std::map<PetscInt, ParticleSubGroupSharedPtr>
-  post_integration(std::shared_ptr<ParticleGroup> particles) = 0;
+  [[nodiscard]] std::map<PetscInt, ParticleSubGroupSharedPtr>
+  post_integration(std::shared_ptr<ParticleGroup> particles);
 
   /**
    * Call after updating to find particles whose trajectories intersect the
@@ -380,8 +395,8 @@ public:
    * constructor, to a ParticleSubGroup of particles which crossed the boundary
    * elements which form the boundary group.
    */
-  [[nodiscard]] virtual std::map<PetscInt, ParticleSubGroupSharedPtr>
-  post_integration(std::shared_ptr<ParticleSubGroup> particles) = 0;
+  [[nodiscard]] std::map<PetscInt, ParticleSubGroupSharedPtr>
+  post_integration(std::shared_ptr<ParticleSubGroup> particles);
 
   /**
    * This method should be called with a collection of particles prior to

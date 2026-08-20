@@ -1,5 +1,6 @@
 #ifdef NESO_PARTICLES_PETSC
 
+#include <neso_particles/boundary/boundary_interaction_specification.hpp>
 #include <neso_particles/common_impl.hpp>
 #include <neso_particles/communication/communication_utility.hpp>
 #include <neso_particles/external_interfaces/petsc/boundary_interaction/boundary_interaction_common.hpp>
@@ -67,13 +68,17 @@ BoundaryInteractionCommon::BoundaryInteractionCommon(
 
       auto &labeled_face_points = face_sets[lx];
       for (const INT fx : labeled_face_points) {
-        tmp_face_cells.push_back(fx);
+        const PetscInt facet_global_id =
+            this->mesh->dmh->get_point_global_index(fx);
+        tmp_face_cells.push_back(facet_global_id);
       }
     }
 
     this->map_groups_boundary_interface[bx.first] =
         std::make_shared<BoundaryMeshInterface>(mesh->get_comm(), sycl_target,
                                                 tmp_face_cells);
+    this->map_groups_unseen_value_extractor[bx.first] =
+        std::make_shared<UnseenValueExtractor>(this->sycl_target);
   }
 
   auto assign_sym = [=](auto &output_sym, auto &input_sym, auto default_sym) {
@@ -112,6 +117,59 @@ BoundaryInteractionCommon::BoundaryInteractionCommon(
       std::make_unique<BufferDevice<int>>(this->sycl_target, h_cell_bounds);
   this->dh_mh_cells =
       std::make_unique<BufferDeviceHost<INT>>(this->sycl_target, 1024);
+}
+
+void BoundaryInteractionCommon::extend_boundary_interfaces(
+    std::map<PetscInt, ParticleSubGroupSharedPtr> &groups) {
+
+  std::map<INT, std::vector<std::pair<int, INT>>> new_potentialy_hit_geoms;
+  int new_geoms_exist = 0;
+  for (const auto &boundary_group : this->boundary_groups) {
+    const auto group_id = boundary_group.first;
+
+    // Does this rank actually have any particles hitting that boundary group?
+    std::set<INT> new_geoms;
+    if (groups.count(group_id)) {
+      new_geoms = this->map_groups_unseen_value_extractor.at(group_id)->extract(
+          groups.at(group_id),
+          BoundaryInteractionSpecification::intersection_metadata, 1, true);
+    }
+
+    new_potentialy_hit_geoms[group_id].reserve(new_geoms.size());
+    for (auto &geomx : new_geoms) {
+      const int owning_rank = this->map_global_point_to_rank.at(geomx);
+      new_potentialy_hit_geoms.at(group_id).push_back({owning_rank, geomx});
+      new_geoms_exist = 1;
+    }
+  }
+
+  int global_new_geoms_exist = 0;
+  MPICHK(MPI_Allreduce(&new_geoms_exist, &global_new_geoms_exist, 1, MPI_INT,
+                       MPI_MAX, this->mesh->get_comm()));
+
+  if (global_new_geoms_exist) {
+    for (const auto &boundary_group : this->boundary_groups) {
+      const auto group_id = boundary_group.first;
+      this->map_groups_boundary_interface.at(group_id)->extend_exchange_pattern(
+          new_potentialy_hit_geoms.at(group_id));
+    }
+  }
+}
+
+std::map<PetscInt, ParticleSubGroupSharedPtr>
+BoundaryInteractionCommon::post_integration(
+    std::shared_ptr<ParticleGroup> particles) {
+  auto groups = this->post_integration_dimension(particles);
+  this->extend_boundary_interfaces(groups);
+  return groups;
+}
+
+std::map<PetscInt, ParticleSubGroupSharedPtr>
+BoundaryInteractionCommon::post_integration(
+    std::shared_ptr<ParticleSubGroup> particles) {
+  auto groups = this->post_integration_dimension(particles);
+  this->extend_boundary_interfaces(groups);
+  return groups;
 }
 
 void BoundaryInteractionCommon::pre_integration(

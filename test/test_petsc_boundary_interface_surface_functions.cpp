@@ -206,6 +206,20 @@ TEST(PETScBoundary2D, setup_surface_functions) {
   ErrorPropagate ep(sycl_target);
   auto k_ep = ep.device_ptr();
 
+  particle_loop(
+      A,
+      [=](auto METADATA, auto E) {
+        const INT geom_id = METADATA.at(1);
+        const REAL geom_id_real = geom_id;
+
+        NESO_KERNEL_ASSERT(geom_id > -1, k_ep);
+        NESO_KERNEL_ASSERT(geom_id_real == E.at(1), k_ep);
+      },
+      Access::read(Sym<INT>("METADATA")), Access::read(Sym<REAL>("E")))
+      ->execute();
+
+  ASSERT_FALSE(ep.get_flag());
+
   b2d->free();
   sycl_target->free();
   mesh->free();

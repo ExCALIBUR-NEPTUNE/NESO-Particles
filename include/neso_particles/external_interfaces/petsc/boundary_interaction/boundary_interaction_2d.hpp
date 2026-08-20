@@ -69,8 +69,8 @@ protected:
   // normal vector.
   static constexpr int ncomp_real = 2 * 2 + 2;
 
-  // label id, global edge point index
-  static constexpr int ncomp_int = 2;
+  // label id, global edge point index, owning rank
+  static constexpr int ncomp_int = 3;
 
   static constexpr REAL padding = 1.0e-8;
 
@@ -268,6 +268,13 @@ protected:
     return m;
   }
 
+  [[nodiscard]] virtual std::map<PetscInt, ParticleSubGroupSharedPtr>
+  post_integration_dimension(std::shared_ptr<ParticleGroup> particles) override;
+
+  [[nodiscard]] virtual std::map<PetscInt, ParticleSubGroupSharedPtr>
+  post_integration_dimension(
+      std::shared_ptr<ParticleSubGroup> particles) override;
+
 public:
   virtual ~BoundaryInteraction2D() = default;
 
@@ -287,32 +294,6 @@ public:
    * Free the instance. Must be called. Collective on the communicator.
    */
   virtual void free() override;
-
-  /**
-   * Call after updating to find particles whose trajectories intersect the
-   * DMPlex boundary.
-   *
-   * @param particles Collection of particles, either a ParticleGroup or
-   * ParticleSubGroup, to identify trajectory-boundary intersections of.
-   * @returns Map from boundary groups ids, which were passed in the
-   * constructor, to a ParticleSubGroup of particles which crossed the boundary
-   * elements which form the boundary group.
-   */
-  [[nodiscard]] virtual std::map<PetscInt, ParticleSubGroupSharedPtr>
-  post_integration(std::shared_ptr<ParticleGroup> particles) override;
-
-  /**
-   * Call after updating to find particles whose trajectories intersect the
-   * DMPlex boundary.
-   *
-   * @param particles Collection of particles, either a ParticleGroup or
-   * ParticleSubGroup, to identify trajectory-boundary intersections of.
-   * @returns Map from boundary groups ids, which were passed in the
-   * constructor, to a ParticleSubGroup of particles which crossed the boundary
-   * elements which form the boundary group.
-   */
-  [[nodiscard]] virtual std::map<PetscInt, ParticleSubGroupSharedPtr>
-  post_integration(std::shared_ptr<ParticleSubGroup> particles) override;
 
   /**
    * Create an instance of the class for a particular mesh. This constructor

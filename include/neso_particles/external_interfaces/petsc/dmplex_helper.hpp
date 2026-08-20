@@ -423,6 +423,7 @@ public:
 
   /**
    * @returns Map from face sets int label to DMPlex points with that label.
+   * Only returns points which are owned by the calling MPI rank.
    */
   std::map<PetscInt, std::vector<PetscInt>> get_face_sets();
 

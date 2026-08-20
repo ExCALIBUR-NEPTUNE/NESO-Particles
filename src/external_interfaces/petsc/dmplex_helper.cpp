@@ -1104,9 +1104,15 @@ std::map<PetscInt, std::vector<PetscInt>> DMPlexHelper::get_face_sets() {
 
   std::map<PetscInt, std::vector<PetscInt>> map;
   for (PetscInt px = points_start; px < points_end; px++) {
-    PetscInt value;
-    PETSCCHK(DMLabelGetValue(face_sets_label, px, &value));
-    map[value].push_back(px);
+
+    // Only return facets which this rank owns for the case when the face label
+    // includes internal faces.
+    const PetscInt global_index = internal_get_point_global_index(px);
+    if (px >= 0) {
+      PetscInt value;
+      PETSCCHK(DMLabelGetValue(face_sets_label, px, &value));
+      map[value].push_back(px);
+    }
   }
 
   return map;
