@@ -35,11 +35,11 @@ std::vector<VTK::UnstructuredCell> DMPlexProjectEvaluateDG::get_vtk_data() {
       get_resource<BufferHost<REAL>, ResourceStackInterfaceBufferHost<REAL>>(
           sycl_target->resource_stack_map, ResourceStackKeyBufferHost<REAL>{},
           sycl_target);
-  h_data->realloc_no_copy(cell_count * ncomp);
+  h_data->realloc_no_copy(cell_count * stride);
 
   this->sycl_target->queue
       .memcpy(h_data->ptr, this->cdc_project->device_ptr(),
-              cell_count * ncomp * sizeof(REAL))
+              cell_count * stride * sizeof(REAL))
       .wait_and_throw();
 
   for (int cellx = 0; cellx < cell_count; cellx++) {
