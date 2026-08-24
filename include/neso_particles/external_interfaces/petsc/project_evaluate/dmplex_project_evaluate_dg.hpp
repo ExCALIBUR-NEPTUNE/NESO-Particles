@@ -20,6 +20,7 @@ protected:
   std::shared_ptr<CellDatConst<REAL>> cdc_volumes;
   DMPlexInterfaceSharedPtr mesh;
   SYCLTargetSharedPtr sycl_target;
+  int ncomp_active{0};
 
   void check_setup();
   void check_ncomp(const int ncomp);
@@ -31,6 +32,7 @@ protected:
     auto dat = particle_group->get_dat(sym);
     const int ncomp = dat->ncomp;
     this->check_ncomp(ncomp);
+    this->ncomp_active = ncomp;
 
     // DG0 projection onto the CellDatConst
     this->cdc_project->fill(0.0);

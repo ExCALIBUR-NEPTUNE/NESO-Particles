@@ -188,7 +188,8 @@ ParticleSetSharedPtr H5Part::read(ParticleSpec &particle_spec, INT step,
 
     auto lambda_read_data = [&](const std::string name, const auto sym,
                                 auto *h_ptr) {
-      hid_t dset = H5Dopen(group_step, name.c_str(), H5P_DEFAULT);
+      hid_t dset;
+      H5CHK(dset = H5Dopen(group_step, name.c_str(), H5P_DEFAULT));
       H5CHK(H5Dread(dset, memtypeid(sym), memspace, filespace, dxpl, h_ptr));
       H5CHK(H5Dclose(dset));
     };
