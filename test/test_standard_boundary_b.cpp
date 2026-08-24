@@ -262,7 +262,6 @@ TEST(CartesianTrajectoryIntersection, offsets_3d) {
   A->domain->mesh->free();
 }
 
-
 TEST(CartesianTrajectoryIntersection, shallow_intersection_3d) {
 
   const int ncell_x = 12;
@@ -288,7 +287,13 @@ TEST(CartesianTrajectoryIntersection, shallow_intersection_3d) {
           boundary_groups, 1.0e-10);
   cartesian_trajectory_intersection->prepare_particle_group(A);
 
-
+  {
+    auto v = std::dynamic_pointer_cast<CartesianHMesh>(A->domain->mesh)
+                 ->get_vtk_cell_data();
+    VTK::VTKHDF vtkhdf("mesh.vtkhdf", A->domain->mesh->get_comm());
+    vtkhdf.write(v);
+    vtkhdf.close();
+  }
 
   {
     auto aa = particle_sub_group(
@@ -298,45 +303,50 @@ TEST(CartesianTrajectoryIntersection, shallow_intersection_3d) {
     A->remove_particles(aa);
     ASSERT_EQ(A->get_npart_local(), 1);
   }
-  
+
   particle_loop(
-    A,
-    [=](auto P){
-      P.at(0) = 1.0;
-      P.at(1) = 1.0;
-      P.at(2) = 1e-14;
-    },
-    Access::write(Sym<REAL>("P"))
-  )->execute();
+      A,
+      [=](auto P) {
+        P.at(0) = 1.0;
+        P.at(1) = 1.0;
+        P.at(2) = 1e-14;
+      },
+      Access::write(Sym<REAL>("P")))
+      ->execute();
 
   cartesian_trajectory_intersection->pre_integration(A);
 
-  A->print(Sym<REAL>("P"), Sym<REAL>("NESO_PARTICLES_CART_H_MESH_PREVIOUS_POS"));
+  A->print(Sym<REAL>("P"),
+           Sym<REAL>("NESO_PARTICLES_CART_H_MESH_PREVIOUS_POS"));
 
-   particle_loop(
-    A,
-    [=](auto P){
-      P.at(0) = 1.0;
-      P.at(1) = -1.0;
-      P.at(2) = -1.0e-14;
-    },
-    Access::write(Sym<REAL>("P"))
-  )->execute(); 
+  particle_loop(
+      A,
+      [=](auto P) {
+        P.at(0) = 1.0;
+        P.at(1) = -1.0;
+        P.at(2) = -1.0e-14;
+      },
+      Access::write(Sym<REAL>("P")))
+      ->execute();
 
+  A->print(Sym<REAL>("P"),
+           Sym<REAL>("NESO_PARTICLES_CART_H_MESH_PREVIOUS_POS"));
 
+  auto groups = cartesian_trajectory_intersection->post_integration(A);
 
-  A->print(Sym<REAL>("P"), Sym<REAL>("NESO_PARTICLES_CART_H_MESH_PREVIOUS_POS"));
-
-  auto groups =
-      cartesian_trajectory_intersection->post_integration(A);
-
-
-
-
-  for(auto & gx : groups){
-    nprint(gx.first, gx.second->get_npart_local());
+  {
+    std::vector<VTK::UnstructuredCell> v;
+    get_vtk_trajectory_line(
+        A, Sym<REAL>("P"), Sym<REAL>("NESO_PARTICLES_CART_H_MESH_PREVIOUS_POS"),
+        v);
+    VTK::VTKHDF vtkhdf("traj.vtkhdf", A->domain->mesh->get_comm());
+    vtkhdf.write(v);
+    vtkhdf.close();
   }
 
+  for (auto &gx : groups) {
+    nprint(gx.first, gx.second->get_npart_local());
+  }
 
   cartesian_trajectory_intersection->free();
   sycl_target->free();
