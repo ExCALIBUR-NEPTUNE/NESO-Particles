@@ -780,12 +780,14 @@ TEST(PETSc, dmplex_project_simple_dg0) {
 
   {
     auto d = dg0->get_vtk_data();
+    std::vector<REAL> h_dofs;
+    dg0->get_dofs(2, h_dofs);
+    ASSERT_EQ(h_dofs.size(), cell_count * 2);
 
-    std::string filename = get_test_root_file("dg0.vtkhdf");
-    VTK::VTKHDF v(filename, mesh->get_comm());
-    v.write(d);
-    v.close();
-    nprint("TODO read back data");
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      ASSERT_EQ(d.at(cellx).cell_data["value_0"], h_dofs.at(cellx * 2));
+      ASSERT_EQ(d.at(cellx).cell_data["value_1"], h_dofs.at(cellx * 2 + 1));
+    }
   }
 
   std::vector<REAL> h_project2;
