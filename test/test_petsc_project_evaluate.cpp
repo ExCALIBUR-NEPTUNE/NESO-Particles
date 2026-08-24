@@ -777,6 +777,17 @@ TEST(PETSc, dmplex_project_simple_dg0) {
 
   // check for 2 components
   dg0->project(A, Sym<REAL>("Q2"));
+
+  {
+    auto d = dg0->get_vtk_data();
+
+    std::string filename = get_test_root_file("dg0.vtkhdf");
+    VTK::VTKHDF v(filename, mesh->get_comm());
+    v.write(d);
+    v.close();
+    nprint("TODO read back data");
+  }
+
   std::vector<REAL> h_project2;
   dg0->get_dofs(2, h_project2);
   ASSERT_EQ(h_project2.size(), cell_count * 2);

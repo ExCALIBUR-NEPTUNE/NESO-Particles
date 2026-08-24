@@ -25,10 +25,29 @@ std::vector<VTK::UnstructuredCell> DMPlexProjectEvaluateDG::get_vtk_data() {
   std::vector<VTK::UnstructuredCell> data =
       this->mesh->dmh->get_vtk_cell_data();
   const int ndim = mesh->get_ndim();
+  const int ncomp = this->ncomp_active;
+
+  auto h_data =
+      get_resource<BufferHost<REAL>, ResourceStackInterfaceBufferHost<REAL>>(
+          sycl_target->resource_stack_map, ResourceStackKeyBufferHost<REAL>{},
+          sycl_target);
+  h_data->realloc_no_copy(cell_count * ncomp);
+
+  this->sycl_target->queue
+      .memcpy(h_data->ptr, this->cdc_project->device_ptr(),
+              cell_count * ncomp * sizeof(REAL))
+      .wait_and_throw();
+
   for (int cellx = 0; cellx < cell_count; cellx++) {
-    const auto cell_value = this->cdc_project->get_value(cellx, 0, 0);
-    data.at(cellx).cell_data["value"] = cell_value;
+    for (int cx = 0; cx < ncomp; cx++) {
+      const REAL cell_value = h_data->ptr[cellx * ncomp + cx];
+      data.at(cellx).cell_data["value_" + std::to_string(cx)] = cell_value;
+    }
   }
+
+  restore_resource(sycl_target->resource_stack_map,
+                   ResourceStackKeyBufferHost<REAL>{}, h_data);
+
   return data;
 }
 
@@ -126,6 +145,7 @@ void DMPlexProjectEvaluateDG::set_dofs(const int ncomp,
                                        const std::vector<REAL> &dofs) {
   if (ncomp > 0) {
     this->check_ncomp(ncomp);
+    this->ncomp_active = ncomp;
 
     const int ncells = this->cdc_project->ncells;
     const int ncomp_dat = this->cdc_project->nrow;

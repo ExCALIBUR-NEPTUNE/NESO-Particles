@@ -4,13 +4,59 @@
 
 namespace NESO::Particles::VTK {
 
+int get_num_vertices(CellType t) {
+  switch (t) {
+  case point:
+    return 1;
+  case line:
+    return 2;
+  case triangle:
+    return 3;
+  case quadrilateral:
+    return 4;
+  case tetrahedron:
+    return 4;
+  case pyramid:
+    return 5;
+  case wedge:
+    return 6;
+  case hex:
+    return 8;
+  default:
+    NESOASSERT(false, "Bad type passed.");
+    return -1;
+  }
+}
+
 VTKHDF::VTKHDF(std::string filename, MPI_Comm comm, std::string dataset_type)
-    : comm(comm), is_closed(true), step(0), dataset_type(dataset_type) {
+    : filename(filename), comm(comm), is_closed(true), step(0),
+      dataset_type(dataset_type) {
 
   if (comm != MPI_COMM_NULL) {
-
     MPICHK(MPI_Comm_rank(this->comm, &this->rank));
     MPICHK(MPI_Comm_size(this->comm, &this->size));
+  }
+}
+
+void VTKHDF::close() {
+  if ((!this->is_closed) && (this->comm != MPI_COMM_NULL)) {
+    H5CHK(H5Gclose(this->root));
+    H5CHK(H5Fclose(this->file_id));
+    H5CHK(H5Pclose(this->plist_id));
+    this->is_closed = true;
+  }
+};
+
+void VTKHDF::write(std::vector<UnstructuredCell> &data,
+                   std::set<std::string> point_data_keys,
+                   std::set<std::string> cell_data_keys) {
+  NESOASSERT(this->dataset_type == "UnstructuredGrid",
+             "Attempting to write unstructured grid data to a file which is "
+             "not set up for unstructured grid data.");
+
+  NESOASSERT(this->is_closed,
+             "Expected file to be closed before call to write.");
+  if (this->comm != MPI_COMM_NULL) {
 
     this->plist_id = H5Pcreate(H5P_FILE_ACCESS);
     H5CHK(H5Pset_fapl_mpio(this->plist_id, this->comm, MPI_INFO_NULL));
@@ -59,26 +105,6 @@ VTKHDF::VTKHDF(std::string filename, MPI_Comm comm, std::string dataset_type)
       H5CHK(H5Sclose(dataspace));
       H5CHK(H5Pclose(property));
     }
-  }
-}
-
-void VTKHDF::close() {
-  if (this->comm != MPI_COMM_NULL) {
-    H5CHK(H5Gclose(this->root));
-    H5CHK(H5Fclose(this->file_id));
-    H5CHK(H5Pclose(this->plist_id));
-    this->is_closed = true;
-  }
-};
-
-void VTKHDF::write(std::vector<UnstructuredCell> &data,
-                   std::set<std::string> point_data_keys,
-                   std::set<std::string> cell_data_keys) {
-  NESOASSERT(this->dataset_type == "UnstructuredGrid",
-             "Attempting to write unstructured grid data to a file which is "
-             "not set up for unstructured grid data.");
-
-  if (this->comm != MPI_COMM_NULL) {
 
     int npoint_local = 0;
     int ncell_local = 0;
@@ -207,6 +233,120 @@ void VTKHDF::write(std::vector<UnstructuredCell> &data,
 
     H5CHK(H5Gclose(point_data_group));
     H5CHK(H5Gclose(cell_data_group));
+  }
+}
+
+void VTKHDF::read(const int num_cells, std::vector<UnstructuredCell> &data,
+                  std::set<std::string> point_data_keys,
+                  std::set<std::string> cell_data_keys) {
+
+  if (this->comm != MPI_COMM_NULL) {
+
+    if (data.size() != num_cells) {
+      data.resize(num_cells);
+    }
+
+    NESOASSERT(this->is_closed, "Expected file to be closed.");
+    this->plist_id = H5Pcreate(H5P_FILE_ACCESS);
+    H5CHK(H5Pset_fapl_mpio(this->plist_id, this->comm, MPI_INFO_NULL));
+    H5CHK(this->file_id =
+              H5Fopen(this->filename.c_str(), H5F_ACC_RDONLY, this->plist_id));
+    this->is_closed = false;
+
+    H5CHK(this->root = H5Gopen(this->file_id, "VTKHDF", H5P_DEFAULT));
+
+    int offset = 0;
+    MPICHK(MPI_Scan(&num_cells, &offset, 1, MPI_INT, MPI_SUM, this->comm));
+    int total_num_cells = offset;
+    MPICHK(MPI_Bcast(&total_num_cells, 1, MPI_INT, this->size - 1, this->comm));
+    offset -= num_cells;
+    const int cell_start = offset;
+    const int cell_end = cell_start + num_cells;
+
+    // For each cell read the cell type - this determines the number of
+    // vertices.
+    std::vector<int> types(num_cells);
+    this->read_dataset(this->root, total_num_cells, offset, num_cells,
+                       H5T_NATIVE_INT, "Types", types);
+    int num_vertices_local = 0;
+    for (int cellx = 0; cellx < num_cells; cellx++) {
+      const auto t = static_cast<VTK::CellType>(types[cellx]);
+      data[cellx].cell_type = t;
+      num_vertices_local += get_num_vertices(t);
+    }
+
+    int vertex_offset = 0;
+    MPICHK(MPI_Scan(&num_vertices_local, &vertex_offset, 1, MPI_INT, MPI_SUM,
+                    this->comm));
+    int total_num_vertices = vertex_offset;
+    MPICHK(
+        MPI_Bcast(&total_num_vertices, 1, MPI_INT, this->size - 1, this->comm));
+
+    vertex_offset -= num_vertices_local;
+    const int vertex_start = vertex_offset;
+    const int vertex_end = vertex_start + num_vertices_local;
+    const int total_num_points = total_num_vertices * 3;
+
+    // Populate the vertex information in the output.
+    std::vector<double> h_data(num_vertices_local * 3);
+    this->read_dataset_2d(this->root, total_num_vertices, vertex_start,
+                          num_vertices_local, 3, H5T_NATIVE_DOUBLE, "Points",
+                          h_data);
+    int index = 0;
+    for (int cellx = 0; cellx < num_cells; cellx++) {
+      const int num_vertices = get_num_vertices(data[cellx].cell_type);
+      data[cellx].points.resize(num_vertices * 3);
+      for (int vx = 0; vx < num_vertices; vx++) {
+        for (int cx = 0; cx < 3; cx++) {
+          data[cellx].points[vx * 3 + cx] = h_data[index++];
+        }
+      }
+    }
+
+    // read the data associated with points
+    if (point_data_keys.size()) {
+
+      hid_t point_data_group = 0;
+      H5CHK(point_data_group = H5Gopen(this->root, "PointData", H5P_DEFAULT));
+
+      for (const auto &keyx : point_data_keys) {
+        // h_data has size num vertices * 3 and hence is large enough to store a
+        // double per vertex.
+        this->read_dataset(point_data_group, total_num_vertices, vertex_start,
+                           num_vertices_local, H5T_NATIVE_DOUBLE, keyx, h_data);
+
+        int index = 0;
+        for (int cellx = 0; cellx < num_cells; cellx++) {
+          const int num_vertices = get_num_vertices(data[cellx].cell_type);
+          data[cellx].point_data[keyx].resize(num_vertices);
+          for (int vx = 0; vx < num_vertices; vx++) {
+            data[cellx].point_data[keyx][vx] = h_data[index++];
+          }
+        }
+      }
+
+      H5CHK(H5Gclose(point_data_group));
+    }
+
+    // read the data associated with cells
+    if (cell_data_keys.size()) {
+      hid_t cell_data_group = 0;
+      H5CHK(cell_data_group = H5Gopen(this->root, "CellData", H5P_DEFAULT));
+
+      for (const auto &keyx : cell_data_keys) {
+        // h_data has size num vertices * 3 and hence is large enough to store a
+        // double per cell.
+        this->read_dataset(cell_data_group, total_num_cells, cell_start,
+                           num_cells, H5T_NATIVE_DOUBLE, keyx, h_data);
+
+        int index = 0;
+        for (int cellx = 0; cellx < num_cells; cellx++) {
+          data[cellx].cell_data[keyx] = h_data[index++];
+        }
+      }
+
+      H5CHK(H5Gclose(cell_data_group));
+    }
   }
 }
 
