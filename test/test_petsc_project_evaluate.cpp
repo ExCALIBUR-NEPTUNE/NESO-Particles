@@ -777,6 +777,19 @@ TEST(PETSc, dmplex_project_simple_dg0) {
 
   // check for 2 components
   dg0->project(A, Sym<REAL>("Q2"));
+
+  {
+    auto d = dg0->get_vtk_data();
+    std::vector<REAL> h_dofs;
+    dg0->get_dofs(2, h_dofs);
+    ASSERT_EQ(h_dofs.size(), cell_count * 2);
+
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      ASSERT_EQ(d.at(cellx).cell_data["value_0"], h_dofs.at(cellx * 2));
+      ASSERT_EQ(d.at(cellx).cell_data["value_1"], h_dofs.at(cellx * 2 + 1));
+    }
+  }
+
   std::vector<REAL> h_project2;
   dg0->get_dofs(2, h_project2);
   ASSERT_EQ(h_project2.size(), cell_count * 2);

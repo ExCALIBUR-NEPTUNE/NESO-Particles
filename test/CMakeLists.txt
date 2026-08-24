@@ -121,7 +121,8 @@ set(TEST_SRCS
     ${TEST_DIR}/test_standard_boundary_b.cpp
     ${TEST_DIR}/test_sycl_target.cpp
     ${TEST_DIR}/test_tuple.cpp
-    ${TEST_DIR}/test_utility.cpp)
+    ${TEST_DIR}/test_utility.cpp
+    ${TEST_DIR}/test_vtk.cpp)
 
 # Check that the files added above are not missing any files in the test
 # directory.
