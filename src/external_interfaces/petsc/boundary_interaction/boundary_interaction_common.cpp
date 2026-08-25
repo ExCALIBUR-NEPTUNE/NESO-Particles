@@ -60,6 +60,10 @@ BoundaryInteractionCommon::BoundaryInteractionCommon(
 
   std::vector<INT> tmp_face_cells;
 
+  INT bound_lower = 0;
+  INT bound_upper = 0;
+  mesh->dmh->get_global_face_index_bounds(bound_lower, bound_upper);
+
   for (auto &bx : boundary_groups) {
     tmp_face_cells.clear();
     NESOASSERT(bx.first >= 0, "Group id cannot be negative.");
@@ -70,6 +74,9 @@ BoundaryInteractionCommon::BoundaryInteractionCommon(
       for (const INT fx : labeled_face_points) {
         const PetscInt facet_global_id =
             this->mesh->dmh->get_point_global_index(fx);
+        NESOASSERT((bound_lower <= facet_global_id) &&
+                       (facet_global_id < bound_upper),
+                   "Bad bounds or facet global ID.");
         tmp_face_cells.push_back(facet_global_id);
       }
     }
@@ -78,7 +85,8 @@ BoundaryInteractionCommon::BoundaryInteractionCommon(
         std::make_shared<BoundaryMeshInterface>(mesh->get_comm(), sycl_target,
                                                 tmp_face_cells);
     this->map_groups_unseen_value_extractor[bx.first] =
-        std::make_shared<UnseenValueExtractor>(this->sycl_target);
+        std::make_shared<UnseenValueExtractor>(this->sycl_target, bound_lower,
+                                               bound_upper);
   }
 
   auto assign_sym = [=](auto &output_sym, auto &input_sym, auto default_sym) {
