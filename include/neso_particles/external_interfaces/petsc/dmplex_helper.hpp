@@ -165,6 +165,8 @@ protected:
   std::map<PetscInt, VTK::UnstructuredCell> map_petsc_to_vtk;
   double volume;
   int ncells_global{-1};
+  INT boundary_index_bound_lower{0};
+  INT boundary_index_bound_upper{0};
 
   inline void check_valid_local_cell(const PetscInt cell) const {
     NESOASSERT((cell > -1) && (cell < this->ncells),
@@ -491,6 +493,14 @@ public:
    */
   void get_linear_normal_vector(const PetscInt point_index,
                                 std::vector<REAL> &normal_vector);
+
+  /**
+   * Get the bounds of global face indices over the entire mesh.
+   *
+   * @param[in, out] bound_lower Lowest global face index.
+   * @param[in, out] bound_upper Largest global face index plus one.
+   */
+  void get_global_face_index_bounds(INT &bound_lower, INT &bound_upper);
 };
 
 /**

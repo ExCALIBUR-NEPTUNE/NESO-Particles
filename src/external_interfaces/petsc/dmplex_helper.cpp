@@ -649,6 +649,36 @@ DMPlexHelper::DMPlexHelper(MPI_Comm comm, DM dm)
         this->internal_get_point_global_index(px));
     this->map_gobal_point_to_local_point[global_point] = px;
   }
+
+  // Get the bounds of global indices on the faces
+  {
+    PetscInt local_start = 0;
+    PetscInt local_end = 0;
+    this->get_boundary_stratum(&local_start, &local_end);
+
+    PetscInt l = std::numeric_limits<PetscInt>::max();
+    PetscInt u = std::numeric_limits<PetscInt>::lowest();
+
+    for (PetscInt localx = local_start; localx < local_end; localx++) {
+      const PetscInt global_point_index = this->signed_global_id_to_global_id(
+          this->internal_get_point_global_index(localx));
+      l = std::min(l, global_point_index);
+      u = std::max(u, global_point_index);
+    }
+
+    INT ll = l;
+    INT lu = u;
+    INT gl = l;
+    INT gu = u;
+
+    MPICHK(MPI_Allreduce(&ll, &gl, 1, map_ctype_mpi_type<INT>(), MPI_MIN,
+                         this->comm));
+    MPICHK(MPI_Allreduce(&lu, &gu, 1, map_ctype_mpi_type<INT>(), MPI_MAX,
+                         this->comm));
+
+    this->boundary_index_bound_lower = gl;
+    this->boundary_index_bound_upper = gu + 1;
+  }
 }
 
 int DMPlexHelper::get_cell_count() { return this->ncells; }
@@ -1102,13 +1132,19 @@ std::map<PetscInt, std::vector<PetscInt>> DMPlexHelper::get_face_sets() {
   PetscInt points_start, points_end;
   this->get_boundary_stratum(&points_start, &points_end);
 
+  INT bound_lower = 0;
+  INT bound_upper = 0;
+  this->get_global_face_index_bounds(bound_lower, bound_upper);
+
   std::map<PetscInt, std::vector<PetscInt>> map;
   for (PetscInt px = points_start; px < points_end; px++) {
 
     // Only return facets which this rank owns for the case when the face label
     // includes internal faces.
     const PetscInt global_index = internal_get_point_global_index(px);
-    if (px >= 0) {
+    if (global_index >= 0) {
+      NESOASSERT((bound_lower <= global_index) && (global_index < bound_upper),
+                 "Bad global point or badly computed global bounds.");
       PetscInt value;
       PETSCCHK(DMLabelGetValue(face_sets_label, px, &value));
       map[value].push_back(px);
@@ -1406,6 +1442,13 @@ get_map_from_global_cell_points_to_ranks(DM dm) {
   cell_owners_local.clear();
 
   return {global_point_min, cell_owners};
+}
+
+void DMPlexHelper::get_global_face_index_bounds(INT &bound_lower,
+                                                INT &bound_upper) {
+
+  bound_lower = this->boundary_index_bound_lower;
+  bound_upper = this->boundary_index_bound_upper;
 }
 
 } // namespace NESO::Particles::PetscInterface
