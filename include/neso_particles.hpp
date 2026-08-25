@@ -64,6 +64,7 @@
 #include "neso_particles/typedefs.hpp"
 #include "neso_particles/utility.hpp"
 #include "neso_particles/utility_mesh_hierarchy_plotting.hpp"
+#include "neso_particles/utility_particle_io.hpp"
 // Implementations
 #include "neso_particles/common_impl.hpp"
 #include "neso_particles/nd_host_array_impl.hpp"

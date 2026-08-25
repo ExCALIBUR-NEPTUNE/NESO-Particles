@@ -29,6 +29,14 @@ enum CellType {
 };
 
 /**
+ * Map the VTK cell type to the expected number of vertices.
+ *
+ * @param t Cell type.
+ * @returns Number of vertices.
+ */
+int get_num_vertices(CellType t);
+
+/**
  * Datatype for representing the data for a single cell.
  */
 struct UnstructuredCell {
@@ -54,6 +62,7 @@ struct UnstructuredCell {
  */
 class VTKHDF {
 protected:
+  std::string filename;
   MPI_Comm comm;
   bool is_closed;
   int step, rank, size;
@@ -144,6 +153,84 @@ protected:
     H5CHK(H5Sclose(memspace));
   }
 
+  template <typename T>
+  inline void read_dataset_2d(hid_t group, const int global_size,
+                              const int offset, const int local_size,
+                              const int ncomp, hid_t out_datatype,
+                              std::string name, std::vector<T> &data) {
+
+    // Create the memspace
+    hsize_t dims_memspace[2] = {static_cast<hsize_t>(local_size),
+                                static_cast<hsize_t>(ncomp)};
+    hid_t memspace;
+    H5CHK(memspace = H5Screate_simple(2, dims_memspace, NULL));
+
+    // Create the filespace
+    hsize_t dims_filespace[2] = {static_cast<hsize_t>(global_size),
+                                 static_cast<hsize_t>(ncomp)};
+    hid_t filespace;
+    H5CHK(filespace = H5Screate_simple(2, dims_filespace, NULL));
+
+    // Select this ranks region of the filespace
+    hsize_t slab_offsets[2] = {static_cast<hsize_t>(offset),
+                               static_cast<hsize_t>(0)};
+    hsize_t slab_counts[2] = {static_cast<hsize_t>(local_size),
+                              static_cast<hsize_t>(ncomp)};
+    H5CHK(H5Sselect_hyperslab(filespace, H5S_SELECT_SET, slab_offsets, NULL,
+                              slab_counts, NULL));
+    // Create the partition
+    hid_t partition;
+    H5CHK(partition = H5Pcreate(H5P_DATASET_XFER));
+    H5CHK(H5Pset_dxpl_mpio(partition, H5FD_MPIO_COLLECTIVE));
+
+    hid_t dset;
+    H5CHK(dset = H5Dopen(group, name.c_str(), H5P_DEFAULT));
+
+    H5CHK(H5Dread(dset, out_datatype, memspace, filespace, partition,
+                  data.data()));
+
+    H5CHK(H5Dclose(dset));
+    H5CHK(H5Pclose(partition));
+    H5CHK(H5Sclose(filespace));
+    H5CHK(H5Sclose(memspace));
+  }
+
+  template <typename T>
+  inline void read_dataset(hid_t group, const int global_size, const int offset,
+                           const int local_size, hid_t out_datatype,
+                           std::string name, std::vector<T> &data) {
+    // Create the memspace
+    hsize_t dims_memspace[1] = {static_cast<hsize_t>(local_size)};
+    hid_t memspace;
+    H5CHK(memspace = H5Screate_simple(1, dims_memspace, NULL));
+
+    // Create the filespace
+    hsize_t dims_filespace[1] = {static_cast<hsize_t>(global_size)};
+    hid_t filespace;
+    H5CHK(filespace = H5Screate_simple(1, dims_filespace, NULL));
+
+    // Select this ranks region of the filespace
+    hsize_t slab_offsets[1] = {static_cast<hsize_t>(offset)};
+    hsize_t slab_counts[1] = {static_cast<hsize_t>(local_size)};
+    H5CHK(H5Sselect_hyperslab(filespace, H5S_SELECT_SET, slab_offsets, NULL,
+                              slab_counts, NULL));
+    // Create the partition
+    hid_t partition;
+    H5CHK(partition = H5Pcreate(H5P_DATASET_XFER));
+    H5CHK(H5Pset_dxpl_mpio(partition, H5FD_MPIO_COLLECTIVE));
+
+    hid_t dset;
+    H5CHK(dset = H5Dopen(group, name.c_str(), H5P_DEFAULT));
+
+    H5CHK(H5Dread(dset, out_datatype, memspace, filespace, partition,
+                  data.data()));
+
+    H5CHK(H5Dclose(dset));
+    H5CHK(H5Pclose(partition));
+    H5CHK(H5Sclose(filespace));
+    H5CHK(H5Sclose(memspace));
+  }
+
 public:
   ~VTKHDF() {
     if ((!this->is_closed) && (!this->rank)) {
@@ -184,6 +271,20 @@ public:
   void write(std::vector<UnstructuredCell> &data,
              std::set<std::string> point_data_keys = {},
              std::set<std::string> cell_data_keys = {});
+
+  /**
+   * Read unstructured data from a VTKHDF file. It is assumed that the parallel
+   * decomposition is identical to the decomposition used to write the file.
+   * Must be called collectively on the communicator.
+   *
+   * @param[in] num_cells Number of cells on this MPI rank.
+   * @param[in, out] data Output data read from file. Will be resized as needed.
+   * @param[in] point_data_keys Specification of which point data to read.
+   * @param[in] cell_data_keys Specification of which cell data to read.
+   */
+  void read(const int num_cells, std::vector<UnstructuredCell> &data,
+            std::set<std::string> point_data_keys,
+            std::set<std::string> cell_data_keys);
 };
 
 #else
@@ -226,6 +327,20 @@ public:
   write([[maybe_unused]] std::vector<UnstructuredCell> &data,
         [[maybe_unused]] std::set<std::string> point_data_keys = {},
         [[maybe_unused]] std::set<std::string> cell_data_keys = {}) {}
+
+  /**
+   * Read unstructured data from a VTKHDF file. It is assumed that the parallel
+   * decomposition is identical to the decomposition used to write the file.
+   * Must be called collectively on the communicator.
+   *
+   * @param[in] num_cells Number of cells on this MPI rank.
+   * @param[in, out] data Output data read from file. Will be resized as needed.
+   * @param[in] point_data_keys Specification of which point data to read.
+   * @param[in] cell_data_keys Specification of which cell data to read.
+   */
+  inline void read(const int num_cells, std::vector<UnstructuredCell> &data,
+                   std::set<std::string> point_data_keys,
+                   std::set<std::string> cell_data_keys);
 };
 
 #endif

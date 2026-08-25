@@ -149,6 +149,7 @@ set(SRC_FILES
     ${SRC_DIR}/particle_group_temporary.cpp
     ${SRC_DIR}/particle_group_pointer_map.cpp
     ${SRC_DIR}/utility.cpp
+    ${SRC_DIR}/utility_particle_io.cpp
     ${SRC_DIR}/utility_mesh_hierarchy_plotting.cpp)
 set(SRC_FILES_IGNORE "")
 check_added_file_list(${SRC_DIR} cpp "${SRC_FILES}" "${SRC_FILES_IGNORE}")
@@ -354,6 +355,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/sycl_typedefs.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/typedefs.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/utility.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/utility_particle_io.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/utility_mesh_hierarchy_plotting.hpp)
 
 # Check that the files added above are not missing any files in the include

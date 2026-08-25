@@ -21,14 +21,38 @@ void DMPlexProjectEvaluateDG::check_ncomp(const int ncomp) {
 }
 
 std::vector<VTK::UnstructuredCell> DMPlexProjectEvaluateDG::get_vtk_data() {
+  auto r0 = sycl_target->profile_map.start_region("DMPlexProjectEvaluateDG",
+                                                  "get_vtk_data");
+
   const int cell_count = this->mesh->get_cell_count();
   std::vector<VTK::UnstructuredCell> data =
       this->mesh->dmh->get_vtk_cell_data();
   const int ndim = mesh->get_ndim();
+  const int ncomp = this->ncomp_active;
+  const int stride = this->cdc_project->nrow;
+
+  auto h_data =
+      get_resource<BufferHost<REAL>, ResourceStackInterfaceBufferHost<REAL>>(
+          sycl_target->resource_stack_map, ResourceStackKeyBufferHost<REAL>{},
+          sycl_target);
+  h_data->realloc_no_copy(cell_count * stride);
+
+  this->sycl_target->queue
+      .memcpy(h_data->ptr, this->cdc_project->device_ptr(),
+              cell_count * stride * sizeof(REAL))
+      .wait_and_throw();
+
   for (int cellx = 0; cellx < cell_count; cellx++) {
-    const auto cell_value = this->cdc_project->get_value(cellx, 0, 0);
-    data.at(cellx).cell_data["value"] = cell_value;
+    for (int cx = 0; cx < ncomp; cx++) {
+      const REAL cell_value = h_data->ptr[cellx * stride + cx];
+      data.at(cellx).cell_data["value_" + std::to_string(cx)] = cell_value;
+    }
   }
+
+  restore_resource(sycl_target->resource_stack_map,
+                   ResourceStackKeyBufferHost<REAL>{}, h_data);
+
+  sycl_target->profile_map.end_region(r0);
   return data;
 }
 
@@ -102,60 +126,99 @@ void DMPlexProjectEvaluateDG::evaluate(
 void DMPlexProjectEvaluateDG::get_dofs(const int ncomp,
                                        std::vector<REAL> &dofs) {
 
+  auto r0 = sycl_target->profile_map.start_region("DMPlexProjectEvaluateDG",
+                                                  "get_dofs");
+
   if (ncomp > 0) {
-    NESOASSERT(this->cdc_project->nrow >= ncomp,
+
+    const int stride = this->cdc_project->nrow;
+    NESOASSERT(stride >= ncomp,
                "Requested more components than there are components in the "
                "internal representation.");
 
-    auto h_dofs = this->cdc_project->get_all_cells();
     const int ncells = this->cdc_project->ncells;
     dofs.resize(ncells * ncomp);
 
-    for (int cx = 0; cx < ncells; cx++) {
-      for (int nx = 0; nx < ncomp; nx++) {
-        dofs[cx * ncomp + nx] = h_dofs[cx]->at(nx, 0);
-      }
-    }
+    auto d_data = get_resource<BufferDevice<REAL>,
+                               ResourceStackInterfaceBufferDevice<REAL>>(
+        sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<REAL>{},
+        sycl_target);
+    d_data->realloc_no_copy(ncells * ncomp);
+    REAL *RESTRICT k_data = d_data->ptr;
+
+    REAL const *const RESTRICT k_src = this->cdc_project->device_ptr();
+
+    auto e0 = this->sycl_target->queue.parallel_for(
+        sycl::range<2>(ncells, ncomp), [=](sycl::item<2> idx) {
+          const std::size_t cellx = idx.get_id(0);
+          const std::size_t component = idx.get_id(1);
+          k_data[cellx * ncomp + component] = k_src[cellx * stride + component];
+        });
+
+    this->sycl_target->queue
+        .memcpy(dofs.data(), k_data, ncells * ncomp * sizeof(REAL), e0)
+        .wait_and_throw();
+
+    restore_resource(sycl_target->resource_stack_map,
+                     ResourceStackKeyBufferDevice<REAL>{}, d_data);
   } else {
     NESOWARN(false, "Number of components passed results in a no-op.");
     dofs.resize(0);
   }
+
+  sycl_target->profile_map.end_region(r0);
 }
 
 void DMPlexProjectEvaluateDG::set_dofs(const int ncomp,
                                        const std::vector<REAL> &dofs) {
+
+  auto r0 = sycl_target->profile_map.start_region("DMPlexProjectEvaluateDG",
+                                                  "set_dofs");
   if (ncomp > 0) {
     this->check_ncomp(ncomp);
+    this->ncomp_active = ncomp;
 
     const int ncells = this->cdc_project->ncells;
-    const int ncomp_dat = this->cdc_project->nrow;
-
-    std::vector<CellData<REAL>> cell_data;
-    cell_data.reserve(ncells);
+    const int stride = this->cdc_project->nrow;
 
     NESOASSERT(dofs.size() >= ncells * ncomp,
                "Passed DOF vector is too small for the number of cells and "
                "components.");
 
-    for (int cellx = 0; cellx < ncells; cellx++) {
-      cell_data.push_back(
-          std::make_shared<CellDataT<REAL>>(this->sycl_target, ncomp_dat, 1));
+    auto d_data = get_resource<BufferDevice<REAL>,
+                               ResourceStackInterfaceBufferDevice<REAL>>(
+        sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<REAL>{},
+        sycl_target);
+    d_data->realloc_no_copy(ncells * ncomp);
+    REAL *RESTRICT k_data = d_data->ptr;
+
+    auto e0 = this->sycl_target->queue.memcpy(k_data, dofs.data(),
+                                              ncells * ncomp * sizeof(REAL));
+
+    REAL *RESTRICT k_dst = this->cdc_project->device_ptr();
+
+    {
+
+      REAL const *const RESTRICT k_src = k_data;
+      this->sycl_target->queue
+          .parallel_for(sycl::range<2>(ncells, ncomp), e0,
+                        [=](sycl::item<2> idx) {
+                          const std::size_t cellx = idx.get_id(0);
+                          const std::size_t component = idx.get_id(1);
+                          k_dst[cellx * stride + component] =
+                              k_src[cellx * ncomp + component];
+                        })
+          .wait_and_throw();
     }
 
-    for (int cx = 0; cx < ncells; cx++) {
-      for (int nx = 0; nx < ncomp; nx++) {
-        cell_data[cx]->at(nx, 0) = dofs[cx * ncomp + nx];
-      }
-      for (int nx = ncomp; nx < ncomp_dat; nx++) {
-        cell_data[cx]->at(nx, 0) = 0.0;
-      }
-    }
-
-    this->cdc_project->set_all_cells(cell_data);
+    restore_resource(sycl_target->resource_stack_map,
+                     ResourceStackKeyBufferDevice<REAL>{}, d_data);
 
   } else {
     NESOWARN(false, "Number of components passed results in a no-op.");
   }
+
+  sycl_target->profile_map.end_region(r0);
 }
 
 } // namespace NESO::Particles::PetscInterface

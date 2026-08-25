@@ -257,5 +257,154 @@ TEST(CartesianTrajectoryIntersection, offsets_3d) {
   lambda_test(aa, 0.0, -100.0, 0.0, 1, 0.0, 0, 2);
   lambda_test(aa, 0.0, 0.0, -100.0, 2, 0.0, 0, 1);
 
+  cartesian_trajectory_intersection->free();
   sycl_target->free();
+  A->domain->mesh->free();
+}
+
+TEST(CartesianTrajectoryIntersection, labels_3d) {
+
+  const int ncell_x = 15;
+  const int ncell_y = 14;
+  const int ncell_z = 31;
+
+  auto [A_t, sycl_target_t, cell_count_t] =
+      particle_loop_common_3d(4, ncell_x, ncell_y, ncell_z);
+  auto sycl_target = sycl_target_t;
+  auto A = A_t;
+
+  {
+    auto aa = particle_sub_group(
+        A, [=](auto INDEX) { return INDEX.get_loop_linear_index() != 0; },
+        Access::read(ParticleLoopIndex{}));
+
+    A->remove_particles(aa);
+    ASSERT_EQ(A->get_npart_local(), 1);
+  }
+
+  std::map<int, std::vector<int>> boundary_groups;
+  boundary_groups[0] = {0};
+  boundary_groups[1] = {1};
+  boundary_groups[2] = {2};
+  boundary_groups[3] = {3};
+  boundary_groups[4] = {4};
+  boundary_groups[5] = {5};
+  auto cartesian_trajectory_intersection =
+      std::make_shared<CartesianTrajectoryIntersection>(
+          sycl_target,
+          std::dynamic_pointer_cast<CartesianHMesh>(A->domain->mesh),
+          boundary_groups, 1.0e-10);
+  cartesian_trajectory_intersection->prepare_particle_group(A);
+
+  auto loop_reset = particle_loop(
+      A,
+      [=](auto P) {
+        P.at(0) = 0.5;
+        P.at(1) = 0.5;
+        P.at(2) = 0.5;
+      },
+      Access::write(Sym<REAL>("P")));
+
+  auto lambda_do_test = [&](const int expected_label, const REAL p0,
+                            const REAL p1, const REAL p2) {
+    loop_reset->execute();
+
+    cartesian_trajectory_intersection->pre_integration(A);
+    particle_loop(
+        A,
+        [=](auto P) {
+          P.at(0) = p0;
+          P.at(1) = p1;
+          P.at(2) = p2;
+        },
+        Access::write(Sym<REAL>("P")))
+        ->execute();
+
+    auto groups = cartesian_trajectory_intersection->post_integration(A);
+
+    for (auto &gx : groups) {
+      const int correct = gx.first == expected_label ? 1 : 0;
+      ASSERT_EQ(gx.second->get_npart_local(), correct);
+    }
+  };
+
+  lambda_do_test(0, 0.5, -1000.0, 0.5);
+  lambda_do_test(2, 0.5, 1000.0, 0.5);
+  lambda_do_test(3, -1000.0, 0.5, 0.5);
+  lambda_do_test(1, 1000.0, 0.5, 0.5);
+  lambda_do_test(4, 0.5, 0.5, -1000.0);
+  lambda_do_test(5, 0.5, 0.5, 1000.0);
+}
+
+TEST(CartesianTrajectoryIntersection, shallow_intersection_3d) {
+
+  const int ncell_x = 15;
+  const int ncell_y = 23;
+  const int ncell_z = 16;
+
+  auto [A_t, sycl_target_t, cell_count_t] =
+      particle_loop_common_3d(4, ncell_x, ncell_y, ncell_z);
+  auto sycl_target = sycl_target_t;
+  auto A = A_t;
+
+  std::map<int, std::vector<int>> boundary_groups;
+  boundary_groups[0] = {0};
+  boundary_groups[1] = {1};
+  boundary_groups[2] = {2};
+  boundary_groups[3] = {3};
+  boundary_groups[4] = {4};
+  boundary_groups[5] = {5};
+
+  auto cartesian_trajectory_intersection =
+      std::make_shared<CartesianTrajectoryIntersection>(
+          sycl_target,
+          std::dynamic_pointer_cast<CartesianHMesh>(A->domain->mesh),
+          boundary_groups, 1.0e-10);
+  cartesian_trajectory_intersection->prepare_particle_group(A);
+
+  {
+    auto aa = particle_sub_group(
+        A, [=](auto INDEX) { return INDEX.get_loop_linear_index() != 0; },
+        Access::read(ParticleLoopIndex{}));
+
+    A->remove_particles(aa);
+    ASSERT_EQ(A->get_npart_local(), 1);
+  }
+
+  const REAL offset_eps = 1.0e-12;
+  particle_loop(
+      A,
+      [=](auto P) {
+        P.at(0) = 0.5;
+        P.at(1) = 0.5;
+        P.at(2) = offset_eps;
+      },
+      Access::write(Sym<REAL>("P")))
+      ->execute();
+
+  cartesian_trajectory_intersection->pre_integration(A);
+
+  particle_loop(
+      A,
+      [=](auto P) {
+        P.at(0) = 0.5;
+        // This y position has to be different to minus the previous y position
+        // otherwise the trajectory does actually go through the corner.
+        P.at(1) = -0.1;
+        P.at(2) = -offset_eps;
+      },
+      Access::write(Sym<REAL>("P")))
+      ->execute();
+
+  auto groups = cartesian_trajectory_intersection->post_integration(A);
+
+  const int correct_group = 4;
+  for (auto &gx : groups) {
+    const int correct_npart = gx.first == correct_group ? 1 : 0;
+    ASSERT_EQ(gx.second->get_npart_local(), correct_npart);
+  }
+
+  cartesian_trajectory_intersection->free();
+  sycl_target->free();
+  A->domain->mesh->free();
 }
