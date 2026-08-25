@@ -242,9 +242,8 @@ void VTKHDF::read(const int num_cells, std::vector<UnstructuredCell> &data,
 
   if (this->comm != MPI_COMM_NULL) {
 
-    if (data.size() != num_cells) {
-      data.resize(num_cells);
-    }
+    data.clear();
+    data.resize(num_cells);
 
     NESOASSERT(this->is_closed, "Expected file to be closed.");
     this->plist_id = H5Pcreate(H5P_FILE_ACCESS);
