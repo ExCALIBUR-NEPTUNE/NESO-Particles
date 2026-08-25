@@ -142,11 +142,16 @@ CartesianTrajectoryIntersection::CartesianTrajectoryIntersection(
                             face_cells.end());
     }
 
+    INT bound_lower = 0;
+    INT bound_upper = 0;
+    mesh->get_global_face_index_bounds(bound_lower, bound_upper);
+
     this->map_groups_boundary_interface[gx.first] =
         std::make_shared<BoundaryMeshInterface>(mesh->get_comm(), sycl_target,
                                                 tmp_face_cells);
     this->map_groups_unseen_value_extractor[gx.first] =
-        std::make_shared<UnseenValueExtractor>(this->sycl_target);
+        std::make_shared<UnseenValueExtractor>(this->sycl_target, bound_lower,
+                                               bound_upper);
   }
 }
 

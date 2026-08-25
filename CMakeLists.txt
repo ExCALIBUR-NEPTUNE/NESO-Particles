@@ -126,6 +126,7 @@ set(SRC_FILES
     ${SRC_DIR}/particle_dat.cpp
     ${SRC_DIR}/particle_group.cpp
     ${SRC_DIR}/particle_set.cpp
+    ${SRC_DIR}/parameters.cpp
     ${SRC_DIR}/loop/particle_loop_args.cpp
     ${SRC_DIR}/loop/particle_loop_base.cpp
     ${SRC_DIR}/loop/particle_loop_iteration_set.cpp

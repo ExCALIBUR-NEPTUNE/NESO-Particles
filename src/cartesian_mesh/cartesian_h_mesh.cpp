@@ -308,12 +308,21 @@ void CartesianHMesh::compute_owned_face_indices() {
   int rank;
   MPICHK(MPI_Comm_rank(this->comm_cart, &rank));
 
+  INT bound_lower = 0;
+  INT bound_upper = 0;
+  this->get_global_face_index_bounds(bound_lower, bound_upper);
+
   for (INT fx = 0; fx < num_faces; fx++) {
     for (INT l1 = l1_starts[fx]; l1 < l1_ends[fx]; l1++) {
       for (INT l0 = l0_starts[fx]; l0 < l0_ends[fx]; l0++) {
         INT index_tuple[3] = {fx, l0, l1};
         const INT linear_face_index =
             this->get_face_linear_index_from_tuple(index_tuple);
+
+        NESOASSERT((bound_lower <= linear_face_index) &&
+                       (linear_face_index < bound_upper),
+                   "Bad linear face index computed.");
+
         const int owning_rank =
             this->get_face_id_owning_rank(linear_face_index);
         if (owning_rank == rank) {
@@ -731,6 +740,29 @@ CartesianHMesh::get_all_face_cells_on_face(const INT face_index) {
              "Bad linear face id passed.");
 
   return this->map_faces_to_geoms[face_index];
+}
+
+void CartesianHMesh::get_global_face_index_bounds(INT &bound_lower,
+                                                  INT &bound_upper) {
+
+  bound_lower = 0;
+  const INT ncell_fine_dim = std::pow(2, this->subdivision_order);
+
+  if (this->ndim == 1) {
+    bound_upper = 2;
+  }
+
+  if (this->ndim == 2) {
+    bound_upper =
+        this->dims[0] * ncell_fine_dim * 2 + this->dims[1] * ncell_fine_dim * 2;
+  }
+
+  if (this->ndim == 3) {
+    bound_upper =
+        this->dims[0] * this->dims[1] * ncell_fine_dim * ncell_fine_dim * 2 +
+        this->dims[1] * this->dims[2] * ncell_fine_dim * ncell_fine_dim * 2 +
+        this->dims[0] * this->dims[2] * ncell_fine_dim * ncell_fine_dim * 2;
+  }
 }
 
 template std::vector<INT>
