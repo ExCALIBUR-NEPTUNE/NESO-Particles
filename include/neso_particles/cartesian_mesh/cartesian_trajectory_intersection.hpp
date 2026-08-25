@@ -194,10 +194,21 @@ public:
                   ax, ay, bx, by, p0x, p0y, p1x, yi1, xi1, k_tolerance);
             }
 
-            const REAL xi_write = exists0 ? xi0 : xi1;
-            const REAL yi_write = exists0 ? yi0 : yi1;
-            const INT edge_write = exists0 ? edges0 : edges1;
             const bool found = exists0 || exists1;
+            constexpr REAL max_distance = std::numeric_limits<REAL>::max();
+
+            const REAL dx0 = xi0 - PP.at(0);
+            const REAL dy0 = yi0 - PP.at(1);
+            const REAL diff0 = exists0 ? dx0 * dx0 + dy0 * dy0 : max_distance;
+
+            const REAL dx1 = xi1 - PP.at(0);
+            const REAL dy1 = yi1 - PP.at(1);
+            const REAL diff1 = exists1 ? dx1 * dx1 + dy1 * dy1 : max_distance;
+            const bool write0 = exists0 && (diff0 < diff1);
+
+            const REAL xi_write = write0 ? xi0 : xi1;
+            const REAL yi_write = write0 ? yi0 : yi1;
+            const INT edge_write = write0 ? edges0 : edges1;
 
             const INT loop_index = INDEX.get_loop_linear_index();
             k_buffer[npart_leaving * 0 + loop_index] = xi_write;
@@ -224,11 +235,11 @@ public:
              *       0
              */
 
-            REAL xi[3];
-            REAL yi[3];
-            REAL zi[3];
-            bool exists[3];
-            INT faces[3];
+            REAL xi[3] = {0.0, 0.0, 0.0};
+            REAL yi[3] = {0.0, 0.0, 0.0};
+            REAL zi[3] = {0.0, 0.0, 0.0};
+            bool exists[3] = {0, 0, 0};
+            INT faces[3] = {0, 0, 0};
 
             {
               // xy plane is xy
@@ -307,14 +318,23 @@ public:
             REAL yi_write = 0.0;
             REAL zi_write = 0.0;
             INT face_write = -1;
+
+            REAL current_distance = std::numeric_limits<REAL>::max();
             for (int facex = 0; facex < 3; facex++) {
-              const bool exists_inner = exists[facex];
+              const REAL d0 = PP.at(0) - xi[facex];
+              const REAL d1 = PP.at(1) - yi[facex];
+              const REAL d2 = PP.at(2) - zi[facex];
+              const REAL r2 = d0 * d0 + d1 * d1 + d2 * d2;
+              const bool exists_inner =
+                  exists[facex] && (r2 <= current_distance);
+
               xi_write = exists_inner ? xi[facex] : xi_write;
               yi_write = exists_inner ? yi[facex] : yi_write;
               zi_write = exists_inner ? zi[facex] : zi_write;
 
               face_write = exists_inner ? faces[facex] : face_write;
               found = found || exists_inner;
+              current_distance = exists_inner ? r2 : current_distance;
             }
 
             const INT loop_index = INDEX.get_loop_linear_index();

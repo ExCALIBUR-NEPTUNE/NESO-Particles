@@ -67,6 +67,7 @@ get_vtk_trajectory_line(std::shared_ptr<GROUP_TYPE> particle_sub_group,
   auto e0 = sycl_target->queue.memcpy(h_data->ptr, k_data,
                                       npart_local * ncomp * 2 * sizeof(REAL));
 
+  trajectory.clear();
   trajectory.resize(npart_local);
   e0.wait_and_throw();
 
