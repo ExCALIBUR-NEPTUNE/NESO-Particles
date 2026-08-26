@@ -470,6 +470,14 @@ public:
   void print();
 
   /**
+   * Get the volume of a point in the local mesh.
+   *
+   * @param index Local point index.
+   * @returns Volume of object.
+   */
+  REAL get_point_volume(const PetscInt point_index);
+
+  /**
    * Get the volume of a cell in the local mesh.
    *
    * @param index Local index of cell.

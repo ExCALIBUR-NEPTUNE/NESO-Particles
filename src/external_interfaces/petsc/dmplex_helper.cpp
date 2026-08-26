@@ -1253,15 +1253,20 @@ void DMPlexHelper::print() {
   }
 }
 
-REAL DMPlexHelper::get_cell_volume(const int index) {
-  this->check_valid_local_cell(index);
-  const PetscInt petsc_index = this->map_np_to_petsc.at(index);
+REAL DMPlexHelper::get_point_volume(const PetscInt point_index) {
+  this->check_valid_petsc_point(point_index);
   PetscReal vol;
   PetscReal centroid[3];
   PetscReal normal[3];
-  PETSCCHK(DMPlexComputeCellGeometryFVM(this->dm, petsc_index, &vol, centroid,
+  PETSCCHK(DMPlexComputeCellGeometryFVM(this->dm, point_index, &vol, centroid,
                                         normal));
   return vol;
+}
+
+REAL DMPlexHelper::get_cell_volume(const int index) {
+  this->check_valid_local_cell(index);
+  const PetscInt petsc_index = this->map_np_to_petsc.at(index);
+  return this->get_point_volume(petsc_index);
 }
 
 REAL DMPlexHelper::get_volume() {
