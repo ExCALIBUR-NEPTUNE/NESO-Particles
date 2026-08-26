@@ -17,7 +17,6 @@ class DMPlexFunction : public GenericFunction {
 
 protected:
   std::vector<VTK::UnstructuredCell> vtk_data;
-  std::vector<INT> cells_local;
 
   /**
    * Create a function on a mesh.
@@ -42,6 +41,9 @@ public:
 
   // The mesh the function is defined on.
   DMPlexInterfaceSharedPtr mesh;
+
+  // The local point indices of the cells.
+  std::vector<INT> cells_local;
 
   /**
    * Create a function on a mesh on the passed entities.

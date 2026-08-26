@@ -59,6 +59,7 @@ set(SRC_FILES
     ${SRC_DIR}/external_interfaces/petsc/boundary_interaction/boundary_interaction_2d.cpp
     ${SRC_DIR}/external_interfaces/petsc/boundary_interaction/boundary_interaction_3d.cpp
     ${SRC_DIR}/external_interfaces/petsc/boundary_interaction/boundary_interaction_common.cpp
+    ${SRC_DIR}/external_interfaces/petsc/boundary_interaction/boundary_interaction.cpp
     ${SRC_DIR}/external_interfaces/petsc/dmplex_cell_serialise.cpp
     ${SRC_DIR}/external_interfaces/petsc/dmplex_interface.cpp
     ${SRC_DIR}/external_interfaces/petsc/dmplex_helper.cpp
