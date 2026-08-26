@@ -7,6 +7,7 @@
 #include "../../../particle_sub_group/particle_sub_group.hpp"
 #include "../dmplex_interface.hpp"
 #include "../project_evaluate/dmplex_function.hpp"
+#include "../project_evaluate/dmplex_function_mass_matrix.hpp"
 #include <map>
 #include <memory>
 #include <optional>
@@ -40,6 +41,9 @@ protected:
       map_groups_boundary_interface;
   std::map<int, std::shared_ptr<UnseenValueExtractor>>
       map_groups_unseen_value_extractor;
+  std::map<std::tuple<int, std::string, int>,
+           std::shared_ptr<DMPlexFunctionMassMatrix>>
+      map_groups_mass_matrix_solver;
 
   // Map from edge global point to owning rank
   std::map<PetscInt, int> map_global_point_to_rank;

@@ -251,6 +251,16 @@ BoundaryInteractionCommon::create_function(const int group,
       this->mesh, this->sycl_target, this->mesh->get_ndim() - 1, cells,
       function_space, polynomial_order, group);
 
+  std::tuple<int, std::string, int> key = {group, function_space,
+                                           polynomial_order};
+
+  if (this->map_groups_mass_matrix_solver.count(key) == 0) {
+    this->map_groups_mass_matrix_solver[key] =
+        std::make_shared<DMPlexFunctionMassMatrix>(
+            this->mesh, this->sycl_target, this->mesh->get_ndim() - 1, cells,
+            function_space, polynomial_order, group);
+  }
+
   this->sycl_target->profile_map.end_region(r0);
   return func;
 }
@@ -395,10 +405,7 @@ void BoundaryInteractionCommon::function_project_contribute(
     ErrorPropagate ep_dof(this->sycl_target);
     auto k_ep_found = ep_found.device_ptr();
     auto k_ep_dof = ep_dof.device_ptr();
-
     auto ndim = this->mesh->get_ndim();
-
-    nprint("TODO: inverse cell volume");
 
     auto lambda_dispatch = [&](auto extract_quantity) {
       particle_loop(
@@ -449,6 +456,13 @@ void BoundaryInteractionCommon::function_project_finalise(
       "BoundaryInteractionCommon", "function_project_finalise");
   prepare_surface_function_project_finalise(
       this->map_groups_boundary_interface.at(func->mesh_group), func);
+
+  std::tuple<int, std::string, int> key = {
+      func->mesh_group, func->function_space, func->polynomial_order};
+
+  auto &mass_matrix_solver = this->map_groups_mass_matrix_solver.at(key);
+  mass_matrix_solver->solve(func);
+
   this->sycl_target->profile_map.end_region(r0);
 }
 
