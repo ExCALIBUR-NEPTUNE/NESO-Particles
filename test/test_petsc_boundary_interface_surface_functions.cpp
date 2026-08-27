@@ -514,7 +514,7 @@ void wrapper_mesh_mass_test(
   const REAL dt = 0.2;
   const int Nsteps = 100;
 
-  auto A = particle_loop_common(ndim, dm, 1093);
+  auto A = particle_loop_common(ndim, dm, 10930);
   auto mesh = std::dynamic_pointer_cast<PetscInterface::DMPlexInterface>(
       A->domain->mesh);
   auto sycl_target = A->sycl_target;
@@ -527,9 +527,12 @@ void wrapper_mesh_mass_test(
 
   std::map<int, PetscInterface::DMPlexFunctionSharedPtr> funcs;
   std::map<int, PetscInterface::DMPlexFunctionSharedPtr> funcs_contrib;
+  std::map<int, PetscInterface::DMPlexFunctionSharedPtr> funcs_total;
   for (auto &bx : boundary_groups) {
     funcs[bx.first] = bic->create_function(bx.first, "DG", 0);
     funcs_contrib[bx.first] = bic->create_function(bx.first, "DG", 0);
+    funcs_total[bx.first] = bic->create_function(bx.first, "DG", 0);
+    funcs_total[bx.first]->fill(0.0);
   }
 
   particle_loop(
@@ -567,6 +570,24 @@ void wrapper_mesh_mass_test(
     return total_mass;
   };
 
+  auto lambda_get_total_boundary_mass = [&]() -> REAL {
+    REAL local_mass = 0.0;
+    for (auto &fx : funcs_total) {
+      auto h_dofs = fx.second->get_dofs();
+      for (std::size_t dx = 0; dx < h_dofs.size(); dx++) {
+        const PetscInt point_index = fx.second->cells_local.at(dx);
+        const REAL volume = mesh->dmh->get_point_volume(point_index);
+        const REAL dof = h_dofs.at(dx);
+        local_mass += volume * dof;
+      }
+    }
+    REAL total_mass = 0.0;
+    MPICHK(MPI_Allreduce(&local_mass, &total_mass, 1,
+                         map_ctype_mpi_type<REAL>(), MPI_SUM,
+                         mesh->get_comm()));
+    return total_mass;
+  };
+
   auto ga_mass = std::make_shared<GlobalArray<REAL>>(sycl_target, 1);
   auto lambda_get_particle_mass = [&]() -> REAL {
     ga_mass->fill(0.0);
@@ -576,6 +597,10 @@ void wrapper_mesh_mass_test(
         ->execute();
     return ga_mass->get().at(0);
   };
+
+  // auto h5part = std::make_shared<H5Part>(
+  //     "trajectory_surface_" + std::to_string(ndim) + ".h5part", A,
+  //     Sym<REAL>("P"));
 
   REAL mass_particle_system = lambda_get_particle_mass();
   const REAL mass_total = mass_particle_system;
@@ -608,7 +633,22 @@ void wrapper_mesh_mass_test(
     std::vector<ParticleSubGroupSharedPtr> groups_union;
     for (auto &gx : groups) {
       groups_union.push_back(gx.second);
+
+      auto h_dofs = funcs_total.at(gx.first)->get_dofs();
+      auto h_dofs_to_add = funcs.at(gx.first)->get_dofs();
+
+      std::transform(h_dofs.begin(), h_dofs.end(), h_dofs_to_add.begin(),
+                     h_dofs.begin(), std::plus<REAL>());
+
+      funcs_total.at(gx.first)->set_dofs(h_dofs);
+
+      // funcs_total.at(gx.first)->write_vtkhdf("trajectory_surface_" +
+      //                                        std::to_string(ndim) + "d_" +
+      //                                        std::to_string(stepx) +
+      //                                        ".vtkhdf");
     }
+
+    // h5part->write();
     A->remove_particles(particle_sub_group_disjoint_union(groups_union));
 
     mass_particle_system = lambda_get_particle_mass();
@@ -616,6 +656,10 @@ void wrapper_mesh_mass_test(
     const REAL mass_diff =
         mass_total - mass_boundary_function - mass_particle_system;
     ASSERT_NEAR(mass_diff, 0.0, 1.0e-10);
+
+    const REAL total_mass_to_test = lambda_get_total_boundary_mass();
+    ASSERT_TRUE(relative_error(mass_boundary_function, total_mass_to_test) <
+                1.0e-14);
 
     for (auto &gx : groups) {
       auto func_tmp = funcs.at(gx.first);
@@ -629,11 +673,6 @@ void wrapper_mesh_mass_test(
         ASSERT_NEAR(correct, to_test, 1.0e-14);
       }
     }
-
-    // func_mass->write_vtkhdf("trajectory_surface_" + std::to_string(ndim) +
-    //                         "d_" + std::to_string(stepx) + ".vtkhdf");
-
-    // h5part->write();
   }
 
   // h5part->close();
