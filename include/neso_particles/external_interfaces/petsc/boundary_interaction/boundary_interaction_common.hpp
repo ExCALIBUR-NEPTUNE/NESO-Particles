@@ -75,6 +75,8 @@ protected:
   inline void find_intersections_inner(std::shared_ptr<T> particle_sub_group,
                                        const U &intersect_object, REAL *d_real,
                                        INT *d_int) {
+    auto r0 = this->sycl_target->profile_map.start_region(
+        "BoundaryInteractionCommon", "find_intersections_inner");
     if (intersect_object.boundary_elements_exist()) {
       auto particle_group = get_particle_group(particle_sub_group);
       const auto k_ndim = particle_group->position_dat->ncomp;
@@ -182,6 +184,7 @@ protected:
           Access::read(particle_group->position_dat))
           ->execute();
     }
+    this->sycl_target->profile_map.end_region(r0);
   }
 
   /**
@@ -190,6 +193,8 @@ protected:
    */
   template <typename T>
   inline void find_cells(std::shared_ptr<T> particle_sub_group) {
+    auto r0 = this->sycl_target->profile_map.start_region(
+        "BoundaryInteractionCommon", "find_cells");
 
     const int k_INT_MAX = std::numeric_limits<int>::max();
     const int k_INT_MIN = std::numeric_limits<int>::lowest();
@@ -340,6 +345,7 @@ protected:
         this->required_mh_cells.insert(cell);
       }
     }
+    this->sycl_target->profile_map.end_region(r0);
   }
 
   BoundaryInteractionCommon(

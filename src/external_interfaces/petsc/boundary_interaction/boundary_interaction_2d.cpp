@@ -28,6 +28,8 @@ BoundaryInteraction2D::get_bounding_box(const int index) {
 }
 
 void BoundaryInteraction2D::collect_cells() {
+  auto r0 = this->sycl_target->profile_map.start_region("BoundaryInteraction2D",
+                                                        "collect_cells");
   for (auto cell : this->required_mh_cells) {
     // Does the mh cell actually have any edges intersecting it?
     if (this->map_mh_index_to_index.count(cell)) {
@@ -91,6 +93,8 @@ void BoundaryInteraction2D::collect_cells() {
     }
     this->collected_mh_cells.insert(cell);
   }
+
+  this->sycl_target->profile_map.end_region(r0);
 }
 
 BoundaryNormalMapper2D BoundaryInteraction2D::get_device_normal_mapper() {

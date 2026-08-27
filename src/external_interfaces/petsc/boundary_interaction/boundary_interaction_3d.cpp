@@ -28,6 +28,8 @@ ExternalCommon::BoundingBoxSharedPtr BoundaryInteraction3D::get_bounding_box(
 }
 
 void BoundaryInteraction3D::collect_cells() {
+  auto r0 = this->sycl_target->profile_map.start_region("BoundaryInteraction3D",
+                                                        "collect_cells");
 
   {
     std::vector<INT> gather_cells;
@@ -117,6 +119,8 @@ void BoundaryInteraction3D::collect_cells() {
     }
     this->collected_mh_cells.insert(cell);
   }
+
+  this->sycl_target->profile_map.end_region(r0);
 }
 
 BoundaryNormalMapper3D BoundaryInteraction3D::get_device_normal_mapper() {

@@ -167,21 +167,29 @@ void BoundaryInteractionCommon::extend_boundary_interfaces(
 std::map<PetscInt, ParticleSubGroupSharedPtr>
 BoundaryInteractionCommon::post_integration(
     std::shared_ptr<ParticleGroup> particles) {
+  auto r0 = this->sycl_target->profile_map.start_region(
+      "BoundaryInteractionCommon", "post_integration");
   auto groups = this->post_integration_dimension(particles);
   this->extend_boundary_interfaces(groups);
+  this->sycl_target->profile_map.end_region(r0);
   return groups;
 }
 
 std::map<PetscInt, ParticleSubGroupSharedPtr>
 BoundaryInteractionCommon::post_integration(
     std::shared_ptr<ParticleSubGroup> particles) {
+  auto r0 = this->sycl_target->profile_map.start_region(
+      "BoundaryInteractionCommon", "post_integration");
   auto groups = this->post_integration_dimension(particles);
   this->extend_boundary_interfaces(groups);
+  this->sycl_target->profile_map.end_region(r0);
   return groups;
 }
 
 void BoundaryInteractionCommon::pre_integration(
     std::shared_ptr<ParticleGroup> particles) {
+  auto r0 = this->sycl_target->profile_map.start_region(
+      "BoundaryInteractionCommon", "pre_integration");
   auto particle_group = get_particle_group(particles);
   prepare_particle_group(particle_group);
   auto position_dat = particle_group->position_dat;
@@ -200,6 +208,7 @@ void BoundaryInteractionCommon::pre_integration(
       Access::read(position_dat->sym),
       Access::write(this->previous_position_sym))
       ->execute();
+  this->sycl_target->profile_map.end_region(r0);
 }
 
 void BoundaryInteractionCommon::pre_integration(

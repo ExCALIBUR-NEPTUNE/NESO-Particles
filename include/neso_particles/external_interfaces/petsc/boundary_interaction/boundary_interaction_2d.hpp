@@ -172,6 +172,8 @@ protected:
   template <typename T>
   [[nodiscard]] inline std::map<PetscInt, ParticleSubGroupSharedPtr>
   post_integration_inner(std::shared_ptr<T> particles) {
+    auto r0 = this->sycl_target->profile_map.start_region(
+        "BoundaryInteraction2D", "post_integration_inner");
 
     this->find_cells(particles);
     this->collect_cells();
@@ -265,6 +267,8 @@ protected:
                      ResourceStackKeyBufferDevice<REAL>{}, d_real);
     restore_resource(sycl_target->resource_stack_map,
                      ResourceStackKeyBufferDevice<INT>{}, d_int);
+
+    this->sycl_target->profile_map.end_region(r0);
     return m;
   }
 
