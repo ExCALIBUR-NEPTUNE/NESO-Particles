@@ -292,35 +292,14 @@ ParticleGroupSharedPtr particle_loop_common(const int ndim, DM dm,
   return A;
 }
 
-void wrapper_box_mesh_test(const int ndim) {
-  PETSCCHK(PetscInitializeNoArguments());
-
-  const int mesh_size = 16;
-  const REAL h = 1.41;
-  PetscInt faces[3] = {mesh_size, mesh_size - 1, mesh_size - 2};
-  PetscReal lower[3] = {0.0, 0.0, 0.0};
-  PetscReal upper[3] = {faces[0] * h, faces[1] * h, faces[2] * h};
-
-  DM dm;
-  PETSCCHK(NPPETScAPI::NP_DMPlexCreateBoxMesh(
-      PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces, lower, upper,
-      /* periodicity */ NULL, PETSC_TRUE, &dm));
-  PetscInterface::generic_distribute(&dm);
+void wrapper_mesh_test(
+    const int ndim, DM dm,
+    std::map<PetscInt, std::vector<PetscInt>> boundary_groups) {
 
   auto A = particle_loop_common(ndim, dm, 1093);
   auto mesh = std::dynamic_pointer_cast<PetscInterface::DMPlexInterface>(
       A->domain->mesh);
   auto sycl_target = A->sycl_target;
-
-  std::map<PetscInt, std::vector<PetscInt>> boundary_groups;
-  boundary_groups[0] = {1};
-  boundary_groups[1] = {2};
-  boundary_groups[2] = {3};
-  boundary_groups[3] = {4};
-  if (ndim == 3) {
-    boundary_groups[4] = {5};
-    boundary_groups[5] = {6};
-  }
 
   const REAL tol = 1.0e-16;
   auto bic = PetscInterface::create_boundary_interaction(sycl_target, mesh,
@@ -361,13 +340,6 @@ void wrapper_box_mesh_test(const int ndim) {
   auto groups = bic->post_integration(A);
 
   auto face_sets = mesh->dmh->get_face_sets();
-
-  std::set<int> valid_labels = {1, 2, 3, 4};
-  if (ndim == 3) {
-    valid_labels.insert(5);
-    valid_labels.insert(6);
-  }
-
   std::set<INT> previously_seen;
 
   for (auto bx : boundary_groups) {
@@ -479,6 +451,19 @@ void wrapper_box_mesh_test(const int ndim) {
     }
   }
 
+  for (auto gx : groups) {
+    bic->function_project_initialise(funcs.at(gx.first));
+  }
+  for (auto gx : groups) {
+    bic->function_project_finalise(funcs.at(gx.first));
+  }
+  for (auto gx : groups) {
+    auto h_dofs = funcs.at(gx.first)->get_dofs();
+    for (auto dx : h_dofs) {
+      ASSERT_EQ(dx, 0.0);
+    }
+  }
+
   int npart_local_A = A->get_npart_local();
   int npart_local_t = 0;
   for (auto gx : groups) {
@@ -522,7 +507,33 @@ void wrapper_box_mesh_test(const int ndim) {
   bic->free();
   sycl_target->free();
   mesh->free();
+}
 
+void wrapper_box_mesh_test(const int ndim) {
+
+  PETSCCHK(PetscInitializeNoArguments());
+  const int mesh_size = 16;
+  const REAL h = 1.41;
+  PetscInt faces[3] = {mesh_size, mesh_size - 1, mesh_size - 2};
+  PetscReal lower[3] = {0.0, 0.0, 0.0};
+  PetscReal upper[3] = {faces[0] * h, faces[1] * h, faces[2] * h};
+  DM dm;
+  PETSCCHK(NPPETScAPI::NP_DMPlexCreateBoxMesh(
+      PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces, lower, upper,
+      /* periodicity */ NULL, PETSC_TRUE, &dm));
+  PetscInterface::generic_distribute(&dm);
+
+  std::map<PetscInt, std::vector<PetscInt>> boundary_groups;
+  boundary_groups[0] = {1};
+  boundary_groups[1] = {2};
+  boundary_groups[2] = {3};
+  boundary_groups[3] = {4};
+  if (ndim == 3) {
+    boundary_groups[4] = {5};
+    boundary_groups[5] = {6};
+  }
+
+  wrapper_mesh_test(ndim, dm, boundary_groups);
   PETSCCHK(DMDestroy(&dm));
   PETSCCHK(PetscFinalize());
 }
@@ -534,6 +545,69 @@ TEST(PETScBoundary2D, surface_functions_box_mesh_evaluate_project) {
 }
 TEST(PETScBoundary3D, surface_functions_box_mesh_evaluate_project) {
   wrapper_box_mesh_test(3);
+}
+TEST(PETScBoundary2D, surface_functions_ref_mesh_evaluate_project) {
+
+  std::filesystem::path gmsh_filepath;
+  GET_TEST_RESOURCE(gmsh_filepath, "gmsh/reference_all_types_square_0.2.msh");
+  PETSCCHK(PetscInitializeNoArguments());
+  DM dm;
+  PETSCCHK(DMPlexCreateGmshFromFile(MPI_COMM_WORLD,
+                                    gmsh_filepath.generic_string().c_str(),
+                                    (PetscBool)1, &dm));
+  PetscInterface::generic_distribute(&dm);
+
+  std::vector<int> faces = {100, 200, 300, 400};
+  std::map<PetscInt, std::vector<PetscInt>> boundary_groups;
+  for (int ix : faces) {
+    boundary_groups[ix] = {ix};
+  }
+
+  wrapper_mesh_test(2, dm, boundary_groups);
+
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
+TEST(PETScBoundary2D, surface_functions_ring_mesh_evaluate_project) {
+
+  std::filesystem::path gmsh_filepath;
+  GET_TEST_RESOURCE(gmsh_filepath, "gmsh/mesh_ring.msh");
+  PETSCCHK(PetscInitializeNoArguments());
+  DM dm;
+  PETSCCHK(DMPlexCreateGmshFromFile(MPI_COMM_WORLD,
+                                    gmsh_filepath.generic_string().c_str(),
+                                    (PetscBool)1, &dm));
+  PetscInterface::generic_distribute(&dm);
+
+  std::map<PetscInt, std::vector<PetscInt>> boundary_groups;
+  boundary_groups[1] = {1, 2, 3, 4};
+
+  wrapper_mesh_test(2, dm, boundary_groups);
+
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
+TEST(PETScBoundary3D, surface_functions_ref_mesh_evaluate_project) {
+
+  std::filesystem::path gmsh_filepath;
+  GET_TEST_RESOURCE(gmsh_filepath, "gmsh/mixed_ref_cube_0.8.msh");
+  PETSCCHK(PetscInitializeNoArguments());
+  DM dm;
+  PETSCCHK(DMPlexCreateGmshFromFile(MPI_COMM_WORLD,
+                                    gmsh_filepath.generic_string().c_str(),
+                                    (PetscBool)1, &dm));
+  PetscInterface::generic_distribute(&dm);
+
+  std::vector<int> faces = {100, 200, 300, 400, 500, 600};
+  std::map<PetscInt, std::vector<PetscInt>> boundary_groups;
+  for (int ix : faces) {
+    boundary_groups[ix] = {ix};
+  }
+
+  wrapper_mesh_test(3, dm, boundary_groups);
+
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
 }
 
 #endif
