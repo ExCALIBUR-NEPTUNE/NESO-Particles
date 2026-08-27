@@ -246,10 +246,8 @@ ParticleGroupSharedPtr particle_loop_common(const int ndim, DM dm,
   ParticleSpec particle_spec{ParticleProp(Sym<REAL>("P"), ndim, true),
                              ParticleProp(Sym<REAL>("V"), 3),
                              ParticleProp(Sym<REAL>("U"), 3),
-                             ParticleProp(Sym<REAL>("TSP"), 2),
-                             ParticleProp(Sym<REAL>("P2"), ndim),
+                             ParticleProp(Sym<REAL>("MASS"), 1),
                              ParticleProp(Sym<INT>("CELL_ID"), 1, true),
-                             ParticleProp(Sym<INT>("LOOP_INDEX"), 2),
                              ParticleProp(Sym<INT>("ID"), 1)};
 
   auto A = std::make_shared<ParticleGroup>(domain, particle_spec, sycl_target);
@@ -301,7 +299,7 @@ void wrapper_mesh_test(
       A->domain->mesh);
   auto sycl_target = A->sycl_target;
 
-  const REAL tol = 1.0e-16;
+  const REAL tol = 1.0e-15;
   auto bic = PetscInterface::create_boundary_interaction(sycl_target, mesh,
                                                          boundary_groups, tol);
 
@@ -509,6 +507,142 @@ void wrapper_mesh_test(
   mesh->free();
 }
 
+void wrapper_mesh_mass_test(
+    const int ndim, DM dm,
+    std::map<PetscInt, std::vector<PetscInt>> boundary_groups) {
+
+  const REAL dt = 0.2;
+  const int Nsteps = 100;
+
+  auto A = particle_loop_common(ndim, dm, 1093);
+  auto mesh = std::dynamic_pointer_cast<PetscInterface::DMPlexInterface>(
+      A->domain->mesh);
+  auto sycl_target = A->sycl_target;
+
+  fill(A, Sym<REAL>("MASS"), 1.0);
+
+  const REAL tol = 1.0e-15;
+  auto bic = PetscInterface::create_boundary_interaction(sycl_target, mesh,
+                                                         boundary_groups, tol);
+
+  std::map<int, PetscInterface::DMPlexFunctionSharedPtr> funcs;
+  std::map<int, PetscInterface::DMPlexFunctionSharedPtr> funcs_contrib;
+  for (auto &bx : boundary_groups) {
+    funcs[bx.first] = bic->create_function(bx.first, "DG", 0);
+    funcs_contrib[bx.first] = bic->create_function(bx.first, "DG", 0);
+  }
+
+  particle_loop(
+      A,
+      [=](auto V) {
+        REAL Vmag = 0.0;
+        for (int dx = 0; dx < ndim; dx++) {
+          Vmag += V.at(dx) * V.at(dx);
+        }
+        const bool is_zero = Vmag == 0.0;
+        const REAL scaling = is_zero ? 0.0 : 1.0 / Kernel::sqrt(Vmag);
+
+        for (int dx = 0; dx < ndim; dx++) {
+          V.at(dx) = is_zero ? 1.0 : scaling * V.at(dx);
+        }
+      },
+      Access::write(Sym<REAL>("V")))
+      ->execute();
+
+  auto lambda_get_boundary_mass = [&]() -> REAL {
+    REAL local_mass = 0.0;
+    for (auto &fx : funcs) {
+      auto h_dofs = fx.second->get_dofs();
+      for (std::size_t dx = 0; dx < h_dofs.size(); dx++) {
+        const PetscInt point_index = fx.second->cells_local.at(dx);
+        const REAL volume = mesh->dmh->get_point_volume(point_index);
+        const REAL dof = h_dofs.at(dx);
+        local_mass += volume * dof;
+      }
+    }
+    REAL total_mass = 0.0;
+    MPICHK(MPI_Allreduce(&local_mass, &total_mass, 1,
+                         map_ctype_mpi_type<REAL>(), MPI_SUM,
+                         mesh->get_comm()));
+    return total_mass;
+  };
+
+  auto ga_mass = std::make_shared<GlobalArray<REAL>>(sycl_target, 1);
+  auto lambda_get_particle_mass = [&]() -> REAL {
+    ga_mass->fill(0.0);
+    particle_loop(
+        A, [=](auto MASS, auto GA_MASS) { GA_MASS.add(0, MASS.at(0)); },
+        Access::read(Sym<REAL>("MASS")), Access::add(ga_mass))
+        ->execute();
+    return ga_mass->get().at(0);
+  };
+
+  REAL mass_particle_system = lambda_get_particle_mass();
+  const REAL mass_total = mass_particle_system;
+  REAL mass_boundary_function = lambda_get_boundary_mass();
+
+  for (int stepx = 0; stepx < Nsteps; stepx++) {
+    bic->pre_integration(A);
+    forward_euler(A, Sym<REAL>("P"), dt, Sym<REAL>("V"));
+    auto groups = bic->post_integration(A);
+
+    for (auto &gx : groups) {
+      bic->function_project(gx.second, Sym<REAL>("MASS"), 0, false,
+                            funcs.at(gx.first));
+    }
+
+    for (auto &gx : groups) {
+      gx.second->add_ephemeral_dat(Sym<REAL>("EPH_MASS"), 1);
+      copy_particle_dat_to_ephemeral_dat(gx.second, Sym<REAL>("MASS"),
+                                         Sym<REAL>("EPH_MASS"));
+
+      auto &func_tmp = funcs_contrib.at(gx.first);
+      bic->function_project_initialise(func_tmp);
+      bic->function_project_contribute(gx.second, Sym<REAL>("MASS"), 0, false,
+                                       func_tmp);
+      bic->function_project_contribute(gx.second, Sym<REAL>("EPH_MASS"), 0,
+                                       true, func_tmp);
+      bic->function_project_finalise(func_tmp);
+    }
+
+    std::vector<ParticleSubGroupSharedPtr> groups_union;
+    for (auto &gx : groups) {
+      groups_union.push_back(gx.second);
+    }
+    A->remove_particles(particle_sub_group_disjoint_union(groups_union));
+
+    mass_particle_system = lambda_get_particle_mass();
+    mass_boundary_function += lambda_get_boundary_mass();
+    const REAL mass_diff =
+        mass_total - mass_boundary_function - mass_particle_system;
+    ASSERT_NEAR(mass_diff, 0.0, 1.0e-10);
+
+    for (auto &gx : groups) {
+      auto func_tmp = funcs.at(gx.first);
+      auto func_contrib_tmp = funcs_contrib.at(gx.first);
+      auto h_dofs_mass = func_tmp->get_dofs();
+      auto h_dofs_mass_contrib = func_contrib_tmp->get_dofs();
+
+      for (std::size_t ix = 0; ix < h_dofs_mass.size(); ix++) {
+        const REAL correct = h_dofs_mass[ix] * 2.0;
+        const REAL to_test = h_dofs_mass_contrib[ix];
+        ASSERT_NEAR(correct, to_test, 1.0e-14);
+      }
+    }
+
+    // func_mass->write_vtkhdf("trajectory_surface_" + std::to_string(ndim) +
+    //                         "d_" + std::to_string(stepx) + ".vtkhdf");
+
+    // h5part->write();
+  }
+
+  // h5part->close();
+
+  bic->free();
+  sycl_target->free();
+  mesh->free();
+}
+
 void wrapper_box_mesh_test(const int ndim) {
 
   PETSCCHK(PetscInitializeNoArguments());
@@ -534,6 +668,35 @@ void wrapper_box_mesh_test(const int ndim) {
   }
 
   wrapper_mesh_test(ndim, dm, boundary_groups);
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
+
+void wrapper_box_mesh_mass_test(const int ndim) {
+
+  PETSCCHK(PetscInitializeNoArguments());
+  const int mesh_size = 16;
+  const REAL h = 1.41;
+  PetscInt faces[3] = {mesh_size, mesh_size - 1, mesh_size - 2};
+  PetscReal lower[3] = {0.0, 0.0, 0.0};
+  PetscReal upper[3] = {faces[0] * h, faces[1] * h, faces[2] * h};
+  DM dm;
+  PETSCCHK(NPPETScAPI::NP_DMPlexCreateBoxMesh(
+      PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces, lower, upper,
+      /* periodicity */ NULL, PETSC_TRUE, &dm));
+  PetscInterface::generic_distribute(&dm);
+
+  std::map<PetscInt, std::vector<PetscInt>> boundary_groups;
+  boundary_groups[0] = {1};
+  boundary_groups[1] = {2};
+  boundary_groups[2] = {3};
+  boundary_groups[3] = {4};
+  if (ndim == 3) {
+    boundary_groups[4] = {5};
+    boundary_groups[5] = {6};
+  }
+
+  wrapper_mesh_mass_test(ndim, dm, boundary_groups);
   PETSCCHK(DMDestroy(&dm));
   PETSCCHK(PetscFinalize());
 }
@@ -605,6 +768,75 @@ TEST(PETScBoundary3D, surface_functions_ref_mesh_evaluate_project) {
   }
 
   wrapper_mesh_test(3, dm, boundary_groups);
+
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
+TEST(PETScBoundary2D, surface_functions_box_mesh_mass_conservation) {
+  wrapper_box_mesh_mass_test(2);
+}
+TEST(PETScBoundary3D, surface_functions_box_mesh_mass_conservation) {
+  wrapper_box_mesh_mass_test(3);
+}
+TEST(PETScBoundary2D, surface_functions_ref_mesh_mass_conservation) {
+
+  std::filesystem::path gmsh_filepath;
+  GET_TEST_RESOURCE(gmsh_filepath, "gmsh/reference_all_types_square_0.2.msh");
+  PETSCCHK(PetscInitializeNoArguments());
+  DM dm;
+  PETSCCHK(DMPlexCreateGmshFromFile(MPI_COMM_WORLD,
+                                    gmsh_filepath.generic_string().c_str(),
+                                    (PetscBool)1, &dm));
+  PetscInterface::generic_distribute(&dm);
+
+  std::vector<int> faces = {100, 200, 300, 400};
+  std::map<PetscInt, std::vector<PetscInt>> boundary_groups;
+  for (int ix : faces) {
+    boundary_groups[ix] = {ix};
+  }
+
+  wrapper_mesh_mass_test(2, dm, boundary_groups);
+
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
+TEST(PETScBoundary2D, surface_functions_ring_mesh_mass_conservation) {
+
+  std::filesystem::path gmsh_filepath;
+  GET_TEST_RESOURCE(gmsh_filepath, "gmsh/mesh_ring.msh");
+  PETSCCHK(PetscInitializeNoArguments());
+  DM dm;
+  PETSCCHK(DMPlexCreateGmshFromFile(MPI_COMM_WORLD,
+                                    gmsh_filepath.generic_string().c_str(),
+                                    (PetscBool)1, &dm));
+  PetscInterface::generic_distribute(&dm);
+
+  std::map<PetscInt, std::vector<PetscInt>> boundary_groups;
+  boundary_groups[1] = {1, 2, 3, 4};
+
+  wrapper_mesh_mass_test(2, dm, boundary_groups);
+
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
+TEST(PETScBoundary3D, surface_functions_ref_mesh_mass_conservation) {
+
+  std::filesystem::path gmsh_filepath;
+  GET_TEST_RESOURCE(gmsh_filepath, "gmsh/mixed_ref_cube_0.8.msh");
+  PETSCCHK(PetscInitializeNoArguments());
+  DM dm;
+  PETSCCHK(DMPlexCreateGmshFromFile(MPI_COMM_WORLD,
+                                    gmsh_filepath.generic_string().c_str(),
+                                    (PetscBool)1, &dm));
+  PetscInterface::generic_distribute(&dm);
+
+  std::vector<int> faces = {100, 200, 300, 400, 500, 600};
+  std::map<PetscInt, std::vector<PetscInt>> boundary_groups;
+  for (int ix : faces) {
+    boundary_groups[ix] = {ix};
+  }
+
+  wrapper_mesh_mass_test(3, dm, boundary_groups);
 
   PETSCCHK(DMDestroy(&dm));
   PETSCCHK(PetscFinalize());

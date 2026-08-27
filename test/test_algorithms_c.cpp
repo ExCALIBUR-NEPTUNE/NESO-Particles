@@ -369,3 +369,159 @@ TEST(Algorithms, cell_dat_const_loop_element_wise_base_broadcast) {
 
   sycl_target->free();
 }
+
+TEST(Algorithms, forward_euler) {
+  auto [A, sycl_target, cell_count_t] = particle_loop_common_2d(27, 16, 32);
+
+  ErrorPropagate ep(sycl_target);
+  auto k_ep = ep.device_ptr();
+
+  for (int dx : {1, 2, 3, 4}) {
+    A->add_particle_dat(Sym<REAL>("PO"), dx);
+    A->add_particle_dat(Sym<REAL>("PP"), dx);
+    A->add_particle_dat(Sym<REAL>("VV"), dx);
+
+    particle_loop(
+        A,
+        [=](auto INDEX, auto PO, auto P, auto V) {
+          for (int ex = 0; ex < dx; ex++) {
+            PO.at(ex) = INDEX.get_loop_linear_index() + 0.1 * ex;
+            P.at(ex) = PO.at(ex);
+            V.at(ex) = INDEX.get_loop_linear_index() + 0.2 * ex;
+          }
+        },
+        Access::read(ParticleLoopIndex{}), Access::write(Sym<REAL>("PO")),
+        Access::write(Sym<REAL>("PP")), Access::write(Sym<REAL>("VV")))
+        ->execute();
+
+    forward_euler(A, Sym<REAL>("PP"), 0.1, Sym<REAL>("VV"));
+
+    particle_loop(
+        A,
+        [=](auto PO, auto P, auto V) {
+          for (int ex = 0; ex < dx; ex++) {
+            const REAL correct = PO.at(ex) + 0.1 * V.at(ex);
+            const REAL to_test = P.at(ex);
+            const REAL err = relative_error(correct, to_test);
+            NESO_KERNEL_ASSERT(err < 1.0e-14, k_ep);
+          }
+        },
+        Access::read(Sym<REAL>("PO")), Access::read(Sym<REAL>("PP")),
+        Access::read(Sym<REAL>("VV")))
+        ->execute();
+
+    ASSERT_FALSE(ep.get_flag());
+
+    A->remove_particle_dat(Sym<REAL>("PO"));
+    A->remove_particle_dat(Sym<REAL>("PP"));
+    A->remove_particle_dat(Sym<REAL>("VV"));
+  }
+
+  sycl_target->free();
+  A->domain->mesh->free();
+}
+
+TEST(Algorithms, fill) {
+  auto [A, sycl_target, cell_count_t] = particle_loop_common_2d(27, 16, 32);
+
+  ErrorPropagate ep(sycl_target);
+  auto k_ep = ep.device_ptr();
+
+  fill(A, Sym<REAL>("V"), 3.14);
+
+  particle_loop(
+      A,
+      [=](auto V) {
+        NESO_KERNEL_ASSERT(V.at(0) == 3.14, k_ep);
+        NESO_KERNEL_ASSERT(V.at(1) == 3.14, k_ep);
+      },
+      Access::read(Sym<REAL>("V")))
+      ->execute();
+  ASSERT_FALSE(ep.get_flag());
+
+  fill(A, Sym<REAL>("V"), 4.14, 1);
+
+  particle_loop(
+      A,
+      [=](auto V) {
+        NESO_KERNEL_ASSERT(V.at(0) == 3.14, k_ep);
+        NESO_KERNEL_ASSERT(V.at(1) == 4.14, k_ep);
+      },
+      Access::read(Sym<REAL>("V")))
+      ->execute();
+  ASSERT_FALSE(ep.get_flag());
+
+  auto a0 = particle_sub_group(
+      A, [=](auto ID) { return ID.at(0) % 2 == 0; },
+      Access::read(Sym<INT>("ID")));
+  auto a1 = particle_sub_group(
+      A, [=](auto ID) { return ID.at(0) % 2 == 1; },
+      Access::read(Sym<INT>("ID")));
+
+  fill(a0, Sym<REAL>("V"), 1.0);
+
+  particle_loop(
+      a0,
+      [=](auto V) {
+        NESO_KERNEL_ASSERT(V.at(0) == 1.0, k_ep);
+        NESO_KERNEL_ASSERT(V.at(1) == 1.0, k_ep);
+      },
+      Access::read(Sym<REAL>("V")))
+      ->execute();
+  ASSERT_FALSE(ep.get_flag());
+
+  particle_loop(
+      a1,
+      [=](auto V) {
+        NESO_KERNEL_ASSERT(V.at(0) == 3.14, k_ep);
+        NESO_KERNEL_ASSERT(V.at(1) == 4.14, k_ep);
+      },
+      Access::read(Sym<REAL>("V")))
+      ->execute();
+  ASSERT_FALSE(ep.get_flag());
+
+  fill(a0, Sym<REAL>("V"), 2.0, 1);
+
+  auto t = [&]() {
+    particle_loop(
+        a0,
+        [=](auto V) {
+          NESO_KERNEL_ASSERT(V.at(0) == 1.0, k_ep);
+          NESO_KERNEL_ASSERT(V.at(1) == 2.0, k_ep);
+        },
+        Access::read(Sym<REAL>("V")))
+        ->execute();
+    ASSERT_FALSE(ep.get_flag());
+  };
+
+  t();
+
+  a0->add_ephemeral_dat(Sym<REAL>("VV"), 2);
+
+  fill(a0, Sym<REAL>("VV"), 4.0);
+  t();
+  particle_loop(
+      a0,
+      [=](auto V) {
+        NESO_KERNEL_ASSERT(V.at_ephemeral(0) == 4.0, k_ep);
+        NESO_KERNEL_ASSERT(V.at_ephemeral(1) == 4.0, k_ep);
+      },
+      Access::read(Sym<REAL>("VV")))
+      ->execute();
+  ASSERT_FALSE(ep.get_flag());
+
+  fill(a0, Sym<REAL>("VV"), 3.0, 0);
+  t();
+  particle_loop(
+      a0,
+      [=](auto V) {
+        NESO_KERNEL_ASSERT(V.at_ephemeral(0) == 3.0, k_ep);
+        NESO_KERNEL_ASSERT(V.at_ephemeral(1) == 4.0, k_ep);
+      },
+      Access::read(Sym<REAL>("VV")))
+      ->execute();
+  ASSERT_FALSE(ep.get_flag());
+
+  sycl_target->free();
+  A->domain->mesh->free();
+}
