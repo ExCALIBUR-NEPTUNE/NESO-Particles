@@ -1,6 +1,7 @@
 #ifndef _NESO_PARTICLES_EXTERNAL_PETSC_DMPLEX_PROJECT_EVALUATE_BARYCENTRIC_H_
 #define _NESO_PARTICLES_EXTERNAL_PETSC_DMPLEX_PROJECT_EVALUATE_BARYCENTRIC_H_
 
+#include "../../../algorithms/cellwise_methods.hpp"
 #include "../../common/coordinate_mapping.hpp"
 #include "../petsc_utility.hpp"
 #include "dmplex_project_evaluate_base.hpp"
@@ -19,6 +20,7 @@ protected:
   std::shared_ptr<CellDatConst<REAL>> cdc_vertices;
   std::shared_ptr<CellDatConst<REAL>> cdc_matrices;
   DMPlexInterfaceSharedPtr mesh;
+  int ncomp_active{0};
 
   inline void check_setup() {
     NESOASSERT(this->qpm->points_added(),
@@ -181,6 +183,7 @@ protected:
 
     const int ncomp = dat->ncomp;
     this->check_ncomp(ncomp);
+    this->ncomp_active = ncomp;
     auto source_dat = this->qpm->get_sym(ncomp);
     this->cdc_project->fill(0.0);
 
@@ -259,6 +262,7 @@ protected:
 
     const int ncomp = dat->ncomp;
     this->check_ncomp(ncomp);
+    this->ncomp_active = ncomp;
 
     auto destination_dat = this->qpm->get_sym(ncomp);
     this->compute_barycentric_coordinates(particle_sub_group);
@@ -281,28 +285,31 @@ protected:
         Access::reduce(this->cdc_project, Kernel::plus<REAL>()))
         ->execute();
 
+    cell_dat_const_loop_element_wise(
+        this->cdc_project,
+        [](auto DOFS, auto INVERSE_VOL) { return DOFS * INVERSE_VOL; },
+        this->cdc_project, this->cdc_volumes);
+
     // Read the CellDatConst values onto the quadrature point values
     particle_loop(
         "DMPlexProjectEvaluateBarycentric::project_1",
         this->qpm->particle_group,
-        [=](auto B, auto NUM_VERTICES, auto SRC, auto VOLUMES, auto DST,
-            auto MASK) {
+        [=](auto B, auto NUM_VERTICES, auto SRC, auto DST, auto MASK) {
           const int num_vertices = NUM_VERTICES.at(0, 0);
           const auto quad_index = MASK.at(3);
           if ((-1 < quad_index) && (quad_index < num_vertices)) {
-            const REAL iv = VOLUMES.at(0, 0);
             for (int cx = 0; cx < ncomp; cx++) {
               REAL tmp_accumulation = 0.0;
               for (int vx = 0; vx < num_vertices; vx++) {
                 tmp_accumulation += B.at(vx) * SRC.at(cx, vx);
               }
-              DST.at(cx) = iv * tmp_accumulation;
+              DST.at(cx) = tmp_accumulation;
             }
           }
         },
         Access::read(sym_barycentric_coords),
         Access::read(this->cdc_num_vertices), Access::read(this->cdc_project),
-        Access::read(this->cdc_volumes), Access::write(destination_dat),
+        Access::write(destination_dat),
         Access::read(Sym<INT>("ADDING_RANK_INDEX")))
         ->execute();
   }
@@ -321,9 +328,11 @@ public:
    * Get a representation of the internal state which can be passed to the
    * VTKHDF writer.
    *
+   * @param name Name to assign to field in output data. Default "value".
    * @returns Data for VTKHDF unstructured grid writer.
    */
-  virtual std::vector<VTK::UnstructuredCell> get_vtk_data() override;
+  virtual std::vector<VTK::UnstructuredCell>
+  get_vtk_data(const std::string name = "value") override;
 
   /**
    * Create a DG1 project/evaluate instance from a QuadraturePointMapper which

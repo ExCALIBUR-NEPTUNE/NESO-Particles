@@ -246,6 +246,19 @@ TEST(PETSc, dmplex_project_evaluate_qpm_average) {
   PETSCCHK(PetscFinalize());
 }
 
+namespace {
+class TestDMPlexProjectEvaluateBarycentric
+    : public PetscInterface::DMPlexProjectEvaluateBarycentric {
+public:
+  template <typename... ARGS>
+  TestDMPlexProjectEvaluateBarycentric(ARGS... args)
+      : DMPlexProjectEvaluateBarycentric(args...) {}
+
+  MAKE_GETTER_METHOD(cdc_project);
+};
+
+} // namespace
+
 TEST(PETSc, dmplex_evaluate_barycentric) {
 
   std::filesystem::path gmsh_filepath;
@@ -299,7 +312,7 @@ TEST(PETSc, dmplex_evaluate_barycentric) {
   }
   A->add_particles_local(initial_distribution);
 
-  auto dpe = std::make_shared<PetscInterface::DMPlexProjectEvaluateBarycentric>(
+  auto dpe = std::make_shared<TestDMPlexProjectEvaluateBarycentric>(
       qpm, "Barycentric", 1, true);
 
   auto lambda_l0 = [=](auto x, auto y) -> REAL {
@@ -356,7 +369,22 @@ TEST(PETSc, dmplex_evaluate_barycentric) {
   ExternalCommon::interpolate<2, 2>(qpm, lambda_l0, lambda_l1);
 
   dpe->evaluate(A, Sym<REAL>("Q2"));
+  auto vtk_data = dpe->get_vtk_data();
+  auto dofs = dpe->get_cdc_project()->get_all_cells();
+
   for (int cx = 0; cx < cell_count; cx++) {
+
+    const int num_vertices = vtk_data.at(cx).num_points;
+
+    for (int vx = 0; vx < num_vertices; vx++) {
+      for (int nx = 0; nx < 2; nx++) {
+        const REAL to_test =
+            vtk_data.at(cx).point_data.at("value_" + std::to_string(nx)).at(vx);
+        const REAL correct = dofs.at(cx)->at(nx, vx);
+        ASSERT_EQ(correct, to_test);
+      }
+    }
+
     auto P = A->get_cell(Sym<REAL>("P"), cx);
     auto Q2 = A->get_cell(Sym<REAL>("Q2"), cx);
     for (int rx = 0; rx < P->nrow; rx++) {
