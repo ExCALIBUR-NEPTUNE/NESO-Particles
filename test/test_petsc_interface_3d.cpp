@@ -142,7 +142,252 @@ struct BoundaryTriangleTest {
   int type;
 };
 
+
+std::vector<REAL> get_coords(
+  DM dm,
+  PetscInt petsc_index
+){
+  const PetscScalar *tmp;
+  PetscScalar *vertices = nullptr;
+  PetscInt num_coords;
+  PetscBool is_dg;
+
+  PETSCCHK(DMPlexGetCellCoordinates(dm, petsc_index, &is_dg, &num_coords, &tmp,
+                                    &vertices));
+  const int num_vertices = num_coords / 3;
+  NESOASSERT(num_vertices == 1, "Expected a point.");
+  std::vector<PetscScalar> h_vertices;
+  h_vertices.reserve(num_coords);
+  for (PetscInt ix = 0; ix < num_coords; ix++) {
+    h_vertices.push_back(vertices[ix]);
+  }
+  PETSCCHK(DMPlexRestoreCellCoordinates(dm, petsc_index, &is_dg, &num_coords,
+                                        &tmp, &vertices));
+
+  return h_vertices;
+}
+
+
+bool normal_points_towards_point(
+  DM dm,
+  const PetscInt p0,
+  const PetscInt p1,
+  const PetscInt p2,
+  const PetscInt point
+){
+
+  auto v0 = get_coords(dm, p0);
+  auto v1 = get_coords(dm, p1);
+  auto v2 = get_coords(dm, p2);
+
+  std::vector<REAL> n01(3);
+  std::vector<REAL> n02(3);
+  for(int dx=0 ; dx<3 ; dx++){
+    n01.at(dx) = v1.at(dx) - v0.at(dx);
+    n02.at(dx) = v2.at(dx) - v0.at(dx);
+  }
+
+  std::vector<REAL> n = {0.0, 0.0, 0.0};
+
+  KERNEL_CROSS_PRODUCT_3D(
+    n01[0], n01[1], n01[2],
+    n02[0], n02[1], n02[2],
+    n[0], n[1], n[2]
+  );
+
+  auto d = get_coords(dm, point);
+
+  const REAL dd = KERNEL_DOT_PRODUCT_3D(
+    n[0], n[1], n[2],
+    d[0], d[1], d[2]
+  );
+
+  return dd >= 0.0;
+}
+
+DMPolytopeType get_point_type(DM dm, const PetscInt point_index) {
+  DMPolytopeType cell_type;
+  PETSCCHK(DMPlexGetCellType(dm, point_index, &cell_type));
+  return cell_type;
+}
+
+std::vector<PetscInt> get_canonical_vertex_order(DM dm, const PetscInt point) {
+  std::vector<PetscInt> order;
+
+  PetscInt depth = -1;
+  PETSCCHK(DMPlexGetPointDepth(dm, point, &depth));
+  const PetscInt *cone = nullptr;
+  PetscInt cone_size = 0;
+  PETSCCHK(DMPlexGetConeSize(dm, point, &cone_size));
+  if (cone_size > 0) {
+    PETSCCHK(DMPlexGetCone(dm, point, &cone));
+  }
+
+  auto point_type = get_point_type(dm, point);
+
+  std::vector<std::vector<PetscInt>> faces;
+  std::set<PetscInt> vertex_points;
+  for (PetscInt fx = 0; fx < cone_size; fx++) {
+    auto t = get_canonical_vertex_order(dm, cone[fx]);
+    for (auto tx : t) {
+      vertex_points.insert(tx);
+    }
+    faces.push_back(t);
+  }
+
+  if (point_type == DM_POLYTOPE_POINT) {
+    order.push_back(point);
+  } else if (point_type == DM_POLYTOPE_SEGMENT) {
+    order.push_back(cone[0]);
+    order.push_back(cone[1]);
+  } else if (point_type == DM_POLYTOPE_POINT_PRISM_TENSOR) {
+    order.push_back(cone[0]);
+    order.push_back(cone[1]);
+  } else if ((point_type == DM_POLYTOPE_TRIANGLE) ||
+             (point_type == DM_POLYTOPE_QUADRILATERAL) ||
+             (point_type == DM_POLYTOPE_SEG_PRISM_TENSOR)) {
+
+    std::map<PetscInt, std::set<PetscInt>> map_vertex_to_neighbours;
+
+    PetscInt first_vertex = -1;
+    for (PetscInt edgex = 0; edgex < cone_size; edgex++) {
+      const PetscInt edge = cone[edgex];
+      std::vector<PetscInt> edge_cone = get_canonical_vertex_order(dm, edge);
+
+      const PetscInt v0 = edge_cone.at(0);
+      const PetscInt v1 = edge_cone.at(1);
+      if (edgex == 0) {
+        first_vertex = v0;
+      }
+
+      map_vertex_to_neighbours[v0].insert(v1);
+      map_vertex_to_neighbours[v1].insert(v0);
+    }
+
+    PetscInt current_vertex = first_vertex;
+    for (int edgex = 0; edgex < cone_size; edgex++) {
+
+      order.push_back(current_vertex);
+      // get a neighbour vertex
+      const PetscInt next_vertex =
+          *map_vertex_to_neighbours.at(current_vertex).begin();
+      // Remove the current point from the neighbours of the next point such
+      // that the loop never travels backwards.
+      map_vertex_to_neighbours.at(next_vertex).erase(current_vertex);
+
+      current_vertex = next_vertex;
+    }
+
+    if (point_type == DM_POLYTOPE_SEG_PRISM_TENSOR) {
+      const PetscInt t2 = order.at(2);
+      const PetscInt t3 = order.at(3);
+      order.at(2) = t3;
+      order.at(3) = t2;
+    }
+
+  } else if (point_type == DM_POLYTOPE_TETRAHEDRON) {
+
+    auto bottom_face = faces.at(0);
+    for (auto tx : bottom_face) {
+      vertex_points.erase(tx);
+    }
+    NESOASSERT(vertex_points.size() == 1, "Expected one remaining point.");
+    const PetscInt point3 = *vertex_points.begin();
+
+    const bool correct_order = normal_points_towards_point(
+        dm, bottom_face.at(0), bottom_face.at(2), bottom_face.at(1), point3);
+
+    if (correct_order) {
+      order.push_back(bottom_face.at(0));
+      order.push_back(bottom_face.at(1));
+      order.push_back(bottom_face.at(2));
+      order.push_back(point3);
+    } else {
+      order.push_back(bottom_face.at(2));
+      order.push_back(bottom_face.at(1));
+      order.push_back(bottom_face.at(0));
+      order.push_back(point3);
+    }
+  } else if (point_type == DM_POLYTOPE_PYRAMID) {
+    // There is one quad and this is the base.
+
+    std::vector<PetscInt> bottom_face;
+    for (auto &fx : faces) {
+      if (fx.size() == 4) {
+        bottom_face = fx;
+      }
+    }
+    NESOASSERT(bottom_face.size() == 4, "Failed to find Pyramid base.");
+    for (auto tx : bottom_face) {
+      vertex_points.erase(tx);
+    }
+    NESOASSERT(vertex_points.size() == 1, "Expected one remaining point.");
+    const PetscInt point4 = *vertex_points.begin();
+
+    const bool correct_order = normal_points_towards_point(
+        dm, bottom_face.at(0), bottom_face.at(3), bottom_face.at(1), point4);
+
+    if (correct_order) {
+      order.push_back(bottom_face.at(0));
+      order.push_back(bottom_face.at(1));
+      order.push_back(bottom_face.at(2));
+      order.push_back(bottom_face.at(3));
+      order.push_back(point4);
+    } else {
+      order.push_back(bottom_face.at(3));
+      order.push_back(bottom_face.at(2));
+      order.push_back(bottom_face.at(1));
+      order.push_back(bottom_face.at(0));
+      order.push_back(point4);
+    }
+  }
+
+  return order;
+}
+
 } // namespace
+
+TEST(PETScBoundary3D, foo) {
+  std::filesystem::path gmsh_filepath;
+  GET_TEST_RESOURCE(gmsh_filepath, "gmsh/mixed_ref_cube_0.8.msh");
+
+  PETSCCHK(PetscInitializeNoArguments());
+  DM dm;
+  PETSCCHK(DMPlexCreateGmshFromFile(MPI_COMM_WORLD,
+                                    gmsh_filepath.generic_string().c_str(),
+                                    (PetscBool)1, &dm));
+  PetscInterface::generic_distribute(&dm);
+
+  int rank = -1;
+  MPICHK(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
+
+  auto mesh =
+      std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
+
+  PetscInt point_start = 0;
+  PetscInt point_end = 0;
+  PETSCCHK(DMPlexGetChart(dm, &point_start, &point_end));
+
+  for(PetscInt px=point_start ; px<point_end ; px++){
+    
+    auto o = get_canonical_vertex_order(dm, px);
+    auto point_type = get_point_type(dm, px);
+
+    if (point_type == DM_POLYTOPE_PYRAMID) {
+    nprint("point:", px);
+    for(auto & vx: o){
+      nprint("\t", vx);
+    }
+    }
+
+  }
+
+
+
+  mesh->free();
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
 
 TEST(PETScBoundary3D, setup) {
   std::filesystem::path gmsh_filepath;
@@ -190,6 +435,45 @@ TEST(PETScBoundary3D, setup) {
 
   for (auto &item : face_sets) {
     if (labels.count(item.first)) {
+      
+      nprint("============================================================");
+  std::vector<BoundaryTriangleTest> h_triangles_edge;
+
+      
+      {
+        std::vector<VTK::UnstructuredCell> vtk_data;
+        
+        for (auto &point_id : item.second) {
+          auto d =mesh->dmh->get_vtk_point_data(point_id); 
+          d.cell_data["u"] = point_id;
+          vtk_data.push_back(d);
+
+          if (point_id == 1848){
+            nprint("START");
+            auto order = get_canonical_vertex_order(dm, point_id);
+            nprint_variable(order);
+
+            for(auto px : order){
+              std::vector<std::vector<REAL>> vertices;
+              mesh->dmh->get_point_vertices(px, vertices);
+              nprint(vertices.at(0));
+            }
+
+            nprint("END");
+          }
+
+
+
+        }
+
+        VTK::VTKHDF w("foo_" + std::to_string(item.first) + ".vtkhdf", mesh->get_comm());
+        w.write(vtk_data);
+        w.close();
+      }
+
+
+      nprint("------------------------------------------------------------");
+
       for (auto &point_id : item.second) {
         auto label_id = item.first;
         // If the facet is a quad then we will split that quad into two
@@ -214,6 +498,7 @@ TEST(PETScBoundary3D, setup) {
 
         auto lambda_push_triangle = [&](auto &t) {
           h_triangles.push_back(t);
+          h_triangles_edge.push_back(t);
           for (auto &cell_weight : cells) {
             h_map_to_test.push_back(cell_weight.first);
             h_map_to_test.push_back(triangle_index);
@@ -263,8 +548,36 @@ TEST(PETScBoundary3D, setup) {
           }
         }
       }
+
+{
+
+
+      nprint("............................................................");
+    std::vector<VTK::UnstructuredCell> vtk_data;
+    
+    for (auto & triangle : h_triangles_edge) {
+
+      VTK::UnstructuredCell t;
+      t.num_points =3;
+      t.cell_type = VTK::CellType::triangle;
+      for(int vx=0 ; vx<3 ; vx++){
+      for(int cx=0 ; cx<3 ; cx++){
+        t.points.push_back(triangle.vertices[vx][cx]);
+      }
+      }
+
+      vtk_data.push_back(t);
+    }
+
+        VTK::VTKHDF w("bar_" + std::to_string(item.first) + ".vtkhdf", mesh->get_comm());
+
+    w.write(vtk_data);
+    w.close();
+  }
     }
   }
+
+  
 
   boundary_interaction->wrap_collect_cells();
 

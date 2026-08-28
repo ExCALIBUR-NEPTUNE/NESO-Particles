@@ -792,6 +792,55 @@ DMPlexHelper::get_cell_bounding_box(const PetscInt cell) {
 void DMPlexHelper::get_point_vertices(
     const PetscInt petsc_index, std::vector<std::vector<REAL>> &vertices) {
 
+
+  const PetscInt * o = nullptr;
+  
+  PETSCCHK(DMPlexGetConeOrientation(this->dm, petsc_index, &o));
+
+  PetscInt cone_size = 0;
+  PETSCCHK(DMPlexGetConeSize(this->dm, petsc_index, &cone_size));
+
+  if (petsc_index == 1848){
+  nprint("get_point_vertices:", petsc_index);
+  for(int cx=0 ; cx<cone_size ; cx++){
+    nprint("\t", o[cx]);
+  }
+
+Vec coordinates;
+PetscScalar *coef = nullptr;
+PetscInt size = 0;
+
+DM cdm, plex;
+
+PETSCCHK(DMGetCoordinateDM(dm, &cdm));
+PETSCCHK(DMGetCoordinatesLocal(dm, &coordinates));
+PETSCCHK(DMConvert(cdm, DMPLEX, &plex));
+
+PETSCCHK(DMGetCoordinatesLocal(dm, &coordinates));
+PETSCCHK(DMPlexVecGetClosure(plex, NULL, coordinates, petsc_index, &size, &coef));
+
+nprint_variable(size);
+for(int ix=0 ; ix<4 ; ix++){
+  nprint(
+      coef[ix * 3 + 0],
+      coef[ix * 3 + 1],
+      coef[ix * 3 + 2]
+      );
+}
+nprint("---_");
+
+
+PETSCCHK(DMPlexVecRestoreClosure(plex, NULL, coordinates, petsc_index, &size, &coef));
+
+  }
+
+
+
+
+
+
+
+
   const PetscScalar *array;
   PetscScalar *coords = nullptr;
   PetscInt num_coords;
@@ -813,6 +862,12 @@ void DMPlexHelper::get_point_vertices(
   }
   PETSCCHK(DMPlexRestoreCellCoordinates(dm, petsc_index, &is_dg, &num_coords,
                                         &array, &coords));
+
+  if (petsc_index == 1848){
+    for(auto vx : vertices){
+      nprint(vx[0], vx[1], vx[2]);
+    }
+  }
 }
 
 void DMPlexHelper::get_cell_vertices(const PetscInt cell,
