@@ -105,9 +105,12 @@ TEST(PETScBoundary2D, constructor_2d) {
         ASSERT_TRUE(index > -1);
         ASSERT_EQ(ptr_int[index * ncomp_int + 0], face_id);
         ASSERT_EQ(ptr_int[index * ncomp_int + 1], facet_global_id);
+        ASSERT_EQ(ptr_int[index * ncomp_int + 2],
+                  sycl_target->comm_pair.rank_parent);
 
         test_int.push_back(face_id);
         test_int.push_back(facet_global_id);
+        test_int.push_back(sycl_target->comm_pair.rank_parent);
 
         mesh->dmh->get_point_vertices(point_index, coords);
         const REAL x0 = coords.at(0).at(0);
@@ -234,21 +237,22 @@ TEST(PETScBoundary2D, collect_2d) {
 
   const int num_edges = cell_data.num_edges;
   const int ncomp_real = b2d->get_ncomp_real();
-  const int ncomp_int = b2d->get_ncomp_int();
+  const int ncomp_int_host = b2d->get_ncomp_int();
+  const int ncomp_int_device = 2;
   std::vector<REAL> h_real(num_edges * 4);
-  std::vector<int> h_int(num_edges * ncomp_int);
+  std::vector<int> h_int(num_edges * ncomp_int_device);
 
   sycl_target->queue
       .memcpy(h_real.data(), cell_data.d_real, num_edges * 4 * sizeof(REAL))
       .wait_and_throw();
   sycl_target->queue
       .memcpy(h_int.data(), cell_data.d_int,
-              num_edges * ncomp_int * sizeof(int))
+              num_edges * ncomp_int_device * sizeof(int))
       .wait_and_throw();
 
   auto lambda_find_int = [&](const int value) -> int {
     for (int ix = 0; ix < num_facets_global; ix++) {
-      if (ptr_int[ix * ncomp_int + 1] == value) {
+      if (ptr_int[ix * ncomp_int_host + 1] == value) {
         return ix;
       }
     }
@@ -256,17 +260,18 @@ TEST(PETScBoundary2D, collect_2d) {
   };
 
   for (int edgex = 0; edgex < num_edges; edgex++) {
-    const int group_id = h_int.at(edgex * ncomp_int + 0);
+    const int group_id = h_int.at(edgex * ncomp_int_device + 0);
     ASSERT_EQ(group_id, 1);
-    const int facet_global_id = h_int.at(edgex * ncomp_int + 1);
+    const int facet_global_id = h_int.at(edgex * ncomp_int_device + 1);
     auto index = lambda_find_int(facet_global_id);
     ASSERT_TRUE(index > -1);
     ASSERT_EQ(ptr_real[index * ncomp_real + 0], h_real.at(edgex * 4 + 0));
     ASSERT_EQ(ptr_real[index * ncomp_real + 1], h_real.at(edgex * 4 + 1));
     ASSERT_EQ(ptr_real[index * ncomp_real + 2], h_real.at(edgex * 4 + 2));
     ASSERT_EQ(ptr_real[index * ncomp_real + 3], h_real.at(edgex * 4 + 3));
-    ASSERT_EQ(1, h_int.at(edgex * ncomp_int + 0));
-    ASSERT_EQ(ptr_int[index * ncomp_int + 1], h_int.at(edgex * ncomp_int + 1));
+    ASSERT_EQ(1, h_int.at(edgex * ncomp_int_device + 0));
+    ASSERT_EQ(ptr_int[index * ncomp_int_host + 1],
+              h_int.at(edgex * ncomp_int_device + 1));
 
     ASSERT_TRUE(d_map_edge_normals->host_get(facet_global_id, &normal_data));
     REAL h_normal[2];
