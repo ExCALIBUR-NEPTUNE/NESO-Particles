@@ -1499,6 +1499,434 @@ void DMPlexHelper::get_global_face_index_bounds(INT &bound_lower,
   bound_upper = this->boundary_index_bound_upper;
 }
 
+bool DMPlexHelper::normal_points_towards_point(const PetscInt p0,
+                                               const PetscInt p1,
+                                               const PetscInt p2,
+                                               const PetscInt point) {
+
+  auto get_coords = [](DM dm, PetscInt petsc_index) {
+    const PetscScalar *tmp;
+    PetscScalar *vertices = nullptr;
+    PetscInt num_coords;
+    PetscBool is_dg;
+
+    PETSCCHK(DMPlexGetCellCoordinates(dm, petsc_index, &is_dg, &num_coords,
+                                      &tmp, &vertices));
+    const int num_vertices = num_coords / 3;
+    NESOASSERT(num_vertices == 1, "Expected a point.");
+    std::vector<PetscScalar> h_vertices;
+    h_vertices.reserve(num_coords);
+    for (PetscInt ix = 0; ix < num_coords; ix++) {
+      h_vertices.push_back(vertices[ix]);
+    }
+    PETSCCHK(DMPlexRestoreCellCoordinates(dm, petsc_index, &is_dg, &num_coords,
+                                          &tmp, &vertices));
+
+    return h_vertices;
+  };
+
+  auto v0 = get_coords(dm, p0);
+  auto v1 = get_coords(dm, p1);
+  auto v2 = get_coords(dm, p2);
+  auto d = get_coords(dm, point);
+
+  std::vector<REAL> n01(3);
+  std::vector<REAL> n02(3);
+  std::vector<REAL> vd(3);
+  for (int dx = 0; dx < 3; dx++) {
+    n01.at(dx) = v1.at(dx) - v0.at(dx);
+    n02.at(dx) = v2.at(dx) - v0.at(dx);
+    vd.at(dx) = d.at(dx) - v0.at(dx);
+  }
+  std::vector<REAL> n = {0.0, 0.0, 0.0};
+
+  KERNEL_CROSS_PRODUCT_3D(n01[0], n01[1], n01[2], n02[0], n02[1], n02[2], n[0],
+                          n[1], n[2]);
+  const REAL dd = KERNEL_DOT_PRODUCT_3D(n[0], n[1], n[2], vd[0], vd[1], vd[2]);
+
+  return dd >= 0.0;
+}
+
+void DMPlexHelper::get_vertex_neighbours(const PetscInt point_index,
+                                         std::vector<PetscInt> &neighbours) {
+
+  neighbours.clear();
+  PetscInt support_size = 0;
+  PETSCCHK(DMPlexGetSupportSize(dm, point_index, &support_size));
+  const PetscInt *support = nullptr;
+  PETSCCHK(DMPlexGetSupport(dm, point_index, &support));
+
+  for (PetscInt sx = 0; sx < support_size; sx++) {
+    PetscInt cone_size = 0;
+    const PetscInt support_point = support[sx];
+    PETSCCHK(DMPlexGetConeSize(dm, support_point, &cone_size));
+    NESOASSERT(cone_size == 2, "Expected support point to be an edge.");
+    const PetscInt *support_cone = nullptr;
+    PETSCCHK(DMPlexGetCone(dm, support_point, &support_cone));
+    const PetscInt p0 = support_cone[0];
+    const PetscInt p1 = support_cone[1];
+
+    if (p0 == point_index) {
+      neighbours.push_back(p1);
+    } else {
+      neighbours.push_back(p0);
+    }
+  }
+}
+
+void DMPlexHelper::get_canonical_vertex_order(const PetscInt point,
+                                              std::vector<PetscInt> &order) {
+
+  order.clear();
+
+  bool remake = this->map_point_to_vertex_order.count(point) == 0;
+  if (this->map_point_to_vertex_type.count(point) == 0) {
+    remake = true;
+  }
+  if ((this->map_point_to_vertex_type.count(point)) &&
+      (this->map_point_to_vertex_type.at(point) !=
+       this->get_point_type(point))) {
+    remake = true;
+  }
+
+  if (remake) {
+
+    PetscInt depth = -1;
+    PETSCCHK(DMPlexGetPointDepth(dm, point, &depth));
+    const PetscInt *cone = nullptr;
+    PetscInt cone_size = 0;
+    PETSCCHK(DMPlexGetConeSize(dm, point, &cone_size));
+    if (cone_size > 0) {
+      PETSCCHK(DMPlexGetCone(dm, point, &cone));
+    }
+
+    auto point_type = get_point_type(point);
+
+    std::vector<std::vector<PetscInt>> faces;
+    std::set<PetscInt> vertex_points;
+    for (PetscInt fx = 0; fx < cone_size; fx++) {
+      std::vector<PetscInt> t;
+      this->get_canonical_vertex_order(cone[fx], t);
+      for (auto tx : t) {
+        vertex_points.insert(tx);
+      }
+      faces.push_back(t);
+    }
+
+    if (point_type == DM_POLYTOPE_POINT) {
+      order.push_back(point);
+    } else if (point_type == DM_POLYTOPE_SEGMENT) {
+      order.push_back(cone[0]);
+      order.push_back(cone[1]);
+    } else if (point_type == DM_POLYTOPE_POINT_PRISM_TENSOR) {
+      order.push_back(cone[0]);
+      order.push_back(cone[1]);
+    } else if ((point_type == DM_POLYTOPE_TRIANGLE) ||
+               (point_type == DM_POLYTOPE_QUADRILATERAL) ||
+               (point_type == DM_POLYTOPE_SEG_PRISM_TENSOR)) {
+
+      std::map<PetscInt, std::set<PetscInt>> map_vertex_to_neighbours;
+
+      PetscInt first_vertex = -1;
+      for (PetscInt edgex = 0; edgex < cone_size; edgex++) {
+        const PetscInt edge = cone[edgex];
+        std::vector<PetscInt> edge_cone;
+        this->get_canonical_vertex_order(edge, edge_cone);
+
+        const PetscInt v0 = edge_cone.at(0);
+        const PetscInt v1 = edge_cone.at(1);
+        if (edgex == 0) {
+          first_vertex = v0;
+        }
+
+        map_vertex_to_neighbours[v0].insert(v1);
+        map_vertex_to_neighbours[v1].insert(v0);
+      }
+
+      PetscInt current_vertex = first_vertex;
+      for (int edgex = 0; edgex < cone_size; edgex++) {
+
+        order.push_back(current_vertex);
+        // get a neighbour vertex
+        const PetscInt next_vertex =
+            *map_vertex_to_neighbours.at(current_vertex).begin();
+        // Remove the current point from the neighbours of the next point such
+        // that the loop never travels backwards.
+        map_vertex_to_neighbours.at(next_vertex).erase(current_vertex);
+
+        current_vertex = next_vertex;
+      }
+
+      if (point_type == DM_POLYTOPE_SEG_PRISM_TENSOR) {
+        const PetscInt t2 = order.at(2);
+        const PetscInt t3 = order.at(3);
+        order.at(2) = t3;
+        order.at(3) = t2;
+      }
+
+    } else if (point_type == DM_POLYTOPE_TETRAHEDRON) {
+
+      auto bottom_face = faces.at(0);
+      for (auto tx : bottom_face) {
+        vertex_points.erase(tx);
+      }
+      NESOASSERT(vertex_points.size() == 1, "Expected one remaining point.");
+      const PetscInt point3 = *vertex_points.begin();
+
+      const bool correct_order = normal_points_towards_point(
+          bottom_face.at(0), bottom_face.at(2), bottom_face.at(1), point3);
+
+      if (correct_order) {
+        order.push_back(bottom_face.at(0));
+        order.push_back(bottom_face.at(1));
+        order.push_back(bottom_face.at(2));
+        order.push_back(point3);
+      } else {
+        order.push_back(bottom_face.at(2));
+        order.push_back(bottom_face.at(1));
+        order.push_back(bottom_face.at(0));
+        order.push_back(point3);
+      }
+    } else if (point_type == DM_POLYTOPE_PYRAMID) {
+      // There is one quad and this is the base.
+
+      std::vector<PetscInt> bottom_face;
+      for (auto &fx : faces) {
+        if (fx.size() == 4) {
+          bottom_face = fx;
+        }
+      }
+      NESOASSERT(bottom_face.size() == 4, "Failed to find Pyramid base.");
+      for (auto tx : bottom_face) {
+        vertex_points.erase(tx);
+      }
+      NESOASSERT(vertex_points.size() == 1, "Expected one remaining point.");
+      const PetscInt point4 = *vertex_points.begin();
+
+      const bool correct_order = normal_points_towards_point(
+          bottom_face.at(0), bottom_face.at(3), bottom_face.at(1), point4);
+
+      if (correct_order) {
+        order.push_back(bottom_face.at(0));
+        order.push_back(bottom_face.at(1));
+        order.push_back(bottom_face.at(2));
+        order.push_back(bottom_face.at(3));
+        order.push_back(point4);
+      } else {
+        order.push_back(bottom_face.at(3));
+        order.push_back(bottom_face.at(2));
+        order.push_back(bottom_face.at(1));
+        order.push_back(bottom_face.at(0));
+        order.push_back(point4);
+      }
+    } else if ((point_type == DM_POLYTOPE_TRI_PRISM) ||
+               (point_type == DM_POLYTOPE_TRI_PRISM_TENSOR)) {
+
+      std::vector<PetscInt> top_face;
+      std::vector<PetscInt> bottom_face;
+      for (auto &fx : faces) {
+        // Only consider the triangles.
+        if (fx.size() == 3) {
+          if (top_face.size() == 0) {
+            top_face = fx;
+          } else if (bottom_face.size() == 0) {
+            bottom_face = fx;
+          }
+        } else {
+          NESOASSERT(fx.size() == 4, "Remaining faces should be quads.");
+        }
+      }
+      NESOASSERT(top_face.size() == 3, "Failed to find top face.");
+      NESOASSERT(bottom_face.size() == 3, "Failed to find bottom face.");
+
+      const bool bottom_points_inwards =
+          normal_points_towards_point(bottom_face.at(0), bottom_face.at(2),
+                                      bottom_face.at(1), top_face.at(0));
+
+      // tri prism bottom face is clockwise for prism and anticlockwise for
+      // tensor prism.
+      if ((!bottom_points_inwards) && (point_type == DM_POLYTOPE_TRI_PRISM)) {
+        std::reverse(bottom_face.begin(), bottom_face.end());
+      }
+      if ((bottom_points_inwards) &&
+          (point_type == DM_POLYTOPE_TRI_PRISM_TENSOR)) {
+        std::reverse(bottom_face.begin(), bottom_face.end());
+      }
+
+      const bool top_normal_upwards = !normal_points_towards_point(
+          top_face.at(0), top_face.at(1), top_face.at(2), bottom_face.at(0));
+      // tri prism and the tensor version have the same top face ordering.
+      if ((!top_normal_upwards)) {
+        std::reverse(top_face.begin(), top_face.end());
+      }
+
+      const PetscInt p0 = bottom_face.at(0);
+      NESOASSERT(this->get_point_type(p0) == DM_POLYTOPE_POINT,
+                 "Expected p0 to be a point.");
+      std::vector<PetscInt> neighbours;
+      get_vertex_neighbours(p0, neighbours);
+
+      PetscInt p3;
+      for (auto &nx : neighbours) {
+        if (std::find(top_face.begin(), top_face.end(), nx) != top_face.end()) {
+          p3 = nx;
+          break;
+        }
+      }
+
+      auto iterator_start_top = std::find(top_face.begin(), top_face.end(), p3);
+      const std::size_t index_start_top = iterator_start_top - top_face.begin();
+      NESOASSERT(index_start_top < 3, "Failed to find starting top index");
+
+      const PetscInt p4 = top_face.at((index_start_top + 1) % 3);
+      const PetscInt p5 = top_face.at((index_start_top + 2) % 3);
+
+      PetscInt to_test;
+      get_vertex_neighbours(bottom_face.at(1), neighbours);
+      for (auto nx : neighbours) {
+        if (std::find(top_face.begin(), top_face.end(), nx) != top_face.end()) {
+          to_test = nx;
+          break;
+        }
+      }
+
+      const PetscInt correct = (point_type == DM_POLYTOPE_TRI_PRISM) ? p5 : p4;
+      NESOASSERT(to_test == correct,
+                 "Failed to find consistent loop for top and bottom faces.");
+
+      order.push_back(bottom_face.at(0));
+      order.push_back(bottom_face.at(1));
+      order.push_back(bottom_face.at(2));
+      order.push_back(p3);
+      order.push_back(p4);
+      order.push_back(p5);
+    } else if ((point_type == DM_POLYTOPE_HEXAHEDRON) ||
+               (point_type == DM_POLYTOPE_QUAD_PRISM_TENSOR)) {
+
+      auto bottom_face = faces.at(0);
+      std::set<PetscInt> bottom_face_set;
+      for (auto &fx : bottom_face) {
+        bottom_face_set.insert(fx);
+      }
+
+      std::vector<PetscInt> top_face;
+
+      for (auto &fx : faces) {
+        NESOASSERT(fx.size() == 4, "Expected all faces to be quads.");
+
+        bool top_face_candidate = true;
+        for (auto px : fx) {
+          if (bottom_face_set.count(px)) {
+            top_face_candidate = false;
+            break;
+          }
+        }
+        if (top_face_candidate) {
+          top_face = fx;
+          break;
+        }
+      }
+
+      NESOASSERT(top_face.size() == 4, "Failed to find a top face.");
+      for (auto &px : top_face) {
+        NESOASSERT(bottom_face_set.count(px) == 0,
+                   "Top face candidate has a point from the bottom face.");
+      }
+
+      const bool bottom_points_inwards =
+          normal_points_towards_point(bottom_face.at(0), bottom_face.at(1),
+                                      bottom_face.at(3), top_face.at(0));
+
+      if (bottom_points_inwards && (point_type == DM_POLYTOPE_HEXAHEDRON)) {
+        std::reverse(bottom_face.begin(), bottom_face.end());
+      }
+      if (!bottom_points_inwards &&
+          (point_type == DM_POLYTOPE_QUAD_PRISM_TENSOR)) {
+        std::reverse(bottom_face.begin(), bottom_face.end());
+      }
+
+      const bool top_points_inwards = normal_points_towards_point(
+          top_face.at(0), top_face.at(1), top_face.at(3), bottom_face.at(0));
+
+      if (top_points_inwards) {
+        std::reverse(top_face.begin(), top_face.end());
+      }
+
+      if (point_type == DM_POLYTOPE_HEXAHEDRON) {
+        const bool bottom0 =
+            normal_points_towards_point(bottom_face.at(0), bottom_face.at(3),
+                                        bottom_face.at(1), top_face.at(0));
+        NESOASSERT(bottom0, "Bottom normal check failed.");
+      }
+
+      if (point_type == DM_POLYTOPE_QUAD_PRISM_TENSOR) {
+        const bool bottom0 =
+            normal_points_towards_point(bottom_face.at(0), bottom_face.at(1),
+                                        bottom_face.at(3), top_face.at(0));
+        NESOASSERT(bottom0, "Bottom normal check failed.");
+      }
+
+      const bool top0 = !normal_points_towards_point(
+          top_face.at(0), top_face.at(1), top_face.at(3), bottom_face.at(0));
+
+      NESOASSERT(top0, "Top normal check failed.");
+
+      const PetscInt p0 = bottom_face.at(0);
+      std::vector<PetscInt> neighbours;
+      get_vertex_neighbours(p0, neighbours);
+      PetscInt p4;
+      bool p4_found = false;
+      for (auto &nx : neighbours) {
+        if (std::find(top_face.begin(), top_face.end(), nx) != top_face.end()) {
+          NESOASSERT(!p4_found, "p4 was already found.");
+          p4_found = true;
+          p4 = nx;
+        }
+      }
+
+      auto iterator_start_top = std::find(top_face.begin(), top_face.end(), p4);
+      const std::size_t index_start_top = iterator_start_top - top_face.begin();
+      NESOASSERT(index_start_top < 4, "Failed to find starting top index");
+      NESOASSERT(top_face.at(index_start_top) == p4,
+                 "p4 consistency check failed.");
+      const PetscInt p5 = top_face.at((index_start_top + 1) % 4);
+      const PetscInt p6 = top_face.at((index_start_top + 2) % 4);
+      const PetscInt p7 = top_face.at((index_start_top + 3) % 4);
+
+      PetscInt to_test;
+      get_vertex_neighbours(bottom_face.at(1), neighbours);
+      for (auto nx : neighbours) {
+        if (std::find(top_face.begin(), top_face.end(), nx) != top_face.end()) {
+          to_test = nx;
+          break;
+        }
+      }
+
+      const PetscInt correct = (point_type == DM_POLYTOPE_HEXAHEDRON) ? p7 : p5;
+      NESOASSERT(to_test == correct,
+                 "Failed to find consistent loop for top and bottom faces.");
+
+      order.push_back(bottom_face.at(0));
+      order.push_back(bottom_face.at(1));
+      order.push_back(bottom_face.at(2));
+      order.push_back(bottom_face.at(3));
+      order.push_back(p4);
+      order.push_back(p5);
+      order.push_back(p6);
+      order.push_back(p7);
+
+    } else {
+      NESOASSERT(false, "Unknown point type.");
+    }
+
+    this->map_point_to_vertex_order[point] = order;
+
+  } else {
+    order.insert(order.end(), this->map_point_to_vertex_order.at(point).begin(),
+                 this->map_point_to_vertex_order.at(point).end());
+  }
+}
+
 } // namespace NESO::Particles::PetscInterface
 
 #endif

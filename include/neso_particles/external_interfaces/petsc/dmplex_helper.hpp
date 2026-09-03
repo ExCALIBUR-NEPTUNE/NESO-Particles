@@ -167,6 +167,8 @@ protected:
   int ncells_global{-1};
   INT boundary_index_bound_lower{0};
   INT boundary_index_bound_upper{0};
+  std::map<PetscInt, PetscInt> map_point_to_vertex_type;
+  std::map<PetscInt, std::vector<PetscInt>> map_point_to_vertex_order;
 
   inline void check_valid_local_cell(const PetscInt cell) const {
     NESOASSERT((cell > -1) && (cell < this->ncells),
@@ -509,6 +511,41 @@ public:
    * @param[in, out] bound_upper Largest global face index plus one.
    */
   void get_global_face_index_bounds(INT &bound_lower, INT &bound_upper);
+
+  /**
+   * Test if the normal vector formed by the vectors p0->p1 and p0->p2 points
+   * towards point.
+   *
+   * @param p0 Local point index of origin.
+   * @param p1 Local point index of point p1.
+   * @param p2 Local point index of point p2.
+   * @param point Local point index of test point.
+   * @returns True if the normal points towards the test point.
+   */
+  bool normal_points_towards_point(const PetscInt p0, const PetscInt p1,
+                                   const PetscInt p2, const PetscInt point);
+
+  /**
+   * For an input vertex local point return the local point indices of
+   * neigbouring vertices.
+   *
+   * @param[in] point_index Point index of a vertex.
+   * @param[in, out] neigbours Point vertices of neighbours.
+   */
+  void get_vertex_neighbours(const PetscInt point_index,
+                             std::vector<PetscInt> &neighbours);
+
+  /**
+   * Get the local point indices of the vertices of a point in an ordering
+   * consistent with "Computational Meshing: Practical Application of PETSc's
+   * DMPlex".
+   *
+   * @param[in] point Local point index to retrieve vertices for.
+   * @param[in, out] order Vector of point indices in the order for the geometry
+   * type.
+   */
+  void get_canonical_vertex_order(const PetscInt point,
+                                  std::vector<PetscInt> &order);
 };
 
 /**
