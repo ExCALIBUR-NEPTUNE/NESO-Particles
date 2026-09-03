@@ -330,6 +330,16 @@ public:
                           std::vector<std::vector<REAL>> &vertices);
 
   /**
+   * Get the vertices of a point using a PETSc index in the graph ordering.
+   *
+   * @param[in] petsc_index PETSc point index.
+   * @param[in, out] vertices Vector of vertices.
+   */
+  void
+  get_point_vertices_graph_ordering(const PetscInt petsc_index,
+                                    std::vector<std::vector<REAL>> &vertices);
+
+  /**
    * Get the vertices of a cell.
    *
    * @param[in] cell Local cell index.

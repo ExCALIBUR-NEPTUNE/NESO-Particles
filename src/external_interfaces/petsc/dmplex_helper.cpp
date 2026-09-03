@@ -792,42 +792,27 @@ DMPlexHelper::get_cell_bounding_box(const PetscInt cell) {
 void DMPlexHelper::get_point_vertices(
     const PetscInt petsc_index, std::vector<std::vector<REAL>> &vertices) {
 
+  this->check_valid_petsc_point(petsc_index);
+  std::vector<std::vector<REAL>> tmp;
+  std::vector<PetscInt> order;
+  this->get_canonical_vertex_order(petsc_index, order);
+  vertices.clear();
+  for (auto &pointx : order) {
+    tmp.clear();
+    this->get_point_vertices_graph_ordering(pointx, tmp);
+    vertices.push_back(tmp.at(0));
+  }
+}
+
+void DMPlexHelper::get_point_vertices_graph_ordering(
+    const PetscInt petsc_index, std::vector<std::vector<REAL>> &vertices) {
+
   const PetscInt *o = nullptr;
 
   PETSCCHK(DMPlexGetConeOrientation(this->dm, petsc_index, &o));
 
   PetscInt cone_size = 0;
   PETSCCHK(DMPlexGetConeSize(this->dm, petsc_index, &cone_size));
-
-  if (petsc_index == 1848) {
-    nprint("get_point_vertices:", petsc_index);
-    for (int cx = 0; cx < cone_size; cx++) {
-      nprint("\t", o[cx]);
-    }
-
-    Vec coordinates;
-    PetscScalar *coef = nullptr;
-    PetscInt size = 0;
-
-    DM cdm, plex;
-
-    PETSCCHK(DMGetCoordinateDM(dm, &cdm));
-    PETSCCHK(DMGetCoordinatesLocal(dm, &coordinates));
-    PETSCCHK(DMConvert(cdm, DMPLEX, &plex));
-
-    PETSCCHK(DMGetCoordinatesLocal(dm, &coordinates));
-    PETSCCHK(DMPlexVecGetClosure(plex, NULL, coordinates, petsc_index, &size,
-                                 &coef));
-
-    nprint_variable(size);
-    for (int ix = 0; ix < 4; ix++) {
-      nprint(coef[ix * 3 + 0], coef[ix * 3 + 1], coef[ix * 3 + 2]);
-    }
-    nprint("---_");
-
-    PETSCCHK(DMPlexVecRestoreClosure(plex, NULL, coordinates, petsc_index,
-                                     &size, &coef));
-  }
 
   const PetscScalar *array;
   PetscScalar *coords = nullptr;
@@ -850,12 +835,6 @@ void DMPlexHelper::get_point_vertices(
   }
   PETSCCHK(DMPlexRestoreCellCoordinates(dm, petsc_index, &is_dg, &num_coords,
                                         &array, &coords));
-
-  if (petsc_index == 1848) {
-    for (auto vx : vertices) {
-      nprint(vx[0], vx[1], vx[2]);
-    }
-  }
 }
 
 void DMPlexHelper::get_cell_vertices(const PetscInt cell,
@@ -1256,15 +1235,31 @@ void DMPlexHelper::get_vtk_point_vertex_order(const PetscInt index,
                                               std::vector<PetscInt> &order) {
 
   this->check_valid_petsc_point(index);
+  const auto point_type = this->get_point_type(index);
   std::map<VTK::CellType, std::vector<int>> map_shape_to_order;
+
   map_shape_to_order[VTK::CellType::point] = {0};
   map_shape_to_order[VTK::CellType::line] = {0, 1};
   map_shape_to_order[VTK::CellType::triangle] = {0, 1, 2};
-  map_shape_to_order[VTK::CellType::quadrilateral] = {0, 1, 2, 3};
+  if (point_type == DM_POLYTOPE_QUADRILATERAL) {
+    map_shape_to_order[VTK::CellType::quadrilateral] = {0, 1, 2, 3};
+  } else {
+    map_shape_to_order[VTK::CellType::quadrilateral] = {0, 1, 3, 2};
+  }
   map_shape_to_order[VTK::CellType::tetrahedron] = {0, 1, 2, 3};
-  map_shape_to_order[VTK::CellType::pyramid] = {0, 1, 3, 2, 4};
-  map_shape_to_order[VTK::CellType::wedge] = {0, 1, 2, 3, 4, 5};
-  map_shape_to_order[VTK::CellType::hex] = {1, 2, 6, 7, 0, 3, 5, 4};
+  map_shape_to_order[VTK::CellType::pyramid] = {0, 3, 2, 1, 4};
+
+  if (point_type == DM_POLYTOPE_TRI_PRISM) {
+    map_shape_to_order[VTK::CellType::wedge] = {0, 1, 2, 3, 5, 4};
+  } else {
+    map_shape_to_order[VTK::CellType::wedge] = {0, 2, 1, 3, 5, 4};
+  }
+
+  if (point_type == DM_POLYTOPE_HEXAHEDRON) {
+    map_shape_to_order[VTK::CellType::hex] = {1, 2, 6, 7, 0, 3, 5, 4};
+  } else {
+    map_shape_to_order[VTK::CellType::hex] = {3, 2, 6, 7, 0, 1, 5, 4};
+  }
 
   const auto cell_type = this->get_point_type(index);
   const auto vtk_cell_type = get_vtk_cell_type(cell_type);

@@ -305,6 +305,120 @@ TEST(PETSc, dmplex_vertex_ordering) {
   PETSCCHK(PetscFinalize());
 }
 
+TEST(PETSc, vtk_mapping) {
+  std::filesystem::path gmsh_filepath;
+  GET_TEST_RESOURCE(gmsh_filepath, "gmsh/mixed_ref_cube_0.8.msh");
+
+  PETSCCHK(PetscInitializeNoArguments());
+  DM dm;
+  PETSCCHK(DMPlexCreateGmshFromFile(MPI_COMM_WORLD,
+                                    gmsh_filepath.generic_string().c_str(),
+                                    (PetscBool)1, &dm));
+  PetscInterface::generic_distribute(&dm);
+
+  int rank = -1;
+  MPICHK(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
+
+  auto mesh =
+      std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
+  auto mesh_hierarchy = mesh->get_mesh_hierarchy();
+
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+
+  std::map<PetscInt, std::vector<PetscInt>> boundary_groups;
+  boundary_groups[0] = {100, 200, 300, 400, 500, 600};
+
+  auto boundary_interaction = std::make_shared<BoundaryInteraction3DTest>(
+      sycl_target, mesh, boundary_groups, 1.0e-14);
+
+  auto labels = boundary_interaction->wrap_get_labels();
+
+  // map from label to petsc point indices in the dm for the facets
+  auto face_sets = mesh->dmh->get_face_sets();
+
+  auto lambda_do_write = [&](const std::string index) {
+    std::vector<VTK::UnstructuredCell> vtk_data;
+    for (auto &item : face_sets) {
+      if (labels.count(item.first)) {
+        {
+          for (auto &point_id : item.second) {
+            auto d = mesh->dmh->get_vtk_point_data(point_id);
+            d.cell_data["u"] = point_id;
+
+            for (int px = 0; px < d.num_points; px++) {
+              const REAL x = d.points.at(px * 3 + 0);
+              const REAL y = d.points.at(px * 3 + 1);
+              const REAL z = d.points.at(px * 3 + 2);
+              d.point_data["x"].push_back(x);
+              d.point_data["y"].push_back(y);
+              d.point_data["z"].push_back(z);
+            }
+            vtk_data.push_back(d);
+          }
+        }
+      }
+    }
+
+    {
+      VTK::VTKHDF w("dmplex_face_coords_" + index + ".vtkhdf",
+                    mesh->get_comm());
+      w.write(vtk_data);
+      w.close();
+    }
+
+    vtk_data.clear();
+
+    auto cell_vtk_data = mesh->dmh->get_vtk_cell_data();
+
+    for (auto &d : cell_vtk_data) {
+      for (int px = 0; px < d.num_points; px++) {
+        const REAL x = d.points.at(px * 3 + 0);
+        const REAL y = d.points.at(px * 3 + 1);
+        const REAL z = d.points.at(px * 3 + 2);
+        d.point_data["x"].push_back(x);
+        d.point_data["y"].push_back(y);
+        d.point_data["z"].push_back(z);
+      }
+      vtk_data.push_back(d);
+    }
+
+    {
+      VTK::VTKHDF w("dmplex_volume_coords_" + index + ".vtkhdf",
+                    mesh->get_comm());
+      w.write(vtk_data);
+      w.close();
+    }
+    vtk_data.clear();
+  };
+
+  lambda_do_write("0");
+
+  PetscInt point_start = -1;
+  PetscInt point_end = -1;
+  PETSCCHK(DMPlexGetChart(dm, &point_start, &point_end));
+  for (PetscInt px = point_start; px < point_end; px++) {
+    auto point_type = mesh->dmh->get_point_type(px);
+    if (point_type == DM_POLYTOPE_TRI_PRISM_TENSOR) {
+      PETSCCHK(DMPlexSetCellType(dm, px, DM_POLYTOPE_TRI_PRISM));
+      point_type = mesh->dmh->get_point_type(px);
+      ASSERT_EQ(point_type, DM_POLYTOPE_TRI_PRISM);
+    }
+    if (point_type == DM_POLYTOPE_HEXAHEDRON) {
+      PETSCCHK(DMPlexSetCellType(dm, px, DM_POLYTOPE_QUAD_PRISM_TENSOR));
+      point_type = mesh->dmh->get_point_type(px);
+      ASSERT_EQ(point_type, DM_POLYTOPE_QUAD_PRISM_TENSOR);
+    }
+  }
+
+  lambda_do_write("1");
+
+  boundary_interaction->free();
+  sycl_target->free();
+  mesh->free();
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
+
 TEST(PETScBoundary3D, setup) {
   std::filesystem::path gmsh_filepath;
   GET_TEST_RESOURCE(gmsh_filepath, "gmsh/mixed_ref_cube_0.8.msh");
@@ -362,21 +476,6 @@ TEST(PETScBoundary3D, setup) {
           auto d = mesh->dmh->get_vtk_point_data(point_id);
           d.cell_data["u"] = point_id;
           vtk_data.push_back(d);
-
-          if (point_id == 1848) {
-            nprint("START");
-            std::vector<PetscInt> order;
-            mesh->dmh->get_canonical_vertex_order(point_id, order);
-            nprint_variable(order);
-
-            for (auto px : order) {
-              std::vector<std::vector<REAL>> vertices;
-              mesh->dmh->get_point_vertices(px, vertices);
-              nprint(vertices.at(0));
-            }
-
-            nprint("END");
-          }
         }
 
         VTK::VTKHDF w("foo_" + std::to_string(item.first) + ".vtkhdf",
