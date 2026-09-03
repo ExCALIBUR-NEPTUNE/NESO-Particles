@@ -555,7 +555,7 @@ std::vector<PetscInt> get_canonical_vertex_order(DM dm, const PetscInt point) {
 
 } // namespace
 
-TEST(PETScBoundary3D, foo) {
+TEST(PETSc, dmplex_vertex_ordering) {
   std::filesystem::path gmsh_filepath;
   GET_TEST_RESOURCE(gmsh_filepath, "gmsh/mixed_ref_cube_0.8.msh");
 
@@ -576,16 +576,137 @@ TEST(PETScBoundary3D, foo) {
   PetscInt point_end = 0;
   PETSCCHK(DMPlexGetChart(dm, &point_start, &point_end));
 
+  std::set<DMPolytopeType> seen_types;
+
   for (PetscInt px = point_start; px < point_end; px++) {
 
-    auto o = get_canonical_vertex_order(dm, px);
-    auto point_type = get_point_type(dm, px);
+    auto lambda_do_test = [&]() {
+      auto o = get_canonical_vertex_order(dm, px);
+      auto point_type = get_point_type(dm, px);
 
-    if (point_type == DM_POLYTOPE_PYRAMID) {
-      nprint("point:", px);
-      for (auto &vx : o) {
-        nprint("\t", vx);
+      if ((point_type == DM_POLYTOPE_TRIANGLE) ||
+          (point_type == DM_POLYTOPE_QUADRILATERAL)) {
+        const int num_points = o.size();
+        for (int px = 0; px < num_points; px++) {
+          std::set<PetscInt> n;
+          std::vector<PetscInt> neighbours;
+          const PetscInt point = o.at(px);
+          get_vertex_neighbours(dm, point, neighbours);
+          const PetscInt next_point = o.at((px + 1) % num_points);
+          ASSERT_NE(std::find(neighbours.begin(), neighbours.end(), next_point),
+                    neighbours.end());
+        }
       }
+
+      if (point_type == DM_POLYTOPE_SEG_PRISM_TENSOR) {
+        const int num_points = o.size();
+        std::vector<int> reorder = {0, 1, 3, 2};
+        for (int px = 0; px < num_points; px++) {
+          std::set<PetscInt> n;
+          std::vector<PetscInt> neighbours;
+          const PetscInt point = o.at(reorder.at(px));
+          get_vertex_neighbours(dm, point, neighbours);
+          const PetscInt next_point = o.at(reorder.at((px + 1) % num_points));
+          ASSERT_NE(std::find(neighbours.begin(), neighbours.end(), next_point),
+                    neighbours.end());
+        }
+      }
+
+      if (point_type == DM_POLYTOPE_TETRAHEDRON) {
+        ASSERT_TRUE(normal_points_towards_point(dm, o.at(0), o.at(2), o.at(1),
+                                                o.at(3)));
+        ASSERT_TRUE(normal_points_towards_point(dm, o.at(0), o.at(3), o.at(2),
+                                                o.at(1)));
+        ASSERT_TRUE(normal_points_towards_point(dm, o.at(3), o.at(1), o.at(2),
+                                                o.at(0)));
+      }
+
+      if (point_type == DM_POLYTOPE_PYRAMID) {
+        ASSERT_TRUE(normal_points_towards_point(dm, o.at(0), o.at(3), o.at(1),
+                                                o.at(4)));
+        ASSERT_TRUE(normal_points_towards_point(dm, o.at(0), o.at(4), o.at(3),
+                                                o.at(1)));
+        ASSERT_TRUE(normal_points_towards_point(dm, o.at(1), o.at(2), o.at(4),
+                                                o.at(0)));
+        ASSERT_TRUE(normal_points_towards_point(dm, o.at(3), o.at(4), o.at(2),
+                                                o.at(0)));
+      }
+
+      if (point_type == DM_POLYTOPE_TRI_PRISM) {
+        ASSERT_TRUE(normal_points_towards_point(dm, o.at(0), o.at(2), o.at(1),
+                                                o.at(3)));
+        ASSERT_TRUE(normal_points_towards_point(dm, o.at(3), o.at(5), o.at(4),
+                                                o.at(0)));
+        ASSERT_TRUE(normal_points_towards_point(dm, o.at(0), o.at(3), o.at(2),
+                                                o.at(1)));
+        ASSERT_TRUE(normal_points_towards_point(dm, o.at(0), o.at(1), o.at(3),
+                                                o.at(2)));
+        ASSERT_TRUE(normal_points_towards_point(dm, o.at(1), o.at(2), o.at(5),
+                                                o.at(0)));
+      }
+
+      if (point_type == DM_POLYTOPE_TRI_PRISM_TENSOR) {
+        ASSERT_TRUE(normal_points_towards_point(dm, o.at(0), o.at(1), o.at(2),
+                                                o.at(3)));
+        ASSERT_TRUE(normal_points_towards_point(dm, o.at(3), o.at(5), o.at(4),
+                                                o.at(0)));
+        ASSERT_TRUE(normal_points_towards_point(dm, o.at(0), o.at(2), o.at(3),
+                                                o.at(1)));
+        ASSERT_TRUE(normal_points_towards_point(dm, o.at(2), o.at(1), o.at(5),
+                                                o.at(0)));
+        ASSERT_TRUE(normal_points_towards_point(dm, o.at(0), o.at(3), o.at(1),
+                                                o.at(2)));
+      }
+
+      if (point_type == DM_POLYTOPE_HEXAHEDRON) {
+        ASSERT_TRUE(normal_points_towards_point(dm, o.at(0), o.at(3), o.at(1),
+                                                o.at(4)));
+        ASSERT_TRUE(normal_points_towards_point(dm, o.at(4), o.at(7), o.at(5),
+                                                o.at(0)));
+        ASSERT_TRUE(normal_points_towards_point(dm, o.at(0), o.at(1), o.at(4),
+                                                o.at(3)));
+        ASSERT_TRUE(normal_points_towards_point(dm, o.at(1), o.at(2), o.at(7),
+                                                o.at(0)));
+        ASSERT_TRUE(normal_points_towards_point(dm, o.at(3), o.at(5), o.at(2),
+                                                o.at(0)));
+        ASSERT_TRUE(normal_points_towards_point(dm, o.at(0), o.at(4), o.at(3),
+                                                o.at(1)));
+      }
+
+      if (point_type == DM_POLYTOPE_QUAD_PRISM_TENSOR) {
+        ASSERT_TRUE(normal_points_towards_point(dm, o.at(0), o.at(1), o.at(3),
+                                                o.at(4)));
+        ASSERT_TRUE(normal_points_towards_point(dm, o.at(4), o.at(7), o.at(5),
+                                                o.at(0)));
+        ASSERT_TRUE(normal_points_towards_point(dm, o.at(0), o.at(3), o.at(4),
+                                                o.at(1)));
+        ASSERT_TRUE(normal_points_towards_point(dm, o.at(3), o.at(2), o.at(7),
+                                                o.at(0)));
+        ASSERT_TRUE(normal_points_towards_point(dm, o.at(1), o.at(5), o.at(2),
+                                                o.at(0)));
+        ASSERT_TRUE(normal_points_towards_point(dm, o.at(0), o.at(4), o.at(1),
+                                                o.at(3)));
+      }
+    };
+
+    auto point_type = get_point_type(dm, px);
+    lambda_do_test();
+    seen_types.insert(point_type);
+
+    if (point_type == DM_POLYTOPE_TRI_PRISM_TENSOR) {
+      PETSCCHK(DMPlexSetCellType(dm, px, DM_POLYTOPE_TRI_PRISM));
+      point_type = get_point_type(dm, px);
+      ASSERT_EQ(point_type, DM_POLYTOPE_TRI_PRISM);
+      lambda_do_test();
+      seen_types.insert(point_type);
+    }
+
+    if (point_type == DM_POLYTOPE_HEXAHEDRON) {
+      PETSCCHK(DMPlexSetCellType(dm, px, DM_POLYTOPE_QUAD_PRISM_TENSOR));
+      point_type = get_point_type(dm, px);
+      ASSERT_EQ(point_type, DM_POLYTOPE_QUAD_PRISM_TENSOR);
+      lambda_do_test();
+      seen_types.insert(point_type);
     }
   }
 
