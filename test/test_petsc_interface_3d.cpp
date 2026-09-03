@@ -466,26 +466,6 @@ TEST(PETScBoundary3D, setup) {
   for (auto &item : face_sets) {
     if (labels.count(item.first)) {
 
-      nprint("============================================================");
-      std::vector<BoundaryTriangleTest> h_triangles_edge;
-
-      {
-        std::vector<VTK::UnstructuredCell> vtk_data;
-
-        for (auto &point_id : item.second) {
-          auto d = mesh->dmh->get_vtk_point_data(point_id);
-          d.cell_data["u"] = point_id;
-          vtk_data.push_back(d);
-        }
-
-        VTK::VTKHDF w("foo_" + std::to_string(item.first) + ".vtkhdf",
-                      mesh->get_comm());
-        w.write(vtk_data);
-        w.close();
-      }
-
-      nprint("------------------------------------------------------------");
-
       for (auto &point_id : item.second) {
         auto label_id = item.first;
         // If the facet is a quad then we will split that quad into two
@@ -510,7 +490,6 @@ TEST(PETScBoundary3D, setup) {
 
         auto lambda_push_triangle = [&](auto &t) {
           h_triangles.push_back(t);
-          h_triangles_edge.push_back(t);
           for (auto &cell_weight : cells) {
             h_map_to_test.push_back(cell_weight.first);
             h_map_to_test.push_back(triangle_index);
@@ -559,32 +538,6 @@ TEST(PETScBoundary3D, setup) {
             triangle_index++;
           }
         }
-      }
-
-      {
-
-        nprint("............................................................");
-        std::vector<VTK::UnstructuredCell> vtk_data;
-
-        for (auto &triangle : h_triangles_edge) {
-
-          VTK::UnstructuredCell t;
-          t.num_points = 3;
-          t.cell_type = VTK::CellType::triangle;
-          for (int vx = 0; vx < 3; vx++) {
-            for (int cx = 0; cx < 3; cx++) {
-              t.points.push_back(triangle.vertices[vx][cx]);
-            }
-          }
-
-          vtk_data.push_back(t);
-        }
-
-        VTK::VTKHDF w("bar_" + std::to_string(item.first) + ".vtkhdf",
-                      mesh->get_comm());
-
-        w.write(vtk_data);
-        w.close();
       }
     }
   }
