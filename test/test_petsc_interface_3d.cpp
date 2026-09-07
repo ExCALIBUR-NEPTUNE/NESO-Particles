@@ -360,8 +360,9 @@ TEST(PETSc, vtk_mapping) {
     }
 
     {
-      VTK::VTKHDF w("dmplex_face_coords_" + index + ".vtkhdf",
-                    mesh->get_comm());
+      VTK::VTKHDF w(
+          get_test_root_file("dmplex_face_coords_" + index + ".vtkhdf"),
+          mesh->get_comm());
       w.write(vtk_data);
       w.close();
     }
@@ -383,8 +384,9 @@ TEST(PETSc, vtk_mapping) {
     }
 
     {
-      VTK::VTKHDF w("dmplex_volume_coords_" + index + ".vtkhdf",
-                    mesh->get_comm());
+      VTK::VTKHDF w(
+          get_test_root_file("dmplex_volume_coords_" + index + ".vtkhdf"),
+          mesh->get_comm());
       w.write(vtk_data);
       w.close();
     }
