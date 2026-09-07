@@ -139,6 +139,8 @@ extern template void
 SubdivideCellsVoronoi::map(std::shared_ptr<ParticleSubGroup> particle_sub_group,
                            Sym<INT> sym_name, const int sym_component);
 
+using SubdivideCellsVoronoiSharedPtr = std::shared_ptr<SubdivideCellsVoronoi>;
+
 } // namespace NESO::Particles
 
 #endif
