@@ -3,7 +3,7 @@
 TEST(IndexMap, device) {
 
   {
-    IndexMapDevice<2, 1> d0;
+    [[maybe_unused]] IndexMapDevice<2, 1> d0;
     ASSERT_EQ(d0.key_dim, 2);
     ASSERT_EQ(d0.value_dim, 1);
   }

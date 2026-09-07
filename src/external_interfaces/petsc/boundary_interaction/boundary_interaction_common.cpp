@@ -399,7 +399,8 @@ void BoundaryInteractionCommon::function_project_contribute(
 
   if (!null_sub_group) {
     auto *k_tree_root = d_tree_root;
-    const auto k_num_accessible_geoms = num_accessible_geoms;
+    // This variable is used but nvc++ analysis reports that it might not be.
+    [[maybe_unused]] const auto k_num_accessible_geoms = num_accessible_geoms;
 
     NESOASSERT(particle_sub_group->contains_ephemeral_dat(
                    Sym<INT>("NESO_PARTICLES_BOUNDARY_METADATA")),
