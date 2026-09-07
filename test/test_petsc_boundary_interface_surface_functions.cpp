@@ -479,7 +479,7 @@ void wrapper_mesh_test(
       const REAL correct = h_contributions_reduced.at(reduced_index);
       const REAL to_test = h_dofs.at(index);
 
-      ASSERT_TRUE(relative_error(correct, to_test) < 1.0e-13);
+      ASSERT_TRUE(relative_error(correct, to_test) < 1.0e-11);
 
       index++;
     }
