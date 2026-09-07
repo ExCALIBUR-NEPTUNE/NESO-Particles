@@ -28,6 +28,8 @@ ExternalCommon::BoundingBoxSharedPtr BoundaryInteraction3D::get_bounding_box(
 }
 
 void BoundaryInteraction3D::collect_cells() {
+  auto r0 = this->sycl_target->profile_map.start_region("BoundaryInteraction3D",
+                                                        "collect_cells");
 
   {
     std::vector<INT> gather_cells;
@@ -74,6 +76,17 @@ void BoundaryInteraction3D::collect_cells() {
         h_int.at(tx * 2 + 0) = group_id;
         h_int.at(tx * 2 + 1) = face_id;
 
+        const int rank = triangle.rank;
+
+        // If we have seen this global edge id before then assert that the
+        // owning rank is what we expect.
+        if (this->map_global_point_to_rank.count(face_id)) {
+          NESOASSERT(this->map_global_point_to_rank[face_id] == rank,
+                     "Bad consensus over edge ownership.");
+        } else {
+          this->map_global_point_to_rank[face_id] = rank;
+        }
+
         if (this->pushed_facet_data.count(face_id) == 0) {
           std::vector<REAL> h_norm(3);
           for (int dx = 0; dx < 3; dx++) {
@@ -106,6 +119,8 @@ void BoundaryInteraction3D::collect_cells() {
     }
     this->collected_mh_cells.insert(cell);
   }
+
+  this->sycl_target->profile_map.end_region(r0);
 }
 
 BoundaryNormalMapper3D BoundaryInteraction3D::get_device_normal_mapper() {
@@ -119,13 +134,13 @@ void BoundaryInteraction3D::free() {
 }
 
 std::map<PetscInt, ParticleSubGroupSharedPtr>
-BoundaryInteraction3D::post_integration(
+BoundaryInteraction3D::post_integration_dimension(
     std::shared_ptr<ParticleGroup> particles) {
   return this->post_integration_inner(particles);
 }
 
 std::map<PetscInt, ParticleSubGroupSharedPtr>
-BoundaryInteraction3D::post_integration(
+BoundaryInteraction3D::post_integration_dimension(
     std::shared_ptr<ParticleSubGroup> particles) {
   return this->post_integration_inner(particles);
 }
@@ -145,6 +160,8 @@ BoundaryInteraction3D::BoundaryInteraction3D(
 
   // map from label to petsc point indices in the dm for the facets
   auto face_sets = this->mesh->dmh->get_face_sets();
+
+  const int rank = this->sycl_target->comm_pair.rank_parent;
 
   // Keep and flatten the points/labels of interest
   std::vector<PetscInt> facet_labels;
@@ -184,7 +201,7 @@ BoundaryInteraction3D::BoundaryInteraction3D(
   for (int ix = 0; ix < num_facets_local; ix++) {
     const PetscInt index = facet_indices.at(ix);
     // Collect the vertex coords
-    this->mesh->dmh->get_generic_vertices(index, coords);
+    this->mesh->dmh->get_point_vertices(index, coords);
     NESOASSERT(coords.size() == 3 || coords.size() == 4,
                "Expected a facet to only have three or four vertices.");
     NESOASSERT(coords.at(0).size() == 3 && coords.at(1).size() == 3 &&
@@ -195,6 +212,10 @@ BoundaryInteraction3D::BoundaryInteraction3D(
 
     BoundaryInteraction3DTriangle triangle_data0;
     BoundaryInteraction3DTriangle triangle_data1;
+
+    triangle_data0.rank = rank;
+    triangle_data1.rank = rank;
+
     const PetscInt facet_global_id =
         this->mesh->dmh->get_point_global_index(index);
 
@@ -227,7 +248,7 @@ BoundaryInteraction3D::BoundaryInteraction3D(
 
       for (int cx = 0; cx < 3; cx++) {
         const PetscInt vx = triangle_indices.at(0).at(cx);
-        this->mesh->dmh->get_generic_vertices(vx, coords);
+        this->mesh->dmh->get_point_vertices(vx, coords);
         NESOASSERT(coords.size() == 1, "Expect coords to be size 1.");
 
         for (int dx = 0; dx < 3; dx++) {
@@ -238,7 +259,7 @@ BoundaryInteraction3D::BoundaryInteraction3D(
 
       for (int cx = 0; cx < 3; cx++) {
         const PetscInt vx = triangle_indices.at(1).at(cx);
-        this->mesh->dmh->get_generic_vertices(vx, coords);
+        this->mesh->dmh->get_point_vertices(vx, coords);
         NESOASSERT(coords.size() == 1, "Expect coords to be size 1.");
 
         for (int dx = 0; dx < 3; dx++) {

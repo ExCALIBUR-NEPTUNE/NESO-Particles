@@ -113,9 +113,11 @@ public:
    * Get a representation of the internal state which can be passed to the
    * VTKHDF writer.
    *
+   * @param name Name to assign to field in output data. Default "value".
    * @returns Data for VTKHDF unstructured grid writer.
    */
-  virtual std::vector<VTK::UnstructuredCell> get_vtk_data() override;
+  virtual std::vector<VTK::UnstructuredCell>
+  get_vtk_data(const std::string name = "value") override;
 
   /**
    * Create a DG0 project/evaluate instance from a QuadraturePointMapper.

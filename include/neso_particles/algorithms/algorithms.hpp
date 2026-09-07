@@ -4,6 +4,7 @@
 #include "cellwise_methods.hpp"
 #include "common.hpp"
 #include "dsmc/dsmc.hpp"
+#include "integration.hpp"
 #include "nd_local_array_looping.hpp"
 #include "particle_data_movement.hpp"
 #include "reduce_dat_cellwise.hpp"

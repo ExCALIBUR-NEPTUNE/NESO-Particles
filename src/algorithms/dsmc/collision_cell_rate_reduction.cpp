@@ -88,7 +88,6 @@ void CollisionCellRateReduction::resize() {
                        max_num_collision_cells_new));
 
     const std::size_t stride_old = num_mesh_cells * max_num_collision_cells_old;
-    const std::size_t stride_new = num_mesh_cells * max_num_collision_cells_new;
 
     this->sycl_target->queue
         .parallel_for(

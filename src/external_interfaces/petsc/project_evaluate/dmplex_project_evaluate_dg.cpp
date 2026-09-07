@@ -20,14 +20,14 @@ void DMPlexProjectEvaluateDG::check_ncomp(const int ncomp) {
   }
 }
 
-std::vector<VTK::UnstructuredCell> DMPlexProjectEvaluateDG::get_vtk_data() {
+std::vector<VTK::UnstructuredCell>
+DMPlexProjectEvaluateDG::get_vtk_data(const std::string name) {
   auto r0 = sycl_target->profile_map.start_region("DMPlexProjectEvaluateDG",
                                                   "get_vtk_data");
 
   const int cell_count = this->mesh->get_cell_count();
   std::vector<VTK::UnstructuredCell> data =
       this->mesh->dmh->get_vtk_cell_data();
-  const int ndim = mesh->get_ndim();
   const int ncomp = this->ncomp_active;
   const int stride = this->cdc_project->nrow;
 
@@ -45,7 +45,7 @@ std::vector<VTK::UnstructuredCell> DMPlexProjectEvaluateDG::get_vtk_data() {
   for (int cellx = 0; cellx < cell_count; cellx++) {
     for (int cx = 0; cx < ncomp; cx++) {
       const REAL cell_value = h_data->ptr[cellx * stride + cx];
-      data.at(cellx).cell_data["value_" + std::to_string(cx)] = cell_value;
+      data.at(cellx).cell_data[name + "_" + std::to_string(cx)] = cell_value;
     }
   }
 

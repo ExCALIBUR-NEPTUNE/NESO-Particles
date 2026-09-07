@@ -274,6 +274,25 @@ TEST(CartesianTrajectoryIntersection, labels_3d) {
   auto A = A_t;
 
   {
+    auto mesh = std::dynamic_pointer_cast<CartesianHMesh>(A->domain->mesh);
+    INT bound_lower = 0;
+    INT bound_upper = 0;
+    mesh->get_global_face_index_bounds(bound_lower, bound_upper);
+    std::set<INT> correct, to_test;
+    for (INT ix = bound_lower; ix < bound_upper; ix++) {
+      correct.insert(ix);
+    }
+
+    auto face_cells = mesh->get_owned_face_cells();
+    for (INT fx : face_cells) {
+      to_test.insert(fx);
+    }
+
+    auto to_test2 = set_all_reduce_union(to_test, mesh->get_comm());
+    ASSERT_EQ(correct, to_test2);
+  }
+
+  {
     auto aa = particle_sub_group(
         A, [=](auto INDEX) { return INDEX.get_loop_linear_index() != 0; },
         Access::read(ParticleLoopIndex{}));

@@ -67,9 +67,11 @@ public:
    * Get a representation of the internal state which can be passed to the
    * VTKHDF writer.
    *
+   * @param name Name to assign to field in output data. Default "value".
    * @returns Data for VTKHDF unstructured grid writer.
    */
-  virtual inline std::vector<VTK::UnstructuredCell> get_vtk_data() = 0;
+  virtual inline std::vector<VTK::UnstructuredCell>
+  get_vtk_data(const std::string name = "value") = 0;
 };
 
 } // namespace NESO::Particles::PetscInterface

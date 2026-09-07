@@ -21,7 +21,6 @@ TEST(CartesianHMesh, surface_functions_setup) {
                                 mesh->get_all_face_cells_on_face(1).size() +
                                 mesh->get_all_face_cells_on_face(2).size();
 
-  ASSERT_EQ(u0->d_dofs->size, num_geoms);
   ASSERT_EQ(u0->local_dof_count, num_geoms);
   ASSERT_EQ(u0->cell_dof_count, 1);
   ASSERT_EQ(u0->mesh, mesh);
@@ -188,7 +187,7 @@ void surface_functions_wrapper(ParticleGroupSharedPtr A,
 
       std::vector<REAL> h_dofs(func->local_dof_count);
       sycl_target->queue
-          .memcpy(h_dofs.data(), func->d_dofs->ptr,
+          .memcpy(h_dofs.data(), func->get_dofs_device_pointer(),
                   func->local_dof_count * sizeof(REAL))
           .wait_and_throw();
 
@@ -230,7 +229,7 @@ void surface_functions_wrapper(ParticleGroupSharedPtr A,
 
       std::vector<REAL> h_dofs(func->local_dof_count);
       sycl_target->queue
-          .memcpy(h_dofs.data(), func->d_dofs->ptr,
+          .memcpy(h_dofs.data(), func->get_dofs_device_pointer(),
                   func->local_dof_count * sizeof(REAL))
           .wait_and_throw();
 
@@ -249,7 +248,7 @@ void surface_functions_wrapper(ParticleGroupSharedPtr A,
     cti.function_project(nullptr, Sym<REAL>("Q"), 0, false, func_0);
     std::vector<REAL> h_dofs(func_0->local_dof_count);
     sycl_target->queue
-        .memcpy(h_dofs.data(), func_0->d_dofs->ptr,
+        .memcpy(h_dofs.data(), func_0->get_dofs_device_pointer(),
                 func_0->local_dof_count * sizeof(REAL))
         .wait_and_throw();
 

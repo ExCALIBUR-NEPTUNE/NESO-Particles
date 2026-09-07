@@ -153,7 +153,7 @@ public:
   const double inverse_cell_width_fine;
   /// Global number of coarse cells.
   const int ncells_coarse;
-  /// Number of coarse cells per fine cell.
+  /// Number of fine cells per coarse cell.
   const int ncells_fine;
   /// Is this mesh running in a mode where it exposes one NP cell per MPI rank.
   bool single_cell_mode;
@@ -373,6 +373,14 @@ public:
 
     return cells;
   }
+
+  /**
+   * Get the bounds of global face indices over the entire mesh.
+   *
+   * @param[in, out] bound_lower Lowest global face index.
+   * @param[in, out] bound_upper Largest global face index plus one.
+   */
+  void get_global_face_index_bounds(INT &bound_lower, INT &bound_upper);
 };
 
 typedef std::shared_ptr<CartesianHMesh> CartesianHMeshSharedPtr;

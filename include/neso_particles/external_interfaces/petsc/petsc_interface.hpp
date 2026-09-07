@@ -11,6 +11,8 @@
 #include "petsc_api_redirection.hpp"
 #include "petsc_common.hpp"
 #include "petsc_utility.hpp"
+#include "project_evaluate/dmplex_function.hpp"
+#include "project_evaluate/dmplex_function_mass_matrix.hpp"
 #endif
 
 #endif

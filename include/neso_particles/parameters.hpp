@@ -66,7 +66,21 @@ struct Parameters {
   inline bool contains(const std::string name) {
     return static_cast<bool>(this->values.count(name));
   }
+
+  /**
+   * First attempt to find a size_t parameter by name in the Parameter instance
+   * then revert to attempting to find the parameter specified in a environment
+   * variable.
+   *
+   * @param name Name of std::size_t parameter to find.
+   * @param default_value Value to return if no parameter is found.
+   * @returns Value.
+   */
+  std::size_t get_env_size_t(const std::string name,
+                             const std::size_t default_value);
 };
+
+using ParametersSharedPtr = std::shared_ptr<Parameters>;
 
 } // namespace NESO::Particles
 

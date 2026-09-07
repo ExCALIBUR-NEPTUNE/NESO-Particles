@@ -28,6 +28,8 @@ BoundaryInteraction2D::get_bounding_box(const int index) {
 }
 
 void BoundaryInteraction2D::collect_cells() {
+  auto r0 = this->sycl_target->profile_map.start_region("BoundaryInteraction2D",
+                                                        "collect_cells");
   for (auto cell : this->required_mh_cells) {
     // Does the mh cell actually have any edges intersecting it?
     if (this->map_mh_index_to_index.count(cell)) {
@@ -35,7 +37,7 @@ void BoundaryInteraction2D::collect_cells() {
 
       // get the real and int data for the mh cell
       std::vector<REAL> h_real(num_edges * 4);
-      std::vector<int> h_int(num_edges * ncomp_int);
+      std::vector<int> h_int(num_edges * 2);
       int index = 0;
       for (auto ix : this->map_mh_index_to_index.at(cell)) {
         for (int cx = 0; cx < 4; cx++) {
@@ -44,10 +46,20 @@ void BoundaryInteraction2D::collect_cells() {
 
         const auto label = this->facets_int[ix * ncomp_int + 0];
         const auto edge_id = this->facets_int[ix * ncomp_int + 1];
+        const auto rank = this->facets_int[ix * ncomp_int + 2];
         const auto group_id = this->map_label_to_groups.at(label);
-        h_int.at(index * ncomp_int + 0) = group_id;
-        h_int.at(index * ncomp_int + 1) = edge_id;
+        h_int.at(index * 2 + 0) = group_id;
+        h_int.at(index * 2 + 1) = edge_id;
         index++;
+
+        // If we have seen this global edge id before then assert that the
+        // owning rank is what we expect.
+        if (this->map_global_point_to_rank.count(edge_id)) {
+          NESOASSERT(this->map_global_point_to_rank[edge_id] == rank,
+                     "Bad consensus over edge ownership.");
+        } else {
+          this->map_global_point_to_rank[edge_id] = rank;
+        }
 
         // Is this edge in the map of edge data for interactions?
         if (this->pushed_edge_data.count(edge_id) == 0) {
@@ -81,6 +93,8 @@ void BoundaryInteraction2D::collect_cells() {
     }
     this->collected_mh_cells.insert(cell);
   }
+
+  this->sycl_target->profile_map.end_region(r0);
 }
 
 BoundaryNormalMapper2D BoundaryInteraction2D::get_device_normal_mapper() {
@@ -103,13 +117,13 @@ void BoundaryInteraction2D::free() {
 }
 
 std::map<PetscInt, ParticleSubGroupSharedPtr>
-BoundaryInteraction2D::post_integration(
+BoundaryInteraction2D::post_integration_dimension(
     std::shared_ptr<ParticleGroup> particles) {
   return this->post_integration_inner(particles);
 }
 
 std::map<PetscInt, ParticleSubGroupSharedPtr>
-BoundaryInteraction2D::post_integration(
+BoundaryInteraction2D::post_integration_dimension(
     std::shared_ptr<ParticleSubGroup> particles) {
   return this->post_integration_inner(particles);
 }
@@ -127,7 +141,8 @@ BoundaryInteraction2D::BoundaryInteraction2D(
   // Get the boundary labels this instance should detect interactions with.
   auto labels = this->get_labels();
 
-  // map from label to petsc point indices in the dm for the facets
+  // Map from label to petsc point indices in the dm for the facets. This call
+  // only returns owned point indices.
   auto face_sets = this->mesh->dmh->get_face_sets();
 
   // Keep and flatten the points/labels of interest
@@ -148,6 +163,7 @@ BoundaryInteraction2D::BoundaryInteraction2D(
   face_sets.clear();
 
   int num_facets_local = facet_labels.size();
+  const int rank = this->sycl_target->comm_pair.rank_parent;
 
   // space to store the local contributions
   std::vector<REAL> local_real(num_facets_local * ncomp_real);
@@ -158,7 +174,7 @@ BoundaryInteraction2D::BoundaryInteraction2D(
   for (int ix = 0; ix < num_facets_local; ix++) {
     const PetscInt index = facet_indices.at(ix);
     // Collect the vertex coords
-    this->mesh->dmh->get_generic_vertices(index, coords);
+    this->mesh->dmh->get_point_vertices(index, coords);
     NESOASSERT(coords.size() == 2,
                "Expected an edge to only have two vertices.");
     NESOASSERT(coords.at(0).size() == 2,
@@ -189,9 +205,12 @@ BoundaryInteraction2D::BoundaryInteraction2D(
 
     // collect the label index and edge global id
     const PetscInt facet_global_id =
-        this->mesh->dmh->get_point_global_index(index);
+        this->mesh->dmh->get_point_global_index(index, true);
+
+    NESOASSERT(facet_global_id >= 0, "The point global id should be positive.");
     local_int.at(ix * ncomp_int + 0) = facet_labels.at(ix);
     local_int.at(ix * ncomp_int + 1) = facet_global_id;
+    local_int.at(ix * ncomp_int + 2) = rank;
   }
 
   facet_labels.clear();

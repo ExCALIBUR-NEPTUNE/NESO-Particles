@@ -162,8 +162,13 @@ protected:
   std::vector<PetscInt> map_np_to_petsc;
   std::map<PetscInt, PetscInt> map_petsc_to_np;
   std::map<PetscInt, PetscInt> map_gobal_point_to_local_point;
+  std::map<PetscInt, VTK::UnstructuredCell> map_petsc_to_vtk;
   double volume;
   int ncells_global{-1};
+  INT boundary_index_bound_lower{0};
+  INT boundary_index_bound_upper{0};
+  std::map<PetscInt, PetscInt> map_point_to_vertex_type;
+  std::map<PetscInt, std::vector<PetscInt>> map_point_to_vertex_order;
 
   inline void check_valid_local_cell(const PetscInt cell) const {
     NESOASSERT((cell > -1) && (cell < this->ncells),
@@ -193,14 +198,25 @@ protected:
 
   ExternalCommon::BoundingBoxSharedPtr bounding_box;
 
-  void get_point_vertices(const PetscInt petsc_index,
-                          std::vector<std::vector<REAL>> &vertices);
-
 public:
   MPI_Comm comm;
   DM dm;
   PetscInt ndim;
   PetscInt ncells;
+
+  /**
+   * @param[in, out] indices Populated with PETSc point indices for locally
+   * owned cells.
+   */
+  template <typename T>
+  inline void get_cell_petsc_indices(std::vector<T> &indices) {
+    if (indices.size() != static_cast<std::size_t>(this->ncells)) {
+      indices.resize(this->ncells);
+    }
+    for (int cellx = 0; cellx < this->ncells; cellx++) {
+      indices[cellx] = get_dmplex_cell_index(cellx);
+    }
+  }
 
   /**
    * Get a serialisable representation of a cell in the DMPlex.
@@ -310,8 +326,18 @@ public:
    * @param[in] petsc_index PETSc point index.
    * @param[in, out] vertices Vector of vertices.
    */
-  void get_generic_vertices(const PetscInt petsc_index,
-                            std::vector<std::vector<REAL>> &vertices);
+  void get_point_vertices(const PetscInt petsc_index,
+                          std::vector<std::vector<REAL>> &vertices);
+
+  /**
+   * Get the vertices of a point using a PETSc index in the graph ordering.
+   *
+   * @param[in] petsc_index PETSc point index.
+   * @param[in, out] vertices Vector of vertices.
+   */
+  void
+  get_point_vertices_graph_ordering(const PetscInt petsc_index,
+                                    std::vector<std::vector<REAL>> &vertices);
 
   /**
    * Get the vertices of a cell.
@@ -411,6 +437,7 @@ public:
 
   /**
    * @returns Map from face sets int label to DMPlex points with that label.
+   * Only returns points which are owned by the calling MPI rank.
    */
   std::map<PetscInt, std::vector<PetscInt>> get_face_sets();
 
@@ -422,6 +449,16 @@ public:
   void write_vtk(const std::string filename);
 
   /**
+   * Get VTK data for a point index.
+   *
+   * @param index PETSc point index of object to get unstructured cell
+   * representation of.
+   * @returns VTK data which can be passed to our VTKHDF
+   * implementation.
+   */
+  const VTK::UnstructuredCell &get_vtk_point_data(const PetscInt index);
+
+  /**
    * Get VTK data for all cells.
    *
    * @returns Vector of VTK data which can be passed to our VTKHDF
@@ -430,19 +467,27 @@ public:
   std::vector<VTK::UnstructuredCell> get_vtk_cell_data();
 
   /**
-   * Get VTK vertex order for a cell. Returned array gives order such that
+   * Get VTK vertex order for a point. Returned array gives order such that
    * For VTK vertex i, order[i] gives the DMPlex vertex.
    *
-   * @param[in] cell Local cell index in [0, cell_count).
+   * @param[in] index Local PETSc index.
    * @param[in, out] order Vector containing reordering.
    */
-  void get_vtk_cell_vertex_order(const PetscInt cell,
-                                 std::vector<PetscInt> &order);
+  void get_vtk_point_vertex_order(const PetscInt index,
+                                  std::vector<PetscInt> &order);
 
   /**
    * Print to stdout information about the held DMPlex.
    */
   void print();
+
+  /**
+   * Get the volume of a point in the local mesh.
+   *
+   * @param index Local point index.
+   * @returns Volume of object.
+   */
+  REAL get_point_volume(const PetscInt point_index);
 
   /**
    * Get the volume of a cell in the local mesh.
@@ -468,6 +513,49 @@ public:
    */
   void get_linear_normal_vector(const PetscInt point_index,
                                 std::vector<REAL> &normal_vector);
+
+  /**
+   * Get the bounds of global face indices over the entire mesh.
+   *
+   * @param[in, out] bound_lower Lowest global face index.
+   * @param[in, out] bound_upper Largest global face index plus one.
+   */
+  void get_global_face_index_bounds(INT &bound_lower, INT &bound_upper);
+
+  /**
+   * Test if the normal vector formed by the vectors p0->p1 and p0->p2 points
+   * towards point.
+   *
+   * @param p0 Local point index of origin.
+   * @param p1 Local point index of point p1.
+   * @param p2 Local point index of point p2.
+   * @param point Local point index of test point.
+   * @returns True if the normal points towards the test point.
+   */
+  bool normal_points_towards_point(const PetscInt p0, const PetscInt p1,
+                                   const PetscInt p2, const PetscInt point);
+
+  /**
+   * For an input vertex local point return the local point indices of
+   * neigbouring vertices.
+   *
+   * @param[in] point_index Point index of a vertex.
+   * @param[in, out] neigbours Point vertices of neighbours.
+   */
+  void get_vertex_neighbours(const PetscInt point_index,
+                             std::vector<PetscInt> &neighbours);
+
+  /**
+   * Get the local point indices of the vertices of a point in an ordering
+   * consistent with "Computational Meshing: Practical Application of PETSc's
+   * DMPlex".
+   *
+   * @param[in] point Local point index to retrieve vertices for.
+   * @param[in, out] order Vector of point indices in the order for the geometry
+   * type.
+   */
+  void get_canonical_vertex_order(const PetscInt point,
+                                  std::vector<PetscInt> &order);
 };
 
 /**

@@ -144,6 +144,283 @@ struct BoundaryTriangleTest {
 
 } // namespace
 
+TEST(PETSc, dmplex_vertex_ordering) {
+  std::filesystem::path gmsh_filepath;
+  GET_TEST_RESOURCE(gmsh_filepath, "gmsh/mixed_ref_cube_0.8.msh");
+
+  PETSCCHK(PetscInitializeNoArguments());
+  DM dm;
+  PETSCCHK(DMPlexCreateGmshFromFile(MPI_COMM_WORLD,
+                                    gmsh_filepath.generic_string().c_str(),
+                                    (PetscBool)1, &dm));
+  PetscInterface::generic_distribute(&dm);
+
+  int rank = -1;
+  MPICHK(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
+
+  auto mesh =
+      std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
+
+  PetscInt point_start = 0;
+  PetscInt point_end = 0;
+  PETSCCHK(DMPlexGetChart(dm, &point_start, &point_end));
+
+  std::set<DMPolytopeType> seen_types;
+
+  for (PetscInt px = point_start; px < point_end; px++) {
+
+    auto lambda_do_test = [&]() {
+      std::vector<PetscInt> o;
+      mesh->dmh->get_canonical_vertex_order(px, o);
+      auto point_type = mesh->dmh->get_point_type(px);
+
+      if ((point_type == DM_POLYTOPE_TRIANGLE) ||
+          (point_type == DM_POLYTOPE_QUADRILATERAL)) {
+        const int num_points = o.size();
+        for (int px = 0; px < num_points; px++) {
+          std::set<PetscInt> n;
+          std::vector<PetscInt> neighbours;
+          const PetscInt point = o.at(px);
+          mesh->dmh->get_vertex_neighbours(point, neighbours);
+          const PetscInt next_point = o.at((px + 1) % num_points);
+          ASSERT_NE(std::find(neighbours.begin(), neighbours.end(), next_point),
+                    neighbours.end());
+        }
+      }
+
+      if (point_type == DM_POLYTOPE_SEG_PRISM_TENSOR) {
+        const int num_points = o.size();
+        std::vector<int> reorder = {0, 1, 3, 2};
+        for (int px = 0; px < num_points; px++) {
+          std::set<PetscInt> n;
+          std::vector<PetscInt> neighbours;
+          const PetscInt point = o.at(reorder.at(px));
+          mesh->dmh->get_vertex_neighbours(point, neighbours);
+          const PetscInt next_point = o.at(reorder.at((px + 1) % num_points));
+          ASSERT_NE(std::find(neighbours.begin(), neighbours.end(), next_point),
+                    neighbours.end());
+        }
+      }
+
+      if (point_type == DM_POLYTOPE_TETRAHEDRON) {
+        ASSERT_TRUE(mesh->dmh->normal_points_towards_point(o.at(0), o.at(2),
+                                                           o.at(1), o.at(3)));
+        ASSERT_TRUE(mesh->dmh->normal_points_towards_point(o.at(0), o.at(3),
+                                                           o.at(2), o.at(1)));
+        ASSERT_TRUE(mesh->dmh->normal_points_towards_point(o.at(3), o.at(1),
+                                                           o.at(2), o.at(0)));
+      }
+
+      if (point_type == DM_POLYTOPE_PYRAMID) {
+        ASSERT_TRUE(mesh->dmh->normal_points_towards_point(o.at(0), o.at(3),
+                                                           o.at(1), o.at(4)));
+        ASSERT_TRUE(mesh->dmh->normal_points_towards_point(o.at(0), o.at(4),
+                                                           o.at(3), o.at(1)));
+        ASSERT_TRUE(mesh->dmh->normal_points_towards_point(o.at(1), o.at(2),
+                                                           o.at(4), o.at(0)));
+        ASSERT_TRUE(mesh->dmh->normal_points_towards_point(o.at(3), o.at(4),
+                                                           o.at(2), o.at(0)));
+      }
+
+      if (point_type == DM_POLYTOPE_TRI_PRISM) {
+        ASSERT_TRUE(mesh->dmh->normal_points_towards_point(o.at(0), o.at(2),
+                                                           o.at(1), o.at(3)));
+        ASSERT_TRUE(mesh->dmh->normal_points_towards_point(o.at(3), o.at(5),
+                                                           o.at(4), o.at(0)));
+        ASSERT_TRUE(mesh->dmh->normal_points_towards_point(o.at(0), o.at(3),
+                                                           o.at(2), o.at(1)));
+        ASSERT_TRUE(mesh->dmh->normal_points_towards_point(o.at(0), o.at(1),
+                                                           o.at(3), o.at(2)));
+        ASSERT_TRUE(mesh->dmh->normal_points_towards_point(o.at(1), o.at(2),
+                                                           o.at(5), o.at(0)));
+      }
+
+      if (point_type == DM_POLYTOPE_TRI_PRISM_TENSOR) {
+        ASSERT_TRUE(mesh->dmh->normal_points_towards_point(o.at(0), o.at(1),
+                                                           o.at(2), o.at(3)));
+        ASSERT_TRUE(mesh->dmh->normal_points_towards_point(o.at(3), o.at(5),
+                                                           o.at(4), o.at(0)));
+        ASSERT_TRUE(mesh->dmh->normal_points_towards_point(o.at(0), o.at(2),
+                                                           o.at(3), o.at(1)));
+        ASSERT_TRUE(mesh->dmh->normal_points_towards_point(o.at(2), o.at(1),
+                                                           o.at(5), o.at(0)));
+        ASSERT_TRUE(mesh->dmh->normal_points_towards_point(o.at(0), o.at(3),
+                                                           o.at(1), o.at(2)));
+      }
+
+      if (point_type == DM_POLYTOPE_HEXAHEDRON) {
+        ASSERT_TRUE(mesh->dmh->normal_points_towards_point(o.at(0), o.at(3),
+                                                           o.at(1), o.at(4)));
+        ASSERT_TRUE(mesh->dmh->normal_points_towards_point(o.at(4), o.at(7),
+                                                           o.at(5), o.at(0)));
+        ASSERT_TRUE(mesh->dmh->normal_points_towards_point(o.at(0), o.at(1),
+                                                           o.at(4), o.at(3)));
+        ASSERT_TRUE(mesh->dmh->normal_points_towards_point(o.at(1), o.at(2),
+                                                           o.at(7), o.at(0)));
+        ASSERT_TRUE(mesh->dmh->normal_points_towards_point(o.at(3), o.at(5),
+                                                           o.at(2), o.at(0)));
+        ASSERT_TRUE(mesh->dmh->normal_points_towards_point(o.at(0), o.at(4),
+                                                           o.at(3), o.at(1)));
+      }
+
+      if (point_type == DM_POLYTOPE_QUAD_PRISM_TENSOR) {
+        ASSERT_TRUE(mesh->dmh->normal_points_towards_point(o.at(0), o.at(1),
+                                                           o.at(3), o.at(4)));
+        ASSERT_TRUE(mesh->dmh->normal_points_towards_point(o.at(4), o.at(7),
+                                                           o.at(5), o.at(0)));
+        ASSERT_TRUE(mesh->dmh->normal_points_towards_point(o.at(0), o.at(3),
+                                                           o.at(4), o.at(1)));
+        ASSERT_TRUE(mesh->dmh->normal_points_towards_point(o.at(3), o.at(2),
+                                                           o.at(7), o.at(0)));
+        ASSERT_TRUE(mesh->dmh->normal_points_towards_point(o.at(1), o.at(5),
+                                                           o.at(2), o.at(0)));
+        ASSERT_TRUE(mesh->dmh->normal_points_towards_point(o.at(0), o.at(4),
+                                                           o.at(1), o.at(3)));
+      }
+    };
+
+    auto point_type = mesh->dmh->get_point_type(px);
+    lambda_do_test();
+    seen_types.insert(point_type);
+
+    if (point_type == DM_POLYTOPE_TRI_PRISM_TENSOR) {
+      PETSCCHK(DMPlexSetCellType(dm, px, DM_POLYTOPE_TRI_PRISM));
+      point_type = mesh->dmh->get_point_type(px);
+      ASSERT_EQ(point_type, DM_POLYTOPE_TRI_PRISM);
+      lambda_do_test();
+      seen_types.insert(point_type);
+    }
+
+    if (point_type == DM_POLYTOPE_HEXAHEDRON) {
+      PETSCCHK(DMPlexSetCellType(dm, px, DM_POLYTOPE_QUAD_PRISM_TENSOR));
+      point_type = mesh->dmh->get_point_type(px);
+      ASSERT_EQ(point_type, DM_POLYTOPE_QUAD_PRISM_TENSOR);
+      lambda_do_test();
+      seen_types.insert(point_type);
+    }
+  }
+
+  mesh->free();
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
+
+TEST(PETSc, vtk_mapping) {
+  std::filesystem::path gmsh_filepath;
+  GET_TEST_RESOURCE(gmsh_filepath, "gmsh/mixed_ref_cube_0.8.msh");
+
+  PETSCCHK(PetscInitializeNoArguments());
+  DM dm;
+  PETSCCHK(DMPlexCreateGmshFromFile(MPI_COMM_WORLD,
+                                    gmsh_filepath.generic_string().c_str(),
+                                    (PetscBool)1, &dm));
+  PetscInterface::generic_distribute(&dm);
+
+  int rank = -1;
+  MPICHK(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
+
+  auto mesh =
+      std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
+  auto mesh_hierarchy = mesh->get_mesh_hierarchy();
+
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+
+  std::map<PetscInt, std::vector<PetscInt>> boundary_groups;
+  boundary_groups[0] = {100, 200, 300, 400, 500, 600};
+
+  auto boundary_interaction = std::make_shared<BoundaryInteraction3DTest>(
+      sycl_target, mesh, boundary_groups, 1.0e-14);
+
+  auto labels = boundary_interaction->wrap_get_labels();
+
+  // map from label to petsc point indices in the dm for the facets
+  auto face_sets = mesh->dmh->get_face_sets();
+
+  auto lambda_do_write = [&](const std::string index) {
+    std::vector<VTK::UnstructuredCell> vtk_data;
+    for (auto &item : face_sets) {
+      if (labels.count(item.first)) {
+        {
+          for (auto &point_id : item.second) {
+            auto d = mesh->dmh->get_vtk_point_data(point_id);
+            d.cell_data["u"] = point_id;
+
+            for (int px = 0; px < d.num_points; px++) {
+              const REAL x = d.points.at(px * 3 + 0);
+              const REAL y = d.points.at(px * 3 + 1);
+              const REAL z = d.points.at(px * 3 + 2);
+              d.point_data["x"].push_back(x);
+              d.point_data["y"].push_back(y);
+              d.point_data["z"].push_back(z);
+            }
+            vtk_data.push_back(d);
+          }
+        }
+      }
+    }
+
+    {
+      VTK::VTKHDF w(
+          get_test_root_file("dmplex_face_coords_" + index + ".vtkhdf"),
+          mesh->get_comm());
+      w.write(vtk_data);
+      w.close();
+    }
+
+    vtk_data.clear();
+
+    auto cell_vtk_data = mesh->dmh->get_vtk_cell_data();
+
+    for (auto &d : cell_vtk_data) {
+      for (int px = 0; px < d.num_points; px++) {
+        const REAL x = d.points.at(px * 3 + 0);
+        const REAL y = d.points.at(px * 3 + 1);
+        const REAL z = d.points.at(px * 3 + 2);
+        d.point_data["x"].push_back(x);
+        d.point_data["y"].push_back(y);
+        d.point_data["z"].push_back(z);
+      }
+      vtk_data.push_back(d);
+    }
+
+    {
+      VTK::VTKHDF w(
+          get_test_root_file("dmplex_volume_coords_" + index + ".vtkhdf"),
+          mesh->get_comm());
+      w.write(vtk_data);
+      w.close();
+    }
+    vtk_data.clear();
+  };
+
+  lambda_do_write("0");
+
+  PetscInt point_start = -1;
+  PetscInt point_end = -1;
+  PETSCCHK(DMPlexGetChart(dm, &point_start, &point_end));
+  for (PetscInt px = point_start; px < point_end; px++) {
+    auto point_type = mesh->dmh->get_point_type(px);
+    if (point_type == DM_POLYTOPE_TRI_PRISM_TENSOR) {
+      PETSCCHK(DMPlexSetCellType(dm, px, DM_POLYTOPE_TRI_PRISM));
+      point_type = mesh->dmh->get_point_type(px);
+      ASSERT_EQ(point_type, DM_POLYTOPE_TRI_PRISM);
+    }
+    if (point_type == DM_POLYTOPE_HEXAHEDRON) {
+      PETSCCHK(DMPlexSetCellType(dm, px, DM_POLYTOPE_QUAD_PRISM_TENSOR));
+      point_type = mesh->dmh->get_point_type(px);
+      ASSERT_EQ(point_type, DM_POLYTOPE_QUAD_PRISM_TENSOR);
+    }
+  }
+
+  lambda_do_write("1");
+
+  boundary_interaction->free();
+  sycl_target->free();
+  mesh->free();
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
+
 TEST(PETScBoundary3D, setup) {
   std::filesystem::path gmsh_filepath;
   GET_TEST_RESOURCE(gmsh_filepath, "gmsh/mixed_ref_cube_0.8.msh");
@@ -190,6 +467,7 @@ TEST(PETScBoundary3D, setup) {
 
   for (auto &item : face_sets) {
     if (labels.count(item.first)) {
+
       for (auto &point_id : item.second) {
         auto label_id = item.first;
         // If the facet is a quad then we will split that quad into two
@@ -221,7 +499,7 @@ TEST(PETScBoundary3D, setup) {
         };
 
         if (is_triangle) {
-          mesh->dmh->get_generic_vertices(point_id, coords);
+          mesh->dmh->get_point_vertices(point_id, coords);
           ASSERT_EQ(coords.size(), 3);
 
           BoundaryTriangleTest triangle;
@@ -248,7 +526,7 @@ TEST(PETScBoundary3D, setup) {
             BoundaryTriangleTest triangle;
             for (int vx : {0, 1, 2}) {
               const PetscInt inner_point_id = triangle_indices.at(tx).at(vx);
-              mesh->dmh->get_generic_vertices(inner_point_id, coords);
+              mesh->dmh->get_point_vertices(inner_point_id, coords);
               ASSERT_EQ(coords.size(), 1);
               for (int cx : {0, 1, 2}) {
                 triangle.vertices[vx][cx] = coords.at(0).at(cx);
@@ -495,8 +773,6 @@ TEST(PETScBoundary3D, detection) {
 
   ErrorPropagate ep(sycl_target);
   auto k_ep = ep.device_ptr();
-
-  std::cout << std::setprecision(15);
 
   particle_loop(
       A,

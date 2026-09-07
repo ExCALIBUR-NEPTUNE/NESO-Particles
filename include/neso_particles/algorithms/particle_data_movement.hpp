@@ -150,6 +150,117 @@ void cellwise_broadcast(std::shared_ptr<GROUP_TYPE> group, Sym<SYM_TYPE> sym,
                    ResourceStackKeyBufferDevice<VALUE_TYPE>{}, d_buffer);
 }
 
+/**
+ * Fill a ParticleDat with the specified value.
+ *
+ * @param particle_group ParticleGroup containing ParticleDat to fill.
+ * @param sym Sym<INT> or Sym<REAL> of ParticleDat to fill.
+ * @param value INT or REAL value to fill ParticleDat with.
+ * @param component Optionally specifify the component of the ParticleDat to
+ * fill.
+ */
+template <typename T>
+inline void fill(ParticleGroupSharedPtr particle_group, Sym<T> sym,
+                 const T value, std::optional<int> component = std::nullopt) {
+  NESOASSERT(particle_group->contains_dat(sym),
+             "ParticleDat not found for sym with name: " + sym.name);
+
+  if (component == std::nullopt) {
+    const int ndim = particle_group->get_dat(sym)->ncomp;
+
+    particle_loop(
+        "Algorithms::fill", particle_group,
+        [=](auto S) {
+          for (int dx = 0; dx < ndim; dx++) {
+            S.at(dx) = value;
+          }
+        },
+        Access::write(sym))
+        ->execute();
+
+  } else {
+    const int component_value = component.value();
+    particle_loop(
+        "Algorithms::fill", particle_group,
+        [=](auto S) { S.at(component_value) = value; }, Access::write(sym))
+        ->execute();
+  }
+}
+
+extern template void fill(ParticleGroupSharedPtr, Sym<REAL>, const REAL,
+                          std::optional<int>);
+extern template void fill(ParticleGroupSharedPtr, Sym<INT>, const INT,
+                          std::optional<int>);
+
+/**
+ * Fill a ParticleDat with the specified value.
+ *
+ * @param particle_sub_group ParticleSubGroup containing ParticleDat to fill.
+ * @param sym Sym<INT> or Sym<REAL> of ParticleDat to fill.
+ * @param value INT or REAL value to fill ParticleDat with.
+ * @param component Optionally specifify the component of the ParticleDat to
+ * fill.
+ */
+template <typename T>
+inline void fill(ParticleSubGroupSharedPtr particle_sub_group, Sym<T> sym,
+                 const T value, std::optional<int> component = std::nullopt) {
+
+  const bool is_ephemeral = particle_sub_group->contains_ephemeral_dat(sym);
+  auto particle_group = get_particle_group(particle_sub_group);
+  NESOASSERT(particle_group->contains_dat(sym) || is_ephemeral,
+             "ParticleDat not found for sym with name: " + sym.name);
+
+  if (component == std::nullopt) {
+
+    if (is_ephemeral) {
+      const int ndim = particle_sub_group->get_ephemeral_dat(sym)->ncomp;
+      particle_loop(
+          "Algorithms::fill", particle_sub_group,
+          [=](auto S) {
+            for (int dx = 0; dx < ndim; dx++) {
+              S.at_ephemeral(dx) = value;
+            }
+          },
+          Access::write(sym))
+          ->execute();
+
+    } else {
+      const int ndim = particle_group->get_dat(sym)->ncomp;
+      particle_loop(
+          "Algorithms::fill", particle_sub_group,
+          [=](auto S) {
+            for (int dx = 0; dx < ndim; dx++) {
+              S.at(dx) = value;
+            }
+          },
+          Access::write(sym))
+          ->execute();
+    }
+
+  } else {
+    const int component_value = component.value();
+
+    if (is_ephemeral) {
+      particle_loop(
+          "Algorithms::fill", particle_sub_group,
+          [=](auto S) { S.at_ephemeral(component_value) = value; },
+          Access::write(sym))
+          ->execute();
+
+    } else {
+      particle_loop(
+          "Algorithms::fill", particle_sub_group,
+          [=](auto S) { S.at(component_value) = value; }, Access::write(sym))
+          ->execute();
+    }
+  }
+}
+
+extern template void fill(ParticleSubGroupSharedPtr, Sym<REAL>, const REAL,
+                          std::optional<int>);
+extern template void fill(ParticleSubGroupSharedPtr, Sym<INT>, const INT,
+                          std::optional<int>);
+
 } // namespace NESO::Particles
 
 #endif

@@ -27,7 +27,9 @@ void DiscardSubGroupSelector::create(Selection *created_selection) {
   auto k_INT = d_INT->ptr;
 
   int *orig_d_npart_cell = nullptr;
-  int *orig_h_npart_cell = nullptr;
+
+  // Silence an errornous warning from nvc++.
+  [[maybe_unused]] int *orig_h_npart_cell = nullptr;
   int npart_local = -1;
   MapLoopLayerToLayer k_parent_map;
 

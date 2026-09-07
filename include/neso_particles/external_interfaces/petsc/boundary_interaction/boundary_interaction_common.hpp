@@ -1,15 +1,20 @@
 #ifndef _NESO_PARTICLES_PETSC_BOUNDARY_INTERACTION_BOUNDARY_INTERACTION_COMMON_HPP_
 #define _NESO_PARTICLES_PETSC_BOUNDARY_INTERACTION_BOUNDARY_INTERACTION_COMMON_HPP_
 
+#include "../../../algorithms/unseen_value_extractor.hpp"
 #include "../../../containers/blocked_binary_tree.hpp"
 #include "../../../loop/particle_loop_functions.hpp"
 #include "../../../particle_sub_group/particle_sub_group.hpp"
 #include "../dmplex_interface.hpp"
+#include "../project_evaluate/dmplex_function.hpp"
+#include "../project_evaluate/dmplex_function_mass_matrix.hpp"
 #include <map>
 #include <memory>
 #include <optional>
 #include <set>
 #include <vector>
+
+#include "../../../boundary/boundary_mesh_interface.hpp"
 
 namespace NESO::Particles::PetscInterface {
 
@@ -30,6 +35,18 @@ protected:
   std::shared_ptr<CellDatConst<int>> cdc_mh_max;
   std::set<INT> required_mh_cells;
   std::set<INT> collected_mh_cells;
+
+  std::map<int, std::vector<INT>> map_group_to_petsc_indices;
+  std::map<int, std::shared_ptr<BoundaryMeshInterface>>
+      map_groups_boundary_interface;
+  std::map<int, std::shared_ptr<UnseenValueExtractor>>
+      map_groups_unseen_value_extractor;
+  std::map<std::tuple<int, std::string, int>,
+           std::shared_ptr<DMPlexFunctionMassMatrix>>
+      map_groups_mass_matrix_solver;
+
+  // Map from edge global point to owning rank
+  std::map<PetscInt, int> map_global_point_to_rank;
 
   void prepare_particle_group(ParticleGroupSharedPtr particle_group);
 
@@ -58,6 +75,8 @@ protected:
   inline void find_intersections_inner(std::shared_ptr<T> particle_sub_group,
                                        const U &intersect_object, REAL *d_real,
                                        INT *d_int) {
+    auto r0 = this->sycl_target->profile_map.start_region(
+        "BoundaryInteractionCommon", "find_intersections_inner");
     if (intersect_object.boundary_elements_exist()) {
       auto particle_group = get_particle_group(particle_sub_group);
       const auto k_ndim = particle_group->position_dat->ncomp;
@@ -165,6 +184,7 @@ protected:
           Access::read(particle_group->position_dat))
           ->execute();
     }
+    this->sycl_target->profile_map.end_region(r0);
   }
 
   /**
@@ -173,6 +193,8 @@ protected:
    */
   template <typename T>
   inline void find_cells(std::shared_ptr<T> particle_sub_group) {
+    auto r0 = this->sycl_target->profile_map.start_region(
+        "BoundaryInteractionCommon", "find_cells");
 
     const int k_INT_MAX = std::numeric_limits<int>::max();
     const int k_INT_MIN = std::numeric_limits<int>::lowest();
@@ -323,6 +345,7 @@ protected:
         this->required_mh_cells.insert(cell);
       }
     }
+    this->sycl_target->profile_map.end_region(r0);
   }
 
   BoundaryInteractionCommon(
@@ -330,7 +353,18 @@ protected:
       std::map<PetscInt, std::vector<PetscInt>> &boundary_groups,
       std::optional<Sym<REAL>> previous_position_sym = std::nullopt);
 
+  [[nodiscard]] virtual std::map<PetscInt, ParticleSubGroupSharedPtr>
+  post_integration_dimension(std::shared_ptr<ParticleGroup> particles) = 0;
+
+  [[nodiscard]] virtual std::map<PetscInt, ParticleSubGroupSharedPtr>
+  post_integration_dimension(std::shared_ptr<ParticleSubGroup> particles) = 0;
+
+  void extend_boundary_interfaces(
+      std::map<PetscInt, ParticleSubGroupSharedPtr> &groups);
+
 public:
+  virtual ~BoundaryInteractionCommon() = default;
+
   /// The compute device used to find intersections.
   SYCLTargetSharedPtr sycl_target;
   /// The interface to a DMPlex mesh.
@@ -342,6 +376,37 @@ public:
   /// particle before the positions were updated in a time stepping loop. These
   /// positions are populated on call to @ref pre_integration.
   Sym<REAL> previous_position_sym;
+
+  /**
+   * Free the instance. Must be called. Collective on the communicator.
+   */
+  virtual void free() = 0;
+
+  /**
+   * Call after updating to find particles whose trajectories intersect the
+   * DMPlex boundary.
+   *
+   * @param particles Collection of particles, either a ParticleGroup or
+   * ParticleSubGroup, to identify trajectory-boundary intersections of.
+   * @returns Map from boundary groups ids, which were passed in the
+   * constructor, to a ParticleSubGroup of particles which crossed the boundary
+   * elements which form the boundary group.
+   */
+  [[nodiscard]] std::map<PetscInt, ParticleSubGroupSharedPtr>
+  post_integration(std::shared_ptr<ParticleGroup> particles);
+
+  /**
+   * Call after updating to find particles whose trajectories intersect the
+   * DMPlex boundary.
+   *
+   * @param particles Collection of particles, either a ParticleGroup or
+   * ParticleSubGroup, to identify trajectory-boundary intersections of.
+   * @returns Map from boundary groups ids, which were passed in the
+   * constructor, to a ParticleSubGroup of particles which crossed the boundary
+   * elements which form the boundary group.
+   */
+  [[nodiscard]] std::map<PetscInt, ParticleSubGroupSharedPtr>
+  post_integration(std::shared_ptr<ParticleSubGroup> particles);
 
   /**
    * This method should be called with a collection of particles prior to
@@ -360,6 +425,115 @@ public:
    * positions are about to be updated, e.g. in a time stepping operation.
    */
   void pre_integration(std::shared_ptr<ParticleSubGroup> particles);
+
+  /**
+   * Create a function on a boundary group. Must be called collectively on the
+   * communicator.
+   *
+   * @param group ID of boundary group to create function on.
+   * @param function_space Family of function to create, e.g. "DG".
+   * @param polynomial_order Order of function to create, e.g. 0.
+   * @returns Function object on boundary.
+   */
+  DMPlexFunctionSharedPtr create_function(const int group,
+                                          const std::string function_space,
+                                          const int polynomial_order);
+
+  /**
+   * Project particle data onto a function defined on the surface. Uses the
+   * standardarised boundary interface on the sub group. This function call is
+   * equivalent to calling:
+   *
+   * function_project_initialise(func);
+   * function_project_contribute(particle_sub_group, sym, component,
+   *                             is_ephemeral, func);
+   * function_project_finalise(func);
+   *
+   * Must be called collectively on the communicator.
+   *
+   * @param particle_sub_group ParticleSubGroup to project onto function.
+   * @param sym Sym<REAL> Particle property to use as source weights.
+   * @param component Component of particle property to use as source weights.
+   * @param is_ephemeral Indicate if the particle weights are in an EphemeralDat
+   * or ParticleDat.
+   * @param func Function to project onto.
+   */
+  void function_project(ParticleSubGroupSharedPtr particle_sub_group,
+                        Sym<REAL> sym, const int component,
+                        const bool is_ephemeral, DMPlexFunctionSharedPtr func);
+
+  /**
+   * A function_project call is equivalent to calling:
+   *
+   * function_project_initialise(func);
+   * function_project_contribute(particle_sub_group, sym, component,
+   *                             is_ephemeral, func);
+   * function_project_finalise(func);
+   *
+   * This method initialises the destination function for projection. Must be
+   * called collectively on the communicator.
+   *
+   * @param func Function to project onto.
+   */
+  void function_project_initialise(DMPlexFunctionSharedPtr func);
+
+  /**
+   * A function_project call is equivalent to calling:
+   *
+   * function_project_initialise(func);
+   * function_project_contribute(particle_sub_group, sym, component,
+   *                             is_ephemeral, func);
+   * function_project_finalise(func);
+   *
+   * This method adds the contributions from the particles in the
+   * particle_sub_group to the projection. Must be called collectively on the
+   * communicator.
+   *
+   * @param particle_sub_group ParticleSubGroup to project onto function.
+   * @param sym Sym<REAL> Particle property to use as source weights.
+   * @param component Component of particle property to use as source weights.
+   * @param is_ephemeral Indicate if the particle weights are in an EphemeralDat
+   * or ParticleDat.
+   * @param func Function to project onto.
+   */
+  void function_project_contribute(ParticleSubGroupSharedPtr particle_sub_group,
+                                   Sym<REAL> sym, const int component,
+                                   const bool is_ephemeral,
+                                   DMPlexFunctionSharedPtr func);
+
+  /**
+   * A function_project call is equivalent to calling:
+   *
+   * function_project_initialise(func);
+   * function_project_contribute(particle_sub_group, sym, component,
+   *                             is_ephemeral, func);
+   * function_project_finalise(func);
+   *
+   * This method must be called after all contributions to the projection have
+   * been made with function_project_contribute. Must be called collectively on
+   * the communicator.
+   *
+   * @param func Function to project onto.
+   */
+  void function_project_finalise(DMPlexFunctionSharedPtr func);
+
+  /**
+   * Evaluate particle data from a function defined on the surface. Uses the
+   * standardarised boundary interface on the sub group. Must be called
+   * collectively on the communicator.
+   *
+   * @param particle_sub_group ParticleSubGroup to containing destination
+   * particles for evaluation.
+   * @param sym Sym<REAL> Particle property to overwrite with function
+   * evaluations.
+   * @param component Component of particle property to write evalauations to.
+   * @param is_ephemeral Indicate if the particle evaluations are in an
+   * EphemeralDat or ParticleDat.
+   * @param func Function to evaluate at particle locations.
+   */
+  void function_evaluate(ParticleSubGroupSharedPtr particle_sub_group,
+                         Sym<REAL> sym, const int component,
+                         const bool is_ephemeral, DMPlexFunctionSharedPtr func);
 };
 
 } // namespace NESO::Particles::PetscInterface

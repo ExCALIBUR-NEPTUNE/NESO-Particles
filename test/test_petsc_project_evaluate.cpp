@@ -246,6 +246,19 @@ TEST(PETSc, dmplex_project_evaluate_qpm_average) {
   PETSCCHK(PetscFinalize());
 }
 
+namespace {
+class TestDMPlexProjectEvaluateBarycentric
+    : public PetscInterface::DMPlexProjectEvaluateBarycentric {
+public:
+  template <typename... ARGS>
+  TestDMPlexProjectEvaluateBarycentric(ARGS... args)
+      : DMPlexProjectEvaluateBarycentric(args...) {}
+
+  MAKE_GETTER_METHOD(cdc_project);
+};
+
+} // namespace
+
 TEST(PETSc, dmplex_evaluate_barycentric) {
 
   std::filesystem::path gmsh_filepath;
@@ -299,7 +312,7 @@ TEST(PETSc, dmplex_evaluate_barycentric) {
   }
   A->add_particles_local(initial_distribution);
 
-  auto dpe = std::make_shared<PetscInterface::DMPlexProjectEvaluateBarycentric>(
+  auto dpe = std::make_shared<TestDMPlexProjectEvaluateBarycentric>(
       qpm, "Barycentric", 1, true);
 
   auto lambda_l0 = [=](auto x, auto y) -> REAL {
@@ -356,7 +369,22 @@ TEST(PETSc, dmplex_evaluate_barycentric) {
   ExternalCommon::interpolate<2, 2>(qpm, lambda_l0, lambda_l1);
 
   dpe->evaluate(A, Sym<REAL>("Q2"));
+  auto vtk_data = dpe->get_vtk_data();
+  auto dofs = dpe->get_cdc_project()->get_all_cells();
+
   for (int cx = 0; cx < cell_count; cx++) {
+
+    const int num_vertices = vtk_data.at(cx).num_points;
+
+    for (int vx = 0; vx < num_vertices; vx++) {
+      for (int nx = 0; nx < 2; nx++) {
+        const REAL to_test =
+            vtk_data.at(cx).point_data.at("value_" + std::to_string(nx)).at(vx);
+        const REAL correct = dofs.at(cx)->at(nx, vx);
+        ASSERT_EQ(correct, to_test);
+      }
+    }
+
     auto P = A->get_cell(Sym<REAL>("P"), cx);
     auto Q2 = A->get_cell(Sym<REAL>("Q2"), cx);
     for (int rx = 0; rx < P->nrow; rx++) {
@@ -826,6 +854,144 @@ TEST(PETSc, dmplex_project_simple_dg0) {
                     1.0e-15);
       }
     }
+  }
+
+  sycl_target->free();
+  mesh->free();
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
+
+TEST(PETSc, dmplex_function) {
+  std::filesystem::path gmsh_filepath;
+  GET_TEST_RESOURCE(gmsh_filepath, "gmsh/reference_all_types_square_0.2.msh");
+
+  PETSCCHK(PetscInitializeNoArguments());
+  DM dm;
+  PETSCCHK(DMPlexCreateGmshFromFile(MPI_COMM_WORLD,
+                                    gmsh_filepath.generic_string().c_str(),
+                                    (PetscBool)1, &dm));
+  PetscInterface::generic_distribute(&dm);
+
+  auto mesh =
+      std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
+  auto sycl_target =
+      std::make_shared<SYCLTarget>(GPU_SELECTOR, mesh->get_comm());
+
+  std::vector<INT> cells;
+  mesh->dmh->get_cell_petsc_indices(cells);
+
+  auto f0 = std::make_shared<PetscInterface::DMPlexFunction>(
+      mesh, sycl_target, mesh->get_ndim(), cells, "DG", 0, 0);
+
+  const int cell_count = mesh->get_cell_count();
+
+  ASSERT_EQ(f0->cell_count, cell_count);
+  ASSERT_EQ(f0->ndim, mesh->get_ndim());
+
+  auto h_dofs0 = f0->get_dofs();
+  ASSERT_EQ(h_dofs0.size(), cell_count);
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    h_dofs0.at(cellx) = cellx;
+  }
+
+  f0->set_dofs(h_dofs0);
+  h_dofs0 = f0->get_dofs();
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    ASSERT_EQ(h_dofs0.at(cellx), cellx);
+  }
+
+  // f0->write_vtkhdf("test_dmplex_function.vtkhdf");
+
+  sycl_target->free();
+  mesh->free();
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
+
+TEST(PETSc, dmplex_function_mass_matrix_solve) {
+  std::filesystem::path gmsh_filepath;
+  GET_TEST_RESOURCE(gmsh_filepath, "gmsh/reference_all_types_square_0.2.msh");
+
+  PETSCCHK(PetscInitializeNoArguments());
+  DM dm;
+  PETSCCHK(DMPlexCreateGmshFromFile(MPI_COMM_WORLD,
+                                    gmsh_filepath.generic_string().c_str(),
+                                    (PetscBool)1, &dm));
+  PetscInterface::generic_distribute(&dm);
+
+  auto mesh =
+      std::make_shared<PetscInterface::DMPlexInterface>(dm, 0, MPI_COMM_WORLD);
+  auto sycl_target =
+      std::make_shared<SYCLTarget>(GPU_SELECTOR, mesh->get_comm());
+
+  std::vector<INT> cells;
+  mesh->dmh->get_cell_petsc_indices(cells);
+
+  {
+    auto f0 = std::make_shared<PetscInterface::DMPlexFunction>(
+        mesh, sycl_target, mesh->get_ndim(), cells, "DG", 0, 0);
+
+    const int cell_count = mesh->get_cell_count();
+
+    auto h_dofs = f0->get_dofs();
+    auto h_correct = f0->get_dofs();
+
+    for (int ix = 0; ix < cell_count; ix++) {
+      h_dofs.at(ix) = ix;
+      h_correct.at(ix) = ix / mesh->dmh->get_cell_volume(ix);
+    }
+    f0->set_dofs(h_dofs);
+
+    auto m2d = std::make_shared<PetscInterface::DMPlexFunctionMassMatrix>(
+        mesh, sycl_target, 2, cells, "DG", 0, 0);
+
+    m2d->solve(f0);
+    h_dofs = f0->get_dofs();
+
+    for (int ix = 0; ix < cell_count; ix++) {
+      ASSERT_TRUE(relative_error(h_correct.at(ix), h_dofs.at(ix)) < 1.0e-14);
+    }
+  }
+
+  {
+
+    auto face_sets = mesh->dmh->get_face_sets();
+    std::vector<INT> indices;
+    for (auto &fx : face_sets) {
+      indices.insert(indices.end(), fx.second.begin(), fx.second.end());
+    }
+
+    auto f0 = std::make_shared<PetscInterface::DMPlexFunction>(
+        mesh, sycl_target, mesh->get_ndim() - 1, indices, "DG", 0, 2);
+
+    auto h_dofs = f0->get_dofs();
+    auto h_correct = f0->get_dofs();
+
+    const int num_cells = indices.size();
+    ASSERT_EQ(num_cells, h_correct.size());
+
+    for (int ix = 0; ix < num_cells; ix++) {
+      const PetscInt index = indices.at(ix);
+      h_correct.at(ix) = ix / mesh->dmh->get_point_volume(index);
+      h_dofs.at(ix) = ix;
+    }
+
+    f0->set_dofs(h_dofs);
+
+    auto m1d = std::make_shared<PetscInterface::DMPlexFunctionMassMatrix>(
+        mesh, sycl_target, 1, indices, "DG", 0, 2);
+    m1d->solve(f0);
+
+    h_dofs = f0->get_dofs();
+
+    for (int ix = 0; ix < num_cells; ix++) {
+      ASSERT_TRUE(relative_error(h_correct.at(ix), h_dofs.at(ix)) < 1.0e-14);
+    }
+
+    m1d->solve(nullptr);
   }
 
   sycl_target->free();

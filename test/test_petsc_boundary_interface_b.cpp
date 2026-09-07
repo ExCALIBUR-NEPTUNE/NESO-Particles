@@ -6,6 +6,8 @@
 namespace {
 class TestBoundaryInteraction2D : public PetscInterface::BoundaryInteraction2D {
 public:
+  virtual ~TestBoundaryInteraction2D() = default;
+
   TestBoundaryInteraction2D(
       SYCLTargetSharedPtr sycl_target,
       PetscInterface::DMPlexInterfaceSharedPtr mesh,

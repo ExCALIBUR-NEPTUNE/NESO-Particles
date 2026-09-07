@@ -47,6 +47,7 @@ set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set(SRC_FILES
     ${SRC_DIR}/algorithms/cellwise_methods.cpp
     ${SRC_DIR}/algorithms/common.cpp
+    ${SRC_DIR}/algorithms/integration.cpp
     ${SRC_DIR}/algorithms/dsmc/pair_sampler_ntc.cpp
     ${SRC_DIR}/algorithms/dsmc/pair_sampler_no_replacement.cpp
     ${SRC_DIR}/algorithms/dsmc/collision_cell_partition.cpp
@@ -59,6 +60,7 @@ set(SRC_FILES
     ${SRC_DIR}/external_interfaces/petsc/boundary_interaction/boundary_interaction_2d.cpp
     ${SRC_DIR}/external_interfaces/petsc/boundary_interaction/boundary_interaction_3d.cpp
     ${SRC_DIR}/external_interfaces/petsc/boundary_interaction/boundary_interaction_common.cpp
+    ${SRC_DIR}/external_interfaces/petsc/boundary_interaction/boundary_interaction.cpp
     ${SRC_DIR}/external_interfaces/petsc/dmplex_cell_serialise.cpp
     ${SRC_DIR}/external_interfaces/petsc/dmplex_interface.cpp
     ${SRC_DIR}/external_interfaces/petsc/dmplex_helper.cpp
@@ -67,6 +69,8 @@ set(SRC_FILES
     ${SRC_DIR}/external_interfaces/petsc/particle_cell_mapping/dmplex_2d_mapper.cpp
     ${SRC_DIR}/external_interfaces/petsc/particle_cell_mapping/dmplex_3d_mapper.cpp
     ${SRC_DIR}/external_interfaces/petsc/particle_cell_mapping/dmplex_host_mapper.cpp
+    ${SRC_DIR}/external_interfaces/petsc/project_evaluate/dmplex_function.cpp
+    ${SRC_DIR}/external_interfaces/petsc/project_evaluate/dmplex_function_mass_matrix.cpp
     ${SRC_DIR}/external_interfaces/petsc/project_evaluate/dmplex_project_evaluate_barycentric.cpp
     ${SRC_DIR}/external_interfaces/petsc/project_evaluate/dmplex_project_evaluate_dg.cpp
     ${SRC_DIR}/external_interfaces/common/bounding_box.cpp
@@ -110,6 +114,7 @@ set(SRC_FILES
     ${SRC_DIR}/device_limits.cpp
     ${SRC_DIR}/departing_particle_identification.cpp
     ${SRC_DIR}/mesh_hierarchy.cpp
+    ${SRC_DIR}/generic_function.cpp
     ${SRC_DIR}/nd_host_array.cpp
     ${SRC_DIR}/global_mapping.cpp
     ${SRC_DIR}/parallel_initialisation.cpp
@@ -124,6 +129,7 @@ set(SRC_FILES
     ${SRC_DIR}/particle_dat.cpp
     ${SRC_DIR}/particle_group.cpp
     ${SRC_DIR}/particle_set.cpp
+    ${SRC_DIR}/parameters.cpp
     ${SRC_DIR}/loop/particle_loop_args.cpp
     ${SRC_DIR}/loop/particle_loop_base.cpp
     ${SRC_DIR}/loop/particle_loop_iteration_set.cpp
@@ -160,6 +166,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/access.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/algorithms.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/common.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/integration.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/dsmc.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/cellwise_all_to_all.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/algorithms/dsmc/collision_cell_partition.hpp
@@ -263,11 +270,14 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/petsc_common.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/petsc_utility.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/petsc_interface.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/project_evaluate/dmplex_function.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/project_evaluate/dmplex_function_mass_matrix.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/project_evaluate/dmplex_project_evaluate_base.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/project_evaluate/dmplex_project_evaluate_barycentric.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/project_evaluate/dmplex_project_evaluate_dg.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/vtk/vtk.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/global_mapping.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/generic_function.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/global_move.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/global_move_exchange.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/local_mapping.hpp

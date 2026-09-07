@@ -5,22 +5,46 @@
 namespace NESO::Particles::PetscInterface {
 
 std::vector<VTK::UnstructuredCell>
-DMPlexProjectEvaluateBarycentric::get_vtk_data() {
+DMPlexProjectEvaluateBarycentric::get_vtk_data(const std::string name) {
   const int cell_count = this->mesh->get_cell_count();
+  const int ncomp = this->ncomp_active;
+  const int nrow = this->cdc_project->nrow;
+  const int stride = nrow * this->cdc_project->ncol;
+  auto sycl_target = this->cdc_project->sycl_target;
+
+  auto h_data =
+      get_resource<BufferHost<REAL>, ResourceStackInterfaceBufferHost<REAL>>(
+          sycl_target->resource_stack_map, ResourceStackKeyBufferHost<REAL>{},
+          sycl_target);
+  h_data->realloc_no_copy(cell_count * stride);
+
+  sycl_target->queue
+      .memcpy(h_data->ptr, this->cdc_project->device_ptr(),
+              cell_count * stride * sizeof(REAL))
+      .wait_and_throw();
+
   std::vector<VTK::UnstructuredCell> data =
       this->mesh->dmh->get_vtk_cell_data();
   for (int cellx = 0; cellx < cell_count; cellx++) {
-    auto values = this->cdc_project->get_cell(cellx);
-    auto inverse_volumes = this->cdc_volumes->get_value(cellx, 0, 0);
     const int num_vertices = data.at(cellx).num_points;
     NESOASSERT((3 <= num_vertices) && (num_vertices <= 4),
                "Bad number of vertices.");
-    data.at(cellx).point_data["value"].reserve(num_vertices);
+
+    for (int cx = 0; cx < ncomp; cx++) {
+      data.at(cellx).point_data[name + "_" + std::to_string(cx)].reserve(
+          num_vertices);
+    }
+
     for (int vx = 0; vx < num_vertices; vx++) {
-      data.at(cellx).point_data["value"].push_back(values->at(0, vx) *
-                                                   inverse_volumes);
+      for (int cx = 0; cx < ncomp; cx++) {
+        const REAL v = h_data->ptr[cellx * stride + nrow * vx + cx];
+        data.at(cellx).point_data[name + "_" + std::to_string(cx)].push_back(v);
+      }
     }
   }
+
+  restore_resource(sycl_target->resource_stack_map,
+                   ResourceStackKeyBufferHost<REAL>{}, h_data);
   return data;
 }
 

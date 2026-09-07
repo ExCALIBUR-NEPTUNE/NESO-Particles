@@ -61,6 +61,7 @@ struct BoundaryInteraction3DTriangle {
   REAL normal[3];
   int label_id;
   int face_id;
+  int rank;
 };
 
 /**
@@ -183,7 +184,8 @@ protected:
   template <typename T>
   [[nodiscard]] inline std::map<PetscInt, ParticleSubGroupSharedPtr>
   post_integration_inner(std::shared_ptr<T> particles) {
-
+    auto r0 = this->sycl_target->profile_map.start_region(
+        "BoundaryInteraction3D", "post_integration_inner");
     this->find_cells(particles);
     this->collect_cells();
 
@@ -277,11 +279,20 @@ protected:
                      ResourceStackKeyBufferDevice<REAL>{}, d_real);
     restore_resource(sycl_target->resource_stack_map,
                      ResourceStackKeyBufferDevice<INT>{}, d_int);
+
+    this->sycl_target->profile_map.end_region(r0);
     return m;
   }
 
+  [[nodiscard]] virtual std::map<PetscInt, ParticleSubGroupSharedPtr>
+  post_integration_dimension(std::shared_ptr<ParticleGroup> particles) override;
+
+  [[nodiscard]] virtual std::map<PetscInt, ParticleSubGroupSharedPtr>
+  post_integration_dimension(
+      std::shared_ptr<ParticleSubGroup> particles) override;
+
 public:
-  /// Tolerance for line-line intersections.
+  /// Tolerance for intersections.
   REAL tol;
 
   /**
@@ -296,33 +307,7 @@ public:
   /**
    * Free the instance. Must be called. Collective on the communicator.
    */
-  void free();
-
-  /**
-   * Call after updating to find particles whose trajectories intersect the
-   * DMPlex boundary.
-   *
-   * @param particles Collection of particles, either a ParticleGroup or
-   * ParticleSubGroup, to identify trajectory-boundary intersections of.
-   * @returns Map from boundary groups ids, which were passed in the
-   * constructor, to a ParticleSubGroup of particles which crossed the boundary
-   * elements which form the boundary group.
-   */
-  [[nodiscard]] std::map<PetscInt, ParticleSubGroupSharedPtr>
-  post_integration(std::shared_ptr<ParticleGroup> particles);
-
-  /**
-   * Call after updating to find particles whose trajectories intersect the
-   * DMPlex boundary.
-   *
-   * @param particles Collection of particles, either a ParticleGroup or
-   * ParticleSubGroup, to identify trajectory-boundary intersections of.
-   * @returns Map from boundary groups ids, which were passed in the
-   * constructor, to a ParticleSubGroup of particles which crossed the boundary
-   * elements which form the boundary group.
-   */
-  [[nodiscard]] std::map<PetscInt, ParticleSubGroupSharedPtr>
-  post_integration(std::shared_ptr<ParticleSubGroup> particles);
+  virtual void free() override;
 
   /**
    * Create an instance of the class for a particular mesh. This constructor

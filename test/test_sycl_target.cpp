@@ -427,6 +427,18 @@ TEST(SYCLTarget, parameters) {
 
   EXPECT_EQ(p.get<SizeTParameter>("LOOP_LOCAL_SIZE")->value, local_size);
   EXPECT_EQ(p.get<SizeTParameter>("LOOP_NBIN")->value, nbin);
+
+  auto p_foo = std::make_shared<SizeTParameter>(42);
+  p.set("FOO", p_foo);
+  const std::size_t t0 = p.get_env_size_t("FOO", 32);
+  ASSERT_EQ(t0, 42);
+  const std::size_t t1 = p.get_env_size_t("BAR", 32);
+  ASSERT_EQ(t1, 32);
+
+  if (get_env_size_t("OMP_NUM_THREADS", 0)) {
+    ASSERT_EQ(p.get_env_size_t("OMP_NUM_THREADS", 0),
+              get_env_size_t("OMP_NUM_THREADS", 0));
+  }
 }
 
 TEST(SYCLTarget, matrix_transpose) {
@@ -634,4 +646,17 @@ TEST(SYCLTarget, device_selectors) {
   ASSERT_EQ(DEVICE_DEFAULT, 0);
   ASSERT_EQ(DEVICE_GPU, 1);
   ASSERT_EQ(DEVICE_CPU, -1);
+}
+
+TEST(SYCLTarget, debug_malloc_fill) {
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+  sycl_target->debug_set_malloc_fill(true);
+
+  std::uint16_t *v16 = static_cast<std::uint16_t *>(
+      sycl_target->malloc_host(sizeof(std::uint16_t)));
+
+  ASSERT_EQ(*v16, sycl_target->debug_get_malloc_fill_value<std::uint16_t>());
+
+  sycl_target->free(v16);
+  sycl_target->free();
 }
