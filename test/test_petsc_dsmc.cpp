@@ -71,21 +71,10 @@ TEST(PETScDSMC, voronoi_cell_volume_cartesian_2d) {
       point_index++;
     };
 
-    if (ndim == 2) {
-      for (int iy = 0; iy < num_cells; iy++) {
-        for (int ix = 0; ix < num_cells; ix++) {
-          std::array<int, 2> idx = {ix, iy};
-          lambda_create_point(idx);
-        }
-      }
-    } else {
-      for (int iz = 0; iz < num_cells; iz++) {
-        for (int iy = 0; iy < num_cells; iy++) {
-          for (int ix = 0; ix < num_cells; ix++) {
-            std::array<int, 3> idx = {ix, iy, iz};
-            lambda_create_point(idx);
-          }
-        }
+    for (int iy = 0; iy < num_cells; iy++) {
+      for (int ix = 0; ix < num_cells; ix++) {
+        std::array<int, 2> idx = {ix, iy};
+        lambda_create_point(idx);
       }
     }
 
@@ -116,12 +105,19 @@ TEST(PETScDSMC, voronoi_cell_volume_cartesian_2d) {
     const int vcell_start = cellx * std::pow(max_num_voronoi_cells, ndim);
     const int vcell_end0 = vcell_start + std::pow(num_cells, ndim);
     const int vcell_end1 = vcell_start + std::pow(max_num_voronoi_cells, ndim);
+
+    REAL total_volume = 0.0;
     for (int vcellx = vcell_start; vcellx < vcell_end0; vcellx++) {
       const REAL volume_correct = std::pow((h / num_cells), ndim);
       const REAL volume_to_test = h_volumes.at(vcellx);
       const REAL err = relative_error(volume_correct, volume_to_test);
       ASSERT_TRUE(err < 0.10);
+      total_volume += volume_to_test;
     }
+
+    const REAL correct_total_volume = std::pow(h, ndim);
+    ASSERT_NEAR(correct_total_volume, total_volume, 1.0e-13);
+
     for (int vcellx = vcell_end0; vcellx < vcell_end1; vcellx++) {
       ASSERT_EQ(h_volumes.at(vcellx), -1.0);
     }
