@@ -7,8 +7,8 @@ namespace NESO::Particles::PetscInterface {
 void estimate_voronoi_cell_volume(DMPlexInterfaceSharedPtr mesh,
                                   SubdivideCellsVoronoiSharedPtr voronoi_cells,
                                   std::size_t &num_samples, REAL &stol,
-                                  std::size_t &max_num_samples,
-                                  CellDatSharedPtr<REAL> volumes,
+                                  std::size_t max_num_samples,
+                                  NDLocalArraySharedPtr<REAL, 2> &volumes,
                                   std::mt19937 *rng_in,
                                   const int default_block_size) {
 
@@ -31,15 +31,19 @@ void estimate_voronoi_cell_volume(DMPlexInterfaceSharedPtr mesh,
   auto A = std::make_shared<ParticleGroup>(domain, particle_spec, sycl_target);
 
   const int cell_count = mesh->get_cell_count();
-  const std::size_t block_size =
-      std::min(static_cast<std::size_t>(default_block_size), num_samples);
+  const INT max_num_voronoi_cells =
+      std::max(1, voronoi_cells->points->get_nrow_max());
 
-  max_num_samples = std::max(max_num_samples, num_samples);
-  max_num_samples = std::max(max_num_samples + 1, block_size * 2 + 1);
+  const std::size_t block_size = default_block_size * max_num_voronoi_cells;
+  const std::size_t min_num_samples_per_voronoi_cell = num_samples;
+  const std::size_t max_num_samples_per_voronoi_cell = max_num_samples;
+
+  const std::size_t min_num_samples = get_next_multiple(
+      min_num_samples_per_voronoi_cell * max_num_voronoi_cells, block_size);
+  max_num_samples = max_num_samples_per_voronoi_cell * max_num_voronoi_cells;
 
   ParticleSet initial_distribution(cell_count * block_size, particle_spec);
 
-  const INT max_num_voronoi_cells = voronoi_cells->points->get_nrow_max();
   for (int cellx = 0; cellx < cell_count; cellx++) {
     for (std::size_t layerx = 0; layerx < block_size; layerx++) {
       initial_distribution[Sym<INT>("CELL_ID")][cellx * block_size + layerx]
@@ -68,7 +72,7 @@ void estimate_voronoi_cell_volume(DMPlexInterfaceSharedPtr mesh,
           sycl_target);
   d_counts->realloc_no_copy(cell_count * max_num_voronoi_cells);
   INT *RESTRICT k_counts = d_counts->ptr;
-  sycl_target->queue.fill(k_counts, 0, cell_count * max_num_voronoi_cells)
+  sycl_target->queue.fill<INT>(k_counts, 0, cell_count * max_num_voronoi_cells)
       .wait_and_throw();
 
   auto d_num_voronoi_cells =
@@ -95,6 +99,13 @@ void estimate_voronoi_cell_volume(DMPlexInterfaceSharedPtr mesh,
   d_volumes_b->realloc_no_copy(max_num_voronoi_cells * cell_count);
   REAL *k_volumes_b = d_volumes_b->ptr;
 
+  sycl_target->queue
+      .fill<REAL>(k_volumes_a, -1.0, cell_count * max_num_voronoi_cells)
+      .wait_and_throw();
+  sycl_target->queue
+      .fill<REAL>(k_volumes_b, -1.0, cell_count * max_num_voronoi_cells)
+      .wait_and_throw();
+
   auto d_stol = get_resource<BufferDevice<REAL>,
                              ResourceStackInterfaceBufferDevice<REAL>>(
       sycl_target->resource_stack_map, ResourceStackKeyBufferDevice<REAL>{},
@@ -104,6 +115,7 @@ void estimate_voronoi_cell_volume(DMPlexInterfaceSharedPtr mesh,
 
   EventStack event_stack;
 
+  const REAL stol_in = stol;
   REAL cstol = stol + 1.0;
   bool converged = false;
 
@@ -111,12 +123,11 @@ void estimate_voronoi_cell_volume(DMPlexInterfaceSharedPtr mesh,
       sycl_target->parameters->template get<SizeTParameter>("LOOP_LOCAL_SIZE")
           ->value;
 
-  auto iteration_set_cells =
-      sycl_target->device_limits.validate_nd_range(sycl::nd_range<2>(
-          sycl::range<2>(cell_count,
-                         get_next_multiple(max_num_voronoi_cells, local_size)),
-          sycl::range<2>(1, local_size)));
+  auto iteration_set_cells = sycl_target->device_limits.validate_nd_range(
+      sycl::nd_range<2>(sycl::range<2>(cell_count, local_size),
+                        sycl::range<2>(1, local_size)));
 
+  num_samples = 0;
   for (std::size_t bx = 0; (bx < max_num_samples) && (!converged);
        bx += block_size) {
 
@@ -161,45 +172,48 @@ void estimate_voronoi_cell_volume(DMPlexInterfaceSharedPtr mesh,
             iteration_set_cells,
             [=](sycl::nd_item<2> idx) {
               const std::size_t mesh_cell = idx.get_global_id(0);
-              const INT voronoi_cell = idx.get_global_id(1);
-              const bool workitem_active =
-                  voronoi_cell < k_num_voronoi_cells[mesh_cell];
-              const INT contrib =
-                  workitem_active ? k_counts[max_num_voronoi_cells * mesh_cell +
-                                             voronoi_cell]
-                                  : 0;
+              const INT local_id = idx.get_global_id(1);
+              const INT num_voronoi_cells = k_num_voronoi_cells[mesh_cell];
 
+              INT contrib = 0;
+              for (INT vcellx = local_id; vcellx < num_voronoi_cells;
+                   vcellx += local_size) {
+                contrib += k_counts[max_num_voronoi_cells * mesh_cell + vcellx];
+              }
               const INT total = sycl::reduce_over_group(
                   idx.get_group(), contrib, sycl::plus<INT>{});
+              const REAL total_real = total;
 
-              if (workitem_active) {
-                const REAL total_real = total;
-                const REAL contrib_real = contrib;
+              for (INT vcellx = local_id; vcellx < num_voronoi_cells;
+                   vcellx += local_size) {
+                const REAL contrib_real =
+                    k_counts[max_num_voronoi_cells * mesh_cell + vcellx];
                 const REAL ratio = contrib_real / total_real;
-                k_volumes_a[max_num_voronoi_cells * mesh_cell + voronoi_cell] =
-                    ratio;
+                k_volumes_a[max_num_voronoi_cells * mesh_cell + vcellx] = ratio;
               }
             })
         .wait_and_throw();
 
     // Have we passed the first set of samples and hence can compute an stol?
-    if (bx > block_size) {
+    if (bx >= block_size) {
 
+      auto e_reset = sycl_target->queue.fill<REAL>(k_stol, 0.0, 1);
       auto e0 = sycl_target->queue.parallel_for(
-          iteration_set_cells, [=](sycl::nd_item<2> idx) {
+          iteration_set_cells, e_reset, [=](sycl::nd_item<2> idx) {
             const std::size_t mesh_cell = idx.get_global_id(0);
-            const INT voronoi_cell = idx.get_global_id(1);
-            const bool workitem_active =
-                voronoi_cell < k_num_voronoi_cells[mesh_cell];
+            const INT local_id = idx.get_global_id(1);
+            const INT num_voronoi_cells = k_num_voronoi_cells[mesh_cell];
+
             REAL stol_contrib = 0.0;
-
-            if (workitem_active) {
+            for (INT vcellx = local_id; vcellx < num_voronoi_cells;
+                 vcellx += local_size) {
               const REAL ratio_a =
-                  k_volumes_a[max_num_voronoi_cells * mesh_cell + voronoi_cell];
+                  k_volumes_a[max_num_voronoi_cells * mesh_cell + vcellx];
               const REAL ratio_b =
-                  k_volumes_b[max_num_voronoi_cells * mesh_cell + voronoi_cell];
+                  k_volumes_b[max_num_voronoi_cells * mesh_cell + vcellx];
 
-              stol_contrib = Kernel::relative_error(ratio_a, ratio_b);
+              const REAL stol_ab = Kernel::relative_error(ratio_a, ratio_b);
+              stol_contrib = sycl::max(stol_contrib, stol_ab);
             }
 
             const REAL stol_reduced = sycl::reduce_over_group(
@@ -210,10 +224,11 @@ void estimate_voronoi_cell_volume(DMPlexInterfaceSharedPtr mesh,
             }
           });
 
-      REAL last_stol = stol + 1.0;
+      REAL last_stol = stol_in + 1.0;
       sycl_target->queue.memcpy(&last_stol, k_stol, sizeof(REAL), e0)
           .wait_and_throw();
-      converged = last_stol < stol;
+      converged = (last_stol < stol_in) && (num_samples >= min_num_samples);
+      stol = last_stol;
     }
 
     {
@@ -221,11 +236,57 @@ void estimate_voronoi_cell_volume(DMPlexInterfaceSharedPtr mesh,
       k_volumes_a = k_volumes_b;
       k_volumes_b = tmp;
     }
+    num_samples += block_size;
   }
 
-  // TODO populate return variable.
+  auto h_volumes =
+      get_resource<BufferHost<REAL>, ResourceStackInterfaceBufferHost<REAL>>(
+          sycl_target->resource_stack_map, ResourceStackKeyBufferHost<REAL>{},
+          sycl_target);
+  h_volumes->realloc_no_copy(cell_count);
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    const REAL mesh_cell_volume = mesh->dmh->get_cell_volume(cellx);
+    h_volumes->ptr[cellx] = mesh_cell_volume;
+  }
 
+  auto e0 = sycl_target->queue.memcpy(k_volumes_a, h_volumes->ptr,
+                                      cell_count * sizeof(REAL));
 
+  if (volumes == nullptr) {
+    volumes = std::make_shared<NDLocalArray<REAL, 2>>(sycl_target, cell_count,
+                                                      max_num_voronoi_cells);
+  } else if ((volumes->index.shape[0] != cell_count) ||
+             (volumes->index.shape[1] < max_num_voronoi_cells)) {
+    volumes = std::make_shared<NDLocalArray<REAL, 2>>(sycl_target, cell_count,
+                                                      max_num_voronoi_cells);
+  }
+
+  volumes->fill(-1.0);
+  e0.wait_and_throw();
+
+  REAL *RESTRICT k_volumes = volumes->ptr();
+  sycl_target->queue
+      .parallel_for(
+          iteration_set_cells,
+          [=](sycl::nd_item<2> idx) {
+            const std::size_t mesh_cell = idx.get_global_id(0);
+            const INT local_id = idx.get_global_id(1);
+            const INT num_voronoi_cells = k_num_voronoi_cells[mesh_cell];
+            const REAL mesh_cell_volume = k_volumes_a[mesh_cell];
+
+            for (INT vcellx = local_id; vcellx < num_voronoi_cells;
+                 vcellx += local_size) {
+              const REAL ratio_b =
+                  k_volumes_b[max_num_voronoi_cells * mesh_cell + vcellx];
+              const REAL vcell_volume = mesh_cell_volume * ratio_b;
+              k_volumes[mesh_cell * max_num_voronoi_cells + vcellx] =
+                  vcell_volume;
+            }
+          })
+      .wait_and_throw();
+
+  restore_resource(sycl_target->resource_stack_map,
+                   ResourceStackKeyBufferHost<REAL>{}, h_volumes);
   restore_resource(sycl_target->resource_stack_map,
                    ResourceStackKeyBufferDevice<REAL>{}, d_stol);
   restore_resource(sycl_target->resource_stack_map,
