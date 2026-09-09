@@ -139,14 +139,14 @@ public:
   /**
    * Realloc the staging area to be at east a required size discarding contents.
    *
-   * @param num_entries.
+   * @param num_entries New number of entries.
    */
   void stage_realloc_no_copy(const int num_entries);
 
   /**
    * Realloc the staging area to be at east a required size keeping contents.
    *
-   * @param num_entries.
+   * @param num_entries New number of entries.
    */
   void stage_realloc(const int num_entries);
 
@@ -159,7 +159,7 @@ public:
    * Extend the zeroed elements in the stage from the last zeroing end to a
    * given number of entries.
    *
-   * @param num_entries.
+   * @param num_entries New number of entries.
    */
   void stage_extend_zero(const int num_entries);
 

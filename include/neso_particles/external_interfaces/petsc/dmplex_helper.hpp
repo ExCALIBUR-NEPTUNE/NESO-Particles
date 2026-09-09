@@ -484,7 +484,7 @@ public:
   /**
    * Get the volume of a point in the local mesh.
    *
-   * @param index Local point index.
+   * @param point_index Local point index.
    * @returns Volume of object.
    */
   REAL get_point_volume(const PetscInt point_index);
@@ -509,7 +509,7 @@ public:
    * the support of the quadrilateral or triangle.
    *
    * @param[in] point_index PETSc point index of the face.
-   * @param[in, out] normal_vetor Output normal vector.
+   * @param[in, out] normal_vector Output normal vector.
    */
   void get_linear_normal_vector(const PetscInt point_index,
                                 std::vector<REAL> &normal_vector);
@@ -540,7 +540,7 @@ public:
    * neigbouring vertices.
    *
    * @param[in] point_index Point index of a vertex.
-   * @param[in, out] neigbours Point vertices of neighbours.
+   * @param[in, out] neighbours Point vertices of neighbours.
    */
   void get_vertex_neighbours(const PetscInt point_index,
                              std::vector<PetscInt> &neighbours);

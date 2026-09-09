@@ -65,26 +65,27 @@ inline void quad_collapsed_to_barycentric(const REAL eta0, const REAL eta1,
 /**
  *  Map positions in physical space back to a reference (collapsed) coordinate
  *  system. Assumes that the vertices are ordered
- *
+ *  ```
  *    v3 -- v2
  *    |     |
  *    v0 -- v1
- *
+ *  ```
  *  and the the coordinate system is
- *
+ *  ```
  *    (-1,  1) -- ( 1,  1)
  *        |           |
  *    (-1, -1) -- ( 1, -1)
- *
+ *  ```
  *  Solves the bilinear system
  *
+ *  ```
  *    xx = (1/4) (x0 (1-eta0)(1-eta1) + x1(1+eta0)(1-eta0)
- *                    + x2(1+eta0)(1+eta1) + x3(1-eta0)(1+eta1))
+ *                + x2(1+eta0)(1+eta1) + x3(1-eta0)(1+eta1))
  *    yy = (1/4) (y0 (1-eta0)(1-eta1) + y1(1+eta0)(1-eta0)
  *                + y2(1+eta0)(1+eta1) + y3(1-eta0)(1+eta1))
- *
+ *  ```
  *  for eta0 and eta1 by writing
- *
+ *  ```
  *    a0 = 0.25 * (x0 + x1 + x2 + x3)
  *    a1 = 0.25 * (-x0 + x1 + x2 - x3)
  *    a2 = 0.25 * (-x0 - x1 + x2 + x3)
@@ -93,26 +94,26 @@ inline void quad_collapsed_to_barycentric(const REAL eta0, const REAL eta1,
  *    b1 = 0.25 * (-y0 + y1 + y2 - y3)
  *    b2 = 0.25 * (-y0 - y1 + y2 + y3)
  *    b3 = 0.25 * (y0 - y1 + y2 - y3)
- *
+ *  ```
  *  then rewriting the original equations as
- *
+ *  ```
  *    xx = a0 + a1 eta0 + a2 eta1 + a3 eta0 eta1 (1)
  *    yy = b0 + b1 eta0 + b2 eta1 + b3 eta0 eta1
- *
+ *  ```
  *  Now write
- *
+ *  ```
  *    eta1 = (y - b0 - b1 eta0) / (b2 + b3 eta0) (2)
- *
+ *  ```
  *  and subsitute eta1 in (1) for (2). The resulting quadratic should be
- *
+ *  ```
  *    0 = A eta0^2 + B eta0 + C (3)
- *
+ *  ```
  *  where
- *
+ *  ```
  *    A = a1 b3 - a3 b1
  *    B = -x b3 + a0 b3 + a1 b2 - a2 b1 + a3 y - a3 b0
  *    C = -x b2 + a0 b2 + a2 y - a2 b0
- *
+ *  ```
  *  Solve (3) to get eta0 then use (2) to compute eta1. If b2=0 and b3=0 then
  *  swap the equations and carry out the same process.
  *
@@ -313,7 +314,7 @@ inline void triangle_barycentric_to_cartesian(const REAL x1, const REAL y1,
  * Given a torus with major radius R convert the coordinate for a point
  * specified in (x,y,z) Cartesian coordinates to a torus cylindrical coordinate
  * system (r, theta, phi). In this notation:
- *
+ * ```
  *    z          /----\
  *    ^         /   /  \  In the (z, R) plane, radius "r", angle "theta"
  *    |        |   *----| relative to a.
@@ -323,7 +324,7 @@ inline void triangle_barycentric_to_cartesian(const REAL x1, const REAL y1,
  *    ^
  *    |
  *  (0,0,0) In Cartesian.
- *
+ * ```
  *  @param[in] R Major radius of torus.
  *  @param[in] x Cartesian coordinate, x component.
  *  @param[in] y Cartesian coordinate, y component.
@@ -367,7 +368,7 @@ inline void cartesian_to_torus_cylindrical(const REAL R, const REAL x,
  * Given a torus with major radius R convert the coordinate for a point
  * specified in torus cylindrical coordinate system (r, theta, phi) to Cartesian
  * coordinates (x,y,z). In this notation:
- *
+ * ```
  *    z          /----\
  *    ^         /   /  \  In the (z, R) plane, radius "r", angle "theta"
  *    |        |   *----| relative to a.
@@ -377,7 +378,7 @@ inline void cartesian_to_torus_cylindrical(const REAL R, const REAL x,
  *    ^
  *    |
  *  (0,0,0) In Cartesian.
- *
+ * ```
  *  @param[in] R Major radius of torus.
  *  @param[in] r Torus cylindrical coordinate, radius in poloidal plane
  * from centre (a).
