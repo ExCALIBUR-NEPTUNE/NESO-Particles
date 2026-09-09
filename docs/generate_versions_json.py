@@ -2,7 +2,14 @@ import git
 import json
 
 repo = git.Repo('../.')
-tags = sorted(repo.tags, key=lambda t: t.commit.committed_datetime)
+
+
+# GitHub has an upload limit of ~1GB for pages hence we limit the number of
+# releases that we generate the docs for.
+tags = list(reversed(sorted(repo.tags, key=lambda t:
+                            t.commit.committed_datetime)))
+if (len(tags) > 4):
+    tags = tags[0:4]
 
 def jsonobjectfunc(version):
     strversion = str(version)
