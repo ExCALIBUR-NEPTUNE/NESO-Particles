@@ -256,7 +256,7 @@ void estimate_voronoi_cell_volume(DMPlexInterfaceSharedPtr mesh,
     volumes = std::make_shared<NDLocalArray<REAL, 2>>(sycl_target, cell_count,
                                                       max_num_voronoi_cells);
   } else if ((volumes->index.shape[0] != cell_count) ||
-             (volumes->index.shape[1] < max_num_voronoi_cells)) {
+             (volumes->index.shape[1] != max_num_voronoi_cells)) {
     volumes = std::make_shared<NDLocalArray<REAL, 2>>(sycl_target, cell_count,
                                                       max_num_voronoi_cells);
   }
