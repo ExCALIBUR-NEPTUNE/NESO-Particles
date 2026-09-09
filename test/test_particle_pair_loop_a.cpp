@@ -867,7 +867,8 @@ TEST(ParticlePairLoop, mask_off_referenced_particles) {
       A,
       [=](auto INDEX, auto NN, auto MASK) {
         const bool nn_set = NN.at(0) == 1;
-        NESO_KERNEL_ASSERT(nn_set != MASK.get(INDEX), k_ep);
+        const bool mask = MASK.get(INDEX);
+        NESO_KERNEL_ASSERT(nn_set != mask, k_ep);
       },
       Access::read(ParticleLoopIndex{}), Access::read(Sym<INT>("NEIGHBOURS")),
       Access::read(particle_mask))
@@ -876,4 +877,5 @@ TEST(ParticlePairLoop, mask_off_referenced_particles) {
   ASSERT_FALSE(ep.get_flag());
 
   sycl_target->free();
+  A->domain->mesh->free();
 }
