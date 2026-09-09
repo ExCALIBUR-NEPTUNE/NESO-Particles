@@ -66,6 +66,7 @@ set(TEST_SRCS
     ${TEST_DIR}/test_petsc_boundary_interface_d.cpp
     ${TEST_DIR}/test_petsc_boundary_interface_surface_functions.cpp
     ${TEST_DIR}/test_petsc_project_evaluate.cpp
+    ${TEST_DIR}/test_petsc_project_evaluate_3d.cpp
     ${TEST_DIR}/test_petsc_utility.cpp
     ${TEST_DIR}/test_particle_dat.cpp
     ${TEST_DIR}/test_packing_unpacking.cpp

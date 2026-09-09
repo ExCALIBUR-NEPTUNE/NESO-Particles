@@ -88,7 +88,9 @@ DMPlexProjectEvaluateDG::DMPlexProjectEvaluateDG(
 
   NESOASSERT(this->mesh != nullptr,
              "Mesh is not descendent from PetscInterface::DMPlexInterface");
-  NESOASSERT(this->mesh->get_ndim() == 2, "Only implemented for 2D domains.");
+  const int ndim = this->mesh->get_ndim();
+  NESOASSERT((ndim == 2) || (ndim == 3),
+             "Only implemented for 2D and 3D domains.");
 
   const int cell_count = this->mesh->get_cell_count();
   this->cdc_project =
