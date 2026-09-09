@@ -13,6 +13,7 @@
 #include "petsc_utility.hpp"
 #include "project_evaluate/dmplex_function.hpp"
 #include "project_evaluate/dmplex_function_mass_matrix.hpp"
+#include "voronoi_cell_volume.hpp"
 #endif
 
 #endif

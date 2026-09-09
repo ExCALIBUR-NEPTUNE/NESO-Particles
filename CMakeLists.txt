@@ -73,6 +73,7 @@ set(SRC_FILES
     ${SRC_DIR}/external_interfaces/petsc/project_evaluate/dmplex_function_mass_matrix.cpp
     ${SRC_DIR}/external_interfaces/petsc/project_evaluate/dmplex_project_evaluate_barycentric.cpp
     ${SRC_DIR}/external_interfaces/petsc/project_evaluate/dmplex_project_evaluate_dg.cpp
+    ${SRC_DIR}/external_interfaces/petsc/voronoi_cell_volume.cpp
     ${SRC_DIR}/external_interfaces/common/bounding_box.cpp
     ${SRC_DIR}/external_interfaces/common/dof_mapper_dg.cpp
     ${SRC_DIR}/external_interfaces/common/local_claim.cpp
@@ -275,6 +276,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/project_evaluate/dmplex_project_evaluate_base.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/project_evaluate/dmplex_project_evaluate_barycentric.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/project_evaluate/dmplex_project_evaluate_dg.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/petsc/voronoi_cell_volume.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/external_interfaces/vtk/vtk.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/global_mapping.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/generic_function.hpp

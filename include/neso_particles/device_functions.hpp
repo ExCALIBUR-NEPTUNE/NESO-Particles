@@ -903,6 +903,18 @@ inline bool reduce_over_group_block_wise(T *la_reduction,
   return block_local_id == 0;
 }
 
+/**
+ * @param correct Correct reference value.
+ * @param to_test Value to test against reference value.
+ * @returns |correct - to_test| / |correct| if |correct| > 0.0 else |correct -
+ * to_test|.
+ */
+inline REAL relative_error(const REAL correct, const REAL to_test) {
+  const REAL abs_error = Kernel::abs(correct - to_test);
+  const REAL abs_correct = Kernel::abs(correct);
+  return abs_correct > 0.0 ? abs_error / abs_correct : abs_error;
+}
+
 } // namespace Kernel
 
 } // namespace NESO::Particles
