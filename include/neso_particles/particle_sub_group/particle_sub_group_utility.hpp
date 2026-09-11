@@ -16,6 +16,8 @@ inline auto get_particle_group(ParticleSubGroupSharedPtr particle_sub_group) {
 }
 
 /**
+ * @np_toctree_start {Particle Sub Group} {Helper Functions} @np_toctree_end
+ *
  * Helper function to return the underlying ParticleGroup for a type.
  *
  * @param particle_group ParticleGroup.
@@ -26,6 +28,12 @@ inline auto get_particle_group(ParticleGroupSharedPtr particle_group) {
 }
 
 /**
+ *
+ * @np_toctree_start
+ * Particle Sub Group
+ * Helper Functions
+ * @np_toctree_end
+ *
  * Helper function for determining if a templated type is a ParticleGroup or
  * ParticleSubGroup.
  *
