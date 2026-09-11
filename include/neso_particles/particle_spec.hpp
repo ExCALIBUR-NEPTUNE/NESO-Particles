@@ -294,9 +294,9 @@ public:
    *
    * @param sym Sym to push into the store.
    */
-  inline void push(Sym<REAL> pp) {
-    this->syms_real.push_back(pp);
-    this->syms_set_real.insert(pp);
+  inline void push(Sym<REAL> sym) {
+    this->syms_real.push_back(sym);
+    this->syms_set_real.insert(sym);
   }
 
   /**
@@ -304,9 +304,9 @@ public:
    *
    * @param sym Sym to push into the store.
    */
-  inline void push(Sym<INT> pp) {
-    this->syms_int.push_back(pp);
-    this->syms_set_int.insert(pp);
+  inline void push(Sym<INT> sym) {
+    this->syms_int.push_back(sym);
+    this->syms_set_int.insert(sym);
   }
 
   /**

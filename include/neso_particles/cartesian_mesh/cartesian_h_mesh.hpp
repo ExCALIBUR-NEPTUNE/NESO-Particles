@@ -26,7 +26,7 @@ namespace NESO::Particles {
  * communicator.
  *
  * The sides of the mesh are labelled as follows in 2D:
- *
+ * ```
  *   - 2 -
  *  3     1
  *   - 0 -
@@ -34,7 +34,7 @@ namespace NESO::Particles {
  *  y
  *  |
  *   -> x
- *
+ * ```
  *  In 3D the bottom face is labelled 4 and the top face is labelled 5.
  *
  * The face cells are given a contiguous linear index which is determined by
@@ -50,7 +50,7 @@ namespace NESO::Particles {
  * is the second coordinate on the face, e.g. z on face 0.
  *
  * In 2D the vertices of each cell are labelled as
- *
+ * ```
  *  3 - 2
  *  |   |
  *  0 - 1
@@ -71,10 +71,10 @@ namespace NESO::Particles {
  *  ^
  *  |
  *   -> x
- *
+ * ```
  * When converting to VTK coordinates we extract vertices in the following
  * order:
- *
+ * ```
  * 2D:
  *
  * Face    Vertices
@@ -92,7 +92,7 @@ namespace NESO::Particles {
  *   3      0, 3, 7, 4
  *   4      0, 1, 2, 3
  *   5      4, 5, 6, 7
- *
+ * ```
  */
 class CartesianHMesh : public HMesh {
 private:

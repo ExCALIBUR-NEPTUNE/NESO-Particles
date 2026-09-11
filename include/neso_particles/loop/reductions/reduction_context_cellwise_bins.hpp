@@ -40,7 +40,7 @@ struct ReductionContextCellwiseBins {
    * Create a reduction context for a particular partition into mesh cells and
    * bins. E.g. velocity bins.
    *
-   * @param particle_group Host ParticleGroup for particles.
+   * @param particle_sub_group Host ParticleSubGroup for particles.
    * @param partition Map from cells and bins to particles.
    */
   ReductionContextCellwiseBins(ParticleSubGroupSharedPtr particle_sub_group,
