@@ -2,9 +2,14 @@
 #define _NESO_PARTICLES
 
 /**
+ * Here we define the Doxygen groups.
+ *
  * @defgroup particle_sub_group Particle Sub Group
+ *
  * @defgroup particle_sub_group_helper_functions Helper Functions
  * @ingroup particle_sub_group
+ *
+ *
  */
 
 #include <memory>
