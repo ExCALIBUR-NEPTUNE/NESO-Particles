@@ -30,12 +30,14 @@ namespace NESO::Particles {
  * For example if A is a ParticleGroup with an INT ParticleProp "ID" that
  * holds particle ids then the following line creates a ParticleSubGroup from
  * the particles with even ids.
- *
+ * ```
  *    auto A_even = std::make_shared<ParticleSubGroup>(
  *      A, [=](auto ID) {
  *        return ((ID[0] % 2) == 0);
  *      },
  *      Access::read(Sym<INT>("ID")));
+ * ```
+ * @ingroup particle_sub_group_creation_functions
  *
  * @param parent Parent ParticleGroup or ParticleSubGroup from which to form
  * ParticleSubGroup.
@@ -54,14 +56,16 @@ particle_sub_group(std::shared_ptr<PARENT> parent, KERNEL kernel,
 /**
  * Create a ParticleSubGroup which is simply a reference/view into an entire
  * ParticleGroup. This constructor creates a sub-group which is equivalent to
- *
+ * ```
  *    auto A_all = std::make_shared<ParticleSubGroup>(
  *      A, [=]() {
  *        return true;
  *      }
  *    );
- *
+ * ```
  * but can make additional optimisations.
+ *
+ * @ingroup particle_sub_group_creation_functions
  *
  * @param parent Parent ParticleGroup or ParticleSubGroup from which to form
  * ParticleSubGroup.
@@ -82,12 +86,14 @@ particle_sub_group(std::shared_ptr<PARENT> parent) {
  * For example if A is a ParticleGroup with an INT ParticleProp "ID" that
  * holds particle ids then the following line creates a ParticleSubGroup from
  * the particles with even ids.
- *
+ * ```
  *    auto A_even = std::make_shared<ParticleSubGroup>(
  *      A, [=](auto ID) {
  *        return ((ID[0] % 2) == 0);
  *      },
  *      Access::read(Sym<INT>("ID")));
+ * ```
+ * @ingroup particle_sub_group_creation_functions
  *
  * @param parent Parent ParticleGroup or ParticleSubGroup from which to form
  * ParticleSubGroup.
@@ -109,14 +115,16 @@ static_particle_sub_group(std::shared_ptr<PARENT> parent, KERNEL kernel,
  * Create a static ParticleSubGroup which is simply a reference/view into an
  * entire ParticleGroup. This constructor creates a sub-group which is
  * equivalent to
- *
+ * ```
  *    auto A_all = std::make_shared<ParticleSubGroup>(
  *      A, [=]() {
  *        return true;
  *      }
  *    );
- *
+ * ```
  * but can make additional optimisations.
+ *
+ * @ingroup particle_sub_group_creation_functions
  *
  * @param parent Parent ParticleGroup or ParticleSubGroup from which to form
  * ParticleSubGroup.
@@ -131,6 +139,8 @@ static_particle_sub_group(std::shared_ptr<PARENT> parent) {
 
 /**
  * Create a ParticleSubGroup that selects all particles int a particular cell.
+ *
+ * @ingroup particle_sub_group_creation_functions
  *
  * @param parent Parent ParticleGroup or ParticleSubGroup from which to form
  * ParticleSubGroup.
@@ -154,6 +164,8 @@ particle_sub_group(std::shared_ptr<PARENT> parent, const INT_TYPE cell,
 /**
  * Create a ParticleSubGroup that selects all particles in a particular cell.
  *
+ * @ingroup particle_sub_group_creation_functions
+ *
  * @param parent Parent ParticleGroup or ParticleSubGroup from which to form
  * ParticleSubGroup.
  * @param cell Local cell index to select all particles in.
@@ -174,6 +186,8 @@ particle_sub_group(std::shared_ptr<PARENT> parent, const int cell,
 
 /**
  * Create a ParticleSubGroup that selects all particles in a range of cells.
+ *
+ * @ingroup particle_sub_group_creation_functions
  *
  * @param parent Parent ParticleGroup or ParticleSubGroup from which to form
  * ParticleSubGroup.
@@ -228,6 +242,8 @@ particle_sub_group(std::shared_ptr<PARENT> parent, const int cell_start,
 
 /**
  * Create a ParticleSubGroup that selects all particles int a particular cell.
+ *
+ * @ingroup particle_sub_group_creation_functions
  *
  * @param parent Parent ParticleGroup or ParticleSubGroup from which to form
  * ParticleSubGroup.

@@ -1,15 +1,29 @@
 #ifndef _NESO_PARTICLES
 #define _NESO_PARTICLES
 
+/*
+ * Here we define the Doxygen groups. Do not start this comment block with a
+ * double ** it will confuse Doxygen.
+ */
+
 /**
- * Here we define the Doxygen groups.
- *
  * @defgroup particle_sub_group Particle Sub Group
- *
+ * @{
+ * @details These are helper functions and classes for working with
+ * ParticleSubGroups.
+ * @}
+ */
+
+/**
  * @defgroup particle_sub_group_helper_functions Helper Functions
  * @ingroup particle_sub_group
- *
- *
+ * @details Here are helper functions for working with ParticleSubGroups.
+ */
+
+/**
+ * @defgroup particle_sub_group_creation_functions Creation Functions
+ * @ingroup particle_sub_group
+ * @details Here are functions for creating ParticleSubGroups.
  */
 
 #include <memory>

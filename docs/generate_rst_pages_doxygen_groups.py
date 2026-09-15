@@ -79,6 +79,7 @@ if __name__ == "__main__":
     # source.
     groups_with_parents = set()
     map_group_ids_to_titles = {}
+    map_group_ids_to_description = {}
 
     # For each group found in index.xml read the corresponding XML tree and
     # discover group members and inner groups.
@@ -105,6 +106,8 @@ if __name__ == "__main__":
         if group_node is None:
             warnings.warn("Could not find group inside group xml file.")
 
+        map_group_ids_to_description[group_id] = ""
+
         for child in group_node:
             if child.tag == "innergroup":
                 child_id = child.attrib["refid"]
@@ -112,6 +115,10 @@ if __name__ == "__main__":
                 groups_with_parents.add(child_id)
             if child.tag == "title":
                 map_group_ids_to_titles[group_id] = child.text
+            if child.tag == "detaileddescription":
+                for para in child:
+                    map_group_ids_to_description[group_id] += para.text.strip() + "\n"
+
 
     # For each group generate the directive for the group node then visit all
     # the children (recursively) and generate the directives for the children.
@@ -128,14 +135,20 @@ if __name__ == "__main__":
                 symbol = MAP_TOC_LEVEL_TO_HEADING_SYMBOLS.get(level, '"')
                 underline = len(title) * symbol
 
+                description = map_group_ids_to_description[child_group_id]
+
                 rst_source += """
 {}
 {}
+
+{}
+
 .. doxygengroup:: {}
   :content-only:
 """.format(
                     title,
                     underline,
+                    description,
                     map_group_ids_to_group_names[child_group_id],
                 )
 
