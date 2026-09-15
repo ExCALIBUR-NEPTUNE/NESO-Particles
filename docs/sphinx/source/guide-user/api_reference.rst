@@ -10,3 +10,6 @@ See `Original Doxygen output <../doxygen/html>`_ for an API reference.
     ********************
     
     .. doxygenindex::
+
+.. doxygengroup:: particle_sub_group
+   :members:
