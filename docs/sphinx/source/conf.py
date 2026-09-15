@@ -10,6 +10,7 @@ project = 'NESO-Particles'
 copyright = '2022, UKAEA'
 author = 'UKAEA'
 release = ''
+maximum_signature_line_length = 70
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

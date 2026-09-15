@@ -14,3 +14,41 @@ pre, code, kbd, samp {
   font-family: "Courier New", monospace;
 }
 
+.function {
+    border-top: 1px solid #48566b;
+    padding-top: 40px;
+}
+
+.contents a.reference.internal code.literal,
+.bd-sidebar-primary code.literal,
+.bd-sidebar-secondary code.literal {
+    color: inherit;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    padding: 0;
+    font-family: "Courier New", monospace;
+    font-size: inherit;
+    font-weight: normal;
+    line-height: inherit;
+}
+
+.bd-article .toctree-wrapper a.reference.internal,
+.bd-article .toctree-wrapper a.reference.internal code.literal,
+.bd-article .toctree-wrapper a.reference.internal code.literal .pre {
+    font-weight: 400 !important;
+}
+
+.bd-article .toctree-wrapper a.reference.internal code.literal {
+    color: inherit !important;
+    background: transparent !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+
+    font-family: "Courier New", monospace;
+    font-size: inherit;
+    line-height: inherit;
+}
