@@ -5,12 +5,6 @@
 
 namespace NESO::Particles {
 
-/** 
- * @defgroup particle_sub_group Particle Sub Group
- * @defgroup particle_sub_group_helper_functions Helper Functions 
- * @ingroup particle_sub_group
- */
-
 /**
  * Helper function to return the underlying ParticleGroup for a type.
  *
@@ -24,8 +18,6 @@ inline auto get_particle_group(ParticleSubGroupSharedPtr particle_sub_group) {
 }
 
 /**
- * @np_toctree_start {Particle Sub Group} {Helper Functions} @np_toctree_end
- *
  * Helper function to return the underlying ParticleGroup for a type.
  *
  * @ingroup particle_sub_group_helper_functions
@@ -38,12 +30,6 @@ inline auto get_particle_group(ParticleGroupSharedPtr particle_group) {
 }
 
 /**
- *
- * @np_toctree_start
- * Particle Sub Group
- * Helper Functions
- * @np_toctree_end
- *
  * Helper function for determining if a templated type is a ParticleGroup or
  * ParticleSubGroup.
  *

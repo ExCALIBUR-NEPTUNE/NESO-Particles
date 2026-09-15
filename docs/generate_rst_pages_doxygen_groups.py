@@ -5,18 +5,19 @@ import glob
 import os
 import warnings
 
-MAP_TOC_LEVEL_TO_HEADING_SYMBOLS = {
-    0: "=",
-    1: "-",
-    2: "^",
-    3: "\""
-}
+MAP_TOC_LEVEL_TO_HEADING_SYMBOLS = {0: "=", 1: "-", 2: "^", 3: '"'}
 
 
 if __name__ == "__main__":
 
     assert len(sys.argv) > 1, "No XML directory passed."
+    assert len(sys.argv) > 2, "No output directory passed."
     xml_directory = sys.argv[1]
+    output_directory = sys.argv[2]
+
+    if not os.path.exists(output_directory):
+        os.mkdir(output_directory)
+    assert os.path.exists(output_directory), "Output directory does not exist and could not be created."
 
     index_xml_filename = os.path.join(xml_directory, "index.xml")
     assert os.path.exists(
@@ -44,8 +45,6 @@ if __name__ == "__main__":
             for child in node:
                 if child.tag == "name":
                     map_group_ids_to_group_names[refid] = child.text
-
-
 
     index_root = None
     index_tree = None
@@ -96,7 +95,7 @@ if __name__ == "__main__":
 
                 child_group_id = child.attrib["id"]
                 title = map_group_ids_to_titles[child_group_id]
-                symbol = MAP_TOC_LEVEL_TO_HEADING_SYMBOLS.get(level, "\"")
+                symbol = MAP_TOC_LEVEL_TO_HEADING_SYMBOLS.get(level, '"')
                 underline = len(title) * symbol
 
                 rst_source += """
@@ -107,7 +106,7 @@ if __name__ == "__main__":
 """.format(
                     title,
                     underline,
-                    map_group_ids_to_group_names[child_group_id]
+                    map_group_ids_to_group_names[child_group_id],
                 )
 
         for child_id in map_groups_to_inner_groups[group_id]:
@@ -122,6 +121,11 @@ if __name__ == "__main__":
             print("--------------")
             print(rst_source)
             print("~~~~~~~~~~~~~~")
+        
+            output_file = os.path.join(output_directory, group_id + ".rst")
+            with open(output_file, "w") as fh:
+                fh.write(rst_source)
+
 
 
 
