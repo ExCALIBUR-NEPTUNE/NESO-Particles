@@ -5,6 +5,14 @@ import glob
 import os
 import warnings
 
+MAP_TOC_LEVEL_TO_HEADING_SYMBOLS = {
+    0: "=",
+    1: "-",
+    2: "^",
+    3: "\""
+}
+
+
 if __name__ == "__main__":
 
     assert len(sys.argv) > 1, "No XML directory passed."
@@ -37,12 +45,15 @@ if __name__ == "__main__":
                 if child.tag == "name":
                     map_group_ids_to_group_names[refid] = child.text
 
+
+
     index_root = None
     index_tree = None
 
     map_groups_to_inner_groups = {}
     map_id_to_roots = {}
     groups_with_parents = set()
+    map_group_ids_to_titles = {}
 
     for group_filename in group_filenames:
         print("Found:", group_filename)
@@ -72,25 +83,30 @@ if __name__ == "__main__":
                 child_id = child.attrib["refid"]
                 map_groups_to_inner_groups[group_id].append(child_id)
                 groups_with_parents.add(child_id)
-
-    print(map_group_ids_to_group_names)
-    print(map_groups_to_inner_groups)
-    print(groups_with_parents)
+            if child.tag == "title":
+                map_group_ids_to_titles[group_id] = child.text
 
     def recurse_groups(group_id, level, rst_source):
-        print(group_id, level)
-
-        rst_source += group_id + "\n"
 
         group_root = map_id_to_roots[group_id]
         assert group_root.attrib["id"] == group_id, "group_root != group_id"
 
         for child in group_root.iter():
             if child.attrib.get("kind", "") == "group":
+
                 child_group_id = child.attrib["id"]
-                rst_source += """.. doxygengroup:: {}
+                title = map_group_ids_to_titles[child_group_id]
+                symbol = MAP_TOC_LEVEL_TO_HEADING_SYMBOLS.get(level, "\"")
+                underline = len(title) * symbol
+
+                rst_source += """
+{}
+{}
+.. doxygengroup:: {}
   :content-only:
 """.format(
+                    title,
+                    underline,
                     map_group_ids_to_group_names[child_group_id]
                 )
 
@@ -106,3 +122,6 @@ if __name__ == "__main__":
             print("--------------")
             print(rst_source)
             print("~~~~~~~~~~~~~~")
+
+
+
