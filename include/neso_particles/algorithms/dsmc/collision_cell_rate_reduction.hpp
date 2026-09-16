@@ -12,9 +12,11 @@ namespace NESO::Particles::DSMC {
  * Implementation to reduce rates on a collision cell basis.
  *
  * Rates are reduced per collision cell as
- *
+ * ```
  *    rate_{cell} = sum_{pair lists} (max_{pairs in cell} (pair reaction rate))
+ * ```
  *
+ * @ingroup algorithms_dsmc
  */
 class CollisionCellRateReduction {
 protected:

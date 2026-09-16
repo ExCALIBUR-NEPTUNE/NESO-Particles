@@ -95,6 +95,8 @@ struct CollisionCellPartitionDevice {
  * Holds a map from (mesh cell, collision cell, species ID) to particle layers.
  * Particles may be masked off by passing a ParticleMask to the construct call.
  * Particles exist in the map independently of the mask values.
+ *
+ * @ingroup algorithms_dsmc
  */
 class CollisionCellPartition {
 protected:

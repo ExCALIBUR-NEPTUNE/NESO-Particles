@@ -15,6 +15,8 @@ namespace NESO::Particles {
  * Implementation to bin particles into subdivision of CartesianHMesh cells. For
  * each mesh cell D subdivisions are performed in each dimension. The subdivided
  * cells are linearly indexed lexicographically from fastest to slowest.
+ *
+ * @ingroup algorithms_dsmc
  */
 class SubdivideCartesianCells {
 protected:

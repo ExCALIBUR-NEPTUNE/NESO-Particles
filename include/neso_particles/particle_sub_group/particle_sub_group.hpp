@@ -138,7 +138,7 @@ static_particle_sub_group(std::shared_ptr<PARENT> parent) {
 }
 
 /**
- * Create a ParticleSubGroup that selects all particles int a particular cell.
+ * Create a ParticleSubGroup that selects all particles in a particular cell.
  *
  * @ingroup particle_sub_group_creation_functions
  *
@@ -241,7 +241,7 @@ particle_sub_group(std::shared_ptr<PARENT> parent, const int cell_start,
 }
 
 /**
- * Create a ParticleSubGroup that selects all particles int a particular cell.
+ * Create a ParticleSubGroup that selects all particles in a particular cell.
  *
  * @ingroup particle_sub_group_creation_functions
  *

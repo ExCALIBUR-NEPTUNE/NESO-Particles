@@ -9,6 +9,8 @@ namespace NESO::Particles {
 /**
  * Get the number of particles in each cell as a CellDatConst.
  *
+ * @ingroup algorithms_general
+ *
  * @param particle_sub_group Particle{Sub}Group containing particles.
  * @param cell_dat_const CellDatConst to populate with particle counts.
  * @param row Row to populate in the CellDatConst.
@@ -162,10 +164,10 @@ void get_broadcast_masks(std::array<int, SIZE> &masks, DAT &dat,
 } // namespace CellDatConstLoop
 } // namespace Private
 
-/*
+/**
  * Applies a kernel element wise to the input CellDatConst dats and assigns the
  * output to the result dat.
- *
+ * ```
  * // For CellDatConstSharedPtrs a,b,c and d.
  * cell_dat_const_loop_element_wise(
  *     d,
@@ -175,9 +177,11 @@ void get_broadcast_masks(std::array<int, SIZE> &masks, DAT &dat,
  *     },
  *     a, b, c
  * );
- *
+ * ```
  * If the output dat, d, has shape NxM and if any arguments have nrow==1 and
  * ncol==1 then these single values are logically broadcast to size NxM.
+ *
+ * @ingroup algorithms_general
  *
  * @param result_dat CellDatConst to be overwritten with the result of the
  * operation. May be equal to one of the arguments to the kernel.

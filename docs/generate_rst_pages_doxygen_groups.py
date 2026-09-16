@@ -145,6 +145,7 @@ if __name__ == "__main__":
 
 .. doxygengroup:: {}
   :content-only:
+  :members:
 """.format(
                     title,
                     underline,

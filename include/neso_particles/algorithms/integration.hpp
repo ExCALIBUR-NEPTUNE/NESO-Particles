@@ -12,6 +12,8 @@ namespace NESO::Particles {
 /**
  * Perform one step of Forward Euler integration.
  *
+ * @ingroup algorithms_general
+ *
  * @param particle_sub_group Particle{Sub}Group containing particles.
  * @param position Sym of particle positions.
  * @param dt Timestep size.

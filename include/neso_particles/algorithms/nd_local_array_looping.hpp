@@ -93,10 +93,10 @@ void get_element_values_broadcast(const std::size_t linear_index,
 } // namespace NDLocalArrayLoop
 } // namespace Private
 
-/*
+/**
  * Applies a kernel element wise to the input NDLocalArrays and assigns the
  * output to the result local array.
- *
+ * ```
  * // For NDLocalArraySharedPtrs a,b,c and d.
  * nd_local_array_loop_element_wise(
  *     d,
@@ -106,9 +106,11 @@ void get_element_values_broadcast(const std::size_t linear_index,
  *     },
  *     a, b, c
  * );
- *
+ * ```
  * If the output array, d, has shape NxM and if any arguments have nrow==1 and
  * ncol==1 then these single values are logically broadcast to size NxM.
+ *
+ * @ingroup algorithms_general
  *
  * @param result_array NDLocalArray to be overwritten with the result of the
  * operation. May be equal to one of the arguments to the kernel.

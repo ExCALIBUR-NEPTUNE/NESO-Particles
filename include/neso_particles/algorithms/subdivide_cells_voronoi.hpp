@@ -11,6 +11,8 @@ namespace NESO::Particles {
 /**
  * Implementation for subdividing mesh cells into voronoi cells defined by
  * points.
+ *
+ * @ingroup algorithms_dsmc
  */
 class SubdivideCellsVoronoi {
 protected:

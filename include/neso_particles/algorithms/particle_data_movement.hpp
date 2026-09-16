@@ -11,6 +11,8 @@ namespace NESO::Particles {
  * destination dats must exist and have the same number of components. Source
  * and destination dats may share the same name.
  *
+ * @ingroup algorithms_general
+ *
  * @param particle_sub_group ParticleSubGroup containing source and destination
  * dats.
  * @param sym_src Source EphemeralDat name.
@@ -60,6 +62,8 @@ copy_ephemeral_dat_to_particle_dat(ParticleSubGroupSharedPtr particle_sub_group,
  * destination dats must exist and have the same number of components. Source
  * and destination dats may share the same name.
  *
+ * @ingroup algorithms_general
+ *
  * @param particle_sub_group ParticleSubGroup containing source and destination
  * dats.
  * @param sym_src Source ParticleDat name.
@@ -108,6 +112,8 @@ copy_particle_dat_to_ephemeral_dat(ParticleSubGroupSharedPtr particle_sub_group,
  * Set the specified component and property on all particles to the value in the
  * passed array at the index that corresponds to the cell of the particle.
  *
+ * @ingroup algorithms_general
+ *
  * @param group ParticleGroup or ParticleSubGroup of particles to set values
  * for.
  * @param sym Particle property to set.
@@ -153,6 +159,8 @@ void cellwise_broadcast(std::shared_ptr<GROUP_TYPE> group, Sym<SYM_TYPE> sym,
 /**
  * Fill a ParticleDat with the specified value.
  *
+ * @ingroup algorithms_general
+ *
  * @param particle_group ParticleGroup containing ParticleDat to fill.
  * @param sym Sym<INT> or Sym<REAL> of ParticleDat to fill.
  * @param value INT or REAL value to fill ParticleDat with.
@@ -194,6 +202,8 @@ extern template void fill(ParticleGroupSharedPtr, Sym<INT>, const INT,
 
 /**
  * Fill a ParticleDat with the specified value.
+ *
+ * @ingroup algorithms_general
  *
  * @param particle_sub_group ParticleSubGroup containing ParticleDat to fill.
  * @param sym Sym<INT> or Sym<REAL> of ParticleDat to fill.
