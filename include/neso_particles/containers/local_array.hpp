@@ -9,6 +9,13 @@
 #include <optional>
 #include <vector>
 
+/**
+ * @defgroup particle_loop_local_array Local Array
+ * @ingroup particle_loop
+ * @details Creates an array local to each MPI rank that can be accessed from
+ * the Particle Loop.
+ */
+
 namespace NESO::Particles {
 // Forward declaration of ParticleLoop such that LocalArray can define
 // ParticleLoop as a friend class.
@@ -30,6 +37,8 @@ namespace Access::LocalArray {
  */
 /**
  * ParticleLoop access type for LocalArray Read access.
+ *
+ * @ingroup particle_loop_local_array
  */
 template <typename T> struct Read {
   /// Pointer to underlying data for the array.
@@ -41,6 +50,8 @@ template <typename T> struct Read {
 
 /**
  * ParticleLoop access type for LocalArray Add access.
+ *
+ * @ingroup particle_loop_local_array
  */
 template <typename T> struct Add {
   /// Pointer to underlying data for the array.
@@ -57,6 +68,8 @@ template <typename T> struct Add {
 
 /**
  * ParticleLoop access type for LocalArray Write access.
+ *
+ * @ingroup particle_loop_local_array
  */
 template <typename T> struct Write {
   /// Pointer to underlying data for the array.
@@ -216,6 +229,8 @@ inline void create_kernel_arg(
 
 /**
  * Container to hold an array of values on each MPI rank.
+ *
+ * @ingroup particle_loop_local_array
  */
 template <typename T> class LocalArray {
   // This allows the ParticleLoop to access the implementation methods.

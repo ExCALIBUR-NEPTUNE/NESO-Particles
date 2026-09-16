@@ -5,11 +5,20 @@
 #include "../loop/access_descriptors.hpp"
 #include "../loop/particle_loop_base.hpp"
 
+/**
+ * @defgroup particle_loop_local_memory_interlaced LocalMemoryInterlaced
+ * @ingroup particle_loop
+ * @details Construct for creating a fixed number of elements per particle in
+ * the Particle Loop where elements are stored with a non-unit stride.
+ */
+
 namespace NESO::Particles {
 
 /**
  * Type to provide kernel local memory on a per particle basis which is
  * interlaced between particles in the workgroup.
+ *
+ * @ingroup particle_loop_local_memory_interlaced
  */
 template <typename T> class LocalMemoryInterlaced {
 public:
@@ -38,6 +47,8 @@ namespace Access::LocalMemoryInterlaced {
 
 /**
  * ParticleLoop access type for LocalMemoryInterlaced Write access.
+ *
+ * @ingroup particle_loop_local_memory_interlaced
  */
 template <typename T> struct Write {
   Write() = default;

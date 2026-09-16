@@ -10,6 +10,13 @@
 #include "rng/rng_generation_function.hpp"
 #include "tuple.hpp"
 
+/**
+ * @defgroup particle_loop_nd_local_array NDLocalArray
+ * @ingroup particle_loop
+ * @details Creates an N-D array local to each MPI rank that can be accessed
+ * from the Particle Loop.
+ */
+
 namespace NESO::Particles {
 
 // Forward declaration of ParticleLoop such that NDLocalArray can define
@@ -24,11 +31,17 @@ namespace Access::NDLocalArray {
 
 /**
  * ParticleLoop access type for NDLocalArray Read access.
+ * @ingroup particle_loop_nd_local_array
  */
 template <typename T, std::size_t N> struct Read {
   // Pointer to underlying data for the array.
   T const *RESTRICT ptr;
   NDIndex<N> index;
+  /**
+   * Access the data at the specified index.
+   *
+   * @param ix Index of element.
+   */
   template <typename... I> const T &at(I... ix) const {
     return ptr[index.get_linear_index(ix...)];
   }
@@ -36,11 +49,17 @@ template <typename T, std::size_t N> struct Read {
 
 /**
  * ParticleLoop access type for NDLocalArray Write access.
+ * @ingroup particle_loop_nd_local_array
  */
 template <typename T, std::size_t N> struct Write {
   /// Pointer to underlying data for the array.
   T *RESTRICT ptr;
   NDIndex<N> index;
+  /**
+   * Access the data at the specified index.
+   *
+   * @param ix Index of element.
+   */
   template <typename... I> inline T &at(I... ix) {
     return ptr[index.get_linear_index(ix...)];
   }
@@ -48,11 +67,19 @@ template <typename T, std::size_t N> struct Write {
 
 /**
  * ParticleLoop access type for NDLocalArray Add access.
+ * @ingroup particle_loop_nd_local_array
  */
 template <typename T, std::size_t N> struct Add {
   /// Pointer to underlying data for the array.
   T *RESTRICT ptr;
   NDIndex<N> index;
+
+  /**
+   * Atomically increment the value at the specified index.
+   *
+   * @param ix Index of element and value to add. The last argument is taken as
+   * the value.
+   */
   template <typename... I> inline T fetch_add(I... ix) {
     auto tuple_index = Tuple::to_tuple(ix...);
 
@@ -69,11 +96,20 @@ template <typename T, std::size_t N> struct Add {
 
 /**
  * ParticleLoop access type for NDLocalArray Max access.
+ * @ingroup particle_loop_nd_local_array
  */
 template <typename T, std::size_t N> struct Max {
   /// Pointer to underlying data for the array.
   T *RESTRICT ptr;
   NDIndex<N> index;
+
+  /**
+   * Atomically update the value at the specified index as the maximum of the
+   * current element and the passed value.
+   *
+   * @param ix Index of element and value to update. The last argument is taken
+   * as the value.
+   */
   template <typename... I> inline T fetch_max(I... ix) {
     auto tuple_index = Tuple::to_tuple(ix...);
 
@@ -90,11 +126,20 @@ template <typename T, std::size_t N> struct Max {
 
 /**
  * ParticleLoop access type for NDLocalArray Min access.
+ * @ingroup particle_loop_nd_local_array
  */
 template <typename T, std::size_t N> struct Min {
   /// Pointer to underlying data for the array.
   T *RESTRICT ptr;
   NDIndex<N> index;
+
+  /**
+   * Atomically update the value at the specified index as the minimum of the
+   * current element and the passed value.
+   *
+   * @param ix Index of element and value to update. The last argument is taken
+   * as the value.
+   */
   template <typename... I> inline T fetch_min(I... ix) {
     auto tuple_index = Tuple::to_tuple(ix...);
 
@@ -380,6 +425,7 @@ inline void create_kernel_arg(
 /**
  * Generic N-Dimensional array type which is accessible on the host and in a
  * @ref ParticleLoop kernel.
+ * @ingroup particle_loop_nd_local_array
  */
 template <typename T, std::size_t N> class NDLocalArray {
 
