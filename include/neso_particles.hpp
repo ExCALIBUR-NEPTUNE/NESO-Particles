@@ -26,6 +26,26 @@
  * @details Here are functions for creating ParticleSubGroups.
  */
 
+/**
+ * @defgroup particle_loop Particle Loop
+ * @details This section contains the API documentation for Particle Loops.
+ */
+
+/**
+ * @defgroup particle_loop_access Particle Loop Access Descriptors
+ * @ingroup particle_loop
+ * @details This section contains the API documentation for Particle Loop access
+ * interface. For example the main functions and access descriptors. These
+ * functions are all in the Access namespace.
+ */
+
+/**
+ * @defgroup particle_loop_functions Particle Loop Functions
+ * @ingroup particle_loop
+ * @details This section contains the API documentation for Particle Loop
+ * functions. i.e. functions which create Particle Loop objects.
+ */
+
 #include <memory>
 
 #include "neso_particles/access.hpp"

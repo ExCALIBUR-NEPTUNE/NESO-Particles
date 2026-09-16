@@ -11,6 +11,7 @@ namespace NESO::Particles {
  *  Create a ParticleLoop that executes a kernel for all particles in the
  * ParticleSubGroup.
  *
+ *  @ingroup particle_loop_functions
  *  @param name Identifier for particle loop.
  *  @param particle_sub_group ParticleSubGroup to execute kernel for all
  * particles.
@@ -59,6 +60,7 @@ particle_loop(const std::string name,
  *  Create a ParticleLoop that executes a kernel for all particles in the
  * ParticleSubGroup.
  *
+ * @ingroup particle_loop_functions
  *  @param particle_sub_group ParticleSubGroup to execute kernel for all
  * particles.
  *  @param kernel Kernel to execute for all particles in the ParticleSubGroup.
