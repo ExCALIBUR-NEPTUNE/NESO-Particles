@@ -3,10 +3,19 @@
 
 #include "cellwise_pair_list.hpp"
 
+/**
+ * @defgroup particle_pair_loop_simple_pair_list Simple Pair List
+ * @ingroup particle_pair_loop
+ * @details This simple pair list is a pair list construct where pairs are
+ * specified on the host.
+ */
+
 namespace NESO::Particles {
 
 /**
  * Type to hold a list of pairs of particles that should collide in each cell.
+ *
+ * @ingroup particle_pair_loop_simple_pair_list
  */
 class CellwisePairListSimple : public CellwisePairList {
 protected:

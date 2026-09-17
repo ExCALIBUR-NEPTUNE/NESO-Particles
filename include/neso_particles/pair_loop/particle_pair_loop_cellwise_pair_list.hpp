@@ -306,6 +306,7 @@ public:
  * to create instances of ParticlePairLoopCellwisePairList. This helper function
  * is for backwards compatibility, the pair_lists vector must be size 1.
  *
+ * @ingroup particle_pair_loop_functions
  * @param name Name for ParticlePairLoop.
  * @param pair_lists Vector of CellwisePairListAbsolute pair lists.
  * @param kernel Kernel for pair loop.
@@ -332,6 +333,7 @@ inline ParticlePairLoopBaseSharedPtr particle_pair_loop(
  * to create instances of ParticlePairLoopCellwisePairList. This helper function
  * is for backwards compatibility, the pair_lists vector must be size 1.
  *
+ * @ingroup particle_pair_loop_functions
  * @param pair_lists Vector of CellwisePairListAbsolute pair lists.
  * @param kernel Kernel for pair loop.
  * @param args Arguments for pair loop.
@@ -350,6 +352,7 @@ inline ParticlePairLoopBaseSharedPtr particle_pair_loop(
  * Create a ParticlePairLoop from cellwise pair lists. This is a helper function
  * to create instances of ParticlePairLoopCellwisePairList.
  *
+ * @ingroup particle_pair_loop_functions
  * @param name Name for ParticlePairLoop.
  * @param pair_list CellwisePairListAbsolute based pair list.
  * @param kernel Kernel for pair loop.
@@ -371,6 +374,7 @@ inline ParticlePairLoopBaseSharedPtr particle_pair_loop(
  * Create a ParticlePairLoop from cellwise pair lists. This is a helper function
  * to create instances of ParticlePairLoopCellwisePairList.
  *
+ * @ingroup particle_pair_loop_functions
  * @param pair_list CellwisePairListAbsolute based pair list.
  * @param kernel Kernel for pair loop.
  * @param args Arguments for pair loop.
