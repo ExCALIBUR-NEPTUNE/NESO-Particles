@@ -9,6 +9,7 @@ namespace NESO::Particles {
 /**
  * Helper function to create a SymVector.
  *
+ * @ingroup particle_loop_sym_vector
  * @param particle_group ParticleGroup to use.
  * @param syms Vector of Syms to use from particle_group.
  */
@@ -21,6 +22,7 @@ std::shared_ptr<SymVector<T>> sym_vector(ParticleGroupSharedPtr particle_group,
 /**
  * Helper function to create a SymVector.
  *
+ * @ingroup particle_loop_sym_vector
  * @param particle_group ParticleGroup to use.
  * @param syms Syms to use from particle_group.
  */
@@ -33,6 +35,7 @@ std::shared_ptr<SymVector<T>> sym_vector(ParticleGroupSharedPtr particle_group,
 /**
  * Helper function to create a SymVector.
  *
+ * @ingroup particle_loop_sym_vector
  * @param particle_sub_group ParticleSubGroup to use.
  * @param syms Vector of Syms to use from particle_group.
  */
@@ -46,6 +49,7 @@ sym_vector(ParticleSubGroupSharedPtr particle_sub_group,
 /**
  * Helper function to create a SymVector.
  *
+ * @ingroup particle_loop_sym_vector
  * @param particle_sub_group ParticleSubGroup to use.
  * @param syms Syms to use from particle_group.
  */

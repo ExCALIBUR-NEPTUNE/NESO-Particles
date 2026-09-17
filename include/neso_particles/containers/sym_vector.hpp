@@ -11,6 +11,12 @@
 #include <memory>
 #include <vector>
 
+/**
+ * @defgroup particle_loop_sym_vector SymVector
+ * @ingroup particle_loop
+ * @details Allows passing a runtime number of Sym arguments to a ParticleLoop.
+ */
+
 namespace NESO::Particles {
 
 // Forward declaration of ParticleLoop such that SymVector can define
@@ -25,9 +31,9 @@ template <typename T> using SymVectorImplGetConstT = T *const *const **;
 namespace Access::SymVector {
 
 /**
- * Access:SymVector::Read<T> and Access:SymVector::Read<T> are the
- * kernel argument types for accessing particle data in a kernel via a
- * SymVector.
+ * Kernel type for SymVector accessed with read mode.
+ *
+ * @ingroup particle_loop_sym_vector
  */
 template <typename T> struct Read {
   ParticleLoopImplementation::ParticleLoopIteration const *iterationx;
@@ -58,6 +64,11 @@ template <typename T> struct Read {
   }
 };
 
+/**
+ * Kernel type for SymVector accessed with write mode.
+ *
+ * @ingroup particle_loop_sym_vector
+ */
 template <typename T> struct Write {
   ParticleLoopImplementation::ParticleLoopIteration const *iterationx;
   /// Pointer to underlying data.
@@ -186,6 +197,8 @@ inline void create_kernel_arg(
 /**
  * Enables ParticleDats to be accessed in ParticleLoops with a number of
  * ParticleDats determined at runtime.
+ *
+ * @ingroup particle_loop_sym_vector
  */
 template <typename T> class SymVector {
   // This allows the ParticleLoop to access the implementation methods.

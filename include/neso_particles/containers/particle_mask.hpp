@@ -12,12 +12,23 @@
 #include "../particle_group.hpp"
 #include "mask_array.hpp"
 
+/**
+ * @defgroup particle_loop_particle_mask ParticleMask
+ * @ingroup particle_loop
+ * @details A per particle mask.
+ */
+
 namespace NESO::Particles {
 
 class ParticleMask;
 
 namespace Access::ParticleMask {
 
+/**
+ * Read kernel type for ParticleMask.
+ *
+ * @ingroup particle_loop_particle_mask
+ */
 struct Read {
   Access::MaskArray::Read mask_array;
 
@@ -31,6 +42,11 @@ struct Read {
   }
 };
 
+/**
+ * Write kernel type for ParticleMask.
+ *
+ * @ingroup particle_loop_particle_mask
+ */
 struct Write {
   std::size_t entry_index{0};
   Access::MaskArray::Write mask_array;
@@ -146,6 +162,8 @@ create_kernel_arg([[maybe_unused]] ParticleLoopIteration &iterationx,
 /**
  * Container to store a single mask per particle which is accessible from
  * ParticleLoop.
+ *
+ * @ingroup particle_loop_particle_mask
  */
 class ParticleMask : public MaskArray {
 protected:

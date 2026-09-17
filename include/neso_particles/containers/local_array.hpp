@@ -10,7 +10,7 @@
 #include <vector>
 
 /**
- * @defgroup particle_loop_local_array Local Array
+ * @defgroup particle_loop_local_array LocalArray
  * @ingroup particle_loop
  * @details Creates an array local to each MPI rank that can be accessed from
  * the Particle Loop.
