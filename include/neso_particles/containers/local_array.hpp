@@ -41,10 +41,18 @@ namespace Access::LocalArray {
  * @ingroup particle_loop_local_array
  */
 template <typename T> struct Read {
-  /// Pointer to underlying data for the array.
   Read() = default;
+
+  /// Pointer to underlying data for the array.
   T const *RESTRICT ptr;
-  const T at(const int component) const { return ptr[component]; }
+
+  /**
+   * Access the element at the specified component.
+   *
+   * @param component Component to access.
+   * @returns Constant reference to element.
+   */
+  const T &at(const int component) const { return ptr[component]; }
   const T &operator[](const int component) const { return ptr[component]; }
 };
 
@@ -54,12 +62,18 @@ template <typename T> struct Read {
  * @ingroup particle_loop_local_array
  */
 template <typename T> struct Add {
-  /// Pointer to underlying data for the array.
   Add() = default;
+
+  /// Pointer to underlying data for the array.
   T *RESTRICT ptr;
+
   /**
    * The local array is local to the MPI rank where the partial sum is a
    * meaningful value.
+   *
+   * @param component Component to access.
+   * @param value Value to add to component.
+   * @returns Value stored before addition.
    */
   inline T fetch_add(const int component, const T value) {
     return atomic_fetch_add(&ptr[component], value);
@@ -72,9 +86,17 @@ template <typename T> struct Add {
  * @ingroup particle_loop_local_array
  */
 template <typename T> struct Write {
-  /// Pointer to underlying data for the array.
   Write() = default;
+
+  /// Pointer to underlying data for the array.
   T *RESTRICT ptr;
+
+  /**
+   * Access the element at the specified component.
+   *
+   * @param component Component to access.
+   * @returns Modifiable reference to element.
+   */
   T &at(const int component) { return ptr[component]; }
   T &operator[](const int component) { return ptr[component]; }
 };

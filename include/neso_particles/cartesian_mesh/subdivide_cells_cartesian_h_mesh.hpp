@@ -5,6 +5,14 @@
 #include "../particle_sub_group/particle_sub_group.hpp"
 #include "cartesian_h_mesh.hpp"
 
+/**
+ * @defgroup cartesian_h_mesh_subdivision Cell Subdivision
+ * @ingroup cartesian_h_mesh
+ * @details Here exist implementation for subdividing CartesianHMesh cells into
+ * smaller cells and mapping particles into these smaller cells. For use in
+ * cases such as DSMC.
+ */
+
 namespace NESO::Particles {
 
 /**

@@ -12,11 +12,20 @@
 #include "../typedefs.hpp"
 #include "cartesian_h_mesh.hpp"
 
+/**
+ * @defgroup cartesian_h_mesh_boundary_conditions Boundary Conditions
+ * @ingroup cartesian_h_mesh
+ * @details This section contains details regarding boundary conditions for the
+ * CartesianHMesh.
+ */
+
 namespace NESO::Particles {
 
 /**
  * Periodic boundary conditions implementation designed to work with a
  * CartesianHMesh.
+ *
+ * @ingroup cartesian_h_mesh_boundary_conditions
  */
 class CartesianPeriodic {
 private:
