@@ -103,7 +103,7 @@ std::vector<std::vector<double>> normal_distribution(const int N,
  * Helper function to quickly initialise a uniform distribution of particles on
  * a CartesianHMesh.
  *
- * @ingroup cartesian_h_mesh
+ * @ingroup cartesian_h_mesh_helper_functions
  * @param[in] mesh CartesianHMesh on which to spawn particles.
  * @param[in] npart_per_cell Number of particle positions to sample for each
  * mesh cell.

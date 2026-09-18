@@ -17,6 +17,12 @@
  * @ingroup cartesian_h_mesh
  */
 
+/**
+ * @defgroup cartesian_h_mesh_helper_functions Helper Functions
+ * @ingroup cartesian_h_mesh
+ * @details Helper functions for CartesianHMesh.
+ */
+
 namespace NESO::Particles {
 
 /**
