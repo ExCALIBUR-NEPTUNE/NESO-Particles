@@ -23,6 +23,8 @@ namespace NESO::Particles::PetscInterface {
  * particle trajectories and the mesh boundary. Users probably want to create
  * an instance of classes which inherit from this base, e.g. @ref
  * BoundaryInteraction2D.
+ *
+ * @ingroup external_interfaces_petsc_dmplex_boundary_intersection
  */
 class BoundaryInteractionCommon {
 protected:

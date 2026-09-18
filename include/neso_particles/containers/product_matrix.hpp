@@ -11,6 +11,13 @@
 #include <numeric>
 #include <vector>
 
+/**
+ * @defgroup particle_loop_product_matrix ProductMatrix
+ * @ingroup particle_loop
+ * @details A construct to store products of particles. i.e. New particles
+ * created in a Particle Loop.
+ */
+
 namespace NESO::Particles {
 
 class ProductMatrix;
@@ -43,6 +50,8 @@ namespace Access::ProductMatrix {
  */
 /**
  * ParticleLoop access type for ProductMatrix Read access.
+ *
+ * @ingroup particle_loop_product_matrix
  */
 struct Read {
   Read() = default;
@@ -85,6 +94,8 @@ struct Read {
 
 /**
  * ParticleLoop access type for ProductMatrix Add access.
+ *
+ * @ingroup particle_loop_product_matrix
  */
 struct Add {
   Add() = default;
@@ -134,6 +145,8 @@ struct Add {
 
 /**
  * ParticleLoop access type for ProductMatrix Write access.
+ *
+ * @ingroup particle_loop_product_matrix
  */
 struct Write {
   /// Pointer to underlying data for the array.
@@ -265,12 +278,13 @@ inline ProductMatrixGet create_loop_arg(ParticleLoopGlobalInfo *global_info,
 
 /**
  * Type to describe the particle properties of products.
+ * @ingroup particle_loop_product_matrix
  */
 typedef ParticleSetDeviceSpec ProductMatrixSpec;
 
 /**
  * Helper function to create ProductMatrixSpec instances.
- *
+ * @ingroup particle_loop_product_matrix
  * @param particle_spec Specification for product particle properties.
  */
 inline std::shared_ptr<ProductMatrixSpec>
@@ -285,6 +299,8 @@ product_matrix_spec(ParticleSpec particle_spec) {
  * column major. Each output particle populates a row in these two matrices.
  * The column ordering is based on the ordering of properties and there
  * components in the input particle specification.
+ *
+ * @ingroup particle_loop_product_matrix
  */
 class ProductMatrix : public ParticleSetDevice {
   friend class ParticleGroup;
@@ -351,6 +367,7 @@ public:
 /**
  * Helper function to create ProductMatrix shared pointer.
  *
+ * @ingroup particle_loop_product_matrix
  * @param sycl_target Device on which particle loops will be executed using
  * the product matrix.
  * @param spec A specification for the output particle properties.

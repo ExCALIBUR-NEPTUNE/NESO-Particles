@@ -5,10 +5,20 @@
 #include "cellwise_pair_list.hpp"
 #include "cellwise_pair_list_block.hpp"
 
+/**
+ * @defgroup particle_pair_loop_cellwise_pair_list_absolute Pair Lists Absolute
+ * @ingroup particle_pair_loop
+ * @details These types define iteration sets for Particle Pair Loops. The type
+ * of the iteration set determines which pair loop is executed. Typically these
+ * absolute pair lists are constructed from pair lists that inherit a base class
+ * that corresponds to the pair list type.
+ */
+
 namespace NESO::Particles {
 
 /**
  * Type for defining the A and B sets along with the pair list.
+ * @ingroup particle_pair_loop_cellwise_pair_list_absolute
  */
 template <typename GROUP_TYPE, typename PAIR_LIST_TYPE>
 struct CellwisePairListAbsolute;
@@ -39,6 +49,8 @@ template <> struct CellwisePairListAbsolute<ParticleGroup, CellwisePairList> {
 /**
  * Type for defining the A and B sets along with the pair list where both A and
  * B are ParticleGroups.
+ *
+ * @ingroup particle_pair_loop_cellwise_pair_list_absolute
  */
 template <>
 struct CellwisePairListAbsolute<ParticleGroup, CellwisePairListBlockInterface> {

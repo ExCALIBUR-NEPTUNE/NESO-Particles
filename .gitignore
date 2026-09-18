@@ -8,3 +8,7 @@ cmake_install.cmake
 test/CMakeFiles/
 test/Makefile
 bin
+docs/sphinx/source/guide-user/group__*.rst
+docs/build/
+docs/sphinx/source/example_sources/
+docs/switcher.json

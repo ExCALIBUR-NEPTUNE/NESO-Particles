@@ -14,6 +14,14 @@
 #include "sycl_typedefs.hpp"
 #include "typedefs.hpp"
 
+/**
+ * @defgroup cartesian_h_mesh CartesianHMesh
+ * @details The CartesianHMesh is a Cartesian mesh that mirrors the auxiliary
+ * grid used for moving particles between MPI ranks. This mesh is a build in
+ * Cartesian mesh that can be used for applications where such a mesh is
+ * appropriate.
+ */
+
 namespace NESO::Particles {
 
 /**

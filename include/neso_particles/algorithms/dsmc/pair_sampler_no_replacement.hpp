@@ -13,6 +13,8 @@ namespace NESO::Particles::DSMC {
 /**
  * Class for sampling pairs of particles without replacement within a collision
  * cell.
+ *
+ * @ingroup algorithms_dsmc
  */
 class PairSamplerNoReplacement : public CellwisePairList {
 protected:

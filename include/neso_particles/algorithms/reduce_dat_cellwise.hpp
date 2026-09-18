@@ -267,6 +267,8 @@ inline sycl::event reduce_dat_components_cellwise_async(
  * Reduces a single value from each particle into a specified CellDatConst
  * index.
  *
+ * @ingroup algorithms_general
+ *
  * @param[in] particle_sub_group ParticleGroup or ParticleSubGroup providing
  * source particles.
  * @param[in] sym Specify the source particle property.
@@ -337,6 +339,8 @@ extern template void reduce_dat_component_cellwise(
  * cellwise. CellDatConst elements are indexed row-wise. The total number of
  * CellDatConst elements must match the number of components of the particle
  * property.
+ *
+ * @ingroup algorithms_general
  *
  * @param[in] particle_sub_group ParticleGroup or ParticleSubGroup providing
  * source particles.

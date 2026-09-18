@@ -3,12 +3,23 @@
 
 #include "../containers/mask_array.hpp"
 
+/**
+ * @defgroup particle_pair_loop_pair_mask PairMask
+ * @ingroup particle_pair_loop
+ * @details Construct for masking off pairs of particles, i.e. storing a boolean
+ * per particle pair.
+ */
+
 namespace NESO::Particles {
 
 class PairMask;
 
 namespace Access::PairMask {
 
+/**
+ * Kernel type for PairMask in write mode.
+ * @ingroup particle_pair_loop_pair_mask
+ */
 struct Write {
   std::size_t entry_index{0};
   MaskArrayDevice mask_array;
@@ -68,6 +79,7 @@ inline void create_kernel_arg(
 /**
  * Specialised MaskArray for enabling/disabling pairs of particles in pair
  * lists.
+ * @ingroup particle_pair_loop_pair_mask
  */
 class PairMask : public MaskArray {
 protected:

@@ -12,6 +12,13 @@
 #include <optional>
 #include <vector>
 
+/**
+ * @defgroup particle_loop_global_array GlobalArray
+ * @ingroup particle_loop
+ * @details An array type with globally fixed size where the result from each
+ * MPI rank is reduced across all MPI ranks on loop completetion.
+ */
+
 namespace NESO::Particles {
 
 // Forward declaration of ParticleLoop such that GlobalArray can define
@@ -30,10 +37,12 @@ namespace Access::GlobalArray {
 /**
  * Access:GlobalArray::Read<T> and Access:GlobalArray::Add<T> are the
  * kernel argument types for accessing GlobalArray data in a kernel.
+ *
+ * @ingroup particle_loop_global_array
  */
 template <typename T> struct Read {
-  /// Pointer to underlying data for the array.
   Read() = default;
+  /// Pointer to underlying data for the array.
   T const *ptr;
   inline const T at(const int component) { return ptr[component]; }
   inline const T &operator[](const int component) { return ptr[component]; }
@@ -42,10 +51,12 @@ template <typename T> struct Read {
 /**
  * Access:GlobalArray::Read<T> and Access:GlobalArray::Add<T> are the
  * kernel argument types for accessing GlobalArray data in a kernel.
+ *
+ * @ingroup particle_loop_global_array
  */
 template <typename T> struct Add {
-  /// Pointer to underlying data for the array.
   Add() = default;
+  /// Pointer to underlying data for the array.
   T *ptr;
   /**
    * This does not return a value as the returned value would be a partial sum
@@ -150,6 +161,8 @@ create_loop_arg([[maybe_unused]] ParticleLoopGlobalInfo *global_info,
  *  GlobalArray is an array type which can be accessed from kernels in read or
  *  atomic add mode. Post loop execution, with add access mode, the global
  *  array values are automatically reduced across the MPI communicator.
+ *
+ *  @ingroup particle_loop_global_array
  */
 template <typename T> class GlobalArray {
   // This allows the ParticleLoop to access the implementation methods.

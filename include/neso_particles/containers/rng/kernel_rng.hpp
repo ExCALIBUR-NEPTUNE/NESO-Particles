@@ -11,6 +11,13 @@
 #include <tuple>
 #include <type_traits>
 
+/**
+ * @defgroup particle_loop_kernel_rng KernelRNG
+ * @ingroup particle_loop
+ * @details Construct for making available RNG samples inside Particle Loop
+ * kernels.
+ */
+
 namespace NESO::Particles {
 
 template <typename T> struct KernelRNG;
@@ -21,6 +28,8 @@ namespace Access::KernelRNG {
  * This is the kernel type for KernelRNG which is used for all
  * implementations which present RNG values to the kernel via an allocated
  * device buffer.
+ *
+ * @ingroup particle_loop_kernel_rng
  */
 template <typename T> struct Read {
   /**

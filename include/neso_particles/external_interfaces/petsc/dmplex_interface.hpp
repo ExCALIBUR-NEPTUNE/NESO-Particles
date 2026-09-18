@@ -12,6 +12,12 @@
 
 namespace NESO::Particles::PetscInterface {
 
+/**
+ * This is the HMesh interface for DMPlex unstructured meshes. It can be used to
+ * create a Domain instance.
+ *
+ * @ingroup external_interfaces_petsc_dmplex_mesh_interface
+ */
 class DMPlexInterface : public HMesh {
 protected:
   bool allocated;

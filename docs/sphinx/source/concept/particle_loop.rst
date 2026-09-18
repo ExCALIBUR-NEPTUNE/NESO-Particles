@@ -111,6 +111,12 @@ The indices of the NDLocalArray are linearised such that the first index is the 
    * - Add
      - Access::NDLocalArray::Add<T, N>
      - fetch_add(i_0, ..., i_n-1, value) atomically increments the element referenced by the index with the passed value. Returns the previous value stored at the index. Users may assume that the memory region accessed is the same for all invocations of the kernel. Hence adding 1 for each particle gives a total ordering for each participating calls.
+   * - Max
+     - Access::NDLocalArray::Max<T, N>
+     - fetch_max(i_0, ..., i_n-1, value) atomically updates the element referenced by the index with the maximum of the passed value and the current value. Returns the previous value stored at the index. Users may assume that the memory region accessed is the same for all invocations of the kernel.
+   * - Min
+     - Access::NDLocalArray::Min<T, N>
+     - fetch_min(i_0, ..., i_n-1, value) atomically updates the element referenced by the index with the minimum of the passed value and the current value. Returns the previous value stored at the index. Users may assume that the memory region accessed is the same for all invocations of the kernel.
 
 GlobalArray
 ~~~~~~~~~~~

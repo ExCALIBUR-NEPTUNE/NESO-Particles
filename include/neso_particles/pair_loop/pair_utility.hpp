@@ -5,6 +5,12 @@
 #include "../pair_loop/particle_pair_loop_cellwise_pair_list.hpp"
 #include "../particle_group.hpp"
 
+/**
+ * @defgroup particle_pair_loop_helper_functions Helper Functions
+ * @ingroup particle_pair_loop
+ * @details Helper functions for working with pair looping.
+ */
+
 namespace NESO::Particles {
 
 /**
@@ -12,6 +18,7 @@ namespace NESO::Particles {
  * pair list. Particles which are not reference do not have their masks
  * modified.
  *
+ * @ingroup particle_pair_loop_helper_functions
  * @param pair_list CellwisePairList containing pairs.
  * @param particle_mask ParticleMask containing masks to set for first
  * ParticleGroup.

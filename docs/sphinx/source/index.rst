@@ -4,6 +4,7 @@ NESO-Particles
 .. toctree::
    :caption: Contents:
    :glob:
+   :maxdepth: 3
 
    concept
    guide-user

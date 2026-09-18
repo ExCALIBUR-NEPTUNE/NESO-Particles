@@ -51,9 +51,10 @@ template <typename T, typename OP> struct Reduction : AccessGeneric<T> {
 /**
  *  Helper function that allows a loop to be constructed with a read-only
  *  parameter passed like:
- *
+ *  ```
  *    Access::read(object)
- *
+ *  ```
+ * @ingroup particle_loop_access
  * @param t Object to pass with read-only access.
  * @returns Access::Read object that wraps passed object.
  */
@@ -62,9 +63,10 @@ template <typename T> inline Read<T> read(T t) { return Read<T>{t}; }
 /**
  *  Helper function that allows a loop to be constructed with a write
  *  parameter passed like:
- *
+ *  ```
  *    Access::write(object)
- *
+ *  ```
+ * @ingroup particle_loop_access
  * @param t Object to pass with write access.
  * @returns Access::Write object that wraps passed object.
  */
@@ -73,9 +75,10 @@ template <typename T> inline Write<T> write(T t) { return Write<T>{t}; }
 /**
  *  Helper function that allows a loop to be constructed with a write
  *  parameter which is atomic addition passed like:
- *
+ *  ```
  *    Access::add(object)
- *
+ *  ```
+ * @ingroup particle_loop_access
  * @param t Object to pass with atomic add access.
  * @returns Access::Add object that wraps passed object.
  */
@@ -84,9 +87,10 @@ template <typename T> inline Add<T> add(T t) { return Add<T>{t}; }
 /**
  *  Helper function that allows a loop to be constructed with a write
  *  parameter which is atomic minimum passed like:
- *
+ *  ```
  *    Access::min(object)
- *
+ *  ```
+ * @ingroup particle_loop_access
  * @param t Object to pass with atomic min access.
  * @returns Access::Min object that wraps passed object.
  */
@@ -95,9 +99,10 @@ template <typename T> inline Min<T> min(T t) { return Min<T>{t}; }
 /**
  *  Helper function that allows a loop to be constructed with a write
  *  parameter which is atomic maximum passed like:
- *
+ *  ```
  *    Access::max(object)
- *
+ *  ```
+ * @ingroup particle_loop_access
  * @param t Object to pass with atomic max access.
  * @returns Access::Max object that wraps passed object.
  */
@@ -106,9 +111,10 @@ template <typename T> inline Max<T> max(T t) { return Max<T>{t}; }
 /**
  *  Helper function that allows a loop to be constructed with a reduction
  *  argument like
- *
+ *  ```
  *    Access::reduce(object, binop)
- *
+ *  ```
+ * @ingroup particle_loop_access
  * @param t Object to reduce values into.
  * @param binop Binary operation to use for reduction, e.g. Kernel::plus<REAL>.
  * @returns Access::Max object that wraps passed object.

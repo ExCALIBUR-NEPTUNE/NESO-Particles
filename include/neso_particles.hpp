@@ -1,6 +1,102 @@
 #ifndef _NESO_PARTICLES
 #define _NESO_PARTICLES
 
+/*
+ * Here we define the Doxygen groups. Do not start this comment block with a
+ * double ** it will confuse Doxygen.
+ */
+
+/**
+ * @defgroup particle_sub_group Particle Sub Group
+ * @{
+ * @details These are helper functions and classes for working with
+ * ParticleSubGroups.
+ * @}
+ */
+
+/**
+ * @defgroup particle_sub_group_helper_functions Helper Functions
+ * @ingroup particle_sub_group
+ * @details Here are helper functions for working with ParticleSubGroups.
+ */
+
+/**
+ * @defgroup particle_sub_group_creation_functions Creation Functions
+ * @ingroup particle_sub_group
+ * @details Here are functions for creating ParticleSubGroups.
+ */
+
+/**
+ * @defgroup particle_loop Particle Loop
+ * @details This section contains the API documentation for Particle Loops.
+ */
+
+/**
+ * @defgroup particle_loop_access Particle Loop Access Descriptors
+ * @ingroup particle_loop
+ * @details This section contains the API documentation for Particle Loop access
+ * interface. For example the main functions and access descriptors. These
+ * functions are all in the Access namespace.
+ */
+
+/**
+ * @defgroup particle_loop_functions Particle Loop Functions
+ * @ingroup particle_loop
+ * @details This section contains the API documentation for Particle Loop
+ * functions. i.e. functions which create Particle Loop objects.
+ */
+
+/**
+ * @defgroup particle_loop_kernel_functions Kernel Functions
+ * @ingroup particle_loop
+ * @details This section contains the API documentation for device callable
+ * functions. These functions can be called within Particle Loops. These
+ * functions are all in the Kernel namespace. See the SYCL specification for
+ * what these maths functions actually do.
+ */
+
+/**
+ * @defgroup neso_particles_core Core Types and Functions
+ * @details Here we describe the core types and functions.
+ */
+
+/**
+ * @defgroup neso_particles_particle_initialisation Particle Initialisation
+ * @ingroup neso_particles_core
+ * @details Types and functions for creating particles and initialising the
+ * particle state.
+ */
+
+/**
+ * @defgroup neso_particles_core_domain Domain
+ * @ingroup neso_particles_core
+ * @details The Domain is where particles exist.
+ */
+
+/**
+ * @defgroup neso_particles_core_particle_group ParticleGroup
+ * @ingroup neso_particles_core
+ * @details The ParticleGroup is the main container for particles.
+ */
+
+/**
+ * @defgroup neso_particles_core_advanced Advanced
+ * @ingroup neso_particles_core
+ * @details More advanced components of the core library.
+ */
+
+/**
+ * @defgroup neso_particles_core_io IO
+ * @ingroup neso_particles_core
+ * @details Components for reading data from and writing particle data to files.
+ */
+
+/**
+ * @defgroup neso_particles_core_particle_data Particle Data
+ * @ingroup neso_particles_core
+ * @details Containers for particle data and describing particle data.
+ */
+
 #include <memory>
 
 #include "neso_particles/access.hpp"

@@ -6,8 +6,17 @@
 namespace NESO::Particles {
 
 /**
+ * @defgroup particle_loop_cell_info_n_part CellInfoNPart
+ * @ingroup particle_loop
+ * @details Particle Loop construct for accessing the index of particles within
+ * a Particle Loop. For example the particle cell and layer along with loop
+ * indices.
+ */
+
+/**
  * The type to pass to a ParticleLoop with read access to access the number of
  * particles in the cell for the iteration set passed to the ParticleLoop.
+ * @ingroup particle_loop_cell_info_n_part
  */
 struct CellInfoNPart {};
 
@@ -18,6 +27,7 @@ namespace Access::CellInfoNPart {
 
 /**
  * Kernel type for read access.
+ * @ingroup particle_loop_cell_info_n_part
  */
 struct Read {
   /// Number of particles in the cell (intended for internal use).

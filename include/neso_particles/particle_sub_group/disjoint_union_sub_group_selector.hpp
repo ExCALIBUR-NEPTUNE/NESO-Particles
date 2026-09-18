@@ -34,6 +34,12 @@ public:
 } // namespace ParticleSubGroupImplementation
 
 /**
+ * Creates a sub group which is the union of N disjoint sub groups. This is
+ * useful when removing particles from multiple sub groups at the same time to
+ * avoid invalidation issues.
+ *
+ * @ingroup particle_sub_group_creation_functions
+ *
  * @param parents Disjoint ParticleSubGroups to unionise.
  * @param make_static Make the ParticleSubGroup static (default false).
  * @returns Union of input particle sub groups.

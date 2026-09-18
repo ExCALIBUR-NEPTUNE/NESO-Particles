@@ -11,6 +11,13 @@
 #include <numeric>
 #include <vector>
 
+/**
+ * @defgroup particle_loop_particle_set_device ParticleSetDevice
+ * @ingroup particle_loop
+ * @details A storage container for multiple particles data on device accessible
+ * in a Particle Loop.
+ */
+
 namespace NESO::Particles {
 
 class ParticleSetDevice;
@@ -43,6 +50,7 @@ namespace Access::ParticleSetDevice {
  */
 /**
  * ParticleLoop access type for ParticleSetDevice Read access.
+ * @ingroup particle_loop_particle_set_device
  */
 struct Read {
   Read() = default;
@@ -85,6 +93,8 @@ struct Read {
 
 /**
  * ParticleLoop access type for ParticleSetDevice Add access.
+ *
+ * @ingroup particle_loop_particle_set_device
  */
 struct Add {
   Add() = default;
@@ -135,6 +145,8 @@ struct Add {
 
 /**
  * ParticleLoop access type for ParticleSetDevice Write access.
+ *
+ * @ingroup particle_loop_particle_set_device
  */
 struct Write {
   /// Pointer to underlying data for the array.
@@ -267,6 +279,7 @@ create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
 
 /**
  * Type to describe the particle properties of particles.
+ * @ingroup particle_loop_particle_set_device
  */
 struct ParticleSetDeviceSpec {
   /// The total number of components of type REAL stored.
@@ -355,6 +368,8 @@ struct ParticleSetDeviceSpec {
  * column major. Each output particle populates a row in these two matrices.
  * The column ordering is based on the ordering of properties and there
  * components in the input particle specification.
+ *
+ * @ingroup particle_loop_particle_set_device
  */
 class ParticleSetDevice {
   friend class ParticleGroup;

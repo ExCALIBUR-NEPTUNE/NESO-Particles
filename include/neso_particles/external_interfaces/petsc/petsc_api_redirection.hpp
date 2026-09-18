@@ -15,6 +15,17 @@ namespace NESO::Particles::NPPETScAPI {
 
 /**
  * Wraps DMPlexCreateBoxMesh to work pre and post petsc v3.22.
+ *
+ * @ingroup external_interfaces_petsc_dmplex_helper_functions
+ * @param[in] comm Communicator for mesh.
+ * @param[in] dim Number of spatial dimensions.
+ * @param[in] simplex Create a mesh consisting of triangles.
+ * @param[in] faces Number of faces in each dimension.
+ * @param[in] lower Origin for each dimension.
+ * @param[in] upper Extent plus origin for each dimension.
+ * @param[in] periodicity Periodicity of each dimension.
+ * @param[in] interpolate Should PETSc interpolate the mesh.
+ * @param[in, out] dm Output DM.
  */
 inline PetscErrorCode NP_DMPlexCreateBoxMesh(
     MPI_Comm comm, PetscInt dim, PetscBool simplex, const PetscInt faces[],

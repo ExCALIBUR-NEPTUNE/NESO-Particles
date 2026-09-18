@@ -8,6 +8,8 @@ namespace NESO::Particles {
 /**
  * Helper function to return the underlying ParticleGroup for a type.
  *
+ * @ingroup particle_sub_group_helper_functions
+ *
  * @param particle_sub_group ParticleSubGroup.
  * @returns Underlying ParticleGroup.
  */
@@ -17,6 +19,8 @@ inline auto get_particle_group(ParticleSubGroupSharedPtr particle_sub_group) {
 
 /**
  * Helper function to return the underlying ParticleGroup for a type.
+ *
+ * @ingroup particle_sub_group_helper_functions
  *
  * @param particle_group ParticleGroup.
  * @returns Underlying ParticleGroup.
@@ -29,6 +33,8 @@ inline auto get_particle_group(ParticleGroupSharedPtr particle_group) {
  * Helper function for determining if a templated type is a ParticleGroup or
  * ParticleSubGroup.
  *
+ * @ingroup particle_sub_group_helper_functions
+ *
  * @param p ParticleGroupSharedPtr.
  * @returns False.
  */
@@ -40,6 +46,8 @@ is_particle_sub_group([[maybe_unused]] ParticleGroupSharedPtr &p) {
 /**
  * Helper function for determining if a templated type is a ParticleGroup or
  * ParticleSubGroup.
+ *
+ * @ingroup particle_sub_group_helper_functions
  *
  * @param p ParticleSubGroupSharedPtr.
  * @returns True.

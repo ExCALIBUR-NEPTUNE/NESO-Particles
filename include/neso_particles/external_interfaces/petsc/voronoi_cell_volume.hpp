@@ -14,6 +14,7 @@ namespace NESO::Particles::PetscInterface {
  * Estimate the volume of Voronoi cells that sub-divide DMPlex cells using Monte
  * Carlo.
  *
+ * @ingroup external_interfaces_petsc_dmplex_dsmc
  * @param[in] mesh DMPlex mesh interface that describes the base mesh.
  * @param[in] voronoi_cells Voronoi cell instance that describes the Voronoi
  * cells in each mesh cell.

@@ -7,7 +7,10 @@
 namespace NESO::Particles {
 
 /**
- * Null Kernel RNG that performs no operations.
+ * Null Kernel RNG that performs no operations. This is the kernel type for
+ * Access::read(std::shared_ptr<NullKernelRNG>).
+ *
+ * @ingroup particle_loop_kernel_rng
  */
 template <typename T> struct NullKernelRNGDevice {
 
@@ -52,6 +55,8 @@ template <typename T> struct NullKernelRNGDevice {
  * samples. This type exists as an RNG implementation for downstream interfaces
  * which must provide a KernelRNG but the specific specialisation of the
  * downstream interface has no RNG requirements.
+ *
+ * @ingroup particle_loop_kernel_rng
  */
 template <typename T>
 class NullKernelRNG : public KernelRNG<NullKernelRNGDevice<T>> {
@@ -97,6 +102,8 @@ public:
 
 /**
  * Helper function to create a NullKernelRNG.
+ *
+ * @ingroup particle_loop_kernel_rng
  * @returns NullKernelRNG that can be passed as a ParticleLoop argument.
  */
 template <typename T>

@@ -9,6 +9,13 @@
 #include <optional>
 #include <vector>
 
+/**
+ * @defgroup particle_loop_local_array LocalArray
+ * @ingroup particle_loop
+ * @details Creates an array local to each MPI rank that can be accessed from
+ * the Particle Loop.
+ */
+
 namespace NESO::Particles {
 // Forward declaration of ParticleLoop such that LocalArray can define
 // ParticleLoop as a friend class.
@@ -30,25 +37,43 @@ namespace Access::LocalArray {
  */
 /**
  * ParticleLoop access type for LocalArray Read access.
+ *
+ * @ingroup particle_loop_local_array
  */
 template <typename T> struct Read {
-  /// Pointer to underlying data for the array.
   Read() = default;
+
+  /// Pointer to underlying data for the array.
   T const *RESTRICT ptr;
-  const T at(const int component) const { return ptr[component]; }
+
+  /**
+   * Access the element at the specified component.
+   *
+   * @param component Component to access.
+   * @returns Constant reference to element.
+   */
+  const T &at(const int component) const { return ptr[component]; }
   const T &operator[](const int component) const { return ptr[component]; }
 };
 
 /**
  * ParticleLoop access type for LocalArray Add access.
+ *
+ * @ingroup particle_loop_local_array
  */
 template <typename T> struct Add {
-  /// Pointer to underlying data for the array.
   Add() = default;
+
+  /// Pointer to underlying data for the array.
   T *RESTRICT ptr;
+
   /**
    * The local array is local to the MPI rank where the partial sum is a
    * meaningful value.
+   *
+   * @param component Component to access.
+   * @param value Value to add to component.
+   * @returns Value stored before addition.
    */
   inline T fetch_add(const int component, const T value) {
     return atomic_fetch_add(&ptr[component], value);
@@ -57,11 +82,21 @@ template <typename T> struct Add {
 
 /**
  * ParticleLoop access type for LocalArray Write access.
+ *
+ * @ingroup particle_loop_local_array
  */
 template <typename T> struct Write {
-  /// Pointer to underlying data for the array.
   Write() = default;
+
+  /// Pointer to underlying data for the array.
   T *RESTRICT ptr;
+
+  /**
+   * Access the element at the specified component.
+   *
+   * @param component Component to access.
+   * @returns Modifiable reference to element.
+   */
   T &at(const int component) { return ptr[component]; }
   T &operator[](const int component) { return ptr[component]; }
 };
@@ -216,6 +251,8 @@ inline void create_kernel_arg(
 
 /**
  * Container to hold an array of values on each MPI rank.
+ *
+ * @ingroup particle_loop_local_array
  */
 template <typename T> class LocalArray {
   // This allows the ParticleLoop to access the implementation methods.

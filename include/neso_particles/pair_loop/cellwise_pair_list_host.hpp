@@ -9,6 +9,13 @@
 #include <tuple>
 #include <vector>
 
+/**
+ * @defgroup particle_pair_loop_host_pair_list Host Pair List
+ * @ingroup particle_pair_loop
+ * @details The host pair list is a simple pair list construct where pairs are
+ * specified only on the host.
+ */
+
 namespace NESO::Particles {
 
 using CellwisePairListHostMap =
@@ -23,6 +30,8 @@ using CellwisePairListHostMap =
 
 /**
  * Type to hold a list of pairs of particles that should collide in each cell.
+ *
+ * @ingroup particle_pair_loop_host_pair_list
  */
 class CellwisePairListHost {
 protected:
