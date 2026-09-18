@@ -46,6 +46,20 @@
  * functions. i.e. functions which create Particle Loop objects.
  */
 
+/**
+ * @defgroup particle_loop_kernel_functions Kernel Functions
+ * @ingroup particle_loop
+ * @details This section contains the API documentation for device callable
+ * functions. These functions can be called within Particle Loops. These
+ * functions are all in the Kernel namespace. See the SYCL specification for
+ * what these maths functions actually do.
+ */
+
+/**
+ * @defgroup neso_particles_core Core Types and Functions
+ * @details Here we describe the core types and functions.
+ */
+
 #include <memory>
 
 #include "neso_particles/access.hpp"
