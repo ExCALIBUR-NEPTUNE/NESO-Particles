@@ -12,12 +12,6 @@
 #include <set>
 #include <vector>
 
-/**
- * @defgroup domain Domain
- * @ingroup neso_particles_core
- * @details The Domain is where particles exist.
- */
-
 namespace NESO::Particles {
 
 /**
@@ -26,7 +20,7 @@ namespace NESO::Particles {
  * particles into cells for each mesh type. Typically shared pointers to Domains
  * are used to construct ParticleGroups.
  *
- *  @ingroup domain
+ *  @ingroup neso_particles_core_domain
  */
 class Domain {
 private:

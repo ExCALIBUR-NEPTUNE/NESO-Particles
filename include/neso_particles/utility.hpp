@@ -19,6 +19,7 @@ namespace NESO::Particles {
 /**
  *  Create a uniform distribution of particle positions within a set of extents.
  *
+ *  @ingroup neso_particles_particle_initialisation
  *  @param N Number of points to generate.
  *  @param ndim Number of dimensions.
  *  @param extents Extent of each of the dimensions.
@@ -46,6 +47,7 @@ uniform_within_extents(const int N, const int ndim, const double *extents,
 /**
  *  Create (N)x(ndim) set of samples from a Gaussian distribution.
  *
+ *  @ingroup neso_particles_particle_initialisation
  *  @param N Number of points to generate.
  *  @param ndim Number of dimensions.
  *  @param mu Mean to use for Gaussian distribution.
@@ -73,6 +75,7 @@ normal_distribution(const int N, const int ndim, const double mu,
 /**
  *  Create a uniform distribution of particle positions within a set of extents.
  *
+ *  @ingroup neso_particles_particle_initialisation
  *  @param N Number of points to generate.
  *  @param ndim Number of dimensions.
  *  @param extents Extent of each of the dimensions.
@@ -84,6 +87,7 @@ uniform_within_extents(const int N, const int ndim, const double *extents);
 /**
  *  Create (N)x(ndim) set of samples from a Gaussian distribution.
  *
+ *  @ingroup neso_particles_particle_initialisation
  *  @param N Number of points to generate.
  *  @param ndim Number of dimensions.
  *  @param mu Mean to use for Gaussian distribution.
@@ -99,6 +103,7 @@ std::vector<std::vector<double>> normal_distribution(const int N,
  * Helper function to quickly initialise a uniform distribution of particles on
  * a CartesianHMesh.
  *
+ * @ingroup cartesian_h_mesh
  * @param[in] mesh CartesianHMesh on which to spawn particles.
  * @param[in] npart_per_cell Number of particle positions to sample for each
  * mesh cell.
@@ -116,6 +121,7 @@ void uniform_within_cartesian_cells(
  *  Get the total number of particles. This method must be called collectively
  * on the communicator.
  *
+ * @ingroup neso_particles_particle_initialisation
  * @param particle_group ParticleGroup or ParticleSubGroup to sum local particle
  * counts of.
  * @returns Global particle count.

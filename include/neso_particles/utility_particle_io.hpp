@@ -14,6 +14,7 @@ namespace NESO::Particles {
  * Get VTK representation of the trajectory between two particle positions. This
  * function is not efficient and is for debugging.
  *
+ * @ingroup neso_particles_core_advanced
  * @param[in] particle_sub_group Particle{Sub}Group of particles.
  * @param[in] sym_start Sym that determines start of the trajectory.
  * @param[in] sym_end Sym that determines end of the trajectory.

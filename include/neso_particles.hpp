@@ -60,6 +60,43 @@
  * @details Here we describe the core types and functions.
  */
 
+/**
+ * @defgroup neso_particles_particle_initialisation Particle Initialisation
+ * @ingroup neso_particles_core
+ * @details Types and functions for creating particles and initialising the
+ * particle state.
+ */
+
+/**
+ * @defgroup neso_particles_core_domain Domain
+ * @ingroup neso_particles_core
+ * @details The Domain is where particles exist.
+ */
+
+/**
+ * @defgroup neso_particles_core_particle_group ParticleGroup
+ * @ingroup neso_particles_core
+ * @details The ParticleGroup is the main container for particles.
+ */
+
+/**
+ * @defgroup neso_particles_core_advanced Advanced
+ * @ingroup neso_particles_core
+ * @details More advanced components of the core library.
+ */
+
+/**
+ * @defgroup neso_particles_core_io IO
+ * @ingroup neso_particles_core
+ * @details Components for reading data from and writing particle data to files.
+ */
+
+/**
+ * @defgroup neso_particles_core_particle_data Particle Data
+ * @ingroup neso_particles_core
+ * @details Containers for particle data and describing particle data.
+ */
+
 #include <memory>
 
 #include "neso_particles/access.hpp"

@@ -13,6 +13,7 @@ namespace NESO::Particles {
 
 /**
  *  Symbol describing a type of data and a name.
+ *  @ingroup neso_particles_core_particle_data
  */
 template <typename U> class Sym {
 private:
@@ -43,6 +44,8 @@ public:
 
 /**
  *  Class to describe a property of a particle.
+ *
+ * @ingroup neso_particles_core_particle_data
  */
 template <typename T> class ParticleProp {
 private:
@@ -76,6 +79,8 @@ public:
 /**
  * A ParticleSpec is a particle specification described by a collection of
  * particle properties.
+ *
+ * @ingroup neso_particles_core_particle_data
  */
 class ParticleSpec {
 private:
@@ -213,6 +218,8 @@ public:
 
 /**
  *  Helper class to hold a collection of Sym instances for ParticleGroup::print.
+ *
+ *  @ingroup neso_particles_core_particle_data
  */
 class SymStore {
 private:

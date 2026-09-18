@@ -108,7 +108,9 @@ struct ParticleDatVersionT {
 
 /**
  *  Fundamentally a ParticleGroup is a collection of ParticleDats, domain and a
- *  compute device.
+ *  compute device. This is the main container for particles.
+ *
+ *  @ingroup neso_particles_core_particle_group
  */
 class ParticleGroup {
   friend class ParticleSubGroupImplementation::SubGroupSelector;
