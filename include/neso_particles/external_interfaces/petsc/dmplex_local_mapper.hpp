@@ -13,7 +13,11 @@
 namespace NESO::Particles::PetscInterface {
 
 /**
- * Top level interface for mapping particles into DMPlex cells.
+ * Top level interface for mapping particles into DMPlex cells. This mapper
+ * corresponds to the DMPlexInterface mesh interface and can be used to create a
+ * Domain instance.
+ *
+ * @ingroup external_interfaces_petsc_dmplex_mesh_interface
  */
 class DMPlexLocalMapper : public LocalMapper {
 protected:

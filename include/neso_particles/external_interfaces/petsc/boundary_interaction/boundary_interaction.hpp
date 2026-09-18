@@ -10,6 +10,7 @@ namespace NESO::Particles::PetscInterface {
  * Create a BoundaryInteraction3D or BoundaryInteraction2D instance and cast it
  * to a BoundaryInteractionCommon.
  *
+ * @ingroup external_interfaces_petsc_dmplex_boundary_intersection
  * @param sycl_target Compute device to use to identify intersections of
  * trajectories and the boundary.
  * @param mesh 3D or 2D DMPlex mesh interface to use.

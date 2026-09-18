@@ -11,6 +11,8 @@ namespace NESO::Particles::PetscInterface {
 /**
  * Implementation to deposit particle data into and evalute from DG1 function
  * spaces by using Barycentric interpolation.
+ *
+ * @ingroup external_interfaces_petsc_dmplex_proj_eval
  */
 class DMPlexProjectEvaluateBarycentric : public DMPlexProjectEvaluateBase {
 protected:

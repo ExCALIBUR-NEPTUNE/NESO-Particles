@@ -10,6 +10,8 @@ namespace NESO::Particles::PetscInterface {
 /**
  * Type that holds a cell index and a pair of weights for combining data when
  * sent/received.
+ *
+ * @ingroup external_interfaces_petsc_dmplex_mesh_coupling
  */
 struct DMPlexMeshCouplerDG0MapEntry {
   // The index of a cell.
@@ -42,6 +44,8 @@ struct DMPlexMeshCouplerDG0MapEntry {
  * direction weight for source cell a and destination cell b and \f$y_a\f$ is
  * the source DOF. The backward direction is identical with the direction of
  * data transport reversed.
+ *
+ * @ingroup external_interfaces_petsc_dmplex_mesh_coupling
  */
 class DMPlexMeshCouplerDG0 {
 protected:
@@ -56,9 +60,7 @@ protected:
   void prepare_transfer(const int ncomp);
 
 public:
-  /// Disable (implicit) copies.
   DMPlexMeshCouplerDG0(const DMPlexMeshCouplerDG0 &st) = delete;
-  /// Disable (implicit) copies.
   DMPlexMeshCouplerDG0 &operator=(DMPlexMeshCouplerDG0 const &a) = delete;
 
   ~DMPlexMeshCouplerDG0() = default;

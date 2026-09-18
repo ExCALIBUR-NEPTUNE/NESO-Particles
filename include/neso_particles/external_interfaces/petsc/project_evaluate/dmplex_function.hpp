@@ -10,6 +10,7 @@ class BoundaryInteractionCommon;
 
 /**
  * Generic type for functions on DMPlex volumes and surfaces.
+ * @ingroup external_interfaces_petsc_dmplex_proj_eval
  */
 class DMPlexFunction : public GenericFunction {
 
