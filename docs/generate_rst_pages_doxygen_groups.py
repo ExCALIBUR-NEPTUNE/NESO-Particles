@@ -8,6 +8,20 @@ This script parses the XML produced by Doxygen to find "groups" (see Doxygen
 documentation) and then generates RST source for each group. For each group a
 RST section will be created with TOC tree structure given by the group
 structure.
+
+
+
+Below we create a group neso_particles_core. With a description that doxygen
+will use provided in @details. The description provided in @np_rst_block will
+be directly inserted into the generated RST instead of the @details block.
+/**
+ * @defgroup neso_particles_core Core Types and Functions
+ * @details Here we describe the core types and functions.
+ * @np_rst_block{
+ * Here we describe the core types and functions of ``NESO::Particles``.
+ * }
+ */
+
 """
 
 import xml.etree.ElementTree as ET
@@ -107,6 +121,7 @@ if __name__ == "__main__":
             warnings.warn("Could not find group inside group xml file.")
 
         map_group_ids_to_description[group_id] = ""
+        found_rst_source = False
 
         for child in group_node:
             if child.tag == "innergroup":
@@ -117,8 +132,20 @@ if __name__ == "__main__":
                 map_group_ids_to_titles[group_id] = child.text
             if child.tag == "detaileddescription":
                 for para in child:
-                    map_group_ids_to_description[group_id] += para.text.strip() + "\n"
+                    if not found_rst_source:
+                        map_group_ids_to_description[group_id] += (
+                            para.text.strip() + "\n"
+                        )
 
+                    for candidate_rst_source in para:
+                        if (
+                            candidate_rst_source.tag
+                            == "NESO_PARTICLES_RST_SOURCE"
+                        ):
+                            found_rst_source = True
+                            map_group_ids_to_description[group_id] = (
+                                candidate_rst_source.text
+                            )
 
     # For each group generate the directive for the group node then visit all
     # the children (recursively) and generate the directives for the children.

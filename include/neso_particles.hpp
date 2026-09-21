@@ -58,6 +58,9 @@
 /**
  * @defgroup neso_particles_core Core Types and Functions
  * @details Here we describe the core types and functions.
+ * @np_rst_block{
+ * Here we describe the core types and functions of ``NESO::Particles``.
+ * }
  */
 
 /**
