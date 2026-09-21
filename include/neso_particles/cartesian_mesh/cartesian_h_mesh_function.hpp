@@ -6,13 +6,21 @@
 #include "cartesian_h_mesh.hpp"
 #include <string>
 
+/**
+ * @defgroup cartesian_h_mesh_functions Surface and Volume Functions
+ * @ingroup cartesian_h_mesh
+ * @details This section contains details regarding functions defined on a
+ * CartesianHMesh. To use these functions see the projection and evaluation
+ * implementations for the volume and surfaces.
+ */
+
 namespace NESO::Particles {
 
 class CartesianTrajectoryIntersection;
 
 /**
  * Generic function type to represent functions on CartesianHMesh.
- *
+ * @ingroup cartesian_h_mesh_functions
  */
 class CartesianHMeshFunction : public GenericFunction {
 

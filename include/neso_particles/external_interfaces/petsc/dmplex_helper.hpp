@@ -18,6 +18,7 @@ constexpr static char face_sets_label[] = "Face Sets";
 /**
  * If there are more than 1 MPI ranks distribute the mesh.
  *
+ * @ingroup external_interfaces_petsc_dmplex_helper_functions
  * @param[in, out] dm DMPlex to distribute, original DMPlex is destroyed.
  * @param[in] comm MPI communicator, default MPI_COMM_WORLD.
  * @param[in] overlap Optional overlap to pass to PETSc (default 0).
@@ -30,6 +31,7 @@ void generic_distribute(DM *dm, MPI_Comm comm = MPI_COMM_WORLD,
  * Setup the coordinate section for a DMPlex. See
  * DMPlexBuildCoordinatesFromCellList.
  *
+ * @ingroup external_interfaces_petsc_dmplex_helper_functions
  * @param dm DMPlex to setup coordinate section for.
  * @param vertex_start Coordinate index for first coordinate.
  * @param vertex_end Coordinate index +1 for last coordinate.
@@ -40,6 +42,7 @@ void setup_coordinate_section(DM &dm, const PetscInt vertex_start,
 /**
  * Helper function to print transitive closure and orientations.
  *
+ * @ingroup external_interfaces_petsc_dmplex_helper_functions
  * @param dm Input DMPlex.
  * @param point PETSc DMPlex pointin DM.
  */
@@ -60,6 +63,7 @@ void setup_local_coordinate_vector(DM &dm, Vec &coordinates);
  * DMPlexDistribute has been called. Must be called collectively on the
  * communicator.
  *
+ * @ingroup external_interfaces_petsc_dmplex_helper_functions
  * @param dm_distributed DMPlex output from a DMPlexDistribute call.
  * @param sf PetscSF returned from a DMPlexDistribute call.
  * @returns Vector where the entry at index i is the new global point index for
@@ -151,6 +155,8 @@ bool dm_from_serialised_cells(
 
 /**
  * Helper class that wraps a PETSc DMPlex and simplifies common operations.
+ *
+ * @ingroup external_interfaces_petsc_dmplex_helper_functions
  */
 class DMPlexHelper {
 protected:
@@ -561,6 +567,7 @@ public:
 /**
  * Get the number of cell vertices and cell vertices in a CellDatConst.
  *
+ * @ingroup external_interfaces_petsc_dmplex_helper_functions
  * @returns CellDatConst for number of cell vertices and cell vertices.
  */
 std::tuple<std::shared_ptr<CellDatConst<int>>,
@@ -573,6 +580,7 @@ get_cell_vertices_cdc(SYCLTargetSharedPtr sycl_target,
  * cell indices live in [a, a+N) and returns a vector of MPI ranks and a. Must
  * be called collectively on the communicator of the DMPlex.
  *
+ * @ingroup external_interfaces_petsc_dmplex_helper_functions
  * @param dm DMPlex to retrieve owning ranks for.
  * @returns The offset a and the vector that holds the MPI rank that owns cell i
  * + a in element i.

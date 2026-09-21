@@ -18,7 +18,10 @@ class H5Part;
 class ParticleSetDevice;
 
 /**
- *  Container to hold particle data for a set of particles.
+ * Container to hold particle data for a set of particles on the host. For
+ * example to stage particle data before it is added to a ParticleGroup.
+ *
+ * @ingroup neso_particles_core_particle_data
  */
 class ParticleSet {
   friend class ParticleGroup;

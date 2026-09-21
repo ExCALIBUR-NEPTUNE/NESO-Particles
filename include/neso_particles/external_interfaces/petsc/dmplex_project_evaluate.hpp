@@ -10,6 +10,8 @@ namespace NESO::Particles::PetscInterface {
 /**
  * Type to handle projection/deposition onto and evaluation from a set of
  * quadrature (nodal) points.
+ *
+ *  @ingroup external_interfaces_petsc_dmplex_proj_eval
  */
 class DMPlexProjectEvaluate {
 protected:

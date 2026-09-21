@@ -1,6 +1,20 @@
 #ifndef _NESO_PARTICLES_PAIR_LOOP_PAIR_LOOP_HPP_
 #define _NESO_PARTICLES_PAIR_LOOP_PAIR_LOOP_HPP_
 
+/**
+ * @defgroup particle_pair_loop Particle Pair Loop
+ * @details This section contains documentation for particle pair looping.
+ * Particle pair looping is a looping type similar to particle loop except that
+ * the kernel operates on two particles.
+ */
+
+/**
+ * @defgroup particle_pair_loop_functions Particle Pair Loop Functions
+ * @ingroup particle_pair_loop
+ * @details Functions that create Particle Pair Loops. These functions accept an
+ * absolute pair list as the iteration set specification.
+ */
+
 #include "cellwise_pair_list.hpp"
 #include "cellwise_pair_list_absolute.hpp"
 #include "cellwise_pair_list_block.hpp"

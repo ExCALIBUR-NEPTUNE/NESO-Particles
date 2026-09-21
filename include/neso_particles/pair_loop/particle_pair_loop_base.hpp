@@ -4,10 +4,18 @@
 #include "../loop/particle_loop_base.hpp"
 #include <optional>
 
+/**
+ * @defgroup particle_pair_loop_base_type Base Type
+ * @ingroup particle_pair_loop
+ * @details Base type from which all Particle Pair Loops inherit.
+ */
+
 namespace NESO::Particles {
 
 /**
  * Base type which all particle pair loops inherit from.
+ *
+ * @ingroup particle_pair_loop_base_type
  */
 class ParticlePairLoopBase {
 protected:

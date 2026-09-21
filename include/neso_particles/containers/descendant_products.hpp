@@ -9,6 +9,12 @@
 #include "../particle_spec.hpp"
 #include "product_matrix.hpp"
 
+/**
+ * @defgroup particle_loop_descendant_products DescendantProducts
+ * @ingroup particle_loop
+ * @details Particle Loop construct for creating particles from particles.
+ */
+
 namespace NESO::Particles {
 
 class DescendantProducts;
@@ -26,10 +32,12 @@ struct DescendantProductsGet {
 namespace Access::DescendantProducts {
 /**
  * ParticleLoop access type for DescendantProducts Write access.
+ *
+ * @ingroup particle_loop_descendant_products
  */
 struct Write {
-  /// Pointer to underlying data for the array.
   Write() = default;
+
   REAL *ptr_real;
   INT *ptr_int;
   int const *offsets_real;
@@ -139,6 +147,8 @@ create_loop_arg(ParticleLoopGlobalInfo *global_info, sycl::handler &cgh,
 /**
  * Class to create M products from each parent particle. Products may inherit
  * property values from the parent.
+ *
+ * @ingroup particle_loop_descendant_products
  */
 class DescendantProducts : public ProductMatrix {
   friend class ParticleGroup;

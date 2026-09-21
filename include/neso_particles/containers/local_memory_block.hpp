@@ -5,10 +5,19 @@
 #include "../loop/access_descriptors.hpp"
 #include "../loop/particle_loop_base.hpp"
 
+/**
+ * @defgroup particle_loop_local_memory_block LocalMemoryBlock
+ * @ingroup particle_loop
+ * @details Construct for creating a contiguous block of local memory per
+ * particle in the Particle Loop.
+ */
+
 namespace NESO::Particles {
 
 /**
  * Type to provide kernel local memory on a per particle basis.
+ *
+ * @ingroup particle_loop_local_memory_block
  */
 template <typename T> class LocalMemoryBlock {
 public:
@@ -36,6 +45,8 @@ namespace Access::LocalMemoryBlock {
 
 /**
  * ParticleLoop access type for LocalMemoryBlock Write access.
+ *
+ * @ingroup particle_loop_local_memory_block
  */
 template <typename T> struct Write {
   Write() = default;

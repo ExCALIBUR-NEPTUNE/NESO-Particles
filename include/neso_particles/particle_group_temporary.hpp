@@ -34,6 +34,9 @@ struct ParticleGroupTemporaryRSI : ResourceStackInterface<ParticleGroup> {
 /**
  * Container to efficiently create and store temporary ParticleGroup instances
  * that have the same properties as a source ParticleGroup.
+ *
+ *
+ * @ingroup neso_particles_core_advanced
  */
 class ParticleGroupTemporary {
 protected:

@@ -5,6 +5,13 @@
 #include "../pair_loop/particle_pair_loop_base.hpp"
 #include "cell_data.hpp"
 
+/**
+ * @defgroup particle_loop_cell_dat_const CellDatConst
+ * @ingroup particle_loop
+ * @details A CellDatConst is a 2D matrix per mesh cell where all mesh cells
+ * have a matrix with the same number of rows and columns.
+ */
+
 namespace NESO::Particles {
 
 template <typename T> class CellDatConst;
@@ -44,6 +51,8 @@ namespace Access::CellDatConst {
 /**
  * Access:CellDatConst::Read<T> is a kernel argument type for accessing
  * CellDatConst data in a kernel.
+ *
+ * @ingroup particle_loop_cell_dat_const
  */
 template <typename T> struct Read {
   /// Pointer to underlying data for the array.
@@ -59,6 +68,8 @@ template <typename T> struct Read {
 /**
  * Access:CellDatConst::Write<T> is a kernel argument type for accessing
  * CellDatConst data in a kernel.
+ *
+ * @ingroup particle_loop_cell_dat_const
  */
 template <typename T> struct Write {
   /// Pointer to underlying data for the array.
@@ -72,6 +83,8 @@ template <typename T> struct Write {
 /**
  * Access:CellDatConst::Add<T> is a kernel argument type for accessing
  * CellDatConst data in a kernel.
+ *
+ * @ingroup particle_loop_cell_dat_const
  */
 template <typename T> struct Add {
   /// Pointer to underlying data for the array.
@@ -86,6 +99,8 @@ template <typename T> struct Add {
 /**
  * Access:CellDatConst::Min<T> is a kernel argument type for accessing
  * CellDatConst data in a kernel.
+ *
+ * @ingroup particle_loop_cell_dat_const
  */
 template <typename T> struct Min {
   /// Pointer to underlying data for the array.
@@ -100,6 +115,8 @@ template <typename T> struct Min {
 /**
  * Access:CellDatConst::Max<T> is a kernel argument type for accessing
  * CellDatConst data in a kernel.
+ *
+ * @ingroup particle_loop_cell_dat_const
  */
 template <typename T> struct Max {
   /// Pointer to underlying data for the array.
@@ -113,6 +130,8 @@ template <typename T> struct Max {
 
 /**
  * Kernel type for Reduction for CellDatConst.
+ *
+ * @ingroup particle_loop_cell_dat_const
  */
 template <typename T, typename OP> struct Reduction {
   Reduction() = default;
@@ -632,6 +651,8 @@ cell_dat_const_impl_get(CellDatConstSharedPtr<T> cell_dat_const);
  *  Container that allocates on the device a matrix of fixed size nrow X ncol
  *  for N cells. Data stored in column major format. i.e. Data order from
  *  slowest to fastest is: cell, column, row.
+ *
+ *  @ingroup particle_loop_cell_dat_const
  */
 template <typename T> class CellDatConst {
   template <typename KERNEL, typename... ARGS> friend class ParticleLoop;

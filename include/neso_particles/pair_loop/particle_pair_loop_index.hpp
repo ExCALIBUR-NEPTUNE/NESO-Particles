@@ -3,14 +3,36 @@
 
 #include "particle_pair_loop_base.hpp"
 
+/**
+ * @defgroup particle_pair_loop_particle_pair_loop_index ParticlePairLoopIndex
+ * @ingroup particle_pair_loop
+ * @details Particle Pair Loop construct for identifying the indices of
+ * particles in pairs.
+ */
+
 namespace NESO::Particles {
 
+/**
+ * @ingroup particle_pair_loop_particle_pair_loop_index
+ *
+ * Pass to pair loops with an access descriptor for the corresponding particle:
+ * ```
+ * Access::A(Access::read(ParticlePairLoopIndex{})),
+ * Access::B(Access::read(ParticlePairLoopIndex{})),
+ * ...
+ * ```
+ */
 struct ParticlePairLoopIndex {};
 
 namespace Access::PairLoopIndex {
 
 /**
- *  Kernel type for read-only access to a ParticlePairLoopIndex.
+ * Kernel type for read-only access to a ParticlePairLoopIndex. When the access
+ * descriptor is for particle A then the kernel argument will describe particle
+ * A. When the access descriptor is for particle B then the kernel argument will
+ * describe particle B.
+ *
+ * @ingroup particle_pair_loop_particle_pair_loop_index
  */
 struct Read {
   INT linear_index{-1};

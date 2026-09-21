@@ -4,6 +4,14 @@
 #include "../loop/particle_loop_base.hpp"
 #include "cell_data.hpp"
 
+/**
+ * @defgroup particle_loop_cell_dat CellDat
+ * @ingroup particle_loop
+ * @details The CellDat object is a 2D matrix per mesh cell with a variable
+ * number of rows across mesh cells and a fixed number of columns across all
+ * mesh cells.
+ */
+
 namespace NESO::Particles {
 
 class ParticlePacker;
@@ -16,6 +24,7 @@ namespace Access::CellDat {
 
 /**
  * Access:CellDat::Read<T> read access cellwise.
+ * @ingroup particle_loop_cell_dat
  */
 template <typename T> struct Read {
   /// Pointer to underlying data for the array.
@@ -29,6 +38,7 @@ template <typename T> struct Read {
 
 /**
  * Access:CellDat::Add<T> add access cellwise.
+ * @ingroup particle_loop_cell_dat
  */
 template <typename T> struct Add {
   /// Pointer to underlying data for the array.
@@ -42,6 +52,7 @@ template <typename T> struct Add {
 
 /**
  * Access:CellDat::Add<T> write access cellwise.
+ * @ingroup particle_loop_cell_dat
  */
 template <typename T> struct Write {
   /// Pointer to underlying data for the array.
@@ -120,6 +131,8 @@ template <typename T> class SymVectorPointerCache;
  * Store data on each cell where the number of columns required per cell is
  * constant but the number of rows is variable. Data is stored in a column
  * major manner with a new device pointer per column.
+ *
+ * @ingroup particle_loop_cell_dat
  */
 template <typename T> class CellDat {
   // This allows the ParticleLoop to access the implementation methods.

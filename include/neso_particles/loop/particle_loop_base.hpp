@@ -170,6 +170,8 @@ bool determine_iteration_set(const int ncell,
 /**
  * Abstract base class for ParticleLoop such that the templated ParticleLoop
  * can be cast to a base type for storage.
+ *
+ * @ingroup particle_loop_functions
  */
 class ParticleLoopBase {
 public:

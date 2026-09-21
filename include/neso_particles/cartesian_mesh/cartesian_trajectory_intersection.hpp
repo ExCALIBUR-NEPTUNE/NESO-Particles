@@ -14,6 +14,13 @@
 #include <limits>
 #include <map>
 
+/**
+ * @defgroup cartesian_h_mesh_intersection Boundary Intersection
+ * @ingroup cartesian_h_mesh
+ * @details This section contains details regarding intersections between
+ * particle trajectories and the boundary of the Cartesian mesh.
+ */
+
 namespace NESO::Particles {
 
 namespace Private {
@@ -22,7 +29,10 @@ constexpr int CART_TRAJ_INT_MASK_VALUE = std::numeric_limits<int>::lowest();
 
 /**
  * This type implements trajectory intersection detection between particles and
- * a CartesianHMesh.
+ * a CartesianHMesh. Instances of this type are used to create and work with
+ * functions defined on the surfaces of the CartesianHMesh.
+ *
+ * @ingroup cartesian_h_mesh_intersection
  */
 class CartesianTrajectoryIntersection {
 protected:
@@ -528,10 +538,8 @@ public:
   }
 
 public:
-  /// Disable (implicit) copies.
   CartesianTrajectoryIntersection(const CartesianTrajectoryIntersection &st) =
       delete;
-  /// Disable (implicit) copies.
   CartesianTrajectoryIntersection &
   operator=(CartesianTrajectoryIntersection const &a) = delete;
   ~CartesianTrajectoryIntersection();

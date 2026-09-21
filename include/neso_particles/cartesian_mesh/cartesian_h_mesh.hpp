@@ -12,6 +12,17 @@
 #include <unordered_map>
 #include <vector>
 
+/**
+ * @defgroup cartesian_h_mesh_mesh Mesh
+ * @ingroup cartesian_h_mesh
+ */
+
+/**
+ * @defgroup cartesian_h_mesh_helper_functions Helper Functions
+ * @ingroup cartesian_h_mesh
+ * @details Helper functions for CartesianHMesh.
+ */
+
 namespace NESO::Particles {
 
 /**
@@ -93,6 +104,8 @@ namespace NESO::Particles {
  *   4      0, 1, 2, 3
  *   5      4, 5, 6, 7
  * ```
+ *
+ * @ingroup cartesian_h_mesh_mesh
  */
 class CartesianHMesh : public HMesh {
 private:

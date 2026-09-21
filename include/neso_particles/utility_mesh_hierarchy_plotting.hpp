@@ -16,6 +16,8 @@ namespace NESO::Particles {
 /**
  * Class to write MeshHierarchy cells to a vtk file as a collection of vertices
  * and edges for visualisation in Paraview.
+ *
+ * @ingroup neso_particles_core_advanced
  */
 class VTKMeshHierarchyCellsWriter {
 protected:

@@ -61,6 +61,7 @@ void parallel_advection_step(ParticleGroupSharedPtr particle_group,
  *  `ParticleGroup.add_particles_local` on each rank then collectively calling
  *  this function.
  *
+ *  @ingroup neso_particles_particle_initialisation
  *  @param particle_group ParticleGroup to initialise by moving particles to the
  * positions in the position ParticleDat.
  *  @param num_steps optional number of steps to move particles over.

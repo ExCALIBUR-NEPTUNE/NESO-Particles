@@ -13,6 +13,7 @@ namespace NESO::Particles {
  *  Create a ParticleLoop that executes a kernel for all particles in the
  * ParticleGroup.
  *
+ *  @ingroup particle_loop_functions
  *  @param name Identifier for particle loop.
  *  @param particle_group ParticleGroup to execute kernel for all particles.
  *  @param kernel Kernel to execute for all particles in the ParticleGroup.
@@ -43,6 +44,7 @@ particle_loop(const std::string name, ParticleGroupSharedPtr particle_group,
  *  Create a ParticleLoop that executes a kernel for all particles in the
  * ParticleGroup.
  *
+ * @ingroup particle_loop_functions
  *  @param particle_group ParticleGroup to execute kernel for all particles.
  *  @param kernel Kernel to execute for all particles in the ParticleGroup.
  *  @param args The remaining arguments are arguments to be passed to the
@@ -60,6 +62,7 @@ particle_loop(ParticleGroupSharedPtr particle_group, KERNEL kernel,
  *  Create a ParticleLoop that executes a kernel for all particles in the
  * ParticleDat.
  *
+ * @ingroup particle_loop_functions
  *  @param name Identifier for particle loop.
  *  @param particle_dat ParticleDat to define the iteration set.
  *  @param kernel Kernel to execute for all particles in the ParticleGroup.
@@ -88,6 +91,7 @@ particle_loop(const std::string name,
  *  Create a ParticleLoop that executes a kernel for all particles in the
  * ParticleDat.
  *
+ * @ingroup particle_loop_functions
  *  @param particle_dat ParticleDat to define the iteration set.
  *  @param kernel Kernel to execute for all particles in the ParticleGroup.
  *  @param args The remaining arguments are arguments to be passed to the

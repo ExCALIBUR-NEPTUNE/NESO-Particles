@@ -17,6 +17,12 @@
 namespace NESO::Particles {
 #ifdef NESO_PARTICLES_HDF5
 
+/**
+ * Read and write implementation of H5Part. This implementation is only
+ * available when the library is installed with HDF5 support.
+ *
+ * @ingroup neso_particles_core_io
+ */
 class H5Part {
 
 protected:
@@ -502,6 +508,12 @@ extern template void H5Part::write_dat_column_wise<ParticleSubGroup, INT>(
     hid_t filespace, bool is_position);
 #else
 
+/**
+ * Read and write implementation of H5Part. This implementation is only
+ * available when the library is installed with HDF5 support.
+ *
+ * @ingroup neso_particles_core_io
+ */
 class H5Part {
 private:
   /**
@@ -604,6 +616,24 @@ public:
    */
   inline void set_rescale_coefficient([[maybe_unused]] Sym<INT> sym,
                                       [[maybe_unused]] const INT value) {}
+
+  /**
+   * Reads particle properties from the h5part file. Must be called collectively
+   * on the communicator.
+   *
+   * @param particle_spec Defines which properties should be read from the file
+   * by specifying the Sym and number of components.
+   * @param step Specify which time step to read from the h5part file.
+   * @param use_xyz_positions If set to true then the particle property with a
+   * Sym<REAL> and positions=true can be populated from the x,y,z entries of the
+   * h5part file.
+   * @returns ParticleSet containing the values read from the h5part file on
+   * this MPI rank.
+   */
+  [[nodiscard]] ParticleSetSharedPtr read(ParticleSpec &particle_spec, INT step,
+                                          const bool use_xyz_positions) {
+    return nullptr;
+  }
 };
 
 #endif

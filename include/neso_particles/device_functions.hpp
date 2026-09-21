@@ -8,53 +8,272 @@
 namespace NESO::Particles {
 
 namespace Kernel {
-
+/**
+ * Returns the minimum of the two arguments.
+ *
+ * @ingroup particle_loop_kernel_functions
+ * @param x First argument.
+ * @param y second argument.
+ * @returns Minimum of x and y.
+ */
 template <typename T, typename U> inline auto min(const T &x, const U &y) {
   return KERNEL_MIN(x, y);
 }
+/**
+ * Returns the minimum of the two arguments.
+ *
+ * @ingroup particle_loop_kernel_functions
+ * @param x First argument.
+ * @param y second argument.
+ * @returns Minimum of x and y.
+ */
 inline auto min(const REAL &x, const REAL &y) { return sycl::fmin(x, y); }
+/**
+ * Returns the maximum of the two arguments.
+ *
+ * @ingroup particle_loop_kernel_functions
+ * @param x First argument.
+ * @param y second argument.
+ * @returns Maximum of x and y.
+ */
 template <typename T, typename U> inline auto max(const T &x, const U &y) {
   return KERNEL_MAX(x, y);
 }
+/**
+ * Returns the maximum of the two arguments.
+ *
+ * @ingroup particle_loop_kernel_functions
+ * @param x First argument.
+ * @param y Second argument.
+ * @returns Maximum of x and y.
+ */
 inline auto max(const REAL &x, const REAL &y) { return sycl::fmax(x, y); }
+/**
+ * Returns the absolute value of x.
+ *
+ * @ingroup particle_loop_kernel_functions
+ * @param x Argument.
+ * @returns Absolute value of x.
+ */
 template <typename T> inline auto abs(const T &x) { return KERNEL_ABS(x); }
+/**
+ * Returns the absolute value of x.
+ *
+ * @ingroup particle_loop_kernel_functions
+ * @param x Argument.
+ * @returns Absolute value of x.
+ */
 inline auto abs(const REAL &x) { return sycl::fabs(x); }
+/**
+ * Returns the square root of x.
+ *
+ * @ingroup particle_loop_kernel_functions
+ * @param x Argument.
+ * @returns Square root of x.
+ */
 inline auto sqrt(const REAL &x) { return sycl::sqrt(x); }
-inline auto rsqrt(const REAL &x) { return sycl::rsqrt(x); }
+/**
+ * Returns the reciprocal square root of x.
+ *
+ * @ingroup particle_loop_kernel_functions
+ * @param x Argument.
+ * @returns Reciprocal square root of x.
+ */
+template <typename T> inline auto rsqrt(const T x) { return sycl::rsqrt(x); }
+/**
+ * Returns exp(x).
+ *
+ * @ingroup particle_loop_kernel_functions
+ * @param x Argument.
+ * @returns exp(x).
+ */
 inline auto exp(const REAL &x) { return sycl::exp(x); }
+/**
+ * Returns fmod(x, y).
+ *
+ * @ingroup particle_loop_kernel_functions
+ * @param x First argument.
+ * @param y Second argument.
+ * @returns fmod(x,y).
+ */
 inline auto fmod(const REAL &x, const REAL &y) { return sycl::fmod(x, y); }
+/**
+ * Returns x*y+z.
+ *
+ * @ingroup particle_loop_kernel_functions
+ * @param x First argument.
+ * @param y Second argument.
+ * @param z Third argument.
+ * @returns x * y + z.
+ */
 inline auto fma(const REAL &x, const REAL &y, const REAL &z) {
   return sycl::fma(x, y, z);
 }
+/**
+ * Returns x to the power y.
+ *
+ * @ingroup particle_loop_kernel_functions
+ * @param x First argument.
+ * @param y Second argument.
+ * @returns x^y.
+ */
 template <typename T> inline auto pow(const T x, const T y) {
   return sycl::pow(x, y);
 }
+/**
+ * Returns atan2(x, y).
+ *
+ * @ingroup particle_loop_kernel_functions
+ * @param x First argument.
+ * @param y Second argument.
+ * @returns atan2(x,y).
+ */
 template <typename T> inline auto atan2(const T y, const T x) {
   return sycl::atan2(y, x);
 }
+/**
+ * Returns copysign(x, y).
+ *
+ * @ingroup particle_loop_kernel_functions
+ * @param x First argument.
+ * @param y Second argument.
+ * @returns copysign(x,y).
+ */
 template <typename T, typename U> inline auto copysign(const T y, const U x) {
   return sycl::copysign(y, x);
 }
-template <typename T> inline auto rsqrt(const T x) { return sycl::rsqrt(x); }
+/**
+ * Returns asin(x).
+ *
+ * @ingroup particle_loop_kernel_functions
+ * @param x Argument.
+ * @returns asin(x).
+ */
 template <typename T> inline auto asin(const T x) { return sycl::asin(x); }
+/**
+ * Returns sin(x).
+ *
+ * @ingroup particle_loop_kernel_functions
+ * @param x Argument.
+ * @returns sin(x).
+ */
 template <typename T> inline auto sin(const T x) { return sycl::sin(x); }
+/**
+ * Returns acos(x).
+ *
+ * @ingroup particle_loop_kernel_functions
+ * @param x Argument.
+ * @returns acos(x).
+ */
 template <typename T> inline auto acos(const T x) { return sycl::acos(x); }
+/**
+ * Returns cos(x).
+ *
+ * @ingroup particle_loop_kernel_functions
+ * @param x Argument.
+ * @returns cos(x).
+ */
 template <typename T> inline auto cos(const T x) { return sycl::cos(x); }
+/**
+ * Returns atan(x).
+ *
+ * @ingroup particle_loop_kernel_functions
+ * @param x Argument.
+ * @returns atan(x).
+ */
 template <typename T> inline auto atan(const T x) { return sycl::atan(x); }
+/**
+ * Returns tan(x).
+ *
+ * @ingroup particle_loop_kernel_functions
+ * @param x Argument.
+ * @returns tan(x).
+ */
 template <typename T> inline auto tan(const T x) { return sycl::tan(x); }
+/**
+ * Returns log(x).
+ *
+ * @ingroup particle_loop_kernel_functions
+ * @param x Argument.
+ * @returns log(x).
+ */
 template <typename T> inline auto log(const T x) { return sycl::log(x); }
+/**
+ * Returns log2(x).
+ *
+ * @ingroup particle_loop_kernel_functions
+ * @param x Argument.
+ * @returns log2(x).
+ */
 template <typename T> inline auto log2(const T x) { return sycl::log2(x); }
+/**
+ * Returns log10(x).
+ *
+ * @ingroup particle_loop_kernel_functions
+ * @param x Argument.
+ * @returns log10(x).
+ */
 template <typename T> inline auto log10(const T x) { return sycl::log10(x); }
+/**
+ * Returns round(x).
+ *
+ * @ingroup particle_loop_kernel_functions
+ * @param x Argument.
+ * @returns round(x).
+ */
 template <typename T> inline auto round(const T x) { return sycl::round(x); }
+/**
+ * Returns tgamma(x).
+ *
+ * @ingroup particle_loop_kernel_functions
+ * @param x Argument.
+ * @returns tgamma(x).
+ */
 template <typename T> inline auto tgamma(const T x) { return sycl::tgamma(x); }
+/**
+ * Returns trunc(x).
+ *
+ * @ingroup particle_loop_kernel_functions
+ * @param x Argument.
+ * @returns trunc(x).
+ */
 template <typename T> inline auto trunc(const T x) { return sycl::trunc(x); }
+/**
+ * Returns ceil(x).
+ *
+ * @ingroup particle_loop_kernel_functions
+ * @param x Argument.
+ * @returns ceil(x).
+ */
 template <typename T> inline auto ceil(const T x) { return sycl::ceil(x); }
+/**
+ * Returns floor(x).
+ *
+ * @ingroup particle_loop_kernel_functions
+ * @param x Argument.
+ * @returns floor(x).
+ */
 template <typename T> inline auto floor(const T x) { return sycl::floor(x); }
+/**
+ * Returns x clamped into [minval, maxval].
+ *
+ * @ingroup particle_loop_kernel_functions
+ * @param x Argument.
+ * @param minval Minimum returned value.
+ * @param maxval Maximum returned value.
+ * @returns x clamped into [minval, maxval].
+ */
 template <typename T>
 inline auto clamp(const T x, const T minval, const T maxval) {
   return sycl::clamp(x, minval, maxval);
 }
-
+/**
+ * Returns popcount(x).
+ *
+ * @ingroup particle_loop_kernel_functions
+ * @param x Argument.
+ * @returns popcount(x).
+ */
 template <typename T> inline auto popcount(const T x) {
   return static_cast<T>(sycl::popcount(x));
 }
@@ -194,6 +413,7 @@ inline void cross_product(const T &a1, const T &a2, const T &a3, const T &b1,
  * are independent of the order in which a and b are specified. i.e. the
  * direction of the output line segment is always in the same direction.
  *
+ * @ingroup particle_loop_kernel_functions
  * @param[in] ax First point of line segment, x coordinate.
  * @param[in] ay First point of line segment, y coordinate.
  * @param[in] bx Second point of line segment, x coordinate.
@@ -221,6 +441,7 @@ inline void consistent_line_orientation_2d(const REAL ax, const REAL ay,
  * [(xa, ya), (xb, yb)] and [(x0, y0), (x1, y1)].
  * Assuming that x1 - x0 != 0 and that the lines are not parallel.
  *
+ * @ingroup particle_loop_kernel_functions
  * param[in] xa Input coordinate for point a.
  * param[in] ya Input coordinate for point a.
  * param[in] xb Input coordinate for point b.
@@ -254,6 +475,7 @@ inline void line_segment_intersection_2d_lambda(const REAL &xa, const REAL &ya,
  * Compute the intersection point of two line segments
  * [(xa, ya), (xb, yb)] and [(x0, y0), (x1, y1)].
  *
+ * @ingroup particle_loop_kernel_functions
  * param[in] xa Input coordinate for point a.
  * param[in] ya Input coordinate for point a.
  * param[in] xb Input coordinate for point b.
@@ -328,6 +550,7 @@ inline bool line_segment_intersection_2d(const REAL &xa, const REAL &ya,
  * Note that the second line segment, (x,y) is aligned with the x-axis and we
  * assume that !(ya == y0 && yb == y0).
  *
+ * @ingroup particle_loop_kernel_functions
  * param[in] xa Input coordinate for point a.
  * param[in] ya Input coordinate for point a.
  * param[in] xb Input coordinate for point b.
@@ -372,6 +595,7 @@ inline bool line_segment_intersection_2d_x_axis_aligned(
  * Note that the second line segment, (x,y) is aligned with the y-axis and we
  * assume that !(xa == x0 && xb == x0).
  *
+ * @ingroup particle_loop_kernel_functions
  * param[in] xa Input coordinate for point a.
  * param[in] ya Input coordinate for point a.
  * param[in] xb Input coordinate for point b.
@@ -395,20 +619,21 @@ inline bool line_segment_intersection_2d_y_axis_aligned(
 
 /**
  * Intersection of line segment
- *
+ * ```
  *  [(ax, ay, az), (bx, by, bz)]
- *
+ * ```
  * with the plane segment
- *
+ * ```
  * (p0x, p2y, p0z)    (p1x, p2y, p0z)
  *               ------   y
  *              |      |  ^
  *              |      |  |
  *               ------   ---> x
  * (p0x, p0y, p0z)    (p1x, p0y, p0z)
- *
+ * ```
  * Assumes that the line does not lie in the plane.
  *
+ * @ingroup particle_loop_kernel_functions
  * param[in] ax Input coordinate for point a.
  * param[in] ay Input coordinate for point a.
  * param[in] az Input coordinate for point a.
@@ -457,6 +682,7 @@ inline bool plane_intersection_3d_xy_plane_aligned(
  * Helper function to evaluate Barycentric coordinates using a set of vertices
  * for a triangle.
  *
+ * @ingroup particle_loop_kernel_functions
  * @param[in] bary_coords Barycentric coordinates.
  * @param[in] triangle_vertex_0 First vertex of triangle.
  * @param[in] triangle_vertex_1 Second vertex of triangle.
@@ -478,6 +704,7 @@ evaluate_barycentric_coordinates(const sycl::marray<REAL, 3> &bary_coords,
  * Line segment - Triangle intersection test, in 3D, using the Möller–Trumbore
  * intersection algorithm.
  *
+ * @ingroup particle_loop_kernel_functions
  * @param[in] line_origin Origin point of line.
  * @param[in] line_direction Direction of line.
  * @param[in] triangle_vertex_0 First vertex of triangle.
@@ -535,6 +762,7 @@ inline bool line_triangle_intersection_moller_trumbore(
  * Naively invert a matrix. The error bars on this call may be quite large.
  * This function uses row-major format.
  *
+ * @ingroup particle_loop_kernel_functions
  * @param[in] M Matrix to invert.
  * @param[in, out] L Output space for M^-1.
  */
@@ -543,7 +771,14 @@ inline void naive_matrix_inverse([[maybe_unused]] const REAL *RESTRICT M,
                                  [[maybe_unused]] REAL *RESTRICT L) {
   static_assert(N == -1, "Not implemented, see specialisations.");
 }
-
+/**
+ * Naively invert a matrix. The error bars on this call may be quite large.
+ * This function uses row-major format.
+ *
+ * @ingroup particle_loop_kernel_functions
+ * @param[in] M Matrix to invert.
+ * @param[in, out] L Output space for M^-1.
+ */
 template <>
 inline void naive_matrix_inverse<3>(const REAL *RESTRICT M, REAL *RESTRICT L) {
   const REAL inverse_factor =
@@ -559,7 +794,14 @@ inline void naive_matrix_inverse<3>(const REAL *RESTRICT M, REAL *RESTRICT L) {
   L[7] = (-M[0] * M[7] + M[1] * M[6]) * inverse_factor;
   L[8] = (M[0] * M[4] - M[1] * M[3]) * inverse_factor;
 }
-
+/**
+ * Naively invert a matrix. The error bars on this call may be quite large.
+ * This function uses row-major format.
+ *
+ * @ingroup particle_loop_kernel_functions
+ * @param[in] M Matrix to invert.
+ * @param[in, out] L Output space for M^-1.
+ */
 template <>
 inline void naive_matrix_inverse<4>(const REAL *RESTRICT M, REAL *RESTRICT L) {
   const REAL inverse_factor =
@@ -904,6 +1146,7 @@ inline bool reduce_over_group_block_wise(T *la_reduction,
 }
 
 /**
+ * @ingroup particle_loop_kernel_functions
  * @param correct Correct reference value.
  * @param to_test Value to test against reference value.
  * @returns |correct - to_test| / |correct| if |correct| > 0.0 else |correct -

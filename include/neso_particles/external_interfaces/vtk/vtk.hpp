@@ -15,8 +15,23 @@
 #include <string>
 #include <vector>
 
+/**
+ * @defgroup external_interfaces_vtk VTK
+ * @details Implementation for reading and writing VTK files.
+ */
+
+/**
+ * @defgroup external_interfaces_vtk_interface Interface
+ * @ingroup external_interfaces_vtk
+ */
+
 namespace NESO::Particles::VTK {
 
+/**
+ * The VTK cell types and the corresponding VTK integer type.
+ *
+ * @ingroup external_interfaces_vtk_interface
+ */
 enum CellType {
   point = 1,
   line = 3,
@@ -31,6 +46,7 @@ enum CellType {
 /**
  * Map the VTK cell type to the expected number of vertices.
  *
+ * @ingroup external_interfaces_vtk_interface
  * @param t Cell type.
  * @returns Number of vertices.
  */
@@ -38,6 +54,8 @@ int get_num_vertices(CellType t);
 
 /**
  * Datatype for representing the data for a single cell.
+ *
+ * @ingroup external_interfaces_vtk_interface
  */
 struct UnstructuredCell {
   /// Number of points for the cell.
@@ -58,7 +76,9 @@ struct UnstructuredCell {
 #ifdef NESO_PARTICLES_HDF5
 
 /**
- * The VTKHDF class facilitates writing VTKHDF files by using HDF5.
+ * The VTKHDF class facilitates reading and writing VTKHDF files by using HDF5.
+ *
+ * @ingroup external_interfaces_vtk_interface
  */
 class VTKHDF {
 protected:
@@ -290,7 +310,9 @@ public:
 #else
 
 /**
- * The VTKHDF class facilitates writing VTKHDF files by using HDF5.
+ * The VTKHDF class facilitates reading and writing VTKHDF files by using HDF5.
+ *
+ * @ingroup external_interfaces_vtk_interface
  */
 class VTKHDF {
 protected:

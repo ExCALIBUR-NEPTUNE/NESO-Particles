@@ -7,8 +7,17 @@
 namespace NESO::Particles {
 
 /**
+ * @defgroup particle_loop_particle_loop_index ParticleLoopIndex
+ * @ingroup particle_loop
+ * @details Particle Loop construct for accessing the index of particles within
+ * a Particle Loop. For example the particle cell and layer along with loop
+ * indices.
+ */
+
+/**
  * The type to pass to a ParticleLoop to read the ParticleLoop loop index in a
  * kernel.
+ * @ingroup particle_loop_particle_loop_index
  */
 struct ParticleLoopIndex {};
 
@@ -18,6 +27,7 @@ struct ParticleLoopIndex {};
 namespace Access::LoopIndex {
 /**
  * ParticleLoop index containing the cell and layer.
+ * @ingroup particle_loop_particle_loop_index
  */
 struct Read {
   /// The cell containing the particle.

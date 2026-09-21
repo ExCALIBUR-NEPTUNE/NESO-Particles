@@ -15,15 +15,17 @@
 namespace NESO::Particles {
 
 /**
- *  A domain wraps a mesh with useful methods such as how to bin particles into
- *  local cells on that mesh type.
+ *  A domain wraps a mesh with a method to map particles into cells on that
+ * mesh. This allows there to be multiple different methods for binning
+ * particles into cells for each mesh type. Typically shared pointers to Domains
+ * are used to construct ParticleGroups.
+ *
+ *  @ingroup neso_particles_core_domain
  */
 class Domain {
 private:
 public:
-  /// Disable (implicit) copies.
   Domain(const Domain &st) = delete;
-  /// Disable (implicit) copies.
   Domain &operator=(Domain const &a) = delete;
 
   /// HMesh derived mesh instance.
@@ -42,6 +44,7 @@ public:
   ~Domain() {}
 };
 
+/// Downstream interfaces will expect this type for Domains.
 typedef std::shared_ptr<Domain> DomainSharedPtr;
 
 } // namespace NESO::Particles

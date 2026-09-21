@@ -58,6 +58,8 @@ class ParticleGroup;
  * Create a ParticleSubGroup from a parent by selecting only the first n
  * particles in each cell.
  *
+ * @ingroup particle_sub_group_creation_functions
+ *
  * @param particle_group Particle(Sub)Group which is the parent.
  * @param num_particles Number of particles to keep from each cell.
  * @param make_static Make the ParticleSubGroup static (default false).
@@ -70,6 +72,8 @@ particle_sub_group_truncate(std::shared_ptr<ParticleGroup> particle_group,
 /**
  * Create a ParticleSubGroup from a parent by selecting only the first n
  * particles in each cell.
+ *
+ * @ingroup particle_sub_group_creation_functions
  *
  * @param particle_sub_group Particle(Sub)Group which is the parent.
  * @param num_particles Number of particles to keep from each cell.

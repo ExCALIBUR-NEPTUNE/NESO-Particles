@@ -6,6 +6,13 @@
 #include "../../containers/tuple.hpp"
 #include "kernel_rng.hpp"
 
+/**
+ * @defgroup particle_loop_tuple_rng TupleRNG
+ * @ingroup particle_loop
+ * @details Construct for passing multiple KernelRNG instances as one Particle
+ * Loop argument.
+ */
+
 namespace NESO::Particles {
 
 // Forward declaration.
@@ -15,10 +22,15 @@ namespace Access::TupleRNG {
 
 /**
  * This is the kernel type for TupleRNG.
+ *
+ * @ingroup particle_loop_tuple_rng
  */
 template <typename... KERNELRNGS> struct Read {
   Tuple::Tuple<KERNELRNGS...> rngs;
 
+  /**
+   * Access the N-th KernelRNG instance.
+   */
   template <std::size_t INDEX> inline auto &get() {
     return Tuple::get<INDEX>(this->rngs);
   }
@@ -28,6 +40,7 @@ template <typename... KERNELRNGS> struct Read {
  * Helper function that calls Access::TupleRNG::get in a way that avoids using
  * ".template".
  *
+ * @ingroup particle_loop_tuple_rng
  * @param tuple_rng Access::TupleRNG::Read instance to access.
  * @returns The reference returned by Access::TupleRNG::Read::get.
  */
@@ -62,6 +75,8 @@ template <typename... RNGPTRS> struct GetTupleRNGDeviceTypes {
 /**
  * Container type which holds multiple RNG types which inherit from KernelRNG or
  * are also TupleRNG instances.
+ *
+ * @ingroup particle_loop_tuple_rng
  */
 template <typename... RNGPTRS> class TupleRNG {
 protected:
@@ -213,6 +228,7 @@ inline void create_kernel_arg(
 /**
  * Helper function to create a tuple of KernelRNG/TupleRNG instances.
  *
+ * @ingroup particle_loop_tuple_rng
  * @param rng_ptrs Shared pointers to instances of KernelRNG descendent types
  * and TupleRNG instances.
  * @returns New TupleRNG instance which can be passed to a particle loop with

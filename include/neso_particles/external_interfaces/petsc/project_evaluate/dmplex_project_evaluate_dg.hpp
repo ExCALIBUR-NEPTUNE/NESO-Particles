@@ -7,12 +7,16 @@ namespace NESO::Particles::PetscInterface {
 
 /**
  * Implementation to deposit particle data into and evalute from DG0 function
- * spaces. This implementation has an internal state (cdc_project) which is a
- * CellDatConst that holds the DOFs. This cell dat is resized whenever set_dofs
- * is called with a greater number of components or when project is called with
- * a greater number of components. Calling project or set_dofs will overwrite
- * the existing DOFs. Calling get_dofs or evaluate will use or retrieve the
- * existing DOFs.
+ * spaces. This implementation can have an internal state (cdc_project) which is
+ * a CellDatConst that holds the DOFs. This cell dat is resized whenever
+ * set_dofs is called with a greater number of components or when project is
+ * called with a greater number of components. Calling project or set_dofs will
+ * overwrite the existing DOFs. Calling get_dofs or evaluate will use or
+ * retrieve the existing DOFs.
+ *
+ * Alternatively this implementation can consider a DOF per local mesh cell.
+ *
+ * @ingroup external_interfaces_petsc_dmplex_proj_eval
  */
 class DMPlexProjectEvaluateDG : public DMPlexProjectEvaluateBase {
 protected:

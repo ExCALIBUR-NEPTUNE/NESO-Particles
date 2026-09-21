@@ -10,6 +10,13 @@
 #include "../loop/particle_loop_base.hpp"
 #include "../pair_loop/particle_pair_loop_base.hpp"
 
+/**
+ * @defgroup particle_loop_mask_array MaskArray
+ * @ingroup particle_loop
+ * @details Container for per particle masks that can be accessed in Particle
+ * Loops.
+ */
+
 namespace NESO::Particles {
 
 class MaskArray;
@@ -18,7 +25,8 @@ class MaskArray;
 using MaskArrayBaseType = std::uint8_t;
 
 /**
- * Device type for MaskArray.
+ * Read access descriptor for MaskArray.
+ * @ingroup particle_loop_mask_array
  */
 template <typename T> struct MaskArrayDeviceBase {
   // Number of bits per base element on the device.
@@ -102,8 +110,17 @@ template <typename T> struct MaskArrayDeviceBase {
 };
 
 namespace Access::MaskArray {
+
+/**
+ * Read access descriptor for MaskArray.
+ * @ingroup particle_loop_mask_array
+ */
 using Read = MaskArrayDeviceBase<MaskArrayBaseType const *>;
 
+/**
+ * Write access descriptor for MaskArray.
+ * @ingroup particle_loop_mask_array
+ */
 struct Write : public MaskArrayDeviceBase<MaskArrayBaseType *> {
 
   /**
@@ -226,6 +243,8 @@ inline void create_kernel_arg(
 
 /**
  * Type that stores N bits per entry (particle).
+ *
+ * @ingroup particle_loop_mask_array
  */
 class MaskArray {
 protected:
