@@ -119,7 +119,7 @@ TEST(Examples, particle_pair_loop_a) {
 
   for (int cellx = 0; cellx < cell_count; cellx++) {
     const int npart_cell = A->get_npart_cell(cellx);
-    if (npart_cell > 1){
+    if (npart_cell > 1) {
       c.push_back(cellx);
       i.push_back(0);
       j.push_back(1);
