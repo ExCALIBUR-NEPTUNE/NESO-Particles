@@ -38,6 +38,8 @@ do
 
     # checkout a version and build the docs for it
     git checkout $BX
+    # Clean the previous docs build. Note we are in docs when this runs.
+    git clean -fd
     echo "$BX" > ./sphinx/source/docs_version
     cat ./sphinx/docs_version
     make
