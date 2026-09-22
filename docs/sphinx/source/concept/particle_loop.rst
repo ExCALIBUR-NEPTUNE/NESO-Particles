@@ -13,6 +13,14 @@ This access descriptor describes exactly how the data will be accessed, e.g. rea
 The provided kernel must be written such that the result of execution of the loop is independent of the execution order of the loop, i.e. parallel and unsequenced in C++ terminology.
 The particle loop abstraction follows the particle loop abstraction in [SAUNDERS2018]_.
 
+.. warning::
+   The kernel function is compiled for and ran on the compute device. Variables
+   used by the kernel, e.g. captured by a lambda, must be copyable to the
+   device. Kernels which are lambda functions, like the examples here, should
+   use a copy capture (``=``) rather than a capture by reference (``&``). Data
+   in host allocated memory should be passed to the kernel via a construct such
+   as ``LocalArray``.
+
 Advection Example
 ~~~~~~~~~~~~~~~~~
 

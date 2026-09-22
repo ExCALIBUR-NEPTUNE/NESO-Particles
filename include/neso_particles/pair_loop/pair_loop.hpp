@@ -6,6 +6,7 @@
  * @details This section contains documentation for particle pair looping.
  * Particle pair looping is a looping type similar to particle loop except that
  * the kernel operates on two particles.
+ * @np_rst_source_file{particle_pair_loop_group_description.rst}
  */
 
 /**

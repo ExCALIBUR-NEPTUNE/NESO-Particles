@@ -1,15 +1,15 @@
 """
-This script should be called with two arguments. The first is the directory
+This script should be called with three arguments. The first is the directory
 containing the xml files produced by doxygen (i.e. ./build/doxygen/xml). The
 second is the sphinx source directory in which the generated RST should be
 written (i.e. ./sphinx/source/guide-user).
+The third argument is the directory containing the Doxyfile. RST source files
+for groups etc should be placed in the Doxyfile directory.
 
 This script parses the XML produced by Doxygen to find "groups" (see Doxygen
 documentation) and then generates RST source for each group. For each group a
 RST section will be created with TOC tree structure given by the group
 structure.
-
-
 
 Below we create a group neso_particles_core. With a description that doxygen
 will use provided in @details. The description provided in @np_rst_block will
@@ -22,6 +22,14 @@ be directly inserted into the generated RST instead of the @details block.
  * }
  */
 
+We can also point to a source file for the RST as follows. This is much more robust than placing RST source in the Doxygen comments.
+/**
+ * @defgroup particle_pair_loop Particle Pair Loop
+ * @details This section contains documentation for particle pair looping.
+ * Particle pair looping is a looping type similar to particle loop except that
+ * the kernel operates on two particles.
+ * @np_rst_source_file{particle_pair_loop_group_description.rst}
+ */
 """
 
 import xml.etree.ElementTree as ET
@@ -38,8 +46,10 @@ if __name__ == "__main__":
 
     assert len(sys.argv) > 1, "No XML directory passed."
     assert len(sys.argv) > 2, "No output directory passed."
+    assert len(sys.argv) > 3, "No Doxyfile source directory passed."
     xml_directory = sys.argv[1]
     output_directory = sys.argv[2]
+    doxygen_directory = sys.argv[3]
 
     if not os.path.exists(output_directory):
         os.mkdir(output_directory)
@@ -146,6 +156,26 @@ if __name__ == "__main__":
                             map_group_ids_to_description[group_id] = (
                                 candidate_rst_source.text
                             )
+                        elif (
+                            candidate_rst_source.tag
+                            == "NESO_PARTICLES_RST_SOURCE_FILE"
+                        ):
+                            filename = candidate_rst_source.text.strip()
+                            filename = os.path.join(doxygen_directory, filename)
+                            file_exists = os.path.exists(filename)
+                            if not file_exists:
+                                warning.warn(
+                                    "Source Doxygen lists a file containing rst source ({}) but no file was found.".format(
+                                        filename
+                                    )
+                                )
+                            else:
+                                print("Found:", filename)
+                                t = None
+                                with open(filename) as fh:
+                                    t = fh.read()
+                                found_rst_source = True
+                                map_group_ids_to_description[group_id] = t
 
     # For each group generate the directive for the group node then visit all
     # the children (recursively) and generate the directives for the children.

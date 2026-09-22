@@ -29,6 +29,7 @@
 /**
  * @defgroup particle_loop Particle Loop
  * @details This section contains the API documentation for Particle Loops.
+ * @np_rst_source_file{particle_loop_group_description.rst}
  */
 
 /**
