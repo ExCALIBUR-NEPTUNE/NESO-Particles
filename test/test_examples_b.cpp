@@ -100,3 +100,38 @@ TEST(Examples, particle_loop_base_b) {
   B->sycl_target->free();
   B->domain->mesh->free();
 }
+
+#include "example_sources/example_particle_pair_loop_simple.hpp"
+
+TEST(Examples, particle_pair_loop_a) {
+  auto A = particle_loop_common();
+
+  A->add_particle_dat(Sym<REAL>("Q"), 1);
+
+  const int cell_count = A->domain->mesh->get_cell_count();
+  auto sycl_target = A->sycl_target;
+  auto cellwise_pair_listA =
+      std::make_shared<CellwisePairListSimple>(sycl_target, cell_count);
+
+  std::vector<int> c;
+  std::vector<int> i;
+  std::vector<int> j;
+
+  for (int cellx = 0; cellx < cell_count; cellx++) {
+    const int npart_cell = A->get_npart_cell(cellx);
+    if (npart_cell > 1){
+      c.push_back(cellx);
+      i.push_back(0);
+      j.push_back(1);
+    }
+  }
+  cellwise_pair_listA->push_back(c, i, j);
+
+  pair_loop_example_simple(
+      CellwisePairListAbsolute<ParticleGroup, CellwisePairList>(
+          A, A, cellwise_pair_listA));
+
+  A->free();
+  A->sycl_target->free();
+  A->domain->mesh->free();
+}
