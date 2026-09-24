@@ -45,7 +45,6 @@ void BoundaryInteraction3D::collect_cells() {
       MeshHierarchyData::GenericSerialContainer<BoundaryInteraction3DTriangle>>
       triangles;
 
-  std::vector<sycl::marray<REAL, 3>> h_real;
   std::vector<int> h_int;
   for (auto cell : this->required_mh_cells) {
 
@@ -56,7 +55,11 @@ void BoundaryInteraction3D::collect_cells() {
     if (num_triangles > 0) {
       // get the real and int data for the mh cell
 
-      h_real.resize(num_triangles * 3);
+      // get the real and int data for the mh cell
+      // macOS clang 17.0.0 and acpp 25.10.0 will error on a resize of a std
+      // vector of marrays. Error is along the lines of no member "size" in
+      // std::reverse_iterator...
+      std::vector<sycl::marray<REAL, 3>> h_real(num_triangles * 3);
       h_int.resize(num_triangles * 2);
 
       for (std::size_t tx = 0; tx < num_triangles; tx++) {
