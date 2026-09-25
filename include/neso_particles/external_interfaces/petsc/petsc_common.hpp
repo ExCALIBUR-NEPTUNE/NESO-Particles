@@ -3,6 +3,7 @@
 
 #include "../../communication.hpp"
 #include "../../typedefs.hpp"
+#include "petsc_api_redirection.hpp"
 #include "petscdm.h"
 #include "petscdmlabel.h"
 #include "petscds.h"
@@ -36,17 +37,21 @@ namespace NESO::Particles::PetscInterface {
  * @param line Line number for the call to neso_particles assert.
  */
 template <typename T>
-inline void neso_particles_petsc_error(const char *expr_str, T error_code,
-                                       const char *file, int line) {
+void neso_particles_petsc_error(const char *expr_str, T error_code,
+                                const char *file, int line) {
   if (error_code != NESO_PARTICLES_PETSC_SUCCESS) {
-    const char *text;
-    char *specific;
-    PetscErrorMessage(error_code, &text, &specific);
+    auto [text, specific] =
+        NESO::Particles::NPPETScAPI::NP_PetscErrorMessage(error_code);
     nprint("Error Code:", error_code, "\n", text, "\n", specific);
     neso_particles_assert(expr_str, false, file, line,
                           "PETSc call did not return PETSC_SUCCESS");
   }
 }
+
+extern template void neso_particles_petsc_error<PetscInt>(const char *expr_str,
+                                                          PetscInt error_code,
+                                                          const char *file,
+                                                          int line);
 
 } // namespace NESO::Particles::PetscInterface
 
