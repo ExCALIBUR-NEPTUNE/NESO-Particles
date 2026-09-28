@@ -4,6 +4,8 @@
 #include <petscdmplex.h>
 #include <petscdmplextransform.h>
 #include <petscsys.h>
+#include <string>
+#include <utility>
 
 #ifndef NESO_PARTICLES_PETSC_VERSION_LT
 #define NESO_PARTICLES_PETSC_VERSION_LT(x, y)                                  \
@@ -38,6 +40,28 @@ inline PetscErrorCode NP_DMPlexCreateBoxMesh(
 #else
   return DMPlexCreateBoxMesh(comm, dim, simplex, faces, lower, upper,
                              periodicity, interpolate, 0, PETSC_TRUE, dm);
+#endif
+}
+
+/**
+ * Wraps PetscErrorMessage to work pre and post petsc v3.25.
+ *
+ * @param error_code PETSc error code to get messages for.
+ * @returns PETSc text and specific as strings.
+ */
+inline std::pair<std::string, std::string>
+NP_PetscErrorMessage(const PetscInt error_code) {
+
+#if NESO_PARTICLES_PETSC_VERSION_LT(3, 25)
+  const char *text;
+  char *specific;
+  PetscErrorMessage(error_code, &text, &specific);
+  return {text, specific};
+#else
+  const char *text;
+  const char *specific;
+  PetscErrorMessage(error_code, &text, &specific);
+  return {text, specific};
 #endif
 }
 

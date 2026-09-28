@@ -531,7 +531,7 @@ TEST_P(PETSC_NDIM, dm_cart_advection) {
       A,
       [=](auto P) {
         for (int dx = 0; dx < ndim; dx++) {
-          P.at(dx) = fmod(P.at(dx) + 100.0, 1.0);
+          P.at(dx) = Kernel::fmod(P.at(dx) + 100.0, 1.0);
         }
       },
       Access::write(Sym<REAL>("P")));

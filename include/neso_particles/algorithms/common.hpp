@@ -127,6 +127,16 @@ joint_exclusive_scan(SYCLTargetSharedPtr sycl_target, std::size_t N,
         }
       });
 
+/**
+ * This seems to avoid a segfault with the Intel LLVM (the open source
+ * one, 7.1.1) native_cpu backednd. The segfault occurs even when the parallel
+ * fors have a no-op kernel. The segfault location will be the end of this
+ * function (i.e. one line after the return statement).
+ */
+#ifndef __ADAPTIVECPP__
+  e0.wait_and_throw();
+#endif
+
   auto e1 = sycl_target->queue.parallel_for(
       sycl::nd_range<1>(sycl::range<1>(local_size), sycl::range<1>(local_size)),
       e0, [=](sycl::nd_item<1> it) {

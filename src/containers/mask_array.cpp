@@ -94,7 +94,7 @@ std::size_t MaskArray::get_num_masks_true(const std::size_t mask_index) {
           }
 
           const int group_reduce_v =
-              reduce_over_group(idx.get_group(), contrib, sycl::plus{});
+              reduce_over_group(idx.get_group(), contrib, sycl::plus<int>{});
 
           if (idx.get_group().leader()) {
             atomic_fetch_add(k_int, static_cast<INT>(group_reduce_v));
