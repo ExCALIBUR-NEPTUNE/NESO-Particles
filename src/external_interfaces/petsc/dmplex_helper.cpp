@@ -67,6 +67,35 @@ void set_partitioner_cell_ownership(
                                              ordered_cells.data()));
 }
 
+void set_partitioner_from_label(DM *dm, const std::string label_name,
+                                MPI_Comm comm) {
+
+  PetscBool has_label;
+  PETSCCHK(DMHasLabel(*dm, label_name.c_str(), &has_label));
+  NESOASSERT(has_label == PETSC_TRUE, "Label not found in DMPlex.");
+
+  DMLabel label;
+  PETSCCHK(DMGetLabel(*dm, label_name.c_str(), &label));
+
+  PetscInt cell_start = -1;
+  PetscInt cell_end = -1;
+  PETSCCHK(DMPlexGetHeightStratum(*dm, 0, &cell_start, &cell_end));
+
+  int size = 0;
+  MPICHK(MPI_Comm_size(comm, &size));
+
+  std::map<PetscInt, int> map_point_to_rank;
+  for (PetscInt cellx = cell_start; cellx < cell_end; cellx++) {
+    PetscInt rank = -1;
+    PETSCCHK(DMLabelGetValue(label, cellx, &rank));
+    NESOASSERT((0 <= rank) && (rank < size),
+               "Bad rank read from label: " + label_name);
+    map_point_to_rank[cellx] = static_cast<int>(rank);
+  }
+
+  set_partitioner_cell_ownership(dm, map_point_to_rank, comm);
+}
+
 void setup_coordinate_section(DM &dm, const PetscInt vertex_start,
                               const PetscInt vertex_end) {
   PetscInt ndim;

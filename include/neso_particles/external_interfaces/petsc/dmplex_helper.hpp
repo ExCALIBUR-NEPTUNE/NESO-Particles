@@ -34,10 +34,8 @@ void generic_distribute(DM *dm, MPI_Comm comm = MPI_COMM_WORLD,
  * map. Calling generic_distribute will then actually distribute the mesh.
  *
  * This function should be called collectively on the communicator of the mesh.
- * The provided map will be reduced across MPI ranks and hence should be
- * consistently passed from all MPI ranks. However there is no requirement that
- * the same map is passed on all MPI ranks. Simply that the reduced map provides
- * a rank for all cell points.
+ * The provided map should contain local point indices as keys and MPI ranks as
+ * values.
  *
  * @ingroup external_interfaces_petsc_dmplex_helper_functions
  * @param[in, out] dm DMPlex to set the partitioner of.
@@ -48,6 +46,21 @@ void generic_distribute(DM *dm, MPI_Comm comm = MPI_COMM_WORLD,
 void set_partitioner_cell_ownership(
     DM *dm, std::map<PetscInt, int> &map_cell_points_to_ranks,
     MPI_Comm comm = MPI_COMM_WORLD);
+
+/**
+ * If there are more than 1 MPI ranks set the partitioner of the mesh to be a
+ * partitioner where the resulting owning MPI rank is the rank provided DMPlex
+ * label.
+ *
+ * This function should be called collectively on the communicator of the mesh.
+ *  *
+ * @ingroup external_interfaces_petsc_dmplex_helper_functions
+ * @param[in, out] dm DMPlex to set the partitioner of.
+ * @param[in] label_name Name of label to read partitions from.
+ * @param[in] comm MPI communicator, default MPI_COMM_WORLD.
+ */
+void set_partitioner_from_label(DM *dm, const std::string label_name,
+                                MPI_Comm comm = MPI_COMM_WORLD);
 
 /**
  * Setup the coordinate section for a DMPlex. See
