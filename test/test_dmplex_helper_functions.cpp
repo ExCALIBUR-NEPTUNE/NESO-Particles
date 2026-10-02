@@ -381,7 +381,8 @@ get_boundary_cell_loop(DM &dm, std::vector<PetscInt> &boundary_edge_loop) {
 }
 
 std::map<PetscInt, int>
-partition_with_uniform_boundary(DM &dm, const int num_partitions) {
+partition_with_uniform_boundary(DM &dm, const int num_partitions,
+                                std::mt19937 *rng = nullptr) {
 
   MPI_Comm comm;
   PETSCCHK(PetscObjectGetComm((PetscObject)dm, &comm));
@@ -402,6 +403,7 @@ partition_with_uniform_boundary(DM &dm, const int num_partitions) {
   std::fill(cell_owning_ranks.begin(), cell_owning_ranks.end(), 0);
   std::map<int, std::set<PetscInt>> map_ranks_to_cells;
 
+  std::set<PetscInt> seen_cells;
   if (rank == 0) {
     auto edge_loop = get_boundary_edge_loop(dm);
 
@@ -417,7 +419,80 @@ partition_with_uniform_boundary(DM &dm, const int num_partitions) {
       for (int cellx = start; cellx < end; cellx++) {
         const PetscInt cell_point = cell_loop.at(cellx);
         map_cell_points_to_ranks[cell_point] = partitionx;
+        map_ranks_to_cells[partitionx].insert(cell_point);
+        seen_cells.insert(cell_point);
       }
+    }
+
+    std::set<PetscInt> seen_edges;
+    std::vector<PetscInt> available_edges;
+
+    for (auto &m : map_ranks_to_cells) {
+      for (auto &cellx : m.second) {
+
+        PetscInt cone_size = 0;
+        PETSCCHK(DMPlexGetConeSize(dm, cellx, &cone_size));
+        NESOASSERT(cone_size > 2,
+                   "Expected cone to be of size at least three.");
+        const PetscInt *cone = nullptr;
+        PETSCCHK(DMPlexGetCone(dm, cellx, &cone));
+
+        for (int ex = 0; ex < cone_size; ex++) {
+          const PetscInt edgex = cone[ex];
+          PetscInt support_size = -1;
+          PETSCCHK(DMPlexGetSupportSize(dm, edgex, &support_size));
+
+          const bool edge_is_new = !seen_edges.count(edgex);
+
+          // If not a boundary edge.
+          if ((support_size > 1) && (edge_is_new)) {
+            const PetscInt *support = nullptr;
+            PETSCCHK(DMPlexGetSupport(dm, edgex, &support));
+            const PetscInt c0 = support[0];
+            const PetscInt c1 = support[1];
+
+            const bool c0_is_new = !seen_cells.count(c0);
+            const bool c1_is_new = !seen_cells.count(c1);
+
+            if (c0_is_new || c1_is_new) {
+              seen_edges.insert(edgex);
+              available_edges.push_back(edgex);
+            }
+          }
+        }
+      }
+    }
+
+    std::mt19937 rng_t;
+    if (rng == nullptr) {
+      rng_t = std::mt19937(std::random_device{}());
+      rng = &rng_t;
+    }
+
+    int num_cells_to_init = num_cells - static_cast<int>(cell_loop.size());
+    NESOASSERT(num_cells_to_init >= 0,
+               "Somehow the cell loop has more cells than the entire domain.");
+
+    std::uniform_int_distribution<std::size_t> edge_dist(
+        0, available_edges.size() - 1);
+    for (int cx = 0; cx < num_cells_to_init; cx++) {
+
+      // Sample an edge for which there is an available cell on the other side.
+      const std::size_t index = edge_dist(*rng);
+      const PetscInt edgex = available_edges.at(index);
+      PetscInt support_size = -1;
+      PETSCCHK(DMPlexGetSupportSize(dm, edgex, &support_size));
+      NESOASSERT(support_size == 2, "This is not an internal edge.");
+      const PetscInt *support = nullptr;
+      PETSCCHK(DMPlexGetSupport(dm, edgex, &support));
+      const PetscInt c0 = support[0];
+      const PetscInt c1 = support[1];
+
+      const bool c0_is_new = !seen_cells.count(c0);
+      const bool c1_is_new = !seen_cells.count(c1);
+
+      NESOASSERT(c0_is_new || c1_is_new,
+                 "Both cells either side of this edge have already been seen");
     }
   }
 
