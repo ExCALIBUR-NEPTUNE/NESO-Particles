@@ -27,6 +27,41 @@ constexpr static char face_sets_label[] = "Face Sets";
  */
 void generic_distribute(DM *dm, MPI_Comm comm = MPI_COMM_WORLD,
                         const PetscInt overlap = 0, PetscSF *sf = nullptr);
+
+/**
+ * If there are more than 1 MPI ranks set the partitioner of the mesh to be a
+ * partitioner where the resulting owning MPI rank is the rank provided in the
+ * map. Calling generic_distribute will then actually distribute the mesh.
+ *
+ * This function should be called collectively on the communicator of the mesh.
+ * The provided map should contain local point indices as keys and MPI ranks as
+ * values.
+ *
+ * @ingroup external_interfaces_petsc_dmplex_helper_functions
+ * @param[in, out] dm DMPlex to set the partitioner of.
+ * @param[in] map_cell_points_to_ranks Map from DMPlex point indices of cells to
+ * the MPI rank which should own the cell.
+ * @param[in] comm MPI communicator, default MPI_COMM_WORLD.
+ */
+void set_partitioner_cell_ownership(
+    DM *dm, std::map<PetscInt, int> &map_cell_points_to_ranks,
+    MPI_Comm comm = MPI_COMM_WORLD);
+
+/**
+ * If there are more than 1 MPI ranks set the partitioner of the mesh to be a
+ * partitioner where the resulting owning MPI rank is the rank provided DMPlex
+ * label.
+ *
+ * This function should be called collectively on the communicator of the mesh.
+ *  *
+ * @ingroup external_interfaces_petsc_dmplex_helper_functions
+ * @param[in, out] dm DMPlex to set the partitioner of.
+ * @param[in] label_name Name of label to read partitions from.
+ * @param[in] comm MPI communicator, default MPI_COMM_WORLD.
+ */
+void set_partitioner_from_label(DM *dm, const std::string label_name,
+                                MPI_Comm comm = MPI_COMM_WORLD);
+
 /**
  * Setup the coordinate section for a DMPlex. See
  * DMPlexBuildCoordinatesFromCellList.
@@ -562,6 +597,14 @@ public:
    */
   void get_canonical_vertex_order(const PetscInt point,
                                   std::vector<PetscInt> &order);
+
+  /**
+   * Get the PETSc point index for a cell index.
+   *
+   * @param cell_index Cell index in [0, cell count).
+   * @returns DMPlex point index for cell.
+   */
+  PetscInt get_cell_point_index(const PetscInt cell_index);
 };
 
 /**
