@@ -2,6 +2,7 @@
 #define _NESO_PARTICLES_TYPEDEFS
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
@@ -10,7 +11,6 @@
 #include <numeric>
 #include <set>
 #include <vector>
-#include <array>
 
 namespace NESO::Particles {
 

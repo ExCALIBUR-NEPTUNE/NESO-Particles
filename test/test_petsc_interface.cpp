@@ -623,6 +623,19 @@ TEST(PETSc, dmplex_helper) {
       /* upper */ NULL,
       /* periodicity */ NULL, PETSC_TRUE, &dm));
 
+  auto local_to_global_map = PetscInterface::get_global_indices_map(dm);
+
+  {
+    PetscInterface::DMPlexHelper dmh(MPI_COMM_WORLD, dm);
+    PetscInt point_start = 0;
+    PetscInt point_end = 0;
+    PETSCCHK(DMPlexGetChart(dm, &point_start, &point_end));
+    for (PetscInt px = point_start; px < point_end; px++) {
+      ASSERT_EQ(dmh.get_point_global_index(px), local_to_global_map.at(px));
+    }
+    dmh.free();
+  }
+
   PetscSF sf;
   PetscInterface::generic_distribute(&dm, MPI_COMM_WORLD, 1, &sf);
 

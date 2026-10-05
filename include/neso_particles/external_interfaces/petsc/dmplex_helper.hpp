@@ -16,7 +16,8 @@ namespace NESO::Particles::PetscInterface {
 constexpr static char face_sets_label[] = "Face Sets";
 
 /**
- * If there are more than 1 MPI ranks distribute the mesh.
+ * If there are more than 1 MPI ranks distribute the mesh. On distribute the
+ * input DM is destroyed.
  *
  * @ingroup external_interfaces_petsc_dmplex_helper_functions
  * @param[in, out] dm DMPlex to distribute, original DMPlex is destroyed.
@@ -53,7 +54,7 @@ void set_partitioner_cell_ownership(
  * label.
  *
  * This function should be called collectively on the communicator of the mesh.
- *  *
+ *
  * @ingroup external_interfaces_petsc_dmplex_helper_functions
  * @param[in, out] dm DMPlex to set the partitioner of.
  * @param[in] label_name Name of label to read partitions from.
@@ -61,6 +62,25 @@ void set_partitioner_cell_ownership(
  */
 void set_partitioner_from_label(DM *dm, const std::string label_name,
                                 MPI_Comm comm = MPI_COMM_WORLD);
+
+/**
+ * Remove the negation from point indices which DMPlex uses to denote global
+ * vs local indices.
+ *
+ * @ingroup external_interfaces_petsc_dmplex_helper_functions
+ * @param c Input index.
+ * @returns c if c > -1 else ((c * (-1)) - 1)
+ */
+PetscInt signed_global_id_to_global_id(const PetscInt c);
+
+/**
+ * Map local point indices to unsigned global indices.
+ *
+ * @ingroup external_interfaces_petsc_dmplex_helper_functions
+ * @param dm Input DM to get unsigned global indices for.
+ * @returns Map from local point indices to global indices.
+ */
+std::map<PetscInt, PetscInt> get_global_indices_map(DM dm);
 
 /**
  * Setup the coordinate section for a DMPlex. See
