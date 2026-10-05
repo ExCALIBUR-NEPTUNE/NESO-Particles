@@ -53,6 +53,7 @@
 #include "dmplex_interface.hpp"
 #include "dmplex_local_mapper.hpp"
 #include "dmplex_mesh_coupler_dg0.hpp"
+#include "dmplex_mesh_coupler_dg0_numbering_map.hpp"
 #include "dmplex_project_evaluate.hpp"
 #include "dmplex_utility.hpp"
 #include "petsc_api_redirection.hpp"

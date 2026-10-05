@@ -214,14 +214,6 @@ void ensure_dm_label_exists(DM dm, std::string label_name);
  * @param value Value to label.
  */
 void label_all_dmplex_boundaries(DM dm, std::string label_name, PetscInt value);
-/**
- * Remove the negation from point indices which DMPlex uses to denote global
- * vs local indices.
- *
- * @param c Input index.
- * @returns c if c > -1 else ((c * (-1)) - 1)
- */
-PetscInt signed_global_id_to_global_id(const PetscInt c);
 
 /**
  * Label all edges between the given pairs of vertices with a value by passing

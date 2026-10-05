@@ -16,6 +16,40 @@ void generic_distribute(DM *dm, MPI_Comm comm, const PetscInt overlap,
   }
 }
 
+PetscInt signed_global_id_to_global_id(const PetscInt c) {
+  return (c > -1) ? c : ((c * (-1)) - 1);
+}
+
+std::map<PetscInt, PetscInt> get_global_indices_map(DM dm) {
+  std::map<PetscInt, PetscInt> m;
+
+  PetscInt point_start = 0;
+  PetscInt point_end = 0;
+  PETSCCHK(DMPlexGetChart(dm, &point_start, &point_end));
+
+  IS global_point_numbers;
+  PETSCCHK(DMPlexCreatePointNumbering(dm, &global_point_numbers));
+  const PetscInt *ptr;
+  PETSCCHK(ISGetIndices(global_point_numbers, &ptr));
+
+  auto lamda_get_point_global_index = [&](const PetscInt point) {
+    PetscInt global_point;
+    global_point = ptr[point - point_start];
+    return global_point;
+  };
+
+  for (PetscInt px = point_start; px < point_end; px++) {
+    const PetscInt signed_global_point = lamda_get_point_global_index(px);
+    const PetscInt global_point =
+        signed_global_id_to_global_id(signed_global_point);
+    m[px] = global_point;
+  }
+
+  PETSCCHK(ISRestoreIndices(global_point_numbers, &ptr));
+  PETSCCHK(ISDestroy(&global_point_numbers));
+  return m;
+}
+
 void setup_coordinate_section(DM &dm, const PetscInt vertex_start,
                               const PetscInt vertex_end) {
   PetscInt ndim;
@@ -638,14 +672,13 @@ DMPlexHelper::DMPlexHelper(MPI_Comm comm, DM dm)
   NESOASSERT(static_cast<std::size_t>(ix) == this->map_np_to_petsc.size(),
              "Size missmatch.");
   this->ncells = this->map_np_to_petsc.size();
-  NESOASSERT(this->ncells, "A rank has zero cells.");
 
   PetscInt point_start = 0;
   PetscInt point_end = 0;
   PETSCCHK(DMPlexGetChart(dm, &point_start, &point_end));
 
   for (PetscInt px = point_start; px < point_end; px++) {
-    const PetscInt global_point = signed_global_id_to_global_id(
+    const PetscInt global_point = this->signed_global_id_to_global_id(
         this->internal_get_point_global_index(px));
     this->map_gobal_point_to_local_point[global_point] = px;
   }
@@ -722,14 +755,14 @@ PetscInt DMPlexHelper::get_point_global_index(const PetscInt point,
   if (signed_point) {
     return global_point;
   } else {
-    return signed_global_id_to_global_id(global_point);
+    return this->signed_global_id_to_global_id(global_point);
   }
 }
 
 PetscInt DMPlexHelper::get_local_point_from_global_point(
     const PetscInt global_point_index) {
   NESOASSERT(this->map_gobal_point_to_local_point.count(
-                 signed_global_id_to_global_id(global_point_index)),
+                 this->signed_global_id_to_global_id(global_point_index)),
              "Global point not found.");
   return this->map_gobal_point_to_local_point[global_point_index];
 }
