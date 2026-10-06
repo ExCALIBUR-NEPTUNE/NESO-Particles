@@ -9,6 +9,24 @@ namespace NESO::Particles::PetscInterface {
  * Helper class for mapping between point and cell indices for
  * DMPlexMeshCouplerDG0.
  *
+ * Use along the lines of:
+ * ```
+ * DM dm;
+ * // Create DM, e.g. box mesh/gmsh.
+ *
+ * DMPlexMeshCouplerDG0NumberingMap nm(comm);
+ * nm.initalise_pre_distribute(dm);
+ *
+ * PetscSF sf;
+ * generic_distribute(&dm, comm, 0, &sf);
+ *
+ * nm.initalise_post_distribute(dm, sf);
+ *
+ * // Collect cells to map into a std::set<PetscInt> to_query
+ *
+ * auto global_cell_indices = nm.get_global_cell_indices(to_query);
+ * ```
+ *
  * @ingroup external_interfaces_petsc_dmplex_mesh_coupling
  */
 class DMPlexMeshCouplerDG0NumberingMap {
@@ -42,7 +60,8 @@ public:
 
   /**
    * Indicate the DMPlex that exists after decomposition. Along with the
-   * distribution map. The input DM will not be stored.
+   * distribution map. The input DM will not be stored. Must be called
+   * collectively on the communicator.
    *
    * @param dm_distributed DMPlex after decomposition.
    * @param sf Star forest returned from generic_distribute or DMPlexDistribute.
@@ -51,7 +70,8 @@ public:
 
   /**
    * Get the distributed global indices, for use with DMPlexMeshCouplerDG0, that
-   * correspond to points on the original non-distributed DMPlex.
+   * correspond to points on the original non-distributed DMPlex. Must be called
+   * collectively on the communicator.
    *
    * @param input_points Input point indices, not cell indices, on the original
    * mesh.
@@ -67,11 +87,15 @@ public:
    * num_cells_init). The output is global cell indices, not PETSc point
    * indices, in [0, num_cells_init).
    *
-   * @param input_cell Input cell index, not point indices, on the original
+   * Must be called collectively on the communicator.
+   *
+   * @param input_cells Input cell indices, not point indices, on the original
    * mesh.
-   * @returns Global point indices on the distributed mesh.
+   * @returns Global point indices on the distributed mesh. As a map from input
+   * indices to global indices.
    */
-  PetscInt get_global_cell_index(const PetscInt input_cell);
+  std::map<PetscInt, PetscInt>
+  get_global_cell_indices(std::set<PetscInt> input_cells);
 };
 
 } // namespace NESO::Particles::PetscInterface
