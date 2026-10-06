@@ -16,7 +16,8 @@ namespace NESO::Particles::PetscInterface {
 constexpr static char face_sets_label[] = "Face Sets";
 
 /**
- * If there are more than 1 MPI ranks distribute the mesh.
+ * If there are more than 1 MPI ranks distribute the mesh. On distribute the
+ * input DM is destroyed.
  *
  * @ingroup external_interfaces_petsc_dmplex_helper_functions
  * @param[in, out] dm DMPlex to distribute, original DMPlex is destroyed.
@@ -27,6 +28,25 @@ constexpr static char face_sets_label[] = "Face Sets";
  */
 void generic_distribute(DM *dm, MPI_Comm comm = MPI_COMM_WORLD,
                         const PetscInt overlap = 0, PetscSF *sf = nullptr);
+
+/**
+ * Remove the negation from point indices which DMPlex uses to denote global
+ * vs local indices.
+ *
+ * @param c Input index.
+ * @returns c if c > -1 else ((c * (-1)) - 1)
+ */
+PetscInt signed_global_id_to_global_id(const PetscInt c);
+
+/**
+ * Map local point indices to unsigned global indices.
+ *
+ * @ingroup external_interfaces_petsc_dmplex_helper_functions
+ * @param dm Input DM to get unsigned global indices for.
+ * @returns Map from local point indices to global indices.
+ */
+std::map<PetscInt, PetscInt> get_global_indices_map(DM dm);
+
 /**
  * Setup the coordinate section for a DMPlex. See
  * DMPlexBuildCoordinatesFromCellList.

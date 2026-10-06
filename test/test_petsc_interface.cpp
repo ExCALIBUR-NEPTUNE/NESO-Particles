@@ -623,6 +623,19 @@ TEST(PETSc, dmplex_helper) {
       /* upper */ NULL,
       /* periodicity */ NULL, PETSC_TRUE, &dm));
 
+  auto local_to_global_map = PetscInterface::get_global_indices_map(dm);
+
+  {
+    PetscInterface::DMPlexHelper dmh(MPI_COMM_WORLD, dm);
+    PetscInt point_start = 0;
+    PetscInt point_end = 0;
+    PETSCCHK(DMPlexGetChart(dm, &point_start, &point_end));
+    for (PetscInt px = point_start; px < point_end; px++) {
+      ASSERT_EQ(dmh.get_point_global_index(px), local_to_global_map.at(px));
+    }
+    dmh.free();
+  }
+
   PetscSF sf;
   PetscInterface::generic_distribute(&dm, MPI_COMM_WORLD, 1, &sf);
 
@@ -1505,6 +1518,97 @@ TEST(PETSc, split_quadrilateral_into_two_triangles) {
       (split1.at(0) == split_test.at(0)) && (split1.at(1) == split_test.at(1));
 
   ASSERT_TRUE(test_is_split_0 || test_is_split_1);
+
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
+
+TEST(PETSc, dmplex_mesh_coupler_dg0_numbering_map) {
+
+  PETSCCHK(PetscInitializeNoArguments());
+  DM dm;
+
+  const PetscInt ndim = 2;
+  const int mesh_size = (ndim == 2) ? 31 : 17;
+  PetscInt faces[3] = {mesh_size, mesh_size, mesh_size};
+
+  PETSCCHK(NPPETScAPI::NP_DMPlexCreateBoxMesh(
+      PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces,
+      /* lower */ NULL,
+      /* upper */ NULL,
+      /* periodicity */ NULL, PETSC_TRUE, &dm));
+
+  PetscInt cell_start = -1;
+  PetscInt cell_end = -1;
+  PETSCCHK(DMPlexGetHeightStratum(dm, 0, &cell_start, &cell_end));
+
+  PETSCCHK(DMCreateLabel(dm, "test_partition"));
+  DMLabel label;
+  PETSCCHK(DMGetLabel(dm, "test_partition", &label));
+
+  for (PetscInt cellx = cell_start; cellx < cell_end; cellx++) {
+    PETSCCHK(DMLabelSetValue(label, cellx, cellx - cell_start));
+  }
+
+  PetscInt offset = cell_start;
+  MPICHK(MPI_Bcast(&offset, 1, MPIU_INT, 0, MPI_COMM_WORLD));
+
+  PetscInterface::DMPlexMeshCouplerDG0NumberingMap nm(MPI_COMM_WORLD);
+  nm.initalise_pre_distribute(dm);
+
+  PetscSF sf;
+  PetscInterface::generic_distribute(&dm, MPI_COMM_WORLD, 0, &sf);
+
+  nm.initalise_post_distribute(dm, sf);
+
+  std::vector<PetscInt> dist_points_map =
+      PetscInterface::get_global_distributed_points_map(dm, sf);
+
+  PETSCCHK(DMPlexGetHeightStratum(dm, 0, &cell_start, &cell_end));
+  PETSCCHK(DMGetLabel(dm, "test_partition", &label));
+
+  PetscInterface::DMPlexHelper dmh(MPI_COMM_WORLD, dm);
+
+  std::set<PetscInt> to_query;
+  std::vector<PetscInt> to_query_v;
+  for (PetscInt cellx = cell_start; cellx < cell_end; cellx++) {
+    PetscInt value = -1;
+    PETSCCHK(DMLabelGetValue(label, cellx, &value));
+    to_query.insert(value);
+    to_query_v.push_back(value + offset);
+  }
+
+  auto pre_to_post_map = nm.get_global_cell_indices(to_query);
+  std::vector<PetscInt> global_points_v;
+  nm.get_global_point_indices(to_query_v, global_points_v);
+
+  PetscInt global_point_min = std::numeric_limits<PetscInt>::max();
+  for (PetscInt cellx = cell_start; cellx < cell_end; cellx++) {
+    const PetscInt global_point_post = dmh.get_point_global_index(cellx);
+    global_point_min = std::min(global_point_min, global_point_post);
+  }
+
+  PetscInt global_offset = 0;
+  MPICHK(MPI_Allreduce(&global_point_min, &global_offset, 1, MPIU_INT, MPI_MIN,
+                       MPI_COMM_WORLD));
+
+  int index = 0;
+  for (PetscInt cellx = cell_start; cellx < cell_end; cellx++) {
+    PetscInt value = -1;
+    PETSCCHK(DMLabelGetValue(label, cellx, &value));
+
+    const PetscInt global_point_post = dmh.get_point_global_index(cellx);
+
+    ASSERT_TRUE(pre_to_post_map.count(value));
+    const PetscInt to_test = pre_to_post_map[value];
+
+    const PetscInt to_test_v = global_points_v.at(index++);
+
+    ASSERT_EQ(to_test, global_point_post - global_offset);
+    ASSERT_EQ(to_test_v, global_point_post);
+  }
+
+  dmh.free();
 
   PETSCCHK(DMDestroy(&dm));
   PETSCCHK(PetscFinalize());
