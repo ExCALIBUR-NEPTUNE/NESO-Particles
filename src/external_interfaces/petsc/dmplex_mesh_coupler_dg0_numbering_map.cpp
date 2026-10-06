@@ -29,6 +29,7 @@ void DMPlexMeshCouplerDG0NumberingMap::initalise_pre_distribute(DM dm) {
     PetscInt cell_end = -1;
     PETSCCHK(DMPlexGetHeightStratum(dm, 0, &cell_start, &cell_end));
     MPICHK(MPI_Bcast(&cell_start, 1, MPIU_INT, 0, this->comm));
+    MPICHK(MPI_Bcast(&cell_end, 1, MPIU_INT, 0, this->comm));
     this->cell_start_pre = cell_start;
     this->cell_end_pre = cell_end;
   }
@@ -106,22 +107,29 @@ void DMPlexMeshCouplerDG0NumberingMap::get_global_point_indices(
   }
 }
 
-PetscInt DMPlexMeshCouplerDG0NumberingMap::get_global_cell_index(
-    const PetscInt input_cell) {
+std::map<PetscInt, PetscInt>
+DMPlexMeshCouplerDG0NumberingMap::get_global_cell_indices(
+    std::set<PetscInt> input_cells) {
 
-  const PetscInt input_global_point = input_cell + this->cell_start_pre;
+  std::map<PetscInt, PetscInt> m;
 
-  NESOASSERT((this->cell_start_pre <= input_global_point) &&
-                 (input_global_point < this->cell_end_pre),
-             "Bad input cell.");
+  for (auto input_cell : input_cells) {
+    const PetscInt input_global_point = input_cell + this->cell_start_pre;
 
-  const PetscInt output_global_point =
-      this->h_init_map_local_to_global.at(input_global_point);
+    NESOASSERT((this->cell_start_pre <= input_global_point) &&
+                   (input_global_point < this->cell_end_pre),
+               "Bad input cell.");
 
-  const PetscInt output_global_cell_index =
-      output_global_point - this->global_cell_start_post;
+    const PetscInt output_global_point =
+        this->h_init_map_local_to_global.at(input_global_point);
 
-  return output_global_cell_index;
+    const PetscInt output_global_cell_index =
+        output_global_point - this->global_cell_start_post;
+
+    m[input_cell] = output_global_cell_index;
+  }
+
+  return m;
 }
 } // namespace NESO::Particles::PetscInterface
 
