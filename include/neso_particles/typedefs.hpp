@@ -10,6 +10,7 @@
 #include <numeric>
 #include <set>
 #include <vector>
+#include <array>
 
 namespace NESO::Particles {
 
