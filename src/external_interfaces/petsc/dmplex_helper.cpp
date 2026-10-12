@@ -216,10 +216,17 @@ std::vector<PetscInt> get_global_distributed_points_map(DM &dm_distributed,
     const PetscInt *ptr;
     PETSCCHK(ISGetIndices(global_point_numbers, &ptr));
 
-    PetscInt npoints_global = 0;
+    PetscInt num_points_local = 0;
+    for (int ix = 0; ix < nleaves; ix++) {
+      const PetscInt global_point_current = ptr[ix - point_start];
+      if (global_point_current > -1) {
+        num_points_local++;
+      }
+    }
 
-    MPICHK(
-        MPI_Allreduce(&nleaves, &npoints_global, 1, MPIU_INT, MPI_SUM, comm));
+    PetscInt npoints_global = 0;
+    MPICHK(MPI_Allreduce(&num_points_local, &npoints_global, 1, MPIU_INT,
+                         MPI_SUM, comm));
 
     std::vector<PetscInt> local_points(npoints_global);
     std::vector<PetscInt> global_points(npoints_global);

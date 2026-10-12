@@ -1553,16 +1553,15 @@ TEST(PETSc, dmplex_mesh_coupler_dg0_numbering_map) {
   PetscInt offset = cell_start;
   MPICHK(MPI_Bcast(&offset, 1, MPIU_INT, 0, MPI_COMM_WORLD));
 
-  PetscInterface::DMPlexMeshCouplerDG0NumberingMap nm(MPI_COMM_WORLD);
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+
+  PetscInterface::DMPlexMeshCouplerDG0NumberingMap nm(sycl_target);
   nm.initalise_pre_distribute(dm);
 
   PetscSF sf;
   PetscInterface::generic_distribute(&dm, MPI_COMM_WORLD, 0, &sf);
 
   nm.initalise_post_distribute(dm, sf);
-
-  std::vector<PetscInt> dist_points_map =
-      PetscInterface::get_global_distributed_points_map(dm, sf);
 
   PETSCCHK(DMPlexGetHeightStratum(dm, 0, &cell_start, &cell_end));
   PETSCCHK(DMGetLabel(dm, "test_partition", &label));
@@ -1610,6 +1609,8 @@ TEST(PETSc, dmplex_mesh_coupler_dg0_numbering_map) {
 
   dmh.free();
 
+  nm.free();
+  sycl_target->free();
   PETSCCHK(DMDestroy(&dm));
   PETSCCHK(PetscFinalize());
 }

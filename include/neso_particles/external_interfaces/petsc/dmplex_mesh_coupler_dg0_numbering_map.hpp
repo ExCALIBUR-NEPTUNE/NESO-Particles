@@ -1,6 +1,7 @@
 #ifndef _NESO_PARTICLES_DMPLEX_MESH_COUPLER_DG0_NUMBERING_MAP_HPP_
 #define _NESO_PARTICLES_DMPLEX_MESH_COUPLER_DG0_NUMBERING_MAP_HPP_
 
+#include "../../compute_target.hpp"
 #include "dmplex_helper.hpp"
 
 namespace NESO::Particles::PetscInterface {
@@ -40,14 +41,18 @@ protected:
   PetscInt cell_start_pre{-1};
   PetscInt cell_end_pre{-1};
   PetscInt global_cell_start_post{-1};
+  bool is_freed{false};
 
 public:
+  ~DMPlexMeshCouplerDG0NumberingMap();
+
   /**
    * Initialise instance. Must be called collectively on the communicator.
    *
-   * @param comm MPI Communicator for decomposed mesh.
+   * @param sycl_target SYCLTarget providing the MPI communicator for decomposed
+   * mesh.
    */
-  DMPlexMeshCouplerDG0NumberingMap(MPI_Comm comm);
+  DMPlexMeshCouplerDG0NumberingMap(SYCLTargetSharedPtr sycl_target);
 
   /**
    * Indicate the DMPlex that exists before decomposition. We assume that this
@@ -96,6 +101,12 @@ public:
    */
   std::map<PetscInt, PetscInt>
   get_global_cell_indices(std::set<PetscInt> input_cells);
+
+  /**
+   * Free the underlying maps. Must be called. Must be called collectively on
+   * the communicator.
+   */
+  void free();
 };
 
 } // namespace NESO::Particles::PetscInterface

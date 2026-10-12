@@ -3,9 +3,15 @@
 
 namespace NESO::Particles::PetscInterface {
 
+DMPlexMeshCouplerDG0NumberingMap::~DMPlexMeshCouplerDG0NumberingMap() {
+  if (!this->is_freed) {
+    nprint("Warning: DMPlexMeshCouplerDG0NumberingMap::free not called.");
+  }
+}
+
 DMPlexMeshCouplerDG0NumberingMap::DMPlexMeshCouplerDG0NumberingMap(
-    MPI_Comm comm)
-    : comm(comm) {}
+    SYCLTargetSharedPtr sycl_target)
+    : comm(sycl_target->comm_pair.comm_parent) {}
 
 void DMPlexMeshCouplerDG0NumberingMap::initalise_pre_distribute(DM dm) {
 
@@ -131,6 +137,9 @@ DMPlexMeshCouplerDG0NumberingMap::get_global_cell_indices(
 
   return m;
 }
+
+void DMPlexMeshCouplerDG0NumberingMap::free() { this->is_freed = true; }
+
 } // namespace NESO::Particles::PetscInterface
 
 #endif
