@@ -16,6 +16,86 @@ void generic_distribute(DM *dm, MPI_Comm comm, const PetscInt overlap,
   }
 }
 
+void set_partitioner_cell_ownership(
+    DM *dm, std::map<PetscInt, int> &map_cell_points_to_ranks, MPI_Comm comm) {
+
+  PetscPartitioner part;
+  PETSCCHK(DMPlexGetPartitioner(*dm, &part));
+  PETSCCHK(PetscPartitionerSetType(part, PETSCPARTITIONERSHELL));
+
+  int size = -1;
+  int rank = -1;
+  MPICHK(MPI_Comm_size(comm, &size));
+  MPICHK(MPI_Comm_rank(comm, &rank));
+
+  PetscInt cell_start = -1;
+  PetscInt cell_end = -1;
+  PETSCCHK(DMPlexGetHeightStratum(*dm, 0, &cell_start, &cell_end));
+
+  std::vector<PetscInt> num_points(size);
+  std::fill(num_points.begin(), num_points.end(), 0);
+  std::map<int, std::vector<PetscInt>> map_ranks_to_points;
+
+  std::size_t expected_num_cell_points = cell_end - cell_start;
+
+  NESOASSERT(
+      map_cell_points_to_ranks.size() == expected_num_cell_points,
+      "Passed map is too small to contain a rank for all locally held cells.");
+
+  for (auto &m : map_cell_points_to_ranks) {
+    const int rankx = m.second;
+    const PetscInt point = m.first;
+    NESOASSERT((0 <= rankx) && (rankx < size), "Bad MPI rank passed in map.");
+    NESOASSERT((cell_start <= point) && (point < cell_end),
+               "Bad point index passed.");
+    num_points.at(rankx)++;
+    map_ranks_to_points[rankx].push_back(point);
+  }
+
+  std::vector<PetscInt> ordered_cells;
+  ordered_cells.reserve(map_cell_points_to_ranks.size());
+
+  for (int rankx = 0; rankx < size; rankx++) {
+    if (map_ranks_to_points.count(rankx)) {
+      ordered_cells.insert(ordered_cells.end(),
+                           map_ranks_to_points.at(rankx).begin(),
+                           map_ranks_to_points.at(rankx).end());
+    }
+  }
+
+  PETSCCHK(PetscPartitionerShellSetPartition(part, size, num_points.data(),
+                                             ordered_cells.data()));
+}
+
+void set_partitioner_from_label(DM *dm, const std::string label_name,
+                                MPI_Comm comm) {
+
+  PetscBool has_label;
+  PETSCCHK(DMHasLabel(*dm, label_name.c_str(), &has_label));
+  NESOASSERT(has_label == PETSC_TRUE, "Label not found in DMPlex.");
+
+  DMLabel label;
+  PETSCCHK(DMGetLabel(*dm, label_name.c_str(), &label));
+
+  PetscInt cell_start = -1;
+  PetscInt cell_end = -1;
+  PETSCCHK(DMPlexGetHeightStratum(*dm, 0, &cell_start, &cell_end));
+
+  int size = 0;
+  MPICHK(MPI_Comm_size(comm, &size));
+
+  std::map<PetscInt, int> map_point_to_rank;
+  for (PetscInt cellx = cell_start; cellx < cell_end; cellx++) {
+    PetscInt rank = -1;
+    PETSCCHK(DMLabelGetValue(label, cellx, &rank));
+    NESOASSERT((0 <= rank) && (rank < size),
+               "Bad rank read from label: " + label_name);
+    map_point_to_rank[cellx] = static_cast<int>(rank);
+  }
+
+  set_partitioner_cell_ownership(dm, map_point_to_rank, comm);
+}
+
 void setup_coordinate_section(DM &dm, const PetscInt vertex_start,
                               const PetscInt vertex_end) {
   PetscInt ndim;
@@ -1920,6 +2000,11 @@ void DMPlexHelper::get_canonical_vertex_order(const PetscInt point,
     order.insert(order.end(), this->map_point_to_vertex_order.at(point).begin(),
                  this->map_point_to_vertex_order.at(point).end());
   }
+}
+
+PetscInt DMPlexHelper::get_cell_point_index(const PetscInt cell_index) {
+  this->check_valid_local_cell(cell_index);
+  return cell_index + this->cell_start;
 }
 
 } // namespace NESO::Particles::PetscInterface
