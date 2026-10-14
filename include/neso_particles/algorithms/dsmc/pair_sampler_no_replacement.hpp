@@ -2,8 +2,13 @@
 #define __NESO_PARTICLES_ALGORITHMS_DSMC_PAIR_SAMPLER_NO_REPLACEMENT_HPP_
 
 #include "../../compute_target.hpp"
+#include "../../containers/cell_dat.hpp"
+#include "../../containers/nd_local_array.hpp"
 #include "../../containers/rng/host_rng_common.hpp"
+#include "../../device_buffers.hpp"
+#include "../../nd_host_array.hpp"
 #include "../../pair_loop/cellwise_pair_list.hpp"
+#include "../../pair_loop/pair_mask.hpp"
 #include "collision_cell_partition.hpp"
 #include <memory>
 #include <vector>
