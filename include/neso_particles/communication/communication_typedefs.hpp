@@ -46,7 +46,7 @@ template <typename T> inline MPI_Datatype map_ctype_mpi_type() {
 /**
  * @returns Unsigned integer MPI datatype that matches std::size_t.
  */
-inline constexpr MPI_Datatype get_size_t_mpi_type() {
+inline MPI_Datatype get_size_t_mpi_type() {
 
   static_assert((sizeof(std::size_t) == sizeof(unsigned int)) ||
                     (sizeof(std::size_t) == sizeof(unsigned long)) ||

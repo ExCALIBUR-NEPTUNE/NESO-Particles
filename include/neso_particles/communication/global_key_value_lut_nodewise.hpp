@@ -14,7 +14,7 @@ namespace NESO::Particles {
  * node-wise where nodes are determined by MPI shared memory split. The map is
  * consistent globally on the entire MPI communicator.
  */
-template <typename VALUE_TYPE> class GlobalKeyValueMapNodewise {
+template <typename VALUE_TYPE> class GlobalKeyValueLUTNodewise {
 protected:
   bool is_allocated{false};
 
@@ -27,9 +27,9 @@ protected:
   std::byte *map_data_base;
 
 public:
-  ~GlobalKeyValueMapNodewise() {
+  ~GlobalKeyValueLUTNodewise() {
     if (this->is_allocated) {
-      nprint("Warning: GlobalKeyValueMapNodewise::free not called.");
+      nprint("Warning: GlobalKeyValueLUTNodewise::free not called.");
     }
   }
 
@@ -41,12 +41,16 @@ public:
   INT key_end;
 
   /**
-   * TODO
+   * Construct a look-up-table (LUT) from passed values. Must be called
+   * collectively on the communicator.
    *
    * Values of key_value_data where the key is present on multiple ranks must
    * provide the exact same value for the key.
+   *
+   * @param sycl_target Compute device providing the MPI communicator.
+   * @param key_value_data Map from keys to values to place in the LUT.
    */
-  GlobalKeyValueMapNodewise(SYCLTargetSharedPtr sycl_target,
+  GlobalKeyValueLUTNodewise(SYCLTargetSharedPtr sycl_target,
                             std::map<INT, VALUE_TYPE> &key_value_data)
       : is_allocated(true), sycl_target(sycl_target) {
 
@@ -82,7 +86,7 @@ public:
     }
     auto &comm_pair = sycl_target->comm_pair;
 
-    const std::size_t offsets_len = num_elements_global + 1;
+    const std::size_t offsets_len = (this->key_end - this->key_start) + 1;
     const MPI_Aint num_alloc_offsets =
         (comm_pair.rank_intra == 0) ? offsets_len * sizeof(std::size_t) : 0;
     MPICHK(MPI_Win_allocate_shared(num_alloc_offsets, sizeof(std::size_t),
@@ -93,30 +97,29 @@ public:
     int tmp_disp_unit = 0;
     MPICHK(MPI_Win_shared_query(this->map_offsets_win, 0, &tmp_size,
                                 &tmp_disp_unit, &this->map_offsets_base));
-    MPICHK(MPI_Win_sync(this->map_offsets_win));
 
     std::size_t win_start = 0;
     std::size_t win_end = 0;
-
     get_decomp_1d(static_cast<std::size_t>(comm_pair.size_intra), offsets_len,
                   static_cast<std::size_t>(comm_pair.rank_intra), &win_start,
                   &win_end);
 
+    MPICHK(MPI_Win_fence(0, this->map_offsets_win));
     std::fill(this->map_offsets_base + win_start,
               this->map_offsets_base + win_start + win_end, 0);
+    MPICHK(MPI_Win_fence(0, this->map_offsets_win));
 
-    MPICHK(MPI_Win_sync(this->map_offsets_win));
-    MPICHK(MPI_Barrier(comm_pair.comm_intra));
-
+    MPICHK(MPI_Win_fence(0, this->map_offsets_win));
+    std::size_t max_local_size = 0;
     for (auto &m : key_value_data) {
       const INT key = m.first - this->key_start;
       const std::size_t size = m.second.get_num_bytes();
       this->map_offsets_base[key] = size;
+      max_local_size = std::max(max_local_size, size);
     }
+    MPICHK(MPI_Win_fence(0, this->map_offsets_win));
 
-    MPICHK(MPI_Win_sync(this->map_offsets_win));
-    MPICHK(MPI_Barrier(comm_pair.comm_intra));
-
+    MPICHK(MPI_Win_fence(0, this->map_offsets_win));
     if (comm_pair.rank_intra == 0) {
 
       std::vector<std::size_t> tmp_map_offsets(offsets_len);
@@ -128,11 +131,8 @@ public:
 
       std::exclusive_scan(tmp_map_offsets.begin(), tmp_map_offsets.end(),
                           this->map_offsets_base, 0);
-
-      MPICHK(MPI_Win_sync(this->map_offsets_win));
     }
-    MPICHK(MPI_Barrier(comm_pair.comm_intra));
-    MPICHK(MPI_Win_sync(this->map_offsets_win));
+    MPICHK(MPI_Win_fence(0, this->map_offsets_win));
 
     const std::size_t total_num_bytes = this->map_offsets_base[offsets_len - 1];
 
@@ -143,29 +143,33 @@ public:
         (void *)&this->map_data, &this->map_data_win));
     MPICHK(MPI_Win_shared_query(this->map_data_win, 0, &tmp_size,
                                 &tmp_disp_unit, &this->map_data_base));
-    MPICHK(MPI_Win_sync(this->map_data_win));
 
-    std::fill(this->map_data_base + this->map_offsets_base[win_start],
-              this->map_data_base +
-                  this->map_offsets_base[win_start + win_end + 1],
-              0);
+    std::size_t byte_start = 0;
+    std::size_t byte_end = 0;
+    get_decomp_1d(
+        static_cast<std::size_t>(comm_pair.size_intra), total_num_bytes,
+        static_cast<std::size_t>(comm_pair.rank_intra), &byte_start, &byte_end);
 
-    MPICHK(MPI_Win_sync(this->map_data_win));
-    MPICHK(MPI_Barrier(comm_pair.comm_intra));
+    MPICHK(MPI_Win_fence(0, this->map_data_win));
+    MPICHK(MPI_Win_fence(0, this->map_offsets_win));
+    {
+      std::byte z{0};
+      z = z ^ z;
+      std::fill(this->map_data_base + byte_start,
+                this->map_data_base + byte_start + byte_end, z);
+    }
 
     for (auto &m : key_value_data) {
       const INT key = m.first - this->key_start;
       const std::size_t offset = this->map_offsets_base[key];
       const std::size_t offset_next = this->map_offsets_base[key + 1];
       const std::size_t size = offset_next - offset;
-      NESOASSERT(size == m.second.buffer.size(),
-                 "Serialised data size missmatch.");
-      std::memcpy(this->map_data_base + offset, m.second.buffer.data(), size);
+      m.second.serialise(this->map_data_base + offset, size);
     }
+    MPICHK(MPI_Win_fence(0, this->map_offsets_win));
+    MPICHK(MPI_Win_fence(0, this->map_data_win));
 
-    MPICHK(MPI_Win_sync(this->map_data_win));
-    MPICHK(MPI_Barrier(comm_pair.comm_intra));
-
+    MPICHK(MPI_Win_fence(0, this->map_data_win));
     if (comm_pair.rank_intra == 0) {
       std::vector<std::size_t> tmp_map_data(total_num_bytes);
       std::fill(tmp_map_data.begin(), tmp_map_data.end(), 0);
@@ -174,15 +178,43 @@ public:
                            comm_pair.comm_inter));
       std::memcpy(this->map_data_base, tmp_map_data.data(), total_num_bytes);
     }
+    MPICHK(MPI_Win_fence(0, this->map_data_win));
+  }
 
-    MPICHK(MPI_Win_sync(this->map_data_win));
-    MPICHK(MPI_Barrier(comm_pair.comm_intra));
+  /**
+   * Retrieve values. Must be called collectively on the communicator.
+   *
+   * @param[in] keys Set of keys to retrieve value for.
+   * @returns Deserialised values.
+   */
+  inline std::map<INT, VALUE_TYPE> get(const std::set<INT> keys) {
+
+    for (auto &key : keys) {
+      NESOASSERT((this->key_start <= key) && (key < this->key_end),
+                 "Invalid key passed.");
+    }
+
+    std::map<INT, VALUE_TYPE> values;
+
+    MPICHK(MPI_Win_fence(0, this->map_data_win));
+    MPICHK(MPI_Win_fence(0, this->map_offsets_win));
+    for (auto &key : keys) {
+      const INT key_origin = key - this->key_start;
+      const std::size_t offset = this->map_offsets_base[key_origin];
+      const std::size_t offset_next = this->map_offsets_base[key_origin + 1];
+      const std::size_t size = offset_next - offset;
+      values[key].deserialise(this->map_data_base + offset, size);
+    }
+
+    MPICHK(MPI_Win_fence(0, this->map_offsets_win));
+    MPICHK(MPI_Win_fence(0, this->map_data_win));
+    return values;
   }
 
   /**
    * Free the key-value map. Must be called. Must be called collectively.
    */
-  void free() {
+  inline void free() {
     if (this->is_allocated) {
       MPICHK(MPI_Win_free(&this->map_offsets_win))
       this->map_offsets = nullptr;

@@ -1,10 +1,4 @@
-#include <gtest/gtest.h>
-#include <memory>
-#include <neso_particles.hpp>
-#include <string>
-#include <vector>
-
-using namespace NESO::Particles;
+#include "include/test_neso_particles.hpp"
 using namespace MeshHierarchyData;
 
 namespace {
@@ -509,4 +503,65 @@ TEST(MeshHierarchyData, multiple_requests) {
 
   mhc.free();
   mesh_hierarchy->free();
+}
+
+template <typename VALUE_TYPE>
+class TestGlobalKeyValueLUTNodewise
+    : public GlobalKeyValueLUTNodewise<VALUE_TYPE> {
+public:
+  template <typename... ARGS>
+  TestGlobalKeyValueLUTNodewise(ARGS... args)
+      : GlobalKeyValueLUTNodewise<VALUE_TYPE>(args...) {}
+
+  auto &get_map_offsets_base() { return this->map_offsets_base; }
+  auto &get_map_data_base() { return this->map_data_base; }
+};
+
+TEST(GlobalKeyValueLUTNodewise, base) {
+
+  int size, rank;
+  MPICHK(MPI_Comm_size(MPI_COMM_WORLD, &size));
+  MPICHK(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+
+  {
+    std::map<INT, GenericSerialContainer<int>> e_map;
+    e_map[1] = GenericSerialContainer<int>(42);
+    e_map[3] = GenericSerialContainer<int>(5);
+    TestGlobalKeyValueLUTNodewise<GenericSerialContainer<int>> e(sycl_target,
+                                                                 e_map);
+    ASSERT_EQ(e.key_start, 1);
+    ASSERT_EQ(e.key_end, 3 + 1);
+    e.free();
+  }
+
+  {
+    std::map<INT, GenericSerialContainer<int>> e_map;
+    e_map[rank] = GenericSerialContainer<int>(rank + 1000);
+    TestGlobalKeyValueLUTNodewise<GenericSerialContainer<int>> e(sycl_target,
+                                                                 e_map);
+    ASSERT_EQ(e.key_start, 0);
+    ASSERT_EQ(e.key_end, size);
+
+    std::set<INT> keys;
+    const INT to_test_key = (rank + 1) % size;
+    keys.insert(to_test_key);
+
+    auto to_test = e.get(keys);
+    ASSERT_EQ(to_test.at(to_test_key).obj, to_test_key + 1000);
+
+    for (INT rankx = 0; rankx < size; rankx++) {
+      keys.insert(rankx);
+    }
+
+    to_test = e.get(keys);
+
+    for (INT rankx = 0; rankx < size; rankx++) {
+      ASSERT_EQ(to_test.at(rankx).obj, rankx + 1000);
+    }
+
+    e.free();
+  }
+
+  sycl_target->free();
 }
