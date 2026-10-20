@@ -14,7 +14,8 @@ namespace NESO::Particles {
  * node-wise where nodes are determined by MPI shared memory split. The map is
  * consistent globally on the entire MPI communicator.
  */
-template <typename VALUE_TYPE> class GlobalKeyValueLUTNodewise {
+template <typename KEY_TYPE, typename VALUE_TYPE>
+class GlobalKeyValueLUTNodewise {
 protected:
   bool is_allocated{false};
 
@@ -36,9 +37,9 @@ public:
   // The SYCLTarget providing the MPI communicators.
   SYCLTargetSharedPtr sycl_target;
   // The start of the range of keys [key_start, key_end).
-  INT key_start;
+  KEY_TYPE key_start;
   // The end of the range of keys [key_start, key_end).
-  INT key_end;
+  KEY_TYPE key_end;
 
   /**
    * Construct a look-up-table (LUT) from passed values. Must be called
@@ -51,22 +52,22 @@ public:
    * @param key_value_data Map from keys to values to place in the LUT.
    */
   GlobalKeyValueLUTNodewise(SYCLTargetSharedPtr sycl_target,
-                            std::map<INT, VALUE_TYPE> &key_value_data)
+                            std::map<KEY_TYPE, VALUE_TYPE> &key_value_data)
       : is_allocated(true), sycl_target(sycl_target) {
 
-    INT key_start_local = std::numeric_limits<INT>::max();
-    INT key_end_local = std::numeric_limits<INT>::lowest();
+    KEY_TYPE key_start_local = std::numeric_limits<KEY_TYPE>::max();
+    KEY_TYPE key_end_local = std::numeric_limits<KEY_TYPE>::lowest();
 
     for (auto &m : key_value_data) {
-      const INT key = m.first;
+      const KEY_TYPE key = m.first;
       key_start_local = std::min(key_start_local, key);
       key_end_local = std::max(key_start_local, key + 1);
     }
 
-    const auto mpi_key_type = map_ctype_mpi_type<INT>();
+    const auto mpi_key_type = map_ctype_mpi_type<KEY_TYPE>();
 
-    const INT num_elements_local = key_value_data.size();
-    INT num_elements_global = 0;
+    const KEY_TYPE num_elements_local = key_value_data.size();
+    KEY_TYPE num_elements_global = 0;
 
     MPICHK(MPI_Allreduce(&num_elements_local, &num_elements_global, 1,
                          mpi_key_type, MPI_SUM,
@@ -106,13 +107,13 @@ public:
 
     MPICHK(MPI_Win_fence(0, this->map_offsets_win));
     std::fill(this->map_offsets_base + win_start,
-              this->map_offsets_base + win_start + win_end, 0);
+              this->map_offsets_base + win_end, 0);
     MPICHK(MPI_Win_fence(0, this->map_offsets_win));
 
     MPICHK(MPI_Win_fence(0, this->map_offsets_win));
     std::size_t max_local_size = 0;
     for (auto &m : key_value_data) {
-      const INT key = m.first - this->key_start;
+      const KEY_TYPE key = m.first - this->key_start;
       const std::size_t size = m.second.get_num_bytes();
       this->map_offsets_base[key] = size;
       max_local_size = std::max(max_local_size, size);
@@ -151,16 +152,18 @@ public:
         static_cast<std::size_t>(comm_pair.rank_intra), &byte_start, &byte_end);
 
     MPICHK(MPI_Win_fence(0, this->map_data_win));
-    MPICHK(MPI_Win_fence(0, this->map_offsets_win));
     {
       std::byte z{0};
       z = z ^ z;
       std::fill(this->map_data_base + byte_start,
-                this->map_data_base + byte_start + byte_end, z);
+                this->map_data_base + byte_end, z);
     }
+    MPICHK(MPI_Win_fence(0, this->map_data_win));
 
+    MPICHK(MPI_Win_fence(0, this->map_data_win));
+    MPICHK(MPI_Win_fence(0, this->map_offsets_win));
     for (auto &m : key_value_data) {
-      const INT key = m.first - this->key_start;
+      const KEY_TYPE key = m.first - this->key_start;
       const std::size_t offset = this->map_offsets_base[key];
       const std::size_t offset_next = this->map_offsets_base[key + 1];
       const std::size_t size = offset_next - offset;
@@ -179,6 +182,7 @@ public:
       std::memcpy(this->map_data_base, tmp_map_data.data(), total_num_bytes);
     }
     MPICHK(MPI_Win_fence(0, this->map_data_win));
+    MPICHK(MPI_Barrier(comm_pair.comm_parent));
   }
 
   /**
@@ -187,19 +191,19 @@ public:
    * @param[in] keys Set of keys to retrieve value for.
    * @returns Deserialised values.
    */
-  inline std::map<INT, VALUE_TYPE> get(const std::set<INT> keys) {
+  inline std::map<KEY_TYPE, VALUE_TYPE> get(const std::set<KEY_TYPE> keys) {
 
     for (auto &key : keys) {
       NESOASSERT((this->key_start <= key) && (key < this->key_end),
                  "Invalid key passed.");
     }
 
-    std::map<INT, VALUE_TYPE> values;
+    std::map<KEY_TYPE, VALUE_TYPE> values;
 
     MPICHK(MPI_Win_fence(0, this->map_data_win));
     MPICHK(MPI_Win_fence(0, this->map_offsets_win));
     for (auto &key : keys) {
-      const INT key_origin = key - this->key_start;
+      const KEY_TYPE key_origin = key - this->key_start;
       const std::size_t offset = this->map_offsets_base[key_origin];
       const std::size_t offset_next = this->map_offsets_base[key_origin + 1];
       const std::size_t size = offset_next - offset;

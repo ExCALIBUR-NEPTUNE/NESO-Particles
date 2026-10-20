@@ -507,11 +507,11 @@ TEST(MeshHierarchyData, multiple_requests) {
 
 template <typename VALUE_TYPE>
 class TestGlobalKeyValueLUTNodewise
-    : public GlobalKeyValueLUTNodewise<VALUE_TYPE> {
+    : public GlobalKeyValueLUTNodewise<INT, VALUE_TYPE> {
 public:
   template <typename... ARGS>
   TestGlobalKeyValueLUTNodewise(ARGS... args)
-      : GlobalKeyValueLUTNodewise<VALUE_TYPE>(args...) {}
+      : GlobalKeyValueLUTNodewise<INT, VALUE_TYPE>(args...) {}
 
   auto &get_map_offsets_base() { return this->map_offsets_base; }
   auto &get_map_data_base() { return this->map_data_base; }

@@ -11,57 +11,32 @@ DMPlexMeshCouplerDG0NumberingMap::~DMPlexMeshCouplerDG0NumberingMap() {
 
 DMPlexMeshCouplerDG0NumberingMap::DMPlexMeshCouplerDG0NumberingMap(
     SYCLTargetSharedPtr sycl_target)
-    : comm(sycl_target->comm_pair.comm_parent) {}
+    : sycl_target(sycl_target) {}
 
 void DMPlexMeshCouplerDG0NumberingMap::initalise_pre_distribute(DM dm) {
 
   NESOASSERT(!this->init_post, "initalise_post_distribute has been called "
                                "before initalise_pre_distribute.");
   this->init_pre = true;
+  const int rank = this->sycl_target->comm_pair.rank_parent;
+  MPI_Comm comm = this->sycl_target->comm_pair.comm_parent;
 
-  int rank;
-  MPICHK(MPI_Comm_rank(this->comm, &rank));
-
-  PetscInt point_start = 0;
-  PetscInt point_end = 0;
-  PETSCCHK(DMPlexGetChart(dm, &point_start, &point_end));
+  PETSCCHK(DMPlexGetChart(dm, &this->point_start_pre, &this->point_end_pre));
 
   if (rank) {
-    NESOASSERT(point_start == point_end, "Expected zero points on ranks != 0.");
+    NESOASSERT(this->point_start_pre == this->point_end_pre,
+               "Expected zero points on ranks != 0.");
   }
-
+  MPICHK(MPI_Bcast(&this->point_start_pre, 1, MPIU_INT, 0, comm));
   {
     PetscInt cell_start = -1;
     PetscInt cell_end = -1;
     PETSCCHK(DMPlexGetHeightStratum(dm, 0, &cell_start, &cell_end));
-    MPICHK(MPI_Bcast(&cell_start, 1, MPIU_INT, 0, this->comm));
-    MPICHK(MPI_Bcast(&cell_end, 1, MPIU_INT, 0, this->comm));
+    MPICHK(MPI_Bcast(&cell_start, 1, MPIU_INT, 0, comm));
+    MPICHK(MPI_Bcast(&cell_end, 1, MPIU_INT, 0, comm));
     this->cell_start_pre = cell_start;
     this->cell_end_pre = cell_end;
   }
-
-  PetscInt num_points_local = point_end - point_start;
-  MPICHK(MPI_Bcast(&num_points_local, 1, MPIU_INT, 0, this->comm));
-  MPICHK(MPI_Bcast(&point_start, 1, MPIU_INT, 0, this->comm));
-
-  this->h_init_map_local_to_global.resize(num_points_local);
-
-  auto map_local_to_global = get_global_indices_map(dm);
-
-  if (!rank) {
-    for (auto &m : map_local_to_global) {
-      const PetscInt l = m.first;
-      const PetscInt g = m.second;
-      NESOASSERT((point_start <= l) && (l < point_end), "Bad local point.");
-      NESOASSERT((point_start <= g) && (g < point_end),
-                 "Bad global point. get_global_distributed_points_map "
-                 "currently assumes this range. Please raise an issue.");
-      this->h_init_map_local_to_global.at(l - point_start) = g;
-    }
-  }
-
-  MPICHK(MPI_Bcast(this->h_init_map_local_to_global.data(), num_points_local,
-                   MPIU_INT, 0, this->comm));
 }
 
 void DMPlexMeshCouplerDG0NumberingMap::initalise_post_distribute(
@@ -70,27 +45,61 @@ void DMPlexMeshCouplerDG0NumberingMap::initalise_post_distribute(
   NESOASSERT(this->init_pre, "initalise_pre_distribute has not been called "
                              "before initalise_post_distribute.");
   this->init_post = true;
+  std::map<PetscInt, MeshHierarchyData::GenericSerialContainer<PetscInt>> m;
+  const int size = this->sycl_target->comm_pair.size_parent;
 
-  auto post_distribution_map =
-      get_global_distributed_points_map(dm_distributed, sf);
+  if (size == 1) {
+    for (PetscInt px = this->point_start_pre; px < this->point_end_pre; px++) {
+      m[px] = MeshHierarchyData::GenericSerialContainer<PetscInt>(px);
+    }
+  } else {
 
-  for (auto &m : this->h_init_map_local_to_global) {
-    const PetscInt old_global_point = m;
-    const PetscInt new_global_point =
-        post_distribution_map.at(old_global_point);
-    m = new_global_point;
+    PetscInt point_start = 0;
+    PetscInt point_end = 0;
+    PETSCCHK(DMPlexGetChart(dm_distributed, &point_start, &point_end));
+
+    PetscInt nroots = 0;
+    PetscInt nleaves = 0;
+    PetscInt const *ilocal = nullptr;
+    PetscSFNode const *iremote = nullptr;
+    PETSCCHK(PetscSFGetGraph(sf, &nroots, &nleaves, &ilocal, &iremote));
+
+    IS global_point_numbers;
+    PETSCCHK(DMPlexCreatePointNumbering(dm_distributed, &global_point_numbers));
+    const PetscInt *ptr;
+    PETSCCHK(ISGetIndices(global_point_numbers, &ptr));
+
+    for (int ix = 0; ix < nleaves; ix++) {
+
+      const PetscInt local_point_previous = iremote[ix].index;
+      NESOASSERT(iremote[ix].rank == 0,
+                 "Expected all points to originate on rank 0.");
+      const PetscInt global_point_current = ptr[ix - point_start];
+
+      if (global_point_current > -1) {
+        m[local_point_previous] =
+            MeshHierarchyData::GenericSerialContainer<PetscInt>(
+                global_point_current);
+      }
+    }
+
+    PETSCCHK(ISRestoreIndices(global_point_numbers, &ptr));
+    PETSCCHK(ISDestroy(&global_point_numbers));
   }
 
+  this->lut = std::make_shared<GlobalKeyValueLUTNodewise<
+      PetscInt, MeshHierarchyData::GenericSerialContainer<PetscInt>>>(
+      sycl_target, m);
+
   {
-    PetscInt global_point_min = std::numeric_limits<PetscInt>::max();
-    for (PetscInt px = this->cell_start_pre; px < this->cell_end_pre; px++) {
-      const PetscInt global_point = this->h_init_map_local_to_global.at(px);
-      global_point_min = std::min(global_point_min, global_point);
+    std::set<PetscInt> to_test;
+    for (auto &[k, v] : m) {
+      to_test.insert(k);
     }
-    this->global_cell_start_post = global_point_min;
-    MPICHK(MPI_Bcast(&global_point_min, 1, MPIU_INT, 0, this->comm));
-    NESOASSERT(this->global_cell_start_post == global_point_min,
-               "Missmatch in global cell start.");
+    auto r = this->lut->get(to_test);
+    for (auto &[k, v] : m) {
+      NESOASSERT(r.at(k).obj == v.obj, "Self test failed.");
+    }
   }
 }
 
@@ -105,11 +114,14 @@ void DMPlexMeshCouplerDG0NumberingMap::get_global_point_indices(
   global_points.clear();
   global_points.reserve(input_points.size());
 
+  std::set<PetscInt> to_query;
   for (PetscInt &px : input_points) {
-    NESOASSERT((0 <= px) && (px < static_cast<PetscInt>(
-                                      this->h_init_map_local_to_global.size())),
-               "Bad input point.");
-    global_points.push_back(this->h_init_map_local_to_global.at(px));
+    to_query.insert(px);
+  }
+  auto m = this->lut->get(to_query);
+  to_query.clear();
+  for (PetscInt &px : input_points) {
+    global_points.push_back(m.at(px).obj);
   }
 }
 
@@ -118,27 +130,29 @@ DMPlexMeshCouplerDG0NumberingMap::get_global_cell_indices(
     std::set<PetscInt> input_cells) {
 
   std::map<PetscInt, PetscInt> m;
-
+  std::set<PetscInt> to_query;
   for (auto input_cell : input_cells) {
     const PetscInt input_global_point = input_cell + this->cell_start_pre;
-
     NESOASSERT((this->cell_start_pre <= input_global_point) &&
                    (input_global_point < this->cell_end_pre),
                "Bad input cell.");
+    to_query.insert(input_global_point);
+  }
 
-    const PetscInt output_global_point =
-        this->h_init_map_local_to_global.at(input_global_point);
+  auto mg = this->lut->get(to_query);
 
-    const PetscInt output_global_cell_index =
-        output_global_point - this->global_cell_start_post;
-
-    m[input_cell] = output_global_cell_index;
+  for (auto input_cell : input_cells) {
+    const PetscInt input_global_point = input_cell + this->cell_start_pre;
+    m[input_cell] = mg.at(input_global_point).obj;
   }
 
   return m;
 }
 
-void DMPlexMeshCouplerDG0NumberingMap::free() { this->is_freed = true; }
+void DMPlexMeshCouplerDG0NumberingMap::free() {
+  this->lut->free();
+  this->is_freed = true;
+}
 
 } // namespace NESO::Particles::PetscInterface
 

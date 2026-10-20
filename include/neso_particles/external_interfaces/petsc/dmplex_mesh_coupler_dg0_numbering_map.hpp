@@ -1,7 +1,9 @@
 #ifndef _NESO_PARTICLES_DMPLEX_MESH_COUPLER_DG0_NUMBERING_MAP_HPP_
 #define _NESO_PARTICLES_DMPLEX_MESH_COUPLER_DG0_NUMBERING_MAP_HPP_
 
+#include "../../communication.hpp"
 #include "../../compute_target.hpp"
+#include "../../mesh_hierarchy_data/generic_serial_container.hpp"
 #include "dmplex_helper.hpp"
 
 namespace NESO::Particles::PetscInterface {
@@ -32,16 +34,20 @@ namespace NESO::Particles::PetscInterface {
  */
 class DMPlexMeshCouplerDG0NumberingMap {
 protected:
-  MPI_Comm comm;
-  std::vector<PetscInt> h_init_map_local_to_global;
+  SYCLTargetSharedPtr sycl_target;
 
   bool init_pre{false};
   bool init_post{false};
+  bool is_freed{false};
 
+  PetscInt point_start_pre{-1};
+  PetscInt point_end_pre{-1};
   PetscInt cell_start_pre{-1};
   PetscInt cell_end_pre{-1};
-  PetscInt global_cell_start_post{-1};
-  bool is_freed{false};
+
+  std::shared_ptr<GlobalKeyValueLUTNodewise<
+      PetscInt, MeshHierarchyData::GenericSerialContainer<PetscInt>>>
+      lut;
 
 public:
   ~DMPlexMeshCouplerDG0NumberingMap();
