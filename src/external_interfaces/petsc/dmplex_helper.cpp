@@ -233,10 +233,18 @@ std::vector<PetscInt> get_global_distributed_points_map(DM &dm_distributed,
     std::fill(local_points.begin(), local_points.end(), -1);
     std::fill(global_points.begin(), global_points.end(), -1);
 
+    int src_rank = -1;
     for (int ix = 0; ix < nleaves; ix++) {
-
       const PetscInt global_point_previous = iremote[ix].index;
       const PetscInt global_point_current = ptr[ix - point_start];
+
+      if (src_rank < 0) {
+        src_rank = iremote[ix].rank;
+      }
+
+      NESOASSERT(src_rank == iremote[ix].rank,
+                 "Source mesh was distributed over more than one MPI rank. "
+                 "This violates an assumption this function makes.");
 
       NESOASSERT((0 <= global_point_previous) &&
                      (global_point_previous < npoints_global),
@@ -253,6 +261,14 @@ std::vector<PetscInt> get_global_distributed_points_map(DM &dm_distributed,
     MPICHK(MPI_Allreduce(local_points.data(), global_points.data(),
                          static_cast<int>(npoints_global), MPIU_INT, MPI_MAX,
                          comm));
+
+    int test_rank = -1;
+    MPICHK(MPI_Allreduce(&src_rank, &test_rank, 1, MPI_INT, MPI_MAX, comm));
+    if (src_rank >= 0) {
+      NESOASSERT(src_rank == test_rank,
+                 "Source mesh was distributed over more than one MPI rank. "
+                 "This violates an assumption this function makes.");
+    }
 
     PETSCCHK(ISRestoreIndices(global_point_numbers, &ptr));
     PETSCCHK(ISDestroy(&global_point_numbers));

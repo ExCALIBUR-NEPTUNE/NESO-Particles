@@ -118,6 +118,10 @@ void setup_local_coordinate_vector(DM &dm, Vec &coordinates);
  * DMPlexDistribute has been called. Must be called collectively on the
  * communicator.
  *
+ * Warning: This function assumes that the source mesh only existed on a single
+ * rank prior to the DMPlexDistribute call. i.e. That local points on that
+ * single rank can be taken as global point indices.
+ *
  * @ingroup external_interfaces_petsc_dmplex_helper_functions
  * @param dm_distributed DMPlex output from a DMPlexDistribute call.
  * @param sf PetscSF returned from a DMPlexDistribute call.
