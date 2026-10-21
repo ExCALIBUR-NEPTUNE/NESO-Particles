@@ -29,7 +29,6 @@ template <> inline MPI_Datatype map_ctype_mpi_type_inner<double>() {
 template <> inline MPI_Datatype map_ctype_mpi_type_inner<float>() {
   return MPI_FLOAT;
 }
-
 } // namespace
 
 /**
@@ -42,6 +41,25 @@ template <typename T> inline MPI_Datatype map_ctype_mpi_type() {
   NESOASSERT(t != MPI_DATATYPE_NULL,
              "Could not find MPI_Datatype matching passed type.");
   return t;
+}
+
+/**
+ * @returns Unsigned integer MPI datatype that matches std::size_t.
+ */
+inline MPI_Datatype get_size_t_mpi_type() {
+
+  static_assert((sizeof(std::size_t) == sizeof(unsigned int)) ||
+                    (sizeof(std::size_t) == sizeof(unsigned long)) ||
+                    (sizeof(std::size_t) == sizeof(unsigned long long)),
+                "Could not find MPI datatype that matches std::size_t.");
+
+  if constexpr (sizeof(std::size_t) == sizeof(unsigned int)) {
+    return MPI_UNSIGNED;
+  } else if constexpr (sizeof(std::size_t) == sizeof(unsigned long)) {
+    return MPI_UNSIGNED_LONG;
+  } else {
+    return MPI_UNSIGNED_LONG_LONG;
+  }
 }
 
 } // namespace NESO::Particles
