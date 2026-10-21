@@ -58,12 +58,7 @@ public:
         h_send_pointers(sycl_target, 1),
         cell_dat(sycl_target, sycl_target->comm_pair.size_parent, 1),
         h_send_buffer(sycl_target, 1), h_send_offsets(sycl_target, 1),
-        sycl_target(sycl_target) {
-    static_assert(std::alignment_of<REAL>::value >=
-                  std::alignment_of<INT>::value);
-    static_assert(
-        (std::alignment_of<REAL>::value % std::alignment_of<INT>::value) == 0);
-  }
+        sycl_target(sycl_target) {}
   /**
    *  Reset the instance before packing particle data.
    */
@@ -145,12 +140,7 @@ public:
       : d_recv_buffer(sycl_target, 1),
         device_aware_mpi_enabled(NESO::Particles::device_aware_mpi_enabled()),
         h_recv_pointers(sycl_target, 1), h_recv_buffer(sycl_target, 1),
-        h_recv_offsets(sycl_target, 1), sycl_target(sycl_target) {
-    static_assert(std::alignment_of<REAL>::value >=
-                  std::alignment_of<INT>::value);
-    static_assert(
-        (std::alignment_of<REAL>::value % std::alignment_of<INT>::value) == 0);
-  };
+        h_recv_offsets(sycl_target, 1), sycl_target(sycl_target){};
 
   /**
    * @returns Host or device pointers for locations in which to recv packed

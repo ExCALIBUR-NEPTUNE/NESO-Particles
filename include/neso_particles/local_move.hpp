@@ -96,6 +96,9 @@ public:
     const int size = this->sycl_target->comm_pair.size_parent;
     this->comm = this->sycl_target->comm_pair.comm_parent;
 
+    NESOASSERT((nranks == 0) || (ranks != nullptr),
+               "nranks > 0 but ranks is nullptr.");
+
     // Get the set of remote ranks this rank can send to using a local pattern
     for (int rankx = 0; rankx < nranks; rankx++) {
       const int remote_rank = ranks[rankx];

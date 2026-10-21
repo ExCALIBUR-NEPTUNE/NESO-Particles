@@ -54,6 +54,8 @@ void ParticlePacker::pack(
       particle_group_pointer_map->get_num_bytes_per_particle();
   this->num_bytes_per_particle = k_num_bytes_per_particle;
 
+  const std::size_t k_num_int_bytes_per_particle =
+      particle_group_pointer_map->get_num_int_bytes_per_particle();
   const std::size_t k_num_real_bytes_per_particle =
       particle_group_pointer_map->get_num_real_bytes_per_particle();
 
@@ -118,9 +120,13 @@ void ParticlePacker::pack(
 
         char *base_pack_ptr =
             &k_pack_cell_dat[rank_packing_cell][0]
-                            [layer_dst * k_num_bytes_per_particle];
-        REAL *pack_ptr_real = (REAL *)base_pack_ptr;
-        pack_ptr_real[index] = k_ptr_real[dat][cell][dat_component][layer_src];
+                            [layer_dst * k_num_bytes_per_particle +
+                             index * sizeof(REAL)];
+        char *src_ptr =
+            (char *)&k_ptr_real[dat][cell][dat_component][layer_src];
+        for (std::size_t cx = 0; cx < sizeof(REAL); cx++) {
+          base_pack_ptr[cx] = src_ptr[cx];
+        }
       }));
 
   event_stack.push(this->sycl_target->queue.parallel_for<>(
@@ -141,12 +147,14 @@ void ParticlePacker::pack(
 
         char *base_pack_ptr =
             &k_pack_cell_dat[rank_packing_cell][0]
-                            [layer_dst * k_num_bytes_per_particle];
-        // offset for the REAL components
-        base_pack_ptr += k_num_real_bytes_per_particle;
+                            [layer_dst * k_num_bytes_per_particle +
+                             k_num_real_bytes_per_particle +
+                             index * sizeof(INT)];
 
-        INT *pack_ptr_int = (INT *)base_pack_ptr;
-        pack_ptr_int[index] = k_ptr_int[dat][cell][dat_component][layer_src];
+        char *src_ptr = (char *)&k_ptr_int[dat][cell][dat_component][layer_src];
+        for (std::size_t cx = 0; cx < sizeof(INT); cx++) {
+          base_pack_ptr[cx] = src_ptr[cx];
+        }
       }));
 }
 
@@ -220,6 +228,13 @@ void ParticleUnpacker::unpack(
   // old cell occupancy
   auto mpi_rank_dat = particle_dats_int[Sym<INT>("NESO_MPI_RANK")];
   const int npart_cell_0_old = mpi_rank_dat->h_npart_cell[0];
+
+  constexpr std::size_t max_int_as_size_t = std::numeric_limits<int>::max();
+  NESOASSERT((static_cast<std::size_t>(npart_cell_0_old) +
+              static_cast<std::size_t>(this->npart_recv)) <= max_int_as_size_t,
+             "The number of particles in cell 0 will exceed the number "
+             "representable by int.");
+
   const int npart_cell_0_new = npart_cell_0_old + this->npart_recv;
   // realloc cell 0 on the dats
   for (auto &dat : particle_dats_real) {
@@ -245,8 +260,12 @@ void ParticleUnpacker::unpack(
   const int ncomp_total_int = device_ptr_map.ncomp_total_int;
   const std::size_t k_num_bytes_per_particle = this->num_bytes_per_particle;
   char *k_recv_buffer = this->d_recv_buffer.ptr;
+
+  const std::size_t k_num_int_bytes_per_particle =
+      particle_group_pointer_map->get_num_int_bytes_per_particle();
   const std::size_t k_num_real_bytes_per_particle =
       particle_group_pointer_map->get_num_real_bytes_per_particle();
+
   this->num_bytes_per_particle = k_num_bytes_per_particle;
 
   const int *RESTRICT k_ncomp_exscan_real = device_ptr_map.d_ncomp_exscan_real;
@@ -287,10 +306,13 @@ void ParticleUnpacker::unpack(
         const int layer = npart_cell_0_old + static_cast<int>(particle);
         const std::size_t offset = k_num_bytes_per_particle * particle;
 
-        const char *const unpack_base_ptr = k_recv_buffer + offset;
-        const REAL *const unpack_ptr_real =
-            reinterpret_cast<const REAL *const>(unpack_base_ptr);
-        k_ptr_real[dat][0][dat_component][layer] = unpack_ptr_real[index];
+        const char *const unpack_base_ptr =
+            k_recv_buffer + offset + index * sizeof(REAL);
+
+        char *dst_ptr = (char *)&k_ptr_real[dat][0][dat_component][layer];
+        for (std::size_t cx = 0; cx < sizeof(REAL); cx++) {
+          dst_ptr[cx] = unpack_base_ptr[cx];
+        }
       }));
 
   event_stack.push(this->sycl_target->queue.parallel_for<>(
@@ -302,15 +324,17 @@ void ParticleUnpacker::unpack(
         const int dat = k_flattened_dat_index_int[idx.get_id(1)];
         const int dat_component = k_flattened_comp_index_int[idx.get_id(1)];
         const int index = k_ncomp_exscan_int[dat] + dat_component;
-
         const int layer = npart_cell_0_old + static_cast<int>(particle);
         const std::size_t offset = k_num_bytes_per_particle * particle;
 
-        const char *const unpack_base_ptr =
-            k_recv_buffer + offset + k_num_real_bytes_per_particle;
-        const INT *const unpack_ptr_int =
-            reinterpret_cast<const INT *const>(unpack_base_ptr);
-        k_ptr_int[dat][0][dat_component][layer] = unpack_ptr_int[index];
+        const char *const unpack_base_ptr = k_recv_buffer + offset +
+                                            k_num_real_bytes_per_particle +
+                                            index * sizeof(INT);
+
+        char *dst_ptr = (char *)&k_ptr_int[dat][0][dat_component][layer];
+        for (std::size_t cx = 0; cx < sizeof(INT); cx++) {
+          dst_ptr[cx] = unpack_base_ptr[cx];
+        }
       }));
 
   event_stack.wait();
