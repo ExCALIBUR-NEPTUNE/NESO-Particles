@@ -20,10 +20,11 @@ char **ParticlePacker::get_packed_pointers(const int num_remote_send_ranks,
     std::stack<sycl::event> copy_events{};
     for (int rankx = 0; rankx < num_remote_send_ranks; rankx++) {
       const int npart_tmp = h_send_rank_npart_ptr[rankx];
-      const int nbytes_tmp = npart_tmp * this->num_bytes_per_particle;
+      const std::size_t nbytes_tmp =
+          static_cast<std::size_t>(npart_tmp) * this->num_bytes_per_particle;
 
       auto device_ptr = this->cell_dat.col_device_ptr(rankx, 0);
-      if (nbytes_tmp > 0) {
+      if ((npart_tmp > 0) && (this->num_bytes_per_particle > 0)) {
         copy_events.push(this->sycl_target->queue.memcpy(
             &this->h_send_buffer.ptr[offset], device_ptr, nbytes_tmp));
       }
@@ -111,7 +112,7 @@ void ParticlePacker::pack(
 
         const int cell = k_pack_cells[particle];
         const int layer_src = k_pack_layers_src[particle];
-        const int layer_dst = k_pack_layers_dst[particle];
+        const std::size_t layer_dst = k_pack_layers_dst[particle];
         const int rank = k_particle_dat_rank[cell][k_rank_component][layer_src];
         const int rank_packing_cell = k_send_rank_map[rank];
 
@@ -134,7 +135,7 @@ void ParticlePacker::pack(
 
         const int cell = k_pack_cells[particle];
         const int layer_src = k_pack_layers_src[particle];
-        const int layer_dst = k_pack_layers_dst[particle];
+        const std::size_t layer_dst = k_pack_layers_dst[particle];
         const int rank = k_particle_dat_rank[cell][k_rank_component][layer_src];
         const int rank_packing_cell = k_send_rank_map[rank];
 
@@ -242,7 +243,7 @@ void ParticleUnpacker::unpack(
   auto &device_ptr_map = particle_group_pointer_map->get();
   const int ncomp_total_real = device_ptr_map.ncomp_total_real;
   const int ncomp_total_int = device_ptr_map.ncomp_total_int;
-  const int k_num_bytes_per_particle = this->num_bytes_per_particle;
+  const std::size_t k_num_bytes_per_particle = this->num_bytes_per_particle;
   char *k_recv_buffer = this->d_recv_buffer.ptr;
   const std::size_t k_num_real_bytes_per_particle =
       particle_group_pointer_map->get_num_real_bytes_per_particle();
@@ -278,13 +279,13 @@ void ParticleUnpacker::unpack(
           sycl::range<2>(static_cast<std::size_t>(k_npart_recv),
                          static_cast<std::size_t>(ncomp_total_real))),
       [=](sycl::item<2> idx) {
-        const int particle = idx.get_id(0);
+        const std::size_t particle = idx.get_id(0);
         const int dat = k_flattened_dat_index_real[idx.get_id(1)];
         const int dat_component = k_flattened_comp_index_real[idx.get_id(1)];
         const int index = k_ncomp_exscan_real[dat] + dat_component;
 
-        const int layer = npart_cell_0_old + particle;
-        const int offset = k_num_bytes_per_particle * particle;
+        const int layer = npart_cell_0_old + static_cast<int>(particle);
+        const std::size_t offset = k_num_bytes_per_particle * particle;
 
         const char *const unpack_base_ptr = k_recv_buffer + offset;
         const REAL *const unpack_ptr_real =
@@ -297,13 +298,13 @@ void ParticleUnpacker::unpack(
           sycl::range<2>(static_cast<std::size_t>(k_npart_recv),
                          static_cast<std::size_t>(ncomp_total_int))),
       [=](sycl::item<2> idx) {
-        const int particle = idx.get_id(0);
+        const std::size_t particle = idx.get_id(0);
         const int dat = k_flattened_dat_index_int[idx.get_id(1)];
         const int dat_component = k_flattened_comp_index_int[idx.get_id(1)];
         const int index = k_ncomp_exscan_int[dat] + dat_component;
 
-        const int layer = npart_cell_0_old + particle;
-        const int offset = k_num_bytes_per_particle * particle;
+        const int layer = npart_cell_0_old + static_cast<int>(particle);
+        const std::size_t offset = k_num_bytes_per_particle * particle;
 
         const char *const unpack_base_ptr =
             k_recv_buffer + offset + k_num_real_bytes_per_particle;

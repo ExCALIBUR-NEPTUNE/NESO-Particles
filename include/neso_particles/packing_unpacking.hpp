@@ -44,7 +44,7 @@ public:
   ParticlePacker &operator=(ParticlePacker const &a) = delete;
 
   /// Number of bytes required per particle packed.
-  int num_bytes_per_particle;
+  std::size_t num_bytes_per_particle;
   /// Compute device used by the instance.
   SYCLTargetSharedPtr sycl_target;
   ~ParticlePacker(){};
@@ -130,7 +130,7 @@ public:
   /// Number of particles expected in the next/current recv operation.
   int npart_recv;
   /// Number of bytes per particle.
-  int num_bytes_per_particle;
+  std::size_t num_bytes_per_particle;
   /// Compute device used by the instance.
   SYCLTargetSharedPtr sycl_target;
 
