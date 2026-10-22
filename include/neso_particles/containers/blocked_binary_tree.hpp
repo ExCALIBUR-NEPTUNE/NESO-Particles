@@ -82,7 +82,7 @@ struct BlockedBinaryNode {
   }
 
   /**
-   * Test if the node corresponds to the input node key.#
+   * Test if the node corresponds to the input node key.
    *
    * @param node_key Node key to test.
    * @returns True if this node corresponds to the input node key.
