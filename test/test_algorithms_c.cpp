@@ -263,7 +263,8 @@ TEST(Algorithms, cell_dat_const_loop_element_wise_base) {
     }
   }
 
-  cell_dat_const_loop_element_wise(d, [=](auto d) { return d * 2; }, d);
+  cell_dat_const_loop_element_wise(
+      d, [=](auto d) { return d * 2; }, d);
 
   h_d_to_test = d->get_all_cells();
 

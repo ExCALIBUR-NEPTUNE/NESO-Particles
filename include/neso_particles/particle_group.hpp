@@ -500,20 +500,32 @@ public:
   template <typename U> inline void add_particles(U particle_data);
 
   /**
-   *  Add particles only to this MPI rank. It is assumed that the added
-   *  particles are in the domain region owned by this MPI rank. If not, see
-   *  `ParticleGroup::add_particles`.
+   * Add particles only to this MPI rank. It is assumed that the added
+   * particles are in the domain region owned by this MPI rank. If not, see
+   * `ParticleGroup::add_particles`.
    *
-   *  @param particle_data New particles to add.
+   * Particle properties which exist in the passed particle data and the
+   * particle group are copied as properties for new particles. Particle
+   * properties which exist in the passed particle data and not in the
+   * ParticleGroup are ignored. Properties for which no particle data is passed
+   * are zeroed for the new particles.
+   *
+   * @param particle_data New particles to add.
    */
   void add_particles_local(ParticleSet &particle_data);
 
   /**
-   *  Add particles only to this MPI rank. It is assumed that the added
-   *  particles are in the domain region owned by this MPI rank. If not, see
-   *  `ParticleGroup::add_particles`.
+   * Add particles only to this MPI rank. It is assumed that the added
+   * particles are in the domain region owned by this MPI rank. If not, see
+   * `ParticleGroup::add_particles`.
    *
-   *  @param particle_data New particles to add.
+   * Particle properties which exist in the passed particle data and the
+   * particle group are copied as properties for new particles. Particle
+   * properties which exist in the passed particle data and not in the
+   * ParticleGroup are ignored. Properties for which no particle data is passed
+   * are zeroed for the new particles.
+   *
+   * @param particle_data New particles to add.
    */
   void add_particles_local(ParticleSetSharedPtr particle_data);
 
@@ -524,14 +536,16 @@ protected:
 
 public:
   /**
-   *  Add particles only to this MPI rank. It is assumed that the added
-   *  particles are in the domain region owned by this MPI rank. If not, see
-   *  `ParticleGroup::add_particles`. Particle properties which exist on the
-   *  ParticleGroup and not in the ProductMatrix will be zero initialised.
-   *  Particle properties which exist on the ProductMatrix and not in the
-   *  ParticleGroup will be ignored.
+   * Add particles only to this MPI rank. It is assumed that the added
+   * particles are in the domain region owned by this MPI rank. If not, see
+   * `ParticleGroup::add_particles`. Particle properties which exist on the
+   * ParticleGroup and not in the ProductMatrix will be zero initialised.
+   * Particle properties which exist on the ProductMatrix and not in the
+   * ParticleGroup will be ignored. All other properties exist in both the
+   * product matrix and particle group and are used to initialise new particles
+   * in the particle group.
    *
-   *  @param product_matrix New particles to add.
+   * @param product_matrix New particles to add.
    */
   void add_particles_local(std::shared_ptr<ProductMatrix> product_matrix);
 

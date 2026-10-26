@@ -78,8 +78,8 @@ TEST(GlobalArray, repeat_kernel_add) {
   MPICHK(MPI_Allreduce(&npart_local, &npart_total, 1, MPI_INT, MPI_SUM,
                        MPI_COMM_WORLD));
 
-  auto loop0 =
-      particle_loop(A, [=](auto GA) { GA.add(0, 1); }, Access::add(g0));
+  auto loop0 = particle_loop(
+      A, [=](auto GA) { GA.add(0, 1); }, Access::add(g0));
 
   loop0->execute();
   ASSERT_EQ(g0->get().at(0), npart_total);
@@ -101,7 +101,9 @@ TEST(GlobalArray, pre_post_calls) {
                        MPI_COMM_WORLD));
 
   g0->fill(0.0);
-  particle_loop(A, [=](auto GA) { GA.add(0, 1); }, Access::add(g0))->execute();
+  particle_loop(
+      A, [=](auto GA) { GA.add(0, 1); }, Access::add(g0))
+      ->execute();
   ASSERT_EQ(g0->get().at(0), npart_total);
 
   g0->fill(0.0);
@@ -119,7 +121,9 @@ TEST(GlobalArray, pre_post_calls) {
                        MPI_COMM_WORLD));
 
   g0->fill(0.0);
-  particle_loop(aa, [=](auto GA) { GA.add(0, 1); }, Access::add(g0))->execute();
+  particle_loop(
+      aa, [=](auto GA) { GA.add(0, 1); }, Access::add(g0))
+      ->execute();
   ASSERT_EQ(g0->get().at(0), aa_npart_total);
 
   g0->fill(0.0);
@@ -134,7 +138,9 @@ TEST(GlobalArray, pre_post_calls) {
   ASSERT_EQ(aa->get_npart_local(), 0);
 
   g0->fill(0.0);
-  particle_loop(A, [=](auto GA) { GA.add(0, 1); }, Access::add(g0))->execute();
+  particle_loop(
+      A, [=](auto GA) { GA.add(0, 1); }, Access::add(g0))
+      ->execute();
   ASSERT_EQ(g0->get().at(0), 0);
 
   g0->fill(0.0);
@@ -144,7 +150,9 @@ TEST(GlobalArray, pre_post_calls) {
   ASSERT_EQ(g0->get().at(0), 0);
 
   g0->fill(0.0);
-  particle_loop(aa, [=](auto GA) { GA.add(0, 1); }, Access::add(g0))->execute();
+  particle_loop(
+      aa, [=](auto GA) { GA.add(0, 1); }, Access::add(g0))
+      ->execute();
   ASSERT_EQ(g0->get().at(0), 0);
 
   g0->fill(0.0);
