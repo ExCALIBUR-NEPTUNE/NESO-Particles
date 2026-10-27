@@ -48,7 +48,7 @@ public:
    * @param map_cell Optionally map a particular cell.
    */
   virtual inline void map_cells([[maybe_unused]] ParticleGroup &particle_group,
-                                [[maybe_unused]] const int map_cell = -1){};
+                                [[maybe_unused]] const int map_cell = -1) {};
 };
 
 typedef std::shared_ptr<LocalMapper> LocalMapperSharedPtr;
@@ -75,13 +75,13 @@ public:
    *  No-op implementation of map.
    */
   inline void map([[maybe_unused]] ParticleGroup &particle_group,
-                  [[maybe_unused]] const int map_cell = -1){};
+                  [[maybe_unused]] const int map_cell = -1) {};
 
   /**
    *  No-op implementation of callback.
    */
   inline void
-  particle_group_callback([[maybe_unused]] ParticleGroup &particle_group){};
+  particle_group_callback([[maybe_unused]] ParticleGroup &particle_group) {};
 };
 
 inline std::shared_ptr<DummyLocalMapperT> DummyLocalMapper() {
