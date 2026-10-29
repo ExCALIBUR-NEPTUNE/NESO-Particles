@@ -175,6 +175,7 @@ bool determine_iteration_set(const int ncell,
  */
 class ParticleLoopBase {
 public:
+  std::size_t kernel_type_id = 0;
   std::shared_ptr<ParticleGroup> particle_group_shrptr{nullptr};
   std::shared_ptr<ParticleSubGroup> particle_sub_group_shrptr{nullptr};
   ParticleGroup *particle_group_ptr = {nullptr};
