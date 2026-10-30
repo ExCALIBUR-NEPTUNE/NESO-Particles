@@ -81,11 +81,14 @@ bool ParticleLoopBase::iteration_set_is_empty(
 }
 
 void ParticleLoopBase::profiling_region_init() {
-  this->profile_region = ProfileRegion(this->loop_type, this->name);
+  this->profile_region = ProfileRegion(this->loop_type, this->name,
+                                       ProfileRegionType::PER_PARTICLE_TIMING);
 }
 
 void ParticleLoopBase::profile_region_finalise() {
-  this->profile_region.end();
+  this->profile_region.end(
+      this->kernel_type_id, 0,
+      static_cast<std::size_t>(this->iteration_set->iteration_set_size));
   this->sycl_target->profile_map.add_region(this->profile_region);
 }
 

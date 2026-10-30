@@ -22,6 +22,7 @@ template <typename KERNEL, typename... ARGS>
 class ParticleLoop : public ParticleLoopBase, public ParticleLoopArgs<ARGS...> {
 protected:
   KERNEL kernel;
+  std::size_t kernel_type_id = typeid(KERNEL).hash_code();
   /// The types of the parameters for the outside loops.
   using loop_parameter_type =
       typename ParticleLoopArgs<ARGS...>::loop_parameter_type;
@@ -66,6 +67,7 @@ public:
                KERNEL kernel, ARGS... args)
       : ParticleLoopBase(name, particle_group),
         ParticleLoopArgs<ARGS...>(args...), kernel(kernel) {
+    this->kernel_type_id = typeid(KERNEL).hash_code();
     this->sycl_target = particle_group->sycl_target;
     this->particle_group_ptr = this->particle_group_shrptr.get();
     this->loop_type = "ParticleLoop";
@@ -123,6 +125,7 @@ public:
                ParticleDatSharedPtr<DAT_TYPE> particle_dat, KERNEL kernel,
                ARGS... args)
       : ParticleLoopArgs<ARGS...>(args...), kernel(kernel) {
+    this->kernel_type_id = typeid(KERNEL).hash_code();
     this->name = name;
     this->sycl_target = particle_dat->sycl_target;
     this->particle_group_shrptr = nullptr;

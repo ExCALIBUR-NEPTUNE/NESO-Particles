@@ -40,6 +40,12 @@ profile_elapsed(std::chrono::high_resolution_clock::time_point time_start,
 }
 
 /**
+ * Enum to specify a particular type of profile region, e.g. per particle
+ * timing.
+ */
+enum ProfileRegionType { STANDARD_REGION, PER_PARTICLE_TIMING };
+
+/**
  * Structure to describe an entry in the profiling data structure.
  */
 struct ProfileEntry {
@@ -58,6 +64,12 @@ struct ProfileRegion {
   std::string key1;
   std::string key2;
   int level;
+  ProfileRegionType profile_region_type{STANDARD_REGION};
+
+  std::size_t profile_region_key1;
+  std::size_t profile_region_key2;
+  double profile_region_type_time = 0.0;
+  double profile_region_type_coeff = 0.0;
   std::size_t num_bytes{0};
   std::size_t num_flops{0};
 
@@ -72,12 +84,54 @@ struct ProfileRegion {
    */
   ProfileRegion(const std::string key1, const std::string key2,
                 const int level = 0)
-      : time_start(profile_timestamp()), key1(key1), key2(key2), level(level) {}
+      : time_start(profile_timestamp()), key1(key1), key2(key2), level(level),
+        profile_region_type(STANDARD_REGION) {}
+
+  /**
+   * Create new ProfileRegion.
+   *
+   * @param key1 First key for ProfileRegion.
+   * @param key2 Second key for ProfileRegion.
+   * @param level Optional level for region, default 0.
+   */
+  ProfileRegion(const std::string key1, const std::string key2,
+                const ProfileRegionType profile_region_type)
+      : time_start(profile_timestamp()), key1(key1), key2(key2), level(0),
+        profile_region_type(profile_region_type) {}
 
   /**
    * End the ProfileRegion.
    */
   inline void end() { this->time_end = profile_timestamp(); }
+
+  /**
+   * End the ProfileRegion and provide a total number of particles.
+   *
+   * @param key1 First key identifying the calling code, e.g. the type ID of the
+   * calling code.
+   * @param key2 Second key for the calling code.
+   * @param num_particles Number of particles processed in the region.
+   */
+  inline void end(const std::size_t key1, const std::size_t key2,
+                  const std::size_t num_particles) {
+    this->end();
+    this->profile_region_key1 = key1;
+    this->profile_region_key2 = key2;
+
+    // Here we store the current average time per particle as the time of
+    // interest.
+    const double current_total_time =
+        this->profile_region_type_coeff > 0.0
+            ? this->profile_region_type_time * this->profile_region_type_coeff
+            : 0.0;
+
+    const double new_total_time =
+        current_total_time + profile_elapsed(this->time_start, this->time_end);
+
+    this->profile_region_type_coeff += static_cast<double>(num_particles);
+    this->profile_region_type_time =
+        new_total_time / this->profile_region_type_coeff;
+  }
 };
 
 /**
@@ -104,6 +158,10 @@ public:
 
   // Is recording of events enabled?
   bool enabled{false};
+
+  // Map from keys to per particle timings.
+  std::map<std::pair<std::size_t, std::size_t>, double>
+      per_particle_timings_map;
 
   /**
    * Enable recording of events and regions.
@@ -192,6 +250,18 @@ public:
     }
   }
 
+protected:
+  inline void
+  push_per_particle_timing([[maybe_unused]] ProfileRegion &profile_region) {
+    if (profile_region.profile_region_type ==
+        ProfileRegionType::PER_PARTICLE_TIMING) {
+      this->per_particle_timings_map[{profile_region.profile_region_key1,
+                                      profile_region.profile_region_key2}] =
+          profile_region.profile_region_type_time;
+    }
+  }
+
+public:
   /**
    * Add a region to this profiling.
    *
@@ -200,6 +270,7 @@ public:
   inline void add_region([[maybe_unused]] ProfileRegion &profile_region) {
     if (this->enabled) {
       this->regions.push_back(profile_region);
+      push_per_particle_timing(profile_region);
     }
   }
 
@@ -221,6 +292,23 @@ public:
   }
 
   /**
+   * Start a region if profiling is enabled for per particle costs.
+   *
+   * @param key1 First key for ProfileRegion.
+   * @param key2 Second key for ProfileRegion.
+   * @param profile_region_type Specify a ProfileRegionType for the new region.
+   */
+  [[nodiscard]] inline std::optional<ProfileRegion>
+  start_region(const std::string key1, const std::string key2,
+               const ProfileRegionType profile_region_type) {
+    if (this->enabled) {
+      return ProfileRegion(key1, key2, profile_region_type);
+    } else {
+      return {};
+    }
+  }
+
+  /**
    * End a region and add it to the profiling if profiling is enabled.
    *
    * @param profile_region ProfileRegion to end and add to internal container.
@@ -229,6 +317,25 @@ public:
     if (this->enabled && profile_region) {
       profile_region.value().end();
       this->regions.push_back(profile_region.value());
+      push_per_particle_timing(profile_region.value());
+    }
+  }
+
+  /**
+   * End the ProfileRegion and add it to the internal container.
+   *
+   * @param key1 First key identifying the calling code, e.g. the type ID of the
+   * calling code.
+   * @param key2 Second key for the calling code.
+   * @param num_particles Number of particles processed in the region.
+   */
+  inline void end_region(std::optional<ProfileRegion> &profile_region,
+                         const std::size_t key1, const std::size_t key2,
+                         const std::size_t num_particles) {
+    if (this->enabled && profile_region) {
+      profile_region.value().end(key1, key2, num_particles);
+      this->regions.push_back(profile_region.value());
+      push_per_particle_timing(profile_region.value());
     }
   }
 
