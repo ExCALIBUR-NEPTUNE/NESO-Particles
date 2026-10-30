@@ -58,9 +58,9 @@ template <typename KEY_TYPE, typename VALUE_TYPE> struct LookupTableNode {
 template <typename KEY_TYPE, typename VALUE_TYPE> class LookupTable {
 protected:
   typedef int BOOL_TYPE;
-  std::unique_ptr<BufferDevice<BOOL_TYPE>> d_entry_exists;
-  std::unique_ptr<BufferDevice<VALUE_TYPE>> d_entries;
-  std::unique_ptr<BufferDevice<LookupTableNode<KEY_TYPE, VALUE_TYPE>>> d_root;
+  std::shared_ptr<BufferDevice<BOOL_TYPE>> d_entry_exists;
+  std::shared_ptr<BufferDevice<VALUE_TYPE>> d_entries;
+  std::shared_ptr<BufferDevice<LookupTableNode<KEY_TYPE, VALUE_TYPE>>> d_root;
 
 public:
   SYCLTargetSharedPtr sycl_target;
@@ -78,15 +78,15 @@ public:
     std::vector<BOOL_TYPE> tmp_false(size);
     std::fill(tmp_false.begin(), tmp_false.end(), 0);
     this->d_entry_exists =
-        std::make_unique<BufferDevice<BOOL_TYPE>>(sycl_target, tmp_false);
+        std::make_shared<BufferDevice<BOOL_TYPE>>(sycl_target, tmp_false);
     this->d_entries =
-        std::make_unique<BufferDevice<VALUE_TYPE>>(sycl_target, size);
+        std::make_shared<BufferDevice<VALUE_TYPE>>(sycl_target, size);
     std::vector<LookupTableNode<KEY_TYPE, VALUE_TYPE>> tmp_root(1);
     tmp_root.at(0).size = size;
     tmp_root.at(0).d_entry_exists = this->d_entry_exists->ptr;
     tmp_root.at(0).d_entries = this->d_entries->ptr;
     this->d_root =
-        std::make_unique<BufferDevice<LookupTableNode<KEY_TYPE, VALUE_TYPE>>>(
+        std::make_shared<BufferDevice<LookupTableNode<KEY_TYPE, VALUE_TYPE>>>(
             sycl_target, tmp_root);
     this->root = this->d_root->ptr;
   }
