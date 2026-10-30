@@ -87,6 +87,7 @@ void ParticleLoopBase::profiling_region_init() {
 
 void ParticleLoopBase::profile_region_finalise() {
   this->profile_region.end(
+      this->kernel_type_id, 0,
       static_cast<std::size_t>(this->iteration_set->iteration_set_size));
   this->sycl_target->profile_map.add_region(this->profile_region);
 }
