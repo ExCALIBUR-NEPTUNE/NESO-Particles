@@ -15,12 +15,10 @@ namespace NESO::Particles {
 class ProfilingCellCosts {
 protected:
   bool enabled = false;
-  std::shared_ptr<BufferDevice<REAL>> d_cell_costs;
+  std::vector<REAL> h_cell_costs;
+  std::vector<int> h_npart_cell;
 
 public:
-  // Compute device
-  SYCLTargetSharedPtr sycl_target;
-
   // Number of cells costs are held for.
   int num_cells;
 
@@ -29,7 +27,7 @@ public:
    *
    * @param num_cells Number of locally owned mesh cells.
    */
-  ProfilingCellCosts(SYCLTargetSharedPtr sycl_target, const int num_cells);
+  ProfilingCellCosts(const int num_cells);
 
   /**
    * Zero the currently held costs.
@@ -39,10 +37,12 @@ public:
   /**
    * Accumulate using a number of particles per cell and a per particle cost.
    *
+   * @param sycl_target Compute device.
    * @param d_npart_cell Number of particles in each cell.
    * @param per_particle_cost Estimated cost per particle.
    */
-  void accumulate(const REAL *RESTRICT d_npart_cell,
+  void accumulate(SYCLTargetSharedPtr sycl_target,
+                  const int *RESTRICT d_npart_cell,
                   const REAL per_particle_cost);
 };
 } // namespace NESO::Particles

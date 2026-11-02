@@ -94,6 +94,11 @@ void ParticleLoopBase::profile_region_finalise() {
   const REAL average_per_particle_cost =
       this->sycl_target->profile_map.get_per_particle_timing(
           this->kernel_type_id, 0);
+
+  if (this->particle_group_ptr != nullptr) {
+    this->particle_group_ptr->domain->profiling_cell_costs.accumulate(
+        this->sycl_target, this->d_npart_cell, average_per_particle_cost);
+  }
 }
 
 } // namespace NESO::Particles

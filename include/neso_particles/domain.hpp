@@ -33,6 +33,9 @@ public:
   HMeshSharedPtr mesh;
   /// LocalMapper derived class instance to bin particles into mesh cells.
   LocalMapperSharedPtr local_mapper;
+  /// Cell costs estimator instance.
+  ProfilingCellCosts profiling_cell_costs;
+
   /**
    * Construct a new Domain.
    *
@@ -41,7 +44,8 @@ public:
    */
   Domain(HMeshSharedPtr mesh,
          LocalMapperSharedPtr local_mapper = DummyLocalMapper())
-      : mesh(mesh), local_mapper(local_mapper) {}
+      : mesh(mesh), local_mapper(local_mapper),
+        profiling_cell_costs(mesh->get_cell_count()) {}
   ~Domain() {}
 };
 
