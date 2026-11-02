@@ -154,6 +154,7 @@ set(SRC_FILES
     ${SRC_DIR}/particle_sub_group/sub_group_selector_utility.cpp
     ${SRC_DIR}/particle_group_temporary.cpp
     ${SRC_DIR}/particle_group_pointer_map.cpp
+    ${SRC_DIR}/profiling_cell_costs.cpp
     ${SRC_DIR}/utility.cpp
     ${SRC_DIR}/utility_particle_io.cpp
     ${SRC_DIR}/utility_mesh_hierarchy_plotting.cpp)
@@ -361,6 +362,7 @@ set(HEADER_FILES
     ${INCLUDE_DIR_NESO_PARTICLES}/nd_host_array.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/nd_host_array_impl.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/profiling.hpp
+    ${INCLUDE_DIR_NESO_PARTICLES}/profiling_cell_costs.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/sycl_typedefs.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/typedefs.hpp
     ${INCLUDE_DIR_NESO_PARTICLES}/utility.hpp

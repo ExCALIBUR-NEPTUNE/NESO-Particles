@@ -263,6 +263,24 @@ protected:
 
 public:
   /**
+   * @param key1 The first key of the region with per particle timing.
+   * @param key2 The second key of the region with per particle timing.
+   * @returns The current estimate of the per particle cost for a pair of keys
+   */
+  inline REAL get_per_particle_timing(const std::size_t key1,
+                                      const std::size_t key2) {
+    if (this->enabled) {
+      const std::pair<std::size_t, std::size_t> k = {key1, key2};
+      NESOASSERT(this->per_particle_timings_map.count(k),
+                 "Could not find key in the map.");
+
+      return this->per_particle_timings_map[k];
+    } else {
+      return 0.0;
+    }
+  }
+
+  /**
    * Add a region to this profiling.
    *
    * @param profile_region ProfileRegion to add.

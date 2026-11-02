@@ -90,6 +90,10 @@ void ParticleLoopBase::profile_region_finalise() {
       this->kernel_type_id, 0,
       static_cast<std::size_t>(this->iteration_set->iteration_set_size));
   this->sycl_target->profile_map.add_region(this->profile_region);
+
+  const REAL average_per_particle_cost =
+      this->sycl_target->profile_map.get_per_particle_timing(
+          this->kernel_type_id, 0);
 }
 
 } // namespace NESO::Particles

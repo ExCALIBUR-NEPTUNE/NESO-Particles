@@ -5,6 +5,7 @@
 #include "mesh_hierarchy.hpp"
 #include "mesh_interface.hpp"
 #include "particle_dat.hpp"
+#include "profiling_cell_costs.hpp"
 #include "typedefs.hpp"
 #include <cstdint>
 #include <cstdlib>
