@@ -129,8 +129,11 @@ struct ProfileRegion {
         current_total_time + profile_elapsed(this->time_start, this->time_end);
 
     this->profile_region_type_coeff += static_cast<double>(num_particles);
-    this->profile_region_type_time =
-        new_total_time / this->profile_region_type_coeff;
+
+    if (this->profile_region_type_coeff > 0.0) {
+      this->profile_region_type_time =
+          new_total_time / this->profile_region_type_coeff;
+    }
   }
 };
 

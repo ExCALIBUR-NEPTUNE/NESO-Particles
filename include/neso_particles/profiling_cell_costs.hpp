@@ -4,6 +4,7 @@
 #include "compute_target.hpp"
 #include "device_buffers.hpp"
 #include "typedefs.hpp"
+#include <cstring>
 #include <vector>
 
 namespace NESO::Particles {
@@ -30,6 +31,16 @@ public:
   ProfilingCellCosts(const int num_cells);
 
   /**
+   * Enable recording of costs.
+   */
+  void enable();
+
+  /**
+   * Disable recording of costs.
+   */
+  void disable();
+
+  /**
    * Zero the currently held costs.
    */
   void zero();
@@ -44,6 +55,13 @@ public:
   void accumulate(SYCLTargetSharedPtr sycl_target,
                   const int *RESTRICT d_npart_cell,
                   const REAL per_particle_cost);
+
+  /**
+   * Get the per cell estimated costs.
+   *
+   * @param[in, out] cell_costs Output vector to be populated with cell costs.
+   */
+  void get_cell_costs(std::vector<REAL> &cell_costs);
 };
 } // namespace NESO::Particles
 

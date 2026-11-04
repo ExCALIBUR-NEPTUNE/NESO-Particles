@@ -9,11 +9,22 @@ ProfilingCellCosts::ProfilingCellCosts(const int num_cells)
       static_cast<bool>(get_env_size_t("NESO_PARTICLES_CELL_COST_PROFILE", 0));
 
   if (this->enabled) {
-    this->h_cell_costs = std::vector<REAL>(num_cells);
-    this->h_npart_cell = std::vector<int>(num_cells);
+    this->enable();
   }
 
   this->zero();
+}
+
+void ProfilingCellCosts::enable() {
+  this->enabled = true;
+  this->h_cell_costs = std::vector<REAL>(num_cells);
+  this->h_npart_cell = std::vector<int>(num_cells);
+}
+
+void ProfilingCellCosts::disable() {
+  this->enabled = false;
+  this->h_cell_costs.clear();
+  this->h_npart_cell.clear();
 }
 
 void ProfilingCellCosts::zero() {
@@ -35,6 +46,18 @@ void ProfilingCellCosts::accumulate(SYCLTargetSharedPtr sycl_target,
     for (int ix = 0; ix < this->num_cells; ix++) {
       this->h_cell_costs[ix] += per_particle_cost * this->h_npart_cell[ix];
     }
+  }
+}
+
+void ProfilingCellCosts::get_cell_costs(std::vector<REAL> &cell_costs) {
+
+  if (this->enabled) {
+    if (cell_costs.size() < this->h_cell_costs.size()) {
+      cell_costs.resize(this->h_cell_costs.size());
+    }
+
+    std::memcpy(cell_costs.data(), this->h_cell_costs.data(),
+                this->h_cell_costs.size() * sizeof(REAL));
   }
 }
 
