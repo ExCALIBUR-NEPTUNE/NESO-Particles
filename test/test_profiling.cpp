@@ -29,8 +29,8 @@ TEST(Profiling, per_cell_cost) {
   const int ny = 32;
   const int nz = 6;
   const int npart_cell = 4;
-  const REAL dt = 0.10;
-  const int Nsteps = 400;
+  const REAL dt = 0.02;
+  const int Nsteps = 200;
 
   auto [A_t, sycl_target_t, cell_count_t] =
       particle_loop_create_common(npart_cell, ndim, nx, ny, nz);
@@ -68,6 +68,7 @@ TEST(Profiling, per_cell_cost) {
     }
   }
 
+  A->clear();
   A->add_particles_local(initial_distribution);
   parallel_advection_initialisation(A, 16);
   A->add_particle_dat(Sym<REAL>("TSP"), 2);
@@ -176,6 +177,20 @@ TEST(Profiling, per_cell_cost) {
     for (auto &gx : sub_groups) {
       reflection->execute(gx.second, Sym<REAL>("P"), Sym<REAL>("V"),
                           Sym<REAL>("TSP"), cti->previous_position_sym);
+
+      particle_loop(
+          "expensive_kernel", gx.second,
+          [=](auto V) {
+            for (int dx = 0; dx < 3; dx++) {
+              for (int cx = 0; cx < 8000; cx++) {
+                V.at(dx) += Kernel::pow(-1.0, static_cast<double>(cx)) *
+                            0.0001 * Kernel::exp(0.000002 * cx) /
+                            Kernel::exp(0.000002 * cx);
+              }
+            }
+          },
+          Access::write(Sym<REAL>("V")))
+          ->execute();
     }
   };
   auto lambda_apply_timestep_reset = [&](auto aa) {

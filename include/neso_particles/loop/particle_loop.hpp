@@ -39,6 +39,7 @@ protected:
 
   virtual inline void
   profiling_region_metrics(const std::size_t size) override {
+    this->profile_iteration_set_size = size;
     this->profile_region.num_bytes =
         size * ParticleLoopImplementation::get_kernel_num_bytes(this->kernel);
     this->profile_region.num_flops =

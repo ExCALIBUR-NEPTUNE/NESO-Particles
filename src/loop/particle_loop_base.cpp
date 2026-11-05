@@ -86,9 +86,11 @@ void ParticleLoopBase::profiling_region_init() {
 }
 
 void ParticleLoopBase::profile_region_finalise() {
-  this->profile_region.end(
-      this->kernel_type_id, 0,
-      static_cast<std::size_t>(this->iteration_set->iteration_set_size));
+
+  const std::size_t iteration_set_size = this->profile_iteration_set_size;
+
+  this->profile_region.end(this->kernel_type_id, 0,
+                           static_cast<std::size_t>(iteration_set_size));
   this->sycl_target->profile_map.add_region(this->profile_region);
 
   const REAL average_per_particle_cost =
@@ -97,7 +99,7 @@ void ParticleLoopBase::profile_region_finalise() {
 
   if (this->particle_group_ptr != nullptr) {
     this->particle_group_ptr->domain->profiling_cell_costs.accumulate(
-        this->sycl_target, this->d_npart_cell, average_per_particle_cost);
+        this->sycl_target, this->d_npart_cell_lb, average_per_particle_cost);
   }
 }
 

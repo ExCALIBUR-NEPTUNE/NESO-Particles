@@ -204,6 +204,7 @@ public:
   int ncell{0};
 
   ProfileRegion profile_region;
+  std::size_t profile_iteration_set_size;
 
   void init_from_particle_dat(std::shared_ptr<ParticleDatT<REAL>> particle_dat);
   void init_from_particle_dat(std::shared_ptr<ParticleDatT<INT>> particle_dat);
