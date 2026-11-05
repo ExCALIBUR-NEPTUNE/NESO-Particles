@@ -115,8 +115,6 @@ protected:
       return false;
     }
 
-    this->profiling_region_metrics(this->iteration_set->iteration_set_size);
-
     // auto region_iteration_set = this->sycl_target->profile_map.start_region(
     //     this->loop_type, this->name + "iteration_set_determination"
     //);
@@ -134,6 +132,8 @@ protected:
                                                global_info.local_size, 0,
                                                this->iteration_set_stride);
     }
+
+    this->profiling_region_metrics(this->iteration_set->iteration_set_size);
     // this->sycl_target->profile_map.end_region(region_iteration_set);
 
     return true;
