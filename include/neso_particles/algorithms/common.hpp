@@ -505,7 +505,7 @@ matrix_transpose(SYCLTargetSharedPtr sycl_target, const std::size_t num_rows,
           // This might have shared memory bank conflicts on GPUs
           local_memory[local_read_rowx * local_size_col + local_read_colx] =
               value_read;
-          item.barrier(sycl::access::fence_space::local_space);
+          sycl::group_barrier(item.get_group());
 
           const std::size_t local_write_rowx =
               item.get_local_linear_id() / local_size_row;

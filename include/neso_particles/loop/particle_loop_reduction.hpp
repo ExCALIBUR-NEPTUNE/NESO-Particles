@@ -108,7 +108,7 @@ public:
                   iterationx.local_sycl_index = idx.get_local_id(1);
                   iterationx.local_sycl_range = idx.get_local_range(1);
                   reduction_initialise_dispatch(idx, iterationx, loop_args);
-                  idx.barrier(sycl::access::fence_space::local_space);
+                  sycl::group_barrier(idx.get_group());
 
                   for (std::size_t stridex = 0;
                        stridex < NESO_PARTICLES_LOOP_STRIDE; stridex++) {
@@ -129,7 +129,7 @@ public:
                     }
                   }
 
-                  idx.barrier(sycl::access::fence_space::local_space);
+                  sycl::group_barrier(idx.get_group());
                   reduction_finalise_dispatch(idx, iterationx, loop_args);
                 });
           }));
