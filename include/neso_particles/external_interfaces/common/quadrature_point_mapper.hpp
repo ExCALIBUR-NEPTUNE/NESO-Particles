@@ -191,7 +191,7 @@ public:
 
 typedef std::shared_ptr<QuadraturePointMapper> QuadraturePointMapperSharedPtr;
 
-namespace {
+namespace Private {
 template <std::size_t N> struct InterpTupleType {};
 
 template <> struct InterpTupleType<1> {
@@ -239,7 +239,7 @@ inline void apply_args(Tuple::Tuple<ARGS...> &args, DST_DAT &dst,
   apply_args_inner(0, args, dst, func...);
 }
 
-} // namespace
+} // namespace Private
 
 /**
  * Helper function to evaluate functions at the points in a
@@ -264,9 +264,9 @@ inline void interpolate(QuadraturePointMapperSharedPtr qpm, FUNC... func) {
   particle_loop(
       qpm->particle_group,
       [=](auto POS, auto Q) {
-        typename InterpTupleType<NDIM>::type args;
-        assemble_args(POS, args);
-        apply_args(args, Q, func...);
+        typename Private::InterpTupleType<NDIM>::type args;
+        Private::assemble_args(POS, args);
+        Private::apply_args(args, Q, func...);
       },
       Access::read(qpm->particle_group->position_dat),
       Access::write(qpm->get_sym(NCOMP)))
@@ -295,8 +295,8 @@ inline void interpolate(QuadraturePointMapperSharedPtr qpm, const int ncomp,
   particle_loop(
       qpm->particle_group,
       [=](auto POS, auto Q) {
-        typename InterpTupleType<NDIM>::type args;
-        assemble_args(POS, args);
+        typename Private::InterpTupleType<NDIM>::type args;
+        Private::assemble_args(POS, args);
         Q.at(component) = Tuple::apply(func, args);
       },
       Access::read(qpm->particle_group->position_dat),
