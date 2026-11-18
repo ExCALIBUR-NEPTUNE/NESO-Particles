@@ -374,6 +374,38 @@ TEST(ParticleLoop, sub_group_sym_vector) {
     }
   }
 
+  // Test empty sym vectors
+  {
+
+    auto si_empty = sym_vector(aa, std::vector<Sym<INT>>());
+    auto sr_empty = sym_vector(aa, std::vector<Sym<REAL>>());
+
+    particle_loop(
+        aa,
+        [=](auto dats_int, auto LOOP_INDEX, [[maybe_unused]] auto SI,
+            [[maybe_unused]] auto SR) {
+          dats_int.at(0, 0) = LOOP_INDEX.at(0) + 2;
+        },
+        Access::write(si), Access::read(Sym<INT>("LOOP_INDEX")),
+        Access::write(si_empty), Access::write(sr_empty))
+        ->execute();
+
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      auto id = A->get_cell(Sym<INT>("ID"), cellx);
+      auto loop_index = A->get_cell(Sym<INT>("LOOP_INDEX"), cellx);
+      const int nrow = id->nrow;
+
+      // for each particle in the cell
+      for (int rowx = 0; rowx < nrow; rowx++) {
+        if (id->at(rowx, 0) % 2 == 0) {
+          ASSERT_EQ(loop_index->at(rowx, 0) + 2, id->at(rowx, 0));
+        } else {
+          ASSERT_EQ(loop_index->at(rowx, 0), -1);
+        }
+      }
+    }
+  }
+
   auto sycl_target = A->sycl_target;
   A->free();
   sycl_target->free();

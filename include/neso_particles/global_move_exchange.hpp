@@ -1,6 +1,7 @@
 #ifndef _NESO_PARTICLES_GLOBAL_MOVE_EXCHANGE
 #define _NESO_PARTICLES_GLOBAL_MOVE_EXCHANGE
 
+#include <limits>
 #include <mpi.h>
 
 #include "communication.hpp"
@@ -236,7 +237,12 @@ public:
 
     // non-blocking recv of packed particle data
     for (int rankx = 0; rankx < this->num_remote_recv_ranks; rankx++) {
-
+      constexpr std::size_t max_int_as_size_t = std::numeric_limits<int>::max();
+      NESOASSERT((static_cast<std::size_t>(this->h_recv_rank_npart.ptr[rankx]) *
+                  static_cast<std::size_t>(num_bytes_per_particle)) <=
+                     max_int_as_size_t,
+                 "The transfer of particle data exceeds the buffer size that "
+                 "can be passed using MPI_INT.");
       MPICHK(
           MPI_Irecv(recv_pointers[rankx],
                     this->h_recv_rank_npart.ptr[rankx] * num_bytes_per_particle,

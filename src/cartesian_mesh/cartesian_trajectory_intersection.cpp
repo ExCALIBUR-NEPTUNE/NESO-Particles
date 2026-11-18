@@ -226,7 +226,10 @@ void CartesianTrajectoryIntersection::function_project_contribute(
 
   if (!null_sub_group) {
     auto *k_tree_root = d_tree_root;
+
+#ifndef NDEBUG
     const auto k_num_accessible_geoms = num_accessible_geoms;
+#endif
 
     NESOASSERT(particle_sub_group->contains_ephemeral_dat(
                    Sym<INT>("NESO_PARTICLES_BOUNDARY_METADATA")),

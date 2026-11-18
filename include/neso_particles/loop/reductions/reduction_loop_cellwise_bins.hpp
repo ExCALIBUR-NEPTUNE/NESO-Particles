@@ -237,7 +237,7 @@ protected:
           ptr[local_sycl_index + offset] =
               binop(current, ptr[local_sycl_index + offset + s]);
         }
-        idx.barrier(sycl::access::fence_space::local_space);
+        sycl::group_barrier(idx.get_group());
       }
       if (local_sycl_index == 0) {
         const int ex = colx * nrow + bin;
@@ -509,8 +509,7 @@ public:
             iterationx.cellx = cellx;
 
             reduction_initialise_dispatch(idx, iterationx, loop_args);
-            idx.barrier(sycl::access::fence_space::local_space);
-
+            sycl::group_barrier(idx.get_group());
             for (int loop_layerx = local_sycl_index; loop_layerx < num_layers;
                  loop_layerx += local_sycl_range) {
               const int layerx = k_index_map.at(key, loop_layerx, 0);
@@ -523,7 +522,7 @@ public:
               Tuple::apply(k_kernel, kernel_args);
             }
 
-            idx.barrier(sycl::access::fence_space::local_space);
+            sycl::group_barrier(idx.get_group());
             reduction_finalise_dispatch(idx, iterationx, loop_args);
           });
         }));

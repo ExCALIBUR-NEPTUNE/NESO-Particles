@@ -174,7 +174,7 @@ struct KernelParameter<Access::Reduction<std::shared_ptr<T<U>>, OP>> {
 
 } // namespace ParticleLoopImplementation
 
-namespace {
+namespace Private {
 
 /**
  *  This is a metafunction which is passed a input data type and returns the
@@ -205,7 +205,7 @@ inline void check_is_sym_outer(T<U> arg) {
   check_is_sym_inner(arg.obj);
 }
 
-} // namespace
+} // namespace Private
 
 /**
  * This class describes how the loop arguments should behave.
@@ -310,9 +310,10 @@ protected:
   }
 
   /// The types of the parameters for the outside loops.
-  using loop_parameter_type = Tuple::Tuple<loop_parameter_t<ARGS>...>;
+  using loop_parameter_type = Tuple::Tuple<Private::loop_parameter_t<ARGS>...>;
   /// The types of the arguments passed to the kernel.
-  using kernel_parameter_type = Tuple::Tuple<kernel_parameter_t<ARGS>...>;
+  using kernel_parameter_type =
+      Tuple::Tuple<Private::kernel_parameter_t<ARGS>...>;
   /// Tuple of the arguments passed to the ParticleLoop on construction.
   std::tuple<ARGS...> args;
 

@@ -260,7 +260,6 @@ void VTKHDF::read(const int num_cells, std::vector<UnstructuredCell> &data,
     MPICHK(MPI_Bcast(&total_num_cells, 1, MPI_INT, this->size - 1, this->comm));
     offset -= num_cells;
     const int cell_start = offset;
-    const int cell_end = cell_start + num_cells;
 
     // For each cell read the cell type - this determines the number of
     // vertices.
@@ -283,8 +282,6 @@ void VTKHDF::read(const int num_cells, std::vector<UnstructuredCell> &data,
 
     vertex_offset -= num_vertices_local;
     const int vertex_start = vertex_offset;
-    const int vertex_end = vertex_start + num_vertices_local;
-    const int total_num_points = total_num_vertices * 3;
 
     // Populate the vertex information in the output.
     std::vector<double> h_data(num_vertices_local * 3);

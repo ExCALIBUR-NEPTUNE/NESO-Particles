@@ -96,6 +96,9 @@ public:
     const int size = this->sycl_target->comm_pair.size_parent;
     this->comm = this->sycl_target->comm_pair.comm_parent;
 
+    NESOASSERT((nranks == 0) || (ranks != nullptr),
+               "nranks > 0 but ranks is nullptr.");
+
     // Get the set of remote ranks this rank can send to using a local pattern
     for (int rankx = 0; rankx < nranks; rankx++) {
       const int remote_rank = ranks[rankx];
@@ -241,6 +244,14 @@ public:
     this->in_flight_recvs = 0;
     for (int rankx = 0; rankx < this->num_remote_recv_ranks; rankx++) {
       const int tmp_num_recv = this->h_recv_rank_npart.ptr[rankx];
+
+      constexpr std::size_t max_int_as_size_t = std::numeric_limits<int>::max();
+      NESOASSERT((static_cast<std::size_t>(tmp_num_recv) *
+                  static_cast<std::size_t>(num_bytes_per_particle)) <=
+                     max_int_as_size_t,
+                 "The transfer of particle data exceeds the buffer size that "
+                 "can be passed using MPI_INT.");
+
       if (tmp_num_recv > 0) {
         MPICHK(MPI_Irecv(recv_pointers[rankx],
                          tmp_num_recv * num_bytes_per_particle, MPI_CHAR,

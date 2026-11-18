@@ -176,14 +176,14 @@ TEST(LookupTable, particle_loop) {
 
     // push data into the LUT
     for (int ix = 0; ix < Nkeys; ix++) {
-      lut->add(ix,                 // key
-               {(ix + 123123) % 7} // value, this is an instance of ValueType.
+      lut->add(ix,            // key
+               {(ix + 3) % 7} // value, this is an instance of ValueType.
       );
 
       // Can get the values on the host
       ValueType v;
       lut->host_get(ix, &v);
-      ASSERT_EQ(v.a, (ix + 123123) % 7);
+      ASSERT_EQ(v.a, (ix + 3) % 7);
     }
 
     // Device pointer to the root of the LUT
@@ -195,14 +195,14 @@ TEST(LookupTable, particle_loop) {
           // Pointer to the device type (note the const)
           const ValueType *v = nullptr;
           // Populate the pointer to the entry if the key is in the LUT.
-          const bool exists = k_lut->get(ID.at(0) % Nkeys, // index key
-                                         &v // pointer to populate
+          const int key = ID.at(0) % Nkeys;
+          const bool exists = k_lut->get(key, // index key
+                                         &v   // pointer to populate
           );
 
           NESO_KERNEL_ASSERT(exists, k_ep);
           if (exists) {
-            NESO_KERNEL_ASSERT((((ID.at(0) % Nkeys) + 123123) % 7) == v->a,
-                               k_ep);
+            NESO_KERNEL_ASSERT((((ID.at(0) % Nkeys) + 3) % 7) == v->a, k_ep);
           }
         },
         Access::read(Sym<INT>("ID")))
@@ -219,8 +219,8 @@ TEST(LookupTable, particle_loop) {
     // push data into the LUT
     for (int ix = 0; ix < Nkeys; ix++) {
       if (ix % 2 == 0) {
-        lut->add(ix,                 // key
-                 {(ix + 123123) % 7} // value, this is an instance of ValueType.
+        lut->add(ix,            // key
+                 {(ix + 3) % 7} // value, this is an instance of ValueType.
         );
       }
     }
@@ -237,8 +237,7 @@ TEST(LookupTable, particle_loop) {
 
                         if ((-1 < key) && (key < Nkeys) && (key % 2 == 0)) {
                           NESO_KERNEL_ASSERT(exists, k_ep);
-                          NESO_KERNEL_ASSERT(((key + 123123) % 7) == v->a,
-                                             k_ep);
+                          NESO_KERNEL_ASSERT(((key + 3) % 7) == v->a, k_ep);
                         } else {
                           NESO_KERNEL_ASSERT(!exists, k_ep);
                         }
@@ -273,14 +272,14 @@ TEST(BlockedBinaryTree, particle_loop) {
 
   // push data into the Tree
   for (int ix = 0; ix < Nkeys; ix++) {
-    bbt->add(ix,                 // key
-             {(ix + 123123) % 7} // value, this is an instance of ValueType.
+    bbt->add(ix,            // key
+             {(ix + 3) % 7} // value, this is an instance of ValueType.
     );
 
     // Can get the values on the host
     ValueType v;
     bbt->host_get(ix, &v);
-    ASSERT_EQ(v.a, (ix + 123123) % 7);
+    ASSERT_EQ(v.a, (ix + 3) % 7);
   }
 
   // Device pointer to the root of the Tree, note we get this pointer after
@@ -293,13 +292,14 @@ TEST(BlockedBinaryTree, particle_loop) {
         // Pointer to the device type (note the const)
         const ValueType *v = nullptr;
         // Populate the pointer to the entry if the key is in the bbt.
-        const bool exists = k_bbt->get(ID.at(0) % Nkeys, // index key
-                                       &v                // pointer to populate
+        const int k = ID.at(0) % Nkeys; // index key
+        const bool exists = k_bbt->get(k,
+                                       &v // pointer to populate
         );
 
         NESO_KERNEL_ASSERT(exists, k_ep);
         if (exists) {
-          NESO_KERNEL_ASSERT((((ID.at(0) % Nkeys) + 123123) % 7) == v->a, k_ep);
+          NESO_KERNEL_ASSERT((((ID.at(0) % Nkeys) + 3) % 7) == v->a, k_ep);
         }
       },
       Access::read(Sym<INT>("ID")))
@@ -313,8 +313,8 @@ TEST(BlockedBinaryTree, particle_loop) {
 
     for (int ix = 0; ix < Nkeys; ix++) {
       if (ix % 2 == 0) {
-        bbt->add(ix,                 // key
-                 {(ix + 123123) % 7} // value, this is an instance of ValueType.
+        bbt->add(ix,            // key
+                 {(ix + 3) % 7} // value, this is an instance of ValueType.
         );
       }
     }
@@ -331,8 +331,7 @@ TEST(BlockedBinaryTree, particle_loop) {
 
                         if ((-1 < key) && (key < Nkeys) && (key % 2 == 0)) {
                           NESO_KERNEL_ASSERT(exists, k_ep);
-                          NESO_KERNEL_ASSERT(((key + 123123) % 7) == v->a,
-                                             k_ep);
+                          NESO_KERNEL_ASSERT(((key + 3) % 7) == v->a, k_ep);
                         } else {
                           NESO_KERNEL_ASSERT(!exists, k_ep);
                         }

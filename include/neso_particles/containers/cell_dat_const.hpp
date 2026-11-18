@@ -430,7 +430,7 @@ inline void reduction_finalise(sycl::nd_item<2> &idx,
         ptr[local_sycl_index + offset] =
             binop(current, ptr[local_sycl_index + offset + s]);
       }
-      idx.barrier(sycl::access::fence_space::local_space);
+      sycl::group_barrier(idx.get_group());
     }
     if (local_sycl_index == 0) {
       T *d_ptr = a.ptr + iterationx.cellx * num_elements + ex;
@@ -439,7 +439,7 @@ inline void reduction_finalise(sycl::nd_item<2> &idx,
 
     // ACPP omp.accelerated seems to not generate the correct loops if this
     // barrier is missing.
-    idx.barrier(sycl::access::fence_space::local_space);
+    sycl::group_barrier(idx.get_group());
   }
 }
 
@@ -512,7 +512,7 @@ pre_loop(ParticleLoopGlobalInfo *global_info,
                   const T value = static_cast<T>(ex * local_sycl_index) + 1;
                   loop_arg.la[index] = value;
                 }
-                idx.barrier(sycl::access::fence_space::local_space);
+                sycl::group_barrier(idx.get_group());
                 reduction_finalise<T, OP>(idx, iterationx, loop_arg_kernel);
               });
         })

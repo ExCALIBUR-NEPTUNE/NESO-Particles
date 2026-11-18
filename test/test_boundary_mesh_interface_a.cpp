@@ -227,9 +227,11 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
 
     bmi.exchange_from_device_pack(d_src.ptr, ncomp, d_dst.ptr).wait_and_throw();
 
-    sycl_target->queue
-        .memcpy(h_dst.data(), d_dst.ptr, packed_data_length * sizeof(REAL))
-        .wait_and_throw();
+    if (packed_data_length > 0) {
+      sycl_target->queue
+          .memcpy(h_dst.data(), d_dst.ptr, packed_data_length * sizeof(REAL))
+          .wait_and_throw();
+    }
 
     int index_dst = 0;
     for (int gx : bmi.outgoing_geom_ids) {
@@ -261,10 +263,12 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
       bmi.exchange_from_device_unpack(d_src.ptr, ncomp, d_dst.ptr)
           .wait_and_throw();
 
-      sycl_target->queue
-          .memcpy(h_dst.data(), d_dst.ptr,
-                  packed_data_length_dst * sizeof(REAL))
-          .wait_and_throw();
+      if (packed_data_length_dst > 0) {
+        sycl_target->queue
+            .memcpy(h_dst.data(), d_dst.ptr,
+                    packed_data_length_dst * sizeof(REAL))
+            .wait_and_throw();
+      }
 
       int dst_index = 0;
       for (auto gx : owned_face_cells) {
@@ -315,9 +319,12 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
     BufferDevice<REAL> d_dst(sycl_target, h_dst);
 
     bmi.exchange_from_device(d_src.ptr, ncomp, d_dst.ptr);
-    sycl_target->queue
-        .memcpy(h_dst.data(), d_dst.ptr, packed_data_length_dst * sizeof(REAL))
-        .wait_and_throw();
+    if (packed_data_length_dst > 0) {
+      sycl_target->queue
+          .memcpy(h_dst.data(), d_dst.ptr,
+                  packed_data_length_dst * sizeof(REAL))
+          .wait_and_throw();
+    }
 
     std::vector<REAL> send_stage(ncomp);
     std::vector<REAL> recv_stage(ncomp);
@@ -357,11 +364,13 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
     h_reverse_incoming_unpack_index.resize(
         bmi.d_reverse_incoming_unpack_index->size);
 
-    sycl_target->queue
-        .memcpy(h_reverse_incoming_unpack_index.data(),
-                bmi.d_reverse_incoming_unpack_index->ptr,
-                bmi.d_reverse_incoming_unpack_index->size * sizeof(int))
-        .wait_and_throw();
+    if (bmi.d_reverse_incoming_unpack_index->size > 0) {
+      sycl_target->queue
+          .memcpy(h_reverse_incoming_unpack_index.data(),
+                  bmi.d_reverse_incoming_unpack_index->ptr,
+                  bmi.d_reverse_incoming_unpack_index->size * sizeof(int))
+          .wait_and_throw();
+    }
 
     int index = 0;
     int pindex = 0;
@@ -427,11 +436,13 @@ TEST(BoundaryMeshInterface, mpi_neighbours) {
     h_reverse_outgoing_pack_index.resize(
         bmi.d_reverse_outgoing_pack_index->size);
 
-    sycl_target->queue
-        .memcpy(h_reverse_outgoing_pack_index.data(),
-                bmi.d_reverse_outgoing_pack_index->ptr,
-                bmi.d_reverse_outgoing_pack_index->size * sizeof(int))
-        .wait_and_throw();
+    if (bmi.d_reverse_outgoing_pack_index->size > 0) {
+      sycl_target->queue
+          .memcpy(h_reverse_outgoing_pack_index.data(),
+                  bmi.d_reverse_outgoing_pack_index->ptr,
+                  bmi.d_reverse_outgoing_pack_index->size * sizeof(int))
+          .wait_and_throw();
+    }
 
     int index = 0;
     int pindex = 0;
