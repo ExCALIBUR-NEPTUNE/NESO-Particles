@@ -10,7 +10,7 @@
 
 namespace NESO::Particles {
 
-namespace {
+namespace Private {
 template <typename T> inline MPI_Datatype map_ctype_mpi_type_inner() {
   return MPI_DATATYPE_NULL;
 }
@@ -30,7 +30,7 @@ template <> inline MPI_Datatype map_ctype_mpi_type_inner<float>() {
   return MPI_FLOAT;
 }
 
-} // namespace
+} // namespace Private
 
 /**
  *  For an input data type T get the matching MPI Datatype.
@@ -38,7 +38,7 @@ template <> inline MPI_Datatype map_ctype_mpi_type_inner<float>() {
  *  @returns MPI_Datatype that matches the input type T.
  */
 template <typename T> inline MPI_Datatype map_ctype_mpi_type() {
-  const MPI_Datatype t = map_ctype_mpi_type_inner<T>();
+  const MPI_Datatype t = Private::map_ctype_mpi_type_inner<T>();
   NESOASSERT(t != MPI_DATATYPE_NULL,
              "Could not find MPI_Datatype matching passed type.");
   return t;

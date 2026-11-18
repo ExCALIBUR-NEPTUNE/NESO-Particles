@@ -178,7 +178,7 @@ inline void create_kernel_arg(
 }
 } // namespace ParticlePairLoopImplementation
 
-namespace {
+namespace Private {
 
 template <typename T> struct get_rng_value_type;
 
@@ -187,7 +187,7 @@ struct get_rng_value_type<T<U>> {
   using type = U;
 };
 
-} // namespace
+} // namespace Private
 
 /**
  * Abstract base class for RNG implementations which create a block of random
@@ -212,7 +212,7 @@ template <typename T> struct KernelRNG {
   /**
    * This type is the, probably scalar, type that the RNG returns when sampled.
    */
-  using RNGValueType = typename get_rng_value_type<T>::type;
+  using RNGValueType = typename Private::get_rng_value_type<T>::type;
 
   /**
    * Create the loop arguments for the RNG implementation.

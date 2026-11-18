@@ -18,11 +18,11 @@ template <typename... ARGS>
 class ParticlePairLoopArgs : public ParticlePairLoopBase {
 protected:
   /// The types of the parameters for the outside loops.
-  using loop_parameter_type = Tuple::Tuple<loop_parameter_t<
+  using loop_parameter_type = Tuple::Tuple<Private::loop_parameter_t<
       typename Access::StripPairGroupAnnotation<ARGS>::type>...>;
 
   /// The types of the arguments passed to the kernel.
-  using kernel_parameter_type = Tuple::Tuple<kernel_parameter_t<
+  using kernel_parameter_type = Tuple::Tuple<Private::kernel_parameter_t<
       typename Access::StripPairGroupAnnotation<ARGS>::type>...>;
 
   /// The mask types for the arguments passed to the kernel
