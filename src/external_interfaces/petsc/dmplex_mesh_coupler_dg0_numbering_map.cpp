@@ -106,6 +106,8 @@ void DMPlexMeshCouplerDG0NumberingMap::initalise_post_distribute(
 void DMPlexMeshCouplerDG0NumberingMap::get_global_point_indices(
     std::vector<PetscInt> &input_points, std::vector<PetscInt> &global_points) {
 
+  NESOASSERT(!this->is_freed,
+             "This map cannot be used after it has been freed.");
   NESOASSERT(this->init_pre, "initalise_pre_distribute has not been called "
                              "before get_global_point_indices.");
   NESOASSERT(this->init_post, "initalise_post_distribute has not been called "
@@ -129,6 +131,8 @@ std::map<PetscInt, PetscInt>
 DMPlexMeshCouplerDG0NumberingMap::get_global_cell_indices(
     std::set<PetscInt> input_cells) {
 
+  NESOASSERT(!this->is_freed,
+             "This map cannot be used after it has been freed.");
   std::map<PetscInt, PetscInt> m;
   std::set<PetscInt> to_query;
   for (auto input_cell : input_cells) {
