@@ -186,9 +186,9 @@ void surface_functions_wrapper(ParticleGroupSharedPtr A,
       auto bmi = func_bmi.second;
 
       std::vector<REAL> h_dofs(func->local_dof_count);
-      sycl_target->queue
-          .memcpy(h_dofs.data(), func->get_dofs_device_pointer(),
-                  func->local_dof_count * sizeof(REAL))
+      sycl_target
+          ->memcpy(h_dofs.data(), func->get_dofs_device_pointer(),
+                   func->local_dof_count * sizeof(REAL))
           .wait_and_throw();
 
       int index = 0;
@@ -228,9 +228,9 @@ void surface_functions_wrapper(ParticleGroupSharedPtr A,
       auto bmi = func_bmi.second;
 
       std::vector<REAL> h_dofs(func->local_dof_count);
-      sycl_target->queue
-          .memcpy(h_dofs.data(), func->get_dofs_device_pointer(),
-                  func->local_dof_count * sizeof(REAL))
+      sycl_target
+          ->memcpy(h_dofs.data(), func->get_dofs_device_pointer(),
+                   func->local_dof_count * sizeof(REAL))
           .wait_and_throw();
 
       int index = 0;
@@ -247,9 +247,9 @@ void surface_functions_wrapper(ParticleGroupSharedPtr A,
     func_0->fill(0.0);
     cti.function_project(nullptr, Sym<REAL>("Q"), 0, false, func_0);
     std::vector<REAL> h_dofs(func_0->local_dof_count);
-    sycl_target->queue
-        .memcpy(h_dofs.data(), func_0->get_dofs_device_pointer(),
-                func_0->local_dof_count * sizeof(REAL))
+    sycl_target
+        ->memcpy(h_dofs.data(), func_0->get_dofs_device_pointer(),
+                 func_0->local_dof_count * sizeof(REAL))
         .wait_and_throw();
 
     for (int ix = 0; ix < func_0->local_dof_count; ix++) {

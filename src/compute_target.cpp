@@ -480,4 +480,30 @@ NDRangePeel1D get_nd_range_peel_1d(const std::size_t size,
                         sycl::range<1>(local_size))};
 }
 
+sycl::event SYCLTarget::memcpy(void *dest, const void *src,
+                               std::size_t num_bytes) {
+  if (num_bytes == 0) {
+    return sycl::event{};
+  } else {
+#ifndef NDEBUG
+    NESOASSERT(dest != nullptr, "Destination address is nullptr.");
+    NESOASSERT(src != nullptr, "Source address is nullptr.");
+#endif
+    return this->queue.memcpy(dest, src, num_bytes);
+  }
+}
+
+sycl::event SYCLTarget::memcpy(void *dest, const void *src,
+                               std::size_t num_bytes, sycl::event dep_event) {
+  if (num_bytes == 0) {
+    return sycl::event{};
+  } else {
+#ifndef NDEBUG
+    NESOASSERT(dest != nullptr, "Destination address is nullptr.");
+    NESOASSERT(src != nullptr, "Source address is nullptr.");
+#endif
+    return this->queue.memcpy(dest, src, num_bytes, dep_event);
+  }
+}
+
 } // namespace NESO::Particles
