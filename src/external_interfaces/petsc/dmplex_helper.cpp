@@ -718,7 +718,6 @@ DMPlexHelper::DMPlexHelper(MPI_Comm comm, DM dm)
   NESOASSERT(static_cast<std::size_t>(ix) == this->map_np_to_petsc.size(),
              "Size missmatch.");
   this->ncells = this->map_np_to_petsc.size();
-  NESOASSERT(this->ncells, "A rank has zero cells.");
 
   PetscInt point_start = 0;
   PetscInt point_end = 0;
