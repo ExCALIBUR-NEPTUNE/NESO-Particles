@@ -363,7 +363,9 @@ TEST(PETSc, vtk_mapping) {
       VTK::VTKHDF w(
           get_test_root_file("dmplex_face_coords_" + index + ".vtkhdf"),
           mesh->get_comm());
-      w.write(vtk_data);
+      std::set<std::string> point_data_keys = {"x", "y", "z"};
+      std::set<std::string> cell_data_keys = {"u"};
+      w.write(vtk_data, point_data_keys, cell_data_keys);
       w.close();
     }
 

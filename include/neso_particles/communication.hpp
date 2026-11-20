@@ -5,6 +5,7 @@
 #include "communication/communication_edges_counter.hpp"
 #include "communication/communication_typedefs.hpp"
 #include "communication/communication_utility.hpp"
+#include "communication/global_key_value_lut_nodewise.hpp"
 #include "typedefs.hpp"
 #include <mpi.h>
 
