@@ -174,7 +174,7 @@ bool determine_iteration_set(const int ncell,
  * @ingroup particle_loop_functions
  */
 class ParticleLoopBase {
-public:
+protected:
   std::size_t kernel_type_id = 0;
   std::shared_ptr<ParticleGroup> particle_group_shrptr{nullptr};
   std::shared_ptr<ParticleSubGroup> particle_sub_group_shrptr{nullptr};
@@ -205,6 +205,8 @@ public:
 
   ProfileRegion profile_region;
   std::size_t profile_iteration_set_size;
+  int profile_cell_start{-1};
+  int profile_cell_end{-1};
 
   void init_from_particle_dat(std::shared_ptr<ParticleDatT<REAL>> particle_dat);
   void init_from_particle_dat(std::shared_ptr<ParticleDatT<INT>> particle_dat);
@@ -240,7 +242,9 @@ public:
   }
 
   void profiling_region_init();
-  virtual inline void profiling_region_metrics(const std::size_t size) = 0;
+  virtual inline void profiling_region_metrics(const int cell_start,
+                                               const int cell_end,
+                                               const std::size_t size) = 0;
 
   void profile_region_finalise();
 

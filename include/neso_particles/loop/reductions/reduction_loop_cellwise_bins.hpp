@@ -319,8 +319,11 @@ protected:
   }
 
   virtual inline void
-  profiling_region_metrics(const std::size_t size) override {
+  profiling_region_metrics(const int cell_start, const int cell_end,
+                           const std::size_t size) override {
     this->profile_iteration_set_size = size;
+    this->profile_cell_start = cell_start;
+    this->profile_cell_end = cell_end;
     this->profile_region.num_bytes =
         size * ParticleLoopImplementation::get_kernel_num_bytes(this->kernel);
     this->profile_region.num_flops =
@@ -457,7 +460,8 @@ protected:
 
     this->cell_offset = cell_start_v;
 
-    this->profiling_region_metrics(this->iteration_set->iteration_set_size);
+    this->profiling_region_metrics(cell_start_v, cell_end_v,
+                                   this->iteration_set->iteration_set_size);
     return true;
   }
 

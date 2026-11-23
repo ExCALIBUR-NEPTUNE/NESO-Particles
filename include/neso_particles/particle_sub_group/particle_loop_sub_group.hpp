@@ -133,7 +133,8 @@ protected:
                                                this->iteration_set_stride);
     }
 
-    this->profiling_region_metrics(this->iteration_set->iteration_set_size);
+    this->profiling_region_metrics(cell_start_v, cell_end_v,
+                                   this->iteration_set->iteration_set_size);
     // this->sycl_target->profile_map.end_region(region_iteration_set);
 
     return true;

@@ -57,6 +57,19 @@ public:
                   const REAL per_particle_cost);
 
   /**
+   * Accumulate using a number of particles per cell and a per particle cost.
+   *
+   * @param sycl_target Compute device.
+   * @param cell_start First cell of region which was timed.
+   * @param cell_end Last cell plus one of region which was timed.
+   * @param d_npart_cell Number of particles in each cell.
+   * @param per_particle_cost Estimated cost per particle.
+   */
+  void accumulate(SYCLTargetSharedPtr sycl_target, const int cell_start,
+                  const int cell_end, const int *RESTRICT d_npart_cell,
+                  const REAL per_particle_cost);
+
+  /**
    * Get the per cell estimated costs.
    *
    * @param[in, out] cell_costs Output vector to be populated with cell costs.

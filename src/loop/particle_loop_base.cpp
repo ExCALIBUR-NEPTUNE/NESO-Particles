@@ -98,8 +98,15 @@ void ParticleLoopBase::profile_region_finalise() {
           this->kernel_type_id, 0);
 
   if (this->particle_group_ptr != nullptr) {
+
+    NESOWARN(this->profile_cell_start > -1,
+             "profile_cell_start was not set. Please create an issue.");
+    NESOWARN(this->profile_cell_end > -1,
+             "profile_cell_end was not set. Please create an issue.");
+
     this->particle_group_ptr->domain->profiling_cell_costs.accumulate(
-        this->sycl_target, this->d_npart_cell_lb, average_per_particle_cost);
+        this->sycl_target, this->profile_cell_start, this->profile_cell_end,
+        this->d_npart_cell_lb, average_per_particle_cost);
   }
 }
 
