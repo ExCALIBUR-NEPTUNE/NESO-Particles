@@ -51,6 +51,7 @@ void DMPlexMeshCouplerDG0NumberingMap::initalise_post_distribute(
   if (size == 1) {
     for (PetscInt px = this->point_start_pre; px < this->point_end_pre; px++) {
       m[px] = MeshHierarchyData::GenericSerialContainer<PetscInt>(px);
+      this->map_local_point_to_pre_distribute_local[px] = px;
     }
   } else {
 
@@ -81,6 +82,9 @@ void DMPlexMeshCouplerDG0NumberingMap::initalise_post_distribute(
             MeshHierarchyData::GenericSerialContainer<PetscInt>(
                 global_point_current);
       }
+
+      this->map_local_point_to_pre_distribute_local[point_start + ix] =
+          local_point_previous;
     }
 
     PETSCCHK(ISRestoreIndices(global_point_numbers, &ptr));
@@ -151,6 +155,13 @@ DMPlexMeshCouplerDG0NumberingMap::get_global_cell_indices(
   }
 
   return m;
+}
+
+PetscInt DMPlexMeshCouplerDG0NumberingMap::get_pre_distribute_local_point_index(
+    const PetscInt point) {
+  NESOASSERT(this->map_local_point_to_pre_distribute_local.count(point),
+             "passed point not found: " + std::to_string(point));
+  return this->map_local_point_to_pre_distribute_local[point];
 }
 
 void DMPlexMeshCouplerDG0NumberingMap::free() {

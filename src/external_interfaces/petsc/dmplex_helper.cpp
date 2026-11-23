@@ -13,6 +13,28 @@ void generic_distribute(DM *dm, MPI_Comm comm, const PetscInt overlap,
     NESOASSERT(dm_out, "Could not distribute mesh.");
     PETSCCHK(DMDestroy(dm));
     *dm = dm_out;
+  } else {
+
+    if (sf != nullptr) {
+
+      PetscInt point_start = 0;
+      PetscInt point_end = 0;
+      PETSCCHK(DMPlexGetChart(*dm, &point_start, &point_end));
+      PetscInt num_points = point_end - point_start;
+      std::vector<PetscSFNode> iremote(num_points);
+
+      for (int px = 0; px < num_points; px++) {
+        iremote[px].rank = 0;
+        iremote[px].index = px + point_start;
+      }
+
+      PETSCCHK(PetscSFCreate(comm, sf));
+      PETSCCHK(PetscSFSetFromOptions(*sf));
+      PETSCCHK(PetscSFSetGraph(*sf, num_points, num_points, NULL,
+                               PETSC_COPY_VALUES, iremote.data(),
+                               PETSC_COPY_VALUES));
+      PETSCCHK(PetscSFSetUp(*sf));
+    }
   }
 }
 

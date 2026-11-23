@@ -49,6 +49,8 @@ protected:
       PetscInt, MeshHierarchyData::GenericSerialContainer<PetscInt>>>
       lut;
 
+  std::map<PetscInt, PetscInt> map_local_point_to_pre_distribute_local;
+
 public:
   ~DMPlexMeshCouplerDG0NumberingMap();
 
@@ -107,6 +109,15 @@ public:
    */
   std::map<PetscInt, PetscInt>
   get_global_cell_indices(std::set<PetscInt> input_cells);
+
+  /**
+   * Get the pre-distribute local point index for a local point. Requires
+   * initalise_pre_distribute and initalise_post_distribute to have been called.
+   *
+   * @param point Local point index post-distribute.
+   * @returns Local point index on source rank pre-distribute.
+   */
+  PetscInt get_pre_distribute_local_point_index(const PetscInt point);
 
   /**
    * Free the underlying maps. Must be called. Must be called collectively on

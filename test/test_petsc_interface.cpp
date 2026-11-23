@@ -721,6 +721,7 @@ TEST(PETSc, dmplex_helper) {
   }
 
   mesh->free();
+  PETSCCHK(PetscSFDestroy(&sf));
   PETSCCHK(DMDestroy(&dm));
   PETSCCHK(PetscFinalize());
 }
@@ -1542,6 +1543,13 @@ TEST(PETSc, dmplex_mesh_coupler_dg0_numbering_map) {
   PetscInt cell_end = -1;
   PETSCCHK(DMPlexGetHeightStratum(dm, 0, &cell_start, &cell_end));
 
+  PetscInt point_start = -1;
+  PetscInt point_end = -1;
+  PETSCCHK(DMPlexGetChart(dm, &point_start, &point_end));
+
+  std::vector<int> h_points(std::max(point_end - point_start, 1));
+  std::iota(h_points.begin(), h_points.end(), 0);
+
   PETSCCHK(DMCreateLabel(dm, "test_partition"));
   DMLabel label;
   PETSCCHK(DMGetLabel(dm, "test_partition", &label));
@@ -1607,10 +1615,45 @@ TEST(PETSc, dmplex_mesh_coupler_dg0_numbering_map) {
     ASSERT_EQ(to_test_v, global_point_post);
   }
 
-  dmh.free();
+  {
 
+    PetscInt nroots = 0;
+    PetscInt nleaves = 0;
+    PetscInt const *ilocal = nullptr;
+    PetscSFNode const *iremote = nullptr;
+    PETSCCHK(PetscSFGetGraph(sf, &nroots, &nleaves, &ilocal, &iremote));
+
+    if (sycl_target->comm_pair.rank_parent == 0) {
+      ASSERT_EQ(nroots, point_end - point_start);
+    } else {
+      ASSERT_EQ(nroots, 0);
+    }
+
+    PetscInt point_start_dist = -1;
+    PetscInt point_end_dist = -1;
+    PETSCCHK(DMPlexGetChart(dm, &point_start_dist, &point_end_dist));
+    ASSERT_EQ(nleaves, point_end_dist - point_start_dist);
+
+    std::vector<int> h_bcast(nleaves);
+    std::fill(h_bcast.begin(), h_bcast.end(), 0);
+
+    PETSCCHK(PetscSFBcastBegin(sf, MPI_INT, h_points.data(), h_bcast.data(),
+                               MPI_MAX));
+    PETSCCHK(
+        PetscSFBcastEnd(sf, MPI_INT, h_points.data(), h_bcast.data(), MPI_MAX));
+
+    for (PetscInt px = point_start_dist; px < point_end_dist; px++) {
+      const PetscInt to_test = nm.get_pre_distribute_local_point_index(px);
+      const PetscInt correct = h_bcast.at(px - point_start_dist);
+      ASSERT_EQ(to_test, correct);
+    }
+  }
+
+  dmh.free();
   nm.free();
   sycl_target->free();
+
+  PETSCCHK(PetscSFDestroy(&sf));
   PETSCCHK(DMDestroy(&dm));
   PETSCCHK(PetscFinalize());
 }

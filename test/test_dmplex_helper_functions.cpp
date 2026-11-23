@@ -125,6 +125,8 @@ TEST(DMPlexHelper, set_partitioner_cell_ownership_map) {
   }
 
   mesh->free();
+
+  PETSCCHK(PetscSFDestroy(&sf));
   PETSCCHK(DMDestroy(&dm));
   PETSCCHK(PetscFinalize());
 }
@@ -250,6 +252,8 @@ TEST(DMPlexHelper, set_partitioner_cell_ownership_label) {
   }
 
   mesh->free();
+
+  PETSCCHK(PetscSFDestroy(&sf));
   PETSCCHK(DMDestroy(&dm));
   PETSCCHK(PetscFinalize());
 }
