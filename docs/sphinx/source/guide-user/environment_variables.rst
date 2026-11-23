@@ -35,3 +35,5 @@ The behaviour of NESO-Particles can be configured at runtime by various environm
      - Default empty string. When set to a file name prefix, e.g, foo, profiling will be enabled and events written to foo.<rank>json on call to free of the SYCLTarget.
    * - ``NESO_PARTICLES_MAX_COMPUTE_UNITS``
      - Default empty string. When set to a positive integer this will override how many compute units NESO-Particles considers each rank to have.
+   * - ``NESO_PARTICLES_NPART_CELL_HINT``
+     - When set to a positive integer this will indicate to all ``ParticleGroups`` how many particles are expected in all cells. This causes space to be immediately allocated for this number of particles and hence reduces the time required to free and allocate more space for when particles are moving between cells.

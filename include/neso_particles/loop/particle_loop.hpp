@@ -134,7 +134,7 @@ public:
     this->loop_type = "ParticleLoop";
     this->init_from_particle_dat(particle_dat);
     this->particle_dat_init = std::static_pointer_cast<void>(particle_dat);
-    (check_is_sym_outer(args), ...);
+    (Private::check_is_sym_outer(args), ...);
   }
 
   /**

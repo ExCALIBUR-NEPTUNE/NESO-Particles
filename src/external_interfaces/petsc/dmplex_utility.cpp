@@ -209,10 +209,6 @@ void label_all_dmplex_boundaries(DM dm, std::string label_name,
   PETSCCHK(DMPlexLabelComplete(dm, label));
 }
 
-PetscInt signed_global_id_to_global_id(const PetscInt c) {
-  return (c > -1) ? c : ((c * (-1)) - 1);
-}
-
 void label_dmplex_edges(DM dm, std::string label_name,
                         std::vector<PetscInt> &vertex_starts,
                         std::vector<PetscInt> &vertex_ends,

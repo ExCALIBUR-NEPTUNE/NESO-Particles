@@ -10,7 +10,8 @@
 #include <string>
 #include <vector>
 
-#include "communication.hpp"
+#include "communication/comm_pair.hpp"
+#include "communication/communication_typedefs.hpp"
 #include "containers/resource_stack_map.hpp"
 #include "device_functions.hpp"
 #include "device_limits.hpp"
@@ -250,6 +251,36 @@ public:
   std::size_t get_num_local_work_items(const std::size_t num_bytes_offset,
                                        const std::size_t num_bytes,
                                        const std::size_t default_num);
+
+  /**
+   * This is a simple wrapper around SYCL memcpy that detects zero sized copies
+   * and returns an event. This wrapper exists to avoid passing zero sized
+   * copies to the SYCL implementations which unreliably handle the zero sized
+   * iteration set case and fatally error. We also ignore nullptr arguments when
+   * the copy size is zero.
+   *
+   * @param[in, out] dest Destination address.
+   * @param[in] src Source address.
+   * @param[in] num_bytes Number of bytes to copy from src to dest.
+   * @returns SYCL event to wait on for copy.
+   */
+  sycl::event memcpy(void *dest, const void *src, std::size_t num_bytes);
+
+  /**
+   * This is a simple wrapper around SYCL memcpy that detects zero sized copies
+   * and returns an event. This wrapper exists to avoid passing zero sized
+   * copies to the SYCL implementations which unreliably handle the zero sized
+   * iteration set case and fatally error. We also ignore nullptr arguments when
+   * the copy size is zero.
+   *
+   * @param[in, out] dest Destination address.
+   * @param[in] src Source address.
+   * @param[in] num_bytes Number of bytes to copy from src to dest.
+   * @param[in] dep_event Event that must finish before copy can start.
+   * @returns SYCL event to wait on for copy.
+   */
+  sycl::event memcpy(void *dest, const void *src, std::size_t num_bytes,
+                     sycl::event dep_event);
 };
 
 typedef std::shared_ptr<SYCLTarget> SYCLTargetSharedPtr;

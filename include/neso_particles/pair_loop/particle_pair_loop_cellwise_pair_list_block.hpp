@@ -224,7 +224,7 @@ public:
 
                 // These barriers seem to avoid a failure in acpp
                 // omp.accelerated?
-                idx.barrier(sycl::access::fence_space::local_space);
+                sycl::group_barrier(idx.get_group());
                 if (wavex == wave) {
                   ParticlePairLoopImplementation::ParticlePairLoopIteration
                       iteration;
@@ -258,8 +258,6 @@ public:
 
                 // These barriers seem to avoid a failure in acpp
                 // omp.accelerated?
-                idx.barrier(sycl::access::fence_space::local_space);
-
                 sycl::group_barrier(idx.get_group());
               }
 

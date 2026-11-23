@@ -250,7 +250,7 @@ void PairSamplerNTC::sample(ParticleSubGroupSharedPtr sub_group_a,
               la_flags[ix] = 0;
             }
 
-            idx.barrier(sycl::access::fence_space::local_space);
+            sycl::group_barrier(idx.get_group());
 
             for (int num_sampled_pairs = 0; num_sampled_pairs < npairs;
                  num_sampled_pairs += local_range) {
@@ -302,9 +302,9 @@ void PairSamplerNTC::sample(ParticleSubGroupSharedPtr sub_group_a,
               }
 
               // resolve dependencies within the block of pairs
-              idx.barrier(sycl::access::fence_space::local_space);
+              sycl::group_barrier(idx.get_group());
               const int num_steps_ordering = la_counts[0];
-              idx.barrier(sycl::access::fence_space::local_space);
+              sycl::group_barrier(idx.get_group());
               if (local_id == 0) {
                 la_counts[0] = 0;
               }
@@ -317,9 +317,9 @@ void PairSamplerNTC::sample(ParticleSubGroupSharedPtr sub_group_a,
                     la_flags[i3] = 0;
                     la_flags[j3] = 0;
                   }
-                  idx.barrier(sycl::access::fence_space::local_space);
+                  sycl::group_barrier(idx.get_group());
                 }
-                idx.barrier(sycl::access::fence_space::local_space);
+                sycl::group_barrier(idx.get_group());
 
                 // For all the particles which are involved in wave 0 set the
                 // next wave to 1.
@@ -327,7 +327,7 @@ void PairSamplerNTC::sample(ParticleSubGroupSharedPtr sub_group_a,
                   la_flags[i3] = 1;
                   la_flags[j3] = 1;
                 }
-                idx.barrier(sycl::access::fence_space::local_space);
+                sycl::group_barrier(idx.get_group());
 
                 for (int orderx = 0; orderx < num_steps_ordering; orderx++) {
 
@@ -341,11 +341,9 @@ void PairSamplerNTC::sample(ParticleSubGroupSharedPtr sub_group_a,
                     // la_counts[0] always holds the max wave exactly (not +1).
                     la_counts[0] = sycl::max(wave, la_counts[0]);
                   }
-
-                  idx.barrier(sycl::access::fence_space::local_space);
+                  sycl::group_barrier(idx.get_group());
                 }
-
-                idx.barrier(sycl::access::fence_space::local_space);
+                sycl::group_barrier(idx.get_group());
               }
 
               if (wave > -1) {
@@ -364,8 +362,7 @@ void PairSamplerNTC::sample(ParticleSubGroupSharedPtr sub_group_a,
                 la_flags[i3] = 0;
                 la_flags[j3] = 0;
               }
-
-              idx.barrier(sycl::access::fence_space::local_space);
+              sycl::group_barrier(idx.get_group());
               block_index++;
             }
 

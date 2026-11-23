@@ -123,9 +123,11 @@ TEST(MaskArray, base) {
 
       ma->reset(false, N);
       d_ma = ma->get_device();
-      sycl_target->queue
-          .memcpy(h_ma.data(), d_ma.d_masks, M * sizeof(MaskArrayBaseType))
-          .wait_and_throw();
+      if (M > 0) {
+        sycl_target->queue
+            .memcpy(h_ma.data(), d_ma.d_masks, M * sizeof(MaskArrayBaseType))
+            .wait_and_throw();
+      }
       for (std::size_t ix = 0; ix < M; ix++) {
         ASSERT_EQ(h_ma.at(ix), static_cast<MaskArrayBaseType>(0));
       }
@@ -156,9 +158,11 @@ TEST(MaskArray, base) {
       ASSERT_FALSE(ep.get_flag());
 
       std::fill(h_ma.begin(), h_ma.end(), 0);
-      sycl_target->queue
-          .memcpy(h_ma.data(), d_ma.d_masks, M * sizeof(MaskArrayBaseType))
-          .wait_and_throw();
+      if (M > 0) {
+        sycl_target->queue
+            .memcpy(h_ma.data(), d_ma.d_masks, M * sizeof(MaskArrayBaseType))
+            .wait_and_throw();
+      }
 
       count = 0;
       for (auto ix : h_ma) {

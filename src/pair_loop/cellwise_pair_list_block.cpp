@@ -235,7 +235,7 @@ void CellwisePairListBlockInterface::get_wave_occupancy_counts(
           if (index_local == (block_size - 1)) {
             la_occupancy_counts[block_size] = 0;
           }
-          idx.barrier(sycl::access::fence_space::local_space);
+          sycl::group_barrier(idx.get_group());
 
           const int num_pairs = d_pair_list.get_num_pairs(index_cell);
           const int num_blocks = div_round_up(num_pairs, block_size);
@@ -251,7 +251,7 @@ void CellwisePairListBlockInterface::get_wave_occupancy_counts(
             const int num_waves =
                 d_pair_list.get_num_waves(index_cell, index_block);
 
-            idx.barrier(sycl::access::fence_space::local_space);
+            sycl::group_barrier(idx.get_group());
             int wave_count = 0;
             for (int ix = 0; ix < block_size; ix++) {
               if (la_waves[ix] == index_local) {
@@ -268,8 +268,7 @@ void CellwisePairListBlockInterface::get_wave_occupancy_counts(
                   la_occupancy_counts[wave_count])
                   .fetch_add(1);
             }
-
-            idx.barrier(sycl::access::fence_space::local_space);
+            sycl::group_barrier(idx.get_group());
             index_pair += block_size;
           }
 
