@@ -17,7 +17,7 @@ class ProfilingCellCosts {
 protected:
   bool enabled = false;
   std::vector<REAL> h_cell_costs;
-  std::vector<int> h_npart_cell;
+  std::vector<int> h_num_elements_per_cell;
 
 public:
   // Number of cells costs are held for.
@@ -29,6 +29,11 @@ public:
    * @param num_cells Number of locally owned mesh cells.
    */
   ProfilingCellCosts(const int num_cells);
+
+  /**
+   * @returns True if enabled otherwise false.
+   */
+  bool is_enabled() const;
 
   /**
    * Enable recording of costs.
@@ -46,28 +51,29 @@ public:
   void zero();
 
   /**
-   * Accumulate using a number of particles per cell and a per particle cost.
+   * Accumulate using a number of elements per cell and a per element cost.
    *
    * @param sycl_target Compute device.
-   * @param d_npart_cell Number of particles in each cell.
-   * @param per_particle_cost Estimated cost per particle.
+   * @param d_num_elements_per_cell Number of elements in each cell.
+   * @param per_element_cost Estimated cost per element.
    */
   void accumulate(SYCLTargetSharedPtr sycl_target,
-                  const int *RESTRICT d_npart_cell,
-                  const REAL per_particle_cost);
+                  const int *RESTRICT d_num_elements_per_cell,
+                  const REAL per_element_cost);
 
   /**
-   * Accumulate using a number of particles per cell and a per particle cost.
+   * Accumulate using a number of elements per cell and a per element cost.
    *
    * @param sycl_target Compute device.
    * @param cell_start First cell of region which was timed.
    * @param cell_end Last cell plus one of region which was timed.
-   * @param d_npart_cell Number of particles in each cell.
-   * @param per_particle_cost Estimated cost per particle.
+   * @param d_num_elements_per_cell Number of elements in each cell.
+   * @param per_element_cost Estimated cost per element.
    */
   void accumulate(SYCLTargetSharedPtr sycl_target, const int cell_start,
-                  const int cell_end, const int *RESTRICT d_npart_cell,
-                  const REAL per_particle_cost);
+                  const int cell_end,
+                  const int *RESTRICT d_num_elements_per_cell,
+                  const REAL per_element_cost);
 
   /**
    * Get the per cell estimated costs.

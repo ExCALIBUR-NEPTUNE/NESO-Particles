@@ -6,7 +6,7 @@ TEST(Profiling, per_particle_average) {
   std::size_t key2 = 2;
 
   auto r0 =
-      ProfileRegion("key1", "key2", ProfileRegionType::PER_PARTICLE_TIMING);
+      ProfileRegion("key1", "key2", ProfileRegionType::PER_ELEMENT_TIMING);
 
   ASSERT_EQ(r0.profile_region_type_coeff, 0.0);
 
@@ -17,13 +17,89 @@ TEST(Profiling, per_particle_average) {
   ProfileMap profile_map;
   profile_map.enable();
   auto r1 = profile_map.start_region("key1", "key2",
-                                     ProfileRegionType::PER_PARTICLE_TIMING);
+                                     ProfileRegionType::PER_ELEMENT_TIMING);
 
   profile_map.end_region(r1, key1, key2, 1024);
   ASSERT_EQ(r1.value().profile_region_type_coeff, static_cast<double>(1024));
 }
 
-TEST(Profiling, per_cell_cost) {
+TEST(Profiling, per_element_cost) {
+  auto sycl_target = std::make_shared<SYCLTarget>(0, MPI_COMM_WORLD);
+
+  const int num_cells = 31;
+  ProfilingCellCosts profiling_cell_costs(num_cells);
+  std::vector<REAL> h_cell_costs;
+  std::vector<int> h_num_elements(num_cells);
+
+  profiling_cell_costs.get_cell_costs(h_cell_costs);
+  if (!profiling_cell_costs.is_enabled()) {
+    ASSERT_EQ(h_cell_costs.size(), 0);
+  }
+
+  profiling_cell_costs.enable();
+  ASSERT_TRUE(profiling_cell_costs.is_enabled());
+  profiling_cell_costs.disable();
+  ASSERT_TRUE(profiling_cell_costs.is_enabled() == false);
+  profiling_cell_costs.enable();
+  ASSERT_TRUE(profiling_cell_costs.is_enabled());
+
+  profiling_cell_costs.get_cell_costs(h_cell_costs);
+  ASSERT_EQ(h_cell_costs.size(), num_cells);
+
+  for (int cellx = 0; cellx < num_cells; cellx++) {
+    ASSERT_EQ(h_cell_costs.at(cellx), 0.0);
+  }
+
+  for (int cellx = 0; cellx < num_cells; cellx++) {
+    h_num_elements.at(cellx) = cellx;
+  }
+
+  auto d_num_elements =
+      std::make_shared<BufferDevice<int>>(sycl_target, h_num_elements);
+
+  profiling_cell_costs.accumulate(sycl_target, d_num_elements->ptr, 2.0);
+  profiling_cell_costs.get_cell_costs(h_cell_costs);
+  for (int cellx = 0; cellx < num_cells; cellx++) {
+    ASSERT_NEAR(h_cell_costs.at(cellx), 2.0 * cellx, 1.0e-14);
+  }
+
+  profiling_cell_costs.zero();
+  profiling_cell_costs.get_cell_costs(h_cell_costs);
+  for (int cellx = 0; cellx < num_cells; cellx++) {
+    ASSERT_EQ(h_cell_costs.at(cellx), 0.0);
+  }
+
+  profiling_cell_costs.accumulate(sycl_target, d_num_elements->ptr, 2.0);
+  profiling_cell_costs.get_cell_costs(h_cell_costs);
+  for (int cellx = 0; cellx < num_cells; cellx++) {
+    ASSERT_NEAR(h_cell_costs.at(cellx), 2.0 * cellx, 1.0e-14);
+  }
+
+  profiling_cell_costs.accumulate(sycl_target, d_num_elements->ptr, 2.0);
+  profiling_cell_costs.get_cell_costs(h_cell_costs);
+  for (int cellx = 0; cellx < num_cells; cellx++) {
+    ASSERT_NEAR(h_cell_costs.at(cellx), 4.0 * cellx, 1.0e-14);
+  }
+
+  profiling_cell_costs.accumulate(sycl_target, 2, 29, d_num_elements->ptr, 2.0);
+
+  profiling_cell_costs.get_cell_costs(h_cell_costs);
+  for (int cellx = 0; cellx < num_cells; cellx++) {
+    if ((cellx >= 2) && (cellx < 29)) {
+      ASSERT_NEAR(h_cell_costs.at(cellx), 6.0 * cellx, 1.0e-14);
+    } else {
+      ASSERT_NEAR(h_cell_costs.at(cellx), 4.0 * cellx, 1.0e-14);
+    }
+  }
+
+  profiling_cell_costs.disable();
+  profiling_cell_costs.get_cell_costs(h_cell_costs);
+  ASSERT_EQ(h_cell_costs.size(), 0);
+
+  sycl_target->free();
+}
+
+TEST(Profiling, per_cell_cost_particle_loops) {
   const int ndim = 2;
   const int nx = 16;
   const int ny = 16;

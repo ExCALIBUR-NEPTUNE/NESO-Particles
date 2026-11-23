@@ -82,7 +82,7 @@ bool ParticleLoopBase::iteration_set_is_empty(
 
 void ParticleLoopBase::profiling_region_init() {
   this->profile_region = ProfileRegion(this->loop_type, this->name,
-                                       ProfileRegionType::PER_PARTICLE_TIMING);
+                                       ProfileRegionType::PER_ELEMENT_TIMING);
 }
 
 void ParticleLoopBase::profile_region_finalise() {
@@ -93,8 +93,8 @@ void ParticleLoopBase::profile_region_finalise() {
                            static_cast<std::size_t>(iteration_set_size));
   this->sycl_target->profile_map.add_region(this->profile_region);
 
-  const REAL average_per_particle_cost =
-      this->sycl_target->profile_map.get_per_particle_timing(
+  const REAL average_per_element_cost =
+      this->sycl_target->profile_map.get_per_element_timing(
           this->kernel_type_id, 0);
 
   if (this->particle_group_ptr != nullptr) {
@@ -106,7 +106,7 @@ void ParticleLoopBase::profile_region_finalise() {
 
     this->particle_group_ptr->domain->profiling_cell_costs.accumulate(
         this->sycl_target, this->profile_cell_start, this->profile_cell_end,
-        this->d_npart_cell_lb, average_per_particle_cost);
+        this->d_npart_cell_lb, average_per_element_cost);
   }
 }
 

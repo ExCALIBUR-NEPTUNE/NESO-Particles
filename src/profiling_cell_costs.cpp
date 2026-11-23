@@ -14,11 +14,13 @@ ProfilingCellCosts::ProfilingCellCosts(const int num_cells)
   }
 }
 
+bool ProfilingCellCosts::is_enabled() const { return this->enabled; }
+
 void ProfilingCellCosts::enable() {
   if (!this->enabled) {
     this->enabled = true;
     this->h_cell_costs = std::vector<REAL>(num_cells);
-    this->h_npart_cell = std::vector<int>(num_cells);
+    this->h_num_elements_per_cell = std::vector<int>(num_cells);
     this->zero();
   }
 }
@@ -26,7 +28,7 @@ void ProfilingCellCosts::enable() {
 void ProfilingCellCosts::disable() {
   this->enabled = false;
   this->h_cell_costs.clear();
-  this->h_npart_cell.clear();
+  this->h_num_elements_per_cell.clear();
 }
 
 void ProfilingCellCosts::zero() {
@@ -36,17 +38,17 @@ void ProfilingCellCosts::zero() {
 }
 
 void ProfilingCellCosts::accumulate(SYCLTargetSharedPtr sycl_target,
-                                    const int *RESTRICT d_npart_cell,
-                                    const REAL per_particle_cost) {
+                                    const int *RESTRICT d_num_elements_per_cell,
+                                    const REAL per_element_cost) {
 
-  this->accumulate(sycl_target, 0, this->num_cells, d_npart_cell,
-                   per_particle_cost);
+  this->accumulate(sycl_target, 0, this->num_cells, d_num_elements_per_cell,
+                   per_element_cost);
 }
 
 void ProfilingCellCosts::accumulate(SYCLTargetSharedPtr sycl_target,
                                     const int cell_start, const int cell_end,
-                                    const int *RESTRICT d_npart_cell,
-                                    const REAL per_particle_cost) {
+                                    const int *RESTRICT d_num_elements_per_cell,
+                                    const REAL per_element_cost) {
 
   if (this->enabled) {
     NESOASSERT(cell_start <= cell_end, "cell_start > cell_end");
@@ -58,12 +60,14 @@ void ProfilingCellCosts::accumulate(SYCLTargetSharedPtr sycl_target,
     const int num_cells_copy = cell_end - cell_start;
 
     sycl_target
-        ->memcpy(this->h_npart_cell.data() + cell_start,
-                 d_npart_cell + cell_start, num_cells_copy * sizeof(int))
+        ->memcpy(this->h_num_elements_per_cell.data() + cell_start,
+                 d_num_elements_per_cell + cell_start,
+                 num_cells_copy * sizeof(int))
         .wait_and_throw();
 
     for (int ix = cell_start; ix < cell_end; ix++) {
-      this->h_cell_costs[ix] += per_particle_cost * this->h_npart_cell[ix];
+      this->h_cell_costs[ix] +=
+          per_element_cost * this->h_num_elements_per_cell[ix];
     }
   }
 }

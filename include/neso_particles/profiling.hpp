@@ -43,7 +43,7 @@ profile_elapsed(std::chrono::high_resolution_clock::time_point time_start,
  * Enum to specify a particular type of profile region, e.g. per particle
  * timing.
  */
-enum ProfileRegionType { STANDARD_REGION, PER_PARTICLE_TIMING };
+enum ProfileRegionType { STANDARD_REGION, PER_ELEMENT_TIMING };
 
 /**
  * Structure to describe an entry in the profiling data structure.
@@ -166,8 +166,7 @@ public:
   // ParticleLoops are often constructed/destroyed frequently in simulations at
   // we need a way to store/accumulate the timing information for a kernel in a
   // persistant place.
-  std::map<std::pair<std::size_t, std::size_t>, double>
-      per_particle_timings_map;
+  std::map<std::pair<std::size_t, std::size_t>, double> per_element_timings_map;
 
   /**
    * Enable recording of events and regions.
@@ -258,11 +257,11 @@ public:
 
 protected:
   inline void
-  push_per_particle_timing([[maybe_unused]] ProfileRegion &profile_region) {
+  push_per_element_timing([[maybe_unused]] ProfileRegion &profile_region) {
     if (profile_region.profile_region_type ==
-        ProfileRegionType::PER_PARTICLE_TIMING) {
-      this->per_particle_timings_map[{profile_region.profile_region_key1,
-                                      profile_region.profile_region_key2}] =
+        ProfileRegionType::PER_ELEMENT_TIMING) {
+      this->per_element_timings_map[{profile_region.profile_region_key1,
+                                     profile_region.profile_region_key2}] =
           profile_region.profile_region_type_time;
     }
   }
@@ -274,10 +273,10 @@ public:
    * @returns True if this instance contains a per particle timing for a pair of
    * keys.
    */
-  inline bool contains_per_particle_timing(const std::size_t key1,
-                                           const std::size_t key2) {
+  inline bool contains_per_element_timing(const std::size_t key1,
+                                          const std::size_t key2) {
     const std::pair<std::size_t, std::size_t> k = {key1, key2};
-    return this->per_particle_timings_map.count(k);
+    return this->per_element_timings_map.count(k);
   }
 
   /**
@@ -285,15 +284,15 @@ public:
    * @param key2 The second key of the region with per particle timing.
    * @returns The current estimate of the per particle cost for a pair of keys.
    */
-  inline REAL get_per_particle_timing(const std::size_t key1,
-                                      const std::size_t key2) {
+  inline REAL get_per_element_timing(const std::size_t key1,
+                                     const std::size_t key2) {
     if (this->enabled) {
       const std::pair<std::size_t, std::size_t> k = {key1, key2};
-      NESOASSERT(this->contains_per_particle_timing(key1, key2),
+      NESOASSERT(this->contains_per_element_timing(key1, key2),
                  "Could not find key in the map. Use "
-                 "contains_per_particle_timing to test.");
+                 "contains_per_element_timing to test.");
 
-      return this->per_particle_timings_map[k];
+      return this->per_element_timings_map[k];
     } else {
       return 0.0;
     }
@@ -307,7 +306,7 @@ public:
   inline void add_region([[maybe_unused]] ProfileRegion &profile_region) {
     if (this->enabled) {
       this->regions.push_back(profile_region);
-      push_per_particle_timing(profile_region);
+      push_per_element_timing(profile_region);
     }
   }
 
@@ -354,7 +353,7 @@ public:
     if (this->enabled && profile_region) {
       profile_region.value().end();
       this->regions.push_back(profile_region.value());
-      push_per_particle_timing(profile_region.value());
+      push_per_element_timing(profile_region.value());
     }
   }
 
@@ -372,7 +371,7 @@ public:
     if (this->enabled && profile_region) {
       profile_region.value().end(key1, key2, num_particles);
       this->regions.push_back(profile_region.value());
-      push_per_particle_timing(profile_region.value());
+      push_per_element_timing(profile_region.value());
     }
   }
 
