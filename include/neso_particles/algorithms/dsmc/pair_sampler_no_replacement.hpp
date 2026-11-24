@@ -53,9 +53,6 @@ public:
 
   virtual ~PairSamplerNoReplacement() = default;
 
-  // Compute device
-  SYCLTargetSharedPtr sycl_target;
-
   // Number of mesh cells
   int num_mesh_cells{0};
 

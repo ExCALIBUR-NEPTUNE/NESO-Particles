@@ -7,7 +7,7 @@ namespace NESO::Particles::DSMC {
 PairSamplerNoReplacement::PairSamplerNoReplacement(
     SYCLTargetSharedPtr sycl_target, const int num_mesh_cells,
     std::shared_ptr<RNGGenerationFunction<REAL>> rng_generation_function)
-    : sycl_target(sycl_target), num_mesh_cells(num_mesh_cells),
+    : CellwisePairList(sycl_target), num_mesh_cells(num_mesh_cells),
       rng_generation_function(rng_generation_function) {
 
   this->d_pair_list = std::make_unique<CellDat<int>>(this->sycl_target,

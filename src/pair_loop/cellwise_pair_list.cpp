@@ -2,11 +2,10 @@
 
 namespace NESO::Particles {
 
-bool CellwisePairList::validate_pair_list(
-    [[maybe_unused]] SYCLTargetSharedPtr sycl_target) {
+CellwisePairList::CellwisePairList(SYCLTargetSharedPtr sycl_target)
+    : sycl_target(sycl_target) {}
 
-  return false;
-}
+bool CellwisePairList::validate_pair_list() { return false; }
 
 INT CellwisePairList::get_num_pairs_range(const int cell_start,
                                           const int cell_end) {
@@ -31,6 +30,60 @@ INT CellwisePairList::get_num_pairs_range(const int cell_start,
   }
 
   return count;
+}
+
+void CellwisePairList::get_num_pairs_masked_range_cellwise(
+    const int cell_start, const int cell_end, int *d_num_pairs,
+    EventStack &event_stack) {
+
+  const auto k_pair_list = this->get_pair_list();
+
+  const std::size_t local_size =
+      sycl_target->parameters->template get<SizeTParameter>("LOOP_LOCAL_SIZE")
+          ->value;
+
+  const int cell_range = cell_end - cell_start;
+  const auto cell_count = k_pair_list.cell_count;
+
+  NESOASSERT((0 <= cell_start) && (cell_start <= cell_count),
+             "Bad cell_start.");
+  NESOASSERT((0 <= cell_end) && (cell_end <= cell_count), "Bad cell_end.");
+
+  if (cell_range < 1) {
+    return;
+  }
+
+  NESOASSERT(d_num_pairs != nullptr, "Bad d_num_pairs.");
+
+  auto e0 = this->sycl_target->queue.fill<int>(d_num_pairs, 0, cell_count);
+  auto e1 = this->sycl_target->queue.parallel_for(
+      this->sycl_target->device_limits.validate_nd_range(
+          sycl::nd_range<2>(sycl::range<2>(cell_range, local_size),
+                            sycl::range<2>(1, local_size))),
+      e0, [=](sycl::nd_item<2> idx) {
+        const int item_cell = idx.get_global_id(0);
+        const int item_local_id = idx.get_global_id(1);
+        const auto &mask_array = k_pair_list.mask_array;
+
+        int count_workitem = 0;
+        const int num_waves = k_pair_list.get_num_waves(item_cell);
+        for (int wavex = 0; wavex < num_waves; wavex++) {
+          const int num_pairs = k_pair_list.get_num_pairs(wavex, item_cell);
+          for (int pair_index = item_local_id; pair_index < num_pairs;
+               pair_index += local_size) {
+            const INT global_pair_index =
+                k_pair_list.get_pair_linear_index(wavex, item_cell, pair_index);
+
+            const bool mask = mask_array.get(global_pair_index, 0);
+            count_workitem += mask ? 1 : 0;
+          }
+        }
+
+        // TODO use group reduce (acpp bugs)?
+        atomic_fetch_add(d_num_pairs + item_cell, count_workitem);
+      });
+
+  event_stack.push(e1);
 }
 
 } // namespace NESO::Particles

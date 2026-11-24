@@ -15,6 +15,7 @@ template <typename KERNEL, typename... ARGS>
 class ParticlePairLoopCellwisePairList : public ParticlePairLoopArgs<ARGS...> {
 
 protected:
+  std::size_t kernel_type_id{0};
   /// The types of the parameters for the outside loops.
   using loop_parameter_type =
       typename ParticlePairLoopArgs<ARGS...>::loop_parameter_type;
@@ -33,6 +34,41 @@ protected:
 
   virtual inline std::size_t get_iteration_set_size() override {
     return static_cast<std::size_t>(this->h_pair_list_device.pair_count);
+  }
+
+  std::optional<ProfileRegion> profile_region;
+
+  virtual inline void profile_region_initialise() override {
+
+    this->profile_region = this->sycl_target->profile_map.start_region(
+        "ParticlePairLoopCellwisePairList", this->name,
+        ProfileRegionType::PER_ELEMENT_TIMING);
+  }
+
+  virtual inline void profile_region_finalise() override {
+
+    if (this->profile_region != std::nullopt) {
+      const auto iteration_set_size = this->global_info_A.iteration_set_size;
+      this->profile_region.value().end(
+          this->kernel_type_id, 0,
+          static_cast<std::size_t>(iteration_set_size));
+
+      this->sycl_target->profile_map.add_region(this->profile_region.value());
+
+      if (this->particle_group_A != nullptr) {
+
+        const REAL average_per_element_cost =
+            this->sycl_target->profile_map.get_per_element_timing(
+                this->kernel_type_id, 0);
+
+        const auto cell_start = this->global_info_A.starting_cell;
+        const auto cell_end = this->global_info_A.bounding_cell;
+
+        // this->particle_group_A->domain->profiling_cell_costs.accumulate(
+        //     this->sycl_target, cell_start, cell_end,
+        //     this->d_npart_cell_lb, average_per_element_cost);
+      }
+    }
   }
 
 public:
@@ -55,6 +91,7 @@ public:
                                       nullptr, args...),
         pair_list(pair_list), kernel(particle_pair_loop_kernel(kernel)) {
 
+    this->kernel_type_id = typeid(KERNEL).hash_code();
     this->particle_group_A = pair_list.A;
     this->particle_group_B = pair_list.B;
     NESOASSERT(this->particle_group_A->domain == this->particle_group_B->domain,
@@ -81,8 +118,8 @@ public:
   submit([[maybe_unused]] const std::optional<int> cell_start = std::nullopt,
          [[maybe_unused]] const std::optional<int> cell_end =
              std::nullopt) override {
-    this->profile_region = this->sycl_target->profile_map.start_region(
-        "ParticlePairLoopCellwisePairList", this->name);
+
+    this->profile_region_initialise();
 
     const auto k_pair_list = this->pair_list.pair_list->get_pair_list();
     this->h_pair_list_device = k_pair_list;
