@@ -55,18 +55,42 @@ protected:
 
       this->sycl_target->profile_map.add_region(this->profile_region.value());
 
-      if (this->particle_group_A != nullptr) {
+      const bool profiling_enabled = this->sycl_target->profile_map.enabled;
 
-        const REAL average_per_element_cost =
-            this->sycl_target->profile_map.get_per_element_timing(
-                this->kernel_type_id, 0);
+      if ((this->particle_group_A != nullptr) && (profiling_enabled)) {
 
-        const auto cell_start = this->global_info_A.starting_cell;
-        const auto cell_end = this->global_info_A.bounding_cell;
+        const bool cell_costs_enabled =
+            this->particle_group_A->domain->profiling_cell_costs.is_enabled();
 
-        // this->particle_group_A->domain->profiling_cell_costs.accumulate(
-        //     this->sycl_target, cell_start, cell_end,
-        //     this->d_npart_cell_lb, average_per_element_cost);
+        if (cell_costs_enabled) {
+
+          const auto cell_start = this->global_info_A.starting_cell;
+          const auto cell_end = this->global_info_A.bounding_cell;
+
+          EventStack es;
+          auto profile_d_pair_counts =
+              get_resource<BufferDevice<int>,
+                           ResourceStackInterfaceBufferDevice<int>>(
+                  this->sycl_target->resource_stack_map,
+                  ResourceStackKeyBufferDevice<int>{}, this->sycl_target);
+          profile_d_pair_counts->realloc_no_copy(this->cell_count);
+
+          this->pair_list.pair_list->get_num_pairs_masked_range_cellwise(
+              cell_start, cell_end, profile_d_pair_counts->ptr, es);
+          es.wait();
+
+          const REAL average_per_element_cost =
+              this->sycl_target->profile_map.get_per_element_timing(
+                  this->kernel_type_id, 0);
+
+          this->particle_group_A->domain->profiling_cell_costs.accumulate(
+              this->sycl_target, cell_start, cell_end,
+              profile_d_pair_counts->ptr, average_per_element_cost);
+
+          restore_resource(this->sycl_target->resource_stack_map,
+                           ResourceStackKeyBufferDevice<int>{},
+                           profile_d_pair_counts);
+        }
       }
     }
   }

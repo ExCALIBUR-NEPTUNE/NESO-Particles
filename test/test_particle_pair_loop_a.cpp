@@ -62,6 +62,50 @@ TEST(ParticlePairLoop, cellwise_pair_list) {
   }
 
   {
+
+    EventStack es;
+    BufferDevice<int> d_tmp_count(sycl_target, cell_count);
+    cellwise_pair_list->get_num_pairs_masked_range_cellwise(
+        0, 0, d_tmp_count.ptr, es);
+    es.wait();
+    auto h_tmp_count = d_tmp_count.get();
+
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      ASSERT_EQ(h_tmp_count.at(cellx), 0);
+    }
+
+    for (int cell_end = 2; cell_end < cell_count; cell_end++) {
+      cellwise_pair_list->get_num_pairs_masked_range_cellwise(
+          1, cell_end, d_tmp_count.ptr, es);
+      es.wait();
+      auto h_tmp_count = d_tmp_count.get();
+
+      ASSERT_EQ(h_tmp_count.at(0), 0);
+      for (int cellx = 1; cellx < cell_end; cellx++) {
+        ASSERT_EQ(h_tmp_count.at(cellx), h_num_pairs.at(cellx));
+      }
+    }
+
+    cellwise_pair_list->get_num_pairs_masked_range_cellwise(
+        0, cell_count, d_tmp_count.ptr, es);
+    es.wait();
+    h_tmp_count = d_tmp_count.get();
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      ASSERT_EQ(h_tmp_count.at(cellx), h_num_pairs.at(cellx));
+    }
+
+    auto pair_mask = cellwise_pair_list->get_pair_mask();
+    pair_mask->reset(false);
+    cellwise_pair_list->get_num_pairs_masked_range_cellwise(
+        0, cell_count, d_tmp_count.ptr, es);
+    es.wait();
+    h_tmp_count = d_tmp_count.get();
+    for (int cellx = 0; cellx < cell_count; cellx++) {
+      ASSERT_EQ(h_tmp_count.at(cellx), 0);
+    }
+  }
+
+  {
     auto h_to_test = cellwise_pair_list->get_host_pair_list();
     auto d_to_test = cellwise_pair_list->get_pair_list();
 

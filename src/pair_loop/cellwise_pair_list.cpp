@@ -49,19 +49,20 @@ void CellwisePairList::get_num_pairs_masked_range_cellwise(
              "Bad cell_start.");
   NESOASSERT((0 <= cell_end) && (cell_end <= cell_count), "Bad cell_end.");
 
+  NESOASSERT(d_num_pairs != nullptr, "Bad d_num_pairs.");
+  auto e0 = this->sycl_target->queue.fill<int>(d_num_pairs, 0, cell_count);
+
   if (cell_range < 1) {
+    event_stack.push(e0);
     return;
   }
 
-  NESOASSERT(d_num_pairs != nullptr, "Bad d_num_pairs.");
-
-  auto e0 = this->sycl_target->queue.fill<int>(d_num_pairs, 0, cell_count);
   auto e1 = this->sycl_target->queue.parallel_for(
       this->sycl_target->device_limits.validate_nd_range(
           sycl::nd_range<2>(sycl::range<2>(cell_range, local_size),
                             sycl::range<2>(1, local_size))),
       e0, [=](sycl::nd_item<2> idx) {
-        const int item_cell = idx.get_global_id(0);
+        const int item_cell = cell_start + idx.get_global_id(0);
         const int item_local_id = idx.get_global_id(1);
         const auto &mask_array = k_pair_list.mask_array;
 
