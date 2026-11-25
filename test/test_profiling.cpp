@@ -146,12 +146,6 @@ TEST(Profiling, per_cell_cost_particle_loops) {
   A->clear();
   A->add_particles_local(initial_distribution);
 
-  auto ccb = std::make_shared<CartesianCellBin>(
-      sycl_target, mesh, A->position_dat, A->cell_id_dat);
-
-  ccb->execute();
-  A->cell_move();
-
   A->domain->profiling_cell_costs.enable();
   sycl_target->profile_map.enable();
 
@@ -341,11 +335,10 @@ TEST(Profiling, per_cell_cost_particle_pair_loops) {
   A->clear();
   A->add_particles_local(initial_distribution);
 
-  auto ccb = std::make_shared<CartesianCellBin>(
-      sycl_target, mesh, A->position_dat, A->cell_id_dat);
-
-  ccb->execute();
-  A->cell_move();
+  // auto ccb = std::make_shared<CartesianCellBin>(
+  //     sycl_target, mesh, A->position_dat, A->cell_id_dat);
+  // ccb->execute();
+  // A->cell_move();
 
   auto cplh = std::make_shared<CellwisePairListHost>(cell_count);
   auto cpl = std::make_shared<CellwisePairListSimple>(sycl_target, cell_count);
@@ -398,6 +391,20 @@ TEST(Profiling, per_cell_cost_particle_pair_loops) {
         EXPECT_TRUE(cell_cost_tmp == 0.0);
       }
     }
+
+    //{
+    //  auto vtk_cell_data =
+    //      std::dynamic_pointer_cast<CartesianHMesh>(A->domain->mesh)
+    //          ->get_vtk_cell_data();
+    //
+    //  for (int cellx = 0; cellx < cell_count; cellx++) {
+    //    vtk_cell_data.at(cellx).cell_data["cost"] = h_cell_costs.at(cellx);
+    //  }
+    //
+    //  VTK::VTKHDF vtkhdf("pair_costs.vtkhdf", MPI_COMM_WORLD);
+    //  vtkhdf.write(vtk_cell_data);
+    //  vtkhdf.close();
+    //}
   }
 
   if (cell_count > 8) {
