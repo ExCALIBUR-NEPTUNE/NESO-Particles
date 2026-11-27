@@ -47,8 +47,6 @@ protected:
   PairMaskSharedPtr pair_mask;
 
 public:
-  /// Compute device holding pairs.
-  SYCLTargetSharedPtr sycl_target;
   /// Number of cells to hold pairs for.
   int num_mesh_cells{0};
 

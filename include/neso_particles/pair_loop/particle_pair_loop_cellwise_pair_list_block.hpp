@@ -17,6 +17,8 @@ class ParticlePairLoopCellwisePairListBlock
     : public ParticlePairLoopArgs<ARGS...> {
 
 protected:
+  std::size_t kernel_type_id{0};
+
   /// The types of the parameters for the outside loops.
   using loop_parameter_type =
       typename ParticlePairLoopArgs<ARGS...>::loop_parameter_type;
@@ -49,6 +51,20 @@ protected:
     return num_pairs;
   }
 
+  std::optional<ProfileRegion> profile_region;
+
+  virtual inline void profile_region_initialise() override {
+
+    this->profile_region = this->sycl_target->profile_map.start_region(
+        "ParticlePairLoopCellwisePairListBlock", this->name,
+        ProfileRegionType::PER_ELEMENT_TIMING);
+  }
+
+  virtual inline void profile_region_finalise() override {
+
+    this->sycl_target->profile_map.end_region(this->profile_region);
+  }
+
 public:
   std::vector<
       CellwisePairListAbsolute<ParticleGroup, CellwisePairListBlockInterface>>
@@ -73,6 +89,7 @@ public:
                                       nullptr, args...),
         pair_lists(pair_lists), kernel(particle_pair_loop_kernel(kernel)) {
 
+    this->kernel_type_id = typeid(KERNEL).hash_code();
     if (pair_lists.size()) {
       this->num_pair_lists = pair_lists.size();
       this->particle_group_A = get_particle_group(pair_lists[0].A);
@@ -120,8 +137,7 @@ public:
         "ParticlePairLoopCellwisePairListBlock does not support "
         "execution over a range of cells. (offset for loop linear index)");
 
-    this->profile_region = this->sycl_target->profile_map.start_region(
-        "ParticlePairLoopCellwisePairListBlock", this->name);
+    this->profile_region_initialise();
 
     INT pair_list_counts_es = 0;
     int block_size = 0;

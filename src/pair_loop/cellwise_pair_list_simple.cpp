@@ -5,7 +5,8 @@ namespace NESO::Particles {
 
 CellwisePairListSimple::CellwisePairListSimple(SYCLTargetSharedPtr sycl_target,
                                                const int num_mesh_cells)
-    : h_wave_count(std::vector<int>(num_mesh_cells)),
+    : CellwisePairList(sycl_target),
+      h_wave_count(std::vector<int>(num_mesh_cells)),
       d_wave_count(
           std::make_shared<BufferDevice<int>>(sycl_target, num_mesh_cells)),
       d_wave_offsets(
@@ -16,7 +17,7 @@ CellwisePairListSimple::CellwisePairListSimple(SYCLTargetSharedPtr sycl_target,
           std::make_shared<BufferDevice<int>>(sycl_target, num_mesh_cells)),
       d_pair_counts_es(
           std::make_shared<BufferDevice<INT>>(sycl_target, num_mesh_cells)),
-      h_pair_counts(std::vector<int>(num_mesh_cells)), sycl_target(sycl_target),
+      h_pair_counts(std::vector<int>(num_mesh_cells)),
       num_mesh_cells(num_mesh_cells),
       pair_mask(std::make_shared<PairMask>(sycl_target)) {
   this->clear();

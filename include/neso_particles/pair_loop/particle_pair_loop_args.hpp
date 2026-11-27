@@ -43,7 +43,6 @@ protected:
   ParticleSubGroupSharedPtr particle_sub_group_B{nullptr};
 
   EventStack event_stack;
-  std::optional<ProfileRegion> profile_region;
 
   /// Recursively assemble the tuple args.
   template <size_t INDEX, typename U> inline void unpack_args(U a0) {
@@ -305,6 +304,9 @@ protected:
     global_info_B->iteration_set_size = iteration_set_size;
   }
 
+  virtual inline void profile_region_initialise() = 0;
+  virtual inline void profile_region_finalise() = 0;
+
 public:
   SYCLTargetSharedPtr sycl_target{nullptr};
   std::string name;
@@ -329,7 +331,7 @@ public:
     KernelMasksType kernel_masks;
     this->apply_post_loop(kernel_masks, this->global_info_A,
                           this->global_info_B);
-    this->sycl_target->profile_map.end_region(this->profile_region);
+    this->profile_region_finalise();
   }
 };
 

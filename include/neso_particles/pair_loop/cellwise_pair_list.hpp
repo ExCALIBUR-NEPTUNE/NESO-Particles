@@ -114,7 +114,17 @@ struct CellwisePairListDevice {
 class CellwisePairList {
 
 public:
+  // Compute device for pair list.
+  SYCLTargetSharedPtr sycl_target{nullptr};
+
   virtual ~CellwisePairList() = default;
+
+  /**
+   * Initialise the base type for the pair list.
+   *
+   * @param sycl_target Compute device for the pair list.
+   */
+  CellwisePairList(SYCLTargetSharedPtr sycl_target);
 
   /**
    * Get a description of the pair list accessible on the device.
@@ -141,7 +151,7 @@ public:
    * @returns True if no conflicts were detected or the pair list was otherwise
    * malformed.
    */
-  virtual bool validate_pair_list(SYCLTargetSharedPtr sycl_target);
+  virtual bool validate_pair_list();
 
   /**
    * @returns The PairMask which can be used to mask off pairs. By default all
@@ -151,13 +161,29 @@ public:
 
   /**
    * Get the number of pairs of particles across mesh cells [cell_start,
-   * cell_end).
+   * cell_end). Note this function returns the un-masked number of pairs.
    *
    * @param cell_start First mesh cell.
    * @param cell_end Last plus one mesh cell.
    * @returns Number of pairs of particles.
    */
   virtual INT get_num_pairs_range(const int cell_start, const int cell_end);
+
+  /**
+   * Get the number of masked pairs in each cell on the compute device.
+   *
+   * @param[in] sycl_target Compute device for cell list.
+   * @param[in] cell_start First mesh cell.
+   * @param[in] cell_end Last plus one mesh cell.
+   * @param[in, put] d_num_pairs Pointer to device buffer of size equal to
+   * the total number of mesh cells where the elements indexed by [cell_start,
+   * cell_end) are updated.
+   * @param[in, out] event_stack EventStack to wait on for result.
+   */
+  virtual void get_num_pairs_masked_range_cellwise(const int cell_start,
+                                                   const int cell_end,
+                                                   int *d_num_pairs,
+                                                   EventStack &event_stack);
 };
 
 using CellwisePairListSharedPtr = std::shared_ptr<CellwisePairList>;
