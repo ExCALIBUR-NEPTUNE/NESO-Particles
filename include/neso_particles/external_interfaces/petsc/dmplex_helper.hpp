@@ -49,6 +49,30 @@ void set_partitioner_cell_ownership(
     MPI_Comm comm = MPI_COMM_WORLD);
 
 /**
+ * Explicitly set the partitioner for a DMPlex to Parmetis.
+ *
+ * @param[in, out] dm DMPlex to set partitioner on.
+ */
+void set_partitioner_parmetis(DM &dm);
+
+/**
+ * Set the cell weights used for decomposition to try and obtain a better
+ * distribution. This function sets the DMPlex section that holds the number of
+ * DOFs for each cell.
+ *
+ * The passed floating point weights are used to create integer weights (DOF
+ * counts) in [1, weight_max].
+ *
+ * @param[in, out] dm DMPlex to set weights for.
+ * @param[in] cell_weights Map from cell point indices to floating point weight.
+ * @param[in] weight_max Maximum number of DOFs to represent weights as, default
+ * 1000.
+ */
+void set_partitioner_weights_via_number_of_dofs(
+    DM &dm, std::map<PetscInt, REAL> &cell_weights,
+    const PetscInt weight_max = 1000);
+
+/**
  * If there are more than 1 MPI ranks set the partitioner of the mesh to be a
  * partitioner where the resulting owning MPI rank is the rank provided DMPlex
  * label.

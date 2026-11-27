@@ -1,4 +1,5 @@
 #ifdef NESO_PARTICLES_PETSC
+#include <limits>
 #include <neso_particles/external_interfaces/petsc/dmplex_helper.hpp>
 
 namespace NESO::Particles::PetscInterface {
@@ -87,6 +88,49 @@ void set_partitioner_cell_ownership(
 
   PETSCCHK(PetscPartitionerShellSetPartition(part, size, num_points.data(),
                                              ordered_cells.data()));
+}
+
+void set_partitioner_parmetis(DM &dm) {
+  PetscPartitioner part;
+  PETSCCHK(DMPlexGetPartitioner(dm, &part));
+  PETSCCHK(PetscPartitionerSetType(part, PETSCPARTITIONERPARMETIS));
+  PETSCCHK(PetscPartitionerSetFromOptions(part));
+}
+
+void set_partitioner_weights_via_number_of_dofs(
+    DM &dm, std::map<PetscInt, REAL> &cell_weights, const PetscInt weight_max) {
+
+  REAL w_max = std::numeric_limits<REAL>::lowest();
+  REAL w_min = std::numeric_limits<REAL>::max();
+
+  for (auto &w : cell_weights) {
+    w_max = std::max(w.second, w_max);
+    w_min = std::min(w.second, w_min);
+  }
+
+  w_max -= w_min;
+
+  MPI_Comm comm;
+  PETSCCHK(PetscObjectGetComm((PetscObject)dm, &comm));
+  PetscInt cell_start;
+  PetscInt cell_end;
+  PetscSection weight_section;
+
+  PETSCCHK(DMPlexGetHeightStratum(dm, 0, &cell_start, &cell_end));
+  PETSCCHK(PetscSectionCreate(comm, &weight_section));
+  PETSCCHK(PetscSectionSetChart(weight_section, cell_start, cell_end));
+  for (PetscInt cellx = cell_start; cellx < cell_end; cellx++) {
+    const REAL w_real = (cell_weights[cellx] - w_min) / w_max;
+    const PetscInt w_int =
+        std::min(std::max(static_cast<PetscInt>(1),
+                          static_cast<PetscInt>(w_real * weight_max)),
+                 weight_max);
+
+    PETSCCHK(PetscSectionSetDof(weight_section, cellx, w_int));
+  }
+  PETSCCHK(PetscSectionSetUp(weight_section));
+  PETSCCHK(DMSetLocalSection(dm, weight_section));
+  PETSCCHK(PetscSectionDestroy(&weight_section));
 }
 
 void set_partitioner_from_label(DM *dm, const std::string label_name,

@@ -258,4 +258,79 @@ TEST(DMPlexHelper, set_partitioner_cell_ownership_label) {
   PETSCCHK(PetscFinalize());
 }
 
+TEST(DMPlexHelper, set_partitioner_weights_via_number_of_dofs) {
+  PETSCCHK(PetscInitializeNoArguments());
+  DM dm;
+
+  const int ndim = 2;
+  const int mesh_size = (ndim == 2) ? 32 : 16;
+  PetscInt faces[3] = {mesh_size, mesh_size, mesh_size};
+
+  int size = -1;
+  int rank = -1;
+  MPICHK(MPI_Comm_size(MPI_COMM_WORLD, &size));
+  MPICHK(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
+
+  PETSCCHK(NPPETScAPI::NP_DMPlexCreateBoxMesh(
+      PETSC_COMM_WORLD, ndim, PETSC_FALSE, faces,
+      /* lower */ NULL,
+      /* upper */ NULL,
+      /* periodicity */ NULL, PETSC_TRUE, &dm));
+
+  PetscInt cell_start = -1;
+  PetscInt cell_end = -1;
+  PETSCCHK(DMPlexGetHeightStratum(dm, 0, &cell_start, &cell_end));
+
+  std::map<PetscInt, REAL> map_point_to_cost;
+  for (PetscInt cellx = cell_start; cellx < cell_end; cellx++) {
+    map_point_to_cost[cellx] = 0.1 * cellx;
+  }
+
+  PetscInterface::set_partitioner_parmetis(dm);
+  PetscInterface::set_partitioner_weights_via_number_of_dofs(dm,
+                                                             map_point_to_cost);
+
+  PetscSection section;
+  PETSCCHK(DMGetLocalSection(dm, &section));
+
+  const REAL w_max = (cell_end - 1) * 0.1;
+  const REAL w_min = cell_start * 0.1;
+
+  for (PetscInt cellx = cell_start; cellx < cell_end; cellx++) {
+
+    const REAL cost = cellx * 0.1;
+
+    PetscInt num_dofs = -1;
+    PETSCCHK(PetscSectionGetDof(section, cellx, &num_dofs));
+
+    PetscInt correct = 1000 * ((cost - w_min) / w_max);
+    correct = std::max(correct, static_cast<PetscInt>(1));
+    correct = std::min(correct, 1000);
+
+    ASSERT_EQ(num_dofs, correct);
+  }
+
+  //{
+  //  PetscInterface::generic_distribute(&dm);
+  //  PetscInterface::DMPlexHelper dmh(MPI_COMM_WORLD, dm);
+  //  int rank = -1;
+  //  MPICHK(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
+  //
+  //  auto vtk_cell_data = dmh.get_vtk_cell_data();
+  //  const int cell_count = vtk_cell_data.size();
+  //  for (int cellx = 0; cellx < cell_count; cellx++) {
+  //    vtk_cell_data.at(cellx).cell_data["rank"] = rank;
+  //  }
+  //
+  //  VTK::VTKHDF vtkhdf("owning_ranks.vtkhdf", MPI_COMM_WORLD);
+  //  vtkhdf.write(vtk_cell_data);
+  //  vtkhdf.close();
+  //
+  //  dmh.free();
+  //}
+
+  PETSCCHK(DMDestroy(&dm));
+  PETSCCHK(PetscFinalize());
+}
+
 #endif
